@@ -1198,7 +1198,8 @@ exec sleep 300
       const from = answers.length;
 
       // The pickers, the management lists, the catalogue, her pool's two pages, and a sign-in on it started,
-      // polled and given up.
+      // polled and given up — each their own attempt since migration 0371, so the person starts one of
+      // theirs here exactly as she does hers.
       await ask(bearer, 'GET', 'providers', {}, undefined, 200);
       await ask(bearer, 'GET', 'providers/mine', {}, undefined, 200);
       await ask(bearer, 'GET', 'providers/presets', {}, undefined, 200);
@@ -1208,9 +1209,9 @@ exec sleep 300
       await ask(bearer, 'GET', 'admin/providers', {}, undefined, 403);
       await ask(bearer, 'GET', 'providers/pools/:id', at, undefined, by(404, 200));
       await ask(bearer, 'GET', 'providers/shared-pools/:id', at, undefined, 200);
-      await ask(bearer, 'POST', 'providers/pools/:id/codex-login', at, undefined, by(404, 201));
-      await ask(bearer, 'GET', 'providers/pools/:id/codex-login', at, undefined, by(404, 200));
-      await ask(bearer, 'DELETE', 'providers/pools/:id/codex-login', at, undefined, by(404, 200));
+      await ask(bearer, 'POST', 'providers/pools/:id/codex-login', at, undefined, 201);
+      await ask(bearer, 'GET', 'providers/pools/:id/codex-login', at, undefined, 200);
+      await ask(bearer, 'DELETE', 'providers/pools/:id/codex-login', at, undefined, 200);
 
       // Her pool where a provider's id or slug goes — a pool is no provider, to either of them — and its
       // members, which a Codex pool has none of.
@@ -1254,8 +1255,10 @@ exec sleep 300
       await ask(bearer, 'PUT', 'providers/shared-pools/:id/keys/:keyId/secret', key, { apiKey: openaiKey() }, 200);
       await ask(bearer, 'DELETE', 'providers/shared-pools/:id/keys/:keyId', key, undefined, 200);
 
-      // Last, what takes something out of her pool: an account, the person, and the person themselves.
-      await ask(bearer, 'DELETE', 'providers/pools/:id/codex-login/account', at, undefined, by(404, 200));
+      // Last, what takes something out of her pool: an account — an admin's alone, so the person, who
+      // signed none of hers in, is refused rather than not found (migration 0371) — the person, and the
+      // person themselves.
+      await ask(bearer, 'DELETE', 'providers/pools/:id/codex-login/account', at, undefined, by(403, 200));
       await ask(bearer, 'DELETE', 'providers/shared-pools/:id/people/:userId', them, undefined, by(403, 200));
       await ask(bearer, 'POST', 'providers/shared-pools/:id/leave', at, undefined, by(201, 403));
       asked[who] = answers.slice(from);

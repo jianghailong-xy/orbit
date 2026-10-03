@@ -107,14 +107,32 @@ public struct EvidenceDecisionCriterion: Codable, Equatable, Sendable {
     }
 }
 
+/// Where the owner's card for a row of a task a session dispatched outside any project is drawn,
+/// and the session its decision is recorded as — the `decidingSessionId` a press sends, which is not
+/// the conversation it is pressed in once the card has moved to the task's run (the run did the
+/// work, and the door refuses it). `PendingDecisionOwnerCard` in the web client.
+public struct EvidenceDecisionOwnerCard: Codable, Equatable, Sendable {
+    public let sessionId: String
+    public let decidingSessionId: String
+
+    public init(sessionId: String, decidingSessionId: String) {
+        self.sessionId = sessionId
+        self.decidingSessionId = decidingSessionId
+    }
+}
+
 /// One pending completion decision — `PendingEvidenceJudgment` on the wire, `PendingDecisionRow`
 /// in the web client. Fields are the server's; nothing is added and nothing is dropped.
 public struct EvidenceDecisionRow: Codable, Equatable, Sendable, Identifiable {
     public let taskId: String
     public let title: String
     /// The project the task is filed under, or nil for a task in none. A conversation draws a card
-    /// only for its own project's rows (`EvidenceDecisions.cardRows`).
+    /// for its own project's rows, and for the rows whose `ownerCard` names it
+    /// (`EvidenceDecisions.cardRows`).
     public let projectId: String?
+    /// Set on a row of a task a session dispatched outside any project; nil on every other row, and
+    /// from a server older than that rule.
+    public let ownerCard: EvidenceDecisionOwnerCard?
     public let criterion: EvidenceDecisionCriterion?
     /// The revision awaiting an answer, in the decimal spelling the decision door takes back.
     public let evidenceRevision: String
@@ -132,6 +150,7 @@ public struct EvidenceDecisionRow: Codable, Equatable, Sendable, Identifiable {
     public var id: String { "\(taskId)#\(evidenceRevision)" }
 
     public init(taskId: String, title: String, projectId: String? = nil,
+                ownerCard: EvidenceDecisionOwnerCard? = nil,
                 criterion: EvidenceDecisionCriterion?,
                 evidenceRevision: String, ageSeconds: Int? = nil, claim: String, gaps: [String],
                 citations: [EvidenceDecisionCitation],
@@ -140,6 +159,7 @@ public struct EvidenceDecisionRow: Codable, Equatable, Sendable, Identifiable {
         self.taskId = taskId
         self.title = title
         self.projectId = projectId
+        self.ownerCard = ownerCard
         self.criterion = criterion
         self.evidenceRevision = evidenceRevision
         self.ageSeconds = ageSeconds
@@ -360,29 +380,42 @@ public enum EvidenceDecisions {
     /// `pending` is already scoped by the server to rows this session may decide. The first two
     /// checks are the second half of that rule, read off the door's own answers carried on the row;
     /// the third is the card's own — a conversation shows the judgments of the project it
-    /// coordinates, and a row from another project, or from none, gets no card there.
+    /// coordinates, and a row from another project gets no card there. A row of a task a session
+    /// dispatched outside any project carries the one conversation its card is drawn in
+    /// (`ownerCard`), and gets a card there and nowhere else; a legacy row in no project, with no
+    /// `ownerCard`, gets none. `sessionId` is this conversation's.
     public static func cardRows(queue: EvidenceDecisionQueue?,
-                                projectId: String?) -> [EvidenceDecisionRow] {
-        guard let projectId else { return [] }
-        return (queue?.pending ?? []).filter { row in
-            row.decidability.decidable && row.independence.independent && row.projectId == projectId
+                                projectId: String?,
+                                sessionId: String? = nil) -> [EvidenceDecisionRow] {
+        (queue?.pending ?? []).filter { row in
+            guard row.decidability.decidable && row.independence.independent else { return false }
+            if let card = row.ownerCard { return sessionId != nil && card.sessionId == sessionId }
+            return projectId != nil && row.projectId == projectId
         }
+    }
+
+    /// The session a press on this row's card decides as: the one its `ownerCard` names — the
+    /// session that dispatched the task, which did none of the work — or else the conversation it
+    /// is pressed in (`evidenceDecidingSession` on the web).
+    public static func decidingSession(row: EvidenceDecisionRow, sessionID: String) -> String {
+        row.ownerCard?.decidingSessionId ?? sessionID
     }
 
     /// Where one delivered card stands RIGHT NOW, derived from the read and from nothing else.
     /// A nil queue is the read not having come back, which is `unread` and not "nothing pending".
-    public static func standing(queue: EvidenceDecisionQueue?, projectId: String?, taskId: String,
+    public static func standing(queue: EvidenceDecisionQueue?, projectId: String?,
+                                sessionId: String? = nil, taskId: String,
                                 evidenceRevision: String) -> EvidenceDecisionStanding {
         EvidenceDecisionStanding(
             taskId: taskId, evidenceRevision: evidenceRevision,
-            state: state(queue: queue, projectId: projectId, taskId: taskId,
+            state: state(queue: queue, projectId: projectId, sessionId: sessionId, taskId: taskId,
                          evidenceRevision: evidenceRevision))
     }
 
-    private static func state(queue: EvidenceDecisionQueue?, projectId: String?, taskId: String,
-                              evidenceRevision: String) -> EvidenceDecisionStanding.State {
+    private static func state(queue: EvidenceDecisionQueue?, projectId: String?, sessionId: String?,
+                              taskId: String, evidenceRevision: String) -> EvidenceDecisionStanding.State {
         guard let queue else { return .unread }
-        let rows = cardRows(queue: queue, projectId: projectId)
+        let rows = cardRows(queue: queue, projectId: projectId, sessionId: sessionId)
         if let row = rows.first(where: { row in
             row.taskId == taskId && row.evidenceRevision == evidenceRevision
         }) {
@@ -627,9 +660,13 @@ public enum EvidenceDecisions {
     /// Nil for a send-back without a reason: the door refuses a SEND_BACK carrying no note and
     /// writes nothing at all, so there is no request worth making. The reason is trimmed, because
     /// whitespace is not one, and it rides with a send-back and with nothing else.
+    ///
+    /// `decidingSessionID` is the conversation the card is pressed in; a row whose `ownerCard` names
+    /// another session decides as that one (`decidingSession`).
     public static func request(row: EvidenceDecisionRow, decision: EvidenceDecisionAnswer,
                                note: String? = nil,
                                decidingSessionID: String) -> EvidenceDecisionRequest? {
+        let decidingSessionID = decidingSession(row: row, sessionID: decidingSessionID)
         switch decision {
         case .confirm:
             return EvidenceDecisionRequest(decidingSessionId: decidingSessionID,

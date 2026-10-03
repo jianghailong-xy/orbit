@@ -175,6 +175,33 @@ public enum SharedPoolPage {
     /// Admins always; members while the pool lets them.
     public static func canAddKey(_ pool: SharedPool) -> Bool { isAdmin(pool) || pool.membersCanAdd }
 
+    /// Admins always; members while the pool's own rule for accounts lets them (migration 0371) — apart
+    /// from the keys' rule, which says nothing about accounts (web's `canAddAccount`).
+    public static func canAddAccount(_ pool: SharedPool) -> Bool { isAdmin(pool) || pool.membersCanAddAccounts }
+
+    /// The caller's own person id, from the pool's people (their `you` row) — who an account's `userId` has
+    /// to be for the caller to be the one who signed it in (web's `viewerId`).
+    public static func viewerId(_ pool: SharedPool) -> String? { pool.people.first(where: \.you)?.userId }
+
+    /// Whether `login` is the caller's own: signed in by them (migration 0371). A payload without the
+    /// account's `userId` — an older server — is nobody's.
+    public static func signedIn(_ login: CodexLogin, by pool: SharedPool) -> Bool {
+        guard let viewer = viewerId(pool), let userId = login.userId else { return false }
+        return PublicID.storageKey(viewer) == PublicID.storageKey(userId)
+    }
+
+    /// Whether the caller may take `login` out: the person who signed it in, or an admin (web's
+    /// `canSignOutAccount`).
+    public static func canSignOut(_ login: CodexLogin, in pool: SharedPool) -> Bool {
+        signedIn(login, by: pool) || isAdmin(pool)
+    }
+
+    /// Whether the caller may sign `login` in again: the person who signed it in, and nobody else — not
+    /// even the pool's admins, who have no credential for it (web's `canSignInAgain`).
+    public static func canSignInAgain(_ login: CodexLogin, in pool: SharedPool) -> Bool {
+        signedIn(login, by: pool)
+    }
+
     /// Its contributor, or an admin.
     public static func canRemove(_ key: SharedPoolKey, in pool: SharedPool) -> Bool {
         key.contributor.you || isAdmin(pool)

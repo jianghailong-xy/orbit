@@ -122,7 +122,6 @@ function database(rows: ProviderRow[]) {
     slug: pool.slug,
     label: pool.label,
     engine: 'claude',
-    logins: [],
     createdAt: at,
     updatedAt: at,
     members: pool.members.map((providerId) => {
@@ -186,6 +185,15 @@ function database(rows: ProviderRow[]) {
           }
         }
         return { count };
+      },
+    },
+    poolCodexLogin: {
+      // A pool's ChatGPT accounts, which this stand-in's Claude pools hold none of: read beside the pool
+      // by pool id (migration 0371), and anything else is a query admission should not be making.
+      findMany: async (args: { where: Where }) => {
+        const { where } = args;
+        if (Array.isArray(where.poolId?.in)) return [];
+        return unexpected('poolCodexLogin.findMany', args);
       },
     },
   };

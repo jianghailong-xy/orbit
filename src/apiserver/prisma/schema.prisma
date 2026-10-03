@@ -259,6 +259,18 @@ enum OwnerConfirmationReviewRecordKind {
   @@map("owner_confirmation_review_record_kind")
 }
 
+/// Why only the account owner can settle a task an agent declared OWNER_CONFIRMED (migration 0373,
+/// `tasks/owner-confirmation-reason.ts`): a release, an irreversible step, the owner's own device
+/// or account, or a trade-off only they can make.
+enum OwnerConfirmationReason {
+  DEPLOY
+  IRREVERSIBLE
+  OWNER_DEVICE_OR_ACCOUNT
+  OWNER_TRADE_OFF
+
+  @@map("owner_confirmation_reason")
+}
+
 /// Whether the reliable in-app delivery also becomes due APNs work. IN_APP_ONLY still receives a
 /// terminal device-ledger receipt so suppression is an auditable fact rather than a missing row.
 enum TaskJudgmentDevicePolicy {
@@ -4057,6 +4069,13 @@ model Task {
   /// the acceptance prose. NULL means no override was needed or recorded; the text is audit
   /// evidence only and is never interpreted as completion evidence.
   completionCriterionOverrideReason String? @map("completion_criterion_override_reason")
+  /// Why only the account owner can settle this OWNER_CONFIRMED task, as the agent that declared it
+  /// said (migration 0373). A session declaring OWNER_CONFIRMED outside an Automatic project names
+  /// one (`tasks/owner-confirmation-reason.ts`); the owner may, and nobody else is asked. Cleared by
+  /// the write that takes the task off OWNER_CONFIRMED. Audit material: no gate reads it afterwards.
+  ownerConfirmationReason     OwnerConfirmationReason? @map("owner_confirmation_reason")
+  /// The one sentence that may accompany the reason. Never present without it (CHECK).
+  ownerConfirmationReasonNote String?                  @map("owner_confirmation_reason_note")
   /// WHICH of the project's stated acceptance criteria this work says it serves, as a relation
   /// rather than the name of one (migration 0232). `CreateTaskDto.criterionKey` is still how a
   /// caller spells it — a content-addressed key read back from `project_get` — and this is where
@@ -5563,15 +5582,13 @@ model ProviderPool {
   // the shared/codex pair together and admits both engines to a pool that is not shared.
   engine        String               @default("claude")
   shared        Boolean              @default(false)
-  // A shared pool's two rules, set by its admins: whether a MEMBER may put a key in (an admin always
-  // may), and whether a person's sessions start on a key of their own while one can run.
-  membersCanAdd Boolean              @default(true) @map("members_can_add")
-  ownKeyFirst   Boolean              @default(true) @map("own_key_first")
+  // A pool's three rules, set by its admins: whether a MEMBER may put a key in (an admin always may),
+  // whether a person's sessions start on a key of their own while one can run, and — migration 0366,
+  // the account-side twin of the first — whether a member may sign a ChatGPT account of their own in.
+  membersCanAdd         Boolean    @default(true) @map("members_can_add")
+  ownKeyFirst           Boolean    @default(true) @map("own_key_first")
+  membersCanAddAccounts Boolean    @default(true) @map("members_can_add_accounts")
   people        ProviderPoolPerson[]
-  // Migration 0323: the ChatGPT login a `codex` pool of one person's own runs on. The primary key of a
-  // row is (pool, account), so a pool may hold more than one — the flow in use keeps it at one (the
-  // service refuses a second account while one is signed in) and the direction says one login.
-  logins        PoolCodexLogin[]
   // Migration 0324: the session tokens a login pool's claims mint, and its ledger.
   loginTokens   PoolLoginToken[]
   loginUsage    PoolLoginUsage[]
@@ -5609,6 +5626,8 @@ model ProviderPoolPerson {
   role      String
   keys      PoolApiKey[]
   tokens    PoolGatewayToken[]
+  // Migration 0366: the ChatGPT logins this person signed in for the pool, which leave with them.
+  logins    PoolCodexLogin[]
   createdAt DateTime           @default(now()) @map("created_at")
 
   @@id([poolId, userId])
@@ -5708,9 +5727,11 @@ model PoolUsage {
 /// be taken leaves it alone. `lastError` is why it is SIGNED_OUT, in the upstream's own words.
 model PoolCodexLogin {
   poolId          String       @map("pool_id") @db.Uuid
-  // The pool's owner: `user_id` is in the foreign key so the database refuses a login naming anyone else.
+  // Who signed it in — a person of the pool, held to it by the composite key below (migration 0366; the
+  // pool's owner alone before it). They and the pool's admins may take it out, and they alone may sign it
+  // in again.
   userId          String       @map("user_id") @db.Uuid
-  pool            ProviderPool @relation(fields: [poolId, userId], references: [id, ownerId], onDelete: Cascade, onUpdate: NoAction)
+  person          ProviderPoolPerson @relation(fields: [poolId, userId], references: [poolId, userId], onDelete: Cascade, onUpdate: NoAction)
   accountId       String       @map("account_id")
   email           String?
   plan            String?

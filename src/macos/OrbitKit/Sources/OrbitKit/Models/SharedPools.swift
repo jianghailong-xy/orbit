@@ -207,13 +207,17 @@ public struct SharedPool: Codable, Equatable, Sendable, Identifiable {
     /// Codex pool of somebody's own (0323), which takes people and keys beside its owner's accounts (0358).
     /// An older server, which listed only the first kind, leaves it out: true.
     public let shared: Bool
-    /// The ChatGPT accounts a pool of somebody's own holds (migrations 0323/0324), as its owner's page
-    /// reads them and — since 2026-10-03 — as everyone in the pool reads them: the accounts run their
-    /// sessions too (pool-credential-select.ts). Which of them the reader's next session runs on is its
-    /// `next`. Empty for a shared pool, which holds none, and for an older server.
+    /// The ChatGPT accounts the pool holds (migrations 0323/0371), as its owner's page reads them and as
+    /// everyone in the pool reads them: whoever in it signed each one in — its owner or a member — the
+    /// accounts run every person's sessions (pool-credential-select.ts). Which of them the reader's next
+    /// session runs on is its `next`; each one's `userId` says whose it is. Empty until somebody signs one
+    /// in, and for an older server.
     public let logins: [CodexLogin]
     /// Rule: anyone in the pool may put a key in. Off, only admins can.
     public let membersCanAdd: Bool
+    /// Rule: a member may sign a ChatGPT account of their own in (migration 0371). Off, only admins can.
+    /// An older server, which had no such rule, leaves it out: true.
+    public let membersCanAddAccounts: Bool
     /// Rule: a member's sessions start on a key they put in while it has room.
     public let ownKeyFirst: Bool
     /// The caller's role.
@@ -224,7 +228,8 @@ public struct SharedPool: Codable, Equatable, Sendable, Identifiable {
 
     public init(id: String, slug: String, label: String, engine: String = "codex", shared: Bool = true,
                 logins: [CodexLogin] = [],
-                membersCanAdd: Bool = true, ownKeyFirst: Bool = true, viewerRole: SharedPoolRole = .member,
+                membersCanAdd: Bool = true, membersCanAddAccounts: Bool = true,
+                ownKeyFirst: Bool = true, viewerRole: SharedPoolRole = .member,
                 window: SharedPoolWindow? = nil, people: [SharedPoolPerson] = [], keys: [SharedPoolKey] = []) {
         self.id = id
         self.slug = slug
@@ -233,6 +238,7 @@ public struct SharedPool: Codable, Equatable, Sendable, Identifiable {
         self.shared = shared
         self.logins = logins
         self.membersCanAdd = membersCanAdd
+        self.membersCanAddAccounts = membersCanAddAccounts
         self.ownKeyFirst = ownKeyFirst
         self.viewerRole = viewerRole
         self.window = window
@@ -251,6 +257,7 @@ public struct SharedPool: Codable, Equatable, Sendable, Identifiable {
         logins = (try? c.decodeIfPresent([LossyDecodable<CodexLogin>].self, forKey: .logins))?
             .compactMap(\.value) ?? []
         membersCanAdd = try c.decodeIfPresent(Bool.self, forKey: .membersCanAdd) ?? true
+        membersCanAddAccounts = try c.decodeIfPresent(Bool.self, forKey: .membersCanAddAccounts) ?? true
         ownKeyFirst = try c.decodeIfPresent(Bool.self, forKey: .ownKeyFirst) ?? true
         viewerRole = try c.decodeIfPresent(SharedPoolRole.self, forKey: .viewerRole) ?? .unknown
         window = (try? c.decodeIfPresent(SharedPoolWindow.self, forKey: .window)) ?? nil
@@ -293,10 +300,13 @@ public struct UpdatePoolKeyRequest: Encodable, Equatable, Sendable {
 /// PATCH /providers/shared-pools/:id — an admin's rules. Nil fields stay.
 public struct UpdateSharedPoolRequest: Encodable, Equatable, Sendable {
     public let membersCanAdd: Bool?
+    /// The accounts' own rule, apart from the keys' (migration 0371).
+    public let membersCanAddAccounts: Bool?
     public let ownKeyFirst: Bool?
 
-    public init(membersCanAdd: Bool? = nil, ownKeyFirst: Bool? = nil) {
+    public init(membersCanAdd: Bool? = nil, membersCanAddAccounts: Bool? = nil, ownKeyFirst: Bool? = nil) {
         self.membersCanAdd = membersCanAdd
+        self.membersCanAddAccounts = membersCanAddAccounts
         self.ownKeyFirst = ownKeyFirst
     }
 }

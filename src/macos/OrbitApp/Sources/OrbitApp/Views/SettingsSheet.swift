@@ -945,11 +945,25 @@ private struct SharedPoolSettingsPage: View {
     var body: some View {
         if let pools = model.sharedPools, let pool = pools.pool(poolID),
            let page = CodexPoolPage(own: nil, access: pool) {
-            CodexPoolPageView(page: page, accountActions: nil, accessActions: poolAccessActions(pools, pool),
+            CodexPoolPageView(page: page, accountActions: accountActions(pools, pool),
+                              accessActions: poolAccessActions(pools, pool),
                               exit: { await close(pools, pool, delete: page.mine) })
         } else {
             ContentUnavailableView(ProvidersOverview.poolGone, systemImage: "person.3")
         }
+    }
+
+    /// A member's presses on the pool's ChatGPT accounts, where its own rule lets them sign one of their
+    /// own in (migration 0371): the same device sign-in, the pool read again afterwards. Nil where it does
+    /// not, which leaves the rows read-only.
+    private func accountActions(_ pools: SharedPoolsModel, _ pool: SharedPool) -> CodexPoolActions? {
+        guard SharedPoolPage.canAddAccount(pool) else { return nil }
+        return CodexPoolActions(
+            start: { try await pools.startCodexLogin(pool) },
+            poll: { try await pools.pollCodexLogin(pool) },
+            cancel: { await pools.cancelCodexLogin(pool) },
+            signOut: { login in await pools.signOutCodexLogin(pool, login) },
+            refresh: { await pools.load() })
     }
 
     private func close(_ pools: SharedPoolsModel, _ pool: SharedPool, delete: Bool) async -> String? {
