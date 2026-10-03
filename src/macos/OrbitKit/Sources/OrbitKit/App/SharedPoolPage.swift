@@ -106,23 +106,11 @@ public enum SharedPoolPage {
         return !stopped.isEmpty && stopped.allSatisfy { $0.spentUntil != nil }
     }
 
-    /// When `key` can run again: OpenAI's own out-of-budget mark, else the first of the next month, when
-    /// a share cap counts from zero. Nil when the pool names no month to read it from.
-    static func reset(_ key: SharedPoolKey, in pool: SharedPool) -> String? {
-        key.spentUntil ?? pool.window?.end
-    }
-
-    /// The EARLIEST of some reset instants — one key free of its reason is enough for work to continue —
-    /// parsed rather than compared as text, so the answer does not ride on how the server spells a time.
+    /// The EARLIEST of some reset instants — one key or account free of its reason is enough for work to
+    /// continue — parsed rather than compared as text, so the answer does not ride on how the server
+    /// spells a time.
     static func earliest(_ resets: [String]) -> String? {
         resets.min { (RelativeTime.parse($0) ?? .distantFuture) < (RelativeTime.parse($1) ?? .distantFuture) }
-    }
-
-    /// When the first key of a pool that cannot run comes back: the earliest of the stops' own resets,
-    /// which is what a pool's head names. Nil while one of its keys can run, or with none stopped.
-    static func firstReset(_ pool: SharedPool) -> String? {
-        let stopped = pool.keys.filter { keyState($0) == .spent }.compactMap { reset($0, in: pool) }
-        return stopped.isEmpty ? nil : earliest(stopped)
     }
 
     /// "$12.40 of $50": what the others spent on the key this month, against the cap its contributor
@@ -186,6 +174,33 @@ public enum SharedPoolPage {
 
     /// Admins always; members while the pool lets them.
     public static func canAddKey(_ pool: SharedPool) -> Bool { isAdmin(pool) || pool.membersCanAdd }
+
+    /// Admins always; members while the pool's own rule for accounts lets them (migration 0371) — apart
+    /// from the keys' rule, which says nothing about accounts (web's `canAddAccount`).
+    public static func canAddAccount(_ pool: SharedPool) -> Bool { isAdmin(pool) || pool.membersCanAddAccounts }
+
+    /// The caller's own person id, from the pool's people (their `you` row) — who an account's `userId` has
+    /// to be for the caller to be the one who signed it in (web's `viewerId`).
+    public static func viewerId(_ pool: SharedPool) -> String? { pool.people.first(where: \.you)?.userId }
+
+    /// Whether `login` is the caller's own: signed in by them (migration 0371). A payload without the
+    /// account's `userId` — an older server — is nobody's.
+    public static func signedIn(_ login: CodexLogin, by pool: SharedPool) -> Bool {
+        guard let viewer = viewerId(pool), let userId = login.userId else { return false }
+        return PublicID.storageKey(viewer) == PublicID.storageKey(userId)
+    }
+
+    /// Whether the caller may take `login` out: the person who signed it in, or an admin (web's
+    /// `canSignOutAccount`).
+    public static func canSignOut(_ login: CodexLogin, in pool: SharedPool) -> Bool {
+        signedIn(login, by: pool) || isAdmin(pool)
+    }
+
+    /// Whether the caller may sign `login` in again: the person who signed it in, and nobody else — not
+    /// even the pool's admins, who have no credential for it (web's `canSignInAgain`).
+    public static func canSignInAgain(_ login: CodexLogin, in pool: SharedPool) -> Bool {
+        signedIn(login, by: pool)
+    }
 
     /// Its contributor, or an admin.
     public static func canRemove(_ key: SharedPoolKey, in pool: SharedPool) -> Bool {

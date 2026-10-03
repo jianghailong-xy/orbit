@@ -36,6 +36,7 @@
    下一轮都用 `--conversation <id>` 重启续上。（§4）
 8. **权限**：默认模式下，需要审批的操作被软拒绝，**整轮立即结束**，模型拿不到结果；deny 规则在
    `--dangerously-skip-permissions` 下仍然生效；PreToolUse hook 只在 skip 模式下才是唯一的闸门。（§5）
+   阶段 3 起 Orbit 的 Default、Accept Edits 由 Orbit 自己的 PreToolUse hook 问人，agy 确认加载了 hook 才加 skip，否则拒绝启动。（§14）
 9. **仓库里的 `.agents/hooks.json`、`.agents/mcp_config.json` 会被执行**，不管什么权限模式 → 受保护模式下应该拒绝启动，
    做法同 `guardKimiProjectMCP`。（§3.5）
 
@@ -129,6 +130,7 @@ agy --gemini_dir=<会话 gemini 目录，绝对路径>
 | `tool` `DONE` | `evToolResult {toolUseId, content: tool_info.output（没有就是空串）, isError:false}` |
 | `tool` `ERROR` | `evToolResult {toolUseId, content: tool_info.error.message, isError:true}` |
 | 被软拒绝的工具（§5.2：本轮 `result.response` 为空、`denied_actions` 非空、最后一个工具步骤既没有 output 也没有 error） | `evToolResult {isError:true, content:"需要审批的操作在当前权限模式下被拒绝：<权限>"}`，再发 `evError` 说明怎么放行 |
+| 一轮结束时还没有结果的工具步骤（被中断、agy 退出或出错时正在跑的那个，永远走不到 `DONE`，§4.1） | 在 `evTurnEnd` 之前按调用顺序补 `evToolResult {isError:true, content:"Interrupted: the turn was stopped / failed while this tool was running."}`；不补的话，会话还开着时客户端会一直把这张卡片画成运行中 |
 | `error_message` `DONE` | `evError {message: result.error，或 AGY_ERROR.short_error}` |
 | `system_message`、`unknown`、`checkpoint` | 不发 transcript 事件，记日志（`logUnhandledStreamKind` 那一类） |
 | `result` | `evTurnEnd {subtype, numTurns:1, costUsd:0, contextTokens, contextWindow}` 加 `TurnCompleteRequest`（§2.4、§9.3） |
@@ -322,6 +324,8 @@ runner 必须比较 `init.conversation_id` 和请求的 id：不一致就发一�
 - 流式中途 SIGINT：6.199 秒发信号，6.211 秒出 `result`，7.462 秒退出码 1（样本 `interrupt-sigint-streaming`，实验 `t06a`）。
 - SIGTERM 同样得到 `ERROR`/`"interrupted"`、退出码 1（实验 `t06d`）。
 - 命令运行中 SIGINT：命令 `sh -c 'sleep 60 & …; sleep 61'`，agy 0.8 秒后退出，两个 sleep 都没了（样本 `interrupt-sigint-tool`，实验 `t06b`）。
+  这个工具步骤停在 `ACTIVE`，没有 `DONE` 也没有 `ERROR`，`result` 直接跟在后面；1.2.16 上一样，由契约测试
+  `TestAntigravityContractInterruptedToolGetsResult` 兜底（runner 补的结果见 §2.2）。
 - 用 PID 文件追踪的版本：SIGINT 后 shell 和前台子进程消失，`setsid` 的孙进程还在；SIGKILL 后三个全部活着，
   shell 被 init 收养，各自在自己的会话里（实验 `t06g`/`t06f`）。
 - hook 进程的 pgid 等于 agy 的 pid（`hooks.log` 里每条都是）；MCP 服务器在 agy 的进程组里，SIGINT 和 SIGKILL 之后都不见了（实验 `v_mcpint`/`v_mcpkill`）。
@@ -332,6 +336,8 @@ runner 必须比较 `init.conversation_id` 和请求的 id：不一致就发一�
 ## 5. 权限模式映射
 
 ### 5.1 结论（第一期，approvalSupport 为 none）
+
+阶段 3 起 Default、Accept Edits 改走 Orbit 的审批 hook（§14）；本节的表对 Plan、Don't Ask、Auto、Bypass 仍然成立。
 
 | Orbit 模式 | agy 参数 | 说明 |
 | --- | --- | --- |
@@ -390,6 +396,8 @@ runner 必须比较 `init.conversation_id` 和请求的 id：不一致就发一�
   deny 规则对常规命令可靠，但不要把它当成对 shell 内建命令的安全边界。
 
 ### 5.4 第二期：PreToolUse hook 审批闸门【实测】
+
+阶段 3 的实现，以及在 1.2.16 上补测的 hook 行为（哪些回答会放行、哪些工具不经过 hook、hooks.json 会被重读），见 §14。
 
 - hook 写在 `<gd>/config/hooks.json`：`{"<名字>":{"PreToolUse":[{"matcher":"","hooks":[{"type":"command","command":"<绝对路径> …","timeout":600}]}]}}`。
   `matcher` 写 `""`、`".*"` 或者省略都匹配所有工具。
@@ -607,8 +615,8 @@ agy 不报上下文窗口大小，按模型维护一张表（阶段 1 定值；�
 ### 10.2 `ask_question`【实测】
 
 模型调用 `ask_question` 时，无头模式不会等人：stream-json 里只有一个 `step_type:"unknown"` 的 `DONE` 步骤，没有任何详情；
-模型收到的结果是 `A1: User Skipped`（样本 `ask-question-headless`）。第一期在 transcript 里不展示；阶段 3 的 PreToolUse hook
-能拿到完整问题（`toolCall.args.questions`），到时候再决定要不要接 Orbit 的问答卡。
+模型收到的结果是 `A1: User Skipped`（样本 `ask-question-headless`）。第一期在 transcript 里不展示。原先设想阶段 3 的
+PreToolUse hook 能拿到完整问题再接 Orbit 的问答卡；1.2.16 实测 `ask_question` **不经过** PreToolUse hook（§14.2），这条路走不通。
 
 ### 10.3 MCP【实测，样本 `mcp-call`】
 
@@ -683,6 +691,137 @@ runner 上没有真实 Gemini key。owner 把 key 写进 runner 上的 `/root/.c
 | `agy --version` | 不写 HOME，不拉起 `--bg-updater` | 引擎探针照常每 5 分钟跑一次 |
 | `agy update` | 无人值守可用（已是最新时打印 `You are already on the latest version.`、退出 0）；带 `--gemini_dir=<目录>` 时更新器状态只写进该目录，目录不存在会自建 | 引擎更新命令是 `agy --gemini_dir=<ORBIT_HOME>/antigravity/updater update`；`agy models` 同样在 `<ORBIT_HOME>/antigravity/catalog` 里跑，用占位 key（它不调 API） |
 | 安装脚本 | 与 §6.4 相同：`agy install` 往 `~/.bashrc`、`~/.profile` 各追加一行 PATH | 这次安装留下的两行没有删 |
+
+## 14. 阶段 3：人工审批（agy 1.2.16）
+
+### 14.1 结论
+
+| Orbit 模式 | agy 参数 | 谁决定没被批准的操作 |
+| --- | --- | --- |
+| Default | `--dangerously-skip-permissions` + Orbit 的 hook | 下面的规则先放行或拒绝，其余出 Orbit 的审批卡片，人来批 |
+| Accept Edits | 同上 | 同上，另外工作区内的写、改直接放行 |
+| Plan | `--mode plan`（不变） | agy 自己拒（§5.2） |
+| Don't Ask | 不加（不变） | agy 自己拒（§5.2） |
+| Auto、Bypass | `--dangerously-skip-permissions`（不变），不装 hook | 全部放行 |
+
+**hooks.json**：问人的两种模式下，runner 每次起 agy 前写 `<gd>/config/hooks.json`：
+
+```json
+{"orbit-approval": {
+  "PreToolUse": [{"matcher": "", "hooks": [{"type": "command", "timeout": 86400,
+    "command": "'<orbit>' hook antigravity-approval '<gd>/orbit/approval-policy.json' <策略文件的 sha256>"}]}],
+  "PreInvocation": [{"type": "command", "timeout": 30,
+    "command": "'<orbit>' hook antigravity-heartbeat '<gd>/orbit/heartbeat' <每个进程一个随机 token>"}]
+}}
+```
+
+其他模式下删掉这个文件（只删 Orbit 自己的那份）：在 Plan、Don't Ask 里 hook 只会给 agy 本来就拒的调用出卡片，在 Auto、Bypass 里它会去问不该问的人。
+
+**`orbit hook antigravity-approval`**（`src/runner-go/antigravity_approval.go`）从 stdin 读一次工具调用，按会话的策略判断，顺序是：
+
+1. 子代理（`invoke_subagent`、`define_subagent`）→ 拒：子代理自己的工具调用不经过任何 hook（§14.2）；
+2. 写 gemini 目录里 artifact 目录以外的地方（hooks.json、策略文件、settings.json…）→ 拒，有允许规则也拒；
+3. 工作区的 deny 规则 → 拒。shell 规则按词匹配整行任何位置（`Bash(rm:*)` 也拒 `true && rm -f x`）：agy 自己那份 `permissions.deny` 在 skip 下照样生效，没必要先问人；
+4. Orbit 自己的 MCP 服务（`call_mcp_tool`、`list_resources`、`read_resource` 且 `ServerName` 为 `orbit`）→ 放行；
+5. 允许规则，按 Kimi 桥的匹配方式（`kimiToolMatchesRule`），**不**认命令前缀 → 放行；
+6. agy 自己的记账：`schedule`、`manage_subagents`、`ask_question`、`manage_task` 的 list/status/kill → 放行（`send_input` 是往运行中的命令里打字，要问）；
+7. 读工作区、会话上传目录、本会话的 artifact 目录（`<gd>/antigravity-cli/brain/<conversation>/`，同 agy 自己默认模式）→ 放行；
+8. 写 artifact 目录（任何模式，同 agy 自己默认模式）、Accept Edits 下写工作区 → 放行，但工作区里任何 `.agents/` 目录下的文件不放行
+   （agy 会在运行中加载它，§14.2）；路径先解析软链接，指向不存在目标的软链接不算在内；
+9. 其余 → 审批卡片：和 Kimi 桥一样 `createApproval` + `awaitApprovalDecision`。卡片的 `toolName`/`input` 用 claude 的叫法（`Bash {command, cwd}`、`Write {file_path, content}`、`Edit {file_path, old_string, new_string}`、`mcp__<server>__<tool>`…），
+   `toolUseId` 是 `<conversation>:<step>`，和 transcript 里这次 tool_use 的 id 相同。批准 → `allow`；拒绝 → `deny`，理由
+   "The user denied this call[: <批注>]"；到点（hook 超时减一分钟）没人答 → `deny`，理由 "Nobody answered the approval request for this call within …"。
+
+命令前缀规则（包括会话中途点的 "Always allow"）由控制面在建卡时按工作区规则回答（`permission-rules.ts` 的 `SERVER_MATCHED_RUNTIMES`，同 Kimi、Codex），不出卡片。
+
+hook **每次都只打印一个决定**；写不出来就以非零退出（agy 把它当拒绝）。策略文件的 sha256 写在 hook 自己的命令行里，对不上就全部拒绝。
+
+**闸门**：skip 只在两项检查都通过时才有：
+
+1. 启动前：`agy --gemini_dir=<gd> --print=/hooks --output-format json`（会话的环境变量和工作目录）列出的必须**恰好**是 Orbit 那两条、来源是 Orbit 写的 hooks.json。agy 出错、少一条、命令或超时不对、多出别的 hook（包括仓库的 `.agents/hooks.json`）都不启动，错误写进 transcript；
+2. 运行中：agy 每发一个步骤，hooks.json 都得还是 Orbit 写的那些字节，工作区（到仓库根为止）的 `.agents/` 里也不能冒出 hooks.json、
+   mcp_config.json、plugins.json 或 plugins/（同 §3.5 启动前的检查）；agy 每答一次模型调用（`agent_response` 步骤）之前都得有本进程 token
+   的心跳。任何一项不满足：当前轮以 FAILED 结束、向 agy 进程组发 SIGINT（agy 会杀掉正在跑的命令）、会话结束。
+
+### 14.2 实测（agy 1.2.16）
+
+PreToolUse hook 的回答（skip 模式，命令是 `echo … > 文件`）：
+
+| hook 的 stdout / 退出码 | 结果 |
+| --- | --- |
+| `{"decision":"allow"}`（带 reason、stderr 有输出、末尾多空行都一样） | 执行 |
+| **空**（退出 0）、只有换行 | **执行** |
+| **`{"decision":"ask"}`** | **执行** |
+| `{}` | 拒，`tool call denied by pre-tool hook:`（理由为空） |
+| `{"decision":"deny","reason":"…"}` / `{"decision":"deny"}` | 拒，模型收到 `tool call denied by pre-tool hook: …`，接着往下走 |
+| `maybe`、`ALLOW`、`block` | 拒，`unsupported hook decision: …` |
+| 多一个未知字段、不是 JSON、两个对象 | 拒，`failed to unmarshal result from hook …` |
+| 非零退出（即使 stdout 是 allow） | 拒，`JSON hook "…" failed: command failed: exit status N` |
+
+所以 Orbit 的 hook 绝不输出空，也绝不输出 `ask`。
+
+哪些调用经过 PreToolUse（skip 模式，hook 记录每次调用并放行）：API key 模式下声明给模型的 13 个工具是 `view_file`、`run_command`、
+`manage_task`、`send_message`、`schedule`、`invoke_subagent`、`define_subagent`、`manage_subagents`、`write_to_file`、
+`replace_file_content`、`read_url_content`、`search_web`、`ask_question`，配了 MCP 再加 `call_mcp_tool`、`list_resources`、`read_resource`。
+逐个试过：除 `ask_question` 外都经过 hook（`send_message`、`read_resource` 没单独试）。`ask_question` 不经过 hook，照旧是 `unknown` 步骤和
+"User Skipped"，它什么都不执行。
+
+**子代理自己的工具调用完全不经过 hook**：`define_subagent`（`enable_write_tools: true`）后 `invoke_subagent`，子代理的提示里让它
+`run_command` 写文件：文件写出来了，hook 日志里没有子代理的 PreToolUse，也没有它的 PreInvocation；父会话的流里只有一个 `subagent` 步骤。
+所以问人的模式下 Orbit 的 hook 拒绝子代理。
+
+`schedule`：定时器的提示词在同一轮里到达（`schedule` 这个工具步骤一直等到定时器触发），它引出的工具调用照样经过 hook。
+
+PreInvocation：每次模型调用之前触发，**同步**（hook 睡 2 秒，模型回复就晚 2 秒）；负载有 `artifactDirectoryPath`、`conversationId`、
+`initialNumSteps`、`invocationNum`（每轮从 0 数起）、`modelName`、`transcriptPath`、`workspacePaths`；它的退出码和输出不影响这次调用
+（退出 1、输出空、输出 deny，模型照样被调用）。父会话的每次调用都有（包括工具结果和定时器之后的调用），子代理的没有。
+一次调用对应一个 `agent_response` 步骤。
+
+`SessionStart`：在进程收到第一条消息之后才触发，不是进程启动时，没法拿来在第一条消息之前确认 hook。
+
+**hooks.json 会被重读**：两轮之间把 hooks.json 改成只剩 PreInvocation，不重启进程，下一轮的 `run_command` 就不经过 hook 直接执行了。
+这是运行中要盯 hooks.json 字节的原因。工作区的 `.agents/hooks.json` 也一样：两轮之间在工作区里新建一个，下一轮它的命令就在每次工具调用前
+执行了；工作区里的 `.gemini/hooks.json`、`.gemini/config/hooks.json` 不会被加载（场景 `s_wshooks`）。
+
+超时：`timeout: 86400` 时 `/hooks` 报 `timeout_seconds: 86400`；hook 等 660 秒后回 allow，命令照常执行（没有 600 秒上限）。
+hook 等待期间，这个工具步骤的 `ACTIVE` 已经流出来了，所以 transcript 里能看到正在等批的调用；`DONE` 在决定之后。
+
+hook 进程：命令经 shell 执行（带引号的参数按 shell 规则拆分），工作目录是 `<gd>/config`，在 agy 的进程组里。
+
+artifact：agy 自己的默认模式（不加参数）下往 `<gd>/antigravity-cli/brain/<conversation>/…` 写文件不用批准（带不带 `ArtifactMetadata` 都一样）；
+带 `ArtifactMetadata` 写别处会被当成参数错误。
+
+`--print=/hooks`：settings 里 `modelProvider` 是 `gemini` 时也要 `GEMINI_API_KEY`，否则退出 1；hooks.json 不存在、为空、不是 JSON 或是个
+目录时都是 `hooks: []`、退出 0；仓库的 `.agents/hooks.json` 也列出来，`source` 是它自己的路径；写成嵌套格式的 PreInvocation 照样列出，但没有
+`command`；PreToolUse 的 `matcher` 只在非空时出现。settings.json 里写 `enableJsonHooks: false` 关不掉 hook。
+
+### 14.3 为什么不会 fail open
+
+- skip 参数只在拿到确认过的闸门时才加（`antigravityPermissionArgs(mode, gated)`）；没有闸门时 Default、Accept Edits 退回 agy 自己的拒绝，
+  而实际运行中这种情况根本不启动 agy。
+- hook 的每种失败都是拒绝：非零退出、被 agy 超时杀掉、策略文件读不出或被改过、调用读不出、控制面连不上、没人答。
+- 运行中的检查在下一个流出的步骤上生效。命令改了 hooks.json：在这个命令自己的 `DONE` 步骤上就会发现（实测比下一次模型调用早），
+  agy 被中断。一个从启动起就没加载 hook 的进程，要到它第一次回答模型调用时才会被发现，同一个回答里的工具调用可能已经开始了——挡在这之前的
+  是启动前的 `/hooks` 检查。
+
+契约测试：`TestAntigravityContractApproval{Allowed,Denied,TimesOut,HookNotLoaded}`（`src/runner-go/antigravity_approval_contract_test.go`），
+`HookNotLoaded` 分 `listing`（agy 列不出 hook，不启动）、`heartbeat`（agy 不跑 hook，第一次回答就停）、`rewritten`（运行中改了 hooks.json，
+下一个步骤就停，命令没执行）、`checkout hook`（运行中工作区冒出 `.agents/hooks.json`，同样停下，它的命令和后面的命令都没执行）。实验脚本在 [`docs/evidence/antigravity-cli-1.2.16/`](./evidence/antigravity-cli-1.2.16/)。
+
+## 15. Gemini 预设借 agy（阶段 4，agy 1.2.16）
+
+Providers 里的 Gemini 预设改借 Antigravity 运行时，迁移 `0372_gemini_antigravity_runtime` 把已存的行改过来。控制面把
+provider 的 key 和端点作为 `GEMINI_API_KEY`、`GOOGLE_GEMINI_BASE_URL` 注入会话环境（`custom-provider.ts`），runner 照内置引擎
+的方式起 agy；模型列表跟 runner 上报的 `agy models` 走（预设的 `modelsFromRuntime`）。2026-10-03 在 runner workstation 上【实测】：
+
+| 项 | 结果 | 用在哪 |
+| --- | --- | --- |
+| slug 到 API 模型（mock 记下的请求路径） | `gemini-3.8-flash`、`gemini-3.7-flash`、`gemini-3.6-flash` 各档都请求同名模型；`gemini-3.1-pro` 低档请求 `gemini-3.1-pro-preview`，高档请求 `gemini-3.1-pro-preview-customtools`；标题照旧用 `gemini-3.1-flash-lite-preview` | 连接测试按这个映射探测 `POST {base}/v1beta/models/{API 模型}:generateContent`，key 放 `x-goog-api-key` 头 |
+| 真实 key 的 `GET /v1beta/models` | 上面这些 API 模型都在，`inputTokenLimit` 都是 1,048,576 | 与 runner 的窗口表（`antigravityContextWindows`）一致，补上 §11 第 5 项 |
+| 无效 key（直接请求 API） | `generateContent` 回 400 `INVALID_ARGUMENT`，`details[].reason` 为 `API_KEY_INVALID`，不是 401/403 | 连接测试显示 `HTTP 400 — API key not valid…` |
+| 预付额度用完 | 每个模型都回 402 `RESOURCE_EXHAUSTED`（"Your prepayment credits are depleted…"）；Orbit 会话里的错误是 `agent executor error: generating and executing: Error 402, Message: …` | §11 第 3 项的一种；连接测试原样显示 Google 的说明 |
+
+§3.2 的"key 对 agent 跑的命令可见"和 §7 的"使用统计关不掉"，写在了连接 Gemini 的表单上（API key 一栏下面）。
 
 ## 附录：实测记录索引
 

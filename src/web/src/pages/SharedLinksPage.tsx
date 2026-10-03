@@ -97,7 +97,8 @@ export function SharedLinksPage() {
       refresh();
       message.success(count === 1 ? 'Link turned off' : `${count} links turned off`);
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error, ids) =>
+      message.error(ids.length === 1 ? "Couldn't turn off the link" : "Couldn't turn off the links", e.message),
   });
   const shareAgain = useMutation({
     mutationFn: (link: ShareLink) => putShareLink(link.kind, link.root.id, { include: link.include }),
@@ -105,12 +106,13 @@ export function SharedLinksPage() {
       refresh();
       message.success('Shared again — with a new link');
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error, link) =>
+      message.error(`Couldn't share the ${KIND_WORD[link.kind].toLowerCase()} again`, e.message),
   });
 
   const copy = (link: ShareLink) => {
     void copyText(publicLinkUrl(link.token)).then((ok) =>
-      ok ? message.success('Link copied') : message.error('Could not copy'),
+      ok ? message.success('Link copied') : message.error("Couldn't copy the link"),
     );
   };
 

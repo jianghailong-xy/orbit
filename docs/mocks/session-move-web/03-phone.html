@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>手机网页：文件夹与 Move</title>
+<link rel="stylesheet" href="board.css"></head>
+<body>
+<h1>手机网页：文件夹与 Move</h1>
+<p class="lede" style="width:1500px">在手机浏览器里，Web 的会话列表本来就是单栏，触摸左右滑的手势也已经照 iOS 做了，所以这里直接套 iOS 的样子。截图里的页面宽 390，和 iPhone 相同。</p>
+
+<div class="row">
+  <div class="col" style="width:330px">
+    <div class="cap"><span class="tag new">列表</span>和桌面一样，文件夹排在最上面</div>
+    <div class="shot phone" style="width:318px"><img src="shots/c1.png" alt=""></div>
+  </div>
+  <div class="col" style="width:330px">
+    <div class="cap"><span class="tag new">文件夹页</span>点文件夹行进入</div>
+    <div class="shot phone" style="width:318px"><img src="shots/c2.png" alt=""></div>
+    <ul class="notes">
+      <li>进出文件夹用和打开会话一样的左右滑动切换。点 ‹、浏览器后退或系统的边缘返回手势，都回到列表。</li>
+    </ul>
+  </div>
+  <div class="col" style="width:330px">
+    <div class="cap"><span class="tag new">左滑</span>Share · Move · Delete</div>
+    <div class="shot phone" style="width:318px"><img src="shots/c3.png" alt=""></div>
+    <ul class="notes">
+      <li class="n" data-n="1">顺序和颜色都和 iOS 一样：蓝、靛、红。Web 手机版现在左滑只有 Delete，这次把 Share 也一起补上（打开的就是会话页 ⋯ 里那个 Share… 对话框）。</li>
+      <li>右滑不变，还是 Complete、Pin。</li>
+    </ul>
+  </div>
+  <div class="col" style="width:330px">
+    <div class="cap"><span class="tag new">Move</span>同一个对话框，手机上撑满宽度</div>
+    <div class="shot phone" style="width:318px"><img src="shots/c4.png" alt=""></div>
+    <ul class="notes">
+      <li>内容和桌面版完全一样。选另一个 Workspace 后的那一步和确认框也一样。</li>
+    </ul>
+  </div>
+</div>
+
+<p class="foot" style="width:1500px">动手之前要先改设计文档 <code>docs/session-folders-move-design.md</code>：第 1 节和 §5.7 现在写的是“web 照常平铺列表”“这一期不做 web 的 Move 入口与文件夹显示”，要把 web 从“不做”里拿出来，入口和交互按这三张图写进去。服务端的接口都已经有了，这次只改 Web 前端。</p>
+</body></html>

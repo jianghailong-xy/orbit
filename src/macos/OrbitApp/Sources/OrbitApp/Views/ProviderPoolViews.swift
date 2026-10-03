@@ -203,11 +203,11 @@ enum CodexPoolSheet: Identifiable {
 
 /// A Codex pool's page (docs/mocks/account-pool-access/), drawn for whoever reads it (`CodexPoolPage`):
 /// what the pool is, whose, and how many of its accounts or keys can run, and the press that puts one in;
-/// its Accounts — its owner's ChatGPT accounts (each signed out with its mark or a swipe, and signed in
-/// again from its row), or, to anybody else, one locked line in their place — then its API keys (switched
-/// off or taken out with a swipe, a refused one replaced from its row), each saying whose sessions it runs
-/// once the pool is shared; who can use it (`WhoCanUseIt`); and deleting the pool (its owner) or leaving it
-/// (anybody else). Every press is the server's to allow.
+/// its Accounts — its owner's ChatGPT accounts (read by everybody in the pool since 2026-10-03, and signed
+/// out with its mark or a swipe only by its owner) — then its API keys (switched off or taken out with a
+/// swipe, a refused one replaced from its row), each saying whose sessions it runs once the pool is shared;
+/// who can use it (`WhoCanUseIt`); and deleting the pool (its owner) or leaving it (anybody else). Every
+/// press is the server's to allow.
 struct CodexPoolPageView: View {
     let page: CodexPoolPage
     /// What its ChatGPT accounts' presses do: its owner's, on a pool of their own.
@@ -224,8 +224,9 @@ struct CodexPoolPageView: View {
     @State private var removingPerson: SharedPoolPerson?
     @State private var confirmingJustMine = false
     @State private var confirmingExit = false
-    /// The rule just flipped, shown as flipped until the pool the server answers with arrives.
+    /// The rules just flipped, shown as flipped until the pool the server answers with arrives.
     @State private var membersCanAdd: Bool?
+    @State private var membersCanAddAccounts: Bool?
     @State private var notice: String?
 
     private var pool: ProviderPool { page.pool }
@@ -308,6 +309,7 @@ struct CodexPoolPageView: View {
         .animation(.default, value: notice)
         .onChange(of: page.access) { _, _ in
             membersCanAdd = nil
+            membersCanAddAccounts = nil
         }
     }
 
@@ -349,9 +351,6 @@ struct CodexPoolPageView: View {
     /// run on, under them.
     private var accountsSection: some View {
         Section {
-            if let owner = page.lockedOwner {
-                LockedAccountsRow(owner: owner)
-            }
             if let note = page.emptyNote {
                 Text(note)
                     .foregroundStyle(.secondary)
@@ -369,12 +368,21 @@ struct CodexPoolPageView: View {
 
     @ViewBuilder private func memberRow(_ member: PoolMember) -> some View {
         if let login = member.login {
+            // What THIS reader may do to THIS account (migration 0371): the person who signed it in signs
+            // it in again, and with the pool's admins takes it out (web's `actionsFor`). Without the pool's
+            // people read — an own pool whose access is not in yet — the page's own presses stand.
+            let canSignInAgain = page.access.map { SharedPoolPage.canSignInAgain(login, in: $0) } ?? page.mine
+            let canSignOut = page.access.map { SharedPoolPage.canSignOut(login, in: $0) } ?? page.mine
             CodexAccountRow(member: member, login: login, next: CodexLoginPool.showsNext(member, in: pool),
-                            tagged: page.tagged, now: now, signInAgain: { sheet = .signIn(login) },
+                            tagged: page.tagged, canSignInAgain: canSignInAgain, canSignOut: canSignOut,
+                            contributor: contributorName(login), now: now,
+                            signInAgain: { sheet = .signIn(login) },
                             signOut: { signingOut = login })
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    Button(role: .destructive) { signingOut = login } label: {
-                        Label(CodexLoginPool.signOut, systemImage: "rectangle.portrait.and.arrow.right")
+                    if canSignOut {
+                        Button(role: .destructive) { signingOut = login } label: {
+                            Label(CodexLoginPool.signOut, systemImage: "rectangle.portrait.and.arrow.right")
+                        }
                     }
                 }
         } else if let key = member.key, let access = page.access {
@@ -400,10 +408,18 @@ struct CodexPoolPageView: View {
         }
     }
 
+    /// The person who signed an account in, named where the pool's people are read and the account is one
+    /// of theirs (web's `contributorOf`).
+    private func contributorName(_ login: CodexLogin) -> String? {
+        guard let access = page.access, let userId = login.userId else { return nil }
+        let key = PublicID.storageKey(userId)
+        return access.people.first { PublicID.storageKey($0.userId) == key }?.name
+    }
+
     /// Who can use it: its owner's switch and what it means, each person's row (taken out, or made an admin
     /// on a pool made on the shared pools page, with a swipe), "Add people", whether they may put keys of
-    /// their own in, the lock on its owner's ChatGPT accounts, and — shared with nobody able to start a
-    /// session yet — what fixes it.
+    /// their own in, the notice that the ChatGPT accounts run everyone's sessions here, and — shared with
+    /// nothing anybody added could run on — what fixes it.
     @ViewBuilder private func whoCanUseIt(_ card: WhoCanUseIt) -> some View {
         Section {
             if card.showsMode {
@@ -458,9 +474,17 @@ struct CodexPoolPageView: View {
                         membersCanAdd = value
                         setRule(UpdateSharedPoolRequest(membersCanAdd: value))
                     }))
+                // The accounts' own rule, beside the keys' (migration 0371).
+                Toggle(WhoCanUseIt.ruleAccountsTitle, isOn: Binding(
+                    get: { membersCanAddAccounts ?? card.pool.membersCanAddAccounts },
+                    set: { value in
+                        membersCanAddAccounts = value
+                        setRule(UpdateSharedPoolRequest(membersCanAddAccounts: value))
+                    }))
             } footer: {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(WhoCanUseIt.ruleHint)
+                    Text(WhoCanUseIt.ruleAccountsHint)
                     if card.showsFoot {
                         HStack(alignment: .firstTextBaseline, spacing: 6) {
                             Image(systemName: "lock.fill")
@@ -506,12 +530,12 @@ struct CodexPoolPageView: View {
     @ViewBuilder private func sheetView(_ kind: CodexPoolSheet) -> some View {
         switch kind {
         case .choose:
-            AddAccountSheet(pool: pool, accounts: page.logins.count) { chosen in
+            AddAccountSheet(pool: pool, accounts: page.logins.count, mine: page.mine) { chosen in
                 sheet = chosen == .key ? CodexPoolSheet.addKey : .signIn(nil)
             }
         case .signIn(let again):
-            if let own = page.own, let accountActions {
-                CodexSignInSheet(pool: own, again: again, actions: accountActions)
+            if let accountActions {
+                CodexSignInSheet(pool: page.own ?? pool, mine: page.mine, again: again, actions: accountActions)
             }
         case .addKey:
             if let access = page.access, let accessActions {
@@ -594,45 +618,14 @@ struct CodexPoolPageView: View {
     }
 }
 
-/// Whose sessions an account of a shared pool runs, said on its owner's page (web's `RunsFor`): a ChatGPT
-/// account only ever its owner's, a key everybody's — a rule rather than a setting. The mark and its words
-/// are one unit on the line: where the line wraps, they go to the next one together.
-private func runsFor(everyone: Bool) -> Text {
-    let words = (everyone ? CodexPoolPage.everyoneHere : CodexPoolPage.onlyYou)
-        .replacingOccurrences(of: " ", with: "\u{00A0}")
-    return (Text(Image(systemName: everyone ? "person.2.fill" : "lock.fill")) + Text(verbatim: "\u{00A0}")
+/// Whose sessions a credential of a shared pool runs, said on its owner's page (web's `RunsFor`): since
+/// 2026-10-03 a ChatGPT account runs everybody's as a key does — a rule rather than a setting. The mark and
+/// its words are one unit on the line: where the line wraps, they go to the next one together.
+private func runsFor() -> Text {
+    let words = CodexPoolPage.everyoneHere.replacingOccurrences(of: " ", with: "\u{00A0}")
+    return (Text(Image(systemName: "person.2.fill")) + Text(verbatim: "\u{00A0}")
         + Text(verbatim: words))
-        .foregroundStyle(everyone ? PoolTone.color(.success) : Color.secondary)
-}
-
-/// The owner's ChatGPT accounts as somebody they added sees them (web's `LockedAccountsRow`): one locked
-/// line — whose they are, never their email, plan or quota, which are the owner's own subscription's.
-private struct LockedAccountsRow: View {
-    let owner: String
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .strokeBorder(Color.secondary.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
-                .frame(width: 28, height: 28)
-                .overlay {
-                    Image(systemName: "lock.fill")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.top, 2)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(CodexPoolPage.lockedTitle(owner))
-                    .font(.headline)
-                    .foregroundStyle(.secondary)
-                Text(CodexPoolPage.lockedLine(owner))
-                    .font(.orbitLabel)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(.vertical, 4)
-    }
+        .foregroundStyle(PoolTone.color(.success))
 }
 
 /// One key: whose it is and its name, where it stands, what the others spent on it against its cap —
@@ -666,7 +659,7 @@ private struct PoolKeyRow: View {
                         PoolChip(text: SharedPoolPage.nextChip)
                     }
                 }
-                (Text(SharedPoolPage.keyLine(key)) + (tagged ? Text(verbatim: " · ") + runsFor(everyone: true) : Text(verbatim: "")))
+                (Text(SharedPoolPage.keyLine(key)) + (tagged ? Text(verbatim: " · ") + runsFor() : Text(verbatim: "")))
                     .font(.orbitLabel)
                     .foregroundStyle(.secondary)
                 Text(status.label)
@@ -765,6 +758,8 @@ private struct AddAccountSheet: View {
     let pool: ProviderPool
     /// How many ChatGPT accounts the pool holds already.
     let accounts: Int
+    /// The reader is the pool's owner: an account may be shared with others yet, or already is.
+    let mine: Bool
     let onContinue: (CodexPoolPage.Kind.ID) -> Void
 
     @State private var kind = CodexPoolPage.Kind.ID.chatGPT
@@ -774,7 +769,7 @@ private struct AddAccountSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    ForEach(CodexPoolPage.kinds(accounts: accounts)) { option in
+                    ForEach(CodexPoolPage.kinds(accounts: accounts, mine: mine)) { option in
                         Button { kind = option.id } label: {
                             HStack(alignment: .top, spacing: 12) {
                                 Image(systemName: kind == option.id ? "largecircle.fill.circle" : "circle")
@@ -865,7 +860,7 @@ private struct SharePoolSheet: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                 }
-                if SharePool.noKey(pool) {
+                if SharePool.empty(pool, accounts: accounts) {
                     Section {
                         let risk = SharePool.risk(pool, accounts: accounts)
                         HStack(alignment: .top, spacing: 10) {
@@ -1226,15 +1221,22 @@ private struct FactText: View {
 // MARK: - A Codex pool's ChatGPT accounts
 
 /// One of the pool's ChatGPT accounts: its email and plan — NEXT, when it is the one the next session
-/// starts on among several; once the pool is shared, that it runs its owner's sessions alone — where it
-/// stands, each of its windows with when it resets, and its sign-out mark; once OpenAI signed it out, why
-/// and the press that signs it in again.
+/// starts on among several; once the pool is shared, that it runs everybody's sessions (2026-10-03) —
+/// where it stands, and each of its windows with when it resets; once OpenAI signed it out, why and — to
+/// the pool's owner alone, whose the sign-in is — the press that signs it in again, and the sign-out mark.
 private struct CodexAccountRow: View {
     let member: PoolMember
     let login: CodexLogin
     let next: Bool
-    /// It says whose sessions it runs: its owner's alone.
+    /// It says whose sessions it runs: everybody's.
     let tagged: Bool
+    /// The reader signed this account in: only they can sign it in again (migration 0371) — nobody, an
+    /// admin included, has a credential for it.
+    let canSignInAgain: Bool
+    /// The reader may take it out: the person who signed it in, or the pool's admins.
+    let canSignOut: Bool
+    /// Who signed it in, where the pool's people are read.
+    let contributor: String?
     let now: Date
     let signInAgain: () -> Void
     let signOut: () -> Void
@@ -1255,36 +1257,44 @@ private struct CodexAccountRow: View {
                             PoolChip(text: SharedPoolPage.nextChip)
                         }
                     }
-                    (Text(CodexLoginPool.line(login)) + (tagged ? Text(verbatim: " · ") + runsFor(everyone: false) : Text(verbatim: "")))
+                    (Text(CodexLoginPool.line(login, contributor: contributor))
+                        + (tagged ? Text(verbatim: " · ") + runsFor() : Text(verbatim: "")))
                         .font(.orbitLabel)
                         .foregroundStyle(.secondary)
                     Text(status.label)
                         .font(.orbitListSubtitle)
                         .foregroundStyle(PoolTone.color(status.tone))
                     if member.state == .signedOut {
-                        Text(CodexLoginPool.signedOutReason)
+                        Text(canSignInAgain
+                            ? CodexLoginPool.signedOutReason
+                            : CodexLoginPool.signedOutReasonNotYours(contributor))
                             .font(.orbitLabel)
                             .foregroundStyle(PoolTone.color(.danger))
                             .padding(.top, 2)
-                        Button(CodexLoginPool.signInAgain, action: signInAgain)
-                            .buttonStyle(.borderedProminent)
-                            .buttonBorderShape(.capsule)
-                            .controlSize(.small)
-                            .padding(.top, 7)
+                        if canSignInAgain {
+                            Button(CodexLoginPool.signInAgain, action: signInAgain)
+                                .buttonStyle(.borderedProminent)
+                                .buttonBorderShape(.capsule)
+                                .controlSize(.small)
+                                .padding(.top, 7)
+                        }
                     }
                 }
                 Spacer(minLength: 0)
                 // Signing this account out: the mark rests in the row's grey — red on a row that is fine
                 // reads as something wrong with it — and asks before it does anything. The tint, not a
-                // style on the image: a borderless button draws its label in its tint.
-                Button(action: signOut) {
-                    Image(systemName: "rectangle.portrait.and.arrow.right")
-                        .frame(width: 30, height: 30)
-                        .contentShape(Rectangle())
+                // style on the image: a borderless button draws its label in its tint. Offered to whoever
+                // the pool admits (the person who signed it in, and its admins) and applied per row.
+                if canSignOut {
+                    Button(action: signOut) {
+                        Image(systemName: "rectangle.portrait.and.arrow.right")
+                            .frame(width: 30, height: 30)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.borderless)
+                    .tint(Color.secondary)
+                    .accessibilityLabel(CodexLoginPool.signOutLabel(login))
                 }
-                .buttonStyle(.borderless)
-                .tint(Color.secondary)
-                .accessibilityLabel(CodexLoginPool.signOutLabel(login))
             }
             if windows.isEmpty {
                 Text(CodexLoginPool.noQuota)
@@ -1348,6 +1358,9 @@ private struct CodexWindowRow: View {
 /// signed out going back in. Closing it before the code was approved gives the sign-in up on the server.
 struct CodexSignInSheet: View {
     let pool: ProviderPool
+    /// The reader is the pool's owner — the page drawn for them — rather than one of the people it is
+    /// shared with, whose own account goes in for everyone here too (migration 0371).
+    var mine: Bool = true
     /// The account a sign-in again is for, once OpenAI signed it out; nil to add one more.
     let again: CodexLogin?
     let actions: CodexPoolActions
@@ -1361,9 +1374,10 @@ struct CodexSignInSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
 
-    init(pool: ProviderPool, again: CodexLogin? = nil, actions: CodexPoolActions,
+    init(pool: ProviderPool, mine: Bool = true, again: CodexLogin? = nil, actions: CodexPoolActions,
          step: CodexSignIn.Step = .consent) {
         self.pool = pool
+        self.mine = mine
         self.again = again
         self.actions = actions
         _step = State(initialValue: step)
@@ -1429,7 +1443,9 @@ struct CodexSignInSheet: View {
                     .padding(.top, 6)
                     .padding(.bottom, 12)
                 VStack(alignment: .leading, spacing: 0) {
-                    let facts = addsAnother ? CodexSignIn.anotherFacts(pool) : CodexSignIn.facts(pool)
+                    let facts = addsAnother
+                        ? CodexSignIn.anotherFacts(pool, mine: mine)
+                        : CodexSignIn.facts(pool, mine: mine)
                     ForEach(Array(facts.enumerated()), id: \.offset) { index, fact in
                         if index > 0 {
                             Divider().padding(.leading, 16)
@@ -1442,7 +1458,7 @@ struct CodexSignInSheet: View {
                 .background(Color(uiColor: .secondarySystemGroupedBackground),
                             in: RoundedRectangle(cornerRadius: 26, style: .continuous))
                 .padding(.horizontal, 16)
-                let risk = addsAnother ? CodexSignIn.anotherRisk : CodexSignIn.risk
+                let risk = addsAnother ? CodexSignIn.anotherRisk : CodexSignIn.risk(mine: mine)
                 (Text("⚠︎ ") + Text(risk.lead).bold() + Text(risk.rest))
                     .font(.orbitListSubtitle)
                     .foregroundStyle(PoolTone.color(.warning))

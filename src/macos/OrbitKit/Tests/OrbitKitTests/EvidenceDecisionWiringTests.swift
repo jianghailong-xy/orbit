@@ -15,8 +15,9 @@ import XCTest
 ///    reason as well, so neither a dead card nor a send-back with no note can be pressed;
 ///  - the standing is re-derived from the console's read on every render and never kept;
 ///  - the body reads the ROW, through `EvidenceDecisions`;
-///  - the console reads the queue with the ruler's reads, delivers only `cardRows`, and presses the
-///    door with the request `EvidenceDecisions.request` builds;
+///  - the console reads the queue in every conversation — with the ruler's reads, and on its own in
+///    one that coordinates nothing — delivers only `cardRows`, and presses the door with the
+///    request `EvidenceDecisions.request` builds;
 ///  - an AskUserQuestion is the ordinary question form, whatever its options say.
 ///
 /// This is a weaker instrument than the web card's DOM test and it is used because it is the
@@ -152,17 +153,28 @@ final class EvidenceDecisionWiringTests: XCTestCase {
 
     func testTheConsoleDeliversOnlyTheRowsTheCardFilterKeeps() throws {
         let console = try source(Self.consolePath)
-        let refresh = try section(console, from: "func refreshRulerQuestions(force: Bool = false) async {",
-                                  to: "private var settlementHeldOnConfirmation")
-        XCTAssertTrue(refresh.contains("guard !isDraft, let projectID, !loadingRuler else { return }"),
-                      "a session that coordinates no project makes no read")
+        let refresh = try section(console, from: "func refreshEvidenceDecisions(force: Bool = false) async {",
+                                  to: "/// Answer one revision of a task's evidence at the decision door")
+        XCTAssertTrue(refresh.contains("guard !isDraft, !loadingEvidence else { return }"),
+                      "every conversation reads it, not only a coordinator: a task a session "
+                          + "dispatched outside any project has its card in a session that coordinates nothing")
         XCTAssertTrue(refresh.contains("api.pendingEvidenceDecisions(decidingSessionID: sessionID)"),
-                      "the queue is read with the ruler's reads — the read is what creates a card, "
-                          + "so no card on screen can be what drives it")
-        XCTAssertTrue(refresh.contains("for row in EvidenceDecisions.cardRows(queue: queue, projectId: projectID) {"),
-                      "and only this project's rows that the door would take from here become cards")
+                      "the read is what creates a card, so no card on screen can be what drives it")
+        XCTAssertTrue(refresh.contains("for row in EvidenceDecisions.cardRows(queue: queue, projectId: projectID, sessionId: sessionID) {"),
+                      "and only the rows the card filter keeps for THIS conversation become cards")
+        let ruler = try section(console, from: "func refreshRulerQuestions(force: Bool = false) async {",
+                                to: "guard !isDraft, let projectID, !loadingRuler else { return }")
+        XCTAssertTrue(ruler.contains("await refreshEvidenceDecisions(force: force)"),
+                      "every door that asks for the ruler's reads — reconnect, a card, a press — asks "
+                          + "for this one first, in a conversation with no project as well")
+        XCTAssertTrue(console.contains("if projectID == nil { Task { [weak self] in await self?.refreshEvidenceDecisions() } }"),
+                      "a conversation that coordinates nothing reads it when its context loads")
+        XCTAssertTrue(console.contains("Task { [weak self] in await self?.refreshEvidenceDecisions(force: true) }"),
+                      "and again when its row's count moves")
         XCTAssertTrue(console.contains("EvidenceDecisions.isOpen(evidenceStanding(taskID, evidenceRevision))"),
                       "the bar stops counting a card that went stale, by OrbitKit's rule")
+        XCTAssertTrue(console.contains("EvidenceDecisions.standing(queue: evidenceDecisions, projectId: projectID, sessionId: sessionID,"),
+                      "and a card's standing is re-derived through the same filter, for this conversation")
     }
 
     /// The arming half of the handoff, on the console's side: the press hands the ROW over and

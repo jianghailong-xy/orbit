@@ -28,7 +28,9 @@ final class CodexPoolPageTests: XCTestCase {
         // Both accounts spent: the key the server picked for him is the next session's, and nothing waits.
         let spent = [B.account("a@x.io", plan: "plus", fingerprint: "…0001", fiveHour: 100, weekly: 10),
                      B.account("b@x.io", plan: "pro", fingerprint: "…0002", fiveHour: 10, weekly: 100)]
-        let onKeys = SharedPools.ownPoolWithAccess(B.ownPool(spent), B.access(B.jiang))
+        // The server's own mark on a key (it picks the credential a session starting now would run on),
+        // which it sets when none of the pool's accounts can.
+        let onKeys = SharedPools.ownPoolWithAccess(B.ownPool(spent), B.access(B.jiang, keyNext: true))
         XCTAssertEqual(onKeys.members.map(\.state), [.spent, .spent, .available, .running])
         XCTAssertEqual(onKeys.members.map(\.next), [false, false, true, false])
         XCTAssertEqual(ProviderPools.headline(onKeys), "Next for you: orbit-org-1")
@@ -67,7 +69,6 @@ final class CodexPoolPageTests: XCTestCase {
         XCTAssertTrue(page.mine)
         XCTAssertFalse(page.people)
         XCTAssertFalse(page.tagged)
-        XCTAssertNil(page.lockedOwner)
         XCTAssertEqual(page.who, "Just me")
         XCTAssertEqual(page.howSentence,
                        "Each session starts on the account whose quota resets soonest, and stays on it until that one runs out.")
@@ -82,40 +83,53 @@ final class CodexPoolPageTests: XCTestCase {
         XCTAssertNil(CodexPoolPage(own: nil, access: nil))
     }
 
-    /// Somebody he added runs on its keys alone: his accounts are one locked line — never an email, a plan,
-    /// a fingerprint or a quota — the keys are theirs to run on, their own first, and the way out is leaving.
+    /// Somebody he added runs on his ChatGPT accounts too (2026-10-03): each account is a row of its own —
+    /// email, plan, `…AB12`, quota, and whose account it is — read as his own page reads them; the keys are
+    /// theirs to run on beside them, their own first; the way out is leaving; and the press that puts
+    /// something in offers what the pool's two rules let them (migration 0371).
     func testTheSamePoolForSomebodyHeAdded() throws {
         let page = B.zhangsPage()
         XCTAssertFalse(page.mine)
         XCTAssertTrue(page.people)
         XCTAssertFalse(page.tagged)
-        XCTAssertEqual(page.lockedOwner, "jianghailong")
-        XCTAssertEqual(page.pool.members.map(\.label), ["zm-proj", "orbit-org-1"])
-        XCTAssertEqual(page.pool.members.map(\.next), [true, false])
-        XCTAssertTrue(page.pool.members.allSatisfy { $0.login == nil && $0.key != nil })
-        XCTAssertNil(page.accounts)
+        XCTAssertEqual(page.pool.members.map(\.label),
+                       ["jianghailong.rd@gmail.com", "hl.work@gmail.com", "zm-proj", "orbit-org-1"])
+        XCTAssertEqual(page.pool.members.map(\.next), [false, true, false, false])
+        XCTAssertEqual(page.logins.map(\.email), ["jianghailong.rd@gmail.com", "hl.work@gmail.com"])
+        XCTAssertEqual(page.accounts, 2)
         XCTAssertNil(page.accountsCount)
-        XCTAssertEqual(page.adding, .key)
-        XCTAssertEqual(page.addLabel, "Add a key")
+        // The pool's own rule for accounts is on: a member signs one of their own in as its owner does.
+        XCTAssertTrue(page.mayAddAccount)
+        XCTAssertEqual(page.adding, .choose)
+        XCTAssertEqual(page.addLabel, "Add account")
         XCTAssertEqual(page.exitLabel, "Leave pool")
         XCTAssertEqual(page.exitConfirm, "Leave")
         XCTAssertEqual(page.exitTitle, "Leave Codex Pool?")
-        // Nothing of his accounts is anywhere on it: whose subscription they are is all it says.
-        let said = [B.line(page), ProviderPools.headline(page.pool), CodexPoolPage.lockedTitle("jianghailong"),
-                    CodexPoolPage.lockedLine("jianghailong")] + page.pool.members.map(\.label)
-        for secret in ["jianghailong.rd@gmail.com", "hl.work@gmail.com", "ChatGPT Plus", "…016a", "Weekly"] {
-            XCTAssertFalse(said.contains { $0.contains(secret) }, "\(secret) reached somebody he added")
-        }
-        // Nor do they get an "Add a key" the pool doesn't let them have.
+        // They read the accounts as his page does — and OpenAI's own id of one is in none of it, his
+        // included: the fingerprint is four characters of it and nothing else.
+        XCTAssertTrue(page.logins.allSatisfy { $0.fingerprint.hasPrefix("…") })
+        // Neither rule on: nothing to put in, and no press at all.
         let theirs = B.access(B.zhang)
         let closed = SharedPool(id: theirs.id, slug: theirs.slug, label: theirs.label, shared: false,
-                                ownerHasChatGPT: true, membersCanAdd: false, viewerRole: .member,
-                                people: theirs.people, keys: theirs.keys)
+                                logins: theirs.logins, membersCanAdd: false, membersCanAddAccounts: false,
+                                viewerRole: .member, people: theirs.people, keys: theirs.keys)
         XCTAssertNil(CodexPoolPage(own: nil, access: closed)?.adding)
-        // A pool of somebody's own without ChatGPT accounts in it has no locked line to draw.
-        let none = SharedPool(id: theirs.id, slug: theirs.slug, label: theirs.label, shared: false,
-                              ownerHasChatGPT: false, people: theirs.people, keys: theirs.keys)
-        XCTAssertNil(CodexPoolPage(own: nil, access: none)?.lockedOwner)
+        // The accounts' rule off while the keys' is on: "Add a key" alone, as it was before 0371.
+        let keysOnly = SharedPool(id: theirs.id, slug: theirs.slug, label: theirs.label, shared: false,
+                                  logins: theirs.logins, membersCanAdd: true, membersCanAddAccounts: false,
+                                  viewerRole: .member, people: theirs.people, keys: theirs.keys)
+        XCTAssertEqual(CodexPoolPage(own: nil, access: keysOnly)?.adding, .key)
+        XCTAssertEqual(CodexPoolPage(own: nil, access: keysOnly)?.addLabel, "Add a key")
+        // A pool of somebody's own with no account signed in holds none — and the note a member reads names
+        // the sign-in as theirs to make, since the pool lets them (0371).
+        let bare = SharedPool(id: theirs.id, slug: theirs.slug, label: theirs.label, shared: false,
+                              logins: [], people: theirs.people, keys: [])
+        XCTAssertEqual(CodexPoolPage(own: nil, access: bare)?.accounts, 0)
+        XCTAssertEqual(CodexPoolPage(own: nil, access: bare)?.emptyNote, CodexLoginPool.noAccount)
+        let bareClosed = SharedPool(id: theirs.id, slug: theirs.slug, label: theirs.label, shared: false,
+                                    logins: [], membersCanAdd: true, membersCanAddAccounts: false,
+                                    viewerRole: .member, people: theirs.people, keys: [])
+        XCTAssertEqual(CodexPoolPage(own: nil, access: bareClosed)?.emptyNote, CodexLoginPool.noAccountOwner)
     }
 
     // MARK: - who can use it
@@ -135,11 +149,17 @@ final class CodexPoolPageTests: XCTestCase {
         XCTAssertEqual(his.rows.map(his.manages), [false, true, true])
         XCTAssertEqual(his.line(his.rows[0]), WhoCanUseIt.PersonLine(runs: WhoCanUseIt.runsOnEverything, everything: true,
                                                                     rest: "23 sessions"))
+        // Everybody he added runs on them too, since 2026-10-03 — not on the API keys alone.
+        XCTAssertEqual(his.line(his.rows[1]), WhoCanUseIt.PersonLine(runs: WhoCanUseIt.runsOnEverything, everything: true,
+                                                                    rest: "19 sessions"))
         // A pool made on the shared pools page holds no ChatGPT account: its maker runs on its keys too, and
         // there is no lock to speak of.
         let keysAlone = WhoCanUseIt(pool: B.access(B.jiang), accounts: nil)
         XCTAssertEqual(keysAlone.line(keysAlone.rows[0]).runs, WhoCanUseIt.runsOnKeys)
         XCTAssertFalse(keysAlone.showsFoot)
+        // Nor does a pool that holds none — a shared pool (which 0371 lets hold them), or one whose
+        // accounts have all been taken out: the notice is about accounts it has.
+        XCTAssertFalse(WhoCanUseIt(pool: B.access(B.jiang), accounts: 0).showsFoot)
 
         let alone = WhoCanUseIt(pool: B.access(B.jiang, people: [], keys: []), accounts: 2)
         XCTAssertNil(alone.count)
@@ -151,7 +171,7 @@ final class CodexPoolPageTests: XCTestCase {
         XCTAssertNil(alone.warning, "nobody else uses it")
         XCTAssertFalse(alone.ran)
 
-        let zhang = WhoCanUseIt(pool: B.access(B.zhang), accounts: nil)
+        let zhang = WhoCanUseIt(pool: B.access(B.zhang), accounts: 0)
         XCTAssertFalse(zhang.showsMode)
         XCTAssertFalse(zhang.addsPeople)
         XCTAssertFalse(zhang.showsRule)
@@ -167,12 +187,31 @@ final class CodexPoolPageTests: XCTestCase {
         XCTAssertEqual(SharePool.emails(" ,, "), [])
         let two = B.access(B.jiang, people: [])
         XCTAssertFalse(SharePool.noKey(two))
+        // A pool with no account of his: the keys are the whole answer, as they always were.
+        XCTAssertEqual(SharePool.facts(two, accounts: nil)[1].lead, "Their sessions run on the pool’s API keys")
         XCTAssertEqual(SharePool.facts(two, accounts: nil)[1].rest, ", which are orbit-org-1 and zm-proj now.")
-        XCTAssertEqual(SharePool.facts(two, accounts: 1)[1].rest, ", which are orbit-org-1 and zm-proj now. "
-            + "Your ChatGPT account stays yours alone: they can’t run on it or see which account it is.")
+        // With his accounts in it, they run on them too (2026-10-03).
+        XCTAssertEqual(SharePool.facts(two, accounts: 2)[1].lead, "Their sessions start on your ChatGPT accounts")
+        XCTAssertEqual(SharePool.facts(two, accounts: 2)[1].rest,
+                       ", and fall to the pool’s API keys — orbit-org-1 and zm-proj — when none of them can run.")
+        // The accounts' own rule, said where the pool lets a member sign one of their own in (migration
+        // 0371) — and left out where it does not.
+        XCTAssertEqual(SharePool.facts(two, accounts: 2)[2].lead, "They can sign in ChatGPT accounts of their own")
+        XCTAssertEqual(SharePool.facts(two, accounts: 2)[3].lead, "Everyone sees each person’s share")
+        XCTAssertEqual(SharePool.facts(two, accounts: 2)[2].rest,
+                       ", which then run everyone’s sessions here too — theirs and yours — until they take them out again.")
+        let accountsClosed = SharedPool(id: two.id, slug: two.slug, label: two.label, shared: two.shared,
+                                        membersCanAddAccounts: false, ownKeyFirst: two.ownKeyFirst,
+                                        people: two.people, keys: two.keys)
+        XCTAssertEqual(SharePool.facts(accountsClosed, accounts: 2).count, 3)
         let none = B.access(B.jiang, people: [], keys: [])
         XCTAssertTrue(SharePool.noKey(none))
+        XCTAssertTrue(SharePool.empty(none, accounts: nil))
+        // A pool with nothing to fall to AND an account signed in is not empty: the account runs theirs.
+        XCTAssertFalse(SharePool.empty(none, accounts: 2))
         XCTAssertEqual(SharePool.risk(none, accounts: nil).rest, " They’ll see it but can’t start a session until it has one.")
+        XCTAssertEqual(SharePool.risk(none, accounts: 0).rest,
+                       " They’ll see it but can’t start a session until it has one, and no ChatGPT account is signed in either.")
         XCTAssertEqual(SharePool.outcome(none, missed: [SharePool.missed("x@y.io", reason: "No Orbit account has that email")]),
                        "Not added: x@y.io (No Orbit account has that email)")
     }

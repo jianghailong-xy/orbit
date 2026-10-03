@@ -124,6 +124,8 @@ import {
   ActivateTurnLeasesResponse,
   fastModeAvailable,
   type CodexRateLimitResetResultRequest,
+  type ConfirmationReturnCard,
+  type ConfirmationReviewRequestCard,
   type OpenItemDeliveryCard,
   type ProjectStartedCard,
   type SessionMessageCard,
@@ -253,8 +255,23 @@ import {
   unspentOwnerConfirmationClaim,
   waitingScheduledWakeup,
 } from '../tasks/owner-confirmation-read';
+import {
+  abandonUnansweredReviews,
+  recordOwnerConfirmationReview,
+  storableBranchSha,
+} from '../tasks/owner-confirmation-review';
+import {
+  appendConfirmationReturnContext,
+  appendOwnerConfirmationReviewContext,
+  readConfirmationReturnCard,
+  readConfirmationReviewRequestCard,
+} from '../tasks/owner-confirmation-review-turn';
+import { appendEvidenceReviewContext } from '../tasks/evidence-review';
+import { OwnerConfirmationReviewService } from '../tasks/owner-confirmation-review.service';
 import { OWNER_CONFIRMATION_UNSETTLED_STATUSES } from '../tasks/task-owner-confirmation';
 import {
+  withConfirmationReturn,
+  withConfirmationReviewRequest,
   withControlPlaneNote,
   withOpenItemDelivery,
   withProjectStarted,
@@ -306,7 +323,7 @@ import {
   retireSessionInboxGeneration,
 } from '../common/session-inbox-fence';
 import {
-  OPENCODE_RUNNER_UPGRADE_ERROR,
+  ADVERTISED_RUNTIMES,
   SOURCE_PROTOCOL_UNSUPPORTED_ERROR,
   advertisedRunnerProviders,
   runnerAdvertisesProvider,
@@ -317,7 +334,7 @@ import {
   hasResolvedSource,
   sessionSourceSnapshot,
 } from '../projects/session-source';
-import { sessionExecRuntime } from '../providers/custom-provider';
+import { providerSlugsOn, sessionExecRuntime } from '../providers/custom-provider';
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
@@ -692,6 +709,13 @@ export class RunnerApiController {
      * this list; an outcome not handed off here is handed off by the request worker's next pass.
      */
     @Optional() private readonly sessionRequests?: SessionRequestService,
+    /**
+     * Hands a confirmation request to its reviewer after the transaction that recorded it, and picks
+     * up a delivery a crash cut off (docs/owner-confirmation-review-contract.md §2 D2, D5).
+     * `@Optional()` for the same reason as the rest of this list: a review not delivered here is
+     * delivered after the reviewer's next completion, and its window runs out regardless.
+     */
+    @Optional() private readonly confirmationReviews?: OwnerConfirmationReviewService,
   ) {}
 
   /** `orbit register` — exchange a one-time enrollment token for a runner credential. */
@@ -1109,6 +1133,8 @@ export class RunnerApiController {
                 // The worktree's actual HEAD branch → the bar flags divergence from the tracked
                 // `branch` and offers Adopt (older runners omit it → left untouched).
                 ...(s.worktreeBranch !== undefined ? { worktreeBranch: s.worktreeBranch } : {}),
+                // The branch tip a confirmation review is held to (0370): written when reported.
+                ...(storableBranchSha(s.branchSha) ? { branchSha: s.branchSha } : {}),
               },
             });
           }),
@@ -1155,8 +1181,8 @@ export class RunnerApiController {
     if (dto?.agentDirProbes?.length) {
       try {
         await Promise.all(
-          dto.agentDirProbes.slice(0, 200).map((p) =>
-            this.prisma.workspace.updateMany({
+          dto.agentDirProbes.slice(0, 200).map(async (p) => {
+            await this.prisma.workspace.updateMany({
               where: { id: p.agentId, runnerId: runner.id, deletedAt: null },
               data: {
                 workDirExists: p.exists,
@@ -1170,8 +1196,24 @@ export class RunnerApiController {
                 workDirTotalBytes: toDiskBytes(p.totalBytes),
                 workDirProbedAt: new Date(),
               },
-            }),
-          ),
+            });
+            // Existing workspaces learn their repository without a manual URL entry. The
+            // directory must still be the one probed, and a concurrent explicit edit wins:
+            // never replace a recorded remote or accept an old runner's unscoped report.
+            const repoUrl = typeof p.repoUrl === 'string' ? p.repoUrl.trim() : '';
+            if (p.exists && p.isGitRepo && typeof p.workDir === 'string' && p.workDir && repoUrl) {
+              await this.prisma.workspace.updateMany({
+                where: {
+                  id: p.agentId,
+                  runnerId: runner.id,
+                  workDir: p.workDir,
+                  deletedAt: null,
+                  OR: [{ repoUrl: null }, { repoUrl: '' }],
+                },
+                data: { repoUrl },
+              });
+            }
+          }),
         );
       } catch {
         // Advisory telemetry — never fail the heartbeat (that would read as offline).
@@ -1906,12 +1948,16 @@ export class RunnerApiController {
   }
 
   /**
-   * Mark pending OpenCode work visibly before refusing a legacy runner. The conditional update
-   * repeats the scheduling predicates, so a capable claim/cancel racing this check can never have
-   * its now-live/ended row stamped with a stale upgrade error.
+   * Mark pending work on a runtime this runner has not advertised (ADVERTISED_RUNTIMES: OpenCode,
+   * Antigravity) visibly, before carrying on without it. `slugs` are the providers that run on it
+   * (providerSlugsOn): the built-in slug, and the configured rows that borrow the runtime. The
+   * conditional update repeats the scheduling predicates, so a capable claim/cancel racing this
+   * check can never have its now-live/ended row stamped with a stale upgrade error.
    */
-  private async markOpenCodeUpgradeRequired(
+  private async markProviderUpgradeRequired(
     runnerId: string,
+    slugs: string[],
+    upgradeError: string,
     candidates?: Array<{ id: string; error: string | null }>,
   ): Promise<boolean> {
     const pending =
@@ -1920,14 +1966,14 @@ export class RunnerApiController {
         where: {
           assignedRunnerId: runnerId,
           status: RunStatus.PENDING,
-          provider: AgentProvider.OPENCODE,
+          provider: { in: slugs },
           cancelRequestedAt: null,
         },
         select: { id: true, error: true },
       }));
     if (pending.length === 0) return false;
     const unmarked = pending
-      .filter((session) => session.error !== OPENCODE_RUNNER_UPGRADE_ERROR)
+      .filter((session) => session.error !== upgradeError)
       .map((session) => session.id);
     if (unmarked.length > 0) {
       const marked = await this.prisma.session.updateMany({
@@ -1935,10 +1981,10 @@ export class RunnerApiController {
           id: { in: unmarked },
           assignedRunnerId: runnerId,
           status: RunStatus.PENDING,
-          provider: AgentProvider.OPENCODE,
+          provider: { in: slugs },
           cancelRequestedAt: null,
         },
-        data: { error: OPENCODE_RUNNER_UPGRADE_ERROR },
+        data: { error: upgradeError },
       });
       if (marked.count > 0) {
         for (const id of unmarked) this.realtime.publishSessionCreated(id);
@@ -1950,7 +1996,7 @@ export class RunnerApiController {
   /**
    * SR35, said out loud on the rows it applies to.
    *
-   * Mirrors `markOpenCodeUpgradeRequired` exactly, because the situation is the same one: a session
+   * Mirrors `markProviderUpgradeRequired` exactly, because the situation is the same one: a session
    * this machine's binary cannot drive, withheld by the claim SQL, which would otherwise sit PENDING
    * with nothing on it to say why. What differs is only that "cannot drive" here means "would drive
    * it from the wrong commit" — a runner without `source-pin/v1` does not fail on the payload, it
@@ -1999,7 +2045,7 @@ export class RunnerApiController {
   @UseGuards(RunnerAuthGuard)
   @Get('sessions/claim')
   async claim(
-    @CurrentRunner() runner: { id: string },
+    @CurrentRunner() runner: { id: string; ownerId: string },
     @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
     @Headers(RUNNER_PROVIDERS_HEADER) providerHeader?: string,
     @Res({ passthrough: true }) res?: Response,
@@ -2017,11 +2063,14 @@ export class RunnerApiController {
     const supportsTerminalHandoff = runnerSupportsCapability(capabilities, SESSION_TERMINAL_HANDOFF_V1);
     const supportsSourcePin = runnerSupportsCapability(capabilities, SESSION_SOURCE_PIN_V1);
     const supportedProviders = advertisedRunnerProviders(providerHeader);
-    if (!supportedProviders.includes(AgentProvider.OPENCODE)) {
-      // Explain the stall on the OpenCode rows themselves and then carry on: the claim SQL
-      // (plus migration 0080's trigger) already keeps them away from a legacy runner, so
-      // failing the request would only strand this runner's Claude/Codex work as well.
-      await this.markOpenCodeUpgradeRequired(runner.id);
+    for (const { provider, upgradeError } of ADVERTISED_RUNTIMES) {
+      if (supportedProviders.includes(provider)) continue;
+      // Explain the stall on the OpenCode/Antigravity rows themselves — a Gemini key's included,
+      // which runs on Antigravity under a slug of its own — and then carry on: the claim SQL (plus
+      // migration 0080's and 0367's triggers, 0372's for the borrowed slugs) already keeps them away
+      // from a legacy runner, so failing the request would only strand this runner's other work.
+      const slugs = await providerSlugsOn(this.prisma, runner.ownerId, provider);
+      await this.markProviderUpgradeRequired(runner.id, slugs, upgradeError);
     }
     if (!supportsSourcePin) {
       // Same shape, same reason (SR35): the claim SQL already withholds these rows, and failing the
@@ -2088,17 +2137,21 @@ export class RunnerApiController {
         owner: { select: { preferences: true } },
       },
     });
-    const openCodeSessions = sessions.filter(
-      (session) =>
-        (session.provider ?? AgentProvider.CLAUDE) === AgentProvider.OPENCODE,
-    );
-    const legacyOpenCode =
-      openCodeSessions.length > 0 &&
-      !runnerAdvertisesProvider(providerHeader, AgentProvider.OPENCODE);
-    if (legacyOpenCode) {
-      await this.markOpenCodeUpgradeRequired(
+    const undrivable = new Set<string>();
+    for (const { provider, upgradeError } of ADVERTISED_RUNTIMES) {
+      if (runnerAdvertisesProvider(providerHeader, provider)) continue;
+      // The configured rows that borrow the runtime too: this runner would rebuild a Gemini key's
+      // session as Claude just the same.
+      const slugs = await providerSlugsOn(this.prisma, runner.ownerId, provider);
+      const onProvider = sessions.filter((session) =>
+        slugs.includes(session.provider ?? AgentProvider.CLAUDE),
+      );
+      if (onProvider.length === 0) continue;
+      await this.markProviderUpgradeRequired(
         runner.id,
-        openCodeSessions
+        slugs,
+        upgradeError,
+        onProvider
           .filter(
             (session) =>
               session.status === RunStatus.PENDING && session.cancelRequestedAt == null,
@@ -2108,10 +2161,12 @@ export class RunnerApiController {
       // Omit the rows rather than failing the request. A 426 is not retryable on the runner, so
       // refusing here shuts the whole process down over one session it merely cannot drive. The
       // checkouts stay safe: worktree GC asks `sessions/worktrees-removable`, which keeps every
-      // non-terminal session, and the claim SQL never hands an OpenCode row to a legacy runner.
+      // non-terminal session, and the claim SQL never hands an OpenCode or Antigravity row to a
+      // runner that has not advertised it.
+      for (const session of onProvider) undrivable.add(session.id);
     }
-    const reclaimable = legacyOpenCode
-      ? sessions.filter((session) => !openCodeSessions.includes(session))
+    const reclaimable = undrivable.size > 0
+      ? sessions.filter((session) => !undrivable.has(session.id))
       : sessions;
     // How to ASK each authority, read once for the whole response rather than per session: the
     // frozen identity travels on each session row, and only the remote's local name and the
@@ -2145,7 +2200,7 @@ export class RunnerApiController {
       // SR35 again, on the other door. A downgraded runner must not re-attach a session whose
       // baseline it cannot honour: reclaim is where a process rebuilds supervisors from checkouts,
       // and one rebuilt without the pin is one that resumes from whatever the shared checkout says
-      // now. Omitted rather than refused, for the same reason the OpenCode rows are.
+      // now. Omitted rather than refused, for the same reason the OpenCode and Antigravity rows are.
       if (!supportsSourcePin && hasResolvedSource(s.sourceState)) {
         continue;
       }
@@ -3224,6 +3279,16 @@ export class RunnerApiController {
         if (t.kind === 'message') {
           content = (await appendSessionRepliesContext(tx, sessionId, t.clientTurnId, content)) ?? content;
         }
+        // A confirmation request handed to this session for review, and a reviewer's return handed to
+        // a run (docs/owner-confirmation-review-contract.md §2 D6, §8 B3): turns with nobody's words,
+        // whose block is rendered from the rows now and recorded as the control plane's note. Not
+        // best-effort, for the reason the replies are not: the block IS the turn. The same for an
+        // evidence revision handed to the session that dispatched its task (tasks/evidence-review.ts).
+        if (t.kind === 'message') {
+          content = (await appendOwnerConfirmationReviewContext(tx, t.clientTurnId, content)) ?? content;
+          content = (await appendConfirmationReturnContext(tx, t.clientTurnId, content)) ?? content;
+          content = (await appendEvidenceReviewContext(tx, t.clientTurnId, content)) ?? content;
+        }
         // The background work this session left running, said to the engine that comes back to it.
         // Outside the branch above on purpose: a re-delivery replaced the person's text with a
         // continuation nudge, and an engine that had to be restarted is the most literal case of
@@ -4154,22 +4219,23 @@ export class RunnerApiController {
       // is closer to firing than anything computed now, and re-deciding it here would restart the
       // countdown on every attempt — the one shape that makes a bounded ladder unbounded.
       //
-      // A model turn a shared pool's key ended is armed ahead of that ladder: the gateway refused the key,
-      // or OpenAI said it is out of budget or refused it, and the next claim moves the session to another
-      // key. That is re-sent the moment another key can take it, or at the first reset when none can
-      // (QueueService.sharedPoolKeyRetryAt) — the account pool's "room on another member re-sends now",
-      // for keys. Decided from the keys, not from the engine's words, and never for a turn whose key can
-      // still run: that failure was not the key's. A login pool's turn its account ended — spent, or signed
-      // out by OpenAI — is armed the same way, from its ChatGPT accounts (QueueService.loginPoolRetryAt):
-      // at once when another can take it, which the next claim moves the session to, else at the first
-      // account's reset.
+      // A model turn a pool's credential ended is armed ahead of that ladder: the gateway refused the key,
+      // or OpenAI said it is out of budget or refused it, or the ChatGPT account the session ran on was
+      // spent or signed out, and the next claim moves the session to whatever else can run. That is
+      // re-sent the moment another credential can take it, or at the first reset when none can
+      // (QueueService.sharedPoolRetryAt, for a session on somebody else's pool — its keys and, for a pool
+      // of somebody's own, the accounts they run too) — the account pool's "room on another member
+      // re-sends now", for a pool. Decided from the credentials, not from the engine's words, and never
+      // for a turn whose own credential can still run: that failure was not its. A session of the pool's
+      // own owner is armed the same way, from its accounts (QueueService.loginPoolRetryAt): at once when
+      // another can take it, which the next claim moves the session to, else at the first account's reset.
       const keyRetryAt =
         dto.status === RunStatus.FAILED
         && completedTurn?.kind === 'message'
         && current.retryAt == null
         // Only a configured provider's slug can name a pool, as in quotaRetryAt.
         && !isBuiltinProvider(current.provider)
-          ? ((await this.queue.sharedPoolKeyRetryAt(tx, current, new Date()))
+          ? ((await this.queue.sharedPoolRetryAt(tx, current, new Date()))
             ?? (await this.queue.loginPoolRetryAt(tx, current, new Date())))
           : null;
       // A built-in Codex session whose account's usage limit ended the turn. Codex says so as the
@@ -4473,6 +4539,11 @@ export class RunnerApiController {
       // `pendingExecutable` is the count the park below is decided by, taken after the requeues
       // above, so a follow-up that arrived while this turn ran counts here too. The wake-up's read
       // and the claim's are the last two, so an ordinary completion pays for neither.
+      //
+      // The request's review is written beside it (docs/owner-confirmation-review-contract.md §2 D1):
+      // the same transaction, so the first read after this turn already says "under review" and the
+      // owner's count never lights for a moment first. It is handed to its reviewer after the commit.
+      let reviewToDeliver: string | null = null;
       if (
         completedMessageTurn != null
         && completedTask != null
@@ -4488,13 +4559,21 @@ export class RunnerApiController {
       ) {
         const claim = await unspentOwnerConfirmationClaim(tx, sessionId);
         if (claim != null) {
-          await recordOwnerConfirmationRequest(tx, {
+          const request = await recordOwnerConfirmationRequest(tx, {
             taskId: current.taskId,
             ownerId: current.ownerId,
             sessionId,
             turnId: completedMessageTurn.id,
             claimId: claim.id,
+            branchSha: storableBranchSha(dto.branchSha) ?? null,
           });
+          const review = await recordOwnerConfirmationReview(tx, {
+            id: request.id,
+            taskId: current.taskId,
+            ownerId: current.ownerId,
+            requestedAt: request.requestedAt,
+          });
+          if (review?.delivery === 'PENDING') reviewToDeliver = review.reviewId;
         }
       }
       // Settle + bill only if this is still the active turn and is not being torn down,
@@ -4542,6 +4621,8 @@ export class RunnerApiController {
           ...(branchMerged !== undefined ? { branchMerged } : {}),
           // The worktree's actual HEAD branch → flags divergence / offers Adopt (older runners omit).
           ...(dto.worktreeBranch !== undefined ? { worktreeBranch: dto.worktreeBranch } : {}),
+          // The branch tip a confirmation review is held to (0370): written when reported.
+          ...(storableBranchSha(dto.branchSha) ? { branchSha: dto.branchSha } : {}),
           runtimeSessionId: dto.runtimeSessionId ?? undefined,
           lastTurnAt: new Date(),
           numTurns: { increment: turnInc },
@@ -4608,6 +4689,16 @@ export class RunnerApiController {
             runningBgJobs: current.runningBgJobs,
             retryAt: retryArmAt ?? current.retryAt,
             lastAssistantText: current.lastAssistantText,
+          })
+        : [];
+      // T5 (docs/owner-confirmation-review-contract.md §4): judged where NO_REPLY is and on the same
+      // condition — a confirmation request this session was handed to review, read and neither
+      // recorded nor returned, with nothing left to wake it, is not going to be reviewed.
+      const reviewsAbandoned = !failSession && nextStatus === RunStatus.AWAITING_INPUT
+        ? await abandonUnansweredReviews(tx, {
+            id: sessionId,
+            runningBgJobs: current.runningBgJobs,
+            retryAt: retryArmAt ?? current.retryAt,
           })
         : [];
       // §8 criterion 17: a turn a transient failure killed without failing the run — a quota ran out
@@ -4733,8 +4824,24 @@ export class RunnerApiController {
         taskOwnerId: current.ownerId,
         taskCompleted: acceptanceTaskCompleted,
         requestsClosed,
+        reviewToDeliver,
+        reviewsAbandoned,
       };
     }, loggedRetry(this.logger, 'runnerApi.turnComplete'));
+    // The review this completion recorded, handed to its reviewer after the commit (§2 D2); and the
+    // ones this completion found it had been handed and dropped, whose cards are the owner's now (T5).
+    if ('reviewToDeliver' in finalized && finalized.reviewToDeliver) {
+      await this.confirmationReviews?.deliver(finalized.reviewToDeliver).catch((error) => this.logger.warn(
+        `confirmation review ${finalized.reviewToDeliver} was not delivered: `
+        + `${error instanceof Error ? error.message : error}`,
+      ));
+    }
+    if ('reviewsAbandoned' in finalized && finalized.reviewsAbandoned?.length) {
+      const ownerId = finalized.taskOwnerId;
+      this.confirmationReviews?.publishMoved(
+        finalized.reviewsAbandoned.map((moved) => ({ ...moved, ownerId })),
+      );
+    }
     // The outcomes this completion wrote — NO_REPLY as a turn settled, UNDELIVERED as a steer failed —
     // handed back to the sessions that asked. After the commit and outside it: a hand-off writes the
     // ASKER's conversation, under the asker's lock, and holding this session's lock while waiting for
@@ -4796,6 +4903,12 @@ export class RunnerApiController {
       // handed over — including what was recorded while it was busy, and what the door that recorded
       // it never got to deliver (contract §4.4 X-D4 3).
       await this.openItems?.deliverOwedTo(sessionId);
+      // And the confirmation reviews it was to be handed whose delivery a crash cut off between their
+      // commit and the hand-off (docs/owner-confirmation-review-contract.md §2 D5).
+      await this.confirmationReviews?.deliverPendingFor(sessionId).catch((error) => this.logger.warn(
+        `pending confirmation reviews of ${sessionId} were not delivered: `
+        + `${error instanceof Error ? error.message : error}`,
+      ));
       this.realtime.publishSessionUpdated(sessionId);
       // T5: this turn's numbers, events and tool calls are committed now, so its spend is a fact.
       // A steer settles only its own row and books no turn, cost or tool call.
@@ -5033,6 +5146,17 @@ export class RunnerApiController {
         const card = await readProjectStartedCard(tx, session.ownerId, start);
         if (card) startedCards.set(turn.id, card);
       }
+      // A confirmation request handed to its reviewer, and a reviewer's return handed to the run
+      // (docs/owner-confirmation-review-contract.md D7, B3): each drawn as its own card rather than as
+      // the owner's message, by the turn's own key — read for those turns and no others.
+      const reviewRequestCards = new Map<string, ConfirmationReviewRequestCard>();
+      const returnCards = new Map<string, ConfirmationReturnCard>();
+      for (const turn of userTurns) {
+        const requested = await readConfirmationReviewRequestCard(tx, turn.clientTurnId);
+        if (requested) reviewRequestCards.set(turn.id, requested);
+        const returned = await readConfirmationReturnCard(tx, turn.clientTurnId);
+        if (returned) returnCards.set(turn.id, returned);
+      }
       for (const e of durable) {
         if (e.type !== RunEventType.USER) continue;
         e.payload = withControlPlaneNote(
@@ -5050,6 +5174,14 @@ export class RunnerApiController {
         e.payload = withProjectStarted(
           e.payload,
           (e.turnId ? startedCards.get(e.turnId) : undefined) ?? null,
+        );
+        e.payload = withConfirmationReviewRequest(
+          e.payload,
+          (e.turnId ? reviewRequestCards.get(e.turnId) : undefined) ?? null,
+        );
+        e.payload = withConfirmationReturn(
+          e.payload,
+          (e.turnId ? returnCards.get(e.turnId) : undefined) ?? null,
         );
         e.payload = withSessionMessage(
           e.payload,
@@ -5706,16 +5838,17 @@ export class RunnerApiController {
               select: { env: true, codexAccount: true, claudeAccount: true },
             })
           : null;
-      // A shared pool's key that ended the run is waited out the same way, from the keys rather than the
-      // words (QueueService.sharedPoolKeyRetryAt): now while another key can take the work — and a login
-      // pool's account from its ChatGPT accounts, now while another can take it, else until the first of
-      // them comes back (QueueService.loginPoolRetryAt).
+      // A pool credential that ended the run is waited out the same way, from the pool's rows rather than
+      // the words (QueueService.sharedPoolRetryAt, for a session on somebody else's pool — its keys and,
+      // for a pool of somebody's own, the accounts they run too): now while another can take the work —
+      // and a pool's own owner's session from its ChatGPT accounts (QueueService.loginPoolRetryAt), now
+      // while another can take it, else until the first of them comes back.
       const keyRetryAt =
         effectiveStatus === RunStatus.FAILED
         && current.retryAt == null
         && !quotaSpent
         && !isBuiltinProvider(current.provider)
-          ? ((await this.queue.sharedPoolKeyRetryAt(tx, current, new Date()))
+          ? ((await this.queue.sharedPoolRetryAt(tx, current, new Date()))
             ?? (await this.queue.loginPoolRetryAt(tx, current, new Date())))
           : null;
       const quotaRetryAt = quotaSpent
@@ -6455,6 +6588,9 @@ export class RunnerApiController {
         ...(branchMerged !== undefined ? { branchMerged } : {}),
         // The worktree's actual HEAD branch → flags divergence / offers Adopt (older runners omit).
         ...(dto.worktreeBranch !== undefined ? { worktreeBranch: dto.worktreeBranch } : {}),
+        // The branch tip a confirmation review is held to (0370) — moved by a Commit, which is what
+        // pushes this diff: written when reported.
+        ...(storableBranchSha(dto.branchSha) ? { branchSha: dto.branchSha } : {}),
       },
     });
     // Only persist the patches once we've confirmed the session is still live (count > 0);

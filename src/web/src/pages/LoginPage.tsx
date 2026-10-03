@@ -38,7 +38,7 @@ export function LoginPage() {
       // reload so BootGate pre-warms that first screen behind the splash.
       location.href = loginDestination(next);
     } catch (err) {
-      message.error((err as Error).message);
+      message.error("Couldn't sign in", (err as Error).message);
     }
   };
 

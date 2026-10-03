@@ -41,6 +41,7 @@ import {
   type WikiRunRow,
   type WikiRunSummary,
 } from '../lib/wikiReviewMode';
+import { useToast } from '../lib/toast';
 import { rejectWikiEntry, revertWikiChangeset, useWikiWrite } from '../lib/wikiWrites';
 
 /**
@@ -219,13 +220,13 @@ export function useRejectEntry() {
   const write = useWikiWrite((body: { entryId: string; reason: WikiRejectReason }) =>
     rejectWikiEntry(body.entryId, body.reason),
   );
-  const { message } = App.useApp();
+  const toast = useToast();
   return async (entryId: string, reason: WikiRejectReason) => {
     try {
       await write.mutateAsync({ entryId, reason });
-      message.success(WIKI_REJECTED);
+      toast.success(WIKI_REJECTED);
     } catch (error) {
-      message.error(error instanceof Error ? error.message : 'The server refused it');
+      toast.error("Couldn't reject the entry", error instanceof Error ? error.message : undefined);
     }
   };
 }
@@ -235,7 +236,8 @@ export function useRejectEntry() {
  * undoes — then the revert, and back to the space the run was opened from.
  */
 export function useRevertRun(spaceSlug: string) {
-  const { modal, message } = App.useApp();
+  const { modal } = App.useApp();
+  const toast = useToast();
   const navigate = useNavigate();
   const write = useWikiWrite((changesetId: string) => revertWikiChangeset(changesetId));
   return (changesetId: string, summary: Pick<WikiRunSummary, 'revertAdds' | 'revertAmends'>) => {
@@ -253,10 +255,10 @@ export function useRevertRun(spaceSlug: string) {
       onOk: async () => {
         try {
           await write.mutateAsync(changesetId);
-          message.success(WIKI_REVERTED);
+          toast.success(WIKI_REVERTED);
           navigate(`/wiki/${spaceSlug}`);
         } catch (error) {
-          message.error(error instanceof Error ? error.message : 'The server refused it');
+          toast.error("Couldn't revert the run", error instanceof Error ? error.message : undefined);
         }
       },
     });

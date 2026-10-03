@@ -20,7 +20,6 @@ package main
 
 import (
 	"bufio"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -170,8 +169,10 @@ func driveCodexAppServerTierProbe(t *testing.T, job *ClaimedSession, override *s
 	api := httptest.NewServer(rec)
 	t.Cleanup(api.Close)
 	config, env := codexTierProbeConfig(t, api.URL)
+	dir := t.TempDir()
 	cmd := exec.Command(exe, append([]string{"app-server", "--stdio"}, config...)...)
 	cmd.Env = env
+	configureCodexProbeProcess(cmd)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		t.Fatal(err)
@@ -183,7 +184,11 @@ func driveCodexAppServerTierProbe(t *testing.T, job *ClaimedSession, override *s
 	if err := cmd.Start(); err != nil {
 		t.Skipf("cannot run %s app-server: %v", exe, err)
 	}
-	t.Cleanup(func() { stdin.Close(); _ = cmd.Process.Kill(); _ = cmd.Wait() })
+	t.Cleanup(func() {
+		if err := stopCodexProbeProcess(cmd, stdin); err != nil {
+			t.Errorf("codex app-server probe cleanup: %v", err)
+		}
+	})
 	p := &codexAppServerProbe{t: t, cmd: cmd, out: bufio.NewReaderSize(stdout, 1<<20)}
 	send := func(msg map[string]interface{}) {
 		b, _ := json.Marshal(msg)
@@ -215,7 +220,6 @@ func driveCodexAppServerTierProbe(t *testing.T, job *ClaimedSession, override *s
 	})
 	send(map[string]interface{}{"method": "initialized", "params": map[string]interface{}{}})
 
-	dir := t.TempDir()
 	thread := codexThreadParams(job, dir, dir)
 	turn := codexTurnParams("", job, dir, dir, "orbit-tier-probe-turn", "Say DONE.", nil, codexTurnContextOptions{})
 	if override != nil {
@@ -253,15 +257,18 @@ func driveCodexExecTierProbe(t *testing.T, job *ClaimedSession) string {
 	// provider block spliced in ahead of the trailing "-" that reads the prompt from stdin.
 	args := codexExecCommandArgs(job, dir, dir, nil, "")
 	args = append(append(args[:len(args)-1:len(args)-1], config...), "-")
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	cmd := exec.CommandContext(ctx, exe, args...)
+	cmd := exec.Command(exe, args...)
 	cmd.Env = env
+	configureCodexProbeProcess(cmd)
 	cmd.Stdin = strings.NewReader("Say DONE.")
 	cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
 	if err := cmd.Start(); err != nil {
 		t.Skipf("cannot run %s exec: %v", exe, err)
 	}
-	t.Cleanup(func() { cancel(); _ = cmd.Wait() })
+	t.Cleanup(func() {
+		if err := stopCodexProbeProcess(cmd, nil); err != nil {
+			t.Errorf("codex exec probe cleanup: %v", err)
+		}
+	})
 	return rec.wait(t)
 }

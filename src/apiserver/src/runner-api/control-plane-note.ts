@@ -1,4 +1,6 @@
 import type {
+  ConfirmationReturnCard,
+  ConfirmationReviewRequestCard,
   OpenItemDeliveryCard,
   ProjectStartedCard,
   SessionMessageCard,
@@ -147,5 +149,33 @@ export function withSessionReplies(
   const stored = { ...payload };
   delete stored.sessionReplies;
   if (cards && cards.length > 0) stored.sessionReplies = cards;
+  return stored;
+}
+
+/**
+ * The same rule for a confirmation request handed to its reviewer (`confirmationReviewRequest`,
+ * docs/owner-confirmation-review-contract.md §2 D7) and for a reviewer's return handed to the run
+ * (`confirmationReturn`, §8 B3): recorded when the control plane opened the turn, absent otherwise,
+ * and never taken from the runner.
+ */
+export function withConfirmationReviewRequest(
+  payload: Record<string, unknown>,
+  card: ConfirmationReviewRequestCard | null,
+): Record<string, unknown> {
+  if (typeof payload?.text !== 'string') return payload;
+  const stored = { ...payload };
+  delete stored.confirmationReviewRequest;
+  if (card !== null) stored.confirmationReviewRequest = card;
+  return stored;
+}
+
+export function withConfirmationReturn(
+  payload: Record<string, unknown>,
+  card: ConfirmationReturnCard | null,
+): Record<string, unknown> {
+  if (typeof payload?.text !== 'string') return payload;
+  const stored = { ...payload };
+  delete stored.confirmationReturn;
+  if (card !== null) stored.confirmationReturn = card;
   return stored;
 }

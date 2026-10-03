@@ -7,6 +7,7 @@ import {
   normalizePermissionRules,
   permissionRuleToken,
   ruleCoversApproval,
+  serverMatchedRuntime,
 } from './permission-rules';
 
 const BASE = ['mcp__orbit__*'];
@@ -80,7 +81,32 @@ test("a workspace's standing grants ride along with a claude dispatch", () => {
   );
 });
 
-test('only claude gets them: the other runtimes read this list as something else', () => {
+test("antigravity gets them too: the runner writes each as agy's own scoped allow rule", () => {
+  // In the modes that ask nobody agy refuses whatever needs approval, so these are the only way a
+  // grant somebody already gave reaches it there (docs/antigravity-runtime-contract.md §5.1:
+  // `Bash(npm test:*)` becomes `command(npm test)`, still scoped).
+  assert.deepEqual(
+    dispatchAllowedTools(AgentProvider.ANTIGRAVITY, BASE, [
+      { toolName: 'Bash', ruleContent: 'npm test:*' },
+      { toolName: 'Edit', ruleContent: '' },
+    ]),
+    ['mcp__orbit__*', 'Bash(npm test:*)', 'Edit'],
+  );
+});
+
+test("antigravity's approval hook is answered from the same rules, as Kimi's bridge is", () => {
+  // In Default and Accept Edits agy runs behind Orbit's approval hook, which never matches a
+  // command prefix itself: a command an earlier card answered "always allow" to — in this session
+  // or another — is answered here instead of asking again (contract §14).
+  assert.equal(serverMatchedRuntime(AgentProvider.ANTIGRAVITY), true);
+  assert.equal(ruleCoversApproval(AgentProvider.ANTIGRAVITY, 'Bash', bash('npm test'), NPM_TEST), true);
+  assert.equal(
+    ruleCoversApproval(AgentProvider.ANTIGRAVITY, 'Bash', bash('npm test && rm -rf /'), NPM_TEST),
+    false,
+  );
+});
+
+test('no other runtime gets them: the rest read this list as something else', () => {
   // OpenCode maps an entry onto a whole-tool permission and Kimi pastes the list into its
   // prompt as "only use these tools" — handing either the same rules changes what they do
   // rather than skipping a prompt someone already answered.

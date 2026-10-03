@@ -40,7 +40,7 @@ export function SetupPage() {
       // A brand-new system has no runner yet — start onboarding at the registration guide.
       location.href = '/runners/register';
     } catch (err) {
-      message.error((err as Error).message);
+      message.error("Couldn't create the account", (err as Error).message);
     }
   };
 

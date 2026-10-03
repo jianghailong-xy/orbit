@@ -23,6 +23,10 @@ test('custom-provider', async (t) => {
     assert.equal(isBuiltinProvider('kimi'), true);
     assert.equal(isBuiltinProvider('kimi', false), false);
     assert.equal(isBuiltinProvider('opencode'), true);
+    // Like opencode, and unlike kimi, the discriminator is not consulted: migration 0367 moved any
+    // configured provider or pool that held the slug aside before it became a runtime keyword.
+    assert.equal(isBuiltinProvider('antigravity'), true);
+    assert.equal(isBuiltinProvider('antigravity', false), true);
     assert.equal(isBuiltinProvider(null), true);
     assert.equal(isBuiltinProvider(undefined), true);
     assert.equal(isBuiltinProvider('deepseek'), false);
@@ -273,6 +277,118 @@ test('custom-provider', async (t) => {
     assert.equal(exec.model, 'anthropic/claude-sonnet-4-5');
     // Nothing is added alongside the workspace's own env — the control plane injects no credential.
     assert.deepEqual(exec.env, { KEEP: '1' });
+  });
+
+  await t.test('built-in antigravity: a gemini pin and the workspace env pass through untouched', () => {
+    const exec = resolveProviderExec({
+      declaredProvider: AgentProvider.ANTIGRAVITY,
+      customRow: null,
+      sessionModel: 'gemini-3.1-pro',
+      workspaceModel: null,
+      workspaceEnv: { GEMINI_API_KEY: 'from-the-workspace' },
+    });
+    assert.equal(exec.provider, AgentProvider.ANTIGRAVITY);
+    assert.equal(exec.model, 'gemini-3.1-pro');
+    // agy reads its Gemini key from its own environment; the control plane injects nothing.
+    assert.deepEqual(exec.env, { GEMINI_API_KEY: 'from-the-workspace' });
+  });
+
+  await t.test('built-in antigravity: an unpinned session runs the runtime default, else agy\'s own', () => {
+    const catalog = {
+      antigravity: [
+        { value: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash', reasoningLevels: ['low', 'medium', 'high'] },
+        { value: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro', reasoningLevels: ['low', 'high'] },
+      ],
+    };
+    const unpinned = { declaredProvider: AgentProvider.ANTIGRAVITY, customRow: null, sessionModel: null };
+    // What the runner says agy defaults to wins over the catalogue's first row...
+    assert.equal(
+      resolveProviderExec({
+        ...unpinned,
+        runtimeDefaultModels: { antigravity: 'gemini-3.1-pro' },
+        modelCatalog: catalog,
+      }).model,
+      'gemini-3.1-pro',
+    );
+    assert.equal(resolveProviderExec({ ...unpinned, modelCatalog: catalog }).model, 'gemini-3.8-flash');
+    // ...and with neither, no `--model` at all: agy runs its own default.
+    assert.equal(resolveProviderExec(unpinned).model, '');
+    // Another runtime's model is not agy's, so it is dropped rather than handed to `--model`.
+    assert.equal(
+      resolveProviderExec({ ...unpinned, sessionModel: 'claude-opus-5' }).model,
+      '',
+    );
+  });
+
+  await t.test('built-in antigravity: a pin agy no longer lists yields to the current default', () => {
+    const base = {
+      declaredProvider: AgentProvider.ANTIGRAVITY,
+      customRow: null,
+      modelCatalog: { antigravity: [{ value: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash' }] },
+    };
+    // Judged against agy's own catalogue, as claude/codex/kimi pins are.
+    const retired = resolveProviderExec({ ...base, sessionModel: 'gemini-3.6-flash' });
+    assert.equal(retired.model, 'gemini-3.8-flash');
+    assert.equal(retired.retiredPin, true);
+    const live = resolveProviderExec({ ...base, sessionModel: 'gemini-3.8-flash' });
+    assert.equal(live.model, 'gemini-3.8-flash');
+    assert.equal(live.retiredPin, undefined);
+  });
+
+  // What the Gemini preset saves (migration 0372 moves the older rows onto the same shape).
+  const geminiRow = (over: Record<string, unknown> = {}) =>
+    row({
+      runtime: AgentProvider.ANTIGRAVITY,
+      baseUrl: 'https://generativelanguage.googleapis.com',
+      apiKeyEnc: encryptSecret('AIza-gemini'),
+      defaultModel: 'gemini-2.5-pro',
+      presetSlug: 'gemini',
+      followsPreset: true,
+      ...over,
+    });
+
+  await t.test('configured Gemini provider: agy runs on this row, with its key and endpoint', () => {
+    const exec = resolveProviderExec({
+      declaredProvider: 'gemini',
+      customRow: geminiRow(),
+      sessionModel: 'gemini-3.1-pro',
+      workspaceModel: null,
+      workspaceEnv: { KEEP: '1', GEMINI_API_KEY: 'typed-into-the-workspace' },
+    });
+    assert.equal(exec.provider, AgentProvider.ANTIGRAVITY);
+    assert.equal(exec.model, 'gemini-3.1-pro');
+    // agy reads both from its environment and nothing else: the key is the whole sign-in, and the
+    // base URL is the host it appends /v1beta/models/… to. The row's key beats one typed into the
+    // workspace, as every provider's env does.
+    assert.deepEqual(exec.env, {
+      KEEP: '1',
+      GEMINI_API_KEY: 'AIza-gemini',
+      GOOGLE_GEMINI_BASE_URL: 'https://generativelanguage.googleapis.com',
+    });
+  });
+
+  await t.test("configured Gemini provider: a model-less session runs agy's, and a Codex-era pin yields", () => {
+    const catalog = {
+      antigravity: [
+        { value: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash', reasoningLevels: ['low', 'medium', 'high'] },
+        { value: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro', reasoningLevels: ['low', 'high'] },
+      ],
+    };
+    const base = { declaredProvider: 'gemini', customRow: geminiRow(), modelCatalog: catalog };
+    // Gemini is agy's own endpoint, so the runner's report of `agy models` is the model space, as
+    // Anthropic's is Claude's — not the gemini-2.5-pro this row stored when it ran on Codex.
+    assert.equal(resolveProviderExec({ ...base, sessionModel: null }).model, 'gemini-3.8-flash');
+    assert.equal(
+      resolveProviderExec({ ...base, sessionModel: null, modelCatalog: undefined }).model,
+      providerPreset('gemini')!.defaultModel,
+    );
+    // A session pinned while this ran on Codex names a model agy refuses to start on.
+    const retired = resolveProviderExec({ ...base, sessionModel: 'gemini-2.5-pro' });
+    assert.equal(retired.model, 'gemini-3.8-flash');
+    assert.equal(retired.retiredPin, true);
+    const live = resolveProviderExec({ ...base, sessionModel: 'gemini-3.1-pro' });
+    assert.equal(live.model, 'gemini-3.1-pro');
+    assert.equal(live.retiredPin, undefined);
   });
 
   await t.test('preset-backed provider: a retired stored default yields to the catalogue', () => {

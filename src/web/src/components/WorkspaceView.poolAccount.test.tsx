@@ -94,6 +94,7 @@ const SHARED = {
   label: 'Team Codex',
   engine: 'codex',
   membersCanAdd: true,
+  membersCanAddAccounts: true,
   ownKeyFirst: true,
   viewerRole: 'MEMBER',
   // This month, whenever the test runs: a cap gauge past its window's end reads as the fresh month it

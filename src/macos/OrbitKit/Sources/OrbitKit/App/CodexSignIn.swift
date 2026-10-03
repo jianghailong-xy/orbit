@@ -1,12 +1,13 @@
 import Foundation
 
 /// "Sign in with ChatGPT" on iOS — a sheet over a Codex pool of one's own, in the web dialog's steps and
-/// words (components/CodexSignIn.tsx): what signing in means (the account is theirs alone, its sign-in
-/// stays on the Orbit server, and it is not to be shared), then the page to open and the one-time code
-/// to enter there while the sheet polls the server until the person approved it, then the account by
-/// its email and `…AB12` — never a token — and how many accounts the pool holds now. One account goes in
-/// per sign-in, as many as its owner signs in; the same sheet puts an account OpenAI signed out back in.
-/// `CodexSignInCopyParityTests` holds every word to the web source.
+/// words (components/CodexSignIn.tsx): what signing in means (the account runs the sessions of everyone
+/// in the pool, its sign-in stays on the Orbit server, and only the owner's own accounts may go in), then
+/// the page to open and the one-time code to enter there while the sheet polls the server until the
+/// person approved it, then the account by its email and `…AB12` — never a token — and how many accounts
+/// the pool holds now. One account goes in per sign-in, as many as its owner signs in; the same sheet
+/// puts an account OpenAI signed out back in. `CodexSignInCopyParityTests` holds every word to the web
+/// source.
 public enum CodexSignIn {
     public enum Step: Equatable, Sendable {
         /// What signing in means, before anything starts on the server.
@@ -54,10 +55,15 @@ public enum CodexSignIn {
         public let rest: String
     }
 
-    public static func facts(_ pool: ProviderPool) -> [Fact] {
+    /// `mine` is the reader: the pool's owner, or one of the people it is shared with, who signs an
+    /// account of their own in (migration 0371) — everyone here runs on it from the moment it is in.
+    public static func facts(_ pool: ProviderPool, mine: Bool = true) -> [Fact] {
         [
-            Fact(lead: "Only you can use it.",
-                 rest: " Sessions on \(pool.label) are yours alone — nobody else in Orbit sees this pool or its account."),
+            mine
+                ? Fact(lead: "Yours, and whoever you add.",
+                       rest: " A pool that is just yours runs your sessions alone; add people and their sessions start on this account too.")
+                : Fact(lead: "Everyone in this pool runs on it.",
+                       rest: " Add it, and everyone here — you included — runs their sessions on this account."),
             Fact(lead: "The sign-in stays on the Orbit server.",
                  rest: " It never goes to a runner — runners get a session token, not your login — and nobody sees its tokens."),
             Fact(lead: "Sign out any time.",
@@ -65,16 +71,19 @@ public enum CodexSignIn {
         ]
     }
 
-    /// The warning that stays: a ChatGPT account is one person's.
-    public static let risk = Fact(
-        lead: "Don’t share your account.",
-        rest: " OpenAI’s terms don’t allow a ChatGPT account to be shared — an account used that way can be suspended.")
+    /// The warning that stays: the people in the pool run on the account, and OpenAI's terms treat that as
+    /// sharing it — read by its owner, whose the adding is, or by one of the people there, whose account the
+    /// whole pool runs on once it is in.
+    public static func risk(mine: Bool = true) -> Fact {
+        Fact(lead: mine ? "Adding people shares your account." : "Everyone here runs on your account.",
+             rest: " Their sessions run on it — OpenAI’s terms treat account sharing as a violation, and an account used that way can be suspended.")
+    }
 
     // MARK: …and adding one more
 
     /// Whether this sign-in adds one more account to a pool that already runs on one of the owner's own —
     /// not one OpenAI signed out going back in (`again`) — which has a notice of its own: what the pool
-    /// runs on now, that the account stays the owner's alone even once the pool is shared, and what the
+    /// runs on now, that everyone in the pool runs on this account too once it is shared, and what the
     /// pool does without it.
     public static func addsAnother(_ pool: ProviderPool, again: CodexLogin?) -> Bool {
         again == nil && !CodexLoginPool.logins(pool).isEmpty
@@ -87,10 +96,12 @@ public enum CodexSignIn {
         return ". It runs on \(accounts) account\(accounts == 1 ? "" : "s") now."
     }
 
-    public static func anotherFacts(_ pool: ProviderPool) -> [Fact] {
+    public static func anotherFacts(_ pool: ProviderPool, mine: Bool = true) -> [Fact] {
         [
-            Fact(lead: "Only you can use it.",
-                 rest: " Sessions on a ChatGPT account are yours alone, even when \(pool.label) is shared: the people in it can’t run on it or see which account it is."),
+            Fact(lead: "Everyone in the pool runs on it.",
+                 rest: mine
+                    ? " Once \(pool.label) is shared, the people you add run their sessions on this account too — and see it, with its usage, on the pool’s page."
+                    : " Everyone here runs their sessions on this account too — you included — and sees it, with its usage, on the pool’s page."),
             Fact(lead: "The sign-in stays on the Orbit server.",
                  rest: " It never goes to a runner. Runners get a session token, not your login."),
             Fact(lead: "Sign out any time.",
@@ -98,10 +109,11 @@ public enum CodexSignIn {
         ]
     }
 
-    /// Its warning: someone else's account signed in here is that account shared.
+    /// Its warning: someone else's account signed in here is that account shared, and so is the owner's in
+    /// a pool others run on.
     public static let anotherRisk = Fact(
         lead: "Only your own accounts.",
-        rest: " Signing in with someone else’s ChatGPT account is sharing it. OpenAI’s terms don’t allow that, and an account used that way can be suspended.")
+        rest: " Signing in with someone else’s ChatGPT account is sharing it, and so is putting yours in a pool others run on: OpenAI’s terms treat both as a violation, and an account used that way can be suspended.")
 
     // MARK: the code
 

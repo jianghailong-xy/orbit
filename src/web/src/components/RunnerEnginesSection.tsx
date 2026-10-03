@@ -37,7 +37,7 @@ export function useEngineUpdate(runnerId: string) {
   return useMutation({
     mutationFn: () => api(`/runners/${runnerId}/engine-update`, { method: 'POST' }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
-    onError: (e: Error) => message.error(e.message || 'Could not start the update'),
+    onError: (e: Error) => message.error("Couldn't start the engine update", e.message),
   });
 }
 
@@ -79,7 +79,7 @@ export function RunnerEnginesSection({ runner }: { runner: Runner }) {
       message.success('Re-reading this machine’s model lists — the picker updates within a minute.');
       void qc.invalidateQueries({ queryKey: runnersQuery().queryKey });
     },
-    onError: (e: Error) => message.error(e.message || 'Could not refresh the model lists'),
+    onError: (e: Error) => message.error("Couldn't refresh the model lists", e.message),
   });
 
   return (
@@ -165,8 +165,9 @@ type Tone = 'ok' | 'warn' | 'muted';
  */
 function signInOf(runner: Runner, health: RunnerEngineHealth): { text: string; tone: Tone } {
   const none = { text: '—', tone: 'muted' as const };
-  // OpenCode signs in per provider with nothing to relay: there is no sign-in to report.
-  if (health.engine === 'opencode') {
+  // OpenCode signs in per provider with nothing to relay, and Antigravity runs on an API key from
+  // its environment: neither has a sign-in to report.
+  if (health.engine === 'opencode' || health.engine === 'antigravity') {
     return health.installed ? none : { text: RUNNER_ENGINE_NOT_INSTALLED, tone: 'muted' };
   }
   const kind = rowKindOf(health, runner.install, health.engine);
@@ -195,7 +196,10 @@ function EngineLine({ runner, health }: { runner: Runner; health: RunnerEngineHe
   const signIn = signInOf(runner, health);
   // A quota belongs to a login that is in: signed out, its last reading is about a session that
   // can no longer start. Same reading Providers shows at the head of its row.
-  const kind = health.engine === 'opencode' ? null : rowKindOf(health, runner.install, health.engine);
+  const kind =
+    health.engine === 'opencode' || health.engine === 'antigravity'
+      ? null
+      : rowKindOf(health, runner.install, health.engine);
   // With several accounts the engine's own snapshot is Default's alone, and one account's windows
   // under "2 accounts signed in" would read as the machine's. The windows shown are those of the
   // account a new session starts on, named — what an account pool's head shows for its next one.

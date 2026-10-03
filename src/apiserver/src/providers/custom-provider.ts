@@ -21,11 +21,12 @@ import {
 // a control-plane-configured ModelProvider that borrows one of these runtimes.
 /** True for a built-in provider (or an unset one) — i.e. NOT a configured ModelProvider slug.
  * `providerBuiltin` is persisted only to fence the former custom `kimi` slug during rolling
- * deployment; Claude/Codex predate the discriminator, and migration 0080 moves any pre-existing
- * custom `opencode` row aside, so both remain unambiguous. */
+ * deployment; Claude/Codex predate the discriminator, and migrations 0080 and 0367 move any
+ * pre-existing custom `opencode` / `antigravity` row (0367: or account pool) aside, so all four
+ * remain unambiguous. */
 export function isBuiltinProvider(slug?: string | null, providerBuiltin = true): boolean {
   if (!slug || slug === AgentProvider.CLAUDE || slug === AgentProvider.CODEX) return true;
-  if (slug === AgentProvider.OPENCODE) return true;
+  if (slug === AgentProvider.OPENCODE || slug === AgentProvider.ANTIGRAVITY) return true;
   if (slug === AgentProvider.KIMI) return providerBuiltin;
   return false;
 }
@@ -90,6 +91,7 @@ export function declaredReasoningLevels(
 function runtimeOf(row: ModelProviderRow): AgentProvider {
   if (row.runtime === AgentProvider.CODEX) return AgentProvider.CODEX;
   if (row.runtime === AgentProvider.KIMI) return AgentProvider.KIMI;
+  if (row.runtime === AgentProvider.ANTIGRAVITY) return AgentProvider.ANTIGRAVITY;
   return AgentProvider.CLAUDE;
 }
 
@@ -108,6 +110,7 @@ export function execRuntime(args: {
   if (args.customRow && args.customRow.enabled) return runtimeOf(args.customRow);
   if (args.declaredProvider === AgentProvider.CODEX) return AgentProvider.CODEX;
   if (args.declaredProvider === AgentProvider.OPENCODE) return AgentProvider.OPENCODE;
+  if (args.declaredProvider === AgentProvider.ANTIGRAVITY) return AgentProvider.ANTIGRAVITY;
   if (args.declaredProvider === AgentProvider.KIMI && args.declaredProviderBuiltin !== false) {
     return AgentProvider.KIMI;
   }
@@ -148,6 +151,27 @@ export async function sessionExecRuntime(
 }
 
 /**
+ * Every provider slug whose sessions run on `runtime` for `ownerId`: the built-in slug itself, and
+ * each enabled configured row of theirs — or a shared one — that borrows it, the way a Gemini key
+ * runs on Antigravity under a slug of its own. This is what a runner-capability gate has to ask
+ * (ADVERTISED_RUNTIMES): a runner that never advertised the runtime is handed that runtime's job
+ * whichever of these slugs the session names. A disabled row dispatches as Claude (execRuntime), so
+ * it is not one of them. The claim SQL (QueueService.trySessionClaim) and migration 0372's trigger
+ * ask the same question of the same rows.
+ */
+export async function providerSlugsOn(
+  db: Prisma.TransactionClient,
+  ownerId: string,
+  runtime: AgentProvider,
+): Promise<string[]> {
+  const borrowing = await db.modelProvider.findMany({
+    where: { runtime, enabled: true, OR: [{ ownerId: null }, { ownerId }] },
+    select: { slug: true },
+  });
+  return [runtime, ...borrowing.map((row) => row.slug)];
+}
+
+/**
  * The runtime `slug` borrows when it names a pool `ownerId` may dispatch with, else null: one of their own
  * account pools, which runs on the engine it was made on — `claude` runs on whichever member the claim
  * picks (QueueService.resolvePoolMember), and only a Claude subscription is admitted as one
@@ -177,11 +201,21 @@ export async function accountPoolRuntime(
 
 // Env injected so the borrowed runtime CLI talks to the provider's endpoint. Claude runtime →
 // Anthropic-compatible vars (Phase 1); codex runtime → OpenAI-compatible (Phase 2); kimi runtime →
-// the Kimi CLI's own KIMI_MODEL_* provider.
+// the Kimi CLI's own KIMI_MODEL_* provider; antigravity runtime → agy's GEMINI_API_KEY /
+// GOOGLE_GEMINI_BASE_URL.
 function injectedEnv(row: ModelProviderRow, model: string): Record<string, string> {
   const apiKey = row.sessionToken ?? decryptSecret(row.apiKeyEnc);
   if (runtimeOf(row) === AgentProvider.CODEX) {
     return { OPENAI_BASE_URL: row.baseUrl, OPENAI_API_KEY: apiKey };
+  }
+  if (runtimeOf(row) === AgentProvider.ANTIGRAVITY) {
+    // agy takes a Gemini key from its environment alone: the runner writes the Gemini directory
+    // that puts it in API-key mode (`modelProvider: gemini`), and GEMINI_API_KEY is then the whole
+    // sign-in. GOOGLE_GEMINI_BASE_URL is the endpoint, to which agy appends
+    // /v1beta/models/{model}:streamGenerateContent itself (docs/antigravity-runtime-contract.md
+    // §1.1). The model is not here: agy takes it as --model/--effort, which the runner builds from
+    // the job's model and effort the same way it does for the built-in engine.
+    return { GEMINI_API_KEY: apiKey, GOOGLE_GEMINI_BASE_URL: row.baseUrl };
   }
   if (runtimeOf(row) === AgentProvider.KIMI) {
     // Kimi has no base-url/key flags: setting KIMI_MODEL_NAME is what makes the CLI synthesize an
@@ -246,9 +280,10 @@ function injectedEnv(row: ModelProviderRow, model: string): Record<string, strin
 /**
  * Resolve how to actually run a (possibly custom) provider at dispatch: the runner-facing
  * built-in runtime, the model to pass, and the process env. For a configured provider
- * the runner never learns its slug — it just receives a Claude/Codex/Kimi job whose env points at
- * the provider's endpoint, so the runner needs no changes. A built-in may also resolve
- * directly to Kimi or OpenCode.
+ * the runner never learns its slug — it just receives a Claude/Codex/Kimi/Antigravity job whose
+ * env points at the provider's endpoint, so the runner needs no changes. A built-in may also resolve
+ * directly to Kimi, OpenCode or Antigravity; a configured row can borrow Antigravity (a Gemini key)
+ * but not OpenCode.
  *
  * `customRow` is null for a built-in provider, or for a slug whose ModelProvider was
  * deleted/disabled (a safe fallback to the claude default rather than a dispatch failure).
@@ -403,7 +438,9 @@ function runtimeCatalogDefault(
  * endpoint IS that CLI's. A configured third-party keeps its pin: its list is a document we mirror
  * (models.dev) or one the user maintains, and neither retires an id reliably enough to overrule a
  * deliberate choice. OpenCode is out too: it owns model selection, and the ids it reports are a
- * slice of a multi-provider space rather than the whole of it.
+ * slice of a multi-provider space rather than the whole of it. Antigravity is judged like the rest,
+ * against the base models its runner folds `agy models` into — so a full level-suffixed slug a
+ * caller typed (`gemini-3.8-flash-high`, which no row is) reads as retired there.
  */
 function retiredPin(
   row: ModelProviderRow | null,

@@ -38,6 +38,12 @@ describe('slashCommands', () => {
     expect(slashAssetMatchesProvider('claude', 'opencode')).toBe(false);
   });
 
+  it('treats Antigravity slash input as a prompt too — agy runs with its slash commands off', () => {
+    expect(supportsRunnerSlashAssets('antigravity')).toBe(false);
+    expect(slashAssetMatchesProvider(undefined, 'antigravity')).toBe(false);
+    expect(slashAssetMatchesProvider('claude', 'antigravity')).toBe(false);
+  });
+
   it('reads slash-led prose as text, not as a command', () => {
     expect(slashCommandName('/tmp/orbit-codex-usage-state 删掉吧')).toBeNull();
     expect(slashCommandName('/root/orbit')).toBeNull();

@@ -3,7 +3,8 @@ import Foundation
 /// A Codex pool of the user's own ChatGPT accounts (migration 0323) on iOS — the web's `withLogin`
 /// (lib/codexLogin.ts) and its account rows (`LoginRow` in components/AccountPools.tsx) in their words:
 /// every account it holds, where each one stands, its windows with when each resets, and what its owner —
-/// the only person who ever sees them — can do about them. The page they are drawn on is `CodexPoolPage`.
+/// who alone may sign one in or out, while the accounts run the sessions of everyone in the pool
+/// (2026-10-03) — can do about them. The page they are drawn on is `CodexPoolPage`.
 /// `CodexSignInCopyParityTests` holds every word here to the web source.
 public enum CodexLoginPool {
     // MARK: drawing it as a pool
@@ -85,10 +86,12 @@ public enum CodexLoginPool {
         return first.uppercased() + plan.dropFirst()
     }
 
-    /// The account's second line: `ChatGPT Plus · …AB12`.
-    public static func line(_ login: CodexLogin) -> String {
+    /// The account's second line: `ChatGPT Plus · …AB12` — led by the person who signed it in, where the
+    /// pool's people are read and the account is one of theirs (migration 0371, web's `LoginRow`).
+    public static func line(_ login: CodexLogin, contributor: String? = nil) -> String {
         let plan = planName(login.plan).map { "ChatGPT \($0)" } ?? "ChatGPT"
-        return "\(plan) · \(login.fingerprint)"
+        let named = contributor.map { "\($0) · " } ?? ""
+        return "\(named)\(plan) · \(login.fingerprint)"
     }
 
     /// Each window the account's quota reports, in the order the pages draw them.
@@ -103,8 +106,14 @@ public enum CodexLoginPool {
 
     /// Nothing has read the account's quota yet — which is not a refusal: it runs.
     public static let noQuota = "No quota reported"
-    /// Why a signed-out account is out, and what brings it back.
+    /// Why a signed-out account is out, and what brings it back — read by the person who signed it in
+    /// (migration 0371), whose the sign-in again is.
     public static let signedOutReason = "OpenAI signed this account out — sign in again to put it back in the pool."
+    /// The same, read by anybody else — the sign-in is not theirs to make, and the account is named as
+    /// theirs whose it is.
+    public static func signedOutReasonNotYours(_ contributor: String?) -> String {
+        "OpenAI signed this account out — only \(contributor ?? "the person who signed it in") can sign it in again."
+    }
 
     /// Whether the account's row wears NEXT (`SharedPoolPage.nextChip`, web's `LoginRow`): with one
     /// account there is nothing to choose between, so the mark would say nothing.
@@ -115,6 +124,9 @@ public enum CodexLoginPool {
     // MARK: on its page
 
     public static let noAccount = "No account yet — no session can start on this pool until you sign in with ChatGPT."
+    /// The same read by one of the people the owner added the pool does not let sign one in: the sign-in is
+    /// not theirs to make.
+    public static let noAccountOwner = "No account yet — no session can start on this pool until its owner signs in with ChatGPT."
     /// A signed-out account comes back from its row.
     public static let signInAgain = "Sign in again"
 

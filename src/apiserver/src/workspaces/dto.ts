@@ -51,10 +51,8 @@ export class CreateWorkspaceDto {
   // the project directory it runs in. Both are otherwise minted by `orbit register`.
   @IsOptional() @IsPublicId() runnerId?: string;
   @IsOptional() @IsString() workDir?: string;
-  // The git remote this workspace's checkout came from, as the user states it — recorded, never
-  // cloned and never guessed. `projects/project-integration-line.ts` bootstraps a project's
-  // codebase binding from it, and a remote nobody stated is one it must not invent (the column's
-  // comment in schema.prisma says why a runner-reported `origin` is not an acceptable source).
+  // Explicit repository address; when empty, the runner's directory probe can backfill it from
+  // origin. Used for project integration, never to clone or change the checkout.
   @IsOptional() @IsString() repoUrl?: string;
   @IsOptional() @IsObject() env?: Record<string, string>;
   // The Codex account this workspace's Codex sessions run on: the id of a slot its runner reports,
@@ -126,5 +124,5 @@ export class UpdateWorkspaceDto {
 
 // The full workspace list in the desired sidebar order; each id's index becomes its position.
 export class ReorderWorkspacesDto {
-  @IsArray() @IsString({ each: true }) ids!: string[];
+  @IsArray() @IsPublicId({ each: true }) ids!: string[];
 }

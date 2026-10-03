@@ -52,7 +52,6 @@ function row(overrides: Partial<Row> & Pick<Row, 'id'>): Record<string, unknown>
     isForeman: false,
     verifiesTaskId: null,
     dispatchHold: false,
-    dispatchAuthority: 'LEGACY',
     runAt: null,
     supersededByTaskId: null,
     terminalReason: null,

@@ -254,7 +254,7 @@ import { DagOp, effectiveOps, findCycle, resultingEdges, stateChanges } from './
 import { manualRunnableTaskSql } from './manual-runnable-task-sql';
 import { automaticAccount, runAccount } from '../providers/plan-usage-accounts';
 import { accountEnvVar } from '../providers/account';
-import { readWaitingOwnerConfirmations } from './owner-confirmation-read';
+import { readOwnerConfirmationRows } from './owner-confirmation-read';
 import { accountPoolRuntime } from '../providers/custom-provider';
 import {
   criterionNeedsProjectRefusal,
@@ -291,6 +291,12 @@ import {
   criterionAsksForOwnerConfirmation,
   ownerConfirmationNotDelegatedBody,
 } from './owner-confirmed-automatic-delegation';
+import {
+  normaliseOwnerConfirmationReasonNote,
+  ownerConfirmationReasonRequiredBody,
+  ownerConfirmationReasonShapeError,
+  type OwnerConfirmationReasonValue,
+} from './owner-confirmation-reason';
 
 /** A polymorphic actor (user or workspace) that authored a task or comment. */
 export type Creator = { type: CreatorType; id: string };
@@ -978,17 +984,17 @@ const DEPENDENCY_TOKEN_TASK_SQL = Prisma.sql`
  * prerequisites instead it seeks the few hundred finished tasks through
  * `task_dependency_depends_on_task_id_idx`: 264ms -> 32ms.
  *
- * `dispatch_authority` is deliberately NOT read here, nor in SCHEDULED_DUE_SQL, nor at execute()'s
+ * `dispatch_authority` was deliberately NOT read here, nor in SCHEDULED_DUE_SQL, nor at execute()'s
  * automatic door. It named the Coordinator's dispatch pass as the starter for a coordinated
  * Project's tasks, and that pass was removed with the control loop — so the column stopped naming a
  * second starter and started naming none at all: every task in a `coordinator_enabled` Project
- * (0122's `task_dispatch_authority_derive` gives them COORDINATOR at birth) fell out of this
+ * (0122's `task_dispatch_authority_derive` gave them COORDINATOR at birth) fell out of this
  * candidate set and never ran, with nothing else scanning for it. Whether a task runs by itself is
  * now answered by the task's own auto-run opt-in and its prerequisites — and, for a task filed under
  * a project, by whether that project moves (started and not paused: project-pause-dispatch.ts),
- * which is not the Automatic switch either. The column and 0122's
- * triggers that derive it are left standing — no reader of them is left in this service, but
- * removing them is its own change.
+ * which is not the Automatic switch either. The column, the enum and the trigger that derived it
+ * were then dropped — 0290 took the fanout, 0329 the rest — so there is no column here to read even
+ * by mistake.
  */
 const AUTO_RUN_READY_SQL = Prisma.sql`
   t.status = 'OPEN'::task_status
@@ -1472,10 +1478,18 @@ export function autoDispatchStillValid(current: bigint, observed: bigint): boole
  * anything and grouped by project it is one pass of ~6ms, where the same count as a correlated
  * subquery per candidate was 294ms a count on the 109,878-task project (2026-09-29).
  */
-const PROJECT_OCCUPIED_SQL = Prisma.sql`
+const PROJECT_OCCUPIED_SQL = projectOccupiedSql();
+
+/**
+ * PROJECT_OCCUPIED_SQL, with `settling` counted as the DONE it is about to be: a completion asked
+ * about ahead of time gives back the slot its own run holds now (`dependentRelease`).
+ */
+function projectOccupiedSql(settling?: string): Prisma.Sql {
+  return Prisma.sql`
   SELECT o.project_id, count(*)::int AS "tasks"
     FROM task o
-   WHERE o.status NOT IN ('DONE'::task_status, 'CANCELLED'::task_status)
+   WHERE o.status NOT IN ('DONE'::task_status, 'CANCELLED'::task_status)${settling ? Prisma.sql`
+     AND o.id <> ${settling}::uuid` : Prisma.empty}
      AND EXISTS (
        SELECT 1 FROM session s
         WHERE s.task_id = o.id
@@ -1485,6 +1499,17 @@ const PROJECT_OCCUPIED_SQL = Prisma.sql`
           )})
      )
    GROUP BY o.project_id`;
+}
+
+/** What one completion releases among its dependents (`TasksService.dependentRelease`). */
+export interface DependentRelease {
+  /** Given a slot, in the order the pass offered them, with the moment (0137) each was read at. */
+  start: Array<{ id: string; epoch: bigint }>;
+  /** Opted into running by themselves, but with no slot free for them yet: the sweep's to start. */
+  waitingForSlot: string[];
+  /** They do not start by themselves (`autoRunWhenReady = false`): somebody's decision. */
+  undecided: string[];
+}
 
 /** What the sweep is allowed to materialise, per runner and per capped list. */
 export interface MaterialisationBudget {
@@ -2793,12 +2818,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * whose dependent is in `taskIds`, joined to its prerequisite's status, group by
    * dependent and reduce. Tasks with no prerequisites are absent (caller reads absent as
    * 'NONE'). Mirrors withRunning's single-grouped-query approach to avoid N+1.
+   *
+   * `assumeDone` asks the question one completion early: every edge whose chain ends at that task
+   * reads as satisfied, as it will once the task is DONE (`dependentRelease`).
    */
   private async dependencyStatesFor(
     ownerId: string,
     taskIds: string[],
+    assumeDone?: string,
   ): Promise<Map<string, DependencyState>> {
-    return new Map([...await this.dependencyFactsFor(ownerId, taskIds)]
+    return new Map([...await this.dependencyFactsFor(ownerId, taskIds, assumeDone)]
       .map(([taskId, facts]) => [taskId, computeDependencyState(facts)]));
   }
 
@@ -2813,6 +2842,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   private async dependencyFactsFor(
     ownerId: string,
     taskIds: string[],
+    assumeDone?: string,
   ): Promise<Map<string, DependencyPrerequisiteFact[]>> {
     type ChainFact = {
       id: string;
@@ -2914,14 +2944,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         .filter((entry) => entry.status === TaskStatus.DONE)
         .map((entry) => entry.id),
     );
-    return new Map([...resolvedByTask].map(([taskId, entries]) => [taskId, entries.map((entry) => ({
-      status: entry.status,
-      verificationGate: dependencyEpochGate(entry.id, epochs, dependents.get(taskId)),
-      verificationGateStalled: dependencyEpochStalled(entry.id, epochs, dependents.get(taskId)),
-      // Absent — not `false` — for anything this read said nothing about, which is what the field
-      // means: a prerequisite with no landing to do (`task-dependencies.ts`).
-      landed: landing.get(entry.id),
-    }))]));
+    return new Map([...resolvedByTask].map(([taskId, entries]) => [taskId, entries.map((entry) => (
+      // The completion asked about ahead of time reads as finished with nothing left of its own —
+      // whether its landing will hold its dependents is the caller's to say (`dependentRelease`).
+      entry.id === assumeDone ? { status: TaskStatus.DONE } : {
+        status: entry.status,
+        verificationGate: dependencyEpochGate(entry.id, epochs, dependents.get(taskId)),
+        verificationGateStalled: dependencyEpochStalled(entry.id, epochs, dependents.get(taskId)),
+        // Absent — not `false` — for anything this read said nothing about, which is what the field
+        // means: a prerequisite with no landing to do (`task-dependencies.ts`).
+        landed: landing.get(entry.id),
+      }))]));
   }
 
   /**
@@ -3471,14 +3504,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * one — `requireExplicitCompletionCriterion` refuses an omission at both HTTP doors — so the
    * fallback is reachable only by code constructing this service directly, and judging it here
    * would make this gate an opinion about the omission rather than about the declaration.
+   *
+   * `dispatchingSessionId` is the session the task is filed from as the write leaves it — the one a
+   * create is made in, or the one an existing row names — because outside a project that session is
+   * what gives EVIDENCE_JUDGMENT a decider (`criterionNeedsProjectRefusal`).
    */
   private assertCriterionHasAProject(
     completionCriterion: TaskCompletionCriterionValue | null | undefined,
     verifiesTaskId: string | null | undefined,
     projectId: string | null | undefined,
+    dispatchingSessionId: string | null | undefined,
     itemIndex?: number,
   ): void {
-    const declaration = { completionCriterion, verifiesTaskId, projectId };
+    const declaration = { completionCriterion, verifiesTaskId, projectId, dispatchingSessionId };
     const refusal = criterionNeedsProjectRefusal(declaration)
       ?? verificationSubjectNeedsProjectRefusal(declaration);
     if (refusal) throw new BadRequestException({ ...refusal, itemIndex: itemIndex ?? null });
@@ -3540,6 +3578,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       );
     }
     const completionCriterion = this.assertCompletionDeclaration(dto);
+    this.assertOwnerConfirmationReasonShape({
+      completionCriterion,
+      reason: dto.ownerConfirmationReason,
+      note: dto.ownerConfirmationReasonNote,
+    });
     await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
     await this.assertOwnedList(ownerId, dto.listId);
     await this.assertOwnedProject(ownerId, dto.projectId);
@@ -3596,6 +3639,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       this.auditReplayedProject(winner, dto.projectId);
       return winner;
     }
+    await this.assertOwnedAttachments(ownerId, dto.attachmentIds);
     // Unit L3 §4: which project this create actually lands in. Decided by the server from the
     // session's coordination scope, not from whatever the caller named — and decided before the
     // transaction, so a refusal is deterministic and leaves nothing behind (AC1).
@@ -3638,7 +3682,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // request on the DTO's empty `projectId` would be a refusal of a task that lands in a project.
     // The shape advice reads the same project, so it is asked here too, still ahead of the gate.
     this.assertCriterionShape(dto, completionCriterion, scopedProjectId != null);
-    this.assertCriterionHasAProject(dto.completionCriterion, dto.verifiesTaskId, scopedProjectId);
+    this.assertCriterionHasAProject(
+      dto.completionCriterion, dto.verifiesTaskId, scopedProjectId, sessionId,
+    );
     // The pairing rule, asked of this call's own items — a single create is a plan of one, and
     // nothing in it points at this row. Answered before the transaction, like every other refusal
     // on this path, so a subject filed without its check leaves no row and takes no lock (AC1).
@@ -3663,12 +3709,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     )).get(0) ?? null;
     // Against the same project and the criterion that declaration resolved to, still before the
     // transaction: an agent cannot hand this task to the owner in an Automatic project unless that
-    // criterion asks for them.
+    // criterion asks for them, nor anywhere else without saying why only the owner can settle it.
     await this.assertOwnerConfirmationDelegated(ownerId, creatorSessionId, [{
       itemIndex: null,
       completionCriterion: dto.completionCriterion,
       projectId: scopedProjectId,
       criterionDefinitionId: criterionDeclaration?.criterionDefinitionId,
+      ownerConfirmationReason: dto.ownerConfirmationReason ?? null,
     }]);
     // Validate prerequisites up front so we never create a task and then reject its deps.
     // No cycle check needed: a brand-new task has no dependents, so it can't close a loop.
@@ -3822,6 +3869,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             tx, ownerId, dependencyCrossings.edges, now,
           );
           const created = await tx.task.create({ data });
+          await this.copyAttachmentsToTask(tx, ownerId, created.id, dto.attachmentIds);
           // Unit L4's `APPLY`: the yes is spent on this task, in the transaction that wrote it. A
           // second application updates no row, throws, and takes this task with it — which is what
           // makes "one approval, one task" a property of the row rather than of the call order.
@@ -4026,6 +4074,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       completionFenceRevision: TASK_COMPLETION_FENCE_REVISION,
       completionCriterionOverrideReason:
         normaliseTaskCriterionOverrideReason(dto.completionCriterionOverrideReason),
+      // Migration 0373: why only the owner can settle it, when the declaration said
+      // (`owner-confirmation-reason.ts`). Both already checked to belong to an OWNER_CONFIRMED
+      // declaration; undefined leaves them out of the INSERT, as every task before them.
+      ownerConfirmationReason: dto.ownerConfirmationReason ?? undefined,
+      ownerConfirmationReasonNote:
+        normaliseOwnerConfirmationReasonNote(dto.ownerConfirmationReasonNote) ?? undefined,
       // Migration 0232: WHICH stated criterion this work says it serves, as the criterion's stable
       // id plus the revision it carried at this moment. Both or neither — a revision without an id
       // is what a DELETED criterion leaves behind, and writing that pair here would forge it.
@@ -4081,12 +4135,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (items.length > TASK_BATCH_CREATE_MAX)
       throw new BadRequestException(`at most ${TASK_BATCH_CREATE_MAX} tasks per batch`);
 
-    for (const item of items) {
-      this.assertCompletionDeclaration({
+    items.forEach((item, index) => {
+      const completionCriterion = this.assertCompletionDeclaration({
         ...item,
         verifiesTaskId: item.verifiesTaskId ?? item.verifiesRef ?? null,
       });
-    }
+      this.assertOwnerConfirmationReasonShape({
+        completionCriterion,
+        reason: item.ownerConfirmationReason,
+        note: item.ownerConfirmationReasonNote,
+      }, index);
+    });
 
     const positionByRef = new Map<string, number>();
     items.forEach((item, index) => {
@@ -4262,6 +4321,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    */
   async previewCreateMany(ownerId: string, dto: CreateTasksBatchDto) {
     const items = await this.assertBatchValid(ownerId, dto);
+    await this.assertOwnedAttachments(ownerId, items.flatMap((item) => item.attachmentIds ?? []));
     // By the project each item NAMES: this preview cannot see the project a coordinator's unnamed
     // item would be filed under. That can only make it quieter than the write, never louder — a
     // card is not refused over VERIFICATION advice the write would withhold.
@@ -4518,6 +4578,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const write = batchWriteOf(item);
       return write ? await this.idempotencyWinner(this.prisma, ownerId, write) : null;
     }));
+    await this.assertOwnedAttachments(
+      ownerId,
+      validated.flatMap((item, index) => replayed[index] ? [] : (item.attachmentIds ?? [])),
+    );
     // Unit L3 §4, once for the whole batch and BEFORE the transaction: every item that is not a
     // replay is admitted and bound, or none is written. An item refused mid-transaction would be a
     // batch that took the owner lock and rolled back; admitted here, a refusal costs no row and no
@@ -4582,7 +4646,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (frozen.has(index)) return;
       this.assertCriterionHasAProject(
         item.completionCriterion, item.verifiesTaskId ?? item.verifiesRef ?? null, item.projectId,
-        index,
+        sessionId, index,
       );
     });
     // Unit T6, over the items this call would WRITE: a replay is frozen and is not re-charged to
@@ -4614,6 +4678,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         completionCriterion: item.completionCriterion,
         projectId: item.projectId,
         criterionDefinitionId: criterionDeclarations.get(index)?.criterionDefinitionId,
+        ownerConfirmationReason: item.ownerConfirmationReason ?? null,
       }])),
     );
     // Unit L4: the plan, judged whole and before the transaction. Every dimension, every item, all
@@ -4793,6 +4858,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
               criterionDeclarations.get(index) ?? null,
             ),
           }));
+        if (!existing) await this.copyAttachmentsToTask(tx, ownerId, task.id, item.attachmentIds);
         // Unit L4's `APPLY`, for an item this call actually created: a replay found the row the
         // first run wrote, and that run already spent the approval on it.
         const spend = spends.get(index);
@@ -5406,16 +5472,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * `owner-confirmed-automatic-delegation.ts`, over the rows these writes would leave: a session
-   * does not declare OWNER_CONFIRMED on work in an Automatic project unless the criterion that work
-   * serves asks for the owner.
+   * `owner-confirmed-automatic-delegation.ts` and `owner-confirmation-reason.ts`, over the rows
+   * these writes would leave: a session does not declare OWNER_CONFIRMED on work in an Automatic
+   * project unless the criterion that work serves asks for the owner, nor on work anywhere else
+   * without naming why only the owner can settle it.
    *
    * Asked by all three write doors after every declaration check and before the transaction, so a
    * refused write leaves no row and a refused batch none of its items. `criterionDefinitionId` is
    * the criterion each item serves once written — what `resolveCriterionDeclarations` resolved, or
    * on an update the one the row keeps — and a criterion of any other project than the one the
-   * item lands in is none of that project's. A write with no session, or with no OWNER_CONFIRMED
-   * item filed in a project, reads nothing.
+   * item lands in is none of that project's. `ownerConfirmationReason` is the reason the row would
+   * carry. Items are asked in order and the first that fails answers, whichever rule it fails. A
+   * write with no session, or with no OWNER_CONFIRMED item, reads nothing.
    */
   private async assertOwnerConfirmationDelegated(
     ownerId: string,
@@ -5425,24 +5493,24 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       completionCriterion: TaskCompletionCriterionValue | null | undefined;
       projectId: string | null | undefined;
       criterionDefinitionId: string | null | undefined;
+      ownerConfirmationReason: OwnerConfirmationReasonValue | null;
     }>,
   ): Promise<void> {
     if (!actingSessionId) return;
-    const declared = items.filter((item) =>
-      item.completionCriterion === 'OWNER_CONFIRMED' && item.projectId);
+    const declared = items.filter((item) => item.completionCriterion === 'OWNER_CONFIRMED');
     if (declared.length === 0) return;
-    const automatic = await this.prisma.project.findMany({
-      where: {
-        id: { in: [...new Set(declared.map((item) => item.projectId!))] },
-        ownerId,
-        coordinatorEnabled: true,
-      },
+    const filedIn = [...new Set(declared
+      .map((item) => item.projectId)
+      .filter((id): id is string => !!id))];
+    const automatic = filedIn.length === 0 ? [] : await this.prisma.project.findMany({
+      where: { id: { in: filedIn }, ownerId, coordinatorEnabled: true },
       select: { id: true },
     });
     const automaticIds = automatic.map((project) => project.id);
-    const governed = declared.filter((item) => automaticIds.includes(item.projectId!));
-    if (governed.length === 0) return;
-    const definitionIds = [...new Set(governed
+    const isGoverned = (item: { projectId: string | null | undefined }) =>
+      !!item.projectId && automaticIds.includes(item.projectId);
+    const definitionIds = [...new Set(declared
+      .filter(isGoverned)
       .map((item) => item.criterionDefinitionId)
       .filter((id): id is string => !!id))];
     const served = definitionIds.length === 0 ? [] : await this.prisma
@@ -5450,13 +5518,42 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         where: { id: { in: definitionIds }, projectId: { in: automaticIds } },
         select: { id: true, projectId: true, verificationMethod: true },
       });
-    for (const item of governed) {
+    for (const item of declared) {
+      if (!isGoverned(item)) {
+        // In no project, or in one whose Automatic is off: the agent names the owner's reason.
+        if (item.ownerConfirmationReason !== null) continue;
+        throw new ConflictException(
+          ownerConfirmationReasonRequiredBody(item.itemIndex, !!item.projectId),
+        );
+      }
       const criterion = served.find((definition) =>
         definition.id === item.criterionDefinitionId && definition.projectId === item.projectId);
       if (criterion && criterionAsksForOwnerConfirmation(criterion.verificationMethod)) continue;
       throw new ConflictException(ownerConfirmationNotDelegatedBody(
         criterion ? criterionKeyOf(criterion.id) : null, item.itemIndex,
       ));
+    }
+  }
+
+  /**
+   * `owner-confirmation-reason.ts`'s shape rule as a 400: a reason only beside OWNER_CONFIRMED, its
+   * sentence only beside a reason. Whoever writes — it is about the request, not the caller.
+   */
+  private assertOwnerConfirmationReasonShape(
+    declaration: {
+      completionCriterion: TaskCompletionCriterionValue;
+      reason: OwnerConfirmationReasonValue | null | undefined;
+      note: string | null | undefined;
+    },
+    itemIndex?: number,
+  ): void {
+    const error = ownerConfirmationReasonShapeError({
+      completionCriterion: declaration.completionCriterion,
+      reason: declaration.reason ?? null,
+      note: normaliseOwnerConfirmationReasonNote(declaration.note),
+    });
+    if (error) {
+      throw new BadRequestException(itemIndex === undefined ? error : `tasks[${itemIndex}]: ${error}`);
     }
   }
 
@@ -5505,6 +5602,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       plan: {
         title: item.title,
         description: item.description ?? null,
+        attachmentIds: item.attachmentIds,
         acceptanceCriteria: item.acceptanceCriteria ?? null,
         acceptanceCommand: item.acceptanceCommand ?? null,
         acceptanceExpectedExitCode: item.acceptanceExpectedExitCode ?? null,
@@ -6480,7 +6578,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       dependencyState,
       blocked: !canRun(dependencyState),
       runnable,
-      awaitingOwnerConfirmation: awaitingIds.has(id),
+      awaitingOwnerConfirmation: awaitingIds.awaiting.has(id),
+      confirmationUnderReview: awaitingIds.underReview.has(id),
     };
   }
 
@@ -6671,7 +6770,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         dependencyState,
         blocked: !canRun(dependencyState),
         runnable: runnableIds.has(task.id),
-        awaitingOwnerConfirmation: awaitingIds.has(task.id),
+        awaitingOwnerConfirmation: awaitingIds.awaiting.has(task.id),
+        confirmationUnderReview: awaitingIds.underReview.has(task.id),
       };
     });
     const nextCursor =
@@ -6785,23 +6885,31 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * The tasks among these whose OWNER_CONFIRMED run is waiting on the owner right now — the same
-   * reading the session list's needs-you signal takes (`readWaitingOwnerConfirmations`), so a row
+   * reading the session list's needs-you signal takes (`readWaitingOwnerConfirmations`, here through
+   * `readOwnerConfirmationRows`, which answers it and its other half at once), so a row
    * and the conversation it points at say it together. Only a row that declares OWNER_CONFIRMED
    * and has not settled can be waiting, so a page without one asks nothing at all.
+   *
+   * `underReview` is the other half of the same population: a run's confirmation still with its
+   * reviewer (docs/owner-confirmation-review-contract.md §5 N3), which the row says "Under review"
+   * about instead. A task is in at most one of the two.
    */
   private async awaitingOwnerConfirmation(
     ownerId: string,
     rows: ReadonlyArray<{ id: string; completionCriterion: string | null; status: string }>,
-  ): Promise<Set<string>> {
+  ): Promise<{ awaiting: Set<string>; underReview: Set<string> }> {
     const wanted = new Set(
       rows
         .filter((row) => row.completionCriterion === 'OWNER_CONFIRMED'
           && (row.status === 'OPEN' || row.status === 'IN_PROGRESS'))
         .map((row) => row.id),
     );
-    if (wanted.size === 0) return wanted;
-    const waiting = await readWaitingOwnerConfirmations(this.prisma, ownerId);
-    return new Set(waiting.map((entry) => entry.taskId).filter((id) => wanted.has(id)));
+    if (wanted.size === 0) return { awaiting: wanted, underReview: new Set() };
+    const { waiting, underReview } = await readOwnerConfirmationRows(this.prisma, ownerId);
+    return {
+      awaiting: new Set(waiting.map((entry) => entry.taskId).filter((id) => wanted.has(id))),
+      underReview: new Set(underReview.map((entry) => entry.taskId).filter((id) => wanted.has(id))),
+    };
   }
 
   /**
@@ -6864,7 +6972,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         dependencyState,
         blocked: !canRun(dependencyState),
         runnable: runnableIds.has(task.id),
-        awaitingOwnerConfirmation: awaitingIds.has(task.id),
+        awaitingOwnerConfirmation: awaitingIds.awaiting.has(task.id),
+        confirmationUnderReview: awaitingIds.underReview.has(task.id),
       };
     });
     return { items, total, truncated: total > items.length };
@@ -8312,13 +8421,47 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         completionCriterion,
         verifiesTaskIdAfter,
         dto.projectId === undefined ? before.projectId : (dto.projectId ?? null),
+        before.creatorSessionId,
       );
     } else if (dto.projectId === null && completionCriterion === 'VERIFICATION') {
       // Taking the task out of its project touches no declaration, which is why EVIDENCE_JUDGMENT
       // is not asked about it: a row of that kind in no project still settles against its own
       // acceptanceCriteria. A verification subject settles nowhere outside a project — nobody there
       // files the verification it waits for — so unfiling one is refused as declaring one there is.
-      this.assertCriterionHasAProject(completionCriterion, verifiesTaskIdAfter, null);
+      this.assertCriterionHasAProject(
+        completionCriterion, verifiesTaskIdAfter, null, before.creatorSessionId,
+      );
+    }
+    // Migration 0373's reason and its sentence, as this write leaves them (`owner-confirmation-reason.ts`).
+    // They explain OWNER_CONFIRMED and nothing else, so a write that lands on another criterion
+    // clears both, and refuses only what it SENT: a reason or a sentence beside that criterion. On
+    // OWNER_CONFIRMED the stored ones stand unless replaced, and null takes both back.
+    let ownerConfirmationReasonAfter: OwnerConfirmationReasonValue | null = null;
+    let ownerConfirmationReasonNoteAfter: string | null = null;
+    if (completionCriterion !== 'OWNER_CONFIRMED') {
+      this.assertOwnerConfirmationReasonShape({
+        completionCriterion,
+        reason: dto.ownerConfirmationReason,
+        note: dto.ownerConfirmationReasonNote,
+      });
+    } else {
+      ownerConfirmationReasonAfter = dto.ownerConfirmationReason === undefined
+        ? (before.ownerConfirmationReason ?? null)
+        : dto.ownerConfirmationReason;
+      if (dto.ownerConfirmationReason === null) {
+        this.assertOwnerConfirmationReasonShape({
+          completionCriterion, reason: null, note: dto.ownerConfirmationReasonNote,
+        });
+      } else {
+        ownerConfirmationReasonNoteAfter = dto.ownerConfirmationReasonNote === undefined
+          ? (before.ownerConfirmationReasonNote ?? null)
+          : normaliseOwnerConfirmationReasonNote(dto.ownerConfirmationReasonNote);
+      }
+      this.assertOwnerConfirmationReasonShape({
+        completionCriterion,
+        reason: ownerConfirmationReasonAfter,
+        note: ownerConfirmationReasonNoteAfter,
+      });
     }
     // The independence door, and the third question on this path that turns on WHO is writing.
     //
@@ -8472,6 +8615,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         || criterionDefinitionId !== before.criterionDefinitionId) {
         await this.assertOwnerConfirmationDelegated(ownerId, actingSessionId, [{
           itemIndex: null, completionCriterion, projectId, criterionDefinitionId,
+          ownerConfirmationReason: ownerConfirmationReasonAfter,
         }]);
       }
     }
@@ -8543,6 +8687,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // licence to erase how this task came to carry the criterion it has.
       completionCriterionOverrideReason:
         criterionChangeRecord ?? (clearsStaleOverrideReason ? null : undefined),
+      // Written only when the write moves them, so an edit that says nothing about them — the
+      // common case — leaves the columns out of the UPDATE.
+      ownerConfirmationReason:
+        ownerConfirmationReasonAfter !== (before.ownerConfirmationReason ?? null)
+          ? ownerConfirmationReasonAfter
+          : undefined,
+      ownerConfirmationReasonNote:
+        ownerConfirmationReasonNoteAfter !== (before.ownerConfirmationReasonNote ?? null)
+          ? ownerConfirmationReasonNoteAfter
+          : undefined,
       // The declaration and its reason move together: written with the reason the door above
       // asked for, and taken back with it — a reason left on a task that lands again would be
       // explaining a declaration it no longer makes.
@@ -9356,8 +9510,49 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * themselves (`autoRunWhenReady = false`): a release that is a decision for the coordinator
    * rather than a dispatch. Each caller hands them to `DEPENDENT_READY`'s door once its own facts
    * are delivered; nothing here is told to anybody.
+   *
+   * What to start is `dependentRelease`'s answer; this only acts on it.
    */
   async dispatchDependentsOf(ownerId: string, doneTaskId: string): Promise<string[]> {
+    const release = await this.dependentRelease(ownerId, doneTaskId);
+    for (const dep of release.start) {
+      try {
+        // Carrying WHICH MOMENT this scan read, so `execute` can prove it is still acting on it:
+        // between here and its own re-read the user may have scheduled this task for later, or the
+        // prerequisite may have reopened, and either replaces the reason this loop had for starting
+        // it. Both advance the epoch, so both are one comparison rather than a value check per fact.
+        await this.dispatchReadyTask(ownerId, dep.id, dep.epoch);
+      } catch (e) {
+        this.logger.warn(
+          `auto-run of dependent task ${dep.id} failed: ${e instanceof Error ? e.message : e}`,
+        );
+      }
+    }
+    return release.undecided;
+  }
+
+  /**
+   * What `doneTaskId` finishing releases among the tasks that depend on it — the completion edge's
+   * whole predicate, read and not acted on. `dispatchDependentsOf` starts what it gives a slot, and
+   * the owner's confirmation card reads the same answer as what confirming would start
+   * (`owner-confirmation-if-confirmed.ts`), so the card cannot promise what the edge would not do.
+   *
+   * A dependent is released when it is READY with this completion and still OPEN. Then it is
+   * `undecided` when it does not start by itself; passed over when its project does not move by
+   * itself, it is scheduled for later or nothing runs it; `waitingForSlot` when its list ranks other
+   * ready work above it or its project, runner or list has no room; and in `start` otherwise, in the
+   * order the pass offered the slots. Every one of them but `start` is left OPEN and READY.
+   *
+   * `assumeCompleted` asks before the completion is written: `doneTaskId` reads as DONE to its
+   * dependents and as no longer holding its project's slot, which is what its DONE will make true.
+   * Its own landing (§2.5 J9) is read as nothing to wait for — whether it will hold the release is
+   * the caller's to say.
+   */
+  async dependentRelease(
+    ownerId: string,
+    doneTaskId: string,
+    { assumeCompleted = false }: { assumeCompleted?: boolean } = {},
+  ): Promise<DependentRelease> {
     // The stored edge may still name W while the completion event comes from its tail S. Resolve
     // that relation in PostgreSQL, using the same fail-closed rules as the candidate scans and
     // commit trigger. This is the instant path; without the reverse-tail match only the periodic
@@ -9400,8 +9595,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
          AND d."depends_on_task_id" IN (SELECT "id" FROM chain)
     `);
     const dependentIds = [...new Set(edges.map((e) => e.taskId))];
-    if (!dependentIds.length) return [];
-    const states = await this.dependencyStatesFor(ownerId, dependentIds);
+    if (!dependentIds.length) return { start: [], waitingForSlot: [], undecided: [] };
+    const states = await this.dependencyStatesFor(
+      ownerId,
+      dependentIds,
+      assumeCompleted ? doneTaskId : undefined,
+    );
     const dependents = await this.prisma.task.findMany({
       where: { id: { in: dependentIds }, ownerId },
       select: {
@@ -9445,6 +9644,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // READY, and the sweep this edge anticipates materialises it the moment a slot frees.
     const budget = await this.materialisationBudget();
     const now = new Date();
+    const start: DependentRelease['start'] = [];
+    const waitingForSlot: string[] = [];
     const undecided: string[] = [];
     // One completion can release several tasks of one list; the list's slots go to them by priority
     // as the sweep would deal them, and in the order they were read while nothing is raised.
@@ -9484,30 +9685,32 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // default everything nobody raised outranks it, so a lowered task is left to the sweep
       // without asking.
       if (dep.listId != null) {
-        if (dep.priority < 0) continue;
+        if (dep.priority < 0) {
+          waitingForSlot.push(dep.id);
+          continue;
+        }
         ranked ??= await this.readyPriorityAbove(released);
-        if ((ranked.get(dep.listId) ?? 0) > dep.priority) continue;
+        if ((ranked.get(dep.listId) ?? 0) > dep.priority) {
+          waitingForSlot.push(dep.id);
+          continue;
+        }
       }
       // Its project is running as many tasks as it may: left OPEN and READY, and the sweep starts it
       // once a slot frees — spending nothing of the runner's or the list's on it now.
-      projectRoom ??= await this.projectBudget(released.map((candidate) => candidate.projectId));
-      if (projectBudgetSpent(projectRoom, dep.projectId)) continue; // left to the sweep
-      if (!takeBudget(budget, dep.assignee.runnerId, dep.listId)) continue; // left to the sweep
-      spendProjectBudget(projectRoom, dep.projectId);
-      const epoch = dep.dispatchEpoch?.epoch ?? 0n;
-      try {
-        // Carrying WHICH MOMENT this scan read, so `execute` can prove it is still acting on it:
-        // between here and its own re-read the user may have scheduled this task for later, or the
-        // prerequisite may have reopened, and either replaces the reason this loop had for starting
-        // it. Both advance the epoch, so both are one comparison rather than a value check per fact.
-        await this.dispatchReadyTask(ownerId, dep.id, epoch);
-      } catch (e) {
-        this.logger.warn(
-          `auto-run of dependent task ${dep.id} failed: ${e instanceof Error ? e.message : e}`,
-        );
+      projectRoom ??= await this.projectBudget(
+        released.map((candidate) => candidate.projectId),
+        assumeCompleted ? doneTaskId : undefined,
+      );
+      // Both left to the sweep.
+      if (projectBudgetSpent(projectRoom, dep.projectId)
+        || !takeBudget(budget, dep.assignee.runnerId, dep.listId)) {
+        waitingForSlot.push(dep.id);
+        continue;
       }
+      spendProjectBudget(projectRoom, dep.projectId);
+      start.push({ id: dep.id, epoch: dep.dispatchEpoch?.epoch ?? 0n });
     }
-    return undecided;
+    return { start, waitingForSlot, undecided };
   }
 
   /**
@@ -10249,12 +10452,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * outstanding tasks that a live or queued session occupies (PROJECT_OCCUPIED_SQL) — the count the
    * independent release has always spent — for `projectBudgetSpent` and `spendProjectBudget`. One
    * statement for a pass, whatever it holds; a pass with no task in a project asks nothing.
+   * `settling` is a task counted as already DONE (`projectOccupiedSql`).
    */
-  private async projectBudget(projectIds: Iterable<string | null>): Promise<Map<string, number>> {
+  private async projectBudget(
+    projectIds: Iterable<string | null>,
+    settling?: string,
+  ): Promise<Map<string, number>> {
     const ids = [...new Set([...projectIds].filter((id): id is string => id != null))];
     if (ids.length === 0) return new Map();
     const rows = await this.prisma.$queryRaw<Array<{ projectId: string; free: number }>>(Prisma.sql`
-      WITH occupied AS MATERIALIZED (${PROJECT_OCCUPIED_SQL})
+      WITH occupied AS MATERIALIZED (${projectOccupiedSql(settling)})
       SELECT p.id AS "projectId", p.max_concurrent_tasks - COALESCE(occupied."tasks", 0) AS "free"
         FROM project p
         LEFT JOIN occupied ON occupied.project_id = p.id
@@ -11538,6 +11745,44 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // its own copies from the request that made it — so leaving them would add a set of the
       // task's design mocks per losing delivery, attached to nothing and deleted by nothing.
       if (!landed) await this.discardTaskAttachmentCopies(copies);
+    }
+  }
+
+  private async assertOwnedAttachments(ownerId: string, attachmentIds?: string[]): Promise<void> {
+    const ids = [...new Set(attachmentIds ?? [])];
+    if (!ids.length) return;
+    const count = await this.prisma.attachment.count({ where: { ownerId, id: { in: ids } } });
+    if (count !== ids.length) throw new NotFoundException('attachment not found');
+  }
+
+  /** Copy, never move, so a task can reuse conversation or task inputs without changing history. */
+  private async copyAttachmentsToTask(
+    tx: Prisma.TransactionClient,
+    ownerId: string,
+    taskId: string,
+    attachmentIds?: string[],
+  ): Promise<void> {
+    const ids = [...new Set(attachmentIds ?? [])];
+    if (!ids.length) return;
+    const sources = await tx.attachment.findMany({
+      where: { ownerId, id: { in: ids } },
+      select: { id: true, mimeType: true, sizeBytes: true, fileName: true, data: true },
+    });
+    // Rechecked in the task's transaction: deletion after preflight must roll back the task too.
+    if (sources.length !== ids.length) throw new NotFoundException('attachment not found');
+    const byId = new Map(sources.map((source) => [source.id, source]));
+    for (const id of ids) {
+      const source = byId.get(id)!;
+      await tx.attachment.create({
+        data: {
+          ownerId, taskId,
+          mimeType: source.mimeType,
+          sizeBytes: source.sizeBytes,
+          fileName: source.fileName,
+          data: source.data,
+        },
+        select: { id: true },
+      });
     }
   }
 

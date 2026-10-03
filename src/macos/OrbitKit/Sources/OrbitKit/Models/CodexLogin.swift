@@ -23,10 +23,18 @@ public struct CodexLogin: Codable, Equatable, Sendable {
     /// Its quota, once something has read it; nil until then — which is not a refusal, and it runs.
     public let usage: PlanUsageSnapshot?
     public let usageUnavailable: String?
+    /// The account the reader's next session would run on, on a pool read as one of its people
+    /// (`SharedPool.logins`, which the server marks); absent from the owner's own reads, where Next is
+    /// worked out from the order and each account's state.
+    public let next: Bool
+    /// Who signed it in — a person of the pool (migration 0371). They alone may sign it in again, and with
+    /// the pool's admins they may take it out; an older server sends none, which no page reads as anybody.
+    public let userId: String?
 
     public init(state: String = "ACTIVE", email: String?, plan: String? = nil, fingerprint: String,
                 lastError: String? = nil, expiresAt: String? = nil, linkedAt: String? = nil,
-                usage: PlanUsageSnapshot? = nil, usageUnavailable: String? = nil) {
+                usage: PlanUsageSnapshot? = nil, usageUnavailable: String? = nil, next: Bool = false,
+                userId: String? = nil) {
         self.state = state
         self.email = email
         self.plan = plan
@@ -36,6 +44,8 @@ public struct CodexLogin: Codable, Equatable, Sendable {
         self.linkedAt = linkedAt
         self.usage = usage
         self.usageUnavailable = usageUnavailable
+        self.next = next
+        self.userId = userId
     }
 
     public init(from decoder: Decoder) throws {
@@ -50,6 +60,9 @@ public struct CodexLogin: Codable, Equatable, Sendable {
         // A quota in a shape this build cannot read is no reason to lose the account.
         usage = (try? c.decodeIfPresent(PlanUsageSnapshot.self, forKey: .usage)) ?? nil
         usageUnavailable = try c.decodeIfPresent(String.self, forKey: .usageUnavailable)
+        // Absent from an owner's own read, and from an older server: no mark.
+        next = (try? c.decodeIfPresent(Bool.self, forKey: .next)) ?? false
+        userId = try c.decodeIfPresent(String.self, forKey: .userId)
     }
 
     /// Whether OpenAI still takes it.

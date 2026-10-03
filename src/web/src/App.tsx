@@ -64,7 +64,7 @@ function DefaultLanding() {
   const runners = useQuery(runnersQuery());
   const first =
     workspaces.isSuccess && runners.isFetched
-      ? firstOpenableWorkspace(workspaces.data, runners.data ?? [])
+      ? firstOpenableWorkspace(workspaces.data)
       : undefined;
   if (first) return <Navigate to={`/workspaces/${encodeId(first.id)}`} replace />;
   if (!workspaces.isFetched || !runners.isFetched) {

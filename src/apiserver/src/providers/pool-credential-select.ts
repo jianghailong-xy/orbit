@@ -9,19 +9,19 @@ import {
 } from './pool-login-select';
 
 /**
- * Which credential of a Codex pool a session runs on — one of the ChatGPT accounts its owner signed in
- * (migration 0323), or one of its API keys (migrations 0321, 0358) — chosen at every door that builds the
- * session's engine (QueueService.resolveLoginPool for the owner's session, resolveSharedPool for anybody
- * else's) and recorded on the session, which is all the gateway sends on. Within each kind the rules are
- * pool-login-select.ts's and pool-key-select.ts's; this is the order between the two, and who may have
- * which:
+ * Which credential of a Codex pool a session runs on — one of the ChatGPT accounts logged into it
+ * (migrations 0323, 0371), or one of its API keys (migrations 0321, 0358) — chosen at every door that
+ * builds the session's engine (QueueService.resolveLoginPool for a pool of the session owner's own,
+ * resolveSharedPool for one somebody else made that they are a person of) and recorded on the session,
+ * which is all the gateway sends on. Within each kind the rules are pool-login-select.ts's and
+ * pool-key-select.ts's; this is the order between the two, and it is one rule for every pool:
  *
- * - The pool's owner runs on its ChatGPT accounts first, and on its keys only while none of them can run:
- *   a subscription's quota costs nothing more to use, where a key is billed by what it runs. A session on
- *   a key goes back onto an account at the first choosing that finds one that can.
- * - Everybody else runs on its keys alone. The accounts are the owner's and run nobody else's session,
- *   whatever accounts the choosing is handed and whatever the session's row names. A shared pool (0321)
- *   holds no account, and everybody in it is this, its maker included.
+ * - every session runs on the pool's ChatGPT accounts first, and on its keys only while none of them can
+ *   run: a subscription's quota costs nothing more to use, where a key is billed by what it runs. A
+ *   session on a key goes back onto an account at the first choosing that finds one that can.
+ * - the accounts are persons of the pool's, each signed in by whoever contributed it (migration 0371),
+ *   and run every person in the pool's sessions; who may sign one in or out is CodexLoginService's, and
+ *   a shared pool (0321) that holds no account simply has none to choose.
  */
 
 /** A key as pool-key-select.ts chooses one, with the label the transcript names it by. */
@@ -29,11 +29,9 @@ type CredentialKey = PoolKeyCandidate & { label: string };
 
 /** The pool, as choosing reads it. */
 export interface CredentialPool<Account extends LoginAccount, Key extends CredentialKey> {
-  /** Whose the pool is. On a pool of one's own, the one person its ChatGPT accounts run sessions for. */
+  /** Whose the pool is. */
   ownerId: string;
-  /** Made on the shared pools page (migration 0321): API keys alone, for everybody in it. */
-  shared: boolean;
-  /** Its ChatGPT accounts, oldest first. */
+  /** Its ChatGPT accounts, oldest first — whoever in the pool signed each one in. */
   accounts: readonly Account[];
   keys: readonly Key[];
   /** Its rule that a person's own key comes before everybody else's (pool-key-select.ts). */
@@ -63,14 +61,13 @@ export interface CredentialChoice {
 
 /**
  * The credential a claim puts `session` — whose `ownerId` it is — on, in the order above. Within the
- * owner's accounts and within the keys, the session stays on what it is on while that can run.
+ * pool's accounts and within the keys, the session stays on what it is on while that can run.
  */
 export function choosePoolCredential<Account extends LoginAccount, Key extends CredentialKey>(
   pool: CredentialPool<Account, Key>,
   session: SessionCredential & { ownerId: string },
   now: Date,
 ): CredentialChoice {
-  if (pool.shared || session.ownerId !== pool.ownerId) return keysAlone(pool, session, now);
   // What the session was on: an account, else a key, else nothing yet.
   const onAccount = session.accountId !== null;
   const onKey = !onAccount && session.keyId !== null;
@@ -79,7 +76,11 @@ export function choosePoolCredential<Account extends LoginAccount, Key extends C
   if (account && loginCanRun(account, now)) {
     const next = { accountId: account.accountId, keyId: null };
     if (account.accountId === session.accountId) return { chosen: next, next, notice: null };
-    const notice = onAccount ? loginSwitchNotice(account, previous, now) : onKey ? keyToLoginSwitchNotice(account) : null;
+    const notice = onAccount
+      ? loginSwitchNotice(account, previous, now)
+      : onKey
+        ? keyToLoginSwitchNotice(account, session.ownerId === pool.ownerId)
+        : null;
     return { chosen: next, next, notice };
   }
   const key = choosePoolKey(pool.keys, session.ownerId, pool.ownKeyFirst, session.keyId, now);
@@ -102,23 +103,3 @@ export function choosePoolCredential<Account extends LoginAccount, Key extends C
   };
 }
 
-/**
- * Anybody's but the owner's: pool-key-select.ts's choice, and with none the key the session is on. An
- * account its row names — carried over from a pool of its owner's own it ran on before — is dropped
- * without a line: the session never ran on it here.
- */
-function keysAlone<Key extends CredentialKey>(
-  pool: { keys: readonly Key[]; ownKeyFirst: boolean },
-  session: SessionCredential & { ownerId: string },
-  now: Date,
-): CredentialChoice {
-  const key = choosePoolKey(pool.keys, session.ownerId, pool.ownKeyFirst, session.keyId, now);
-  if (!key) return { chosen: null, next: { accountId: null, keyId: session.keyId }, notice: null };
-  const next = { accountId: null, keyId: key.id };
-  // The first key a session runs on is where it starts, not a move.
-  const notice =
-    session.keyId !== null && key.id !== session.keyId
-      ? poolKeySwitchNotice(key, pool.keys.find((left) => left.id === session.keyId) ?? null, session.ownerId, now)
-      : null;
-  return { chosen: next, next, notice };
-}

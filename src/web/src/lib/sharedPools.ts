@@ -1,6 +1,7 @@
 import { queryOptions } from '@tanstack/react-query';
 import { AgentProvider, type PlanUsageSnapshot } from '@orbit/shared';
 import { api } from '../api';
+import { loginName, loginSpentUntil, loginState, type CodexLogin } from './codexLogin';
 import { encodeId } from './idCodec';
 import type { PoolMember, PoolMemberState, ProviderPool } from './providerPools';
 
@@ -69,15 +70,31 @@ export interface SharedPool {
   /** Made on the shared pools page (migration 0321): API keys alone, never a ChatGPT account. False on a
    *  Codex pool of somebody's own (0323), which takes people and keys beside its owner's accounts (0358). */
   shared: boolean;
-  /** Whether its owner has ChatGPT accounts in it — all anybody else is told of them. */
-  ownerHasChatGPT: boolean;
+  /**
+   * The ChatGPT accounts the pool holds (migrations 0323/0371), whoever in it signed each one in — its
+   * owner or a member — as everyone in the pool reads them: the accounts run every person's sessions
+   * (pool-credential-select.ts). Which of them the viewer's next session runs on is `next`; `userId` says
+   * whose account each one is. Empty until somebody signs one in.
+   */
+  logins: SharedPoolLogin[];
+  /** Rule: anyone in the pool may put a key in. Off, only admins can. */
   membersCanAdd: boolean;
+  /** Rule: a member may sign a ChatGPT account of their own in (migration 0371). Off, only admins can. */
+  membersCanAddAccounts: boolean;
   ownKeyFirst: boolean;
   viewerRole: SharedPoolRole;
   /** The calendar month (UTC) every cap and every figure here counts. */
   window: { start: string; end: string };
   people: SharedPoolPerson[];
   keys: SharedPoolKey[];
+}
+
+/** One of a pool's ChatGPT accounts as everybody in it reads it: an account of the person who signed it
+ *  in (`userId`), which only they may sign in again — with the pool's admins for taking it out — and one
+ *  every person's sessions run on. */
+export interface SharedPoolLogin extends CodexLogin {
+  /** The account a session the viewer starts now runs on — the claim's own choice, asked for them. */
+  next: boolean;
 }
 
 export const SHARED_POOLS_BASE = '/providers/shared-pools';
@@ -150,12 +167,38 @@ function keyWindow(key: SharedPoolKey, pool: SharedPool): PlanUsageSnapshot | nu
 }
 
 /**
- * A shared pool in the shape an account pool is drawn in — its keys as members — so the Providers page
- * card, the session picker and the composer take it as they take one: each member carries its `key`,
- * and the pool itself the whole view (`shared`) for what only a shared pool has.
+ * A pool read as its people and keys as an account pool is drawn — its ChatGPT accounts first, then its
+ * keys — so the Providers page card, the session picker and the composer take it as they take one: each
+ * member carries its `login` or its `key`, and the pool itself the whole view (`shared`) for what only a
+ * shared pool has. The order is every session's: the accounts while any can run, its keys after
+ * (pool-credential-select.ts).
  */
 export function sharedPoolAsProviderPool(pool: SharedPool): ProviderPool {
-  return keysPool(pool, keyMembers(pool));
+  // A payload that leaves `logins` out is a pool whose accounts nothing is known of (an older server):
+  // it is drawn as it was — its keys — rather than as a crash.
+  const drawn = keysPool(pool, [...(pool.logins ?? []).map((login) => loginMember(pool, login)), ...keyMembers(pool)]);
+  // The pool's accounts ride along on the pool itself too (`login`/`logins`, as the owner's own read
+  // carries them): the sign-in dialog and poolLogins read them there.
+  return { ...drawn, login: (pool.logins ?? [])[0] ?? null, logins: pool.logins ?? [] };
+}
+
+/** One of the pool's ChatGPT accounts as a member of it: named by its email, where it stands
+ *  (loginState), and — the account the viewer's next session runs on, which the server chose for them —
+ *  the one wearing NEXT. Its email, plan, `…AB12` and quota are the pool's own view of it. */
+function loginMember(pool: SharedPool, login: SharedPoolLogin): PoolMember {
+  const state = loginState(login);
+  return {
+    id: `login:${login.fingerprint}`,
+    slug: pool.slug,
+    label: loginName(login),
+    enabled: true,
+    presetSlug: 'openai',
+    planUsage: login.usage,
+    state,
+    resetsAt: state === 'SPENT' ? (loginSpentUntil(login) ?? null) : null,
+    next: login.next,
+    login,
+  };
 }
 
 /**
@@ -222,16 +265,39 @@ function keyMembers(pool: SharedPool): PoolMember[] {
 
 function keysPool(pool: SharedPool, members: PoolMember[]): ProviderPool {
   const free = members.some((member) => member.state === 'AVAILABLE' || member.state === 'RUNNING');
-  const runnable = pool.keys.some((key) => key.enabled && key.state === 'ACTIVE');
+  const accounts = members.flatMap((member) => (member.login ? [member.login] : []));
+  // Whether waiting brings anything back: an account that is not signed out — a spent one comes back by
+  // the hour — or a key OpenAI still takes that is switched on. A signed-out account, an off key and a
+  // refused one come back only by their owner's or contributor's hand.
+  const revives =
+    accounts.some((login) => loginState(login) !== 'SIGNED_OUT') ||
+    pool.keys.some((key) => key.enabled && key.state === 'ACTIVE');
   const stops = members.flatMap((member) => (member.state === 'SPENT' && member.resetsAt ? [member.resetsAt] : []));
   return {
     id: pool.id,
     slug: pool.slug,
     label: pool.label,
-    // The EARLIEST of the stops, as an account pool's own `resetsAt` is: one key free of its reason is
-    // enough for work to continue, whether that is the month turning or OpenAI's mark running out.
+    // What the pool runs on, carried from its own view: a member's page is drawn from this object, and
+    // whether it can hold ChatGPT accounts — of the pool's own or of a member's (migration 0371) — is
+    // read from the engine.
+    engine: pool.engine,
+    // The EARLIEST of the stops, as an account pool's own `resetsAt` is: one credential free of its
+    // reason is enough for work to continue, whether that is the month turning, OpenAI's mark running
+    // out, or an account's window resetting.
     resetsAt: !free && stops.length > 0 ? earliest(stops) : null,
-    unavailable: runnable ? null : pool.keys.length === 0 ? 'No keys' : 'No key can run',
+    // Why nothing can run, in the words the owner's own pool page uses (codexLogin.withLogin,
+    // ownPoolWithAccess): 'Signed out' while the pool holds accounts and OpenAI refused every one of
+    // them — which waiting does not mend — else the keys' own answer. A pool holding no account, a shared
+    // pool (0321) among them (migration 0371 lets one hold accounts), is its keys' own answer alone.
+    unavailable: revives
+      ? null
+      : accounts.length > 0
+        ? 'Signed out'
+        : pool.keys.length === 0
+          ? pool.shared
+            ? 'No keys'
+            : 'Not signed in'
+          : 'No key can run',
     members,
     shared: pool,
   };
@@ -261,6 +327,26 @@ export const canReplaceKey = canRemoveKey;
 
 /** Whether the viewer may put a key in: an admin always, a member while the pool lets members add. */
 export const canAddKey = (pool: SharedPool): boolean => pool.viewerRole === 'ADMIN' || pool.membersCanAdd;
+
+/** Whether the viewer may sign a ChatGPT account of their own in: an admin always, a member while the
+ *  pool's rule for accounts lets them (migration 0371). */
+export const canAddAccount = (pool: SharedPool): boolean =>
+  pool.viewerRole === 'ADMIN' || pool.membersCanAddAccounts;
+
+/** Whether the viewer may take `login` out: the person who signed it in, or an admin — the keys' own
+ *  rule (canRemoveKey) for accounts. */
+export const canSignOutAccount = (pool: SharedPool, login: { userId: string }): boolean =>
+  login.userId === viewerId(pool) || pool.viewerRole === 'ADMIN';
+
+/** Whether the viewer may sign `login` in again: the person who signed it in, and nobody else — not even
+ *  the pool's admins, who have no credential for it (migration 0371). */
+export const canSignInAgain = (pool: SharedPool, login: { userId: string }): boolean =>
+  login.userId === viewerId(pool);
+
+/** The viewer's own person id, from the pool's people (their `you` row) — who an account's `userId` has
+ *  to be for the viewer to be the one who signed it in. */
+export const viewerId = (pool: SharedPool): string | undefined =>
+  pool.people.find((person) => person.you)?.userId;
 
 /** When a cap starts again, as a date: it is always the first of a month, which a weekday would not say. */
 export const formatCapReset = (iso: string): string =>

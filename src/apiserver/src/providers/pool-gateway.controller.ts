@@ -17,13 +17,13 @@ import { POOL_LOGIN_TOKEN_PREFIX } from './shared-pool';
  * gateway's list is refused by the gateway, with its reason, rather than answered by the router.
  *
  * A token authenticates (pool, person, session) and nothing more. Its prefix says which table it is kept in
- * — a login pool's (`orbit-gwl-`, its owner's: PoolLoginGatewayService.caller) or a person's (`orbit-gw-`:
- * PoolGatewayService.caller) — and nothing about where its requests go: that is the session's, as its last
- * claim left it. A session on one of the pool's ChatGPT accounts goes to ChatGPT's Codex backend
- * (PoolLoginGatewayService.forward), which takes nobody's session but the pool's owner's; one on one of its
- * API keys goes to OpenAI's API (PoolGatewayService.forward). A session on neither is answered by the side
- * its token belongs to: a login pool's as a pool holding no account, a person's as a pool with no key for
- * them.
+ * — a login pool's (`orbit-gwl-`, its owner's own sessions: PoolLoginGatewayService.caller) or a person's
+ * (`orbit-gw-`: PoolGatewayService.caller) — and nothing about where its requests go: that is the session's,
+ * as its last claim left it. A session on one of the pool's ChatGPT accounts goes to ChatGPT's Codex
+ * backend (PoolLoginGatewayService.forward) — its owner's session on an `orbit-gwl-` token, one of the
+ * people they added on an `orbit-gw-` one, both served there since 2026-10-03 — and one on one of its API
+ * keys goes to OpenAI's API (PoolGatewayService.forward). A session on neither is answered by the side its
+ * token belongs to: a login pool's as a pool holding no account, a person's as a pool with no key for them.
  */
 @Controller('gw/codex')
 export class PoolGatewayController {

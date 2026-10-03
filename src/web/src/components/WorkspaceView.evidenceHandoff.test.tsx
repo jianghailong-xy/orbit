@@ -111,6 +111,9 @@ class FakeEventSource {
 
 /** Every write the page made, as path + body, so "where the sentence went" is readable. */
 const writes: Array<{ path: string; body: unknown }> = [];
+/** What the session and the pending read answer: the coordinator's, unless a case says otherwise. */
+let sessionReply: Record<string, unknown> = COORDINATOR;
+let queueReply: PendingDecisionQueue = QUEUE;
 let container: HTMLDivElement | null = null;
 let root: Root | null = null;
 let client: QueryClient | null = null;
@@ -122,15 +125,32 @@ const mounted = (): HTMLDivElement => {
 const count = (selector: string): number => mounted().querySelectorAll(selector).length;
 
 const waitForUi = async (assertion: () => void): Promise<void> => {
-  await act(async () => {
+  // The act environment is off while the window is waited out, as RTL's own asyncWrapper
+  // does it: React queues every render scheduled inside an in-flight act callback and flushes
+  // none of them until that callback settles, so a page that answers inside the window can
+  // never draw what the window exists to see — the wait times out with the data already in
+  // the cache (workstation-gpu: e85b63ee9's second full run; the merge check reds here).
+  const env = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
+  const previous = env.IS_REACT_ACT_ENVIRONMENT;
+  env.IS_REACT_ACT_ENVIRONMENT = false;
+  try {
     await vi.waitFor(assertion, { timeout: 8_000, interval: 20 });
-  });
+  } finally {
+    env.IS_REACT_ACT_ENVIRONMENT = previous;
+  }
+  // And one act to close the window: the last commit the wait saw leaves its passive effects
+  // scheduled, and what they carry — React Query's mutation options among it — is what the
+  // test's next press runs on. The old act-wrapped wait flushed them on its way out; this
+  // keeps that, without the freeze that made the wait itself blind.
+  await act(async () => {});
 };
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   FakeEventSource.open = [];
   writes.length = 0;
+  sessionReply = COORDINATOR;
+  queueReply = QUEUE;
   vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {} });
   vi.stubGlobal('EventSource', FakeEventSource);
   apiMock.mockReset();
@@ -195,10 +215,10 @@ beforeEach(() => {
       if (path.includes('/background')) return reply([]);
       if (path.includes('/created-tasks')) return reply({ total: 0, running: 0, failed: 0, done: 0, items: [], projects: [] });
       if (path.includes('/diff')) return reply({ files: [] });
-      return reply(COORDINATOR);
+      return reply(sessionReply);
     }
-    if (path.startsWith('/sessions')) return reply([COORDINATOR]);
-    if (path.startsWith('/tasks/evidence-decisions/pending')) return reply(QUEUE);
+    if (path.startsWith('/sessions')) return reply([sessionReply]);
+    if (path.startsWith('/tasks/evidence-decisions/pending')) return reply(queueReply);
     if (path.startsWith('/tasks/page')) return reply({ items: [], nextCursor: null });
     if (path.startsWith('/tasks')) return reply({ items: [], total: 0, counts: {} });
     return reply([]);
@@ -363,5 +383,45 @@ describe('Chat about this on the evidence card', { timeout: 60_000 }, () => {
     expect(writes.filter((write) => write.path.includes('/turns'))).toEqual([]);
     expect(count('.composer-replyto')).toBe(0);
     expect(composer().value).toBe('');
+  });
+});
+
+/**
+ * A task a session dispatched outside any project, whose dispatching session is in Trash: the read
+ * draws its card in the task's run, which coordinates nothing, and names the dispatching session as
+ * the one its decision is recorded as (apiserver tasks/evidence-review.ts). The send-back typed at
+ * this composer has to reach the door in that name — the run did the work, and the door refuses it.
+ */
+describe('Chat about this on a dispatched task’s card drawn in its run', { timeout: 60_000 }, () => {
+  it('sends the reason as the dispatching session’s SEND_BACK, not this run’s', async () => {
+    const DISPATCHER_PUBLIC = encodeId('0195c0de-0000-7000-8000-000000000065');
+    sessionReply = { ...COORDINATOR, projectId: null, title: 'the run that did the work' };
+    const dispatched: PendingDecisionRow = {
+      ...ROW,
+      projectId: null,
+      ownerCard: { sessionId: COORDINATOR_PUBLIC, decidingSessionId: DISPATCHER_PUBLIC },
+    };
+    queueReply = { ...QUEUE, pending: [dispatched] };
+    await mount();
+    await act(async () => {
+      cardActions()[1]!.button.click();
+    });
+    await waitForUi(() => {
+      expect(count('.composer-replyto')).toBe(1);
+    });
+    await type('贴出改前先红的输出');
+    await send();
+    await waitForUi(() => {
+      expect(writes).toHaveLength(1);
+    });
+    expect(writes[0]).toEqual({
+      path: `/tasks/${ROW.taskId}/evidence/decision`,
+      body: {
+        decidingSessionId: DISPATCHER_PUBLIC,
+        evidenceRevision: ROW.evidenceRevision,
+        decision: 'SEND_BACK',
+        note: '贴出改前先红的输出',
+      },
+    });
   });
 });

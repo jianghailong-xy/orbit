@@ -7,9 +7,10 @@ import Foundation
 /// takes every one of them out. Each person's row says what their sessions run on, how many keys they put
 /// in, how many sessions they started this month and their share of this month's API key use, which
 /// everyone in the pool sees. The people the owner added read all of it and change none of it. While a pool
-/// shared with people has no API key, its owner is told at the foot of the card that none of them can start
-/// a session on it yet (02, the boundary state), and offered Add an API key. `PoolAccessCopyParityTests`
-/// holds every word here to the web source.
+/// shared with people has nothing any of them could run on — no API key and no ChatGPT account signed in
+/// (2026-10-03; the accounts run everyone's sessions) — its owner is told at the foot of the card that none
+/// of them can start a session on it yet (02, the boundary state), and offered Add an API key.
+/// `PoolAccessCopyParityTests` holds every word here to the web source.
 public struct WhoCanUseIt: Equatable, Sendable {
     public let pool: SharedPool
     /// How many ChatGPT accounts of its owner's the pool holds — nil for a pool made on the shared pools
@@ -91,7 +92,7 @@ public struct WhoCanUseIt: Equatable, Sendable {
     /// sessions they started this month; to anybody else, those two alone.
     public struct PersonLine: Equatable, Sendable {
         public let runs: String?
-        /// The pool's owner's own sessions run on its ChatGPT accounts first, and then on its keys.
+        /// Everybody in the pool's sessions run on its ChatGPT accounts first, and then on its keys.
         public let everything: Bool
         public let rest: String
     }
@@ -99,9 +100,9 @@ public struct WhoCanUseIt: Equatable, Sendable {
     public func line(_ person: SharedPoolPerson) -> PersonLine {
         let sessions = SharedPoolPage.plural(person.sessions, "session")
         guard mine else { return PersonLine(runs: nil, everything: false, rest: SharedPoolPage.personLine(person)) }
-        // The owner's own sessions run on its ChatGPT accounts first; everybody else's — and everybody's in
-        // a pool of keys alone — on its API keys.
-        if person.creator && accounts != nil {
+        // Everyone's sessions run on the pool's ChatGPT accounts first while it holds any (2026-10-03); in
+        // a pool of keys alone — a shared pool, or one whose accounts have all been taken out — on its keys.
+        if let accounts, accounts > 0 {
             return PersonLine(runs: Self.runsOnEverything, everything: true, rest: sessions)
         }
         let keys = person.keys == 0 ? "no key" : SharedPoolPage.plural(person.keys, "key")
@@ -122,23 +123,31 @@ public struct WhoCanUseIt: Equatable, Sendable {
 
     public static let ruleTitle = "They can add their own API keys"
     public static let ruleHint = "Off: only you put keys in. A key they add runs everyone’s sessions here, theirs first."
+    /// The accounts' own rule, beside the keys' (migration 0371): a member may sign a ChatGPT account of
+    /// their own in, which then runs everyone's sessions here, and only they can sign it in again.
+    public static let ruleAccountsTitle = "They can add their own ChatGPT accounts"
+    public static let ruleAccountsHint = "Off: only you sign ChatGPT accounts in. An account they sign in runs everyone’s sessions"
+        + " here too, and only they can sign it in again."
 
-    /// Whether they may put keys of their own in is its owner's to say, once anybody else can use it.
+    /// Whether they may put keys of their own in, or sign ChatGPT accounts of their own in, is its owner's
+    /// to say — two rules, once anybody else can use it.
     public var showsRule: Bool { mine && people }
 
-    public static let footLead = "Your ChatGPT accounts only ever run your own sessions."
-    public static let footRest = " OpenAI’s terms don’t allow a ChatGPT account to be shared, so nobody you add can run on one — or see which accounts they are."
+    public static let footLead = "Your ChatGPT accounts run everyone’s sessions here."
+    public static let footRest = " The people you add start on them, and fall to the API keys when none can run."
+        + " OpenAI’s terms treat account sharing as a violation — an account used that way can be suspended."
 
-    /// The lock at the card's foot: said to its owner, once anybody else can use a pool their ChatGPT
-    /// accounts are in.
-    public var showsFoot: Bool { mine && people && accounts != nil }
+    /// The notice at the card's foot: said to its owner, once anybody else can use a pool their ChatGPT
+    /// accounts are in — a pool holding none has nothing to say here.
+    public var showsFoot: Bool { mine && people && (accounts ?? 0) > 0 }
 
-    /// Shared with people and no API key yet: none of them can start a session on it, and what fixes it —
-    /// said to its owner alone, with "Add an API key" (02, the boundary state).
+    /// Shared with people and nothing they could run on — no API key and no ChatGPT account signed in:
+    /// none of them can start a session on it, and what fixes it — said to its owner alone, with "Add an
+    /// API key" (02, the boundary state).
     public var warning: AddPoolKey.Fact? {
-        guard mine, people, pool.keys.isEmpty else { return nil }
+        guard mine, people, pool.keys.isEmpty, (accounts ?? 0) == 0 else { return nil }
         let names = SharedPoolPage.listOf(added.map(\.name))
-        let accounts = accounts == nil ? "" : ", and your ChatGPT accounts only run your own sessions"
+        let accounts = accounts == nil ? "" : " and no ChatGPT account signed in"
         return AddPoolKey.Fact(lead: "\(names) can’t start a session here yet.",
                                rest: " \(pool.label) has no API key\(accounts).")
     }
@@ -160,28 +169,46 @@ public enum SharePool {
     /// With no key in the pool yet, the sheet warns instead of saying what they get.
     public static func noKey(_ pool: SharedPool) -> Bool { pool.keys.isEmpty }
 
+    /// Nothing the people added could run on: no key to fall to, and no ChatGPT account signed in either —
+    /// the one case the sheet warns about instead of saying what they get (web's `empty`).
+    public static func empty(_ pool: SharedPool, accounts: Int?) -> Bool {
+        noKey(pool) && (accounts ?? 0) == 0
+    }
+
     public static func risk(_ pool: SharedPool, accounts: Int?) -> AddPoolKey.Fact {
-        let accounts = accounts == nil ? "" : ", because your ChatGPT accounts only run your own sessions"
+        let accounts = accounts == nil ? "" : ", and no ChatGPT account is signed in either"
         return AddPoolKey.Fact(lead: "\(pool.label) has no API key yet.",
                                rest: " They’ll see it but can’t start a session until it has one\(accounts).")
     }
 
-    /// What being added means, before anybody is: the pool on their pages, the keys they run on — never its
-    /// owner's ChatGPT accounts, when it holds any — and that everybody's share is shown to everybody.
+    /// What being added means, before anybody is: the pool on their pages, what their sessions run on — the
+    /// pool's ChatGPT accounts first since 2026-10-03 — and that everybody's share is shown to everybody.
     public static func facts(_ pool: SharedPool, accounts: Int?) -> [AddPoolKey.Fact] {
         let keys = pool.keys.map(\.label)
-        var run = ", which \(keys.count == 1 ? "is" : "are") \(SharedPoolPage.listOf(keys)) now."
-        if accounts == 1 {
-            run += " Your ChatGPT account stays yours alone: they can’t run on it or see which account it is."
-        } else if let accounts, accounts > 1 {
-            run += " Your \(accounts) ChatGPT accounts stay yours alone: they can’t run on them or see which accounts they are."
+        let run: AddPoolKey.Fact
+        if pool.keys.isEmpty {
+            run = AddPoolKey.Fact(lead: "Their sessions start on your ChatGPT accounts",
+                                  rest: ", and wait when none of them can run — the pool has no API key to fall to yet.")
+        } else if let accounts, accounts > 0 {
+            run = AddPoolKey.Fact(lead: "Their sessions start on your ChatGPT accounts",
+                                  rest: ", and fall to the pool’s API keys — \(SharedPoolPage.listOf(keys)) — when none of them can run.")
+        } else {
+            run = AddPoolKey.Fact(lead: "Their sessions run on the pool’s API keys",
+                                  rest: ", which \(keys.count == 1 ? "is" : "are") \(SharedPoolPage.listOf(keys)) now.")
         }
-        return [
+        var facts = [
             AddPoolKey.Fact(lead: "They see \(pool.label)",
                             rest: " on their Providers page and in the session picker, and can start sessions on it."),
-            AddPoolKey.Fact(lead: "Their sessions run on the pool’s API keys", rest: run),
-            AddPoolKey.Fact(lead: "Everyone sees each person’s share", rest: " of this month’s API key use."),
+            run,
         ]
+        // The accounts' own rule (migration 0371): what a member may sign in of their own, said before the
+        // share line, where the pool lets them.
+        if pool.membersCanAddAccounts {
+            facts.append(AddPoolKey.Fact(lead: "They can sign in ChatGPT accounts of their own",
+                                         rest: ", which then run everyone’s sessions here too — theirs and yours — until they take them out again."))
+        }
+        facts.append(AddPoolKey.Fact(lead: "Everyone sees each person’s share", rest: " of this month’s API key use."))
+        return facts
     }
 
     /// The addresses typed, in the order they were: a comma or a space ends one (web's `tokenSeparators`),

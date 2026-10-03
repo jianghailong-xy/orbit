@@ -5,24 +5,34 @@ import {
   restingOffset,
   sessionSwipeActions,
   settleSwipe,
+  swipeActionsOnScreen,
   swipeGeometry,
 } from './sessionSwipe';
 
-// A 400px phone row. Open reveals two leading actions (144px) and one trailing (72px); a full swipe
-// is armed at 60% of the row (240px).
+// A 400px phone row. Open reveals two leading actions (144px) and three trailing (216px); a full
+// swipe is armed at 60% of the row (240px).
 const ROW = 400;
 const open = swipeGeometry('open', ROW, true);
 
 describe('sessionSwipeActions', () => {
   // Hand-synced with `SessionRowActions.swift`: leading = positive actions (outermost first, the
-  // full-swipe one leads), trailing = Delete.
+  // full-swipe one leads), trailing = Delete outermost, then Move, then Share.
   it('lays each list out like the iOS row', () => {
-    expect(sessionSwipeActions('open')).toEqual({ leading: ['complete', 'pin'], trailing: ['delete'] });
+    expect(sessionSwipeActions('open')).toEqual({
+      leading: ['complete', 'pin'],
+      trailing: ['delete', 'move', 'share'],
+    });
     expect(sessionSwipeActions('completed')).toEqual({
       leading: ['restore', 'pin'],
-      trailing: ['delete'],
+      trailing: ['delete', 'move', 'share'],
     });
     expect(sessionSwipeActions('trash')).toEqual({ leading: ['restore'], trailing: ['purge'] });
+  });
+
+  it('reads Share · Move · Delete from left to right on the trailing edge', () => {
+    const { leading, trailing } = sessionSwipeActions('open');
+    expect(swipeActionsOnScreen('leading', leading)).toEqual(['complete', 'pin']);
+    expect(swipeActionsOnScreen('trailing', trailing)).toEqual(['share', 'move', 'delete']);
   });
 });
 
@@ -33,8 +43,8 @@ describe('settleSwipe', () => {
       open: 'leading',
       fullSwipe: false,
     });
-    expect(settleSwipe(null, dragOffset(null, -35, open), open).open).toBeNull();
-    expect(settleSwipe(null, dragOffset(null, -36, open), open).open).toBe('trailing');
+    expect(settleSwipe(null, dragOffset(null, -107, open), open).open).toBeNull();
+    expect(settleSwipe(null, dragOffset(null, -108, open), open).open).toBe('trailing');
   });
 
   it('keeps an open side through a small drag back and shuts it past the slop', () => {
@@ -45,8 +55,8 @@ describe('settleSwipe', () => {
   });
 
   it('carries one drag from an open side through to the other', () => {
-    const offset = dragOffset('leading', -200, open);
-    expect(offset).toBe(-56);
+    const offset = dragOffset('leading', -260, open);
+    expect(offset).toBe(-116);
     expect(settleSwipe('leading', offset, open).open).toBe('trailing');
   });
 
@@ -73,7 +83,7 @@ describe('settleSwipe', () => {
 
   it('never turns a long leftward drag into Delete', () => {
     const offset = dragOffset(null, -390, open);
-    expect(offset).toBe(-92);
+    expect(offset).toBe(-236);
     expect(settleSwipe(null, offset, open)).toEqual({ open: 'trailing', fullSwipe: false });
   });
 

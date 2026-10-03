@@ -1,7 +1,7 @@
 import Foundation
 
 // One Orbit session asking another for a reply (docs/session-request-reply-contract.md §6), as the
-// native cards and the session list draw it — the rules of `src/web/src/lib/sessionRequest.ts`, for
+// native cards draw it — the rules of `src/web/src/lib/sessionRequest.ts`, for
 // iOS and macOS.
 //
 // The RECIPIENT's card is the "From [session]" card its message arrived as, with the request it is
@@ -198,7 +198,7 @@ public struct SessionReply: Codable, Equatable, Sendable {
     }
 }
 
-/// One open request on a session's list row: the other session, and the request.
+/// One open request on a session: the other session, and the request.
 public struct SessionRequestPeer: Codable, Equatable, Sendable {
     public let requestId: String
     public let sessionId: String
@@ -211,7 +211,7 @@ public struct SessionRequestPeer: Codable, Equatable, Sendable {
     }
 }
 
-/// What the cards and the list say, in the web's own words: `lib/sessionRequest.ts`, which
+/// What the cards say, in the web's own words: `lib/sessionRequest.ts`, which
 /// `SessionRequestCopyParityTests` holds this end to.
 public enum SessionRequestCopy {
     /// The recipient's card: the line saying this message is a request.
@@ -226,9 +226,6 @@ public enum SessionRequestCopy {
     public static let openRequest = "Open the request ↗"
     public static let notYou = "Handed back by Orbit, not typed by you"
     public static let neverSeen = "The session never saw the request."
-    /// The session list.
-    public static let awaiting = "Waiting on"
-    public static let owes = "Owes a reply to"
 
     /// What each state is called on the recipient's card.
     public static func stateLabel(_ state: SessionRequestState) -> String {
@@ -281,24 +278,6 @@ public enum SessionRequestCopy {
         day.timeZone = calendar.timeZone
         day.dateFormat = "MMM d"
         return "\(day.string(from: at)), \(time.string(from: at))"
-    }
-
-    /// A list row's open requests, both ways: "Waiting on Worker 2 · Owes a reply to Coordinator".
-    /// Nil when neither is open. The web's `requestPeersLine`.
-    public static func peersLine(awaiting: [SessionRequestPeer]?, owes: [SessionRequestPeer]?) -> String? {
-        func names(_ peers: [SessionRequestPeer]) -> String {
-            let titles = peers.map { peer -> String in
-                let title = peer.title.trimmingCharacters(in: .whitespacesAndNewlines)
-                return title.isEmpty ? SessionMessageCard.untitled : title
-            }
-            return titles.count > 2
-                ? "\(titles.prefix(2).joined(separator: ", ")) +\(titles.count - 2)"
-                : titles.joined(separator: ", ")
-        }
-        var parts: [String] = []
-        if let awaiting, !awaiting.isEmpty { parts.append("\(Self.awaiting) \(names(awaiting))") }
-        if let owes, !owes.isEmpty { parts.append("\(Self.owes) \(names(owes))") }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     /// The asked session, as the app's own `orbit-session:` door.

@@ -27,6 +27,11 @@ test('an ask-me mode is honored only where the runtime can reach a human', () =>
     const opencode = derivePermissionSemantics(AgentProvider.OPENCODE, mode);
     assert.equal(opencode.unapproved, 'deny');
     assert.equal(opencode.honored, false);
+    // agy asks through Orbit's approval hook, which every call that acts reaches (contract §14).
+    const antigravity = derivePermissionSemantics(AgentProvider.ANTIGRAVITY, mode);
+    assert.equal(antigravity.unapproved, 'ask');
+    assert.equal(antigravity.honored, true);
+    assert.equal(antigravity.note, undefined);
     // Codex now bridges its approval requests to the same card, so an ask-me mode means it.
     const codex = derivePermissionSemantics(AgentProvider.CODEX, mode);
     assert.equal(codex.unapproved, 'ask');
@@ -36,7 +41,12 @@ test('an ask-me mode is honored only where the runtime can reach a human', () =>
 });
 
 test("Don't Ask means deny everywhere a runtime can withhold, and is unenforced on Codex", () => {
-  for (const provider of [AgentProvider.CLAUDE, AgentProvider.KIMI, AgentProvider.OPENCODE]) {
+  for (const provider of [
+    AgentProvider.CLAUDE,
+    AgentProvider.KIMI,
+    AgentProvider.OPENCODE,
+    AgentProvider.ANTIGRAVITY,
+  ]) {
     const semantics = derivePermissionSemantics(provider, PermissionMode.DONT_ASK);
     assert.equal(semantics.unapproved, 'deny', `${provider} should deny`);
     assert.equal(semantics.honored, true);
@@ -67,6 +77,8 @@ test('Auto exists on every runtime; only Claude gates it per model', () => {
   assert.equal(autoAvailable(AgentProvider.CODEX, 'gpt-5.6-sol'), true);
   assert.equal(autoAvailable(AgentProvider.KIMI, 'any-local-alias'), true);
   assert.equal(autoAvailable(AgentProvider.OPENCODE, ''), true);
+  // agy runs it as --dangerously-skip-permissions, on any model it lists.
+  assert.equal(autoAvailable(AgentProvider.ANTIGRAVITY, 'gemini-3.1-pro'), true);
   assert.equal(autoAvailable(AgentProvider.CLAUDE, 'claude-opus-5'), true);
   assert.equal(autoAvailable(AgentProvider.CLAUDE, 'claude-haiku-4-5'), false);
   // A configured provider's model space is vendor-defined; the CLI decides for itself.
@@ -109,6 +121,8 @@ test('approval support is reported per runtime', () => {
   assert.equal(runtimeApprovalSupport(AgentProvider.CLAUDE), 'full');
   assert.equal(runtimeApprovalSupport(AgentProvider.KIMI), 'partial');
   assert.equal(runtimeApprovalSupport(AgentProvider.OPENCODE), 'none');
+  // Through Orbit's PreToolUse hook; subagents, whose calls the hook never sees, are refused.
+  assert.equal(runtimeApprovalSupport(AgentProvider.ANTIGRAVITY), 'full');
   // Codex gates its dangerous primitives (commands, patches) but not every tool.
   assert.equal(runtimeApprovalSupport(AgentProvider.CODEX), 'partial');
 });
@@ -150,4 +164,26 @@ test('a row with no provider information still derives lifecycle capabilities', 
   const bare = withSessionCapabilities({ ...ROW });
   assert.equal(bare.permissionSemantics, undefined);
   assert.equal(typeof bare.capabilities.canResume, 'boolean');
+});
+
+test('an Antigravity session payload says what its mode means on agy, not on Claude', () => {
+  // Resolved as the built-in runtime it is: Default asks through Orbit's approval hook, and Don't
+  // Ask keeps agy's own refusal.
+  const agy = withSessionCapabilities({
+    ...ROW,
+    provider: 'antigravity',
+    providerBuiltin: true,
+    permissionMode: PermissionMode.DEFAULT,
+  });
+  assert.equal(agy.permissionSemantics?.approvalSupport, 'full');
+  assert.equal(agy.permissionSemantics?.unapproved, 'ask');
+  assert.equal(agy.permissionSemantics?.honored, true);
+  const dontAsk = withSessionCapabilities({
+    ...ROW,
+    provider: 'antigravity',
+    providerBuiltin: true,
+    permissionMode: PermissionMode.DONT_ASK,
+  });
+  assert.equal(dontAsk.permissionSemantics?.unapproved, 'deny');
+  assert.equal(dontAsk.permissionSemantics?.honored, true);
 });

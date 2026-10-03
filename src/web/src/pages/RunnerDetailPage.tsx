@@ -131,8 +131,7 @@ interface Workspace {
   lastProvider?: string;
   provider?: string;
   workDir?: string | null;
-  /** The git remote this workspace's checkout came from, as declared here. Recorded only — it is
-   *  what a project's integration line is bound from, so nothing else may invent it. */
+  /** Repository for project integration, entered here or detected from the checkout's origin. */
   repoUrl?: string | null;
   env?: Record<string, string> | null;
   /** Which Codex account on its runner this workspace's Codex sessions run on: the id of a slot the
@@ -262,7 +261,7 @@ export function RunnerDetailPage() {
       void qc.invalidateQueries({ queryKey: ['runners'] });
       setRenaming(false);
     },
-    onError: (e: Error) => message.error(e.message || 'Rename failed'),
+    onError: (e: Error) => message.error("Couldn't rename the runner", e.message),
   });
 
   // What is typed into Max Concurrent, shown until its save settles. The ref is what a save reads:
@@ -289,7 +288,7 @@ export function RunnerDetailPage() {
     },
     onError: (e: Error, _patch, context) => {
       if (context?.previous) qc.setQueryData(['runners'], context.previous);
-      message.error(e.message || 'Update failed');
+      message.error("Couldn't save the capacity", e.message);
     },
     onSettled: () => {
       setMaxDraft(null);
@@ -308,7 +307,7 @@ export function RunnerDetailPage() {
       message.success(REPO_CLEANUP_QUEUED);
       void qc.invalidateQueries({ queryKey: ['workspaces'] });
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => message.error("Couldn't clean up the checkout", e.message),
   });
   const deleteMut = useMutation({
     mutationFn: () => api(`/runners/${runnerId}`, { method: 'DELETE' }),
@@ -316,7 +315,7 @@ export function RunnerDetailPage() {
       void qc.invalidateQueries({ queryKey: ['runners'] });
       navigate('/runners');
     },
-    onError: (e: Error) => message.error(e.message || 'Delete failed'),
+    onError: (e: Error) => message.error("Couldn't delete the runner", e.message),
   });
 
   // Add / edit a workspace bound to this runner (controlled inputs, like the
@@ -385,14 +384,22 @@ export function RunnerDetailPage() {
             );
             void qc.invalidateQueries({ queryKey: ['sessions'] });
           })
-          .catch((e: Error) => message.error(e.message || 'Import failed'));
+          .catch((e: Error) =>
+            message.error(
+              transcripts.length === 1
+                ? "Couldn't import the conversation"
+                : "Couldn't import the conversations",
+              e.message,
+            ),
+          );
       }
       void qc.invalidateQueries({ queryKey: ['workspaces'] });
       setFormOpen(false);
       setEditing(null);
       setDirty(false);
     },
-    onError: (e: Error) => message.error(e.message || 'Save failed'),
+    onError: (e: Error) =>
+      message.error(editing ? "Couldn't save the workspace" : "Couldn't create the workspace", e.message),
   });
   // Enable/disable is a one-field PATCH from the row menu, so it doesn't drag the whole
   // editor open just to park a workspace.
@@ -410,7 +417,8 @@ export function RunnerDetailPage() {
       );
       void qc.invalidateQueries({ queryKey: ['workspaces'] });
     },
-    onError: (e: Error) => message.error(e.message || 'Update failed'),
+    onError: (e: Error, v) =>
+      message.error(v.enabled ? "Couldn't enable the workspace" : "Couldn't disable the workspace", e.message),
   });
   const duplicateMut = useMutation({
     mutationFn: (a: Workspace) =>
@@ -434,12 +442,12 @@ export function RunnerDetailPage() {
         },
       }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['workspaces'] }),
-    onError: (e: Error) => message.error(e.message || 'Duplicate failed'),
+    onError: (e: Error) => message.error("Couldn't duplicate the workspace", e.message),
   });
   const removeWorkspaceMut = useMutation({
     mutationFn: (id: string) => api(`/workspaces/${id}`, { method: 'DELETE' }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['workspaces'] }),
-    onError: (e: Error) => message.error(e.message || 'Delete failed'),
+    onError: (e: Error) => message.error("Couldn't delete the workspace", e.message),
   });
   // Import a local Claude Code transcript as this workspace's session — the same door
   // `orbit session import` uses, so the refusals read identically. The button stays busy while
@@ -459,7 +467,7 @@ export function RunnerDetailPage() {
       message.success('Imported — opening the session.');
       navigate(`/sessions/${encodeId(id)}`);
     },
-    onError: (e: Error) => message.error(e.message || 'Import failed'),
+    onError: (e: Error) => message.error("Couldn't import the session", e.message),
   });
 
   // Ask the runner what Claude Code history sits under the directory being typed, and wait for the
@@ -527,7 +535,7 @@ export function RunnerDetailPage() {
       void qc.invalidateQueries({ queryKey: ['imported-sessions', editing?.id] });
       void qc.invalidateQueries({ queryKey: ['sessions'] });
     },
-    onError: (e: Error) => message.error(e.message || 'Remove failed'),
+    onError: (e: Error) => message.error("Couldn't remove the imported conversations", e.message),
   });
 
   // Shared reset for both entry points — every field the form owns is set here, so a stale
@@ -678,10 +686,7 @@ export function RunnerDetailPage() {
           )}
         </div>
       </div>
-      {/* Recorded, never cloned, and never guessed from the checkout on the machine: this is the
-          remote a project's integration line is bound from, and a guess would be indistinguishable
-          from a declaration at every later read. Full width below the grid — a URL is the longest
-          thing this form asks for. */}
+      {/* Full width below the grid — a URL is the longest thing this form asks for. */}
       <div className="rd-form-field">
         <div className="rd-form-label">Repository URL</div>
         <Input
@@ -693,8 +698,8 @@ export function RunnerDetailPage() {
           placeholder="https://github.com/owner/repo (optional)"
         />
         <div className="rd-path-hint rd-path-muted">
-          Where this checkout came from. A project's integration line is bound from it — with none
-          recorded, a project whose coordination workspace is this one cannot start one.
+          Used for project integration. When empty, the runner detects origin on its next directory
+          scan and fills this in. You can also enter the repository URL here.
         </div>
       </div>
       {/* Shown only when this directory has something to offer — an empty path, a directory nobody
@@ -1122,7 +1127,9 @@ export function RunnerDetailPage() {
     keepFreeRef.current?.focus({ preventScroll: true });
   };
   const copyCommand = (command: string) =>
-    void copyText(command).then((ok) => (ok ? message.success('Copied') : message.error('Copy failed')));
+    void copyText(command).then((ok) =>
+      ok ? message.success('Command copied') : message.error("Couldn't copy the command"),
+    );
 
   /** The one thing a card offers, where it has one. */
   const attentionAction = (item: AttentionItem): ReactNode => {
@@ -1489,7 +1496,7 @@ function WorkspacePermissionRules({ workspaceId }: { workspaceId: string }) {
       void qc.invalidateQueries({
         queryKey: workspacePermissionRulesQuery(workspaceId).queryKey,
       }),
-    onError: (e: Error) => message.error(e.message || 'Revoke failed'),
+    onError: (e: Error) => message.error("Couldn't revoke the permission rule", e.message),
   });
   const rows = rules.data ?? [];
   return (

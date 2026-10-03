@@ -13,11 +13,13 @@ import type { SharedPool, SharedPoolKey, SharedPoolPerson } from '../lib/sharedP
 import { ProviderPoolPage } from './ProviderPoolPage';
 
 /**
- * A Codex pool shared with people before it has an API key (docs/mocks/account-pool-access/02, the
- * boundary state), on its page, mounted for real against a fake API. Its owner's ChatGPT accounts only
- * ever run the owner's own sessions, so until a key goes in nobody they added can start a session on it:
- * "Who can use it" says so at its foot, by name, and offers Add an API key — which opens Add a key. The
- * pool and its people are the boards' own: jianghailong's Codex Pool, shared with Zhang Min and Lin Wei.
+ * A Codex pool shared with people, on its page, mounted for real against a fake API. Since 2026-10-03 its
+ * owner's ChatGPT accounts run the sessions of everyone in the pool, so sharing it before it has an API key
+ * is no boundary any more: "Who can use it" says at its foot that the people added start on his accounts,
+ * and offers nothing to fix. Only a pool holding nothing they could run on — no key AND no account signed
+ * in (docs/mocks/account-pool-access/02, the boundary state) — tells its owner by name that nobody they
+ * added can start a session yet, and offers Add an API key, which opens Add a key. The pool and its people
+ * are the boards' own: jianghailong's Codex Pool, shared with Zhang Min and Lin Wei.
  */
 
 vi.mock('../api', async (importOriginal) => ({
@@ -41,6 +43,8 @@ const spend = (costUsd: number) => ({ inputTokens: 0, outputTokens: 0, costUsd }
 
 /** jianghailong's ChatGPT account, as GET /providers/pools serves it to him. */
 const ACCOUNT: CodexLogin = {
+  // Signed in by jianghailong, the pool's owner (migration 0371).
+  userId: JIANG,
   state: 'ACTIVE',
   email: 'jianghailong.rd@gmail.com',
   plan: 'plus',
@@ -89,7 +93,12 @@ const ORBIT_ORG_1 = (viewer: string): SharedPoolKey => ({
 function access(
   viewer: string,
   people: string[],
-  { label = 'Codex Pool', keys = [], shared = false }: { label?: string; keys?: SharedPoolKey[]; shared?: boolean } = {},
+  {
+    label = 'Codex Pool',
+    keys = [],
+    shared = false,
+    logins = shared ? [] : [ACCOUNT],
+  }: { label?: string; keys?: SharedPoolKey[]; shared?: boolean; logins?: CodexLogin[] } = {},
 ): SharedPool {
   const person = (userId: string): SharedPoolPerson => ({
     userId,
@@ -108,8 +117,9 @@ function access(
     engine: 'codex',
     // Made on the shared pools page (migration 0321): API keys alone, no ChatGPT account of anybody's.
     shared,
-    ownerHasChatGPT: !shared,
+    logins: logins.map((login, index) => ({ ...login, next: index === 0 })),
     membersCanAdd: true,
+    membersCanAddAccounts: true,
     ownKeyFirst: true,
     viewerRole: viewer === JIANG ? 'ADMIN' : 'MEMBER',
     window: { start: '2026-10-01T00:00:00.000Z', end: '2026-11-01T00:00:00.000Z' },
@@ -135,8 +145,9 @@ describe('a Codex pool shared with people before it has an API key', () => {
   let ownAccess: SharedPool | null = null;
 
   /** jianghailong, with `people` added to his Codex pool of his own. */
-  const asOwner = (people: string[], options?: { label?: string; keys?: SharedPoolKey[] }) => {
-    ownPools = [ownPool(options?.label ?? 'Codex Pool')];
+  const asOwner = (people: string[], options?: { label?: string; keys?: SharedPoolKey[]; logins?: CodexLogin[] }) => {
+    const logins = options?.logins ?? [ACCOUNT];
+    ownPools = [{ ...ownPool(options?.label ?? 'Codex Pool'), login: logins[0] ?? null, logins }];
     sharedList = [];
     ownAccess = access(JIANG, people, options);
   };
@@ -227,46 +238,52 @@ describe('a Codex pool shared with people before it has an API key', () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
   });
 
-  it('tells its owner at the foot of Who can use it that the people they added can’t start a session yet, and offers Add an API key (02, boundary state)', async () => {
+  it('tells its owner at the foot of Who can use it that his ChatGPT accounts run the people added’s sessions too — with no key in the pool (02, owner, no key)', async () => {
     await mount();
     expect(text(who().querySelector('.re-runner'))).toBe('Who can use it3');
-    const warn = warning();
-    expect(warn).not.toBeNull();
-    // The card's last word, in amber with the warning triangle.
-    expect(who().lastElementChild).toBe(warn);
-    expect(warn!.querySelector('.anticon-warning')).not.toBeNull();
-    expect(text(warn!.querySelector('b'))).toBe('Zhang Min and Lin Wei can’t start a session here yet.');
-    expect(text(warn!.querySelector('span:not(.anticon)'))).toBe(
-      'Zhang Min and Lin Wei can’t start a session here yet. Codex Pool has no API key, and your ChatGPT accounts only run your own sessions.',
+    expect(warning()).toBeNull();
+    expect(button('Add an API key')).toBeNull();
+    // The card's last word: the notice about sharing the accounts, in amber with the warning triangle.
+    const foot = who().querySelector<HTMLElement>('.who-foot');
+    expect(foot).not.toBeNull();
+    expect(who().lastElementChild).toBe(foot);
+    expect(foot!.querySelector('.anticon-warning')).not.toBeNull();
+    expect(text(foot!.querySelector('b'))).toBe('Your ChatGPT accounts run everyone’s sessions here.');
+    expect(text(foot)).toBe(
+      'Your ChatGPT accounts run everyone’s sessions here. The people you add start on them, and fall to the API keys when none can run. OpenAI’s terms treat account sharing as a violation — an account used that way can be suspended.',
     );
-    const add = button('Add an API key', warn!);
-    expect(add).not.toBeNull();
-    expect(add!.classList.contains('ant-btn-primary')).toBe(true);
-
-    // It opens Add a key, as the page's own Add account → Paste an OpenAI API key does; nothing is sent
-    // on the way.
-    await click(add);
-    expect(text(dialog()?.querySelector('.ant-modal-title'))).toBe('Add a key to Codex Pool');
     expect(sent).toEqual([]);
   });
 
-  it('names the pool by its own name, and whoever its owner added', async () => {
-    asOwner([LIN], { label: 'Orbit Codex' });
+  it('names the pool by its own name, and whoever its owner added, when nothing can run for them yet (02, boundary state)', async () => {
+    asOwner([LIN], { label: 'Orbit Codex', logins: [] });
+    await mount();
+    const warn = warning()!;
+    expect(text(warn.querySelector('span:not(.anticon)'))).toBe(
+      'Lin Wei can’t start a session here yet. Orbit Codex has no API key and no ChatGPT account signed in.',
+    );
+    await click(button('Add an API key', warn));
+    expect(text(dialog()?.querySelector('.ant-modal-title'))).toBe('Add a key to Orbit Codex');
+    expect(sent).toEqual([]);
+
+    // The same state on the boards' own pool — its owner, Zhang Min and Lin Wei, and no account signed in
+    // this time — reads in that pool's own words (the native parity test looks this sentence up).
+    await act(async () => root.unmount());
+    container.remove();
+    asOwner([ZHANG, LIN], { logins: [] });
     await mount();
     expect(text(warning()?.querySelector('span:not(.anticon)'))).toBe(
-      'Lin Wei can’t start a session here yet. Orbit Codex has no API key, and your ChatGPT accounts only run your own sessions.',
+      'Zhang Min and Lin Wei can’t start a session here yet. Codex Pool has no API key and no ChatGPT account signed in.',
     );
-    await click(button('Add an API key', warning()!));
-    expect(text(dialog()?.querySelector('.ant-modal-title'))).toBe('Add a key to Orbit Codex');
   });
 
-  it('leaves the ChatGPT accounts out of it on a pool made on the shared pools page, which holds none', async () => {
+  it('names the accounts too on a pool made on the shared pools page, which can hold them since migration 0371', async () => {
     ownPools = [];
     sharedList = [access(JIANG, [ZHANG, LIN], { label: 'Team Codex', shared: true })];
     ownAccess = null;
     await mount();
     expect(text(warning()?.querySelector('span:not(.anticon)'))).toBe(
-      'Zhang Min and Lin Wei can’t start a session here yet. Team Codex has no API key.',
+      'Zhang Min and Lin Wei can’t start a session here yet. Team Codex has no API key and no ChatGPT account signed in.',
     );
     expect(button('Add an API key', warning()!)).not.toBeNull();
   });

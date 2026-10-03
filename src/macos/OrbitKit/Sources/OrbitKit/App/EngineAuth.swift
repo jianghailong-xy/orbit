@@ -43,6 +43,11 @@ public enum EngineAuth {
         /// can't express (the runner refuses such a request outright — `loginFlowFor` in login.go),
         /// so the card names the command to run on that machine instead of a button that can't work.
         case runCommand(String)
+        /// Antigravity: there is no sign-in at all — agy runs on the Gemini API key in its
+        /// environment, which the workspace's environment variables or the runner's own supply —
+        /// so the card names the variable and where to set it instead of a button with nothing
+        /// behind it.
+        case environmentKey(String)
         /// Any other slug is a control-plane–configured provider, i.e. an API key to fix. These
         /// clients have no Providers screen, so the card says where the key lives rather than
         /// offering an action it can't perform.
@@ -53,6 +58,7 @@ public enum EngineAuth {
     public static func remedy(forProvider provider: String) -> Remedy {
         if let engine = LoginEngine(rawValue: provider) { return .signIn(engine) }
         if provider == "opencode" { return .runCommand("opencode auth login") }
+        if provider == "antigravity" { return .environmentKey("GEMINI_API_KEY") }
         return .apiKey(slug: provider)
     }
 }

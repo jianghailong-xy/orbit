@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post, UseGuards } from '@nestjs/common';
 import { CreatorType } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
@@ -50,18 +50,25 @@ export class TaskCompletionEvidenceController {
    * compare-and-set on the evidence revision and the identical criterion-text comparison. What the
    * browser supplies in the body, a runner supplies in a header; nothing else differs, which is
    * what makes the row an owner presses and the row a coordinator presses the same row.
+   *
+   * The one difference is who is asking, read the way the OWNER_CONFIRMED door reads it (this door,
+   * and no session header): the account owner in the app may decide the owner card of a task in no
+   * project that has no dispatching session from the run it is drawn in, the only conversation left
+   * to draw it in (`evidence-review.ts#ownerDecidesInTheRun`).
    */
   @Post('decision')
   decide(
     @CurrentUser() user: AuthUser,
     @Param('taskId', PublicIdPipe) taskId: string,
     @Body() dto: DecideTaskEvidenceDto,
+    @Headers('x-orbit-session-id') actingSessionId: string | undefined,
   ) {
     return this.evidence.decide(
       user.userId,
       taskId,
       { type: CreatorType.USER, id: user.userId },
       dto,
+      { door: 'USER', userId: user.userId, actingSessionId },
     );
   }
 

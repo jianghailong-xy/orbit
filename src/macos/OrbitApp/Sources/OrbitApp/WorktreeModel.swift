@@ -167,7 +167,7 @@ final class WorktreeModel {
         busy = true
         defer { busy = false }
         do { try await api.commit(sessionID: sessionID) }
-        catch { onOutcome(Self.failure("Commit failed", error: error)); return }
+        catch { onOutcome(Self.failure("Couldn't start the commit", error: error, key: "commit")); return }
         accepted(.commit)
         // Reflect the pending commit immediately; the poll loop then follows the runner's outcome.
         await loadDetail()
@@ -177,7 +177,7 @@ final class WorktreeModel {
         busy = true
         defer { busy = false }
         do { try await api.merge(sessionID: sessionID, targetBranch: target) }
-        catch { onOutcome(Self.failure("Merge failed", error: error)); return }
+        catch { onOutcome(Self.failure("Couldn't start the merge" + (target.map { " into \($0)" } ?? ""), error: error, key: "merge")); return }
         accepted(.merge)
         await loadDetail()
     }
@@ -189,7 +189,7 @@ final class WorktreeModel {
         do {
             try await api.merge(sessionID: sessionID, targetBranch: recovery.targetBranch,
                                 recoveryAction: action, previewId: previewID)
-        } catch { onOutcome(Self.failure("Could not start recovery", error: error)); return }
+        } catch { onOutcome(Self.failure("Couldn't start the recovery", error: error)); return }
         // A preview only checks again, and the review sheet shows what it found — web follows every
         // recovery step to a result card but that one.
         if action != "preview" { accepted(.merge) }
@@ -203,7 +203,7 @@ final class WorktreeModel {
             let session = try await api.createMergeRepair(sessionID: sessionID, preparePR: preparePR)
             await loadDetail()
             return session.id
-        } catch { onOutcome(Self.failure("Could not start repair session", error: error)); return nil }
+        } catch { onOutcome(Self.failure("Couldn't start the repair session", error: error)); return nil }
     }
 
     /// Adopt the worktree's actual HEAD branch (after an in-worktree `git checkout -b`) as the
@@ -213,7 +213,7 @@ final class WorktreeModel {
         busy = true
         defer { busy = false }
         do { try await api.adoptBranch(sessionID: sessionID) }
-        catch { onOutcome(Self.failure("Adopt failed", error: error)); return }
+        catch { onOutcome(Self.failure("Couldn't update the tracked branch", error: error)); return }
         onOutcome(ToastRequest(message: "Now tracking this worktree's branch"))
         await loadDetail()
     }
@@ -239,7 +239,7 @@ final class WorktreeModel {
             onOutcome(ToastRequest(message: "Resuming the session to resolve the conflict…",
                                    tone: .info))
         } catch {
-            onOutcome(Self.failure("Couldn't resume the session", error: error))
+            onOutcome(Self.failure("Couldn't start resolving the conflict", error: error))
             return
         }
         await loadDetail()
@@ -259,7 +259,7 @@ final class WorktreeModel {
                                                    kind: "message"))
             onOutcome(ToastRequest(message: "Handed the commit to the session", tone: .info))
         } catch {
-            onOutcome(Self.failure("Couldn't resume the session", error: error))
+            onOutcome(Self.failure("Couldn't hand the commit to the session", error: error))
             return
         }
         await loadDetail()
@@ -270,17 +270,19 @@ final class WorktreeModel {
         onAccepted(kind)
     }
 
-    /// A failed merge or commit picked up again gets a card saying it's under way. Results aren't
-    /// reported here: this poll stops with the console's focus, and a result read on returning would
-    /// be a late one — `ConsoleRegistry` follows the request to `resultCard` instead.
+    /// A failed merge or commit picked up again gets a progress pill saying it's under way. Results
+    /// aren't reported here: this poll stops with the console's focus, and a result read on returning
+    /// would be a late one — `ConsoleRegistry` follows the request to `resultCard` instead, whose card
+    /// carries the same key and so takes the pill's place.
     private func surfaceRetry(from old: SessionDetail?, to new: SessionDetail) {
         guard let old else { return }
         if (old.mergeStatus == "conflict" || old.mergeStatus == "error"), new.mergeStatus == "pending" {
-            onOutcome(ToastRequest(message: "Merging…", tone: .info))
+            onOutcome(ToastRequest(message: "Merging into \(new.mergeTarget ?? "main")…", tone: .info,
+                                   key: "merge", inProgress: true))
             return
         }
         if old.commitStatus == "error", new.commitStatus == "pending" {
-            onOutcome(ToastRequest(message: "Committing…", tone: .info))
+            onOutcome(ToastRequest(message: "Committing changes…", tone: .info, key: "commit", inProgress: true))
         }
     }
 
@@ -293,20 +295,20 @@ final class WorktreeModel {
         case .merge:
             if let recovery = detail.mergeRecovery {
                 return ToastRequest(message: recovery.title,
-                                    tone: recovery.code == "READY" ? .info : .warning)
+                                    tone: recovery.code == "READY" ? .info : .warning, key: "merge")
             }
             let target = detail.mergeTarget ?? "main"
             switch detail.mergeStatus {
             case "merged":
-                return ToastRequest(message: "Merged into \(target)")
+                return ToastRequest(message: "Merged into \(target)", key: "merge")
             case "conflict":
                 return ToastRequest(
                     message: "Merge conflict in \(target)",
                     detail: "Merge aborted; your branch is unchanged. Resolve it from the worktree bar.",
-                    tone: .warning)
+                    tone: .warning, key: "merge")
             case "error":
-                return ToastRequest(message: "Merge into \(target) failed",
-                                    detail: Self.trimmed(detail.mergeError), tone: .error)
+                return ToastRequest(message: "Couldn't merge into \(target)",
+                                    detail: Self.trimmed(detail.mergeError), tone: .error, key: "merge")
             default:
                 return nil
             }
@@ -317,14 +319,14 @@ final class WorktreeModel {
                 let failure = WorktreeBarLogic.commitFailure(commitStatus: detail.commitStatus,
                                                              commitError: detail.commitError,
                                                              commitResultMessage: detail.commitResultMessage)
-                return ToastRequest(message: "Commit failed", detail: failure?.why, tone: .error)
+                return ToastRequest(message: "Couldn't commit", detail: failure?.why, tone: .error, key: "commit")
             case "committed":
                 return ToastRequest(message: "Changes committed",
-                                    detail: Self.trimmed(detail.commitResultMessage))
+                                    detail: Self.trimmed(detail.commitResultMessage), key: "commit")
             case "nochange":
                 return ToastRequest(message: "No changes to commit",
                                     detail: Self.trimmed(detail.commitResultMessage),
-                                    tone: .neutral)
+                                    tone: .neutral, key: "commit")
             default:
                 return nil
             }
@@ -332,8 +334,9 @@ final class WorktreeModel {
     }
 
     /// A failed action as a card: the attempt as the headline, the server's own words underneath.
-    private static func failure(_ headline: String, error: Error) -> ToastRequest {
-        ToastRequest(message: headline, detail: failureDetail(error), tone: .error)
+    /// `key` ties a merge's or a commit's failure to the operation, so a later success clears it.
+    private static func failure(_ headline: String, error: Error, key: String? = nil) -> ToastRequest {
+        ToastRequest(message: headline, detail: failureDetail(error), tone: .error, key: key)
     }
 
     private static func failureDetail(_ error: Error) -> String? {

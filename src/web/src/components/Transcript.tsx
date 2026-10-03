@@ -82,6 +82,9 @@ import { TaskStartCard } from './TaskStartCard';
 import { parseProjectStarted } from '../lib/projectStarted';
 import { ProjectStartedCard } from './ProjectStartedCard';
 import { parseSessionMessage } from '../lib/sessionMessage';
+import { parseConfirmationReturn, parseConfirmationReviewRequest } from '../lib/confirmationReviewTurns';
+import type { ConfirmationReturnCard, ConfirmationReviewRequestCard } from '@orbit/shared';
+import { ReviewRequestedCard, SentBackByReviewerCard } from './ConfirmationReviewTurnCards';
 import type { SessionMessageCard as SessionMessage, SessionReplyCard as SessionReply } from '@orbit/shared';
 import { SessionMessageCard } from './SessionMessageCard';
 import { parseSessionReplies, withoutReplyBlocks } from '../lib/sessionRequest';
@@ -357,12 +360,31 @@ type TextNode = {
   // The outcomes of this session's own requests the turn handed back, when the control plane
   // recorded them beside the echo (`sessionReplies`, lib/sessionRequest). Drawn as reply cards.
   sessionReplies?: SessionReply[];
+  // A confirmation request handed to this conversation to review, and a reviewer's return handed to
+  // the run (lib/confirmationReviewTurns). Orbit's turns, drawn as their cards.
+  reviewRequest?: ConfirmationReviewRequestCard;
+  reviewReturn?: ConfirmationReturnCard;
 };
 type ResultNode = { kind: 'result'; seq: number; content: any; isError?: boolean; truncated?: boolean };
 type MarkerNode = { kind: 'divider' | 'interrupt'; seq: number };
 // `repeats` counts the identical lines folded into this one (see `engineStderr`); absent or 1
 // means the line was seen once.
 type ErrorNode = { kind: 'error'; seq: number; message: string; repeats?: number };
+/** A structured runtime diagnostic. Unlike an unclassified stderr line, its impact is known: a
+ * recoverable/degraded diagnostic is a warning about an auxiliary path (for example the Codex
+ * model catalog or an optional MCP worker), not evidence that the session turn failed. */
+type DiagnosticNode = {
+  kind: 'diagnostic';
+  seq: number;
+  message: string;
+  component?: string;
+  phase?: string;
+  severity?: string;
+  impact?: string;
+  recoverable?: boolean;
+  code?: string;
+  repeats?: number;
+};
 type AuthErrorNode = { kind: 'authError'; seq: number; message: string };
 /** A runner-side heads-up that isn't a failure: the turn worked, but something about WHERE it
  *  worked needs saying — today, edits it left in the machine's shared checkout instead of this
@@ -388,6 +410,7 @@ type Node =
   | ResultNode
   | MarkerNode
   | ErrorNode
+  | DiagnosticNode
   | AuthErrorNode
   | NoticeNode
   | AutoRetryNode;
@@ -407,6 +430,86 @@ type EngineLogLine = { level: string; source: string; text: string };
 function parseEngineLogLine(line: string): EngineLogLine | undefined {
   const m = TRACING_LINE.exec(line);
   return m ? { level: m[2], source: m[3], text: m[4] } : undefined;
+}
+
+type RunDiagnostic = Omit<DiagnosticNode, 'kind' | 'seq' | 'repeats'>;
+
+/**
+ * Normalize the optional structured diagnostic attached by a current runner. Older runners only
+ * send `stderr`, so this deliberately returns undefined for anything that is not an object. Keeping
+ * the parser here makes the transcript tolerant of rolling runner upgrades and preserves the old
+ * stderr path for events that have no diagnostic metadata.
+ */
+function parseRunDiagnostic(raw: unknown, fallbackMessage: string): RunDiagnostic | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const value = raw as Record<string, unknown>;
+  const stringField = (name: string): string | undefined => {
+    const field = value[name];
+    return typeof field === 'string' && field.trim() !== '' ? field.trim() : undefined;
+  };
+  const message = stringField('message') ?? fallbackMessage;
+  if (!message) return undefined;
+  return {
+    message,
+    component: stringField('component'),
+    phase: stringField('phase'),
+    severity: stringField('severity'),
+    impact: stringField('impact'),
+    recoverable: value.recoverable === true ? true : value.recoverable === false ? false : undefined,
+    code: stringField('code'),
+  };
+}
+
+/** Recognize the two auxiliary Codex errors emitted by runners before structured diagnostics
+ * existed. This keeps already-persisted sessions from changing meaning when the UI is upgraded. */
+function legacyRecoverableDiagnostic(line: string): RunDiagnostic | undefined {
+  const lower = line.toLowerCase();
+  const tokenInvalidated = lower.includes('token_invalidated') || lower.includes('token has been invalidated');
+  if (
+    lower.includes('codex_models_manager') &&
+    lower.includes('failed to refresh available models') &&
+    lower.includes('401') &&
+    tokenInvalidated
+  ) {
+    return {
+      message: line,
+      component: 'model_catalog',
+      phase: 'startup',
+      severity: 'WARN',
+      impact: 'degraded',
+      recoverable: true,
+      code: 'token_invalidated',
+    };
+  }
+  if (lower.includes('rmcp::transport::worker') && lower.includes('401') && tokenInvalidated) {
+    return {
+      message: line,
+      component: 'mcp_transport',
+      phase: 'startup',
+      severity: 'WARN',
+      impact: 'degraded',
+      recoverable: true,
+      code: 'token_invalidated',
+    };
+  }
+  return undefined;
+}
+
+/** Whether a structured diagnostic describes a degraded auxiliary path rather than a fatal run. */
+function diagnosticIsWarning(diagnostic: RunDiagnostic): boolean {
+  const impact = diagnostic.impact?.toLowerCase();
+  const severity = diagnostic.severity?.toLowerCase();
+  return (
+    diagnostic.recoverable === true ||
+    severity === 'warn' ||
+    severity === 'warning' ||
+    impact === 'recoverable' ||
+    impact === 'degraded' ||
+    impact === 'warning' ||
+    impact === 'warn' ||
+    impact === 'non-fatal' ||
+    impact === 'nonfatal'
+  );
 }
 
 type ToolFailureSummary = { tool: string; path?: string; reason: string };
@@ -598,6 +701,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
   // (rather than per sub-workspace) is deliberate — one process writes the stderr, and which tool
   // call happened to be open when it flushed is incidental.
   const stderrSeen = new Map<string, ErrorNode>();
+  const diagnosticSeen = new Map<string, DiagnosticNode>();
   let lastStderr:
     | { error: ErrorNode; seq: number; continuing: boolean }
     | { tool: ToolNode; seq: number; continuing: boolean }
@@ -614,6 +718,44 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
       if (!wanted || entry.node.name.toLowerCase() === wanted) return entry.node;
     }
     return undefined;
+  };
+  const structuredDiagnostic = (
+    parentId: string | undefined,
+    seq: number,
+    raw: unknown,
+    fallbackMessage: string,
+  ): boolean => {
+    const diagnostic = parseRunDiagnostic(raw, fallbackMessage);
+    if (!diagnostic) return false;
+    // The tracing timestamp belongs to the log record, not to the diagnosis. Strip it before
+    // folding repeated startup reports from retries into one row, as the legacy stderr path does.
+    // A model refresh includes a fresh request/cf-ray id on every attempt. When the runner gives
+    // us a stable diagnostic code, that volatile suffix must not turn one incident into two rows.
+    // For older structured producers without a code, normalize the common ids while retaining the
+    // rest of the message so genuinely different diagnostics stay separate.
+    const stableMessage = diagnostic.code
+      ? ''
+      : diagnostic.message
+          .replace(/request id:\s*\S+/gi, 'request id: <id>')
+          .replace(/cf-ray:\s*\S+/gi, 'cf-ray: <id>');
+    const key = [
+      diagnostic.component ?? '',
+      diagnostic.phase ?? '',
+      diagnostic.severity ?? '',
+      diagnostic.impact ?? '',
+      diagnostic.recoverable === true ? 'true' : diagnostic.recoverable === false ? 'false' : '',
+      diagnostic.code ?? '',
+      stableMessage.replace(LEADING_TIMESTAMP, ''),
+    ].join('\u0000');
+    const previous = diagnosticSeen.get(key);
+    if (previous) {
+      previous.repeats = (previous.repeats ?? 1) + 1;
+      return true;
+    }
+    const node: DiagnosticNode = { kind: 'diagnostic', seq, ...diagnostic };
+    diagnosticSeen.set(key, node);
+    into(parentId).push(node);
+    return true;
   };
   const engineStderr = (parentId: string | undefined, seq: number, line: string) => {
     // apply_patch writes the explanation over several stderr events. Once the first line is tied to
@@ -731,6 +873,8 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         const startedCard = parseProjectStarted(p) ?? undefined;
         const sessionMessage = parseSessionMessage(p) ?? undefined;
         const sessionReplies = parseSessionReplies(p) ?? undefined;
+        const reviewRequest = parseConfirmationReviewRequest(p) ?? undefined;
+        const reviewReturn = parseConfirmationReturn(p) ?? undefined;
         const priorSteer = ev.turnId ? userByTurn.get(ev.turnId) : undefined;
         if (priorSteer?.steer && p.steer !== true) {
           priorSteer.steer = false;
@@ -754,6 +898,8 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
             startedCard,
             sessionMessage,
             sessionReplies,
+            reviewRequest,
+            reviewReturn,
             ts: ev.ts,
             images: imgs,
             attachmentRefs: refs,
@@ -917,16 +1063,24 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         // before two lines can be compared for folding, not just before they are displayed. The
         // runner strips them at the source now (runner-go/ansi.go), but every event already
         // stored carries them.
-        if (p.stderr) {
-          const line = stripAnsi(String(p.stderr)).trim();
-          if (line && !isBenignEngineStderr(line)) engineStderr(parent, ev.seq, line);
-          else lastStderr = undefined;
-        } else lastStderr = undefined;
+        // Keep the legacy truthiness/String conversion for old payloads whose stderr was not a
+        // string; current runners always send text, but older persisted events must render the
+        // same way after a reload.
+        const line = p.stderr ? stripAnsi(String(p.stderr)).trim() : '';
+        // New runners annotate startup/auxiliary stderr with its impact. A recoverable or
+        // degraded diagnostic is deliberately kept out of the legacy red error path; if the
+        // annotation is absent or malformed, retain the old behavior for rolling compatibility.
+        const diagnostic = p.diagnostic ?? legacyRecoverableDiagnostic(line);
+        if (diagnostic && structuredDiagnostic(parent, ev.seq, diagnostic, line)) {
+          lastStderr = undefined;
+        } else if (line && !isBenignEngineStderr(line)) engineStderr(parent, ev.seq, line);
+        else lastStderr = undefined;
         // A `resumed` begins a new engine run: a retry loop prints the same refusal per
         // attempt, and each attempt's failure is its own error row. The fold is per run,
         // not per session — reset it so the next identical line starts a new row.
         if (p.subtype === 'resumed') {
           stderrSeen.clear();
+          diagnosticSeen.clear();
           lastStderr = undefined;
         }
         break;
@@ -1351,6 +1505,30 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
           />
         );
       }
+      // A confirmation review's two turns (lib/confirmationReviewTurns): the request a reviewer is
+      // handed, and the reviewer's return handed to the run. Both are Orbit's — the block the agent
+      // read rides at the foot as the note it is — and neither is the reader's bubble.
+      if (node.reviewRequest || node.reviewReturn) {
+        const undelivered = node.delivery === 'failed' || node.delivery === 'unconfirmed';
+        const attached = node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />;
+        return node.reviewRequest ? (
+          <ReviewRequestedCard
+            card={node.reviewRequest}
+            seq={node.seq}
+            ts={node.ts}
+            undelivered={undelivered}
+            attached={attached}
+          />
+        ) : (
+          <SentBackByReviewerCard
+            card={node.reviewReturn!}
+            seq={node.seq}
+            ts={node.ts}
+            undelivered={undelivered}
+            attached={attached}
+          />
+        );
+      }
       // A turn the control plane opened for a background job's news, or for a wakeup coming due, is
       // nobody's message either: the block IS the turn, so it is read off the recorded note rather
       // than the person's words, which are empty. It is drawn as one event line in the agent's
@@ -1403,6 +1581,37 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
           ⊘ interrupted
         </div>
       );
+    case 'diagnostic': {
+      const warning = diagnosticIsWarning(node);
+      const log = parseEngineLogLine(node.message);
+      const level = node.severity?.toUpperCase() || log?.level;
+      const label = [
+        node.phase?.toLowerCase() === 'startup' ? 'Startup' : node.phase,
+        node.component,
+        node.code,
+      ]
+        .filter(Boolean)
+        .join(' · ');
+      const className = warning ? 'chat-notice chat-diagnostic' : 'chat-error chat-diagnostic';
+      return (
+        <div
+          className={className}
+          data-diagnostic="true"
+          data-impact={node.impact}
+          data-phase={node.phase}
+          data-level={level}
+          data-seq={node.seq}
+          title={node.message}
+        >
+          <span className="chat-diagnostic-mark">{warning ? '⚠' : !log || level === 'ERROR' ? '✖' : '·'}</span>
+          {label && <span className="chat-diagnostic-label">{label}</span>}
+          <span className="chat-diagnostic-text">{linkifyLogText(log?.text ?? node.message)}</span>
+          {(node.repeats ?? 1) > 1 && (
+            <span className={warning ? 'chat-diagnostic-repeat' : 'chat-error-repeat'}>×{node.repeats}</span>
+          )}
+        </div>
+      );
+    }
     case 'error': {
       const failure = parseToolFailureSummary(node.message);
       if (failure) return <ToolFailureCard node={node} summary={failure} />;
@@ -1503,13 +1712,14 @@ function ToolFailureCard({
  * The providers whose credentials live on the runner itself (the engines in doctor.go), so the
  * remedy is a sign-in on that machine rather than a key to fix in Providers.
  */
-const LOCAL_LOGIN = new Set(['claude', 'codex', 'kimi', 'opencode']);
+const LOCAL_LOGIN = new Set(['claude', 'codex', 'kimi', 'opencode', 'antigravity']);
 
 /**
  * Of those, the ones Orbit can sign in from here. OpenCode is deliberately absent: its login
  * picks an underlying provider interactively, which the browser relay's DTO cannot express, so
  * the runner refuses such a request outright (loginFlowFor in login.go). Its card names the
- * command to run instead of offering a button that cannot work.
+ * command to run instead of offering a button that cannot work. Antigravity has no sign-in at
+ * all: agy runs on the Gemini API key in its environment, so its card names that variable.
  */
 const RELAY_LOGIN = new Set(['claude', 'codex', 'kimi']);
 
@@ -1540,9 +1750,11 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
         <div className="chat-authfix-title">
           {!help
             ? 'Authentication failed'
-            : local
-              ? `Sign-in expired${help.runnerName ? ` on “${help.runnerName}”` : ''}`
-              : 'Provider authentication failed'}
+            : help.provider === 'antigravity'
+              ? 'Gemini API key rejected'
+              : local
+                ? `Sign-in expired${help.runnerName ? ` on “${help.runnerName}”` : ''}`
+                : 'Provider authentication failed'}
         </div>
       </div>
       <div className="chat-authfix-msg">{message}</div>
@@ -1556,6 +1768,12 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
               onUseApiKey={help.onUseApiKey}
             />
           )
+        ) : provider === 'antigravity' ? (
+          <div className="chat-authfix-desc">
+            Antigravity runs on the Gemini API key in its environment. Set{' '}
+            <code>GEMINI_API_KEY</code> in this workspace's environment variables, or on the runner,
+            then send your message again.
+          </div>
         ) : (
           <div className="chat-authfix-desc">
             Run <code>opencode auth login</code> on that machine and choose the provider there —
@@ -3207,7 +3425,18 @@ function describeTool(name: string, input: any, isShell?: boolean, answer?: stri
         body: i.content ? <Pre text={String(i.content)} /> : undefined,
       };
     case 'Edit':
-      return { label: 'Edit', icon: <EditOutlined />, tone: 'write', path: i.file_path, body: <Diff oldStr={i.old_string} newStr={i.new_string} /> };
+      return {
+        label: 'Edit',
+        icon: <EditOutlined />,
+        tone: 'write',
+        path: i.file_path,
+        // Antigravity names the file it edited and nothing else — agy's stream carries no diff
+        // (contract §2.2) — so an Edit without either side is just the file, not an empty diff.
+        body:
+          i.old_string === undefined && i.new_string === undefined ? undefined : (
+            <Diff oldStr={i.old_string} newStr={i.new_string} />
+          ),
+      };
     case 'apply_patch': {
       const files = Array.isArray(i.files)
         ? i.files.filter((p: unknown): p is string => typeof p === 'string' && p.length > 0)

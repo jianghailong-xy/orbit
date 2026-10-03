@@ -66,7 +66,7 @@ export function ProvidersPage() {
       void qc.invalidateQueries({ queryKey: providersQuery().queryKey });
       message.success('Provider deleted');
     },
-    onError: (e: Error) => message.error(e.message || 'Failed'),
+    onError: (e: Error) => message.error("Couldn't delete the provider", e.message),
   });
 
   const columns: TableColumnsType<ProviderRow> = [

@@ -335,7 +335,7 @@ function EngineRow({
     mutationFn: () =>
       api(`/runners/${runner.id}/install`, { method: 'POST', body: { engine } }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
-    onError: (e: Error) => message.error(e.message || 'Could not start the install'),
+    onError: (e: Error) => message.error("Couldn't start the install", e.message),
   });
   const dismissInstall = useMutation({
     mutationFn: () => api(`/runners/${runner.id}/install`, { method: 'DELETE' }),
@@ -523,7 +523,7 @@ function EngineRow({
             engine={engine}
             runnerId={runner.id}
             accounts={health?.accounts ?? []}
-            onCancel={() => onSignIn(null)}
+            onClose={() => onSignIn(null)}
           />
         </div>
       )}
@@ -569,7 +569,7 @@ function AccountName({
       }),
     // Returned, so the new name stays on the row until the list carries it rather than flicking back.
     onSuccess: () => qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
-    onError: (e: Error) => message.error(e.message || 'Could not rename the account'),
+    onError: (e: Error) => message.error("Couldn't rename the account", e.message),
   });
   const shown = rename.isPending ? (rename.variables ?? accountNameOf(account)) : accountNameOf(account);
   // Default named something else says what it still is: the login this machine's own environment
@@ -628,17 +628,7 @@ function AccountName({
   return (
     <div className="re-name" onDoubleClick={start}>
       <span className="re-name-text">{shown}</span>
-      {renamedDefault && (
-        <span
-          className="re-chip"
-          title={
-            `This machine's own login — ${tildePath(accountDir(account))}, the one \`${engine}\` in a terminal ` +
-            'uses. Signing in from a terminal changes which account this is.'
-          }
-        >
-          DEFAULT
-        </span>
-      )}
+      {renamedDefault && <span className="re-chip">DEFAULT</span>}
       {/* Where Automatic starts the next session — the account pools' mark for the same thing. */}
       {next && (
         <span className="re-chip" title="Automatic starts new sessions here">
@@ -703,10 +693,10 @@ function AccountRow({
     onSuccess: (state) => {
       // A refusal the control plane could make itself (an older runner, or the account that is the
       // machine's own CODEX_HOME) arrives as an error; anything the machine decided arrives here.
-      if (state?.status === 'failed' && state.message) message.error(state.message);
+      if (state?.status === 'failed' && state.message) message.error("Couldn't remove the account", state.message);
       void qc.invalidateQueries({ queryKey: runnersQuery().queryKey });
     },
-    onError: (e: Error) => message.error(e.message || 'Could not remove the account'),
+    onError: (e: Error) => message.error("Couldn't remove the account", e.message),
   });
   // Each account's quota is its own: the runner reads every account in that account's CODEX_HOME,
   // and an account it has not read shows none rather than borrowing another's limit.
@@ -820,18 +810,22 @@ function AccountRow({
  * does (AccountName). That rename can only name an account the runner reports, which a new one is
  * once it is signed in, so a name saved before then waits here for it — and a panel closed first
  * leaves the account the name it was added under, for its row's rename to change.
+ *
+ * Once that account is signed in, reported and named, the panel folds itself away: what it added is
+ * that account's own row, and the row's pencil is where its name changes from then on.
  */
 function AddEngineAccount({
   engine,
   runnerId,
   accounts,
-  onCancel,
+  onClose,
 }: {
   engine: LoginEngine;
   runnerId: string;
   /** Every account the runner reports for this engine, Default included. */
   accounts: RunnerEngineAccount[];
-  onCancel: () => void;
+  /** Fold the panel away: its own Cancel, and the moment the account it added is done. */
+  onClose: () => void;
 }) {
   const message = useToast();
   const qc = useQueryClient();
@@ -843,6 +837,7 @@ function AddEngineAccount({
   const added = accounts.filter((account) => !had.has(account.id)).at(-1);
   // A name saved before the runner reported the account it is for.
   const [waiting, setWaiting] = useState<string | null>(null);
+  const [focused, setFocused] = useState(false);
   const rename = useMutation({
     mutationFn: ({ id, to }: { id: string; to: string }) =>
       api<RunnerEngineAccount>(`/runners/${runnerId}/accounts/${engine}/${id}`, {
@@ -850,7 +845,11 @@ function AddEngineAccount({
         body: { name: to },
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
-    onError: (e: Error) => message.error(e.message || 'Could not rename the account'),
+    // Not returned: an error toast stays until dismissed, and a mutation awaits what onError returns,
+    // so returning it would hold the rename pending — and the panel waiting on it — until then.
+    onError: (e: Error) => {
+      message.error("Couldn't rename the account", e.message);
+    },
   });
   const save = () => {
     const to = name.trim();
@@ -866,6 +865,18 @@ function AddEngineAccount({
     setWaiting(null);
     if (waiting !== addedName) rename.mutate({ id: addedId, to: waiting });
   }, [addedId, addedName, waiting, rename.mutate]);
+  // Done: the account is signed in by the runner's own word, and carries the name in the field. Not
+  // while that name is still being typed or saved — a rename that failed leaves it differing, and the
+  // panel open — and never after a sign-in that failed or was cancelled, which reports no such account.
+  const finished =
+    added?.auth === 'yes' &&
+    !focused &&
+    waiting === null &&
+    !rename.isPending &&
+    name.trim() === addedName;
+  useEffect(() => {
+    if (finished) onClose();
+  }, [finished, onClose]);
 
   return (
     <>
@@ -875,7 +886,11 @@ function AddEngineAccount({
           className="rsi-input"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          onBlur={save}
+          onFocus={() => setFocused(true)}
+          onBlur={() => {
+            setFocused(false);
+            save();
+          }}
           onKeyDown={(e) => {
             if (e.nativeEvent.isComposing) return; // let the IME (e.g. pinyin) keep Enter
             if (e.key === 'Enter') e.currentTarget.blur();
@@ -886,12 +901,7 @@ function AddEngineAccount({
           spellCheck={false}
         />
       </label>
-      <div className="re-panel-hint re-add-hint">
-        Only a label for this page. Orbit gives the account its own{' '}
-        <code className="re-cmd">{engine === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME'}</code> on
-        this machine; your terminal keeps using Default.
-      </div>
-      <RunnerSignIn runnerId={runnerId} engine={engine} accountName={name} autoStart onCancel={onCancel} />
+      <RunnerSignIn runnerId={runnerId} engine={engine} accountName={name} autoStart onCancel={onClose} />
     </>
   );
 }

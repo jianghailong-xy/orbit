@@ -26,10 +26,10 @@ export interface CreateSessionDto {
   taskId?: string;
 
   /** Per-session provider override, picked on the New Session screen: a built-in engine
-   *  ("claude"/"codex"/"kimi"/"opencode") or one of the caller's configured ModelProvider
-   *  slugs. Omitted keeps the historical behaviour — the session inherits its workspace's
-   *  provider. An unknown or foreign slug is rejected rather than silently falling back,
-   *  so a session never dispatches with an identity the caller can't use. */
+   *  ("claude"/"codex"/"kimi"/"opencode"/"antigravity") or one of the caller's configured
+   *  ModelProvider slugs. Omitted keeps the historical behaviour — the session inherits its
+   *  workspace's provider. An unknown or foreign slug is rejected rather than silently falling
+   *  back, so a session never dispatches with an identity the caller can't use. */
   provider?: string;
   /** Per-session override; omitted falls back to the Runner Runtime or ModelProvider default. */
   model?: string;

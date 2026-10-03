@@ -47,9 +47,9 @@ export function SettingsPage() {
       api<Me>('/users/me/preferences', { method: 'PATCH', body: patch }),
     onSuccess: (updated) => {
       qc.setQueryData(meQuery().queryKey, updated);
-      message.success('Saved');
+      message.success('Setting saved');
     },
-    onError: (e: Error) => message.error(e.message || 'Failed to save'),
+    onError: (e: Error) => message.error("Couldn't save the setting", e.message),
   });
 
   return (

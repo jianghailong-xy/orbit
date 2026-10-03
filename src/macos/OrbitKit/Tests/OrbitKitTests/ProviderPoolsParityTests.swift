@@ -141,8 +141,11 @@ final class ProviderPoolsParityTests: XCTestCase {
         let account = CodexLogin(state: "ACTIVE", email: "e", plan: "plus", fingerprint: "…AB12", lastError: "x",
                                  expiresAt: "2026-10-07T09:12:00.000Z", linkedAt: "2026-09-28T09:12:00.000Z",
                                  usage: PlanUsageSnapshot(provider: "codex", primary: PlanUsageWindow(utilization: 1)),
-                                 usageUnavailable: "y")
-        XCTAssertEqual(try encodedKeys(account), declaredFields(try interfaceBody("CodexLogin", in: web, file: lib)))
+                                 usageUnavailable: "y", userId: "u")
+        // `next` is the one field this client's account carries beyond web's: what a pool read as one of its
+        // people marks (web's `SharedPoolLogin extends CodexLogin`), absent from an owner's own read.
+        XCTAssertEqual(try encodedKeys(account),
+                       declaredFields(try interfaceBody("CodexLogin", in: web, file: lib)).union(["next"]))
         let poll = CodexLoginPoll(status: "CONFIRMED", verificationUrl: "u", userCode: "c", expiresAt: "t",
                                   account: account, logins: [account], error: "e")
         XCTAssertEqual(try encodedKeys(poll), declaredFields(try interfaceBody("CodexLoginPoll", in: web, file: lib)))
@@ -238,8 +241,16 @@ final class ProviderPoolsParityTests: XCTestCase {
                       "\(lib)'s pool no longer spells out its month — drop this check")
         let window = SharedPoolWindow(start: "2026-09-01T00:00:00.000Z", end: "2026-10-01T00:00:00.000Z")
         XCTAssertEqual(try encodedKeys(window), ["start", "end"])
+        // The accounts a pool of somebody's own holds (2026-10-03: everyone in the pool reads them), which
+        // web declares as its account plus the reader's `next` — the same shape this client decodes.
+        XCTAssertTrue(web.contains("logins: SharedPoolLogin[];"),
+                      "\(lib) no longer declares the pool's ChatGPT accounts — drop this check")
+        XCTAssertTrue(web.contains("export interface SharedPoolLogin extends CodexLogin {"),
+                      "\(lib) no longer declares an account of a pool's own read as CodexLogin plus `next`")
+        let login = CodexLogin(state: "ACTIVE", email: "owner@codex-login.invalid", plan: "pro",
+                               fingerprint: "…AB12", next: true)
         let pool = SharedPool(id: "p", slug: "team-codex", label: "Team Codex", engine: "codex", shared: false,
-                              ownerHasChatGPT: true, membersCanAdd: true, ownKeyFirst: true, viewerRole: .member,
+                              logins: [login], membersCanAdd: true, ownKeyFirst: true, viewerRole: .member,
                               window: window, people: [person], keys: [key])
         XCTAssertEqual(try encodedKeys(pool), declaredFields(try interfaceBody("SharedPool", in: web, file: lib)))
     }

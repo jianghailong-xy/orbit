@@ -289,18 +289,18 @@ final class AgentsStackWiringTests: XCTestCase {
     }
 
     /// The draft an iPad draws sits beside a session column that already names its workspace, so it
-    /// leaves the navigation bar's switcher to the phone's pushed draft, where it is the only one.
-    func testTheWideDraftLeavesTheWorkspaceSwitcherToTheColumn() throws {
+    /// leaves the navigation bar's workspace title to the phone's pushed draft.
+    func testTheWideDraftLeavesTheWorkspaceTitleToTheColumn() throws {
         let views = try appSource("Views/AgentsView.swift")
         let detail = code(try slice(views, from: "struct AgentConsoleDetail: View {",
                                     to: "struct NewSessionView: View {"))
-        XCTAssertTrue(detail.contains("agentSwitcherInBar: false"))
+        XCTAssertTrue(detail.contains("workspaceTitleInBar: false"))
         let draft = code(try slice(views, from: "struct NewSessionView: View {",
                                    to: "struct AgentSessionRow: View {"))
-        XCTAssertTrue(draft.contains("agentSwitcherInBar: Bool = true,"))
-        let bar = try slice(draft, from: ".toolbar {", to: "ToolbarItem(placement: .principal) { agentSwitcher }")
-        XCTAssertTrue(bar.contains("if agentSwitcherInBar {"), "the bar's switcher is the flag's")
-        XCTAssertFalse(code(try appSource("Views/CompactShell.swift")).contains("agentSwitcherInBar:"),
+        XCTAssertTrue(draft.contains("workspaceTitleInBar: Bool = true,"))
+        let bar = try slice(draft, from: ".toolbar {", to: "ToolbarItem(placement: .principal) { WorkspaceTitle(name: agent.name) }")
+        XCTAssertTrue(bar.contains("if workspaceTitleInBar {"), "the flag controls the bar's title")
+        XCTAssertFalse(code(try appSource("Views/CompactShell.swift")).contains("workspaceTitleInBar:"),
                        "the phone's draft keeps it")
     }
 
