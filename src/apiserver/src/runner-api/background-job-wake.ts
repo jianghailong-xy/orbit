@@ -25,6 +25,17 @@ import { stripNul } from './strip-nul';
  *
  * Wakes nobody has been handed yet are one turn: a wake that arrives while a wake turn is still
  * queued files itself onto that turn, and a job's later wake replaces its earlier one there.
+ *
+ * A job's exit that arrives while the session is running a turn goes into that turn instead, as a
+ * CURRENT_WORK steer aimed at it, whenever the runtime and the runner can steer one (createTurn's
+ * `steerIfLive`): the agent learns the job ended at its next tool call rather than after the turn it
+ * is in, and no turn of its own is opened for it. Waiting behind the running turn, a wake used to sit
+ * for minutes and then open a whole turn to report a job the agent had often read for itself by then.
+ * Output wakes never steer — a job writing every minute would interrupt the turn every minute — so
+ * they queue for the next turn as they always have. The two routes never join each other's turn: a
+ * steer joins a steer still waiting for the same running turn, a next-turn wake the queued next-turn
+ * wake. A steer that misses its turn comes back as an ordinary wake turn, and takes the queued one
+ * with it (`foldQueuedWakeTurnsInto`).
  */
 
 /** The `client_turn_id` prefix of a turn filed to deliver background job wakes. */
@@ -123,7 +134,12 @@ export function sessionHasEnded(session: {
 }
 
 /**
- * The session's wake turn nobody has been handed yet, if there is one.
+ * The session's wake turn nobody has been handed yet on this route, if there is one: a queued
+ * next-turn wake, or — for a wake going into the running turn — a steer still waiting for that same
+ * turn. Never the other route's: a steer joining a queued wake would wait for the next turn after
+ * all, and a next-turn wake joining a steer would be written into a turn it was not decided for.
+ * A steer the runner has taken, or the engine has acknowledged, is no longer PENDING, so a later wake
+ * is a steer of its own.
  *
  * Read under the Session lock `createTurn` holds. Every door that hands a turn out or takes a queued
  * one away — the inbox claim, completion's drain, interrupt, withdraw, end — takes that same lock
@@ -132,16 +148,127 @@ export function sessionHasEnded(session: {
 export function undeliveredWakeTurn(
   tx: Prisma.TransactionClient,
   sessionId: string,
+  route: { kind: string; targetTurnId?: string } = { kind: 'message' },
 ): Promise<ConversationTurn | null> {
   return tx.conversationTurn.findFirst({
     where: {
       sessionId,
-      kind: 'message',
+      ...(route.kind === 'steer'
+        ? { kind: 'steer', sendIntent: 'CURRENT_WORK', targetTurnId: route.targetTurnId }
+        : { kind: 'message' }),
       status: 'PENDING',
       clientTurnId: { startsWith: BACKGROUND_WAKE_TURN_PREFIX },
     },
     orderBy: { seq: 'asc' },
   });
+}
+
+/**
+ * Fold every other queued next-turn wake into the wake turn a missed steer just became.
+ *
+ * A steer wake whose turn ended before the engine read it is put back in the queue as an ordinary
+ * next-turn message, on the same row (`requeueUnreadCurrentWorkSteers` at turn-complete, or the
+ * runner's `steer_requeue`). A wake that arrived meanwhile for the next turn — a job's output, a
+ * wakeup coming due, an exit no live turn could take — is queued as a turn of its own, so without
+ * this the two would each open a turn, back to back, to say what one turn says.
+ *
+ * The requeued row is the one kept: it may already have a `user` event in the transcript, and its
+ * re-delivery amends that line where a client drew it. A queued turn nobody was handed goes the way a
+ * withdrawn one does — its wakes and its due wakeups move onto the kept turn first. A job both turns
+ * carry keeps the wake that says how it ended, as `fileBackgroundJobWake` would have; output read
+ * from the earlier of the two offsets still has to be read. A queued wake turn that is already in the
+ * transcript (handed out once, and back unanswered) is left as it is: deleting it would strand the
+ * line drawn for it.
+ *
+ * Under the Session lock its caller holds, in the transaction that requeued the steer.
+ */
+export async function foldQueuedWakeTurnsInto(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+  kept: { id: string; clientTurnId: string },
+): Promise<number> {
+  if (!isBackgroundWakeTurn(kept.clientTurnId)) return 0;
+  const queued = await tx.conversationTurn.findMany({
+    where: {
+      sessionId,
+      id: { not: kept.id },
+      kind: 'message',
+      status: 'PENDING',
+      clientTurnId: { startsWith: BACKGROUND_WAKE_TURN_PREFIX },
+    },
+    select: { id: true, clientTurnId: true },
+  });
+  const announced = queued.length === 0
+    ? []
+    : await tx.runEvent.findMany({
+        where: { sessionId, type: 'user', turnId: { in: queued.map((turn) => turn.id) } },
+        select: { turnId: true },
+      });
+  const shown = new Set(announced.map((event) => event.turnId));
+  const others = queued.filter((turn) => !shown.has(turn.id));
+  for (const other of others) {
+    const wakes = await tx.backgroundJobWake.findMany({
+      where: { sessionId, clientTurnId: other.clientTurnId },
+    });
+    for (const wake of wakes) {
+      const there = await tx.backgroundJobWake.findUnique({
+        where: {
+          sessionId_clientTurnId_jobId: { sessionId, clientTurnId: kept.clientTurnId, jobId: wake.jobId },
+        },
+      });
+      if (!there) {
+        await tx.backgroundJobWake.update({ where: { id: wake.id }, data: { clientTurnId: kept.clientTurnId } });
+        continue;
+      }
+      const later = there.updatedAt >= wake.updatedAt ? there : wake;
+      const says = there.trigger === 'exit' ? there : wake.trigger === 'exit' ? wake : later;
+      await tx.backgroundJobWake.update({
+        where: { id: there.id },
+        data: {
+          trigger: says.trigger,
+          kind: says.kind,
+          command: says.command,
+          description: says.description,
+          status: says.status,
+          exitCode: says.exitCode,
+          reason: says.reason,
+          outputPath: says.outputPath,
+          outputSize: says.outputSize,
+          outputExcerpt: says.outputExcerpt,
+          outputOffset: there.outputOffset < wake.outputOffset ? there.outputOffset : wake.outputOffset,
+        },
+      });
+      await tx.backgroundJobWake.delete({ where: { id: wake.id } });
+    }
+    await tx.sessionScheduledWakeup.updateMany({
+      where: { sessionId, clientTurnId: other.clientTurnId, state: 'DELIVERED' },
+      data: { clientTurnId: kept.clientTurnId },
+    });
+    await tx.conversationTurn.deleteMany({ where: { id: other.id, sessionId, status: 'PENDING' } });
+  }
+  return others.length;
+}
+
+/**
+ * `foldQueuedWakeTurnsInto` for the steers a turn's completion just requeued: the first of them that
+ * is a wake turn keeps every other wake queued for the next turn, the other requeued ones included.
+ */
+export async function foldRequeuedWakeTurns(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+  requeuedTurnIds: readonly string[],
+): Promise<void> {
+  const requeued = await tx.conversationTurn.findMany({
+    where: {
+      sessionId,
+      id: { in: [...requeuedTurnIds] },
+      clientTurnId: { startsWith: BACKGROUND_WAKE_TURN_PREFIX },
+    },
+    select: { id: true, clientTurnId: true },
+    orderBy: { seq: 'asc' },
+  });
+  const kept = requeued.find((turn) => isBackgroundWakeTurn(turn.clientTurnId));
+  if (kept) await foldQueuedWakeTurnsInto(tx, sessionId, kept);
 }
 
 /**
@@ -218,9 +345,18 @@ function describeTrigger(wake: StoredWake): string {
   return wake.exitCode == null ? `ended｜${wake.status}` : `ended｜${wake.status}｜exit code ${wake.exitCode}`;
 }
 
+/**
+ * What the block says brought it, by the kind of turn delivering it: a turn the control plane opened
+ * for it, or — for a steer — the turn the agent is already in, which nobody opened for the wake.
+ */
+const WAKE_HEADS: Record<'message' | 'steer', string> = {
+  message: '  A background job you started with bg_run has news you were waiting for; the control plane opened this turn for it:',
+  steer: '  A background job you started with bg_run has news you were waiting for. It ended while you were working, so this message was added to the turn you are in:',
+};
+
 /** The block a wake turn delivers. */
-export function buildBackgroundWakeBlock(wakes: StoredWake[]): string {
-  const lines = ['<background-job-wake>', '  A background job you started with bg_run has news you were waiting for; the control plane opened this turn for it:'];
+export function buildBackgroundWakeBlock(wakes: StoredWake[], turnKind: string = 'message'): string {
+  const lines = ['<background-job-wake>', WAKE_HEADS[turnKind === 'steer' ? 'steer' : 'message']];
   for (const wake of wakes) {
     const head = [wake.jobId, wake.kind, wake.command];
     if (wake.description) head.push(wake.description);
@@ -250,18 +386,20 @@ export function buildBackgroundWakeBlock(wakes: StoredWake[]): string {
  * out again after its runner died, the continuation nudge followed by the block. Throws on a database
  * failure: unlike a note riding along on somebody's message, this block IS the turn, and a turn
  * delivered without it would wake the agent for nothing. The claim rolls back and the turn stays
- * queued for the next poll.
+ * queued for the next poll. `turnKind` is the delivering turn's: a steer says it joined the turn the
+ * agent is in rather than that one was opened for it.
  */
 export async function appendBackgroundWakeContext(
   tx: Prisma.TransactionClient,
   sessionId: string,
   clientTurnId: string,
   content: string | null | undefined,
+  turnKind: string = 'message',
 ): Promise<string | null | undefined> {
   const wakes = await tx.backgroundJobWake.findMany({ where: { sessionId, clientTurnId } });
   if (wakes.length === 0) return content;
   // In the order the wakes first arrived, ordered here rather than trusted from the read.
   wakes.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.jobId.localeCompare(b.jobId));
-  const block = buildBackgroundWakeBlock(wakes);
+  const block = buildBackgroundWakeBlock(wakes, turnKind);
   return content ? `${content}\n\n${block}` : block;
 }
