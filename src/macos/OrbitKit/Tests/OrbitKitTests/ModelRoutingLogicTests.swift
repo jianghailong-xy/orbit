@@ -234,6 +234,11 @@ final class ModelRoutingLogicTests: XCTestCase {
         XCTAssertEqual(lines.joined(separator: " "), note, "every word, in order")
         XCTAssertTrue(lines.allSatisfy { $0.count <= 64 })
         XCTAssertEqual(ComposerLogic.menuLines("Tier M"), ["Tier M"])
+        // An iOS menu item stops at three lines: the note is shown a sentence an item.
+        XCTAssertEqual(ComposerLogic.sentences(note), ["Changing the model here applies to this run only.",
+                                                       "To fix the model for every run, set it on the task."])
+        XCTAssertEqual(ComposerLogic.sentences(note).joined(separator: " "), note)
+        XCTAssertEqual(ComposerLogic.sentences("One sentence."), ["One sentence."])
         // A run with no space breaks where it fills the line; CJK characters count double.
         let cjk = String(repeating: "规", count: 40)
         XCTAssertEqual(ComposerLogic.menuLines(cjk).map(\.count), [32, 8])
