@@ -1,0 +1,27 @@
+{
+  "agy": "1.2.15",
+  "recorded": "2026-10-03",
+  "argv": [
+    "--gemini_dir=/work/orbit-gemini",
+    "--print=",
+    "--input-format",
+    "stream-json",
+    "--output-format",
+    "stream-json"
+  ],
+  "settings": {
+    "enableTelemetry": false
+  },
+  "exit": 0,
+  "note": "Default (request-review) mode headless: a tool that needs approval is soft-denied, the turn ends at once with response \"\" and status SUCCESS; denied_actions is a cumulative de-duplicated set; stderr carries one 'jetski: no output produced' line per denied turn.",
+  "driver": [
+    "write stdin line 1",
+    "wait for result #1",
+    "write stdin line 2",
+    "wait for result #2",
+    "write stdin line 3",
+    "wait for result #3",
+    "close stdin",
+    "wait for exit"
+  ]
+}
