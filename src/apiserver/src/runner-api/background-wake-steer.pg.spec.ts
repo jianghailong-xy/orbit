@@ -438,9 +438,10 @@ scenario('(c) output wakes wait for the next turn even while one runs, join each
   // The later wake says how the job stands now; what the session has not read starts where it did.
   assert.deepEqual(rows, [{ offset: '0', size: '200', excerpt: 'step 2/9' }]);
 
-  // The two routes never join each other's turn. The same job's exit goes into the running turn as
-  // a steer of its own, and the next-turn wake is not folded into it.
-  const exit = await fileWake(exitWake('bgj_c00000000001'));
+  // The two routes never join each other's turn. Another job's exit goes into the running turn as a
+  // steer of its own, and the next-turn wake is not folded into it (a job's OWN exit is the one
+  // exception — see (f)).
+  const exit = await fileWake(exitWake('bgj_c00000000003'));
   assert.equal(exit.outcome, 'ENQUEUED');
   const steer = await turn(exit.turnId!);
   assert.equal(steer.kind, 'steer');
@@ -449,7 +450,7 @@ scenario('(c) output wakes wait for the next turn even while one runs, join each
   const third = await fileWake(outputWake('bgj_c00000000002', 1));
   assert.equal(third.outcome, 'MERGED');
   assert.equal(third.turnId, queued.id);
-  assert.deepEqual(await jobsOn(steer.clientTurnId), [{ jobId: 'bgj_c00000000001', trigger: 'exit' }]);
+  assert.deepEqual(await jobsOn(steer.clientTurnId), [{ jobId: 'bgj_c00000000003', trigger: 'exit' }]);
   assert.deepEqual(await jobsOn(queued.clientTurnId), [
     { jobId: 'bgj_c00000000001', trigger: 'output' },
     { jobId: 'bgj_c00000000002', trigger: 'output' },
@@ -501,13 +502,16 @@ scenario('(d) a steer its turn finished without reading is a deliverable wake tu
 scenario('(d) a missed steer and the wake queued for the next turn are one turn, at the target\'s completion', async () => {
   await seed();
   // The build's output was queued for the next turn; then the build exited while the turn ran and
-  // was steered into it; then the deploy's output joined the queued wake.
+  // was steered into it, taking its own output wake with it (f); then the deploy's output was queued
+  // for the next turn in a wake turn of its own.
   const queued = await fileWake(outputWake('bgj_d10000000001', 1));
   const steered = await fileWake(exitWake('bgj_d10000000001', { outputOffset: 100, outputSize: 400 }));
   const joined = await fileWake(outputWake('bgj_d10000000002', 1));
-  assert.equal(joined.turnId, queued.turnId);
   assert.notEqual(steered.turnId, queued.turnId);
   assert.equal((await turn(steered.turnId!)).kind, 'steer');
+  assert.equal(joined.outcome, 'ENQUEUED');
+  assert.notEqual(joined.turnId, queued.turnId);
+  assert.notEqual(joined.turnId, steered.turnId);
 
   await answer(RUNNING_TURN_ID);
   await complete(RUNNING_TURN_ID);
@@ -572,6 +576,98 @@ scenario('(d) a steer the runner hands back unread takes the queued wake with it
   for (const fact of ['<background-job-wake>', 'bgj_d20000000001', 'bgj_d20000000002', OPENED_HEAD]) {
     assert.ok(content.includes(fact), `the requeued wake does not say ${fact}:\n${content}`);
   }
+});
+
+/** What one wake turn says about one job: where the output it covers begins, and where it ends. */
+async function coverage(clientTurnId: string, jobId: string): Promise<Array<{ offset: string; size: string }>> {
+  const { rows } = await admin.query<{ offset: string; size: string }>(
+    `SELECT output_offset::text AS offset, output_size::text AS size FROM "background_job_wake"
+      WHERE session_id = $1::uuid AND client_turn_id = $2 AND job_id = $3`,
+    [SESSION_ID, clientTurnId, jobId],
+  );
+  return rows;
+}
+
+scenario('(f) a job\'s exit steered into the running turn takes that job\'s output wake off the next-turn queue', async () => {
+  await seed();
+  const build = 'bgj_f00000000001';
+  // The build's output, twice, waiting for the next turn.
+  const queued = await turn((await fileWake(outputWake(build, 1))).turnId!);
+  assert.equal((await fileWake(outputWake(build, 2))).turnId, queued.id);
+
+  // The build exits while the turn runs. Its exit is the last thing it will say, so the output wake
+  // goes with it into the running turn: covered from where the output wake began, not where the exit's
+  // own wake did. The queued turn, left carrying nothing, goes — after the running turn there is no
+  // turn left to open for output the exit already reported.
+  const exit = await fileWake(exitWake(build, { outputOffset: 200, outputSize: 4096 }));
+  const steer = await turn(exit.turnId!);
+  assert.equal(steer.kind, 'steer');
+  assert.equal(steer.targetTurnId, RUNNING_TURN_ID);
+  assert.deepEqual(await jobsOn(steer.clientTurnId), [{ jobId: build, trigger: 'exit' }]);
+  assert.deepEqual(await coverage(steer.clientTurnId, build), [{ offset: '0', size: '4096' }]);
+  assert.deepEqual((await wakeTurns()).map((row) => row.id), [steer.id],
+    'the output wake still waits to open a turn of its own after the exit');
+  assert.deepEqual(await jobsOn(queued.clientTurnId), []);
+
+  const delivered = await take();
+  assert.equal(delivered?.turnId, steer.id);
+  const content = String(delivered?.content ?? '');
+  for (const fact of [STEER_HEAD, build, 'exit code 2', 'this covers bytes 0–4096']) {
+    assert.ok(content.includes(fact), `the steered exit does not say ${fact}:\n${content}`);
+  }
+});
+
+scenario('(f) a queued turn that still carries another job\'s wake stays, with only that wake', async () => {
+  await seed();
+  const build = 'bgj_f10000000001';
+  const tests = 'bgj_f10000000002';
+  const queued = await turn((await fileWake(outputWake(build, 1))).turnId!);
+  assert.equal((await fileWake(outputWake(tests, 1))).turnId, queued.id);
+
+  const exit = await fileWake(exitWake(build, { outputOffset: 100, outputSize: 900 }));
+  const steer = await turn(exit.turnId!);
+  assert.equal(steer.kind, 'steer');
+  assert.deepEqual(await coverage(steer.clientTurnId, build), [{ offset: '0', size: '900' }]);
+  // The tests are still running, and what they wrote still waits for the next turn.
+  assert.deepEqual((await wakeTurns()).map((row) => row.id), [queued.id, steer.id]);
+  assert.deepEqual(await jobsOn(queued.clientTurnId), [{ jobId: tests, trigger: 'output' }]);
+  assert.deepEqual(await jobsOn(steer.clientTurnId), [{ jobId: build, trigger: 'exit' }]);
+});
+
+scenario('(g) an output wake that arrives after its job\'s exit was filed is dropped, on either route', async () => {
+  // Steered: the exit went into the running turn; the output found as the process exited arrives
+  // second, and would otherwise queue a turn to report output the exit already covered.
+  await seed();
+  const steered = await turn((await fileWake(exitWake('bgj_g00000000001', { outputSize: 500 }))).turnId!);
+  assert.equal(steered.kind, 'steer');
+  assert.deepEqual(await fileWake(outputWake('bgj_g00000000001', 5)), { outcome: 'DROPPED' });
+  assert.deepEqual((await wakeTurns()).map((row) => row.id), [steered.id]);
+  assert.deepEqual(await jobsOn(steered.clientTurnId), [{ jobId: 'bgj_g00000000001', trigger: 'exit' }]);
+
+  // Queued: no turn running, the exit waits for the next turn; the late output adds nothing to it.
+  await seed({ running: false });
+  const queued = await fileWake(exitWake('bgj_g00000000002'));
+  const queuedTurn = await turn(queued.turnId!);
+  assert.equal(queuedTurn.kind, 'message');
+  assert.deepEqual(await fileWake(outputWake('bgj_g00000000002', 3)), { outcome: 'DROPPED' });
+  assert.deepEqual((await wakeTurns()).map((row) => row.id), [queuedTurn.id]);
+  assert.deepEqual(await jobsOn(queuedTurn.clientTurnId), [{ jobId: 'bgj_g00000000002', trigger: 'exit' }]);
+
+  // ...and once that exit has been delivered and answered, a late output still opens nothing.
+  await admin.query(`UPDATE "session" SET status = 'RUNNING' WHERE id = $1::uuid`, [SESSION_ID]);
+  const delivered = await take();
+  assert.equal(delivered?.turnId, queuedTurn.id);
+  await answer(queuedTurn.id);
+  await complete(queuedTurn.id);
+  assert.deepEqual(await fileWake(outputWake('bgj_g00000000002', 4)), { outcome: 'DROPPED' });
+  const { rows } = await admin.query<{ n: string }>(
+    `SELECT count(*)::text AS n FROM "conversation_turn" WHERE session_id = $1::uuid AND status = 'PENDING'`,
+    [SESSION_ID],
+  );
+  assert.equal(rows[0].n, '0', 'a late output wake opened a turn after the exit was read');
+
+  // A job that never reported an exit (it asked only about its output) keeps waking for it.
+  assert.equal((await fileWake(outputWake('bgj_g00000000003', 1))).outcome, 'ENQUEUED');
 });
 
 scenario('(e) the runner takes the steer with the wake written into it, and its echo is the control plane\'s note', async () => {
