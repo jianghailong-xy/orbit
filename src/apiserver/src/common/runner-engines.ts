@@ -30,12 +30,17 @@ export function isLoginEngine(value: unknown): value is LoginEngine {
 /**
  * Every engine a runner reports health for, in the order they're shown.
  *
- * Wider than LOGIN_ENGINES on purpose: OpenCode can't be signed into from the browser, but it is
- * installed on the machine and updated by the same periodic pass. Filtering it out here is what used
- * to make the runner's own update summary mention an engine the control plane had no record of.
- * Sign-in stays gated on isLoginEngine, where that question actually belongs.
+ * Wider than LOGIN_ENGINES on purpose: OpenCode can't be signed into from the browser, and
+ * Antigravity runs on a Gemini API key from its own environment with no relayed sign-in at all, but
+ * both are installed on the machine and updated by the same periodic pass. Filtering one out here is
+ * what used to make the runner's own update summary mention an engine the control plane had no
+ * record of. Sign-in stays gated on isLoginEngine, where that question actually belongs.
  */
-export const REPORTED_ENGINES: readonly ReportedEngine[] = [...LOGIN_ENGINES, 'opencode'];
+export const REPORTED_ENGINES: readonly ReportedEngine[] = [
+  ...LOGIN_ENGINES,
+  'opencode',
+  'antigravity',
+];
 
 export function isReportedEngine(value: unknown): value is ReportedEngine {
   return typeof value === 'string' && REPORTED_ENGINES.includes(value as ReportedEngine);

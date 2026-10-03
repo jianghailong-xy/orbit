@@ -815,9 +815,9 @@ export class SessionsService {
     // the chosen workspace's machine (workspaces belong to a runner) — picking a workspace is
     // enough to know which machine + project dir to run in.
     let assignedRunnerId: string | undefined = dto.assignedRunnerId;
-    // The session's provider identity: a built-in ("claude"/"codex"/"opencode") or a custom
-    // slug ("deepseek"). Stored verbatim; runtime is derived below. A workspace holds no provider of
-    // its own — absent an explicit pick this is seeded from what the project last ran on.
+    // The session's provider identity: a built-in ("claude"/"codex"/"kimi"/"opencode"/"antigravity")
+    // or a custom slug ("deepseek"). Stored verbatim; runtime is derived below. A workspace holds no
+    // provider of its own — absent an explicit pick this is seeded from what the project last ran on.
     let provider: string = AgentProvider.CLAUDE;
     let providerBuiltin = true;
     // Per-workspace worktree toggle: default off. A workspace with it turned off (the default)
@@ -1125,7 +1125,7 @@ export class SessionsService {
         provider,
         providerBuiltin,
         // Pre-generate the Claude session id so the runner spawns with --session-id.
-        // Codex/Kimi/OpenCode create and return their own thread id after process init.
+        // Codex/Kimi/OpenCode/Antigravity create and return their own thread id after process init.
         runtimeSessionId: runtime === AgentProvider.CLAUDE ? runtimeSessionId : null,
         model: dto.model,
         // Old replicas omit this post-0079 column and receive its false default. That lets claim
@@ -7847,10 +7847,11 @@ export class SessionsService {
       if (session.numTurns === 0) await this.ensurePromptSeeded(tx, session);
       // Whether there is anything to say the new config TO. `setconfig` is a stream-json
       // control_request, and claude is the only runtime spoken to that way: codex and kimi are
-      // driven over ACP/JSON-RPC, opencode runs one process per turn, and none of their session
-      // loops has an arm for the kind — one filed there is acked on delivery and applied by
-      // nobody, which is worse than the wait this split removed. For them the live half stays
-      // what it always was: part of the re-spawn, effort included.
+      // driven over ACP/JSON-RPC, opencode runs one process per turn, antigravity's stream-json
+      // input takes nothing but user messages (agy exits on a control_request, contract §1.1), and
+      // none of their session loops has an arm for the kind — one filed there is acked on delivery
+      // and applied by nobody, which is worse than the wait this split removed. For them the live
+      // half stays what it always was: part of the re-spawn, effort included.
       //
       // Asked of the RUNTIME, the way deliverSteer asks its own question, and read off
       // `resolveProviderExec` — whose `provider` IS that runtime (`execRuntime`), resolved after

@@ -436,4 +436,6 @@ export enum AgentProvider {
   CODEX = 'codex',
   KIMI = 'kimi',
   OPENCODE = 'opencode',
+  /** Google's Antigravity CLI (`agy`), driven headless; see docs/antigravity-runtime-contract.md. */
+  ANTIGRAVITY = 'antigravity',
 }

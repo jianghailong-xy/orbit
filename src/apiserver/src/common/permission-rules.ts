@@ -88,8 +88,13 @@ export function permissionRuleToken(rule: StoredPermissionRule): string {
  * what this workspace's owner has already approved permanently. Order is stable (base first)
  * and duplicates collapse, so re-approving something already granted is a no-op.
  *
- * Only claude's runtime receives the workspace's rules, because it is the one that reads this
- * list as a NARROWING allowlist in the grammar the rules are stored in. OpenCode maps an entry
+ * Only claude's and antigravity's runtimes receive the workspace's rules, because they are the ones
+ * that read this list as a NARROWING allowlist in the grammar the rules are stored in: claude as
+ * `--allowedTools`, agy through the runner, which writes each rule as its own scoped
+ * `permissions.allow` entry (`Bash(git:*)` → `command(git)`, `Read(<path>)` → `read_file(<path>)`,
+ * docs/antigravity-runtime-contract.md §5.1). That is the one way a standing grant can reach agy at
+ * all: headless, it refuses whatever needs approval and has nobody to ask, so a rule someone
+ * already answered "always allow" to is exactly what this list is for. OpenCode maps an entry
  * onto a whole-tool permission (it already drops scoped rules rather than broaden them, but a
  * tool-wide one would still open a tool its guarded modes gate), and Kimi pastes the list into
  * the prompt as "only use these tools". Handing either the same rules would change what they do
@@ -109,7 +114,7 @@ export function dispatchAllowedTools(
   rules: readonly PermissionRule[],
 ): string[] {
   const out = [...base];
-  if (provider !== AgentProvider.CLAUDE) return out;
+  if (provider !== AgentProvider.CLAUDE && provider !== AgentProvider.ANTIGRAVITY) return out;
   const seen = new Set(out);
   for (const rule of normalizePermissionRules(rules)) {
     const token = permissionRuleToken(rule);
@@ -126,8 +131,9 @@ export function dispatchAllowedTools(
  * Claude is deliberately absent. It already holds the rules (`dispatchAllowedTools`) and applies
  * them with its own matcher, so a claude request that still reaches us means ITS matcher judged
  * the rule not to cover this call — and this one, which knows strictly less, must not overrule
- * that. OpenCode never asks at all. So this is the set of runtimes that can ask but have nowhere
- * to put an allowlist, which is exactly the gap this matching exists to close.
+ * that. OpenCode and Antigravity never ask at all (Antigravity holds the rules itself, as claude
+ * does). So this is the set of runtimes that can ask but have nowhere to put an allowlist, which is
+ * exactly the gap this matching exists to close.
  */
 const SERVER_MATCHED_RUNTIMES: ReadonlySet<string> = new Set([
   AgentProvider.CODEX,

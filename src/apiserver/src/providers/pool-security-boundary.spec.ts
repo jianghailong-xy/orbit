@@ -140,8 +140,9 @@ function database(rows: ProviderRow[]) {
     modelProvider: {
       findMany: async (args: { where: Where }) => {
         const { where } = args;
-        if (where.id?.in && where.OR && where.slug?.not) {
-          return rows.filter((r) => where.id.in.includes(r.id) && r.slug !== where.slug.not && visible(where)(r));
+        // The compatibility guard rows (opencode, antigravity) are never a candidate member.
+        if (where.id?.in && where.OR && Array.isArray(where.slug?.notIn)) {
+          return rows.filter((r) => where.id.in.includes(r.id) && !where.slug.notIn.includes(r.slug) && visible(where)(r));
         }
         if (typeof where.slug?.startsWith === 'string' && Object.keys(where).length === 1) {
           return rows.filter((r) => r.slug.startsWith(where.slug.startsWith)).map((r) => ({ slug: r.slug }));

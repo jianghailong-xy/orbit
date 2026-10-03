@@ -14,6 +14,8 @@ test('normalizeRuntimeProvider preserves every built-in runtime and safely defau
   assert.equal(normalizeRuntimeProvider(AgentProvider.CLAUDE), AgentProvider.CLAUDE);
   assert.equal(normalizeRuntimeProvider(AgentProvider.CODEX), AgentProvider.CODEX);
   assert.equal(normalizeRuntimeProvider(AgentProvider.KIMI), AgentProvider.KIMI);
+  assert.equal(normalizeRuntimeProvider(AgentProvider.OPENCODE), AgentProvider.OPENCODE);
+  assert.equal(normalizeRuntimeProvider(AgentProvider.ANTIGRAVITY), AgentProvider.ANTIGRAVITY);
   assert.equal(
     normalizeRuntimeProvider(AgentProvider.KIMI, false),
     AgentProvider.CLAUDE,
@@ -245,6 +247,68 @@ test('OpenCode is a dynamically-initialized runtime whose Auto mode is never dow
   assert.equal(
     normalizeBuiltinPermissionMode(AgentProvider.OPENCODE, '', PermissionMode.AUTO),
     PermissionMode.AUTO,
+  );
+});
+
+test('Antigravity is a built-in runtime that learns its conversation id from agy', () => {
+  // No discriminator needed: migration 0367 moved any configured `antigravity` out of the way, so
+  // the slug means the runtime whatever provider_builtin a row carries.
+  assert.equal(normalizeRuntimeProvider(AgentProvider.ANTIGRAVITY), AgentProvider.ANTIGRAVITY);
+  assert.equal(
+    normalizeRuntimeProvider(AgentProvider.ANTIGRAVITY, false),
+    AgentProvider.ANTIGRAVITY,
+  );
+  // agy mints the conversation id and reports it in its init event, so none is seeded at create.
+  assert.equal(initializesRuntimeDynamically(AgentProvider.ANTIGRAVITY), true);
+  // Auto is runtime-wide there (it runs as --dangerously-skip-permissions), whatever the model.
+  assert.equal(
+    normalizeBuiltinPermissionMode(AgentProvider.ANTIGRAVITY, '', PermissionMode.AUTO),
+    PermissionMode.AUTO,
+  );
+});
+
+test('Antigravity effort lands inside agy\'s closed low/medium/high vocabulary', () => {
+  for (const kept of ['', 'low', 'medium', 'high']) {
+    assert.equal(normalizeEffortForProvider(AgentProvider.ANTIGRAVITY, kept), kept, kept);
+  }
+  // Levels carried in from other runtimes go to the nearer end of agy's range...
+  assert.equal(normalizeEffortForProvider(AgentProvider.ANTIGRAVITY, 'none'), 'low');
+  assert.equal(normalizeEffortForProvider(AgentProvider.ANTIGRAVITY, 'minimal'), 'low');
+  assert.equal(normalizeEffortForProvider(AgentProvider.ANTIGRAVITY, 'xhigh'), 'high');
+  assert.equal(normalizeEffortForProvider(AgentProvider.ANTIGRAVITY, 'max'), 'high');
+  assert.equal(normalizeEffortForProvider(AgentProvider.ANTIGRAVITY, 'ultra'), 'high');
+  // ...and anything agy has no name for is Default rather than a flag it would refuse.
+  assert.equal(normalizeEffortForProvider(AgentProvider.ANTIGRAVITY, 'project-custom'), '');
+  assert.equal(normalizeEffortForProvider(AgentProvider.ANTIGRAVITY, null), undefined);
+});
+
+test('Antigravity effort is held to the levels the runner reports for that model', () => {
+  // The runner folds `agy models` into one row per base model, its levels as reasoningLevels.
+  const catalog = {
+    antigravity: [
+      { value: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash', reasoningLevels: ['low', 'medium', 'high'] },
+      { value: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro', reasoningLevels: ['low', 'high'] },
+    ],
+  };
+  assert.equal(
+    normalizeEffortForRuntimeModel(AgentProvider.ANTIGRAVITY, 'medium', 'gemini-3.8-flash', catalog),
+    'medium',
+  );
+  // Gemini 3.1 Pro has no medium, so the row turns it into Default.
+  assert.equal(
+    normalizeEffortForRuntimeModel(AgentProvider.ANTIGRAVITY, 'medium', 'gemini-3.1-pro', catalog),
+    '',
+  );
+  // The vocabulary map runs first: a Claude `max` is agy's `high`, which Gemini 3.1 Pro has.
+  assert.equal(
+    normalizeEffortForRuntimeModel(AgentProvider.ANTIGRAVITY, 'max', 'gemini-3.1-pro', catalog),
+    'high',
+  );
+  // No model (agy picks its own) or one the catalog does not report keeps the mapped value.
+  assert.equal(normalizeEffortForRuntimeModel(AgentProvider.ANTIGRAVITY, 'high', '', catalog), 'high');
+  assert.equal(
+    normalizeEffortForRuntimeModel(AgentProvider.ANTIGRAVITY, 'medium', 'gemini-3.1-pro', null),
+    'medium',
   );
 });
 

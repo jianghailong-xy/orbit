@@ -47,6 +47,7 @@ import {
   treeCeiling,
 } from '../common/session-tree-sql';
 import {
+  ANTIGRAVITY_RUNNER_UPGRADE_ERROR,
   OPENCODE_RUNNER_UPGRADE_ERROR,
   SOURCE_PROTOCOL_UNSUPPORTED_ERROR,
 } from '../runner-api/runner-provider-support';
@@ -146,6 +147,7 @@ export class QueueService {
     hungUp?: AbortSignal,
   ): Promise<ClaimedSession | null> {
     const supportsOpenCode = runner.supportedProviders?.includes(AgentProvider.OPENCODE) ?? false;
+    const supportsAntigravity = runner.supportedProviders?.includes(AgentProvider.ANTIGRAVITY) ?? false;
     // Atomically claim one PENDING session assigned to this runner. The runner id
     // must be cast to ::uuid: Prisma binds template params as text, and Postgres
     // has no `uuid = text` operator (claim silently fails otherwise — 42883).
@@ -168,10 +170,11 @@ export class QueueService {
         // pg_advisory_xact_lock returns PostgreSQL void, which queryRaw cannot deserialize;
         // executeRaw deliberately discards that result (same pattern as pg_notify).
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(1330792788, 1)`;
-        // Migration 0080 installs a database trigger so an older apiserver replica cannot
-        // claim OpenCode as Claude during a rolling control-plane deploy. This transaction-
-        // local capability is the positive signal that lets only the new, capable path pass.
-        await tx.$executeRaw`SELECT set_config('orbit.runner_supports_opencode', ${supportsOpenCode ? '1' : '0'}, true)`;
+        // Migrations 0080 and 0367 install database triggers so an older apiserver replica cannot
+        // claim OpenCode or Antigravity as Claude during a rolling control-plane deploy. These
+        // transaction-local capabilities are the positive signal that lets only the new, capable
+        // path pass. One statement for both: this runs inside the global claim lock above.
+        await tx.$executeRaw`SELECT set_config('orbit.runner_supports_opencode', ${supportsOpenCode ? '1' : '0'}, true), set_config('orbit.runner_supports_antigravity', ${supportsAntigravity ? '1' : '0'}, true)`;
         // Asked again here, after the waits for a connection and for the lock above (up to 20s
         // under a busy pool): the runner may have hung up during them.
         if (hungUp?.aborted) return [];
@@ -187,7 +190,11 @@ export class QueueService {
           -- being claimed IS the answer, so leaving the text behind would make a running session
           -- read as blocked on the machine that is running it.
           error = CASE
-            WHEN error IN (${OPENCODE_RUNNER_UPGRADE_ERROR}, ${SOURCE_PROTOCOL_UNSUPPORTED_ERROR}) THEN NULL
+            WHEN error IN (
+              ${OPENCODE_RUNNER_UPGRADE_ERROR},
+              ${ANTIGRAVITY_RUNNER_UPGRADE_ERROR},
+              ${SOURCE_PROTOCOL_UNSUPPORTED_ERROR}
+            ) THEN NULL
             ELSE error
           END,
           "started_at" = COALESCE("started_at", now()),
@@ -219,6 +226,12 @@ export class QueueService {
             AND (
               ${supportsOpenCode}
               OR COALESCE(s.provider, 'claude') <> 'opencode'
+            )
+            -- The same gate for Antigravity (migration 0367): every runner shipped before one
+            -- that advertises it reads the slug as Claude.
+            AND (
+              ${supportsAntigravity}
+              OR COALESCE(s.provider, 'claude') <> 'antigravity'
             )
             -- A runner may only ever drive sessions owned by its own owner.
             AND s."owner_id" = (SELECT r."owner_id" FROM "runner" r WHERE r.id = ${runnerId})
