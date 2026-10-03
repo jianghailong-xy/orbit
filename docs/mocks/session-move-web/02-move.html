@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>Web：Move</title>
+<link rel="stylesheet" href="board.css"></head>
+<body>
+<h1>Web：Move（放进文件夹，或搬到其他 Workspace）</h1>
+<p class="lede" style="width:1660px">iOS 的左滑 Move 和长按 Move…，在 Web 上对应三个入口，点开都是同一个 Move 对话框，内容和 iOS 的 Move 面板一样（§4、§5）。能不能搬、为什么不能，都由服务端的 <code>GET /sessions/:id/move-targets</code> 给出，Web 只负责显示，不自己判断。</p>
+
+<div class="row">
+  <div class="col" style="width:520px">
+    <div class="cap"><span class="tag new">入口 1</span>Open 列表：鼠标移到行上</div>
+    <div class="shot" style="width:328px"><img src="shots/b1.png" alt=""></div>
+    <ul class="notes">
+      <li class="n" data-n="1">行右侧会出现 Pin、Complete 两个按钮，Move 加在它们前面，提示文字是 <b>Move…</b>。</li>
+    </ul>
+  </div>
+  <div class="col" style="width:440px">
+    <div class="cap"><span class="tag new">入口 2</span>会话页右上角 ⋯</div>
+    <div class="shot" style="width:370px"><img src="shots/b2.png" alt=""></div>
+    <ul class="notes">
+      <li class="n" data-n="1"><b>Move…</b> 加在 Complete 下面：这两项都是给会话归类，放在一组。</li>
+    </ul>
+  </div>
+  <div class="col" style="width:520px">
+    <div class="cap"><span class="tag new">入口 3</span>Completed 列表：行上的 ⋯</div>
+    <div class="shot" style="width:328px"><img src="shots/b3.png" alt=""></div>
+    <ul class="notes">
+      <li class="n" data-n="1">Completed 视图只显示里面有已完成会话的文件夹，数字也只数已完成的。</li>
+      <li class="n" data-n="2">Move to Open 下面加 <b>Move…</b>。回收站里的会话不能移动，Trash 的菜单不变。</li>
+    </ul>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col" style="width:540px">
+    <div class="cap"><span class="tag new">对话框</span>Move</div>
+    <div class="shot" style="width:540px"><img src="shots/b4.png" alt=""></div>
+    <ul class="notes">
+      <li class="n" data-n="1"><b>Folder in orbit</b>：No Folder、各个文件夹（带会话数）、New Folder…；会话现在在哪就勾哪。点一下立刻移过去，对话框关闭，右上角提示 <i>Moved to “Web polish”</i>。不用确认。</li>
+      <li class="n" data-n="2"><b>Move to Another Workspace</b>：每行是品牌标、名字和 <i>&lt;provider&gt; · &lt;runner&gt;</i>。runner 离线也能选，行上标 Runner offline，下一条消息会等它上线再发。不能搬去的 Workspace 置灰，写明原因。会话本身不能搬时（比如正在跑、在等审批），整组置灰，原因写在组下面。</li>
+    </ul>
+  </div>
+  <div class="col" style="width:540px">
+    <div class="cap"><span class="tag new">第二步</span>选放在那边哪个文件夹</div>
+    <div class="shot" style="width:540px"><img src="shots/b5.png" alt=""></div>
+    <ul class="notes">
+      <li class="n" data-n="1">‹ 回到上一步。</li>
+      <li class="n" data-n="2">底下一句话说明会换到哪台 runner、对话怎么接上，文案和 iOS 是同一套。点一个文件夹（或 No Folder）后，弹出确认框。</li>
+    </ul>
+  </div>
+  <div class="col" style="width:500px">
+    <div class="cap"><span class="tag new">确认</span>搬到其他 Workspace 一定要确认</div>
+    <div class="shot" style="width:500px"><img src="shots/b6.png" alt=""></div>
+    <ul class="notes">
+      <li>正文按实际情况拼（同 iOS §5.3）：有没合并的改动，就写出文件数和分支名；换了 runner 的 Claude 会话，再加一句“之前的对话会给 agent 做摘要”。</li>
+      <li>已经结束的会话，按钮是 <b>Move</b>。空闲但没结束的，按钮是 <b>End and Move</b>：先结束会话（原 runner 把改动收尾提交），再搬。</li>
+    </ul>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col" style="width:1164px">
+    <div class="cap"><span class="tag new">搬完</span></div>
+    <div class="shot" style="width:1164px"><img src="shots/b7.png" alt=""></div>
+  </div>
+  <div class="col" style="width:456px;padding-top:30px">
+    <ul class="notes">
+      <li class="n" data-n="1">右上角提示 <i>Moved to wikova-develop</i>。会话从 orbit 的列表消失，出现在 wikova-develop 的列表里。</li>
+      <li>右边这段对话<b>不关</b>，下一条消息直接在 wikova-develop 里继续。这和设计文档里“会话移出文件夹后页面不跳走”是同一个原则。</li>
+      <li>搬不成（服务端返回 409）时，弹 Web 现有的错误提示（不会自己消失），内容是服务端给的原因，和 iOS 一样。</li>
+      <li><b>这一版不做拖拽</b>（把会话拖到文件夹上）：iOS 也没有，需要的话以后单独加。</li>
+    </ul>
+  </div>
+</div>
+</body></html>

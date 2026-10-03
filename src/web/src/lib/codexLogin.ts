@@ -4,22 +4,27 @@ import { planUsageRows } from './planUsage';
 import type { PoolMember, PoolMemberState, ProviderPool } from './providerPools';
 
 /**
- * A Codex pool of the user's own (migration 0323): it runs on ChatGPT accounts of theirs, which this
- * server signed in with the official codex CLI's device flow and keeps encrypted — never a runner, never
- * a response. What the pages read of it is `logins` on the pool (ProvidersService.poolViews), every
- * account it holds, oldest first: each one's email, plan, `…AB12`, whether OpenAI still takes it, and its
- * quota once something has read it. `login` is the first of them — the account its sessions run on.
+ * A Codex pool's ChatGPT accounts (migrations 0323, 0371): each is signed in by a person of the pool with
+ * the official codex CLI's device flow, held encrypted by this server — never a runner, never a response.
+ * What the pages read of a pool is `logins` (ProvidersService.poolViews, SharedPoolsService.poolView),
+ * every account it holds, oldest first: each one's email, plan, `…AB12`, whether OpenAI still takes it, its
+ * quota once something has read it, and `userId` — who signed it in, the one person who may sign it in
+ * again. `login` is the first of them — the account its sessions run on.
  *
  * The pages draw such a pool the way they draw every other one: each account is one of the pool's members
  * (`withLogin`), carrying `login` the way a shared pool's member carries its `key` — so the Providers
  * card, the session picker and the composer take it as they take any pool.
  */
 
-/** The account a Codex pool of one's own runs on, as the server reads it (codex-login.ts). */
+/** The account a Codex pool runs on, as the server reads it (codex-login.ts). */
 export interface CodexLogin {
-  /** ACTIVE, or SIGNED_OUT once OpenAI refused it — which only its owner's sign-in again undoes. */
+  /** ACTIVE, or SIGNED_OUT once OpenAI refused it — which only the sign-in again of the person who
+   *  signed it in undoes (migration 0371; the pool owner's alone before that). */
   state: string;
   email: string | null;
+  /** Who signed it in — a person of the pool. They alone may sign it in again; with the pool's admins
+   *  they may take it out. The pool's `people` name them. */
+  userId: string;
   /** The plan the account's sign-in names (`plus`, `pro`, …), when it names one. */
   plan: string | null;
   /** `…AB12`: all any response says of the account's id. */

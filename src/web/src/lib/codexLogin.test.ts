@@ -17,6 +17,8 @@ const NEXT_WEEK = '2026-10-03T09:00:00.000Z';
 
 function account(over: Partial<CodexLogin> = {}): CodexLogin {
   return {
+    // Who signed it in (migration 0371).
+    userId: 'u1',
     state: 'ACTIVE',
     email: 'lin@example.com',
     plan: 'pro',
@@ -37,7 +39,7 @@ const pool = (login: CodexLogin | null): ProviderPool => ({
   engine: 'codex',
   login,
   resetsAt: null,
-  unavailable: login ? null : 'the pool "My Codex" has no ChatGPT account signed in — sign in on its page',
+  unavailable: login ? null : 'the pool "My Codex" has no ChatGPT account signed in — sign one in on its page',
   members: [],
 });
 

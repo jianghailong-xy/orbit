@@ -63,6 +63,16 @@ type agyContract struct {
 	events      []agyContractEvent
 	taskGets    []string
 	completions chan TurnCompleteRequest
+	// The approval cards the session filed, and the answers the test gave them (approvalsFor).
+	approvals []agyContractApproval
+	decisions map[string]ApprovalDecisionResponse
+	asked     chan agyContractApproval
+}
+
+// agyContractApproval is one card a session filed: its id and the body it was filed with.
+type agyContractApproval struct {
+	id   string
+	body map[string]interface{}
 }
 
 func newAgyContract(t *testing.T) *agyContract {
@@ -75,6 +85,8 @@ func newAgyContract(t *testing.T) *agyContract {
 		dir:         t.TempDir(),
 		inbox:       make(chan RunInboxResponse, 16),
 		completions: make(chan TurnCompleteRequest, 16),
+		decisions:   map[string]ApprovalDecisionResponse{},
+		asked:       make(chan agyContractApproval, 16),
 	}
 	c.home = filepath.Join(c.dir, "home")
 	c.orbitHome = filepath.Join(c.dir, "orbit-home")
@@ -128,12 +140,42 @@ func (c *agyContract) startMockGemini() {
 	t.Fatal("mockgemini never reported its address")
 }
 
-// startControlPlane serves the two things a session asks the control plane while it runs: its
-// inbox (long-polled; a turn handed out through c.inbox) and, through `orbit mcp`, task_get.
+// startControlPlane serves what a session asks the control plane while it runs: its inbox
+// (long-polled; a turn handed out through c.inbox), through `orbit mcp` task_get, and through Orbit's
+// approval hook the approval cards — filed, then long-polled until the test answers (c.decide).
 func (c *agyContract) startControlPlane() {
 	c.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/approvals"):
+			var body map[string]interface{}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			c.mu.Lock()
+			card := agyContractApproval{id: fmt.Sprintf("approval-%d", len(c.approvals)+1), body: body}
+			c.approvals = append(c.approvals, card)
+			c.mu.Unlock()
+			c.asked <- card
+			_ = json.NewEncoder(w).Encode(map[string]string{"id": card.id, "status": "PENDING"})
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/approvals/"):
+			id := filepath.Base(r.URL.Path)
+			window := time.After(2 * time.Second)
+			for {
+				c.mu.Lock()
+				decision, decided := c.decisions[id]
+				c.mu.Unlock()
+				if decided {
+					_ = json.NewEncoder(w).Encode(decision)
+					return
+				}
+				select {
+				case <-window:
+					_ = json.NewEncoder(w).Encode(map[string]string{"id": id, "status": "PENDING"})
+					return
+				case <-r.Context().Done():
+					return
+				case <-time.After(20 * time.Millisecond):
+				}
+			}
 		case strings.HasSuffix(r.URL.Path, "/inbox"):
 			select {
 			case resp := <-c.inbox:
@@ -348,7 +390,8 @@ func (c *agyContract) geminiDir() string {
 	return dir
 }
 
-// agyProcesses lists the agy processes running on this session's Gemini directory: pid -> argv.
+// agyProcesses lists the agy processes running a session on this session's Gemini directory: pid ->
+// argv. The short `--print=/hooks` that checks the approval gate before each start is not one.
 func (c *agyContract) agyProcesses() map[int]string {
 	c.t.Helper()
 	out, err := exec.Command("ps", "-A", "-o", "pid=,args=").Output()
@@ -359,7 +402,8 @@ func (c *agyContract) agyProcesses() map[int]string {
 	procs := map[int]string{}
 	for _, line := range strings.Split(string(out), "\n") {
 		fields := strings.Fields(line)
-		if len(fields) < 2 || !strings.Contains(line, marker) || filepath.Base(fields[1]) != agyExecutable {
+		if len(fields) < 2 || !strings.Contains(line, marker) || filepath.Base(fields[1]) != agyExecutable ||
+			strings.Contains(line, "--print=/hooks") {
 			continue
 		}
 		if pid, err := strconv.Atoi(fields[0]); err == nil {
@@ -744,13 +788,15 @@ func TestAntigravityContractInjectsOrbitMCP(t *testing.T) {
 	c.homeIsUntouched()
 }
 
-// In the default mode agy refuses what nobody approved — it has nobody to ask — and the turn stops
-// there (§5.2): the command does not run, the transcript says why, and the turn reports
-// permission_denied. An approval Orbit already holds becomes a permissions.allow rule agy honours.
+// In its own default mode (no permission flag) agy refuses what nobody approved — it has nobody to
+// ask — and the turn stops there (§5.2): the command does not run, the transcript says why, and the
+// turn reports permission_denied. An approval Orbit already holds becomes a permissions.allow rule
+// agy honours. That mode is what Orbit's Don't Ask runs; Orbit's Default asks a person through the
+// approval hook instead (TestAntigravityContractApproval*).
 func TestAntigravityContractDefaultModeRefusesUnapproved(t *testing.T) {
 	t.Run("refused", func(t *testing.T) {
 		c := newAgyContract(t)
-		job := c.job("contract-deny", "default")
+		job := c.job("contract-deny", "dontAsk")
 		marker := filepath.Join(c.execDir, "denied.txt")
 		session := c.start(job)
 		c.send(RunInboxResponse{TurnID: "t1", Kind: "message", Content: "make the file\n" +
@@ -793,7 +839,7 @@ func TestAntigravityContractDefaultModeRefusesUnapproved(t *testing.T) {
 
 	t.Run("allowed by rule", func(t *testing.T) {
 		c := newAgyContract(t)
-		job := c.job("contract-allow", "default")
+		job := c.job("contract-allow", "dontAsk")
 		job.Agent.AllowedTools = []string{"mcp__orbit__*", "Bash(touch:*)"}
 		marker := filepath.Join(c.execDir, "allowed.txt")
 		session := c.start(job)

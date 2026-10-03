@@ -123,8 +123,14 @@ public struct WhoCanUseIt: Equatable, Sendable {
 
     public static let ruleTitle = "They can add their own API keys"
     public static let ruleHint = "Off: only you put keys in. A key they add runs everyone’s sessions here, theirs first."
+    /// The accounts' own rule, beside the keys' (migration 0371): a member may sign a ChatGPT account of
+    /// their own in, which then runs everyone's sessions here, and only they can sign it in again.
+    public static let ruleAccountsTitle = "They can add their own ChatGPT accounts"
+    public static let ruleAccountsHint = "Off: only you sign ChatGPT accounts in. An account they sign in runs everyone’s sessions"
+        + " here too, and only they can sign it in again."
 
-    /// Whether they may put keys of their own in is its owner's to say, once anybody else can use it.
+    /// Whether they may put keys of their own in, or sign ChatGPT accounts of their own in, is its owner's
+    /// to say — two rules, once anybody else can use it.
     public var showsRule: Bool { mine && people }
 
     public static let footLead = "Your ChatGPT accounts run everyone’s sessions here."
@@ -132,8 +138,8 @@ public struct WhoCanUseIt: Equatable, Sendable {
         + " OpenAI’s terms treat account sharing as a violation — an account used that way can be suspended."
 
     /// The notice at the card's foot: said to its owner, once anybody else can use a pool their ChatGPT
-    /// accounts are in.
-    public var showsFoot: Bool { mine && people && accounts != nil }
+    /// accounts are in — a pool holding none has nothing to say here.
+    public var showsFoot: Bool { mine && people && (accounts ?? 0) > 0 }
 
     /// Shared with people and nothing they could run on — no API key and no ChatGPT account signed in:
     /// none of them can start a session on it, and what fixes it — said to its owner alone, with "Add an
@@ -190,12 +196,19 @@ public enum SharePool {
             run = AddPoolKey.Fact(lead: "Their sessions run on the pool’s API keys",
                                   rest: ", which \(keys.count == 1 ? "is" : "are") \(SharedPoolPage.listOf(keys)) now.")
         }
-        return [
+        var facts = [
             AddPoolKey.Fact(lead: "They see \(pool.label)",
                             rest: " on their Providers page and in the session picker, and can start sessions on it."),
             run,
-            AddPoolKey.Fact(lead: "Everyone sees each person’s share", rest: " of this month’s API key use."),
         ]
+        // The accounts' own rule (migration 0371): what a member may sign in of their own, said before the
+        // share line, where the pool lets them.
+        if pool.membersCanAddAccounts {
+            facts.append(AddPoolKey.Fact(lead: "They can sign in ChatGPT accounts of their own",
+                                         rest: ", which then run everyone’s sessions here too — theirs and yours — until they take them out again."))
+        }
+        facts.append(AddPoolKey.Fact(lead: "Everyone sees each person’s share", rest: " of this month’s API key use."))
+        return facts
     }
 
     /// The addresses typed, in the order they were: a comma or a space ends one (web's `tokenSeparators`),

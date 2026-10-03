@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>Web：文件夹在会话列表里</title>
+<link rel="stylesheet" href="board.css"></head>
+<body>
+<h1>Web：文件夹在会话列表里</h1>
+<p class="lede" style="width:1500px">和 iOS 同一套规则（<code>docs/session-folders-move-design.md</code> §3）：文件夹属于某个 Workspace，排在列表最上面、按名字排序；进了文件夹的会话不再出现在下面的时间分组里，所以文件夹行要替里面的会话报状态。每张图都是在真实 Web 控制台上截的，新加的部分直接用控制台自己的样式画进页面；红色虚线和数字是标注。</p>
+
+<div class="row">
+  <div class="col" style="width:1080px">
+    <div class="cap"><span class="tag new">改后</span>Open 列表：文件夹排在 Pinned 上面</div>
+    <div class="shot" style="width:1080px"><img src="shots/a1.png" alt=""></div>
+  </div>
+  <div class="col" style="width:380px;padding-top:30px">
+    <ul class="notes">
+      <li class="n" data-n="1"><b>文件夹行</b>：图标 + 名字 + 会话数 + ›。只有一行高，比会话行矮，一眼能和会话分开。Open 显示全部文件夹，空的也显示。</li>
+      <li class="n" data-n="2"><b>有会话等你</b>：琥珀色数字，就是侧栏 Workspace 行那颗。</li>
+      <li class="n" data-n="3"><b>有会话在跑</b>：文件夹图标右下角一个蓝点，跟 Web 侧栏的 Workspace 行一样。iOS 这里用转圈；Web 的转圈只给会话行用，免得一屏好几个在转。</li>
+      <li>文件夹图标用靛蓝色，和侧栏 Workspace 行的灰色文件夹区分开，也和 Move 按钮同色。</li>
+      <li>点文件夹行，会话栏换成这个文件夹的列表（见下面第一张图）。右边的对话不动。</li>
+    </ul>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col" style="width:480px">
+    <div class="cap"><span class="tag new">新增</span>文件夹页：会话栏原地换成文件夹</div>
+    <div class="shot" style="width:328px"><img src="shots/a2.png" alt=""></div>
+    <ul class="notes">
+      <li class="n" data-n="1">‹ 回到 orbit 的列表。标题是文件夹名，下面一行小字是 Workspace 名。地址栏带上文件夹，浏览器后退、刷新都能回到对的地方。</li>
+      <li class="n" data-n="2">⋯ 里是 <b>Rename…</b>、<b>Delete Folder…</b>。</li>
+      <li class="n" data-n="3">在这里点 New session，新会话直接建在这个文件夹里。</li>
+      <li>列表和外面一样：Pinned、时间分组、行、悬停按钮都相同。看的范围跟着进来时的列表：从 Open 进来看 Open 的会话，从 Completed 进来看已完成的。</li>
+    </ul>
+  </div>
+  <div class="col" style="width:480px">
+    <div class="cap"><span class="tag new">新增</span>新建：Open ▾ 菜单最下面</div>
+    <div class="shot" style="width:328px"><img src="shots/a3.png" alt=""></div>
+    <ul class="notes">
+      <li class="n" data-n="1"><b>New Folder…</b>。iOS 放在 ≡ 菜单里，Web 对应的就是这个 Open ▾ 菜单：切换视图、按标签筛选、分组都在里面。</li>
+      <li>另一个入口在 Move 对话框里（见 02）：在那里新建，文件夹建好就把当前会话放进去。</li>
+    </ul>
+  </div>
+  <div class="col" style="width:480px">
+    <div class="cap"><span class="tag new">新增</span>新建文件夹直接在列表里输名字</div>
+    <div class="shot" style="width:328px"><img src="shots/a4.png" alt=""></div>
+    <ul class="notes">
+      <li class="n" data-n="1">文件夹区顶部出现一个输入框，回车建好，Esc 取消。建好后按名字排到该在的位置。</li>
+      <li>Web 改会话标题本来就是在原地改（双击标题），文件夹照这个做，不弹窗。iOS 用的是系统输入弹窗。</li>
+    </ul>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col" style="width:480px">
+    <div class="cap"><span class="tag new">新增</span>鼠标移到文件夹行上，出现 ⋯</div>
+    <div class="shot" style="width:328px"><img src="shots/a5.png" alt=""></div>
+    <ul class="notes">
+      <li class="n" data-n="1"><b>Rename…</b>、<b>Delete Folder…</b>，和文件夹页 ⋯ 里的是同一组。iOS 靠长按打开，Web 用 ⋯，和 Completed 行的 ⋯ 一个做法。</li>
+    </ul>
+  </div>
+  <div class="col" style="width:480px">
+    <div class="cap"><span class="tag new">新增</span>改名也在原地改，重名时提示就写在下面</div>
+    <div class="shot" style="width:328px"><img src="shots/a6.png" alt=""></div>
+    <ul class="notes">
+      <li class="n" data-n="1">同一个 Workspace 里不能重名，服务端会拒绝（409）。提示文案沿用 iOS：<i>There’s already a folder named “Release” in orbit. Choose another name.</i></li>
+    </ul>
+  </div>
+  <div class="col" style="width:480px">
+    <div class="cap"><span class="tag new">新增</span>删除前确认</div>
+    <div class="shot" style="width:440px"><img src="shots/a7.png" alt=""></div>
+    <ul class="notes">
+      <li>用 Web 现有的确认框，和 <i>Delete permanently?</i> 那个一样。</li>
+      <li>只删文件夹本身：里面的会话回到列表，不会进回收站。文案和 iOS 相同，不写会话数量：列表只数当前视图（Open 或 Completed）里的会话，可文件夹里的会话会全部回到列表。</li>
+    </ul>
+  </div>
+</div>
+
+<div class="box" style="width:1500px">
+  <h2>什么时候显示文件夹（和 iOS 相同）</h2>
+  <table>
+    <tr><th style="width:300px">列表</th><th>文件夹</th></tr>
+    <tr><td>Open</td><td>全部文件夹，空的也显示</td></tr>
+    <tr><td>Completed</td><td>只显示里面有已完成会话的文件夹（数量也只数已完成的，见 02 第三张图）</td></tr>
+    <tr><td>Trash</td><td>不显示，列表平铺</td></tr>
+    <tr><td>Filter by Tag / Group by Tag</td><td>不显示，列表平铺，免得文件夹和标签两套分组叠在一起</td></tr>
+    <tr><td>搜索（Ctrl K）</td><td>搜索结果本来就跨 Workspace 平铺，不变</td></tr>
+    <tr><td>别的设备改了文件夹</td><td>收到服务端的 <code>FOLDER_CHANGED</code> 事件就刷新文件夹（Web 现在还不处理这个事件）</td></tr>
+  </table>
+</div>
+</body></html>

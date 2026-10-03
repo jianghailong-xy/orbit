@@ -94,6 +94,27 @@ type PoolEditRow = PoolAdmissionRow & { id: string; label: string };
  *  provider lists use — and, for a Codex pool of the caller's own, the ChatGPT accounts it holds
  *  (migration 0323). Only the columns `codexLoginView` reads are selected, and no token is among them:
  *  the encrypted pair is never selected on any path that builds a response. */
+/** A pool's ChatGPT logins, read beside the pool itself: a login belongs to a person of the pool
+ *  (migration 0371), so it is no relation of the pool row. Each by its email and `…AB12`, oldest first. */
+const POOL_LOGIN_SELECT = {
+  poolId: true,
+  accountId: true,
+  // Who signed it in — the person whose sign-in again brings it back, and who may take it out with the
+  // pool's admins.
+  userId: true,
+  email: true,
+  plan: true,
+  state: true,
+  lastError: true,
+  expiresAt: true,
+  createdAt: true,
+  // What the pool gateway last read off the backend's answers, and the reset it named (migration 0324).
+  usage: true,
+  spentUntil: true,
+} satisfies Prisma.PoolCodexLoginSelect;
+
+type PoolLoginRow = Prisma.PoolCodexLoginGetPayload<{ select: typeof POOL_LOGIN_SELECT }>;
+
 const POOL_SELECT = {
   id: true,
   slug: true,
@@ -101,21 +122,6 @@ const POOL_SELECT = {
   createdAt: true,
   updatedAt: true,
   engine: true,
-  logins: {
-    orderBy: [{ createdAt: 'asc' }, { accountId: 'asc' }],
-    select: {
-      accountId: true,
-      email: true,
-      plan: true,
-      state: true,
-      lastError: true,
-      expiresAt: true,
-      createdAt: true,
-      // What the pool gateway last read off the backend's answers, and the reset it named (migration 0324).
-      usage: true,
-      spentUntil: true,
-    },
-  },
   members: {
     orderBy: [
       { provider: { position: { sort: 'asc', nulls: 'last' } } },
@@ -126,18 +132,39 @@ const POOL_SELECT = {
   },
 } satisfies Prisma.ProviderPoolSelect;
 
-function poolView({ members, logins, ...pool }: Prisma.ProviderPoolGetPayload<{ select: typeof POOL_SELECT }>) {
+function poolView(
+  { members, ...pool }: Prisma.ProviderPoolGetPayload<{ select: typeof POOL_SELECT }>,
+  logins: PoolLoginRow[],
+) {
   return { ...pool, members: members.map((member) => member.provider), ...loginsOf(logins) };
 }
 
 /** A pool's accounts as every read of it carries them, each by its email and `…AB12`: `logins`, every
- *  ChatGPT account a Codex pool of its owner's own holds, oldest first — none for every Claude pool, and
- *  for a Codex one nobody has signed into yet — and `login`, the first of them or null, which is the one
- *  its sessions run on. Built by `codexLoginView`, which cannot see a token: none is selected. */
-function loginsOf(rows: { accountId: string; email: string | null; plan: string | null; state: string;
-  lastError: string | null; expiresAt: Date; createdAt: Date; usage: Prisma.JsonValue; spentUntil: Date | null }[]) {
+ *  ChatGPT account a Codex pool holds — whoever in the pool signed it in (migration 0371) — oldest first,
+ *  none for every Claude pool and for a Codex one nobody has signed into yet — and `login`, the first of
+ *  them or null, which is the one its sessions run on. Built by `codexLoginView`, which cannot see a
+ *  token: none is selected. */
+function loginsOf(rows: PoolLoginRow[]) {
   const logins = rows.map((row) => codexLoginView(row, row.usage as PlanUsageSnapshot | null)!);
   return { login: logins[0] ?? null, logins };
+}
+
+/** The ChatGPT logins of each pool given, oldest first, read beside the pools themselves — a login is a
+ *  person of the pool's (migration 0371), so it hangs off no relation of the pool's row. */
+async function loginsByPool(
+  db: Prisma.TransactionClient | PrismaService,
+  poolIds: string[],
+): Promise<Map<string, PoolLoginRow[]>> {
+  const rows = poolIds.length
+    ? await db.poolCodexLogin.findMany({
+        where: { poolId: { in: poolIds } },
+        orderBy: [{ createdAt: 'asc' }, { accountId: 'asc' }],
+        select: POOL_LOGIN_SELECT,
+      })
+    : [];
+  const byPool = new Map<string, PoolLoginRow[]>();
+  for (const row of rows) byPool.set(row.poolId, [...(byPool.get(row.poolId) ?? []), row]);
+  return byPool;
 }
 
 /** The same pools, read with what asking each member's credential for its quota takes (poolViews). The key
@@ -508,7 +535,8 @@ export class ProvidersService {
       }),
     );
     this.publishChanged(ownerId, pool.id);
-    return poolView(pool);
+    // A pool is made with no ChatGPT login in it: every one is signed in afterwards (CodexLoginService).
+    return poolView(pool, []);
   }
 
   /** One of the caller's pools, as its page reads it — the members it holds and where each of them
@@ -654,7 +682,7 @@ export class ProvidersService {
       select: POOL_SELECT,
     });
     if (!pool) throw new NotFoundException('pool not found');
-    return poolView(pool);
+    return poolView(pool, (await loginsByPool(this.prisma, [pool.id])).get(pool.id) ?? []);
   }
 
   /**
@@ -686,23 +714,28 @@ export class ProvidersService {
           select: { poolId: true, enabled: true, state: true },
         })
       : [];
-    return pools.map(({ members, logins: rows, ...pool }) => {
-      const { login, logins } = loginsOf(rows);
+    const accountsByPool = await loginsByPool(this.prisma, codexIds);
+    return pools.map(({ members, ...pool }) => {
+      const { login, logins } = loginsOf(accountsByPool.get(pool.id) ?? []);
       // A Codex pool of the owner's own runs on its ChatGPT accounts, not on member providers: it holds
       // none, and what decides whether it can take a session is whether one of its accounts is ACTIVE,
       // which the claim can put the session on — or, with none, whether one of its API keys can run
       // (QueueService.accountPoolRefusal). A quota that has not been read does not decide it — that is
       // `login.usage` being null, and the account runs.
       if (pool.engine === AgentProvider.CODEX) {
+        const account = logins.find((view) => view.state === 'ACTIVE') ?? login;
         return {
           ...pool,
           login,
           logins,
           resetsAt: null,
+          // The owner reads this: the sentence says "sign in again" only for an account they signed in
+          // themselves — one of the pool's may be a member's (migration 0371).
           unavailable: codexPoolUnavailableReason(
             pool.label,
-            logins.find((view) => view.state === 'ACTIVE') ?? login,
+            account,
             keys.filter((key) => key.poolId === pool.id),
+            account?.userId === ownerId,
           ),
           members: [],
         };

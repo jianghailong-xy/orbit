@@ -518,7 +518,7 @@ describe('Antigravity defaults', () => {
     expect(PROVIDER_OPTIONS).toContainEqual({ value: 'antigravity', label: 'Antigravity' });
     expect(mergedProviderOptions(null).map((option) => option.value)).toContain('antigravity');
     expect(providerIdentityResolved('antigravity')).toBe(true);
-    // agy cannot ask anyone, so Auto is not a per-model question for it.
+    // agy runs Auto as --dangerously-skip-permissions on any model, so it is not a per-model question.
     expect(supportsAuto('gemini-3.1-pro', 'antigravity')).toBe(true);
   });
 

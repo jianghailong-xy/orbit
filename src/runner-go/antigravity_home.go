@@ -23,6 +23,7 @@ package main
 //	<dir>/config/mcp_config.json          the MCP servers: Orbit's own and the agent's
 //	<dir>/GEMINI.md                       the agent's instructions, which agy loads as user rules
 //	<dir>/antigravity-cli/bin -> <runner>/antigravity/bin
+//	<dir>/config/hooks.json, <dir>/orbit/ Orbit's approval gate, in the modes that ask (antigravity_approval.go)
 
 import (
 	"encoding/json"

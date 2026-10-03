@@ -907,7 +907,7 @@ final class AgentDefaultsTests: XCTestCase {
         XCTAssertEqual(AgentDefaults.providerName("antigravity", configured: nil), "Antigravity")
         // Its catalog and Runtime default are keyed on its own name, never Claude's.
         XCTAssertEqual(AgentDefaults.runtime(for: "antigravity"), "antigravity")
-        // agy cannot ask anyone, so Auto is not a per-model question for it.
+        // agy runs Auto as --dangerously-skip-permissions on any model, so it is not a per-model question.
         XCTAssertTrue(AgentDefaults.supportsAuto("gemini-3.1-pro", provider: "antigravity"))
         XCTAssertEqual(AgentDefaults.clampPermissionMode(.auto, for: "gemini-3.1-pro",
                                                          provider: "antigravity"), .auto)

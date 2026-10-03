@@ -117,7 +117,7 @@ final class SharedPoolCopyParityTests: XCTestCase {
         assertSays(tags, "label: '\(status(invalid))', color: 'red'", in: Self.providerPools)
         assertSays(tags, "label: '\(status(off))', color: 'default'", in: Self.providerPools)
         assertSays(tags, "`At cap · resets ${formatCapReset(member.resetsAt)}` : 'At cap'", in: Self.providerPools)
-        assertSays(tags, "pool.shared ? 'No key can run' : 'No account can run'", in: Self.providerPools)
+        assertSays(tags, "keysOnly ? 'No key can run' : 'No account can run'", in: Self.providerPools)
 
         // A key OpenAI put out of budget (P2's `spentUntil`) says so, with the date its mark runs to, in
         // the web's own sentence and colour — and out of budget outranks the cap.
@@ -133,7 +133,8 @@ final class SharedPoolCopyParityTests: XCTestCase {
                    in: Self.accountPools)
 
         let lib = try web(Self.sharedPools)
-        assertSays(lib, "pool.keys.length === 0 ? 'No keys' : 'No key can run'", in: Self.sharedPools)
+        assertSays(lib, "pool.keys.length === 0 ? pool.shared ? 'No keys' : 'Not signed in' : 'No key can run',",
+                   in: Self.sharedPools)
         assertSays(lib, "{ month: 'short', day: 'numeric', timeZone: 'UTC' }", in: Self.sharedPools)
         assertSays(lib, "`sk-…${key.trim().slice(-4)}`", in: Self.sharedPools)
         // The colours people wear, in the web's order.
