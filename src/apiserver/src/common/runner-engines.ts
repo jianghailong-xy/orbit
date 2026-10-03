@@ -1,4 +1,5 @@
 import type {
+  InstallEngine,
   LoginEngine,
   ReportedEngine,
   RunnerEngineAccount,
@@ -25,6 +26,10 @@ export function engineKeepsAccounts(engine: unknown): engine is LoginEngine {
 
 export function isLoginEngine(value: unknown): value is LoginEngine {
   return typeof value === 'string' && LOGIN_ENGINES.includes(value as LoginEngine);
+}
+
+export function isInstallEngine(value: unknown): value is InstallEngine {
+  return isLoginEngine(value) || value === 'antigravity';
 }
 
 /**

@@ -26,6 +26,8 @@ public struct ConfiguredProviderModel: Codable, Equatable, Sendable, Identifiabl
 /// pickers alongside claude/codex. The payload is de-sensitized (enabled providers only, no
 /// key/baseUrl). Mirrors web's `ConfiguredProvider` (lib/agentDefaults.ts).
 public struct ConfiguredProvider: Codable, Equatable, Sendable, Identifiable {
+    /// The configured row's id, used to open its key editor in the web app.
+    public var providerID: String? = nil
     public let slug: String
     public let label: String
     /// The built-in runtime the provider borrows: "claude", "codex", "kimi" or "antigravity".
@@ -48,6 +50,11 @@ public struct ConfiguredProvider: Codable, Equatable, Sendable, Identifiable {
     /// endpoint, neither of which has a 5-hour/weekly window at all. Served by GET /providers.
     public let planUsage: PlanUsageSnapshot?
     public var id: String { slug }
+
+    private enum CodingKeys: String, CodingKey {
+        case providerID = "id"
+        case slug, label, runtime, models, defaultModel, presetSlug, modelsFromRuntime, planUsage
+    }
 
     public init(slug: String, label: String, runtime: String? = nil,
                 models: [ConfiguredProviderModel] = [], defaultModel: String? = nil,

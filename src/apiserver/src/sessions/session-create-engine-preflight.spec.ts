@@ -17,7 +17,7 @@ const SIGNED_OUT: RunnerEngineHealth[] = [
   { engine: 'codex', installed: true, version: '0.9.1', auth: 'yes' },
 ];
 
-function makeService(engines: unknown, runnerOverrides: Record<string, unknown> = {}) {
+function makeService(engines: unknown, runnerOverrides: Record<string, unknown> = {}, configuredRuntime?: string) {
   const creates: Array<Record<string, unknown>> = [];
   const prisma = {
     // create() reads the owner's account-level permission default when the caller names none.
@@ -45,7 +45,7 @@ function makeService(engines: unknown, runnerOverrides: Record<string, unknown> 
         ...runnerOverrides,
       }),
     },
-    modelProvider: { findFirst: async () => null },
+    modelProvider: { findFirst: async () => configuredRuntime ? { runtime: configuredRuntime } : null },
     session: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
         creates.push(data);
@@ -167,16 +167,53 @@ test('a session that brings its own credentials ignores the local sign-in', () =
     }),
     null,
   );
-  // Antigravity runs on a Gemini API key from its own environment: there is no sign-in on the
-  // machine to be out of, whatever the runner's probe says, so a missing key fails at spawn instead.
+  // A Gemini provider brings the encrypted key it dispatches on, regardless of the runner's env.
   assert.equal(
     signedOutEngineRefusal({
       runtime: 'antigravity',
-      bringsOwnCredentials: false,
+      bringsOwnCredentials: true,
       runner: { ...runner, engines: [{ engine: 'antigravity', installed: true, auth: 'no' }] },
     }),
     null,
   );
+});
+
+test('built-in Antigravity refuses an explicitly missing Gemini key and points to Providers', async () => {
+  const fixture = makeService([{ engine: 'antigravity', installed: true, auth: 'no' }], { displayName: 'HPC' });
+  await assert.rejects(
+    fixture.service.create('owner-1', { ...PROMPT, provider: 'antigravity' }),
+    (error: unknown) => {
+      assert.ok(error instanceof ConflictException);
+      assert.match(error.message, /Antigravity needs a Gemini API key on runner "HPC"/);
+      assert.match(error.message, /Connect Gemini in Providers \(\/providers\/new\/gemini\)/);
+      return true;
+    },
+  );
+  assert.deepEqual(fixture.creates, []);
+});
+
+test('a configured Gemini provider creates a session when the runner has no Gemini env key', async () => {
+  const fixture = makeService([{ engine: 'antigravity', installed: true, auth: 'no' }], {}, 'antigravity');
+  await fixture.service.create('owner-1', { ...PROMPT, provider: 'gemini' });
+  assert.equal(fixture.creates.length, 1);
+  assert.equal(fixture.creates[0].provider, 'gemini');
+  assert.equal(fixture.creates[0].providerBuiltin, false);
+});
+
+test('Antigravity credential preflight only refuses a definite no on an online runner', () => {
+  const runner = { name: 'build-box', status: 'ONLINE', lastHeartbeatAt: new Date(), engines: [{ engine: 'antigravity', installed: true, auth: 'no' }] };
+  const check = (overrides: Record<string, unknown> = {}, workspaceEnv?: unknown) => signedOutEngineRefusal({
+    runtime: 'antigravity', bringsOwnCredentials: false, runner: { ...runner, ...overrides }, workspaceEnv,
+  });
+  assert.ok(check());
+  assert.ok(check({}, { GEMINI_API_KEY: '   ' }));
+  assert.equal(check({}, { GEMINI_API_KEY: 'test-workspace-key' }), null);
+  assert.equal(check({ engines: [{ engine: 'antigravity', installed: true, auth: 'yes' }] }), null);
+  assert.equal(check({ engines: [{ engine: 'antigravity', installed: true, auth: 'unknown' }] }), null);
+  assert.equal(check({ engines: null }), null);
+  assert.equal(check({ status: 'OFFLINE' }), null);
+  assert.equal(check({ lastHeartbeatAt: new Date(Date.now() - 10 * 60_000) }), null);
+  assert.ok(check({ engines: [{ engine: 'antigravity', installed: false, auth: 'no' }] }), 'an explicit missing key is actionable even before install');
 });
 
 test('kimi needs both halves of its environment provider to skip the check', () => {

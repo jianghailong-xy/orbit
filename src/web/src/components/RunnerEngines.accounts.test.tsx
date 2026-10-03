@@ -159,6 +159,7 @@ describe('a runner with two Codex accounts', () => {
       'Claude Code',
       'Codex',
       'Kimi Code',
+      'Antigravity CLI',
     ]);
     expect(tags(engineRows[0])).toEqual(['Signed in']);
     expect(tags(engineRows[2])).toEqual(['Signed in']);

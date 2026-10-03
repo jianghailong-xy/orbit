@@ -523,13 +523,16 @@ describe('Antigravity defaults', () => {
     expect(supportsAuto('gemini-3.1-pro', 'antigravity')).toBe(true);
   });
 
-  it('offers the models the runner reports, and agy’s own pick only until it reports them', () => {
+  it('offers the runner models and labels the no-catalogue fallback with Gemini’s preset default', () => {
     expect(modelOptionsForProvider('antigravity', catalog)).toEqual([
       { value: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash' },
       { value: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro' },
     ]);
     expect(modelOptionsForProvider('antigravity')).toEqual(ANTIGRAVITY_MODEL_OPTIONS);
-    expect(ANTIGRAVITY_MODEL_OPTIONS).toEqual([{ value: '', label: 'Managed by Antigravity' }]);
+    expect(ANTIGRAVITY_MODEL_OPTIONS).toEqual([{ value: '', label: 'Gemini 3.8 Flash' }]);
+    expect(modelOptionsForProvider('antigravity', { claude: [{ value: 'claude-opus-5', label: 'Opus 5' }] }))
+      .toEqual([{ value: '', label: 'Gemini 3.8 Flash' }]);
+    expect(defaultModelForProvider('antigravity')).toBe('');
   });
 
   it('defaults like the other built-ins, and never to a Claude model', () => {
