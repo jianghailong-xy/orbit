@@ -68,10 +68,11 @@ export function isLocalSlashCommand(name: string): boolean {
   return LOCAL_SLASH_ITEMS.some((it) => it.name.toLowerCase() === name.toLowerCase());
 }
 
-/** Codex and OpenCode take slash-prefixed text as an ordinary runtime prompt and have no
- *  runner slash registry; Kimi exposes commands and skills through ACP. */
+/** Codex, OpenCode and Antigravity take slash-prefixed text as an ordinary runtime prompt and
+ *  have no runner slash registry (agy is started with `--disable-slash-commands`, since its own
+ *  command handler ends a stream-json session); Kimi exposes commands and skills through ACP. */
 export function supportsRunnerSlashAssets(provider?: string | null): boolean {
-  return provider !== 'codex' && provider !== 'opencode';
+  return provider !== 'codex' && provider !== 'opencode' && provider !== 'antigravity';
 }
 
 /** Match one runner-owned slash asset to the active runtime. Untagged assets come
@@ -80,7 +81,9 @@ export function slashAssetMatchesProvider(
   assetProvider: string | null | undefined,
   activeProvider: string | null | undefined,
 ): boolean {
-  if (activeProvider === 'codex' || activeProvider === 'opencode') return false;
+  if (activeProvider === 'codex' || activeProvider === 'opencode' || activeProvider === 'antigravity') {
+    return false;
+  }
   if (activeProvider === 'kimi') return assetProvider === 'kimi';
   return !assetProvider || assetProvider === 'claude';
 }

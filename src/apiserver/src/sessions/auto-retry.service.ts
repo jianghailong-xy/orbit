@@ -42,6 +42,10 @@ import {
   SESSION_REPLY_TURN_PREFIX,
 } from './session-request';
 import { AUTO_RETRY_TURN_KEY_PREFIX } from './watch-turn-key';
+import {
+  confirmationReviewRetryTurnId,
+  isConfirmationReviewContentTurn,
+} from '../tasks/owner-confirmation-review-turn';
 import { runAccount } from '../providers/plan-usage-accounts';
 import {
   classifyTransactionError,
@@ -97,6 +101,8 @@ interface ResendMessage {
   senderSessionId: string | null;
   turnId: string | null;
   sessionReplies?: true;
+  /** The key of a failed confirmation-review or return turn, which is re-sent as itself. */
+  confirmationReviewTurn?: string;
 }
 
 /**
@@ -509,7 +515,12 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         // taken onto it as it is written (sessions/session-request.ts). Only while some are held —
         // with none, it would wake the session to say nothing.
         const resendsReplies = !!message.sessionReplies && await hasHeldSessionReplies(this.prisma, session.id);
-        if (!content && !resendsReplies) {
+        // A failed confirmation review or return turn is re-sent as itself, its block rendered again
+        // from the rows (tasks/owner-confirmation-review-turn.ts) — nobody's words either.
+        const resendsReview = message.confirmationReviewTurn
+          ? confirmationReviewRetryTurnId(message.confirmationReviewTurn, randomUUID())
+          : null;
+        if (!content && !resendsReplies && !resendsReview) {
           // Nothing to re-send (no user message, no opening prompt to fall back on). Sending
           // an invented "continue" would be us writing in the user's voice.
           await this.disarm(session.id, session.status, 'nothing to re-send');
@@ -593,7 +604,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
               // again, so its outcomes are found, merged and drawn as what they are.
               clientTurnId: resendsReplies
                 ? `${SESSION_REPLY_TURN_PREFIX}retry:${randomUUID()}`
-                : `${AUTO_RETRY_TURN_KEY_PREFIX}${randomUUID()}`,
+                : resendsReview ?? `${AUTO_RETRY_TURN_KEY_PREFIX}${randomUUID()}`,
             },
             {
               ...this.resendCarrying(session.id, message, resendsReplies),
@@ -1136,6 +1147,12 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         const keyOfTurn = turns.find((turn) => turn.id === event.turnId)?.clientTurnId;
         if (isSessionReplyTurn(keyOfTurn)) {
           return { content: '', attachmentsOf: null, senderSessionId: null, turnId: null, sessionReplies: true };
+        }
+        // A confirmation request handed to its reviewer, or a reviewer's return handed to the run
+        // (tasks/owner-confirmation-review-turn.ts), is re-sent as itself: stepping past it would
+        // re-send a message the session already answered.
+        if (keyOfTurn && isConfirmationReviewContentTurn(keyOfTurn)) {
+          return { content: '', attachmentsOf: null, senderSessionId: null, turnId: null, confirmationReviewTurn: keyOfTurn };
         }
         if (isBackgroundWakeTurn(keyOfTurn)) break;
         const original = executableFor(event.turnId);

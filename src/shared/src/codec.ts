@@ -536,6 +536,14 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // one (a history reference with no foreign key). Addresses a reader follows — never a fence.
   'jobId',
   'requestedByUserId',
+  // A confirmation request's review (migration 0370, docs/owner-confirmation-review-contract.md
+  // §3.4): the review row, the REVIEW record a decision was made against, the run the request came
+  // from and the session that reviews it. Addresses a reader follows; the request itself keeps its
+  // raw `requestId` (below). `recordId` is registered above.
+  'reviewId',
+  'reviewRecordId',
+  'runSessionId',
+  'reviewerSessionId',
 ]);
 
 /** `@db.Uuid` columns that are NOT public ids. They are opaque lease/fence tokens: the runner

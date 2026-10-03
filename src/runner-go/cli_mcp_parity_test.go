@@ -80,6 +80,15 @@ var cliParityParamAlias = map[string]string{
 	"paths": "--path",
 }
 
+// Tools whose command takes the whole MCP input as ONE JSON document (`--input JSON | --input-file -`),
+// because that is the input's shape: a confirmation review is four lists of structured lines, which
+// nobody types as flags (docs/owner-confirmation-review-contract.md §3.5, §8 B1). Every parameter is
+// then a key of that document, and is documented by its own name inside the --input argument.
+var cliParityJSONInputTools = map[string]bool{
+	"task_confirmation_review": true,
+	"task_confirmation_return": true,
+}
+
 // The CLI and the MCP server are two doors onto the same API, and `orbit capabilities` is what an
 // agent reads to find the CLI one. So every tool must have a command, and every parameter must be
 // named in that command's documented arguments — this is exactly what drifted when session_create
@@ -108,7 +117,21 @@ func TestCLICapabilitiesCoverEveryMCPToolAndParameter(t *testing.T) {
 		documented := strings.Join(spec.Arguments, " ")
 		schema, _ := descriptor["inputSchema"].(map[string]interface{})
 		props, _ := schema["properties"].(map[string]interface{})
+		input := ""
+		if cliParityJSONInputTools[name] {
+			for _, argument := range spec.Arguments {
+				if strings.HasPrefix(argument, "--input ") {
+					input = argument
+				}
+			}
+			if input == "" {
+				t.Errorf("%s takes its input as one JSON document but documents no --input argument: %v", name, spec.Arguments)
+			}
+		}
 		for _, param := range sortedParamNames(props) {
+			if input != "" && regexp.MustCompile(`\b`+param+`\b`).MatchString(input) {
+				continue
+			}
 			if !cliDocumentsParam(documented, param) {
 				t.Errorf("%s does not document MCP parameter %q: %v", name, param, spec.Arguments)
 			}

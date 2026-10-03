@@ -1,0 +1,253 @@
+{
+  "about": [
+    "The owner-confirmation card's two new lines of sight: the \"If you confirm\" block right above",
+    "Confirm done, and the folded \"What counts as done\" row with its item count. One set of cases both",
+    "clients are proved against: the web reads this file in `OwnerConfirmationCard.test.tsx`",
+    "(`ifConfirmedRows`, `criteriaItemsLabel`), the native client in `OwnerConfirmationIfConfirmedTests`",
+    "(`OwnerConfirmations.ifConfirmedRows`, `OwnerConfirmations.criteriaItemsLabel`), so the browser,",
+    "the Mac and the phone cannot say two different things about one confirmation.",
+    "",
+    "`rows`: `ifConfirmed` as `GET /tasks/:taskId/owner-confirmation` publishes it (an item the server",
+    "could not read is absent) → the rows the block draws, in order. `kind` picks the row's symbol;",
+    "`lead` is its first line; `added` is the branch's added lines, drawn after ` · ` in the diff's",
+    "green; `detail` is the quieter second line. No rows → no block at all.",
+    "",
+    "`criteria`: a task's acceptance criteria (Markdown) → the count the folded row says. Top-level",
+    "list items are counted when there are any, paragraphs otherwise; nothing written → null, and the",
+    "box says nobody wrote it down instead of folding."
+  ],
+  "rows": [
+    {
+      "case": "nothing waiting: no block",
+      "ifConfirmed": null,
+      "rows": []
+    },
+    {
+      "case": "every item failed to read: no block",
+      "ifConfirmed": {},
+      "rows": []
+    },
+    {
+      "case": "nothing to start, no branch, nothing lands, no open run: no block",
+      "ifConfirmed": {
+        "startsTasks": [],
+        "startsAfterLanding": false,
+        "branch": null,
+        "landing": "NONE",
+        "endsSession": null
+      },
+      "rows": []
+    },
+    {
+      "case": "the mock's card: one task starts now, and the branch is not on main",
+      "ifConfirmed": {
+        "startsTasks": [
+          { "id": "t2", "title": "会话间消息署名：自动重试遇到请求、手动 Retry、计数口径三处待定", "starts": "NOW" }
+        ],
+        "startsAfterLanding": false,
+        "branch": { "name": "orbit/p1-1c207b", "linesAdded": 9432, "linesRemoved": 11, "files": 41, "onMain": "NO" },
+        "landing": "NONE",
+        "endsSession": null
+      },
+      "rows": [
+        {
+          "kind": "START",
+          "lead": "Starts 1 task waiting on this one",
+          "added": null,
+          "detail": "会话间消息署名：自动重试遇到请求、手动 Retry、计数口径三处待定"
+        },
+        {
+          "kind": "BRANCH",
+          "lead": "Not on main yet",
+          "added": "+9,432",
+          "detail": "orbit/p1-1c207b — confirming doesn’t merge it"
+        }
+      ]
+    },
+    {
+      "case": "every tier, several tasks, a run with no jobs left",
+      "ifConfirmed": {
+        "startsTasks": [
+          { "id": "a", "title": "Draw the card on iOS", "starts": "NOW" },
+          { "id": "b", "title": "Draw the card on the web", "starts": "NOW" },
+          { "id": "c", "title": "Review the copy", "starts": "WHEN_SLOT_FREES" },
+          { "id": "d", "title": "Release notes", "starts": "MANUAL" }
+        ],
+        "startsAfterLanding": false,
+        "branch": null,
+        "landing": "NONE",
+        "endsSession": { "sessionId": "s1", "runningBgJobs": 0 }
+      },
+      "rows": [
+        { "kind": "START", "lead": "Starts 2 tasks waiting on this one", "added": null, "detail": "Draw the card on iOS · Draw the card on the web" },
+        { "kind": "START", "lead": "1 task starts when a slot frees", "added": null, "detail": "Review the copy" },
+        { "kind": "START", "lead": "1 task becomes ready to start", "added": null, "detail": "Release notes" },
+        { "kind": "ENDS_SESSION", "lead": "Ends this session", "added": null, "detail": null }
+      ]
+    },
+    {
+      "case": "several waiting for a slot, several to start by hand",
+      "ifConfirmed": {
+        "startsTasks": [
+          { "id": "c", "title": "Review the copy", "starts": "WHEN_SLOT_FREES" },
+          { "id": "e", "title": "Translate the copy", "starts": "WHEN_SLOT_FREES" },
+          { "id": "d", "title": "Release notes", "starts": "MANUAL" },
+          { "id": "f", "title": "Tell the beta testers", "starts": "MANUAL" }
+        ],
+        "startsAfterLanding": false
+      },
+      "rows": [
+        { "kind": "START", "lead": "2 tasks start when a slot frees", "added": null, "detail": "Review the copy · Translate the copy" },
+        { "kind": "START", "lead": "2 tasks become ready to start", "added": null, "detail": "Release notes · Tell the beta testers" }
+      ]
+    },
+    {
+      "case": "a project task: dependents wait for the landing, the line asks again before main",
+      "ifConfirmed": {
+        "startsTasks": [
+          { "id": "a", "title": "Draw the card on iOS", "starts": "NOW" },
+          { "id": "c", "title": "Review the copy", "starts": "WHEN_SLOT_FREES" },
+          { "id": "d", "title": "Release notes", "starts": "MANUAL" }
+        ],
+        "startsAfterLanding": true,
+        "branch": { "name": "orbit/if-you-confirm-web-ios-macos-e62fb5", "linesAdded": 812, "linesRemoved": 64, "files": 9, "onMain": "NO" },
+        "landing": "LINE_THEN_OWNER",
+        "endsSession": { "sessionId": "s1", "runningBgJobs": 1 }
+      },
+      "rows": [
+        { "kind": "START", "lead": "Starts 1 task once this lands", "added": null, "detail": "Draw the card on iOS" },
+        { "kind": "START", "lead": "1 task starts once this lands and a slot frees", "added": null, "detail": "Review the copy" },
+        { "kind": "START", "lead": "1 task becomes ready to start once this lands", "added": null, "detail": "Release notes" },
+        { "kind": "BRANCH", "lead": "Not on main yet", "added": "+812", "detail": "orbit/if-you-confirm-web-ios-macos-e62fb5 — confirming doesn’t merge it" },
+        { "kind": "LANDING", "lead": "Goes onto the integration line; merging into main asks you again", "added": null, "detail": null },
+        { "kind": "ENDS_SESSION", "lead": "Ends this session · 1 background job stops", "added": null, "detail": null }
+      ]
+    },
+    {
+      "case": "several of each tier after the landing",
+      "ifConfirmed": {
+        "startsTasks": [
+          { "id": "a", "title": "A", "starts": "NOW" },
+          { "id": "b", "title": "B", "starts": "NOW" },
+          { "id": "c", "title": "C", "starts": "WHEN_SLOT_FREES" },
+          { "id": "e", "title": "E", "starts": "WHEN_SLOT_FREES" },
+          { "id": "d", "title": "D", "starts": "MANUAL" },
+          { "id": "f", "title": "F", "starts": "MANUAL" }
+        ],
+        "startsAfterLanding": true
+      },
+      "rows": [
+        { "kind": "START", "lead": "Starts 2 tasks once this lands", "added": null, "detail": "A · B" },
+        { "kind": "START", "lead": "2 tasks start once this lands and a slot frees", "added": null, "detail": "C · E" },
+        { "kind": "START", "lead": "2 tasks become ready to start once this lands", "added": null, "detail": "D · F" }
+      ]
+    },
+    {
+      "case": "Automatic: lands on main by itself, so the branch row does not say confirming will not merge it",
+      "ifConfirmed": {
+        "startsTasks": [],
+        "startsAfterLanding": true,
+        "branch": { "name": "orbit/fix-login-3c9a1e", "linesAdded": 1234567, "linesRemoved": 0, "files": 3, "onMain": "UNKNOWN" },
+        "landing": "AUTO_MAIN",
+        "endsSession": { "sessionId": "s1", "runningBgJobs": 3 }
+      },
+      "rows": [
+        { "kind": "BRANCH", "lead": "No record of this branch on main", "added": null, "detail": "orbit/fix-login-3c9a1e" },
+        { "kind": "LANDING", "lead": "Lands on main by itself if the checks pass", "added": null, "detail": null },
+        { "kind": "ENDS_SESSION", "lead": "Ends this session · 3 background jobs stop", "added": null, "detail": null }
+      ]
+    },
+    {
+      "case": "the branch is already on main: no branch row",
+      "ifConfirmed": {
+        "startsTasks": [],
+        "startsAfterLanding": false,
+        "branch": { "name": "orbit/merged-7f00aa", "linesAdded": 40, "linesRemoved": 2, "files": 2, "onMain": "YES" },
+        "landing": "LINE_THEN_OWNER",
+        "endsSession": null
+      },
+      "rows": [
+        { "kind": "LANDING", "lead": "Goes onto the integration line; merging into main asks you again", "added": null, "detail": null }
+      ]
+    },
+    {
+      "case": "the landing could not be read: the branch row claims nothing about merging, and no tier waits for a landing",
+      "ifConfirmed": {
+        "startsTasks": [
+          { "id": "a", "title": "Draw the card on iOS", "starts": "NOW" }
+        ],
+        "branch": { "name": "orbit/unread-landing-0b1c2d", "linesAdded": 0, "linesRemoved": 12, "files": 1, "onMain": "NO" },
+        "endsSession": { "sessionId": "s1", "runningBgJobs": 0 }
+      },
+      "rows": [
+        { "kind": "START", "lead": "Starts 1 task waiting on this one", "added": null, "detail": "Draw the card on iOS" },
+        { "kind": "BRANCH", "lead": "Not on main yet", "added": null, "detail": "orbit/unread-landing-0b1c2d" },
+        { "kind": "ENDS_SESSION", "lead": "Ends this session", "added": null, "detail": null }
+      ]
+    },
+    {
+      "case": "the run worked on no branch, and nothing else could be read",
+      "ifConfirmed": {
+        "branch": null
+      },
+      "rows": []
+    },
+    {
+      "case": "a branch outside any project, with no record of it on main",
+      "ifConfirmed": {
+        "startsTasks": [],
+        "startsAfterLanding": false,
+        "branch": { "name": "orbit/notes-5e5e5e", "linesAdded": 999, "linesRemoved": 1, "files": 1, "onMain": "UNKNOWN" },
+        "landing": "NONE",
+        "endsSession": null
+      },
+      "rows": [
+        { "kind": "BRANCH", "lead": "No record of this branch on main", "added": null, "detail": "orbit/notes-5e5e5e — confirming doesn’t merge it" }
+      ]
+    }
+  ],
+  "criteria": [
+    { "case": "nobody wrote any down", "acceptanceCriteria": null, "label": null },
+    { "case": "blank", "acceptanceCriteria": "  \n\n ", "label": null },
+    {
+      "case": "one sentence",
+      "acceptanceCriteria": "Every September invoice is in finance/2026-09/ named YYYY-MM-DD_vendor_amount.pdf, and summary.csv totals match the bank statement.",
+      "label": "1 item"
+    },
+    {
+      "case": "a heading over a bulleted list: the heading is not an item",
+      "acceptanceCriteria": "## Done when\n\n- all filed\n- totals match",
+      "label": "2 items"
+    },
+    {
+      "case": "a numbered list, as tasks here are usually written",
+      "acceptanceCriteria": "1. web、iOS、macOS 卡片按效果图第②台手机排版。\n2. 三端文案逐字一致。\n3. CI probe 拍出的 iOS 截图附在证据里。",
+      "label": "3 items"
+    },
+    {
+      "case": "six criteria, as on the mock",
+      "acceptanceCriteria": "1. One\n2. Two\n3. Three\n4. Four\n5. Five\n6. Six",
+      "label": "6 items"
+    },
+    {
+      "case": "a lead line, then items with a nested one: only the top-level items count",
+      "acceptanceCriteria": "It is done when:\n- the card folds\n  - and opens in place\n- the block sits above Confirm done",
+      "label": "2 items"
+    },
+    {
+      "case": "Chinese numbering",
+      "acceptanceCriteria": "1、三端一致\n2、文案逐字一致\n3）截图附上",
+      "label": "3 items"
+    },
+    {
+      "case": "paragraphs without a list are counted as paragraphs",
+      "acceptanceCriteria": "The card folds what counts as done into one row.\n\nThe block sits right above Confirm done.",
+      "label": "2 items"
+    },
+    {
+      "case": "a number that opens a sentence is not a list item",
+      "acceptanceCriteria": "1.5 GB is the cap\n2)x is not an item either",
+      "label": "1 item"
+    }
+  ]
+}

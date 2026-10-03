@@ -1758,6 +1758,31 @@ func (t *Transport) claimOwnerConfirmation(id, agentID, sessionID string) (json.
 	return out, err
 }
 
+// The reviewer's two answers to a confirmation request (docs/owner-confirmation-review-contract.md
+// §3.5, §8). The reviewing session is the authenticated header, like a declaration's: whoever may
+// review a request is decided by the control plane against the session the request was handed to,
+// never by a field of the body.
+func (t *Transport) reviewOwnerConfirmation(id, agentID, sessionID string, body interface{}) (json.RawMessage, error) {
+	return t.answerOwnerConfirmationReview(id, agentID, sessionID, "review", body)
+}
+
+func (t *Transport) returnOwnerConfirmation(id, agentID, sessionID string, body interface{}) (json.RawMessage, error) {
+	return t.answerOwnerConfirmationReview(id, agentID, sessionID, "return", body)
+}
+
+func (t *Transport) answerOwnerConfirmationReview(id, agentID, sessionID, verb string, body interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	if sessionID == "" {
+		return nil, fmt.Errorf("session id is required to review a confirmation request")
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/tasks/"+url.PathEscape(id)+"/owner-confirmation/"+verb,
+		body, &out, taskOpTimeout, taskCreateHeaders(agentID, sessionID))
+	return out, err
+}
+
 func (t *Transport) listTaskLists() (json.RawMessage, error) {
 	var out json.RawMessage
 	err := t.do(nil, "GET", "/runner/task-lists", nil, &out, taskOpTimeout)

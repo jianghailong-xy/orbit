@@ -244,6 +244,27 @@ final class RunnerAttentionCasesTests: XCTestCase {
                        "Never updated. Orbit retries every 30 min — Update Engines Now tries again right away.")
     }
 
+    /// Antigravity is reported like OpenCode — installed, versioned, updated by the same pass — so
+    /// the same case with agy in OpenCode's place raises it under its own CLI name. And never as signed
+    /// out, though a workspace runs on it: agy's key comes from its environment, not a sign-in.
+    func testAntigravityNeverUpdatedIsRaisedUnderItsOwnNameAndNeverAsSignedOut() throws {
+        let agy = try input("OpenCode never updated: raised under its own name") { input in
+            guard var runner = input["runner"] as? [String: Any],
+                  var engines = runner["engines"] as? [[String: Any]] else { return }
+            for index in engines.indices where engines[index]["engine"] as? String == "opencode" {
+                engines[index]["engine"] = "antigravity"
+                engines[index]["auth"] = "no"
+            }
+            runner["engines"] = engines
+            input["runner"] = runner
+            input["workspaces"] = [["id": "ws-agy", "name": "agy", "lastProvider": "antigravity"]]
+        }
+        let found = RunnerAttention.runnerAttention(agy)
+        XCTAssertEqual(found.map(\.title), ["Antigravity CLI update failed"])
+        XCTAssertEqual(found.first?.action, RunnerAttentionAction(kind: .updateEngines, engine: "antigravity",
+                                                                  workspaceId: nil, command: nil))
+    }
+
     // MARK: disk, Keep Free and versions
 
     private func workspaces(_ json: String) throws -> [RunnerAttentionWorkspace] {

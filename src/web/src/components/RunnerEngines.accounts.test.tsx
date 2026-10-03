@@ -264,7 +264,11 @@ describe('a runner with two Codex accounts', () => {
     const input = page.querySelector<HTMLInputElement>('.re-add input')!;
     expect(input.value).toBe('Account 3');
     expect(loginPosts()).toEqual([{ engine: 'codex', accountName: 'Account 3' }]);
-    expect(page.textContent).toContain('Starting sign-in on the runner…');
+    // The panel's pending words are the POST's ANSWER being drawn, not the press: the button's own
+    // "Starting…" comes from the mutation's local state and is already up, and under load the read
+    // lands between the two — the merge check red here on workstation-gpu was "expected
+    // '…Only a label for this page…Starting…Cancel…' to contain 'Starting sign-in on the runner…'".
+    await vi.waitFor(() => expect(page.textContent).toContain('Starting sign-in on the runner…'));
 
     // Cancelled, the panel offers the sign-in again — under whatever name is typed, and not under a
     // blank one, which would read as no account at all: the runner's own login.
@@ -282,7 +286,9 @@ describe('a runner with two Codex accounts', () => {
         input.dispatchEvent(new Event('input', { bubbles: true }));
       });
     await type('  ');
-    expect(button(page, 'Sign in to Codex').disabled).toBe(true);
+    // The same wait one answer later: the idle panel the Cancel's DELETE brings back is drawn from
+    // its response, and until it lands the sign-in button is not on the page at all.
+    await vi.waitFor(() => expect(button(page, 'Sign in to Codex').disabled).toBe(true));
     await type('  Personal ');
     await click(button(page, 'Sign in to Codex'));
     expect(loginPosts()).toEqual([

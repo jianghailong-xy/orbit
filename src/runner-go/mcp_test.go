@@ -139,6 +139,90 @@ func TestMCPTaskRequestConfirmationRefusesOutsideASession(t *testing.T) {
 	}
 }
 
+func TestMCPConfirmationReviewToolsPostTheInputUnderTheReviewingSession(t *testing.T) {
+	for _, tool := range []string{"task_confirmation_review", "task_confirmation_return"} {
+		if !hasMCPTool(toolDescriptors(false, false), tool) {
+			t.Fatalf("%s missing from the base task tools", tool)
+		}
+	}
+	srv, calls := confirmationReviewServer(t)
+	// The reviewer's own task is a different one: the tool must not default to it.
+	mcp := &mcpServer{taskID: "own-task", agentID: "a1", sessionID: "reviewer", t: NewTransport(srv.URL, "tok")}
+	review := mcp.callTool("task_confirmation_review", map[string]interface{}{
+		"taskId":    "t9",
+		"requestId": "0199a0b1-0000-7000-8000-000000000001",
+		"judgment":  "Ready, one call for you.",
+		"checked":   []interface{}{map[string]interface{}{"text": "suite passes", "evidenceRefs": []interface{}{"abc123"}}},
+	})
+	if review["isError"] == true {
+		t.Fatalf("task_confirmation_review returned an error: %#v", review["content"])
+	}
+	returned := mcp.callTool("task_confirmation_return", map[string]interface{}{
+		"taskId":    "t9",
+		"requestId": "0199a0b1-0000-7000-8000-000000000001",
+		"reason":    "The migration is missing.",
+		"problems":  []interface{}{map[string]interface{}{"text": "no migration"}},
+	})
+	if returned["isError"] == true {
+		t.Fatalf("task_confirmation_return returned an error: %#v", returned["content"])
+	}
+	if len(*calls) != 2 {
+		t.Fatalf("calls = %#v", *calls)
+	}
+	for i, want := range []string{
+		"/api/runner/tasks/t9/owner-confirmation/review",
+		"/api/runner/tasks/t9/owner-confirmation/return",
+	} {
+		call := (*calls)[i]
+		if call.method != http.MethodPost || call.path != want {
+			t.Errorf("call %d hit %s %s, want POST %s", i, call.method, call.path, want)
+		}
+		if call.agent != "a1" || call.session != "reviewer" {
+			t.Errorf("call %d attribution = agent %q, session %q", i, call.agent, call.session)
+		}
+		if _, ok := call.body["taskId"]; ok {
+			t.Errorf("call %d carried taskId in the body as well as the path: %#v", i, call.body)
+		}
+		if call.body["requestId"] != "0199a0b1-0000-7000-8000-000000000001" {
+			t.Errorf("call %d body = %#v", i, call.body)
+		}
+	}
+	if (*calls)[0].body["judgment"] != "Ready, one call for you." || (*calls)[1].body["reason"] != "The migration is missing." {
+		t.Errorf("bodies = %#v", *calls)
+	}
+}
+
+func TestMCPConfirmationReviewToolsNeedTheTaskAndASession(t *testing.T) {
+	srv, calls := confirmationReviewServer(t)
+	inSession := &mcpServer{taskID: "own-task", agentID: "a1", sessionID: "reviewer", t: NewTransport(srv.URL, "tok")}
+	headless := &mcpServer{taskID: "own-task", agentID: "a1", t: NewTransport(srv.URL, "tok")}
+	for _, tool := range []string{"task_confirmation_review", "task_confirmation_return"} {
+		if res := inSession.callTool(tool, map[string]interface{}{"requestId": "x"}); res["isError"] != true {
+			t.Errorf("%s with no taskId was accepted: %#v", tool, res)
+		}
+		if res := headless.callTool(tool, map[string]interface{}{"taskId": "t9", "requestId": "x"}); res["isError"] != true {
+			t.Errorf("%s with no session was accepted: %#v", tool, res)
+		}
+	}
+	if len(*calls) != 0 {
+		t.Fatalf("the door was reached without a task or a session: %#v", *calls)
+	}
+}
+
+func TestMCPTaskRequestConfirmationSaysTheReviewerIsAskedFirst(t *testing.T) {
+	for _, tool := range toolDescriptors(false, false) {
+		if tool["name"] != "task_request_confirmation" {
+			continue
+		}
+		description, _ := tool["description"].(string)
+		if !strings.Contains(description, "If the task has a reviewer, Orbit asks it first and the owner's card waits until the review is in.") {
+			t.Fatalf("task_request_confirmation does not say a reviewer is asked first: %q", description)
+		}
+		return
+	}
+	t.Fatal("task_request_confirmation missing")
+}
+
 func TestMCPTaskStartIsPartOfTaskTools(t *testing.T) {
 	if !hasMCPTool(toolDescriptors(false, false), "task_start") {
 		t.Fatalf("task_start missing from the base task tools")

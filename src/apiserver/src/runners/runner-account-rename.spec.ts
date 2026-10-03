@@ -95,6 +95,8 @@ test('only an account of an engine that keeps accounts, by an id an account can 
     await assert.rejects(h.patch(engine, account, { name: 'Main' }), BadRequestException, `${engine}/${account}`);
   }
   await assert.rejects(h.patch('opencode', 'default', { name: 'Main' }), BadRequestException);
+  // Reported on the Runners page since it is installed there, but it keeps no accounts either.
+  await assert.rejects(h.patch('antigravity', 'default', { name: 'Main' }), BadRequestException);
   assert.deepEqual(h.writes, []);
 });
 

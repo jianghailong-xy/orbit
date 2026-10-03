@@ -196,6 +196,7 @@ public enum RunnerAttention {
         ("codex", LoginEngine.codex.displayName),
         ("kimi", LoginEngine.kimi.displayName),
         ("opencode", "OpenCode"),
+        ("antigravity", "Antigravity CLI"),
     ]
 
     /// The login a built-in engine runs on, as a sign-in or a quota sentence names it.

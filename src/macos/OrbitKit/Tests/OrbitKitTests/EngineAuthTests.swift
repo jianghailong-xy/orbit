@@ -29,6 +29,8 @@ final class EngineAuthTests: XCTestCase {
         XCTAssertEqual(EngineAuth.remedy(forProvider: "kimi"), .signIn(.kimi))
         // OpenCode's login picks its provider interactively, so it can't be relayed from here.
         XCTAssertEqual(EngineAuth.remedy(forProvider: "opencode"), .runCommand("opencode auth login"))
+        // Antigravity has no sign-in at all: agy runs on the Gemini API key in its environment.
+        XCTAssertEqual(EngineAuth.remedy(forProvider: "antigravity"), .environmentKey("GEMINI_API_KEY"))
         // Any other slug is a control-plane–configured provider, i.e. a key to fix.
         XCTAssertEqual(EngineAuth.remedy(forProvider: "my-vendor"), .apiKey(slug: "my-vendor"))
     }

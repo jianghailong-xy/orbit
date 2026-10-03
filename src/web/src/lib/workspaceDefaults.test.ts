@@ -17,6 +17,8 @@ import {
   newSessionModelForProvider,
   normalizeEffortForProvider,
   OPENCODE_EFFORT_OPTIONS,
+  ANTIGRAVITY_EFFORT_OPTIONS,
+  ANTIGRAVITY_MODEL_OPTIONS,
   providerIdentityResolved,
   PROVIDER_OPTIONS,
   supportsAuto,
@@ -495,6 +497,90 @@ describe('OpenCode defaults', () => {
   it('does not leak an unknown dynamic OpenCode variant into another runtime', () => {
     expect(normalizeEffortForProvider('claude', 'project-custom', 'claude-opus-5', catalog)).toBe('');
     expect(normalizeEffortForProvider('codex', 'project-custom', 'gpt-5.6-sol', catalog)).toBe('');
+  });
+});
+
+describe('Antigravity defaults', () => {
+  // What a runner reports from `agy models`: one row per model, its levels folded out of the slug.
+  const catalog: RunnerModelCatalog = {
+    antigravity: [
+      {
+        value: 'gemini-3.8-flash',
+        label: 'Gemini 3.8 Flash',
+        contextWindow: 1_048_576,
+        reasoningLevels: ['low', 'medium', 'high'],
+      },
+      { value: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro', reasoningLevels: ['low', 'high'] },
+    ],
+  };
+
+  it('is a built-in runtime of its own', () => {
+    expect(PROVIDER_OPTIONS).toContainEqual({ value: 'antigravity', label: 'Antigravity' });
+    expect(mergedProviderOptions(null).map((option) => option.value)).toContain('antigravity');
+    expect(providerIdentityResolved('antigravity')).toBe(true);
+    // agy cannot ask anyone, so Auto is not a per-model question for it.
+    expect(supportsAuto('gemini-3.1-pro', 'antigravity')).toBe(true);
+  });
+
+  it('offers the models the runner reports, and agy’s own pick only until it reports them', () => {
+    expect(modelOptionsForProvider('antigravity', catalog)).toEqual([
+      { value: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash' },
+      { value: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro' },
+    ]);
+    expect(modelOptionsForProvider('antigravity')).toEqual(ANTIGRAVITY_MODEL_OPTIONS);
+    expect(ANTIGRAVITY_MODEL_OPTIONS).toEqual([{ value: '', label: 'Managed by Antigravity' }]);
+  });
+
+  it('defaults like the other built-ins, and never to a Claude model', () => {
+    expect(defaultModelForProvider('antigravity', catalog, null, { antigravity: 'gemini-3.1-pro' })).toBe(
+      'gemini-3.1-pro',
+    );
+    expect(defaultModelForProvider('antigravity', catalog)).toBe('gemini-3.8-flash');
+    // No catalogue and no reported default: no `--model`, which is what dispatch sends too.
+    expect(defaultModelForProvider('antigravity')).toBe('');
+    expect(defaultModelForProvider('antigravity', { claude: [{ value: 'claude-opus-5', label: 'Opus 5' }] })).toBe('');
+  });
+
+  it('shows the model a session with none actually runs on', () => {
+    // '' stood in for a catalogue not reported yet. Once there is one, a model-less session runs
+    // its first row, so the pill says that rather than a choice nobody made.
+    expect(livePinnedModel('', 'antigravity', catalog)).toBeUndefined();
+    expect(effectiveSessionModel('antigravity', '', null, catalog)).toBe('gemini-3.8-flash');
+    expect(effectiveSessionModel('antigravity', '', null, null)).toBe('');
+    expect(newSessionModelForProvider('antigravity', { antigravity: '' }, catalog)).toBe('gemini-3.8-flash');
+    // A pin the runner still lists stays; one it no longer lists falls to the current default.
+    expect(effectiveSessionModel('antigravity', 'gemini-3.1-pro', null, catalog)).toBe('gemini-3.1-pro');
+    expect(effectiveSessionModel('antigravity', 'gemini-2.9-pro', null, catalog)).toBe('gemini-3.8-flash');
+  });
+
+  it('offers each model only the thinking levels it has', () => {
+    expect(effortOptionsForProvider('antigravity', 'gemini-3.1-pro', catalog)).toEqual([
+      { value: '', label: 'Default' },
+      { value: 'low', label: 'Low' },
+      { value: 'high', label: 'High' },
+    ]);
+    expect(effortOptionsForProvider('antigravity', 'gemini-3.8-flash', catalog)).toEqual(ANTIGRAVITY_EFFORT_OPTIONS);
+    // A model the catalogue does not report gets agy's whole vocabulary, not Claude's.
+    expect(effortOptionsForProvider('antigravity', '', catalog)).toEqual(ANTIGRAVITY_EFFORT_OPTIONS);
+    expect(effortOptionsForProvider('antigravity', 'gemini-3.1-pro')).toEqual(ANTIGRAVITY_EFFORT_OPTIONS);
+  });
+
+  it('moves an effort picked on another runtime onto agy’s levels, then the model’s own', () => {
+    expect(normalizeEffortForProvider('antigravity', 'max', 'gemini-3.8-flash', catalog)).toBe('high');
+    expect(normalizeEffortForProvider('antigravity', 'ultra', 'gemini-3.8-flash', catalog)).toBe('high');
+    expect(normalizeEffortForProvider('antigravity', 'minimal', 'gemini-3.8-flash', catalog)).toBe('low');
+    // Gemini 3.1 Pro has no Medium: Default rather than a level agy would refuse.
+    expect(normalizeEffortForProvider('antigravity', 'medium', 'gemini-3.1-pro', catalog)).toBe('');
+    expect(normalizeEffortForProvider('antigravity', 'xhigh', 'gemini-3.1-pro', catalog)).toBe('high');
+    // No row: agy's closed vocabulary still applies, so an OpenCode variant is dropped.
+    expect(normalizeEffortForProvider('antigravity', 'max', '', catalog)).toBe('high');
+    expect(normalizeEffortForProvider('antigravity', 'project-custom', '', catalog)).toBe('');
+    expect(newSessionEffortForProvider('antigravity', 'max', null, 'gemini-3.1-pro', catalog)).toBe('high');
+  });
+
+  it('takes its context window from the runner catalogue', () => {
+    expect(contextWindowFor('gemini-3.8-flash', catalog)).toBe(1_048_576);
+    expect(contextWindowFor('gemini-3.1-pro', catalog)).toBeUndefined();
   });
 });
 

@@ -172,8 +172,11 @@ test('a row says when its OWNER_CONFIRMED run is waiting on the owner', async ()
             requestedAt: new Date('2026-09-26T08:05:00Z'), task: { projectId: null },
           }];
         },
-        findFirst: async () => ({ id: 'req-1', sessionId: SESSION, decisions: [] }),
+        findFirst: async () => ({ id: 'req-1', sessionId: SESSION, decisions: [], reviews: [] }),
       },
+      // No review row: the request has no reviewer, so it is the owner's at once
+      // (docs/owner-confirmation-review-contract.md §1 S2).
+      taskOwnerConfirmationReview: { findMany: async () => [] },
       session: { groupBy: async () => [], findMany: async () => [{ id: SESSION }] },
     },
   );
@@ -182,6 +185,9 @@ test('a row says when its OWNER_CONFIRMED run is waiting on the owner', async ()
 
   const byId = Object.fromEntries(page.items.map((item: any) => [item.id, item.awaitingOwnerConfirmation]));
   assert.deepEqual(byId, { [WAITING]: true, [PLAIN]: false });
+  // The other half of the same reading: nothing is with a reviewer, so no row says "Under review".
+  const underReview = Object.fromEntries(page.items.map((item: any) => [item.id, item.confirmationUnderReview]));
+  assert.deepEqual(underReview, { [WAITING]: false, [PLAIN]: false });
   assert.equal(requestReads.length, 1);
 });
 
@@ -205,6 +211,8 @@ test('a page with nothing that could be waiting asks the confirmation table noth
 
   assert.equal(asked, false);
   assert.ok(page.items.every((item: any) => item.awaitingOwnerConfirmation === false));
+  assert.ok(page.items.every((item: any) => item.confirmationUnderReview === false),
+    'nor is anything under review (docs/owner-confirmation-review-contract.md §5 N3)');
 });
 
 // ── The lists index ───────────────────────────────────────────────────────────────────────────

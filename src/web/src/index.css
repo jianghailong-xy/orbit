@@ -8830,6 +8830,75 @@ button.chat-jump-start:hover {
   /* The text keeps its paragraphs and list items on lines of their own (`markdownToPlainLines`). */
   white-space: pre-wrap;
 }
+/* What counts as done, folded to one row that opens in place: the key, how many items, a caret. */
+.owner-confirmation-fold {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+.owner-confirmation-count {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.owner-confirmation-fold .anticon {
+  font-size: 10px;
+  color: var(--text-3);
+}
+/* If you confirm: Orbit's own facts about what the press sets off, right above Confirm done. White
+   and edged in the neutral border, with a symbol per row and no author, where the two boxes above
+   it quote somebody. */
+.owner-confirmation-if {
+  margin-top: 10px;
+  padding: 8px 12px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-base);
+}
+.owner-confirmation-if-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+.owner-confirmation-if-symbol {
+  flex: none;
+  width: 14px;
+  padding-top: 2px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.owner-confirmation-if-row.is-start .owner-confirmation-if-symbol {
+  color: var(--brand);
+}
+.owner-confirmation-if-text {
+  flex: 1;
+  min-width: 0;
+}
+.owner-confirmation-if-lead {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--text-1);
+}
+.owner-confirmation-if-added {
+  font-weight: 500;
+  color: var(--success-solid);
+}
+.owner-confirmation-if-detail {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 /* The line under the buttons on both cards whose second answer is a composer handoff: where the
    next message goes, and what pressing does not do. One rule, two cards — the sentence is the
    promise, and a promise that drifts between two cards saying the same thing is two promises. */

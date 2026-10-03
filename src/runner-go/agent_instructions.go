@@ -213,6 +213,7 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 			"labels", "attribution", "dependency-graph", "dependency-add", "dependency-remove",
 			"evidence-list", "evidence-submit", "evidence-decide",
 			"create-batch", "batch-pin", "reopen", "request-confirmation",
+			"confirmation-review", "confirmation-return",
 		} {
 			rules = append(rules, "Bash("+command+" task "+action+" *)")
 		}
