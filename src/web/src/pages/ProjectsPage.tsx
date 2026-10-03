@@ -464,7 +464,6 @@ export function ProjectsPage() {
             const runnerId = workspaceRunnerId(workspace);
             return runnerId !== null && onlineRunnerIds.has(runnerId);
           }),
-          runnerList,
         )
       : undefined;
     if (first) {

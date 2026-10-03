@@ -160,8 +160,6 @@ private struct RunnerEngineContent: View {
         } footer: {
             if offline {
                 Text(RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER)
-            } else if signingIn == Self.adding {
-                Text(addAccountNote(login))
             }
         }
         // A name saved for the account Add Account is adding, before the runner reported it, goes to
@@ -309,12 +307,6 @@ private struct RunnerEngineContent: View {
             line += words
         }
         return line
-    }
-
-    private func addAccountNote(_ login: LoginEngine) -> String {
-        let dir = login == .claude ? "CLAUDE_CONFIG_DIR" : "CODEX_HOME"
-        return "Only a label for this page. Orbit gives the account its own \(dir) on this machine; "
-            + "your terminal keeps using Default."
     }
 
     private var removalAsked: Binding<Bool> {

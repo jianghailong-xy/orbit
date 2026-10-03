@@ -126,5 +126,5 @@ export class UpdateWorkspaceDto {
 
 // The full workspace list in the desired sidebar order; each id's index becomes its position.
 export class ReorderWorkspacesDto {
-  @IsArray() @IsString({ each: true }) ids!: string[];
+  @IsArray() @IsPublicId({ each: true }) ids!: string[];
 }

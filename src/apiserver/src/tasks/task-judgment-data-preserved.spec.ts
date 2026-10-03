@@ -1726,7 +1726,17 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // so the 0177 pair and every stored task and criterion row are out of its reach. No INSERT,
       // UPDATE or DELETE. (Written as 0360 on its own branch and renumbered before it landed: 0359 is
       // spelled by a branch not yet landed, and 0361, 0362, 0364 and 0365 landed first.)
-      '0366_session_retry_claim_lease'],
+      '0366_session_retry_claim_lease',
+      // Every live workspace's place in the sidebar, written down (0369): one UPDATE … FROM of
+      // `workspace.position`, computed from `workspace` and `runner` rows and nothing else. Read
+      // against every claim above: neither table is a preserved relation, and no `task`, `session`,
+      // `project` or `project_acceptance_*` object is named, so the 0177 pair and every stored task
+      // and criterion row are out of its reach. No table, column, constraint, index, function,
+      // trigger or type is created, altered or dropped, so it is not another writer of the DONE
+      // fence and names none of the six preserved objects; no row is inserted or deleted. (Written
+      // as 0366 on its own branch and renumbered before it landed: 0366 is the retry claim lease
+      // just above, and 0367 and 0368 are spelled by branches not yet landed.)
+      '0369_workspace_position_backfill'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
