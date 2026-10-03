@@ -78,8 +78,9 @@ psql_admin() {
 # different facts and they are not the same news: the wall clock ran out (`timeout` reports its
 # own 124), the process was killed by a signal (`timeout` reports 128+N, which is what an
 # out-of-memory kill looks like from here), the case died before it could report a single TAP
-# line, or the spec ran and reported a failing test. The first three all leave a log with no
-# `not ok` in it, so only the exit code can tell them apart.
+# line, or the spec ran and reported a failing test. The first three mostly leave a log with no
+# `not ok` in it -- a timed-out one can carry Node's own, see the failure branch -- so only the
+# exit code can tell them apart.
 case_kind() {
   local rc="$1"
   if [ "$rc" = 0 ]; then echo COMPLETED; return; fi
@@ -230,15 +231,32 @@ if [ "$SPEC_RC" != 0 ]; then
   fi
   if grep -q '^not ok' "$LOG"; then
     sed -n '/^not ok/,$p' "$LOG" >&2
-  else
-    # The case died before it produced a single `not ok`, so the sed above printed nothing at all.
-    # That is how one acceptance run reported nineteen reds without one word of why. Whatever the
-    # case did manage to write is the only evidence left, so print the end of it, and state the
-    # three numbers that separate "it ran out of time" from "it broke".
-    echo "==> full-api NO TAP [$INDEX/$OUTCOME_API_CASE_TOTAL]: $RELATIVE_SPEC: last ${TAIL_LINES} lines of $LOG" >&2
-    tail -n "$TAIL_LINES" "$LOG" >&2
-    echo "exit=$SPEC_RC elapsed=${SPEC_ELAPSED}s timeout=$OUTCOME_API_CASE_TIMEOUT kind=$SPEC_KIND" >&2
   fi
+  case "$SPEC_KIND" in
+    TIMED_OUT|SIGNALED)
+      # Stopped from outside, so the end of the log is printed whether or not there is TAP above.
+      # Whether there is, Node decides by a race: `timeout` sends SIGTERM to the runner and, through
+      # its process group, to the test file the runner is running, and the runner reports that file
+      # as `not ok ... signal: 'SIGTERM'` only if the file's death reaches it before it exits, one
+      # turn of its event loop after its own SIGTERM -- rarely on an idle host, often on a busy one.
+      # When the end was printed only for a case without a `not ok`, the same timeout read two ways:
+      # on a busy host, Node's verdict alone, with the stderr the case had left above it and this
+      # exit line both gone.
+      echo "==> full-api $SPEC_KIND [$INDEX/$OUTCOME_API_CASE_TOTAL]: $RELATIVE_SPEC: last ${TAIL_LINES} lines of $LOG" >&2
+      ;;
+    CRASHED_BEFORE_TAP)
+      # The case died before it produced a single `not ok`, so the sed above printed nothing at all.
+      # That is how one acceptance run reported nineteen reds without one word of why. Whatever the
+      # case did manage to write is the only evidence left, so print the end of it, and state the
+      # three numbers that separate "it ran out of time" from "it broke".
+      echo "==> full-api NO TAP [$INDEX/$OUTCOME_API_CASE_TOTAL]: $RELATIVE_SPEC: last ${TAIL_LINES} lines of $LOG" >&2
+      ;;
+    *)
+      exit "$SPEC_RC"
+      ;;
+  esac
+  tail -n "$TAIL_LINES" "$LOG" >&2
+  echo "exit=$SPEC_RC elapsed=${SPEC_ELAPSED}s timeout=$OUTCOME_API_CASE_TIMEOUT kind=$SPEC_KIND" >&2
   exit "$SPEC_RC"
 fi
 echo "==> full-api PASS [$INDEX/$OUTCOME_API_CASE_TOTAL]: $RELATIVE_SPEC"
