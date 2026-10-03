@@ -18,6 +18,17 @@ public enum ComposerLogic {
     /// anything larger. Very large content belongs in an uploaded file, not a prompt.
     public static let maxPromptChars = 50_000
 
+    /// The decision behind a task run whose model smart selection picked, while the composer still
+    /// shows that model (docs/model-routing-design.md §9): it marks the model chip ✦ and opens its
+    /// menu on why. A model changed here is this run's own, a session opened by hand has no route,
+    /// and a run on an Agent without smart selection has one that was not applied — all three keep
+    /// the chip as it always was (web parity: `smartRoute` in WorkspaceView.tsx).
+    public static func smartRoute(taskID: String?, route: TaskRunRoute?, modelID: String) -> TaskRunRoute? {
+        guard let taskID, !taskID.isEmpty, let route, route.applied,
+              let level = route.level, !level.isEmpty, route.model == modelID else { return nil }
+        return route
+    }
+
     /// Whether a Completed-session composer should explain that sending will return it to Open.
     /// A missing capability keeps the legacy optimistic presentation, but an explicit server
     /// denial is authoritative and must leave only the more useful blocked-reason copy visible.
