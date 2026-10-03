@@ -44,12 +44,10 @@ public enum SessionFolderCopy {
     public static func deleteTitle(_ name: String) -> String { "Delete “\(name)”?" }
 
     /// The confirmation's body: what happens to what is inside it — nothing is deleted, the
-    /// sessions go back to the list (§3.4).
-    public static func deleteMessage(sessionCount: Int) -> String {
-        sessionCount == 1
-            ? "The 1 session in it moves back to the list. No session is deleted."
-            : "The \(sessionCount) sessions in it move back to the list. No session is deleted."
-    }
+    /// sessions go back to the list (§3.4). It names no number: the list that asks counts only the
+    /// sessions in its own scope (Open or Completed), while every session filed in the folder goes
+    /// back to the list.
+    public static let deleteMessage = "Its sessions move back to the list. No session is deleted."
 
     /// The confirmation's confirm button — Delete Folder…'s own words, so the button and the entry
     /// that raised it read alike.

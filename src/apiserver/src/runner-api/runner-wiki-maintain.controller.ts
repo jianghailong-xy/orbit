@@ -3,7 +3,7 @@ import { Runner } from '@prisma/client';
 import { toUuid } from '@orbit/shared';
 import { PublicIdPipe } from '../common/public-id';
 import { PrismaService } from '../prisma/prisma.service';
-import { WikiMaintenanceFinishDto, WikiProposeDto, WikiVerificationReportDto } from '../wiki/dto';
+import { WikiMaintenanceAdvanceDto, WikiMaintenanceFinishDto, WikiProposeDto, WikiVerificationReportDto } from '../wiki/dto';
 import { isWikiMaintenanceSession, WikiMaintenance } from '../wiki/wiki-maintenance';
 import { finishWikiMaintenanceRun, wikiMaintenanceCheck, wikiMaintenanceRunContext } from '../wiki/wiki-maintenance-run';
 import { WikiRolloutGuard } from '../wiki/wiki-rollout';
@@ -14,7 +14,8 @@ import { RunnerAuthGuard } from './runner-auth.guard';
 /**
  * The runner door's routes of the Wiki maintenance job (contracts/wiki.contract.json `maintenance.job`,
  * criterion 3): what `orbit wiki maintain` starts from, how it proposes as the space's maintenance run,
- * how it verifies what ended sessions left waiting, how it ends, and what `orbit wiki check` asks.
+ * how it moves the cursor once its proposals are recorded, how it verifies what ended sessions left waiting,
+ * how it ends, and what `orbit wiki check` asks.
  *
  * ALL BUT THE CHECK ARE A MAINTENANCE RUN'S ALONE, as the dossiers and the cursor are: the calling
  * session must be a maintenance run of the space in the path (`isWikiMaintenanceSession`) — a headless
@@ -101,6 +102,22 @@ export class RunnerWikiMaintainController {
     const sessionId = await this.maintainer(runner, callingSessionId, id, true);
     const principal: WikiPrincipal = { origin: 'maintenance', ownerId: runner.ownerId, userId: null, sessionId: sessionId!, toolCallId: null };
     return answerForVerifications(await this.wiki.recordVerifications(principal, id, dto.verdicts, { adopt: true }));
+  }
+
+  /**
+   * The run's ops are recorded (contract `maintenance.job.run.steps`, advance): the cursor moves past the sessions
+   * they came from now, before the steps after the proposals, and nothing of how the run ends is said yet.
+   */
+  @Post('spaces/:id/maintenance/advance')
+  @HttpCode(HttpStatus.OK)
+  async advance(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: WikiMaintenanceAdvanceDto,
+  ) {
+    await this.maintainer(runner, callingSessionId, id, true);
+    return this.maintenance.advanceRecorded(runner.ownerId, id, dto.to);
   }
 
   /** How the run ended (contract `maintenance.job.finish`): the cursor advanced as its route rules, and the report kept. */

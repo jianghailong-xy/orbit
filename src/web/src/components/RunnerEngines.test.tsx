@@ -319,6 +319,24 @@ describe('the "On your runners" section', () => {
     expect(failed).toContain('Retry');
   });
 
+  it('offers the sign-in a just-installed engine needs before the probe catches up', () => {
+    // The relay says done, the last heartbeat's probe still predates the binary. The row must not
+    // offer the install again, and must not leave nothing to press either: the sign-in is next.
+    const html = render([
+      runner({
+        engines: [
+          health({ engine: 'claude' }),
+          health({ engine: 'codex', installed: false, auth: 'unknown' }),
+        ],
+        install: install({ status: 'done', engine: 'codex', command: 'npm install -g @openai/codex' }),
+      }),
+    ]);
+    const codex = html.slice(html.indexOf('>Codex<'), html.indexOf('>Kimi Code<'));
+    expect(codex).toContain('>Installed<');
+    expect(codex).toContain('>Sign in<');
+    expect(codex).not.toContain('>Install<');
+  });
+
   it('starts folded, so a page of set-up machines is a list rather than a wall', () => {
     const html = render(
       [

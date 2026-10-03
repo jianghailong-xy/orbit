@@ -1,7 +1,14 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { DeleteOutlined, LogoutOutlined, PauseCircleOutlined, PlayCircleOutlined } from '@ant-design/icons';
+import {
+  DeleteOutlined,
+  LockOutlined,
+  LogoutOutlined,
+  PauseCircleOutlined,
+  PlayCircleOutlined,
+  TeamOutlined,
+} from '@ant-design/icons';
 import { Button, Checkbox, Input, Modal, Popconfirm, Radio, Segmented, Select, Tag, Tooltip } from 'antd';
 import { api } from '../api';
 import { isLoginPool, loginLine, type CodexLogin } from '../lib/codexLogin';
@@ -26,6 +33,9 @@ import {
   canRemoveKey,
   canReplaceKey,
   formatCapReset,
+  hasPeople,
+  ownsPool,
+  poolOwner,
   SHARED_POOLS_BASE,
   type SharedPool,
   type SharedPoolKey,
@@ -50,11 +60,17 @@ function readFold(): Record<string, boolean> {
   }
 }
 
-/** What a pool's members are: a shared pool holds keys, an account pool of one's own accounts. */
-const memberNoun = (pool: ProviderPool, n: number) => `${pool.shared ? 'key' : 'account'}${n === 1 ? '' : 's'}`;
+/** Whether `pool` is drawn for one of the people its owner added — who run on its API keys alone — rather
+ *  than for its owner. */
+const readByMember = (pool: ProviderPool): boolean => !!pool.shared && !ownsPool(pool.shared);
 
-/** "2 of 3 accounts available" — "2 of 5 keys available" on a shared pool: the members a session could
- *  start on right now. */
+/** What a pool's members are to whoever reads it: to its owner, accounts — each ChatGPT account and API
+ *  key of a Codex pool, each subscription of a Claude one — and to the people they added, its keys. */
+const memberNoun = (pool: ProviderPool, n: number) =>
+  readByMember(pool) ? `key${n === 1 ? '' : 's'} you can run on` : `account${n === 1 ? '' : 's'}`;
+
+/** "2 of 3 accounts available" — "2 of 2 keys you can run on available" for somebody the owner added: the
+ *  members a session could start on right now. */
 export const availabilityOf = (pool: ProviderPool, refusals: PoolRefusals): string =>
   `${availableCount(pool, refusals)} of ${pool.members.length} ${memberNoun(pool, pool.members.length)} available`;
 
@@ -87,17 +103,19 @@ export function PoolEngineMark({ pool, size = 18 }: { pool: ProviderPool; size?:
  */
 export function PoolGauge({ pool }: { pool: ProviderPool }) {
   const head = poolHeadline(pool);
+  // Only a pool of nothing but keys is capped: a ChatGPT account in it is spent, and comes back by the hour.
+  const keysOnly = !!pool.shared && !pool.members.some((member) => member.login);
   if (head.kind === 'spent') {
     // A shared pool's keys are capped rather than spent, and come back with the month — unless what
     // stopped them is OpenAI's own out-of-budget mark, which comes back at a date of its own.
-    const spent = !pool.shared ? 'All spent' : allOutOfBudget(pool.shared) ? 'All out of budget' : 'All at cap';
+    const spent = !keysOnly ? 'All spent' : allOutOfBudget(pool.shared!) ? 'All out of budget' : 'All at cap';
     return (
       <span className="pool-gauge spent">
         {head.resetsAt ? (
           // One inline run, so the gauge's flex gap doesn't open up inside the sentence.
           <span>
             <span className="pool-wide">{spent} · </span>resets{' '}
-            {pool.shared ? formatCapReset(head.resetsAt) : formatResetTime(head.resetsAt)}
+            {keysOnly ? formatCapReset(head.resetsAt) : formatResetTime(head.resetsAt)}
           </span>
         ) : (
           spent
@@ -110,9 +128,14 @@ export function PoolGauge({ pool }: { pool: ProviderPool }) {
   return (
     <span className="pool-gauge" title={`The next session starts on ${member.label}`}>
       {/* A pool of one's own ChatGPT account with one account has nothing to choose between, so it is
-          named; holding several, "Next:" says which of them the next session starts on. */}
+          named; holding several, "Next:" says which of them the next session starts on — and once other
+          people use the pool, that it is the viewer's next session, theirs running elsewhere. */}
       <span className="pool-gauge-name">
-        {member.login && pool.members.length === 1 ? member.label : `Next: ${member.label}`}
+        {pool.shared && hasPeople(pool.shared)
+          ? `Next for you: ${member.label}`
+          : member.login && pool.members.length === 1
+            ? member.label
+            : `Next: ${member.label}`}
       </span>
       {quota ? (
         <>
@@ -123,9 +146,9 @@ export function PoolGauge({ pool }: { pool: ProviderPool }) {
             {`${compactWindowLabel(quota.label)} ${quota.percent}%`}
           </span>
         </>
-      ) : member.key ? null : (
+      ) : (
         // A key with no cap has nothing to fill; an account that reports no quota says so.
-        <span className="pool-gauge-none">No quota reported</span>
+        <span className="pool-gauge-none">{member.key ? 'No limit' : 'No quota reported'}</span>
       )}
     </span>
   );
@@ -212,9 +235,36 @@ export interface KeyActions {
   onRemove?: (key: SharedPoolKey) => void;
 }
 
+/** Whose sessions an account of a pool shared with people runs, said on its owner's page: a ChatGPT
+ *  account only ever its owner's, a key everybody's. A rule rather than a setting. */
+function RunsFor({ everyone }: { everyone: boolean }) {
+  return everyone ? (
+    <span className="pool-runs-for all">
+      <TeamOutlined />
+      Everyone here
+    </span>
+  ) : (
+    <span className="pool-runs-for">
+      <LockOutlined />
+      Only you
+    </span>
+  );
+}
+
 /** One key of a shared pool: whose it is and its fingerprint, where it stands, what the others spent on
- *  it this month against the cap its contributor set, and what the viewer may do about it. */
-function KeyRow({ pool, member, actions }: { pool: SharedPool; member: PoolMember; actions: KeyActions }) {
+ *  it this month against the cap its contributor set, and what the viewer may do about it. `tagged` says
+ *  it runs everybody's sessions. */
+function KeyRow({
+  pool,
+  member,
+  actions,
+  tagged = false,
+}: {
+  pool: SharedPool;
+  member: PoolMember;
+  actions: KeyActions;
+  tagged?: boolean;
+}) {
   const key = member.key!;
   const status = memberStatus(member);
   const cap = key.shareCap;
@@ -237,6 +287,12 @@ function KeyRow({ pool, member, actions }: { pool: SharedPool; member: PoolMembe
           </div>
           <div className="pool-key-mask">
             {key.contributor.name} · {key.fingerprint}
+            {tagged && (
+              <>
+                {' · '}
+                <RunsFor everyone />
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -319,15 +375,18 @@ export interface LoginActions {
 }
 
 /** The ChatGPT account a Codex pool of one's own runs on: its email and plan, where it stands, each of
- *  its windows with when it resets — and, once OpenAI signed it out, why and the way back. */
+ *  its windows with when it resets — and, once OpenAI signed it out, why and the way back. `tagged` says
+ *  it runs its owner's sessions alone. */
 function LoginRow({
   pool,
   member,
   actions,
+  tagged = false,
 }: {
   pool: ProviderPool;
   member: PoolMember;
   actions: LoginActions;
+  tagged?: boolean;
 }) {
   const login = member.login!;
   const status = memberStatus(member);
@@ -347,7 +406,15 @@ function LoginRow({
             {/* With one account there is nothing to choose between, so the mark would say nothing. */}
             {member.next && pool.members.length > 1 && <span className="re-chip">NEXT</span>}
           </div>
-          <div className="pool-key-mask">{loginLine(login)}</div>
+          <div className="pool-key-mask">
+            {loginLine(login)}
+            {tagged && (
+              <>
+                {' · '}
+                <RunsFor everyone={false} />
+              </>
+            )}
+          </div>
         </div>
       </div>
       <div className="pool-status">
@@ -412,9 +479,33 @@ function LoginRow({
   );
 }
 
+/** The ChatGPT accounts of a pool's owner, as one of the people they added sees them: one locked line,
+ *  never their email, plan or quota — which are the owner's own subscription's. */
+function LockedAccountsRow({ owner }: { owner: string }) {
+  return (
+    <div className="re-row pool-row pool-row-locked">
+      <div className="re-id">
+        <span className="pool-lock-tile" aria-hidden="true">
+          <LockOutlined />
+        </span>
+        <div style={{ minWidth: 0 }}>
+          <div className="re-name">
+            <span className="pool-member-label">{owner}’s ChatGPT accounts</span>
+          </div>
+          <div className="pool-key-mask">
+            Only {owner}’s sessions run on them — a ChatGPT account can’t be shared.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** A pool's members, with what a pool of fewer than two accounts is worth saying about itself. A shared
  *  pool's members are its keys (KeyRow), and `keyActions` what can be done to them here; a Codex pool
- *  of one's own has its ChatGPT account (LoginRow), and `loginActions` what can be done to it. */
+ *  of one's own has its ChatGPT account (LoginRow), and `loginActions` what can be done to it. Once its
+ *  owner shares it, each says whose sessions it runs; the people they added see their ChatGPT accounts
+ *  as one locked line. */
 export function PoolMembers({
   pool,
   refusals,
@@ -431,8 +522,11 @@ export function PoolMembers({
   const [only] = pool.members;
   const { shared } = pool;
   const login = isLoginPool(pool);
+  const tagged = !!shared && ownsPool(shared) && hasPeople(shared);
+  const locked = shared && !ownsPool(shared) && shared.ownerHasChatGPT ? poolOwner(shared) : undefined;
   return (
     <>
+      {locked && <LockedAccountsRow owner={locked.name} />}
       {/* Every door that takes a provider refuses a pool with nothing in it (the server's
           `unavailable`), so this says that rather than where such a session would run. */}
       {pool.members.length === 0 &&
@@ -455,9 +549,9 @@ export function PoolMembers({
       )}
       {pool.members.map((member) =>
         shared && member.key ? (
-          <KeyRow key={member.id} pool={shared} member={member} actions={keyActions ?? {}} />
+          <KeyRow key={member.id} pool={shared} member={member} actions={keyActions ?? {}} tagged={tagged} />
         ) : member.login ? (
-          <LoginRow key={member.id} pool={pool} member={member} actions={loginActions ?? {}} />
+          <LoginRow key={member.id} pool={pool} member={member} actions={loginActions ?? {}} tagged={tagged} />
         ) : (
           <MemberRow
             key={member.id}
@@ -486,6 +580,9 @@ function PoolCard({
   keyActions?: KeyActions;
   loginActions?: LoginActions;
 }) {
+  const { shared } = pool;
+  const member = readByMember(pool);
+  const people = !!shared && hasPeople(shared);
   return (
     <div className={`re-card pool-card${collapsed ? ' collapsed' : ''}`} data-pool={pool.id}>
       <div className="re-head">
@@ -495,18 +592,23 @@ function PoolCard({
           </span>
           <PoolEngineMark pool={pool} />
           <span className="re-runner">{pool.label}</span>
-          {pool.shared && <span className="re-chip pool-shared-chip">SHARED</span>}
-          {/* A pool of one's own ChatGPT account says who may use it and how many of its own accounts
-              are left to run on. */}
-          {isLoginPool(pool) ? (
+          {people && <span className="re-chip pool-shared-chip">SHARED</span>}
+          {/* A Codex pool its owner keeps to themselves says so, with how many of its accounts are left to
+              run on; shared, it wears SHARED and its people instead. Somebody they added reads whose it is
+              and the keys they run on — its accounts and its gauge are on its page. */}
+          {member ? (
+            <span className="re-summary">
+              {poolOwner(shared!)?.name}’s · {pool.members.length} {memberNoun(pool, pool.members.length)}
+            </span>
+          ) : poolRunsCodex(pool) && !people ? (
             <span className="re-summary">Just me · {availabilityOf(pool, refusals)}</span>
           ) : (
             <Availability pool={pool} refusals={refusals} />
           )}
         </button>
         <span className="re-head-sp" />
-        {pool.shared && <PeopleStack pool={pool.shared} />}
-        <PoolGauge pool={pool} />
+        {people && !member && <PeopleStack pool={shared!} />}
+        {!member && <PoolGauge pool={pool} />}
         <Link className="re-manage" to={`/providers/pools/${encodeId(pool.id)}`} aria-label={`Manage ${pool.label}`}>
           <span className="pool-wide">Manage </span>→
         </Link>

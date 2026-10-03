@@ -18,6 +18,7 @@ import {
   type NormalizedRunEvent,
   type WikiCursorOutcome,
   type WikiCursorState,
+  type WikiMaintenanceCatchUp,
   type WikiMaintenanceCheck,
   type WikiMaintenanceDue,
   type WikiMaintenanceFailureKind,
@@ -46,7 +47,8 @@ import {
   type FactPosition,
   type WikiMaintenance,
 } from './wiki-maintenance';
-import { wikiMaintenanceRunsToday } from './wiki-maintenance-session';
+import { wikiMaintenanceCatchUpOf, wikiMaintenanceRunsToday } from './wiki-maintenance-session';
+import { wikiMaintenanceProviderIsLocal } from './wiki-maintenance-settings';
 import { hasQueuedWikiPlanJob, resumeWikiPlanJobs } from './wiki-plan-job';
 import { currentWikiRollout, wikiOnFor } from './wiki-rollout';
 
@@ -94,6 +96,15 @@ import { currentWikiRollout, wikiOnFor } from './wiki-rollout';
  * session ended, and the dispatcher starts it again, once; any other, or one whose rerun died too, is
  * closed FAILED with its run's end written down. And a run whose task ended without the run saying how is
  * given that end, so no row is left without one.
+ *
+ * A SPACE THAT IS BEHIND CATCHES UP (contract `maintenance.job.catchUp`, criterion 3 revision 4). On 2026-10-02
+ * the cursor stood thirteen days behind with nearly two thousand facts pending, and eight runs a day — the
+ * failed ones counted — never caught up. So while the oldest pending fact is more than a day old, the end of
+ * the space's latest run is itself the fact that makes the next one; a run on a local endpoint, or one that
+ * failed, is not counted against the day; and the run writes no document, which waits for the first run after
+ * the space has caught up. Read off the facts and the runs' own ends when a hint arrives — still no clock — and
+ * paused once the space's last three runs all failed, until a run succeeds: a pause gives the day its limit
+ * back, and a run's end makes nothing.
  */
 
 // ── The trigger ─────────────────────────────────────────────────────────────────────────────────
@@ -154,6 +165,8 @@ export type WikiMaintenanceTriggerOutcome =
     due: WikiMaintenanceDue;
     expect: string;
     runSessions: number;
+    /** How the run was made (contract `maintenance.job.catchUp`): null while the space was not behind. */
+    catchUp: WikiMaintenanceCatchUp | null;
     settled?: WikiMaintenanceSettled;
   }
   | {
@@ -219,15 +232,21 @@ export async function considerWikiMaintenance(
        AND (f."sessionId" = ANY(${sessionIds}::text[])
          OR (f."kind" = 'task_terminal' AND f."ref" = ANY(${taskIds}::text[])))
      LIMIT 1`;
-  if (named.length === 0) return no('no_new_fact');
+  // A hint that names no fact may name the end of the space's latest run, which is a fact of its own while the
+  // space catches up (contract `maintenance.job.catchUp.trigger`) — and only then, as the catch-up read below says.
+  const runEnded = named.length === 0 && (await namesLatestRunEnd(prisma, ownerId, spaceId, sessionIds, taskIds));
+  if (named.length === 0 && !runEnded) return no('no_new_fact');
 
   const backlog = await countBacklog(prisma, scope, watermark);
+  const catchUp = await wikiMaintenanceCatchUpOf(prisma, ownerId, spaceId, backlog.oldestPendingAt, now);
+  if (runEnded && catchUp.state !== 'active') return no('no_new_fact');
   const due = maintenanceDue(backlog, now);
   if (!due.backlog && !due.age) return no('not_due');
 
-  // The day's runs, and — Manual — the review queue's room.
-  const today = await wikiMaintenanceRunsToday(prisma, ownerId, spaceId, now);
-  if (today.remaining <= 0) {
+  // The day's runs, and — Manual — the review queue's room. A run made in active catch-up on a local endpoint is
+  // not counted against the day (contract `maintenance.job.catchUp.dailyLimit`), so the day holds it back no more.
+  const localEndpoint = await wikiMaintenanceProviderIsLocal(prisma, ownerId, settings.provider);
+  if (!(catchUp.state === 'active' && localEndpoint) && (await wikiMaintenanceRunsToday(prisma, ownerId, spaceId, now)).remaining <= 0) {
     await hold(prisma, cursor.id, cursor.heldReason, 'daily_limit_reached', now);
     return no('daily_limit_reached');
   }
@@ -269,6 +288,7 @@ export async function considerWikiMaintenance(
         sessions: backlog.pendingSessions,
         oldest: backlog.oldestPendingAt,
         runSessions,
+        catchUp: catchUp.state,
       }),
       acceptanceCommand: wikiMaintenanceCheckCommand(uuidToBase62(spaceId), token),
       workspaceId: settings.workspaceId,
@@ -280,6 +300,8 @@ export async function considerWikiMaintenance(
       pendingSessions: backlog.pendingSessions,
       oldestPendingAt: backlog.oldestPendingAt,
       expect,
+      catchUp: catchUp.state,
+      localEndpoint,
     },
   });
   if ('why' in made) return no(made.why);
@@ -291,8 +313,35 @@ export async function considerWikiMaintenance(
     due: why,
     expect: token,
     runSessions,
+    catchUp: catchUp.state,
     ...(recovered ? { settled: recovered } : {}),
   };
+}
+
+/**
+ * Whether a hint names the end of the space's latest run (contract `maintenance.job.catchUp.trigger`): that run's
+ * task, or one of its sessions, once the task has ended. The run's own events name nothing else of the space.
+ */
+async function namesLatestRunEnd(
+  prisma: TriggerDb,
+  ownerId: string,
+  spaceId: string,
+  sessionIds: string[],
+  taskIds: string[],
+): Promise<boolean> {
+  const latest = await prisma.wikiMaintenanceRun.findFirst({
+    where: { ownerId, spaceId },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    select: { taskId: true },
+  });
+  if (!latest) return false;
+  const named = taskIds.includes(latest.taskId) || (sessionIds.length > 0
+    && (await prisma.session.findFirst({ where: { id: { in: sessionIds }, ownerId, taskId: latest.taskId }, select: { id: true } })) !== null);
+  if (!named) return false;
+  return (await prisma.task.findFirst({
+    where: { id: latest.taskId, ownerId, status: { in: ['DONE', 'FAILED', 'CANCELLED'] } },
+    select: { id: true },
+  })) !== null;
 }
 
 /**
@@ -314,9 +363,19 @@ class MaintenanceTaskWriter {
     cursorId: string;
     now: Date;
     task: { title: string; description: string; acceptanceCommand: string; workspaceId: string; provider: string };
-    run: { due: WikiMaintenanceDue; backlog: number; pendingSessions: number; oldestPendingAt: Date | null; expect: FactPosition };
+    run: {
+      due: WikiMaintenanceDue;
+      backlog: number;
+      pendingSessions: number;
+      oldestPendingAt: Date | null;
+      expect: FactPosition;
+      catchUp: WikiMaintenanceCatchUp | null;
+      localEndpoint: boolean;
+    };
   }): Promise<{ taskId: string; runId: string } | { why: 'off' | 'unfinished' | 'plan_job_queued' | 'daily_limit_reached' }> {
     const { ownerId, spaceId, listId, now } = input;
+    // A run made in active catch-up on a local endpoint is never counted against the day: nothing to count again.
+    const counted = !(input.run.catchUp === 'active' && input.run.localEndpoint);
     return withTransactionRetry(
       this.prisma,
       async (tx) => {
@@ -325,7 +384,7 @@ class MaintenanceTaskWriter {
         if (!list) return { why: 'off' } as const;
         if (await unfinishedTask(tx, ownerId, listId)) return { why: 'unfinished' } as const;
         if (await hasQueuedWikiPlanJob(tx, ownerId, spaceId)) return { why: 'plan_job_queued' } as const;
-        if ((await wikiMaintenanceRunsToday(tx, ownerId, spaceId, now)).remaining <= 0) return { why: 'daily_limit_reached' } as const;
+        if (counted && (await wikiMaintenanceRunsToday(tx, ownerId, spaceId, now)).remaining <= 0) return { why: 'daily_limit_reached' } as const;
         const task = await tx.task.create({
           data: {
             title: input.task.title,
@@ -361,6 +420,8 @@ class MaintenanceTaskWriter {
             expectAt: input.run.expect.at,
             expectKind: input.run.expect.kind,
             expectRef: input.run.expect.ref,
+            catchUp: input.run.catchUp,
+            localEndpoint: input.run.localEndpoint,
           },
           select: { id: true },
         });
@@ -642,10 +703,20 @@ function maintenanceTaskPrompt(input: {
   sessions: number;
   oldest: Date | null;
   runSessions: number;
+  catchUp: WikiMaintenanceCatchUp | null;
 }): string {
   const because = input.why === 'backlog'
     ? `${input.sessions} sessions have facts the wiki has not taken in`
     : `its oldest fact the wiki has not taken in is from ${input.oldest?.toISOString() ?? 'more than a day ago'}`;
+  const behind = input.catchUp === null ? [] : [
+    '',
+    input.catchUp === 'active'
+      ? 'The space is catching up: its oldest fact the wiki has not taken in is more than a day old. This run writes no '
+        + 'document and proposes no change to the plan — the first run after the space has caught up rewrites what changed '
+        + 'meanwhile — and its end makes the next run.'
+      : 'The space is behind, and its catch-up is paused: its last runs all failed. This run writes no document and '
+        + 'proposes no change to the plan; it counts against the day, and once a run succeeds the catch-up goes on.',
+  ];
   return [
     `A Wiki maintenance run of the space «${input.title}» (${input.spaceRef}): ${because}. This run covers the next `
       + `${input.runSessions} of those sessions.`,
@@ -662,7 +733,8 @@ function maintenanceTaskPrompt(input: {
       + 'the summary it printed, its token spend included; if it failed, its last lines. Run nothing else, and do not '
       + 'retry a failed run more than once. When the Orbit server answers 5xx or not at all, it waits for the server '
       + 'itself before it ends, so a run it says you may run again is safe to run again at once; when it says the '
-      + 'server did not come back, do not run it again — the next run takes the same dossiers.',
+      + 'server did not come back, do not run it again — the next run takes the dossiers this one did not record.',
+    ...behind,
   ].join('\n');
 }
 
@@ -850,6 +922,7 @@ export async function wikiMaintenanceRunContext(
     taskId: run?.taskId ?? null,
     expect,
     runSessions: wikiMaintenanceRunSessions({ mode: settings.reviewMode, activeEntries, pendingInSpace }),
+    catchUp: (run?.catchUp as WikiMaintenanceCatchUp | null | undefined) ?? null,
   };
 }
 
@@ -869,7 +942,9 @@ const REPORT_MAX_BYTES = 16_000;
 /**
  * A run ends: the cursor is advanced as `advanceCursor` rules (only a succeeded run moves it, forward
  * only), and what the run reported is kept on its row — with the outcome the cursor made of it, so a
- * succeeded run whose token the cursor refused is kept as failed.
+ * succeeded run whose token the cursor refused is kept as failed. A run that moved the cursor when its ops
+ * were recorded (`WikiMaintenance.advanceRecorded`) ends with the same token: a success moves nothing more,
+ * and a failure is counted with the cursor left where the recorded ops put it.
  */
 export async function finishWikiMaintenanceRun(
   prisma: PrismaService,
@@ -966,6 +1041,11 @@ export async function noteWikiMaintenanceRunEnd(
  * `orbit wiki check` (contract `maintenance.job.check`): did the run of the task that expects this
  * position do what it was made for — the cursor at or past the position, and the run ended succeeded
  * with none of its ops refused. The run is the latest one whose task expects exactly this position.
+ *
+ * A run moves the cursor as soon as its ops are recorded (criterion 3 revision 4), so a run that failed after
+ * that — at the verification, the anchors or the documents — has a cursor that reached the position and an end
+ * that is failed: it does not pass. The cursor stays where it is, and the next run does not read those
+ * sessions again; the run is one more failure in a row, and its task fails with it.
  */
 export async function wikiMaintenanceCheck(
   prisma: PrismaService,
@@ -998,6 +1078,9 @@ export async function wikiMaintenanceCheck(
     problems.push('No maintenance task of this space expects this position.');
   } else if (run.outcome === null) {
     problems.push('The run has not said how it ended: it did not finish, or was cut short before it could.');
+  } else if (run.outcome !== 'succeeded' && reached) {
+    problems.push(`The cursor reached the position, past the sessions whose ops the run recorded — the next run does not `
+      + `read them again — but the run ended ${run.outcome} after that${run.error ? `: ${run.error}` : '.'}`);
   } else if (run.outcome !== 'succeeded') {
     problems.push(`The run ended ${run.outcome}${run.error ? `: ${run.error}` : '.'}`);
   } else if (run.opsRefused === null) {

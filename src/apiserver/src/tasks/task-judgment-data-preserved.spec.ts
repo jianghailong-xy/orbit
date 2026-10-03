@@ -1651,7 +1651,40 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // or type is created, replaced or dropped, so it is not another writer of the DONE fence. (Written
       // as 0354 on its own branch and renumbered before it landed: 0354 is spelled by another branch not
       // yet landed, and 0355 is the one just above.)
-      '0356_wiki_maintenance_run_attempts'],
+      '0356_wiki_maintenance_run_attempts',
+      // How a maintenance run was made, for the day's count while its space catches up (0357): two `ADD
+      // COLUMN`s on `wiki_maintenance_run` — `catch_up` TEXT, nullable with no default, and `local_endpoint`
+      // BOOLEAN NOT NULL DEFAULT false, catalog-only — and one CHECK every stored row satisfies because its
+      // `catch_up` reads NULL. Read against every claim above: `wiki_maintenance_run` is the only table named, and
+      // it is none of the preserved relations, so no `task`, `session`, `project` or `project_acceptance_*`
+      // object is named and the 0177 pair and every stored task and criterion row are out of its reach. No
+      // function, trigger or type is created, replaced or dropped, so it is not another writer of the DONE fence
+      // and names none of the six preserved objects. No INSERT, UPDATE or DELETE: nothing is backfilled.
+      '0357_wiki_maintenance_catch_up',
+      // Every Codex pool has its owner among its people (0358): one INSERT … SELECT … ON CONFLICT DO
+      // NOTHING into `provider_pool_person`, an ADMIN row for the owner of each pool of one's own on Codex,
+      // reading `provider_pool` and writing nothing else. Read against every claim above: neither table is
+      // a preserved relation, and no `task`, `session`, `project` or `project_acceptance_*` object is
+      // named, so the 0177 pair and every stored task and criterion row are out of its reach. No table,
+      // column, constraint, index, function, trigger or type is created, altered or dropped, so it is not
+      // another writer of the DONE fence and names none of the six preserved objects; no row is updated
+      // or deleted. (0357 is the wiki maintenance catch-up's, so this took the next number.)
+      '0358_codex_pool_owner_person',
+      // `task_project_activity_idx`: one partial btree on `task (owner_id, project_id, updated_at)`
+      // `WHERE project_id IS NOT NULL`, three columns that already existed, so that the sidebar's
+      // `max(updated_at)` per open project is one backward probe instead of a read of every task.
+      // Read against every claim above: one `CREATE INDEX IF NOT EXISTS` and nothing else — no
+      // function, trigger, type, column or constraint is created, altered or dropped, so it is not
+      // another writer of the DONE fence and names none of the six preserved objects. `task` IS one
+      // of the preserved relations, and it is named only as the table the index is built on, as in
+      // 0283 and 0305: an index is a new relation beside the table, not a rewrite of it, so no
+      // column of `task` is added, dropped or retyped and no stored row moves by one byte.
+      // `task.acceptance_command`, `task.acceptance_expected_exit_code`,
+      // `task_executable_acceptance_pair` and `task_completion_criterion` are not named, and no
+      // `project_acceptance_*` object is. No INSERT, UPDATE or DELETE: the build reads every task
+      // row once and writes none. (It is in place of a maintained column on `project`, another
+      // preserved relation, whose backfill would have been an UPDATE of every project row.)
+      '0361_task_project_activity_idx'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -61,9 +61,10 @@ export interface CodexLoginPoll {
 /** POST starts a sign-in, GET polls it, DELETE gives it up; `/account` signs the account out. */
 export const codexLoginPath = (poolId: string) => `/providers/pools/${encodeId(poolId)}/codex-login`;
 
-/** A Codex pool of the user's own: one ChatGPT account, not a set of member keys. */
+/** A Codex pool of the user's own, the one their ChatGPT accounts are in — its people and keys read beside
+ *  them or not (ownPoolWithAccess), but never a pool made on the shared pools page. */
 export const isLoginPool = (pool: Pick<ProviderPool, 'engine' | 'shared'>): boolean =>
-  pool.engine === 'codex' && !pool.shared;
+  pool.engine === 'codex' && !pool.shared?.shared;
 
 /** `Plus` for `plus`: the plan as OpenAI's own pages name it. */
 const planName = (plan: string | null): string | null =>

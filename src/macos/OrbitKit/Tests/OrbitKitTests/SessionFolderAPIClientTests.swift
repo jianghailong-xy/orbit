@@ -141,6 +141,45 @@ final class SessionFolderAPIClientTests: XCTestCase {
         XCTAssertTrue(out.sent.first?.body?["folderId"] is NSNull)
     }
 
+    /// The Move panel's second group reads `GET /sessions/:id/move-targets`; its confirmation posts
+    /// the workspace, and the folder there — or an explicit null — to the same move door.
+    func testMoveTargetsAndAMoveToAnotherWorkspace() async throws {
+        let read = answer(#"""
+        {"workspaceId":"w1","folderId":null,"folders":[],"reason":null,"needsEnd":true,"branch":"orbit/s1",
+         "changedFiles":1,"unmergedFiles":1,"mergeTarget":"main",
+         "targets":[{"workspaceId":"w2","name":"site","provider":"claude","runnerId":"r2","runnerName":"mac-mini",
+                     "runnerOnline":true,"workDir":"/srv/site","reason":null,"conversation":"rebuilt",
+                     "folders":[{"id":"f2","name":"Bugs","sessionCount":2}]}]}
+        """#)
+        let targets = try await client().sessionMoveTargets("s1")
+        XCTAssertTrue(targets.needsEnd)
+        XCTAssertEqual(targets.targets.map(\.name), ["site"])
+        XCTAssertEqual(targets.targets.first?.folders.map(\.id), ["f2"])
+        XCTAssertEqual(read.sent.map(\.method), ["GET"])
+        XCTAssertEqual(read.sent.map(\.path), ["/api/sessions/s1/move-targets"])
+
+        let moved = answer(#"{"id":"s1","workspaceId":"w2","folderId":"f2"}"#, status: 201)
+        try await client().moveSession("s1", toWorkspace: "w2", folderID: "f2")
+        XCTAssertEqual(moved.sent.map(\.method), ["POST"])
+        XCTAssertEqual(moved.sent.map(\.path), ["/api/sessions/s1/move"])
+        XCTAssertEqual(moved.sent.first?.body?["workspaceId"] as? String, "w2")
+        XCTAssertEqual(moved.sent.first?.body?["folderId"] as? String, "f2")
+
+        let loose = answer(#"{"id":"s1","workspaceId":"w2","folderId":null}"#, status: 201)
+        try await client().moveSession("s1", toWorkspace: "w2", folderID: nil)
+        XCTAssertEqual(loose.sent.first?.body?["workspaceId"] as? String, "w2")
+        XCTAssertTrue(loose.sent.first?.body?["folderId"] is NSNull)
+
+        // A refusal is the server's 409, with the reason the panel shows.
+        _ = answer(#"{"statusCode":409,"message":"End the session first."}"#, status: 409)
+        do {
+            try await client().moveSession("s1", toWorkspace: "w2", folderID: nil)
+            XCTFail("a 409 is thrown")
+        } catch {
+            XCTAssertEqual(SessionMoveCopy.moveFailed(error), "End the session first.")
+        }
+    }
+
     /// A session started from a folder's page is created in that folder: the request carries it,
     /// and the session that comes back says where it is.
     func testANewSessionIsCreatedInItsFolder() async throws {
