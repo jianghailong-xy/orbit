@@ -209,7 +209,7 @@ suite('(g) the core tables carry exactly the triggers the inventory registers, m
   // can drift alone, which is what makes "one fewer" a detectable event rather than a hand edit.
   assert.deepEqual(installed.rows, registered,
     'the core tables\' installed triggers and the inventory must be the same set');
-  assert.equal(installed.rowCount, 47,
+  assert.equal(installed.rowCount, 46,
     'these four tables carried 43 triggers before 0224, 40 after it, 39 once 0226 removed '
     + '`failure_successor_task_binding_immutable` from `task`, 38 once 0227 removed '
     + '`task_executable_plan_bind` with the EXECUTABLE acceptance runtime, 35 once 0228 '
@@ -217,7 +217,7 @@ suite('(g) the core tables carry exactly the triggers the inventory registers, m
     + '`task_open_verification_request_carrier_guard` with the judgment machinery, 36 once '
     + '0231 added `session_source_freeze_guard` to `session` with the SOURCE snapshot, 37 once '
     + '0271 added `task_progress_epoch_advance` to `task` with the lifecycle epoch. Back to the '
-    + 'same 43 the first number names, but not the same 43 — nothing has been subtracted since, and '
+    + 'same 43 the first number names, but not the same 43 — nothing was subtracted on the way, and '
     + 'two later projects put three triggers each on '
     + '`task`: 0280 added `task_list_task_count_insert`/`_delete`/`_relist` with the list\'s task '
     + 'count, and 0282 added `project_task_status_count_insert`/`_delete`/`_move` with the '
@@ -227,7 +227,8 @@ suite('(g) the core tables carry exactly the triggers the inventory registers, m
     + 'session that stopped for good, 46 once 0367 added `session_antigravity_runner_claim_guard`, '
     + 'which keeps an older control plane from claiming an Antigravity session as Claude, and 47 '
     + 'once 0370 added `task_owner_confirmation_review_reviewer_ended`, which records on the '
-    + 'confirmation reviews still waiting on a session that their reviewer ended');
+    + 'confirmation reviews still waiting on a session that their reviewer ended — and 46 on this '
+    + 'line, where 0329 removed 0122\'s `task_dispatch_authority_derive` with the column it stamped');
   for (const [, trigger] of DROPPED_TRIGGERS) {
     assert.equal(installed.rows.some((row) => row.trigger === trigger), false);
   }

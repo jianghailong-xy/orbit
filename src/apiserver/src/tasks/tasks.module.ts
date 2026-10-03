@@ -14,6 +14,7 @@ import { PendingEvidenceJudgmentsController } from './pending-evidence-judgments
 import { TaskOwnerConfirmationController } from './task-owner-confirmation.controller';
 import { TaskOwnerConfirmationService } from './task-owner-confirmation.service';
 import { OwnerConfirmationReviewService } from './owner-confirmation-review.service';
+import { EvidenceReviewService } from './evidence-review.service';
 import { TaskProgressController } from './task-progress.controller';
 import { TaskProgressService } from './task-progress.service';
 import { SessionCreatedTasksController } from './session-created-tasks.controller';
@@ -50,6 +51,7 @@ import { TaskModelRoutingReportService } from './task-model-routing-report.servi
     TaskCompletionEvidenceService,
     TaskOwnerConfirmationService,
     OwnerConfirmationReviewService,
+    EvidenceReviewService,
     TaskProgressService,
     SessionCreatedTasksService,
     TaskModelRoutingReportService,

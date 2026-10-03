@@ -224,8 +224,9 @@ struct CodexPoolPageView: View {
     @State private var removingPerson: SharedPoolPerson?
     @State private var confirmingJustMine = false
     @State private var confirmingExit = false
-    /// The rule just flipped, shown as flipped until the pool the server answers with arrives.
+    /// The rules just flipped, shown as flipped until the pool the server answers with arrives.
     @State private var membersCanAdd: Bool?
+    @State private var membersCanAddAccounts: Bool?
     @State private var notice: String?
 
     private var pool: ProviderPool { page.pool }
@@ -308,6 +309,7 @@ struct CodexPoolPageView: View {
         .animation(.default, value: notice)
         .onChange(of: page.access) { _, _ in
             membersCanAdd = nil
+            membersCanAddAccounts = nil
         }
     }
 
@@ -366,13 +368,18 @@ struct CodexPoolPageView: View {
 
     @ViewBuilder private func memberRow(_ member: PoolMember) -> some View {
         if let login = member.login {
+            // What THIS reader may do to THIS account (migration 0371): the person who signed it in signs
+            // it in again, and with the pool's admins takes it out (web's `actionsFor`). Without the pool's
+            // people read — an own pool whose access is not in yet — the page's own presses stand.
+            let canSignInAgain = page.access.map { SharedPoolPage.canSignInAgain(login, in: $0) } ?? page.mine
+            let canSignOut = page.access.map { SharedPoolPage.canSignOut(login, in: $0) } ?? page.mine
             CodexAccountRow(member: member, login: login, next: CodexLoginPool.showsNext(member, in: pool),
-                            tagged: page.tagged, manages: page.mine, now: now,
+                            tagged: page.tagged, canSignInAgain: canSignInAgain, canSignOut: canSignOut,
+                            contributor: contributorName(login), now: now,
                             signInAgain: { sheet = .signIn(login) },
                             signOut: { signingOut = login })
-                // Signing it out is the pool owner's alone: a member's row has no such swipe.
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    if page.mine {
+                    if canSignOut {
                         Button(role: .destructive) { signingOut = login } label: {
                             Label(CodexLoginPool.signOut, systemImage: "rectangle.portrait.and.arrow.right")
                         }
@@ -399,6 +406,14 @@ struct CodexPoolPageView: View {
                 }
             }
         }
+    }
+
+    /// The person who signed an account in, named where the pool's people are read and the account is one
+    /// of theirs (web's `contributorOf`).
+    private func contributorName(_ login: CodexLogin) -> String? {
+        guard let access = page.access, let userId = login.userId else { return nil }
+        let key = PublicID.storageKey(userId)
+        return access.people.first { PublicID.storageKey($0.userId) == key }?.name
     }
 
     /// Who can use it: its owner's switch and what it means, each person's row (taken out, or made an admin
@@ -459,9 +474,17 @@ struct CodexPoolPageView: View {
                         membersCanAdd = value
                         setRule(UpdateSharedPoolRequest(membersCanAdd: value))
                     }))
+                // The accounts' own rule, beside the keys' (migration 0371).
+                Toggle(WhoCanUseIt.ruleAccountsTitle, isOn: Binding(
+                    get: { membersCanAddAccounts ?? card.pool.membersCanAddAccounts },
+                    set: { value in
+                        membersCanAddAccounts = value
+                        setRule(UpdateSharedPoolRequest(membersCanAddAccounts: value))
+                    }))
             } footer: {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(WhoCanUseIt.ruleHint)
+                    Text(WhoCanUseIt.ruleAccountsHint)
                     if card.showsFoot {
                         HStack(alignment: .firstTextBaseline, spacing: 6) {
                             Image(systemName: "lock.fill")
@@ -507,12 +530,12 @@ struct CodexPoolPageView: View {
     @ViewBuilder private func sheetView(_ kind: CodexPoolSheet) -> some View {
         switch kind {
         case .choose:
-            AddAccountSheet(pool: pool, accounts: page.logins.count) { chosen in
+            AddAccountSheet(pool: pool, accounts: page.logins.count, mine: page.mine) { chosen in
                 sheet = chosen == .key ? CodexPoolSheet.addKey : .signIn(nil)
             }
         case .signIn(let again):
-            if let own = page.own, let accountActions {
-                CodexSignInSheet(pool: own, again: again, actions: accountActions)
+            if let accountActions {
+                CodexSignInSheet(pool: page.own ?? pool, mine: page.mine, again: again, actions: accountActions)
             }
         case .addKey:
             if let access = page.access, let accessActions {
@@ -735,6 +758,8 @@ private struct AddAccountSheet: View {
     let pool: ProviderPool
     /// How many ChatGPT accounts the pool holds already.
     let accounts: Int
+    /// The reader is the pool's owner: an account may be shared with others yet, or already is.
+    let mine: Bool
     let onContinue: (CodexPoolPage.Kind.ID) -> Void
 
     @State private var kind = CodexPoolPage.Kind.ID.chatGPT
@@ -744,7 +769,7 @@ private struct AddAccountSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    ForEach(CodexPoolPage.kinds(accounts: accounts)) { option in
+                    ForEach(CodexPoolPage.kinds(accounts: accounts, mine: mine)) { option in
                         Button { kind = option.id } label: {
                             HStack(alignment: .top, spacing: 12) {
                                 Image(systemName: kind == option.id ? "largecircle.fill.circle" : "circle")
@@ -1205,8 +1230,13 @@ private struct CodexAccountRow: View {
     let next: Bool
     /// It says whose sessions it runs: everybody's.
     let tagged: Bool
-    /// The reader is the pool's owner, who alone may sign the account in or out.
-    let manages: Bool
+    /// The reader signed this account in: only they can sign it in again (migration 0371) — nobody, an
+    /// admin included, has a credential for it.
+    let canSignInAgain: Bool
+    /// The reader may take it out: the person who signed it in, or the pool's admins.
+    let canSignOut: Bool
+    /// Who signed it in, where the pool's people are read.
+    let contributor: String?
     let now: Date
     let signInAgain: () -> Void
     let signOut: () -> Void
@@ -1227,18 +1257,21 @@ private struct CodexAccountRow: View {
                             PoolChip(text: SharedPoolPage.nextChip)
                         }
                     }
-                    (Text(CodexLoginPool.line(login)) + (tagged ? Text(verbatim: " · ") + runsFor() : Text(verbatim: "")))
+                    (Text(CodexLoginPool.line(login, contributor: contributor))
+                        + (tagged ? Text(verbatim: " · ") + runsFor() : Text(verbatim: "")))
                         .font(.orbitLabel)
                         .foregroundStyle(.secondary)
                     Text(status.label)
                         .font(.orbitListSubtitle)
                         .foregroundStyle(PoolTone.color(status.tone))
                     if member.state == .signedOut {
-                        Text(manages ? CodexLoginPool.signedOutReason : CodexLoginPool.signedOutReasonMember)
+                        Text(canSignInAgain
+                            ? CodexLoginPool.signedOutReason
+                            : CodexLoginPool.signedOutReasonNotYours(contributor))
                             .font(.orbitLabel)
                             .foregroundStyle(PoolTone.color(.danger))
                             .padding(.top, 2)
-                        if manages {
+                        if canSignInAgain {
                             Button(CodexLoginPool.signInAgain, action: signInAgain)
                                 .buttonStyle(.borderedProminent)
                                 .buttonBorderShape(.capsule)
@@ -1250,9 +1283,9 @@ private struct CodexAccountRow: View {
                 Spacer(minLength: 0)
                 // Signing this account out: the mark rests in the row's grey — red on a row that is fine
                 // reads as something wrong with it — and asks before it does anything. The tint, not a
-                // style on the image: a borderless button draws its label in its tint. Its owner's alone:
-                // the accounts run everyone's sessions, but the sign-in is not a member's to change.
-                if manages {
+                // style on the image: a borderless button draws its label in its tint. Offered to whoever
+                // the pool admits (the person who signed it in, and its admins) and applied per row.
+                if canSignOut {
                     Button(action: signOut) {
                         Image(systemName: "rectangle.portrait.and.arrow.right")
                             .frame(width: 30, height: 30)
@@ -1325,6 +1358,9 @@ private struct CodexWindowRow: View {
 /// signed out going back in. Closing it before the code was approved gives the sign-in up on the server.
 struct CodexSignInSheet: View {
     let pool: ProviderPool
+    /// The reader is the pool's owner — the page drawn for them — rather than one of the people it is
+    /// shared with, whose own account goes in for everyone here too (migration 0371).
+    var mine: Bool = true
     /// The account a sign-in again is for, once OpenAI signed it out; nil to add one more.
     let again: CodexLogin?
     let actions: CodexPoolActions
@@ -1338,9 +1374,10 @@ struct CodexSignInSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
 
-    init(pool: ProviderPool, again: CodexLogin? = nil, actions: CodexPoolActions,
+    init(pool: ProviderPool, mine: Bool = true, again: CodexLogin? = nil, actions: CodexPoolActions,
          step: CodexSignIn.Step = .consent) {
         self.pool = pool
+        self.mine = mine
         self.again = again
         self.actions = actions
         _step = State(initialValue: step)
@@ -1406,7 +1443,9 @@ struct CodexSignInSheet: View {
                     .padding(.top, 6)
                     .padding(.bottom, 12)
                 VStack(alignment: .leading, spacing: 0) {
-                    let facts = addsAnother ? CodexSignIn.anotherFacts(pool) : CodexSignIn.facts(pool)
+                    let facts = addsAnother
+                        ? CodexSignIn.anotherFacts(pool, mine: mine)
+                        : CodexSignIn.facts(pool, mine: mine)
                     ForEach(Array(facts.enumerated()), id: \.offset) { index, fact in
                         if index > 0 {
                             Divider().padding(.leading, 16)
@@ -1419,7 +1458,7 @@ struct CodexSignInSheet: View {
                 .background(Color(uiColor: .secondarySystemGroupedBackground),
                             in: RoundedRectangle(cornerRadius: 26, style: .continuous))
                 .padding(.horizontal, 16)
-                let risk = addsAnother ? CodexSignIn.anotherRisk : CodexSignIn.risk
+                let risk = addsAnother ? CodexSignIn.anotherRisk : CodexSignIn.risk(mine: mine)
                 (Text("⚠︎ ") + Text(risk.lead).bold() + Text(risk.rest))
                     .font(.orbitListSubtitle)
                     .foregroundStyle(PoolTone.color(.warning))

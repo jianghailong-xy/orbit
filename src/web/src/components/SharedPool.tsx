@@ -119,7 +119,7 @@ export function WhoCanUseItCard({
   // Everybody in it but its owner: the people they added.
   const added = pool.people.filter((person) => !person.creator);
   const [sharing, setSharing] = useState(false);
-  const save = usePoolWrite((rules: { membersCanAdd: boolean }) =>
+  const save = usePoolWrite((rules: { membersCanAdd?: boolean; membersCanAddAccounts?: boolean }) =>
     api(poolPath(pool), { method: 'PATCH', body: rules }),
   );
   // Back to Just me: everybody but its owner out, and their keys and session tokens with them.
@@ -177,22 +177,39 @@ export function WhoCanUseItCard({
       )}
       {people && pool.people.map((person) => <PersonRow key={person.userId} pool={pool} person={person} accounts={accounts} />)}
       {mine && people && (
-        <div className="pool-rule">
-          <div>
-            <div className="pool-rule-t">They can add their own API keys</div>
-            <div className="pool-rule-h">
-              Off: only you put keys in. A key they add runs everyone’s sessions here, theirs first.
+        <>
+          <div className="pool-rule">
+            <div>
+              <div className="pool-rule-t">They can add their own API keys</div>
+              <div className="pool-rule-h">
+                Off: only you put keys in. A key they add runs everyone’s sessions here, theirs first.
+              </div>
             </div>
+            <Switch
+              checked={pool.membersCanAdd}
+              loading={save.isPending}
+              onChange={(on) => save.mutate({ membersCanAdd: on })}
+              aria-label="They can add their own API keys"
+            />
           </div>
-          <Switch
-            checked={pool.membersCanAdd}
-            loading={save.isPending}
-            onChange={(on) => save.mutate({ membersCanAdd: on })}
-            aria-label="They can add their own API keys"
-          />
-        </div>
+          <div className="pool-rule">
+            <div>
+              <div className="pool-rule-t">They can add their own ChatGPT accounts</div>
+              <div className="pool-rule-h">
+                Off: only you sign ChatGPT accounts in. An account they sign in runs everyone’s sessions
+                here too, and only they can sign it in again.
+              </div>
+            </div>
+            <Switch
+              checked={pool.membersCanAddAccounts}
+              loading={save.isPending}
+              onChange={(on) => save.mutate({ membersCanAddAccounts: on })}
+              aria-label="They can add their own ChatGPT accounts"
+            />
+          </div>
+        </>
       )}
-      {mine && people && accounts !== null && (
+      {mine && people && accounts !== null && accounts > 0 && (
         <div className="who-foot">
           <WarningFilled />
           <span>
@@ -484,6 +501,12 @@ function SharePoolModal({
                 </>
               )}
             </li>
+            {pool.membersCanAddAccounts && (
+              <li>
+                <b>They can sign in ChatGPT accounts of their own</b>, which then run everyone’s sessions
+                here too — theirs and yours — until they take them out again.
+              </li>
+            )}
             <li>
               <b>Everyone sees each person’s share</b> of this month’s API key use.
             </li>

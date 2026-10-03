@@ -5,9 +5,13 @@ ChatGPT 登录」；本文档、效果图与 4 项产品决策已按新方向改
 共享池的 web / iOS 界面，以及池主本人 ChatGPT 账号的池（P3-a / P3-b / P3-c，迁移 0323 / 0324）都已实现。
 2026-10-02 池主选定**方案 A**（D8）：服务端（迁移 0355 / 0358）和 web 界面已实现，macOS / iOS 的方案 A 界面截至 2026-10-03 还在做。
 **2026-10-03 池主改定：D8 里「ChatGPT 账号只跑池主自己的会话」这条规则去掉**——池里被加进来的人（people）也跑在
-池主的 ChatGPT 账号上，与池主同一条顺序（先用账号，账号都不能跑才落到 API key），见下面 D9；账号的登录/登出/加账号
-仍只有池主（账号本身仍是池主的，0323 / 0324 的池主外键不放宽、也不新增迁移）。旧规则的效果图
+池主的 ChatGPT 账号上，与池主同一条顺序（先用账号，账号都不能跑才落到 API key），见下面 D9。旧规则的效果图
 （`docs/mocks/account-pool-access/02` 里成员视角的锁定行）不再代表产品行为，图纸未重画。
+**2026-10-03 同日再进一步（D10）：池里的人可以签名下自己的 ChatGPT 账号加进池**——加进来的账号与池主的对称，
+跑全池的会话；`pool_codex_login` 的复合外键从池主换成池里的**人**（迁移 0371），池主本人才有 `pool_login_token`
+（`orbit-gwl-`）这件事不变。这一条把 2026-09-27 的「服务器不代持别人的个人 ChatGPT 凭据」硬边界**有意跨过**：
+D9 只借池主的账号跑别人的会话，D10 起服务器还要代持并刷新**成员自己**的个人登录。风险由各贡献者与池主承担，
+产品提示如实说明（见 §4）。
 效果图、iOS 复刻和 web 界面 mock 补丁都在 [`docs/mocks/codex-shared-pool/`](./mocks/codex-shared-pool/)；
 方案 A 的效果图在 [`docs/mocks/account-pool-access/`](./mocks/account-pool-access/)。
 
@@ -20,13 +24,17 @@ ChatGPT 登录」；本文档、效果图与 4 项产品决策已按新方向改
 一个池可以同时有池主的多个 ChatGPT 账号、OpenAI API key 和被加进来的人。
 ~~ChatGPT 账号只跑池主自己的会话，对别人锁住（不显示邮箱、套餐、`…AB12`、额度）；被加进来的人只跑池里的 API key。~~
 **2026-10-03 改定（D9）：账号对池里每个人可用，与池主同一顺序（先用账号，账号都不能跑才落到 API key）；
-邮箱、套餐、`…AB12`、额度对成员同样可见，登录 / 登出仍只有池主。** 理由：
+邮箱、套餐、`…AB12`、额度对成员同样可见。**
+**2026-10-03 再定（D10）：池里的人可以把自己名下的 ChatGPT 账号签进池**（谁能加由池规则
+`members_can_add_accounts` 控制，默认开）；账号跑全池的会话，只有签名者本人能 Sign in again，签名者本人和池的
+管理员可以把它移出。理由：
 - OpenAI 条款写的是「You may not share your account credentials or make your account available to anyone else」，
-  09-27 改方向也是因为这一条；2026-10-03 池主明确要求去掉「只跑池主」这条规则，共享账号的风险由池主自己承担，
-  产品里的提示如实说明这一点（不再写「别人不能跑」）。
-- 0323 / 0324 的边界不变：`pool_codex_login` 和 `pool_login_token` 上的 `(pool_id, user_id) → provider_pool(id, owner_id)`
-  外键原样保留，没有删除或放宽，登录行和登录令牌仍然只能属于池主——成员跑在池主账号上不需要自己的登录行或登录令牌，
-  所以这次改动没有迁移。
+  09-27 改方向也是因为这一条；2026-10-03 池主明确要求去掉「只跑池主」这条规则、并让成员能拿自己的账号入池，
+  共享账号与服务器代持个人登录的风险由各贡献者与池主自己承担，产品里的提示如实说明这一点（不再写「别人不能跑」）。
+- D9 时 `pool_codex_login` 与 `pool_login_token` 的 `(pool_id, user_id) → provider_pool(id, owner_id)` 外键都原样保留
+  （成员跑在池主账号上不需要自己的行）。D10 起前者换成 `(pool_id, user_id) → provider_pool_person(pool_id, user_id)`
+  （迁移 0371，与 `pool_api_key.contributor` 同一把围栏）：登录行属于**池里的一个人**，随他离开池一起删；后者不动，
+  登录令牌仍只属于池主。
 
 ## 0. 一页结论
 
@@ -37,10 +45,11 @@ ChatGPT 登录」；本文档、效果图与 4 项产品决策已按新方向改
 - **会话仍跑在成员自己的 runner 上**。runner 上的 codex 走现有的自定义 provider 通路，
   `OPENAI_BASE_URL` 指向 Orbit 网关，`OPENAI_API_KEY` 是会话令牌。
   网关把令牌换成池内某把 key，其余原样转发给 OpenAI。**runner 上没有任何一把池内 key。**
-- **硬边界：服务器不代持、不中转任何别人的个人 ChatGPT 凭据。** 别人能放进池里的只有 API key。
-  （2026-09-28 起池里可以有池主本人经设备码登入的 ChatGPT 账号，库里钉在池主身上；方案 A 起它们仍只跑池主自己的会话，见 D8。）
-- **方案 A（2026-10-02）**：一个 Codex 池可以同时放池主的多个 ChatGPT 账号、API key 和被加进来的人。
-  池主的会话先用 ChatGPT 账号，都用不了才落到 key；被加进来的人只用 key。「谁能用」由池里有哪些人派生。
+- ~~**硬边界：服务器不代持、不中转任何别人的个人 ChatGPT 凭据。**~~ **2026-10-03 起这条边界被有意跨过（D9 / D10）**：
+  服务器代持池主与各成员**本人经设备码登入**的 ChatGPT 凭据（加密存库、只在服务器上刷新），池主与成员各自承担
+  账号共享的条款风险；别人能主动放进池里的仍只有自己的账号（设备码登录）与 API key，见 D9 / D10 与 §4。
+- **方案 A（2026-10-02）**：一个 Codex 池可以同时放池里的多个 ChatGPT 账号（池主的，2026-10-03 起也可以是成员自己签进来的）、
+  API key 和被加进来的人。会话先用池里的 ChatGPT 账号，都用不了才落到 key。「谁能用」由池里有哪些人派生。
 - **会话侧几乎没有新界面**：
   - 选择器、输入框配额条、换 key 提示都是现成的；
   - 新界面只有共享池卡片、池页的 Members / Rules、「Add a key」流程、「New pool」。
@@ -60,7 +69,8 @@ ChatGPT 登录」；本文档、效果图与 4 项产品决策已按新方向改
 | D6 | 没出 key 的成员也能用池；每人的用量份额公开可见 | 效果图 02 |
 | D7 | 默认：网关先放在 apiserver 进程里 | 默认，未反对 |
 | D8 | 方案 A：一种 Codex 池，可以同时有池主的多个 ChatGPT 账号、OpenAI API key 和被加进来的人。「谁能用」（Just me / Me and people I add）由池里的人派生；D9 覆盖其中「账号只跑池主自己的会话」一条 | 2026-10-02 池主定（效果图 `account-pool-access/02` 的主方案；同图的「方案 B · 两种池不合并」未采用）。0323 / 0324 的池主外键不变、不放宽（见文首） |
-| D9 | **池主的 ChatGPT 账号，池里的每个人都能跑**（2026-10-03 池主定，取代 D8 里「只跑池主自己的会话」）：与池主同一条顺序——先用账号，账号都不能跑才落到 API key；账号的登录 / 重登 / 加账号仍只有池主。理由是池主本人要求把「只跑池主」这条规则去掉，共享账号的风险（OpenAI 条款视为违规、账号可能被限制）由池主自己承担；产品里的提示改成如实说明这一点（登录弹窗、Who can use it 卡脚注） | 2026-10-03 池主定，经会话确认（含账号优先、成员看到完整账号卡片、macOS / iOS 一起改）。0323 / 0324 的池主外键不变——别人跑在池主账号上不需要自己的 `pool_codex_login` / `pool_login_token` 行 |
+| D9 | **池主的 ChatGPT 账号，池里的每个人都能跑**（2026-10-03 池主定，取代 D8 里「只跑池主自己的会话」）：与池主同一条顺序——先用账号，账号都不能跑才落到 API key。理由是池主本人要求把「只跑池主」这条规则去掉，共享账号的风险（OpenAI 条款视为违规、账号可能被限制）由池主自己承担；产品里的提示改成如实说明这一点（登录弹窗、Who can use it 卡脚注） | 2026-10-03 池主定，经会话确认（含账号优先、成员看到完整账号卡片、macOS / iOS 一起改）。当时 0323 / 0324 的池主外键不变——别人跑在池主账号上不需要自己的 `pool_codex_login` / `pool_login_token` 行；`pool_codex_login` 的围栏已由 D10 换成池里的人（0371） |
+| D10 | **池里的人可以签名下自己的 ChatGPT 账号加进池**（2026-10-03 池主定）：两种池（本人的 Codex 池与共享池 0321）都行；加进来的账号与池主的完全对称——跑全池的会话，先用账号、账号都不能跑才落到 key；**只有签名者本人**能 Sign in again（管理员也没有那个账号的凭据），签名者本人与池的管理员可以把它移出；能否加由池的新规则 `members_can_add_accounts`（默认开）控制，与 key 的规则 `members_can_add` 各管一摊。数据上 `pool_codex_login` 的复合外键从池主换成池里的**人**（迁移 0371，`(pool_id, user_id) → provider_pool_person`，与 `pool_api_key.contributor` 同一把），登录令牌 `pool_login_token` 仍只属于池主（`orbit-gwl-`） | 2026-10-03 池主定，经会话确认（账号范围＝池里每个人、管理权＝贡献者＋池主、独立规则、两种池都行）。**有意跨过 2026-09-27「服务器不代持别人的个人登录」的硬边界**：D9 是借池主账号跑别人的会话，D10 起服务器还代持并刷新成员自己的个人 ChatGPT 登录；风险由各贡献者与池主承担，提示如实（§4） |
 
 ## 2. 架构
 
@@ -161,8 +171,9 @@ codex (custom provider "orbit") ──▶  /gw/codex/responses  ──池内某�
   - ~~ChatGPT 账号只跑池主的会话：会话的 owner 不是池主，就在读任何账号之前回 403 `orbit_pool_login_owner_only`~~
     ——2026-10-03 起这条已去掉（D9）：池主的会话（`orbit-gwl-` 令牌）和被加进来的人的会话（`orbit-gw-` 令牌）都
     由这里转发到会话当前的账号；账号的登录 / 重登 / 登出仍只在池主那组门（CodexLoginService）。
-    账号被登出 / 池里没有账号的拒绝语按读者分两种：池主读到 "only you can sign in again"，别人读到
-    "only its owner can sign in again"。
+    账号被登出 / 池里没有账号的拒绝语按读者与**该账号的签名者**的关系分两种（D10 起）：签名者本人读到
+    "only you can sign in again"，别人读到 "only the person who signed it in can sign it in again"（池里没有账号时
+    对所有人同一句 "sign one in on its page"，谁能加由池规则决定）。
   - 令牌不再绑定账号（0355）：warm 引擎拿着换号前签发的令牌，下一次请求就走会话现在的账号，不用重启引擎；
     移出一个账号不会让别的会话的令牌失效，正在用这个账号的会话收到 403 `orbit_pool_login_missing`，直到下一次 claim 把它换走。
   - 池主的会话落到 key 上时，用的仍是同一个 `orbit-gwl-` 令牌；被加进来的人永远只有 `orbit-gw-` 令牌。
@@ -320,9 +331,10 @@ claim（P1 已落地，`QueueService.resolveSharedPool`）：
   池主的会话在上面仍先用 ChatGPT 账号。不改写的理由（迁移头部写明）：跟着人数变的 `shared` 等于把人员行已经说明的事实再存一份，
   每次加人、移人都要同步；而且现在读 `shared` 的地方（登录 `CodexLoginService`、池主的池列表与池页 `ProvidersService`、claim
   `QueueService.accountPool`）都把它读成「这里没有 ChatGPT 账号」，加一个人就会让池主的账号离开池主自己的会话和池页。
-- **一个池多个 ChatGPT 账号**：`pool_codex_login` 的主键 0323 起就是 `(pool_id, account_id)`，没有新迁移。服务端不再拒绝第二个账号
+- **一个池多个 ChatGPT 账号（D10 起还是多个人的）**：`pool_codex_login` 的主键 0323 起就是 `(pool_id, account_id)`，没有新迁移。服务端不再拒绝第二个账号
   （`POOL_CODEX_ACCOUNT_TAKEN` 已去掉）；同一个账号再登回 409 `POOL_CODEX_ACCOUNT_DUPLICATE`（`This ChatGPT account is already in "<池名>"`），
-  已被登出（SIGNED_OUT）的同一个账号重登则接管原来那一行。账号按 `created_at`、`account_id` 升序（较早加入的在前）。
+  已被登出（SIGNED_OUT）的同一个账号重登则接管原来那一行——**但只有把它签进来的那个人能重登**，同样的账号由别人签回
+  仍是 409 `POOL_CODEX_ACCOUNT_DUPLICATE`（行随贡献者走，见上）。账号按 `created_at`、`account_id` 升序（较早加入的在前）。
   登出只移除一个账号：`DELETE /api/providers/pools/:id/codex-login/account?fingerprint=…AB12`；两个账号后四位相同时回 409
   `POOL_CODEX_ACCOUNT_AMBIGUOUS`，什么都不删。
 - **令牌与账号解绑（0355）**：`pool_login_token` 去掉 `account_id` 列、`(pool_id, account_id) → pool_codex_login` 外键和这一对的索引。
@@ -330,12 +342,20 @@ claim（P1 已落地，`QueueService.resolveSharedPool`）：
   会话跑在哪个账号上只看 `session.pool_codex_account_id`（0324），网关每个请求现读。0355 原本写作 0348，落地前因 main 已有
   `0348_session_folder` 改号。
 - **会话上的凭据**：`session.pool_codex_account_id`（0324）和 `session.pool_key_id`（0321），claim 写下选中的那一个、清掉另一个。
-  被加进来的人的会话自 2026-10-03 起也会是 `pool_codex_account_id`——他们跑在池主的账号上（D9）——但永远不会有
-  `pool_login_token` 行：那张表的外键（0324）把它钉在池主身上，他们的令牌始终是 `pool_gateway_token`（`orbit-gw-`）。
-- **0323 / 0324 的池主外键不变**：`pool_codex_login_pool_id_user_id_fkey` 与 `pool_login_token_pool_id_user_id_fkey` 都是
-  `FOREIGN KEY (pool_id, user_id) REFERENCES provider_pool(id, owner_id) ON DELETE CASCADE`，0355、0358 都没有提到或改写它们。
-  `pool-login-owner-fence.pg.spec.ts` 在跑完全部迁移的库上用 `pg_get_constraintdef` 比对这两条定义与 0323 / 0324 原文一致，
-  并验证插入 `user_id` 不是池主的行会被外键拒绝。
+  被加进来的人的会话自 2026-10-03 起也会是 `pool_codex_account_id`——他们跑在池里的账号上（D9 起是池主的，D10 起也可以是
+  某个成员自己的）——但永远不会有 `pool_login_token` 行：那张表的外键（0324）把它钉在池主身上，他们的令牌始终是
+  `pool_gateway_token`（`orbit-gw-`）。
+- **账号的围栏是池里的一个人（D10，迁移 0371）**：`pool_codex_login_pool_id_user_id_fkey` 从
+  `FOREIGN KEY (pool_id, user_id) REFERENCES provider_pool(id, owner_id)` 换成
+  `REFERENCES provider_pool_person(pool_id, user_id) ON DELETE CASCADE`（`pool_api_key.contributor`、`pool_gateway_token.person`
+  同一条围栏）。所以「谁能有一行登录」＝池里的一个人，插一个池外的人（哪怕他是另一个池的池主）仍被外键拒绝；
+  人离开池，他签进来的账号随他的那一行一起删。存量行都指向池主、池主必有 person 行（0358），无需回填。
+- **`pool_login_token` 的池主围栏不变**：`pool_login_token_pool_id_user_id_fkey` 仍是 0324 的
+  `FOREIGN KEY (pool_id, user_id) REFERENCES provider_pool(id, owner_id)`——登录令牌只发给池主的会话，成员的会话始终是
+  `pool_gateway_token`（`orbit-gw-`），即使它跑在某个成员签进来的账号上。
+  `pool-login-fences.pg.spec.ts`（D10 时从 `pool-login-owner-fence.pg.spec.ts` 改名）在跑完全部迁移的库上用
+  `pg_get_constraintdef` 比对这两条定义与 0371 / 0324 原文一致，并验证：登录行对池里的人（池主与成员）都可以插、
+  对池外的人被拒；登录令牌对成员仍被拒、只对池主可以插；人离开池，他的登录行随之删除。
 
 ### 2.5 权限
 
@@ -345,16 +365,17 @@ claim（P1 已落地，`QueueService.resolveSharedPool`）：
 | 动作 | 管理员 | 成员 | 非成员 |
 |---|---|---|---|
 | 看到池、在选择器里选它、在它上面开会话 | ✓ | ✓ | ✗（按不存在处理） |
-| 加自己的 key | ✓ | 规则开着时 ✓ | ✗ |
+| 加自己的 key | ✓ | 规则 `members_can_add` 开着时 ✓ | ✗ |
 | 停用 key（`enabled=false`） | 只能停用自己贡献的 | 只能停用自己贡献的 | ✗ |
 | 移除 key | 任何人的 | 只能移除自己贡献的 | ✗ |
 | 替换失效的 key | 任何人的 | 只能替换自己贡献的 | ✗ |
+| 加自己的 ChatGPT 账号（Sign in with ChatGPT，D10） | ✓ | 规则 `members_can_add_accounts` 开着时 ✓ | ✗ |
+| 被登出后 Sign in again（D10） | **只有把该账号签进来的那个人**（管理员也没有那个账号的凭据） | 同左（自己的账号） | ✗ |
+| 移除池里的一个 ChatGPT 账号（D10） | 任何人的 | 只能移除自己签进来的 | ✗ |
 | 改规则、加/移成员、删池 | ✓ | ✗ | ✗ |
-| 离开池（自己的 key 一起离开） | — | ✓ | — |
-| **ChatGPT 账号**（方案 A；只在本人 Codex 池上） | **池主** | **成员（被加进来的人）** | **非成员** |
-| 加 ChatGPT 账号（Sign in with ChatGPT）、被登出后 Sign in again | ✓ | ✗ | ✗ |
-| 登出（移除）其中一个 ChatGPT 账号 | ✓ | ✗ | ✗ |
-| 看到 ChatGPT 账号的邮箱、套餐、`…AB12`、额度读数、被登出的原因 | ✓ | ✓（2026-10-03 起，与池主同一份视图；只有 OpenAI 的账号 id 谁也读不到） | ✗ |
+| 离开池（自己的 key 与签进来的账号一起离开） | — | ✓ | — |
+| **ChatGPT 账号（方案 A 起；D10 起两种池都有，账号可以属于池里任何人）** | **池主 / 管理员** | **成员（被加进来的人）** | **非成员** |
+| 看到 ChatGPT 账号的邮箱、套餐、`…AB12`、额度读数、被登出的原因、签名者姓名 | ✓ | ✓（2026-10-03 起，与池主同一份视图；只有 OpenAI 的账号 id 谁也读不到） | ✗ |
 | 会话跑在 ChatGPT 账号上 | ✓（先用账号，都用不了才落到 key） | ✓（同一条顺序，2026-10-03 起） | ✗ |
 
 - 所有接受 provider slug 的入口都要改：建会话、建任务或改任务、改 agent、会话中途换 provider。
@@ -370,20 +391,27 @@ claim（P1 已落地，`QueueService.resolveSharedPool`）：
     被加进来的人都是成员：规则「They can add their own API keys」（即 `members_can_add`）开着时能加自己的 key，离开时 key 和令牌跟着走。
   - 池主在本人池上加人（按 Orbit 账号邮箱）、移人、加删 key、改规则，走的是共享池那一组门 `/api/providers/shared-pools/:id/...`。
     `GET /api/providers/shared-pools` 列出调用者所在的共享池，以及别人把他加进去的本人池；自己的池仍在 `/api/providers/pools`。
-  - ChatGPT 账号的登录、重登、登出只在 `/api/providers/pools/:id/codex-login…`，这些门只认池主（`CodexLoginService.ownPool`），别人一律 404。
+  - ChatGPT 账号的登录、重登、登出只在 `/api/providers/pools/:id/codex-login…`，D9 时只认池主（`CodexLoginService.ownPool`）；
+    D10 起这些门认**池里的任何人**（`poolOf` 查 `provider_pool_person` 行，两种池都算），加账号按池规则
+    `members_can_add_accounts`（管理员总是可以），登出（移除）只允许签名者本人与管理员，Sign in again 只允许签名者本人；
+    池外的人一律 404（与池不存在同形）。每个 (池, 人) 一对独立的登录尝试：两个人同时登录同一个池互不顶掉，也从读不到对方尝试的结果。
   - ~~被加进来的人读到的池视图里，关于 ChatGPT 账号只有 `ownerHasChatGPT`（池里有没有）……~~ 2026-10-03 起（D9）成员读到
     **完整账号视图**：`SharedPool.logins` 与池主页面同一份（`codexLoginView`：邮箱、套餐、`…AB12`、state、`usage`、`lastError`、
     `spentUntil`），另加一个 `next` 标记说明他下一次 claim 会落到哪张账号；`ownerHasChatGPT` 字段随锁定行一起删除。
     视图由 `choosePoolCredential` 求 `next`（账号优先），与 claim 同一条规则。OpenAI 的账号 id 谁也读不到（`maskedAccount`）。
   - 选择器和接受 slug 的入口（`listUsable`、`accountPoolRuntime`、`accountPoolRefusal`）对被加进来的人放行别人的本人 Codex 池；
-    拒绝只在「没有一个账号能跑、也没有一把 key 能用」时给出（`codexPoolUnavailableReason`，成员版措辞是 "ask its owner to sign in"），
-    一个账号能跑就不再置灰（web 选择器里该池可点）。
-  - 边界由三处守住：库里 0323 / 0324 的池主外键（账号与登录令牌只属于池主，成员不会、也不能有自己的行）；claim 不给成员签发登录令牌
-    （他们的会话跑在池主账号上，但令牌是 `orbit-gw-`）；`CodexLoginService.ownPool` 的登录 / 重登 / 登出门只认池主。
+    拒绝只在「池里的账号一个都不能跑、也没有一把能用的 key」时给出（`codexPoolUnavailableReason`；账号被登出时，签名者本人读到
+    "sign in again on its page"，别人读到 "only the person who signed it in can sign it in again, on the pool's page"，
+    池里没有账号时所有人同一句 "sign one in on its page"），一个账号能跑就不再置灰（web 选择器里该池可点）。
+  - 边界由三处守住（D10 起）：库里 **`pool_login_token` 的池主围栏**（登录令牌只发给池主的会话，成员不会、也不能有自己的行）；
+    claim 不给成员签发登录令牌（他们的会话可以跑在任何账号上，但令牌是 `orbit-gw-`）；**Sign in again 只有签名者本人**能做
+    （`CodexLoginService.signOut`/`store` 的贡献者判定），别人——管理员也一样——没有那个账号的凭据。
+    账号本身的围栏是池里的人（0371），池外的人插不进一行登录。
     `pool-security-boundary.pg.spec.ts` 让成员的会话走 claim、reclaim、换 provider 的 reload，断言 `pool_login_token` 里没有他的行、
-    `session.pool_codex_account_id` 是池主的账号、拿到的令牌经网关转发到 ChatGPT 后端并带上该账号的 `ChatGPT-Account-ID`；
-    再以成员身份调用 providers 四个控制器（含 shared-pools）声明的全部路由，被拒的也算，断言他读得到账号的邮箱、套餐、`…AB12`、
-    额度与 `last_error`（和池主一样），但任何响应、会话读接口和推送里都没有 OpenAI 的账号 id 或任何凭据。池主身份的同一组请求作为正对照。
+    `session.pool_codex_account_id` 是池里的账号、拿到的令牌经网关转发到 ChatGPT 后端并带上该账号的 `ChatGPT-Account-ID`；
+    再以成员身份调用 providers 四个控制器（含 shared-pools）声明的全部路由，被拒的也算——包括在池里的登录门上起一个自己的登录、
+    轮询、放弃，以及越权移除别人的账号得 403——断言他读得到账号的邮箱、套餐、`…AB12`、额度与 `last_error`（和池主一样），
+    但任何响应、会话读接口和推送里都没有 OpenAI 的账号 id 或任何凭据。池主身份的同一组请求作为正对照。
 
 ## 3. 界面
 
@@ -396,7 +424,7 @@ web 与原生之间走 parity 测试）。两套图说法不一样的地方，�
 | 图（account-pool-access） | 内容 |
 |---|---|
 | 01-review-and-accounts | 左半：原池页的 review（头部读数只看 5h、登出图标常红、「Just me」只是一句副标题、只能放一个账号）。右半 A–E：一个池放多个 ChatGPT 账号——右上角常驻 Add account；Accounts 卡头部写 `Next:` 下一个会话落在哪个账号、以及它最紧的窗口；登出图标平时灰色、悬停才变红；「Who can use it」成为一张卡；换号句式 |
-| 02-who-can-use-it | 池主和被加进来的人看同一个池：分享后 API key 标 `Everyone here`（~~ChatGPT 账号标 `Only you`、成员只剩一行锁住的说明~~——已作废，见下）；Who can use it 卡（Just me / Me and people I add、每人能跑什么和 API key 本月用量份额、They can add their own API keys）；池里没有 key 且没有账号登录时的黄色提示。右下的「方案 B」（两种池不合并）未采用。**2026-10-03（D9）起，这张图里成员视角的锁定行与 `Only you` 标注不再代表产品行为**：账号与 key 一样标 `Everyone here`，成员读到和池主相同的账号卡片（邮箱、套餐、`…AB12`、额度、被登出原因），没有登录 / 登出动作，卡脚注如实写明账号共享与条款风险；图纸与 PNG 未重画 |
+| 02-who-can-use-it | 池主和被加进来的人看同一个池：分享后 API key 标 `Everyone here`（~~ChatGPT 账号标 `Only you`、成员只剩一行锁住的说明~~——已作废，见下）；Who can use it 卡（Just me / Me and people I add、每人能跑什么和 API key 本月用量份额、They can add their own API keys）；池里没有 key 且没有账号登录时的黄色提示。右下的「方案 B」（两种池不合并）未采用。**2026-10-03（D9）起，这张图里成员视角的锁定行与 `Only you` 标注不再代表产品行为**：账号与 key 一样标 `Everyone here`，成员读到和池主相同的账号卡片（邮箱、套餐、`…AB12`、额度、被登出原因），卡脚注如实写明账号共享与条款风险；**（D10）起卡上再添一条规则开关「They can add their own ChatGPT accounts」，成员可以由头部按钮 `Add account` 把自己的账号签进来，账号行第二行以签名者姓名开头（如 `Zhang Min · ChatGPT Plus · …AB12`），Sign out / Sign in again 按行给：Sign in again 只有签名者本人，Sign out 签名者本人与管理员**；图纸与 PNG 未重画 |
 | 03-flows | Add account 先选加什么（Sign in with ChatGPT / Paste an OpenAI API key）；第二个账号的登录说明；完成页与同一账号再登；Share Codex Pool（含池里没有 key 的变体）；Make Codex Pool just yours?；Providers 页的池卡（池主 Just me / 分享后，以及成员看到的同一个池） |
 
 - web 已按这三张图实现：`ProviderPoolPage.tsx` 的 `CodexPoolPage` 按池主 / 被加进来的人两种视角画同一个池，0321 建的 key 池也走这个页面，
@@ -430,7 +458,13 @@ web 与原生之间走 parity 测试）。两套图说法不一样的地方，�
 - **共享账号（2026-10-03 起，D9）**：池主的 ChatGPT 账号跑池里所有人的会话，这正是 OpenAI 条款里
   「make your account available to anyone else」那条所说的共享；池主已知情并明确要求这么做，风险（账号被限制甚至停用）
   由池主承担。产品不再声称「别人跑不到」，而是在登录弹窗和 Who can use it 卡里如实写明这一点，不做任何规避检测。
-  账号仍只有池主能登录 / 登出，池主随时可以登出账号或把人移出池来收回使用权。
+  池主随时可以登出账号或把人移出池来收回使用权。
+- **成员的个人登录由服务器代持（2026-10-03 起，D10）**：成员用自己的账号入池后，服务器不但转发它，还**代持并刷新该账号的
+  access / refresh token**（`PROVIDER_SECRET_KEY` 加密存库），并在上游 401 时把它标为 SIGNED_OUT；换言之 2026-09-27 被
+  三个执行会话按条款拒绝的方向（服务器代持他人的个人 ChatGPT 登录）**被池主有意要求并接受**，风险（账号被限制甚至停用）
+  由各贡献者本人与池主承担。产品提示如实写明：登录弹窗对成员说「Everyone in this pool runs on it」与条款风险句；
+  账号行写明签名者，Sign in again 只给签名者本人；贡献者随时可以把自己的账号登出（离开池时自动一起删），池主随时可以
+  把它移出池。不做任何规避检测。
 - **兼容性**：OpenAI 是否接受 codex 自定义 provider 形状的请求，要 P0 实测。
   codex 升级后请求可能变化，网关要有录制和回放的契约测试。
 - **安全**：
@@ -454,4 +488,8 @@ web 与原生之间走 parity 测试）。两套图说法不一样的地方，�
 - **P4 iOS / macOS 界面**：按效果图 05。
 - **P5 文案**：`poolSwitchNotice` 增加 D5 的 key 句式；个人池保持现有句式；parity 测试。
 - **方案 A**（2026-10-02 起，D8）：多账号、选号与换号、令牌与账号解绑（迁移 0355）、合并两种池（迁移 0358）、web 界面已实现；
-  macOS / iOS 的方案 A 界面与 parity 截至 2026-10-03 还在做。
+- **D9 / D10**（2026-10-03）：账号对全池可用；成员可以签自己的账号入池（迁移 0371：`pool_codex_login` 的围栏换成
+  `provider_pool_person`，`provider_pool.members_can_add_accounts` 默认开）。web 与原生一起改，
+  `pool-login-fences.pg.spec.ts`、`codex-login.pg.spec.ts`、`codex-login-scope.pg.spec.ts`、`pool-security-boundary.pg.spec.ts`、
+  `shared-pool-doors.pg.spec.ts` 与 web / 原生的页面测试随之更新。
+- macOS / iOS 的方案 A 界面与 parity 截至 2026-10-03 还在做。

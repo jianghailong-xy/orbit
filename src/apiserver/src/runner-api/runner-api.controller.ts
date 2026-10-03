@@ -266,6 +266,7 @@ import {
   readConfirmationReturnCard,
   readConfirmationReviewRequestCard,
 } from '../tasks/owner-confirmation-review-turn';
+import { appendEvidenceReviewContext } from '../tasks/evidence-review';
 import { OwnerConfirmationReviewService } from '../tasks/owner-confirmation-review.service';
 import { OWNER_CONFIRMATION_UNSETTLED_STATUSES } from '../tasks/task-owner-confirmation';
 import {
@@ -333,7 +334,7 @@ import {
   hasResolvedSource,
   sessionSourceSnapshot,
 } from '../projects/session-source';
-import { sessionExecRuntime } from '../providers/custom-provider';
+import { providerSlugsOn, sessionExecRuntime } from '../providers/custom-provider';
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
@@ -1932,13 +1933,14 @@ export class RunnerApiController {
 
   /**
    * Mark pending work on a runtime this runner has not advertised (ADVERTISED_RUNTIMES: OpenCode,
-   * Antigravity) visibly, before carrying on without it. The conditional update repeats the
-   * scheduling predicates, so a capable claim/cancel racing this check can never have its
-   * now-live/ended row stamped with a stale upgrade error.
+   * Antigravity) visibly, before carrying on without it. `slugs` are the providers that run on it
+   * (providerSlugsOn): the built-in slug, and the configured rows that borrow the runtime. The
+   * conditional update repeats the scheduling predicates, so a capable claim/cancel racing this
+   * check can never have its now-live/ended row stamped with a stale upgrade error.
    */
   private async markProviderUpgradeRequired(
     runnerId: string,
-    provider: AgentProvider,
+    slugs: string[],
     upgradeError: string,
     candidates?: Array<{ id: string; error: string | null }>,
   ): Promise<boolean> {
@@ -1948,7 +1950,7 @@ export class RunnerApiController {
         where: {
           assignedRunnerId: runnerId,
           status: RunStatus.PENDING,
-          provider,
+          provider: { in: slugs },
           cancelRequestedAt: null,
         },
         select: { id: true, error: true },
@@ -1963,7 +1965,7 @@ export class RunnerApiController {
           id: { in: unmarked },
           assignedRunnerId: runnerId,
           status: RunStatus.PENDING,
-          provider,
+          provider: { in: slugs },
           cancelRequestedAt: null,
         },
         data: { error: upgradeError },
@@ -2027,7 +2029,7 @@ export class RunnerApiController {
   @UseGuards(RunnerAuthGuard)
   @Get('sessions/claim')
   async claim(
-    @CurrentRunner() runner: { id: string },
+    @CurrentRunner() runner: { id: string; ownerId: string },
     @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
     @Headers(RUNNER_PROVIDERS_HEADER) providerHeader?: string,
     @Res({ passthrough: true }) res?: Response,
@@ -2047,10 +2049,12 @@ export class RunnerApiController {
     const supportedProviders = advertisedRunnerProviders(providerHeader);
     for (const { provider, upgradeError } of ADVERTISED_RUNTIMES) {
       if (supportedProviders.includes(provider)) continue;
-      // Explain the stall on the OpenCode/Antigravity rows themselves and then carry on: the
-      // claim SQL (plus migration 0080's and 0367's triggers) already keeps them away from a
-      // legacy runner, so failing the request would only strand this runner's other work as well.
-      await this.markProviderUpgradeRequired(runner.id, provider, upgradeError);
+      // Explain the stall on the OpenCode/Antigravity rows themselves — a Gemini key's included,
+      // which runs on Antigravity under a slug of its own — and then carry on: the claim SQL (plus
+      // migration 0080's and 0367's triggers, 0372's for the borrowed slugs) already keeps them away
+      // from a legacy runner, so failing the request would only strand this runner's other work.
+      const slugs = await providerSlugsOn(this.prisma, runner.ownerId, provider);
+      await this.markProviderUpgradeRequired(runner.id, slugs, upgradeError);
     }
     if (!supportsSourcePin) {
       // Same shape, same reason (SR35): the claim SQL already withholds these rows, and failing the
@@ -2120,13 +2124,16 @@ export class RunnerApiController {
     const undrivable = new Set<string>();
     for (const { provider, upgradeError } of ADVERTISED_RUNTIMES) {
       if (runnerAdvertisesProvider(providerHeader, provider)) continue;
-      const onProvider = sessions.filter(
-        (session) => (session.provider ?? AgentProvider.CLAUDE) === provider,
+      // The configured rows that borrow the runtime too: this runner would rebuild a Gemini key's
+      // session as Claude just the same.
+      const slugs = await providerSlugsOn(this.prisma, runner.ownerId, provider);
+      const onProvider = sessions.filter((session) =>
+        slugs.includes(session.provider ?? AgentProvider.CLAUDE),
       );
       if (onProvider.length === 0) continue;
       await this.markProviderUpgradeRequired(
         runner.id,
-        provider,
+        slugs,
         upgradeError,
         onProvider
           .filter(
@@ -3259,10 +3266,12 @@ export class RunnerApiController {
         // A confirmation request handed to this session for review, and a reviewer's return handed to
         // a run (docs/owner-confirmation-review-contract.md §2 D6, §8 B3): turns with nobody's words,
         // whose block is rendered from the rows now and recorded as the control plane's note. Not
-        // best-effort, for the reason the replies are not: the block IS the turn.
+        // best-effort, for the reason the replies are not: the block IS the turn. The same for an
+        // evidence revision handed to the session that dispatched its task (tasks/evidence-review.ts).
         if (t.kind === 'message') {
           content = (await appendOwnerConfirmationReviewContext(tx, t.clientTurnId, content)) ?? content;
           content = (await appendConfirmationReturnContext(tx, t.clientTurnId, content)) ?? content;
+          content = (await appendEvidenceReviewContext(tx, t.clientTurnId, content)) ?? content;
         }
         // The background work this session left running, said to the engine that comes back to it.
         // Outside the branch above on purpose: a re-delivery replaced the person's text with a

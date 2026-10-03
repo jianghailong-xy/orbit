@@ -55,10 +55,15 @@ public enum CodexSignIn {
         public let rest: String
     }
 
-    public static func facts(_ pool: ProviderPool) -> [Fact] {
+    /// `mine` is the reader: the pool's owner, or one of the people it is shared with, who signs an
+    /// account of their own in (migration 0371) — everyone here runs on it from the moment it is in.
+    public static func facts(_ pool: ProviderPool, mine: Bool = true) -> [Fact] {
         [
-            Fact(lead: "Yours, and whoever you add.",
-                 rest: " A pool that is just yours runs your sessions alone; add people and their sessions start on this account too."),
+            mine
+                ? Fact(lead: "Yours, and whoever you add.",
+                       rest: " A pool that is just yours runs your sessions alone; add people and their sessions start on this account too.")
+                : Fact(lead: "Everyone in this pool runs on it.",
+                       rest: " Add it, and everyone here — you included — runs their sessions on this account."),
             Fact(lead: "The sign-in stays on the Orbit server.",
                  rest: " It never goes to a runner — runners get a session token, not your login — and nobody sees its tokens."),
             Fact(lead: "Sign out any time.",
@@ -66,11 +71,13 @@ public enum CodexSignIn {
         ]
     }
 
-    /// The warning that stays: the people added run on the account, and OpenAI's terms treat that as
-    /// sharing it.
-    public static let risk = Fact(
-        lead: "Adding people shares your account.",
-        rest: " Their sessions run on it — OpenAI’s terms treat account sharing as a violation, and an account used that way can be suspended.")
+    /// The warning that stays: the people in the pool run on the account, and OpenAI's terms treat that as
+    /// sharing it — read by its owner, whose the adding is, or by one of the people there, whose account the
+    /// whole pool runs on once it is in.
+    public static func risk(mine: Bool = true) -> Fact {
+        Fact(lead: mine ? "Adding people shares your account." : "Everyone here runs on your account.",
+             rest: " Their sessions run on it — OpenAI’s terms treat account sharing as a violation, and an account used that way can be suspended.")
+    }
 
     // MARK: …and adding one more
 
@@ -89,10 +96,12 @@ public enum CodexSignIn {
         return ". It runs on \(accounts) account\(accounts == 1 ? "" : "s") now."
     }
 
-    public static func anotherFacts(_ pool: ProviderPool) -> [Fact] {
+    public static func anotherFacts(_ pool: ProviderPool, mine: Bool = true) -> [Fact] {
         [
             Fact(lead: "Everyone in the pool runs on it.",
-                 rest: " Once \(pool.label) is shared, the people you add run their sessions on this account too — and see it, with its usage, on the pool’s page."),
+                 rest: mine
+                    ? " Once \(pool.label) is shared, the people you add run their sessions on this account too — and see it, with its usage, on the pool’s page."
+                    : " Everyone here runs their sessions on this account too — you included — and sees it, with its usage, on the pool’s page."),
             Fact(lead: "The sign-in stays on the Orbit server.",
                  rest: " It never goes to a runner. Runners get a session token, not your login."),
             Fact(lead: "Sign out any time.",

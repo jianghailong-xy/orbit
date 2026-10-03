@@ -1034,6 +1034,9 @@ const RUNNER_OWNER = '22222222-2222-4222-8222-222222222222';
  */
 function makeReclaimController(runEventTable: RunEventRow[], sessionId: string) {
   const prisma = {
+    // A runner that names no runtime makes the claim/reclaim ask which providers borrow one
+    // (providerSlugsOn); none do here.
+    modelProvider: { findMany: async () => [] },
     session: {
       findMany: async () => [
         {

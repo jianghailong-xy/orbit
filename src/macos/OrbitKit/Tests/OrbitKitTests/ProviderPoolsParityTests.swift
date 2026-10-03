@@ -141,7 +141,7 @@ final class ProviderPoolsParityTests: XCTestCase {
         let account = CodexLogin(state: "ACTIVE", email: "e", plan: "plus", fingerprint: "…AB12", lastError: "x",
                                  expiresAt: "2026-10-07T09:12:00.000Z", linkedAt: "2026-09-28T09:12:00.000Z",
                                  usage: PlanUsageSnapshot(provider: "codex", primary: PlanUsageWindow(utilization: 1)),
-                                 usageUnavailable: "y")
+                                 usageUnavailable: "y", userId: "u")
         // `next` is the one field this client's account carries beyond web's: what a pool read as one of its
         // people marks (web's `SharedPoolLogin extends CodexLogin`), absent from an owner's own read.
         XCTAssertEqual(try encodedKeys(account),

@@ -1,6 +1,6 @@
 # 会话的 Share / Move：文件夹与搬到其他 Workspace
 
-状态：已定稿（2026-10-02）。文件夹用方案 B（进入单独的文件夹页），搬家规则已确认，按项目分任务落地。效果图在 `docs/mocks/session-move/01–03`（HTML 源 + PNG）。
+状态：已定稿（2026-10-02）。文件夹用方案 B（进入单独的文件夹页），搬家规则已确认，按项目分任务落地。效果图在 `docs/mocks/session-move/01–03`（HTML 源 + PNG）。2026-10-03 起 web 也补齐了文件夹和 Move，见第 7 节，效果图在 `docs/mocks/session-move-web/01–03`。
 本文是执行会话的契约：写代码前读它；实现与本文冲突时，先说清楚再改，别悄悄偏离。
 
 ## 1. 范围
@@ -8,7 +8,7 @@
 - iOS 会话列表左滑新增 **Share** 和 **Move**，与原有的 **Delete** 并排。
 - 新概念 **文件夹**：属于某个 Workspace，一个会话最多在一个文件夹里。
 - **Move** 一个入口两种去处：移到当前 Workspace 的某个文件夹；或者搬到其他 Workspace（可同时选那边的文件夹）。
-- 本期只做 iOS 界面。macOS 共用 SwiftUI，但列表不显示文件夹，新按钮也只在 iOS 出现；web 照常平铺列表。数据层对三端一致：web / macOS 看到的会话归属（Workspace）是对的，只是不分文件夹。
+- iOS 和 web 都有文件夹和 Move（web 的做法见第 7 节）。macOS 共用 SwiftUI，但列表不显示文件夹，新按钮也只在 iOS 出现。数据层对三端一致：macOS 看到的会话归属（Workspace）是对的，只是不分文件夹。
 
 ## 2. 左滑与长按
 
@@ -167,10 +167,23 @@
 
 - 代码跟着搬（推送分支、跨机器传改动）。
 - Codex 跨 runner、Kimi、OpenCode 的搬家。
-- web 和 macOS 的 Move 入口与文件夹显示。
+- macOS 的 Move 入口与文件夹显示。web 已经补齐，见第 7 节。
 
 ## 6. 分两期做
 
 1. **第一期：Share + 文件夹。** 迁移 0343（`session_folder` + `session.folder_id`）、文件夹接口、`POST /sessions/:id/move` 只支持换文件夹、新建会话带 `folderId`、`FOLDER_CHANGED`；iOS 的左滑 Share / Move / Delete、Move 面板的文件夹部分、列表里的文件夹行和文件夹页、文件夹管理。只动 apiserver 和 iOS，不碰 runner。
 2. **第二期：搬到其他 Workspace。** `move-targets`、move 的换 Workspace 分支、`worktrees-removable` 的调整；runner 的 `session-move/v1`（检出认仓库 + Claude 对话搬目录）；iOS 面板下半、确认框、End and Move。
    - 发布顺序：先部署 runner 和 apiserver，再发 iOS beta。目标 runner 没升级时，面板里那一行是灰的，不会出错。
+
+## 7. Web
+
+规则全部沿用上面几节，文案和 iOS 一字不差（`src/web/src/lib/sessionFolders.ts` 照着 OrbitKit 的 `SessionFolderGrouping`、`SessionFolderCopy`、`SessionMoveCopy`、`SessionWorkspaceMove` 写）。下面只记 web 自己的做法，效果图在 `docs/mocks/session-move-web/01–03`。
+
+- **列表要拉全。** web 的会话列表原本分页（每页 40 条，滚到底再拉）。文件夹在客户端分组，文件夹的数量、状态标记和文件夹页都需要看到里面的每个会话，所以 Workspace 有文件夹时，这个视图一次拉整个列表（不带 `limit`，和原生客户端每次的请求一样）；没有文件夹的 Workspace 照旧分页。
+- **文件夹行。** 排在 Pinned 和时间分组上面，行高比会话行矮。标记沿用 web 侧栏里 Workspace 行的做法：有会话在跑时，文件夹图标上是静止的蓝点，只剩后台任务时是呼吸的蓝点；有会话等你时，行尾显示琥珀色数字。iOS 这里用转圈，web 的转圈只给会话行。文件夹图标用靛蓝色（Move 的颜色），和侧栏里灰色的 Workspace 文件夹区分开。
+- **文件夹页。** 会话栏原地换成文件夹的列表：‹ 回到 Workspace 的列表，标题是文件夹名，下面一行小字是 Workspace 名，⋯ 里是 Rename… 和 Delete Folder…。右边的对话不动。文件夹记在地址的 `?folder=<id>` 上，浏览器后退和刷新都对；在文件夹页里打开会话时这个参数跟着走。文件夹页里点 New session，新会话直接建在这个文件夹（新建请求带 `folderId`）。手机上进出文件夹用和打开会话一样的左右滑动。
+- **管理。** New Folder… 放在列表顶部的 Open ▾ 菜单最下面，只在显示文件夹的视图里出现；Move 对话框里也有一个。新建和改名都直接在行内输入名字：Enter 保存，Esc 取消，离开输入框时有名字就保存；重名（409）的提示写在输入框下面。鼠标移到文件夹行上，› 换成 ⋯；删除用 web 现有的确认框。手机没有悬停，用文件夹页的 ⋯。
+- **Move 的入口。** Open 行鼠标悬停时，Pin、Complete 前面多一个 Move；会话页 ⋯ 菜单里，Move… 在 Complete 或 Move to Open 下面；Completed 行的 ⋯ 菜单里，Move… 在 Move to Open 下面；Trash 没有。手机左滑是 Share · Move · Delete，Share 打开会话页 ⋯ 里的同一个 Share… 对话框。
+- **Move 对话框。** 内容同第 4 节。第一组的会话数取 `move-targets` 返回的 `folders[].sessionCount`。搬到其他 Workspace 失败时，弹 web 的错误提示，内容是服务端给的原因。搬走的如果是右边正开着的会话，对话不关，控制台跟着它到新 Workspace 的列表：web 的会话栏本来就显示打开着的会话所在的 Workspace。
+- **实时。** `folder.changed` 刷新文件夹和会话列表；会话换文件夹是 `session.updated`，只刷新列表。
+- **不做。** 把会话拖到文件夹上（iOS 也没有）。

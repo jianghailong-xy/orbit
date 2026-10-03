@@ -153,7 +153,7 @@ interface PageProps {
 function composition({ rows, projectId = PROJECT_ID, approvals = [] }: PageProps): JSX.Element {
   const payload = queue(rows);
   client!.setQueryData(pendingDecisionsQuery(SESSION_ID).queryKey, payload);
-  const cards = new Set(evidenceDecisionCardRows(payload, projectId).map(decisionRowKey));
+  const cards = new Set(evidenceDecisionCardRows(payload, projectId, SESSION_ID).map(decisionRowKey));
   return (
     <QueryClientProvider client={client!}>
       <DecisionStrip
@@ -377,6 +377,11 @@ describe('a row this conversation draws no card for is not on its strip', () => 
     expect(scope.textContent).not.toContain(unfiled.title);
   });
 
+  it('in any session, for a dispatched task whose card the read places in another conversation', async () => {
+    const theirs = row({ projectId: null, ownerCard: { sessionId: 'another-session', decidingSessionId: 'another-session' } });
+    expectAbsent(await page({ rows: [theirs], projectId: null }), theirs);
+  });
+
   it('does not throw, scroll or mark anything if a reveal is asked for anyway', async () => {
     // The last line of defence: `hasCard` is computed at render and pressed a moment later, so it
     // can go stale. Reveal says it did not arrive instead of scrolling something else.
@@ -385,5 +390,24 @@ describe('a row this conversation draws no card for is not on its strip', () => 
     expect(revealDecisionCard(only)).toBe(false);
     expect(scrolled).toEqual([]);
     expect(marked).toEqual([]);
+  });
+});
+
+/**
+ * A task a session dispatched outside any project (apiserver tasks/evidence-review.ts): the read names
+ * the one conversation its card is drawn in, which coordinates no project — and that conversation's
+ * strip counts it and points at it, like a coordinator's does for its project's rows.
+ */
+describe('a dispatched task’s row is counted on the strip of the conversation its card is in', () => {
+  it('counts it, and pressing the line goes to its card', async () => {
+    const dispatched = row({
+      title: 'the invoices, outside any project',
+      projectId: null,
+      ownerCard: { sessionId: SESSION_ID, decidingSessionId: SESSION_ID },
+    });
+    const scope = await page({ rows: [dispatched], projectId: null });
+    expect(line(scope).getAttribute('aria-label')).toBe(`${needsDecisionCount(1)}: ${dispatched.title}`);
+    await click(line(scope));
+    expect(scrolled).toEqual([anchorFor(scope, dispatched)]);
   });
 });

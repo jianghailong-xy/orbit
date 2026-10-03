@@ -491,7 +491,7 @@ test('a shared task: an explicit projection, the red line, its layers and its ru
     const ownerKeys = keysOf(mine.json);
     assert.deepEqual(
       ['ownerId', 'creatorSession', 'assignee', 'provider', 'model', 'knownGoodSha', 'pinnedRevision', 'idempotencyKey',
-        'dispatchAuthority', 'dispatchRefusal', 'convergenceCounters', 'progressState', 'deliveries', 'mentions',
+        'dispatchRefusal', 'convergenceCounters', 'progressState', 'deliveries', 'mentions',
         'authorId', 'lastError'].filter((name) => !ownerKeys.has(name)),
       [],
       'the owner\'s read lost a field (2) proves absent from the public one',

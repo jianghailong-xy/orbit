@@ -4,6 +4,7 @@ import {
   currentProviderChoice,
   defaultModelLabel,
   providerChoices,
+  runtimeSummary,
   sameRuntimeChoices,
 } from './sessionProviderChoices';
 import type { ConfiguredProvider } from './workspaceDefaults';
@@ -37,6 +38,17 @@ const moonshot: ConfiguredProvider = {
   models: [{ value: 'kimi-k3', label: 'Kimi K3' }],
   defaultModel: 'kimi-k3',
   presetSlug: 'moonshot',
+};
+
+// A key connected from the Gemini preset, as GET /providers serves it.
+const gemini: ConfiguredProvider = {
+  slug: 'gemini',
+  label: 'Gemini',
+  runtime: 'antigravity',
+  models: [{ value: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash' }],
+  defaultModel: 'gemini-3.8-flash',
+  presetSlug: 'gemini',
+  modelsFromRuntime: true,
 };
 
 const catalog = {
@@ -302,7 +314,8 @@ describe('brandForProvider', () => {
   });
 
   it('gives Antigravity its own mark rather than the Gemini preset’s', () => {
-    // Google ships both, but the Gemini preset is the API reached through another CLI.
+    // Google ships both, and a Gemini key runs on Antigravity, but the preset is named for the
+    // models the key buys and the engine is the CLI that drives them.
     const { brand, glyphKey } = brandForProvider('antigravity', 'Antigravity');
     expect(glyphKey).toBe('antigravity');
     expect(brand).toEqual({ mono: 'A', from: '#3186ff', to: '#00b95c' });
@@ -434,6 +447,27 @@ describe('sameRuntimeChoices', () => {
     expect(choices.every((c) => c.unavailable === 'Not installed')).toBe(true);
   });
 
+  it('puts a Gemini key with the Antigravity engine it runs on, and nowhere else', () => {
+    const rows = [gemini, deepseek];
+    const all = providerChoices(rows, catalog);
+    for (const from of ['antigravity', 'gemini']) {
+      expect(sameRuntimeChoices(from, all, rows).map((c) => c.slug)).toEqual(['antigravity', 'gemini']);
+    }
+    expect(sameRuntimeChoices('claude', all, rows).map((c) => c.slug)).not.toContain('gemini');
+  });
+
+  it('blocks a Gemini key where agy is missing, and points the fix at the Antigravity engine', () => {
+    const health = [{ engine: 'antigravity' as const, installed: false, auth: 'unknown' as const }];
+    const row = providerChoices([gemini], catalog, undefined, health).find((c) => c.slug === 'gemini');
+    expect(row?.unavailable).toBe('Not installed');
+    expect(row?.fixEngine).toBe('antigravity');
+    // Installed is all it needs: the key it carries is the whole sign-in.
+    const ready = providerChoices([gemini], catalog, undefined, [
+      { engine: 'antigravity', installed: true, auth: 'no' },
+    ]).find((c) => c.slug === 'gemini');
+    expect(ready?.unavailable).toBeUndefined();
+  });
+
   it('still shows a session whose provider was removed as its current entry', () => {
     const choices = sameRuntimeChoices(
       'gone-away',
@@ -549,6 +583,8 @@ describe('a Codex pool somebody was added to, in their picker', () => {
   const spend = { inputTokens: 0, outputTokens: 0, costUsd: 0 };
   /** One of his ChatGPT accounts as the pool carries it — the first one the next session's. */
   const account = (email: string, over: Partial<CodexLogin> = {}): CodexLogin => ({
+    // His: jianghailong, the pool's owner, signs them in again (migration 0371).
+    userId: 'jiang',
     state: 'ACTIVE',
     email,
     plan: 'plus',
@@ -588,6 +624,7 @@ describe('a Codex pool somebody was added to, in their picker', () => {
     shared: false,
     logins: logins.map((login, index) => ({ ...login, next: index === 0 })),
     membersCanAdd: true,
+    membersCanAddAccounts: true,
     ownKeyFirst: true,
     viewerRole: viewer === 'jiang' ? 'ADMIN' : 'MEMBER',
     window: { start: '2026-10-01T00:00:00.000Z', end: '2026-11-01T00:00:00.000Z' },
@@ -667,5 +704,14 @@ describe('a Codex pool somebody was added to, in their picker', () => {
       unavailable: 'Not installed',
       fixEngine: 'codex',
     });
+  });
+});
+
+describe('runtimeSummary', () => {
+  it('says which CLI a vendor on its own API runs on, and the dialect of the rest', () => {
+    expect(runtimeSummary('antigravity')).toBe('Runs on the Antigravity CLI');
+    expect(runtimeSummary('kimi')).toBe('Runs on the Kimi CLI');
+    expect(runtimeSummary('codex')).toBe('OpenAI-compatible');
+    expect(runtimeSummary('claude')).toBe('Anthropic-compatible');
   });
 });

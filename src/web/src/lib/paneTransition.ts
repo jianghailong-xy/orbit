@@ -15,7 +15,14 @@ import { MOBILE_QUERY } from './useMediaQuery';
 //
 // Anything that can't or shouldn't animate — desktop, reduced motion, a browser without the
 // API — just navigates, which is exactly today's behaviour.
-export function navigateWithPaneSlide(dir: 'push' | 'pop', navigate: () => void): void {
+//
+// `swapsPane: false` slides a move that stays on the list screen — into a folder's page and back
+// out of it — so the conversation pane is left where it is.
+export function navigateWithPaneSlide(
+  dir: 'push' | 'pop',
+  navigate: () => void,
+  opts: { swapsPane?: boolean } = {},
+): void {
   const onPhone = window.matchMedia?.(MOBILE_QUERY).matches ?? false;
   const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
   if (!onPhone || reducedMotion || typeof document.startViewTransition !== 'function') {
@@ -33,7 +40,9 @@ export function navigateWithPaneSlide(dir: 'push' | 'pop', navigate: () => void)
     // the router's commit landing AFTER the snapshot, so back animated the conversation sliding
     // off a second copy of itself instead of revealing the list. Rendering is suspended inside
     // this callback, so neither flushSync nor waiting for the mutation gets the commit in first.
-    document.querySelector('.workspace-split')?.classList.toggle('show-conversation', dir === 'push');
+    if (opts.swapsPane !== false) {
+      document.querySelector('.workspace-split')?.classList.toggle('show-conversation', dir === 'push');
+    }
     flushSync(navigate);
   });
   void transition.finished.finally(() => {

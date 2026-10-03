@@ -128,6 +128,35 @@ final class SharedPoolsModel {
         await write { try await self.api.removeSharedPoolPerson(pool.id, userID: person.userId) }
     }
 
+    // MARK: a ChatGPT account of one's own (migration 0371)
+
+    /// A member's own sign-in on a pool its rule lets them join (CodexLoginService): the page to open and
+    /// the one-time code, from the server's device sign-in.
+    func startCodexLogin(_ pool: SharedPool) async throws -> CodexLoginAttempt {
+        try await api.startCodexLogin(poolID: pool.id)
+    }
+
+    func pollCodexLogin(_ pool: SharedPool) async throws -> CodexLoginPoll {
+        try await api.pollCodexLogin(poolID: pool.id)
+    }
+
+    /// Best-effort: a sign-in nobody finishes also runs out on the server by itself.
+    func cancelCodexLogin(_ pool: SharedPool) async {
+        _ = try? await api.cancelCodexLogin(poolID: pool.id)
+    }
+
+    /// Take one's own account out of the pool: the server deletes the sign-in it held, and the pool read
+    /// again afterwards. Why it didn't, or nil.
+    func signOutCodexLogin(_ pool: SharedPool, _ login: CodexLogin) async -> String? {
+        do {
+            try await api.signOutCodexLogin(poolID: pool.id, fingerprint: login.fingerprint)
+            await load()
+            return nil
+        } catch {
+            return APIClient.failureReason(error)
+        }
+    }
+
     /// Delete the pool (its owner) or leave it (anybody else): it is gone from this account's list.
     func exit(_ pool: SharedPool, delete: Bool) async -> String? {
         do {

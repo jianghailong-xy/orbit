@@ -98,6 +98,103 @@ test('a codex 404 says the endpoint lacks the Responses API instead of blaming t
   }
 });
 
+test('an antigravity probe asks the Gemini API itself, with the header agy sends', async () => {
+  const { seen, restore } = stubFetch({ status: 200 });
+  try {
+    const r = await svc().testConnection({
+      baseUrl: 'https://generativelanguage.googleapis.com/',
+      apiKey: 'AIza-x',
+      model: 'gemini-3.8-flash',
+      runtime: 'antigravity',
+    });
+    assert.equal(r.ok, true);
+    // The method agy streams ({base}/v1beta/models/{model}:streamGenerateContent), asked once.
+    assert.equal(
+      seen.url,
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent',
+    );
+    const headers = seen.init?.headers as Record<string, string>;
+    assert.equal(headers['x-goog-api-key'], 'AIza-x');
+    // No Bearer and no Anthropic headers: Gemini reads neither, and the key belongs in its own.
+    assert.equal(headers.Authorization, undefined);
+    assert.equal(headers['anthropic-version'], undefined);
+    assert.deepEqual(JSON.parse(String(seen.init?.body)), {
+      contents: [{ role: 'user', parts: [{ text: 'ping' }] }],
+      generationConfig: { maxOutputTokens: 1 },
+    });
+  } finally {
+    restore();
+  }
+});
+
+test("an antigravity probe asks for the API model agy calls, not agy's own name for it", async () => {
+  const { seen, restore } = stubFetch({ status: 200 });
+  try {
+    // agy 1.2.16 runs `gemini-3.1-pro` (at any level) on the API's preview id; the bare name 404s.
+    for (const model of ['gemini-3.1-pro', 'gemini-3.1-pro-low']) {
+      await svc().testConnection({
+        baseUrl: 'https://generativelanguage.googleapis.com',
+        apiKey: 'AIza-x',
+        model,
+        runtime: 'antigravity',
+      });
+      assert.equal(
+        seen.url,
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent',
+        model,
+      );
+    }
+    // A level-suffixed slug of any other model is its base name.
+    await svc().testConnection({
+      baseUrl: 'https://generativelanguage.googleapis.com',
+      apiKey: 'AIza-x',
+      model: 'gemini-3.7-flash-high',
+      runtime: 'antigravity',
+    });
+    assert.equal(
+      seen.url,
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent',
+    );
+  } finally {
+    restore();
+  }
+});
+
+test("a Gemini 404 names the model it is about; a bare one is still the Base URL's", async () => {
+  // What the API answers for a model it doesn't serve: Google's own error, saying which.
+  const missing = stubFetch({
+    status: 404,
+    body: '{"error":{"code":404,"message":"models/gemini-9 is not found for API version v1beta, or is not supported for generateContent.","status":"NOT_FOUND"}}',
+  });
+  try {
+    const r = await svc().testConnection({
+      baseUrl: 'https://generativelanguage.googleapis.com',
+      apiKey: 'AIza-x',
+      model: 'gemini-9',
+      runtime: 'antigravity',
+    });
+    assert.equal(r.ok, false);
+    assert.equal(r.status, 404);
+    assert.match(r.message, /^HTTP 404 — models\/gemini-9 is not found/);
+  } finally {
+    missing.restore();
+  }
+  // What the host answers for a path it doesn't have, e.g. the old OpenAI-compatible base left in
+  // front of /v1beta/models: an empty 404.
+  const bare = stubFetch({ status: 404 });
+  try {
+    const r = await svc().testConnection({
+      baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+      apiKey: 'AIza-x',
+      model: 'gemini-3.8-flash',
+      runtime: 'antigravity',
+    });
+    assert.equal(r.message, 'Endpoint not found — check the Base URL');
+  } finally {
+    bare.restore();
+  }
+});
+
 test('an opaque vendor message is qualified with the status it came back on', async () => {
   const { restore } = stubFetch({
     status: 429,

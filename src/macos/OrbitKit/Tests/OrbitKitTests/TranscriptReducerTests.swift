@@ -495,6 +495,24 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertTrue(r.state.background.isEmpty, "no confirmation ⇒ no tray row")
     }
 
+    /// A call cut off by Stop: agy never finishes the command it was running, so the runner answers
+    /// it with an error. The card settles on that while the session stays open, rather than spin.
+    func testToolCallCutOffByAnInterruptSettlesAsError() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .toolUse, payload: .object([
+            "id": .string("conv:2"), "name": .string("Bash"),
+            "input": .object(["command": .string("sleep 120 && echo finished-sleeping")])])))
+        r.apply(RunEvent(seq: 2, type: .interrupt, payload: .object([:])))
+        r.apply(RunEvent(seq: 3, type: .toolResult, payload: .object([
+            "toolUseId": .string("conv:2"), "isError": .bool(true),
+            "content": .string("Interrupted: the turn was stopped while this tool was running.")])))
+        r.apply(RunEvent(seq: 4, type: .turnEnd, payload: .object(["subtype": .string("interrupted")])))
+        XCTAssertFalse(r.state.status.isTerminal)
+        let card = r.state.items.compactMap(\.asTool).first
+        XCTAssertEqual(card?.status, .error)
+        XCTAssertEqual(card?.result, "Interrupted: the turn was stopped while this tool was running.")
+    }
+
     /// The composer's context gauge reads the latest positive `contextTokens` from any event. New
     /// runners normally report it on `turn_end`; a lightweight status/unknown event may also
     /// refresh it without ending the active turn. Later events that omit it keep the last known
