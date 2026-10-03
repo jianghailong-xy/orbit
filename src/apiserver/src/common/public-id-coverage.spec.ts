@@ -16,6 +16,7 @@ import {
   CreateTaskDto,
 } from '../tasks/dto';
 import { UpdateTaskListDto } from '../task-lists/dto';
+import { ReorderWorkspacesDto } from '../workspaces/dto';
 import { WorkspacesController } from '../workspaces/workspaces.controller';
 import { AttachmentsController } from '../attachments/attachments.controller';
 import { AdminProvidersController } from '../providers/admin-providers.controller';
@@ -393,6 +394,12 @@ test('the batch DTOs accept a pasted public id', async () => {
   const list = plainToInstance(UpdateTaskListDto, { foremanWorkspaceId: B62 });
   assert.deepEqual(await validate(list), []);
   assert.equal(list.foremanWorkspaceId, UUID);
+
+  // The sidebar's drag sends the ids it was given, which are public ids; taken as plain strings
+  // they reached Prisma's uuid column and every drop answered 500.
+  const reorder = plainToInstance(ReorderWorkspacesDto, { ids: [B62, UUID] });
+  assert.deepEqual(await validate(reorder), []);
+  assert.deepEqual(reorder.ids, [UUID, UUID]);
 });
 
 test('IsPublicId still rejects a body id that is neither spelling', async () => {

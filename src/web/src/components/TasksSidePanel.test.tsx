@@ -8,6 +8,7 @@ import {
   ProjectRow,
   projectsShortcutLabel,
   WorkspaceRow,
+  WorkspacesHead,
   WorkspaceStateMark,
   workspaceCountsPollInterval,
   workspaceRunnerIsOffline,
@@ -99,8 +100,9 @@ describe('TasksSidePanel nav', () => {
     // Tasks went in between when the rail's foot became the open projects: the task lists that
     // stood there are picked from the Tasks page's title, and this is the way to it.
     expect(keys).toEqual(['projects', 'tasks', 'wiki', 'runners', 'providers']);
+    // The rows' own group head (WorkspacesHead) names them the way Projects names its rows; it is
+    // no destination, so it is no TOP entry either.
     expect(source).not.toContain('tp-workspaces-head');
-    expect(source).not.toContain('<span className="tp-group-name">Workspaces</span>');
   });
 
   it('renders TOP-derived items in both the collapsed rail and the expanded nav', () => {
@@ -298,8 +300,9 @@ describe('TasksSidePanel workspace rows', () => {
     expect(styles).toMatch(
       /@media \(min-width:\s*961px\)[\s\S]*?\.app-shell \.app-nav:not\(\.collapsed\) \.tp-workspace-shortcut\s*\{[\s\S]*?display:\s*inline;/,
     );
-    expect(source).toContain('{orderedWorkspaces.map((a, index) => {');
-    expect(source).toContain('shortcutLabel={workspaceShortcutLabel(index)}');
+    expect(source).toContain('orderedWorkspaces.map((a, index) => {');
+    // A held row previews the order it would leave behind; otherwise the label is the row's index.
+    expect(source).toContain('shortcutLabel={workspaceShortcutLabel(dragPreviewIds?.indexOf(a.id) ?? index)}');
   });
 
   it('gives the drawer the folder dot rather than a trailing spinner of its own', () => {
@@ -539,6 +542,67 @@ describe('TasksSidePanel workspace rows', () => {
     expect(compactRunning).toContain('tp-rail-running');
     expect(compactRunning).toContain('anticon-spin');
     expect(compactRunning).not.toContain('tp-rail-offline');
+  });
+});
+
+describe('TasksSidePanel arranging the Workspace rows', () => {
+  const noop = () => undefined;
+
+  it('heads the rows the way the Projects group is headed, with Edit as its one action', () => {
+    const head = renderToStaticMarkup(
+      <WorkspacesHead count={9} open editing={false} onToggle={noop} onEdit={noop} onDone={noop} />,
+    );
+    expect(head).toContain('class="tp-group-head"');
+    expect(head).toContain('<span class="tp-group-name">Workspaces</span><span class="tp-count">9</span>');
+    expect(head).toContain('anticon-caret-down');
+    expect(head).toContain('class="tp-group-action">Edit</button>');
+    expect(source).toContain('<span className="tp-group-name">Projects</span>');
+  });
+
+  it('turns Edit into Done and drops the fold caret while the rows are arranged', () => {
+    const head = renderToStaticMarkup(
+      <WorkspacesHead count={9} open editing onToggle={noop} onEdit={noop} onDone={noop} />,
+    );
+    expect(head).toContain('class="tp-group-action editing">Done</button>');
+    expect(head).not.toContain('anticon-caret-down');
+  });
+
+  it('shows Edit on hover like the caret, and always in the drawer, which has no hover', () => {
+    expect(styles).toMatch(/\.tp-group-action\s*\{[\s\S]*?opacity:\s*0;/);
+    expect(styles).toMatch(
+      /\.tp-group-head:hover \.tp-group-action,\s*\.tp-group-action:focus-visible,\s*\.tp-group-action\.editing\s*\{\s*opacity:\s*1;/,
+    );
+    expect(styles).toMatch(/@media \(max-width:\s*960px\)\s*\{\s*\.tp-group-action\s*\{\s*opacity:\s*1;/);
+  });
+
+  it('puts the handle in the folder column, opens nothing, and shows every row its ⌘N', () => {
+    const html = renderToStaticMarkup(
+      <WorkspaceRow
+        workspace={workspace}
+        runnerLabel="wikova"
+        active
+        offline
+        running
+        jobs={1}
+        needsYou={2}
+        shortcutLabel="⌘1"
+        onOpen={noop}
+        dragHandle={<button type="button" className="tp-ico tp-workspace-handle" />}
+      />,
+    );
+    expect(html).toContain('class="tp-item editing"');
+    expect(html.indexOf('tp-workspace-handle')).toBeLessThan(html.indexOf('tp-workspace-label'));
+    expect(html).not.toContain('anticon-folder');
+    expect(html).not.toContain('needs-you');
+    expect(html).not.toContain('tp-workspace-icon-offline');
+    expect(html).toContain('>⌘1</kbd>');
+    expect(html).not.toContain('active');
+  });
+
+  it('lets a row move only while arranging, and saves each drop through the reorder endpoint', () => {
+    expect(source).toContain('return editingWorkspaces && runnerId ? (');
+    expect(source).toContain("api<Workspace[]>('/workspaces/reorder', { method: 'POST', body: { ids } })");
+    expect(source).toContain("message.error(e.message || 'Reorder failed')");
   });
 });
 

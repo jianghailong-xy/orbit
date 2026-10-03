@@ -75,13 +75,11 @@ func accountHealth(kind accountSlotKind, binPath string, defaultAuth authState) 
 	if err != nil {
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
 	out := make([]EngineAccountReport, 0, len(slots))
 	for _, slot := range slots {
 		auth := defaultAuth
 		if slot.ID != accountSlotDefaultID {
-			auth = kind.loginStatus(ctx, binPath, slot.Dir)
+			auth = accountLoginStatus(kind, binPath, slot.Dir)
 		}
 		out = append(out, EngineAccountReport{
 			ID:        slot.ID,
@@ -92,6 +90,17 @@ func accountHealth(kind accountSlotKind, binPath string, defaultAuth authState) 
 		})
 	}
 	return out
+}
+
+// accountLoginStatusTimeout is how long one account's status question may take. Each account has
+// its own: under a load of 40 a CLI can take most of ten seconds to answer, and accounts sharing one
+// budget left the later ones none — a CLI killed mid-answer, and for Claude possibly mid-refresh.
+var accountLoginStatusTimeout = 10 * time.Second
+
+func accountLoginStatus(kind accountSlotKind, binPath, dir string) authState {
+	ctx, cancel := context.WithTimeout(context.Background(), accountLoginStatusTimeout)
+	defer cancel()
+	return kind.loginStatus(ctx, binPath, dir)
 }
 
 // codexHomeOf repeats a Codex account's directory under the historical field name. The control
@@ -175,7 +184,11 @@ func (r EngineHealthReport) signedIn() bool {
 type engineHealthProbe struct {
 	mu       sync.Mutex
 	snapshot []EngineHealthReport
-	// Serialises refreshes so a forced one during the timer's own run doesn't double the probe.
+	// Serialises refreshes. One asked for while another runs waits for it and then probes again:
+	// the run in flight may have asked the CLIs before whatever prompted this one — a sign-in that
+	// just landed, an install that just finished — and dropping the request, which a TryLock here
+	// did, left the Providers page calling a freshly signed-in engine signed out until the next
+	// five-minute tick.
 	refreshMu sync.Mutex
 	// What a refresh runs: probeEngineHealth, unless a test stands in for the machine's CLIs.
 	probe func() []EngineHealthReport
@@ -191,9 +204,7 @@ type engineHealthProbe struct {
 }
 
 func (p *engineHealthProbe) refresh() {
-	if !p.refreshMu.TryLock() {
-		return
-	}
+	p.refreshMu.Lock()
 	defer p.refreshMu.Unlock()
 	probe := p.probe
 	if probe == nil {

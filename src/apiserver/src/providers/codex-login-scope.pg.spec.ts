@@ -388,7 +388,7 @@ suite("a pool of one's own ChatGPT login, at every door — its owner's, and nob
 
     // Only the credential's fate moves the account: the gateway's 401 marks it out, the owner is the only
     // one who can sign it in again, and the page says which of the two it is.
-    assert.equal(await login.markSignedOut(pool.id, 'your authentication token has been invalidated'), true);
+    assert.equal(await login.markSignedOut(pool.id, ACCOUNT_ID, 'your authentication token has been invalidated'), true);
     const out = (await call(200, owner.id, 'GET', at)).json;
     assert.deepEqual(
       { state: out.login.state, lastError: out.login.lastError, unavailable: out.unavailable },
@@ -400,18 +400,55 @@ suite("a pool of one's own ChatGPT login, at every door — its owner's, and nob
       },
     );
     assert.match(String(await queue.accountPoolRefusal(owner.id, pool.slug)), /was rejected by OpenAI/u);
-    assert.equal(await login.markSignedOut(pool.id, 'second refusal'), false, 'a signed-out account moved twice');
+    assert.equal(await login.markSignedOut(pool.id, ACCOUNT_ID, 'second refusal'), false, 'a signed-out account moved twice');
   });
 
   await t.test('the sign-in doors are the owner’s: a stranger’s poll of a pool they cannot see is that pool not existing', async () => {
     // The account is still there and still signed out — nothing the stranger did reached it.
     const rows = await db.poolCodexLogin.findMany({ where: { poolId: pool.id } });
     assert.deepEqual(rows.map((row) => [row.accountId, row.state]), [[ACCOUNT_ID, 'SIGNED_OUT']]);
+    // The route names the account by the fingerprint every response names it by: a stranger naming it
+    // reaches no pool, and one the pool holds no account by takes nothing out.
+    const signOut = (fingerprint: string) => `${at}/codex-login/account?fingerprint=${encodeURIComponent(fingerprint)}`;
+    await call(404, stranger.id, 'DELETE', signOut(`…${ACCOUNT_ID.slice(-4)}`));
+    assert.deepEqual((await call(200, owner.id, 'DELETE', signOut('…none'))).json, { removed: 0 });
     // Its owner signs the account out of the pool entirely; the tokens go with it.
-    assert.deepEqual(await login.signOut(owner.id, pool.id), { removed: 1 });
+    assert.deepEqual((await call(200, owner.id, 'DELETE', signOut(`…${ACCOUNT_ID.slice(-4)}`))).json, { removed: 1 });
     assert.equal(await db.poolCodexLogin.count({ where: { poolId: pool.id } }), 0);
     const page = (await call(200, owner.id, 'GET', at)).json;
     assert.equal(page.login, null);
+    assert.deepEqual(page.logins, []);
     assert.match(String(page.unavailable), /no ChatGPT account signed in/u);
+  });
+
+  await t.test('a pool holding several accounts reads them all — `logins`, oldest first — and `login` is the first of them', async () => {
+    const older = randomUUID();
+    const newer = randomUUID();
+    for (const [accountId, email, createdAt] of [
+      [older, 'first@example.invalid', new Date(Date.now() - 60_000)],
+      [newer, 'second@example.invalid', new Date()],
+    ] as const) {
+      await db.poolCodexLogin.create({
+        data: {
+          poolId: pool.id, userId: owner.id, accountId, email, plan: 'plus', createdAt,
+          accessTokenEnc: encryptSecret('access-token-not-a-real-one'),
+          refreshTokenEnc: encryptSecret('refresh-token-not-a-real-one'),
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        },
+      });
+    }
+    const page = (await call(200, owner.id, 'GET', at)).json;
+    assert.deepEqual(
+      page.logins.map((login: { email: string; fingerprint: string; state: string }) => [login.email, login.fingerprint, login.state]),
+      [
+        ['first@example.invalid', `…${older.slice(-4)}`, 'ACTIVE'],
+        ['second@example.invalid', `…${newer.slice(-4)}`, 'ACTIVE'],
+      ],
+    );
+    assert.deepEqual(page.login, page.logins[0]);
+    // The pools' list reads the same accounts, and neither read names an account by its id.
+    const listed = (await call(200, owner.id, 'GET', 'providers/pools')).json as Array<{ slug: string; logins: unknown }>;
+    assert.deepEqual(listed.find((entry) => entry.slug === pool.slug)?.logins, page.logins);
+    for (const id of [older, newer]) assert.equal(JSON.stringify(listed).includes(id), false, 'a read carried an account id');
   });
 });

@@ -7,8 +7,13 @@ import OrbitKit
 /// switcher (`AgentSwitchSheet`): Move over the session's title, Done, and the folders of the
 /// session's workspace — No Folder, each folder with how many of the list's sessions are in it, and
 /// New Folder…. The folder the session is in is ticked; a tap moves it there at once and closes the
-/// panel, and the app's toast says where it went (`AppModel.moveSession`). Moving to another
-/// workspace will be the panel's second group.
+/// panel, and the app's toast says where it went (`AppModel.moveSession`).
+///
+/// The second group, Move to Another Workspace (§4, §5.2), lists the owner's other workspaces as
+/// `GET /sessions/:id/move-targets` answers: brand mark, name and `<provider> · <runner>`. One the
+/// session can go to opens its page (`SessionMoveTargetPage`), where a folder there is picked and the
+/// move confirmed; one it can't is greyed with the server's reason, and when the session itself can't
+/// leave, the whole group is greyed with why under it. A server without move-targets shows no group.
 struct SessionMoveSheet: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
@@ -25,6 +30,12 @@ struct SessionMoveSheet: View {
     @State private var creating = false
     /// Why the last New Folder… didn't create a folder, shown as an alert.
     @State private var failure: String?
+    /// The server's answer for the second group, once it has given one.
+    @State private var targets: SessionMoveTargets?
+    /// Why the second group couldn't be read, while there is no answer to show instead.
+    @State private var targetsFailure: String?
+    /// The server has no move-targets (it predates moving between workspaces): no second group.
+    @State private var targetsUnsupported = false
 
     var body: some View {
         NavigationStack {
@@ -48,8 +59,15 @@ struct SessionMoveSheet: View {
                 } header: {
                     Text(SessionMoveCopy.folderGroup(workspace: workspace.name))
                 }
+                workspaceGroup
             }
             .disabled(creating)
+            .navigationDestination(for: SessionMoveTarget.self) { target in
+                SessionMoveTargetPage(session: session, workspace: workspace, target: target,
+                                      answer: targets ?? SessionMoveTargets(targets: [target]),
+                                      close: { dismiss() }, reload: { await loadTargets() })
+            }
+            .task { await loadTargets() }
             .navigationTitle(SessionMoveCopy.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -121,6 +139,87 @@ struct SessionMoveSheet: View {
             }
         }
         .contentShape(Rectangle())
+    }
+
+    /// Move to Another Workspace: a spinner while the server is asked, then a row per other
+    /// workspace — or, when the answer couldn't be read, the group with why under it. No group when
+    /// the owner has no other workspace, or the server can't say (`targetsUnsupported`).
+    @ViewBuilder private var workspaceGroup: some View {
+        if let targets {
+            if !targets.targets.isEmpty {
+                Section {
+                    ForEach(SessionWorkspaceMoveLogic.rows(targets, providerName: providerName)) { row in
+                        if row.isEnabled {
+                            NavigationLink(value: row.target) { targetRow(row) }
+                        } else {
+                            targetRow(row)
+                        }
+                    }
+                } header: {
+                    Text(SessionMoveCopy.anotherWorkspaceGroup)
+                } footer: {
+                    if let reason = SessionWorkspaceMoveLogic.groupReason(targets) { Text(reason) }
+                }
+            }
+        } else if let targetsFailure {
+            Section {
+            } header: {
+                Text(SessionMoveCopy.anotherWorkspaceGroup)
+            } footer: {
+                Text(targetsFailure)
+            }
+        } else if !targetsUnsupported {
+            Section {
+                HStack(spacing: 12) {
+                    ProgressView()
+                    Text(SessionMoveCopy.loadingWorkspaces).foregroundStyle(.secondary)
+                }
+            } header: {
+                Text(SessionMoveCopy.anotherWorkspaceGroup)
+            }
+        }
+    }
+
+    /// A workspace the session could go to, as the workspace switcher draws one: its brand mark, its
+    /// name, and under it `<provider> · <runner>` — or `Runner offline`, or the server's reason it
+    /// can't go there, the whole row greyed. The chevron is the navigation link's own.
+    private func targetRow(_ row: SessionMoveTargetRow) -> some View {
+        HStack(spacing: 12) {
+            ProviderMark(provider: row.target.provider, size: 30)
+                .opacity(row.isEnabled ? 1 : 0.45)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(row.target.name)
+                    .foregroundStyle(row.isEnabled ? .primary : .secondary)
+                    .lineLimit(1)
+                Text(row.detail)
+                    .font(.orbitListSubtitle)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 8)
+        }
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+    }
+
+    /// A runtime's name as the workspace switcher spells it — a configured provider by its label.
+    private func providerName(_ slug: String) -> String {
+        AgentDefaults.providerName(slug, configured: app.agents?.configuredProviders)
+    }
+
+    /// Ask the server for the second group — when the panel opens, when it comes back to it from a
+    /// workspace's page, and after a move that didn't go through, whose reason may have changed.
+    private func loadTargets() async {
+        do {
+            targets = try await app.sessionMoveTargets(session.id)
+            targetsFailure = nil
+        } catch APIError.http(let status, _) where status == 404 {
+            targetsUnsupported = true
+        } catch {
+            // An answer already on screen stays; only an empty group says it couldn't be read.
+            if targets == nil { targetsFailure = SessionMoveCopy.targetsFailed(error) }
+        }
     }
 
     /// A tap files the session there and closes the panel; on the ticked row it only closes it.

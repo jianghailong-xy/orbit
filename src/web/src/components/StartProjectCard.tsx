@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type JSX } from 'react';
+import { useEffect, useId, useRef, useState, type JSX, type Ref } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Input, InputNumber, Modal, Radio, Spin, Switch } from 'antd';
 import type {
@@ -160,6 +160,7 @@ export interface StartPlanView {
 }
 
 export function StartProjectCard({
+  ref,
   projectTitle,
   askedAt,
   request,
@@ -177,6 +178,8 @@ export function StartProjectCard({
   onChatAbout,
   onViewTasks,
 }: {
+  /** The card's own element, which is where its keyboard claim says it is drawn (`CardHotkey.ts`). */
+  ref?: Ref<HTMLDivElement>;
   projectTitle: string;
   /** When the coordinator asked; null for a card nobody asked for. */
   askedAt: string | null;
@@ -218,7 +221,7 @@ export function StartProjectCard({
   const missingCheck = runMergeCheckMissing(draft);
   const set = (patch: Partial<StartSettingsDraft>) => onDraft({ ...draft, ...patch });
   return (
-    <div className="approval-card settlement-card start-card">
+    <div ref={ref} className="approval-card settlement-card start-card">
       <div className="approval-head settlement-card-head">
         <span className="settlement-card-heading">{START_PROJECT_TITLE}</span>
         <span className="criteria-provenance prov-brand" title={ACCEPTANCE_PROVENANCE_TITLE}>
@@ -537,15 +540,18 @@ export function SessionStartProjectCard({
       question: 'START',
     });
   };
+  const anchor = useRef<HTMLDivElement>(null);
   const keys = useDecisionCardKeys({
     confirmEnabled: onScreen && !start.isPending && stale === null && draft !== null && startDraftComplete(draft),
     onConfirm: press,
+    anchor,
   });
 
   if (!onScreen || !shown || !request || !draft) return null;
   const branchRef = request.settings.projectBranchName ?? `refs/heads/project/${project}`;
   return (
     <StartProjectCard
+      ref={anchor}
       key={shown.itemId}
       projectTitle={title}
       askedAt={shown.waitingSince}

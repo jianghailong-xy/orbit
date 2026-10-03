@@ -15,12 +15,14 @@ import {
   Param,
   Post,
   Query,
+  Res,
   StreamableFile,
   UploadedFile as UploadedFileParam,
   UnauthorizedException,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { PublicIdPipe } from '../common/public-id';
 import { MachineProtocol } from '../common/machine-protocol';
 import { TasksService } from '../tasks/tasks.service';
@@ -215,8 +217,13 @@ import {
   BackgroundWakeDto,
   type BackgroundWakeReceipt,
   fileBackgroundJobWake,
+  foldQueuedWakeTurnsInto,
+  foldRequeuedWakeTurns,
   isBackgroundWakeTurn,
+  jobExitFiled,
   sessionHasEnded,
+  StaleBackgroundWake,
+  takeJobOffNextTurnQueue,
   undeliveredWakeTurn,
 } from './background-job-wake';
 import {
@@ -1844,6 +1851,15 @@ export class RunnerApiController {
         codexAccountRemoveMessage: status === 'failed' ? (body.message ?? null) : null,
       },
     });
+    // The name the account was given in Orbit goes with it (RunnersService.renameAccount): nothing
+    // would show it again, and a slot added later under the same id must not inherit it.
+    if (count > 0 && status === 'done' && body.account) {
+      await this.prisma.$executeRaw`
+        UPDATE "runner"
+           SET "account_names" = "account_names" #- ARRAY[${engine}::text, ${body.account}::text]
+         WHERE "id" = ${runnerId}::uuid
+           AND "account_names" #> ARRAY[${engine}::text, ${body.account}::text] IS NOT NULL`;
+    }
     return { ok: true, applied: count > 0 };
   }
 
@@ -1986,7 +2002,18 @@ export class RunnerApiController {
     @CurrentRunner() runner: { id: string },
     @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
     @Headers(RUNNER_PROVIDERS_HEADER) providerHeader?: string,
+    @Res({ passthrough: true }) res?: Response,
   ): Promise<ClaimedSession | null> {
+    // The long poll outlives the request otherwise: a runner that stopped — a self-update re-exec, a
+    // restart, its own claim timeout — leaves it waiting here, and the session it claims next is
+    // answered to nobody (see claimSessionForRunner). The response closing before anything was
+    // written to it is the connection going away.
+    let hungUp: AbortSignal | undefined;
+    if (res) {
+      const hangUp = new AbortController();
+      res.once('close', () => hangUp.abort());
+      hungUp = hangUp.signal;
+    }
     const supportsTerminalHandoff = runnerSupportsCapability(capabilities, SESSION_TERMINAL_HANDOFF_V1);
     const supportsSourcePin = runnerSupportsCapability(capabilities, SESSION_SOURCE_PIN_V1);
     const supportedProviders = advertisedRunnerProviders(providerHeader);
@@ -2010,6 +2037,7 @@ export class RunnerApiController {
       supportsTerminalHandoff,
       supportsSourcePin,
       runnerSupportsCapability(capabilities, WIKI_MAINTENANCE_RUN_V1),
+      hungUp,
     );
     if (job?.allowOrchestration) {
       if (runnerSupportsCapability(capabilities, SESSION_ORCHESTRATION_CREDENTIAL_V1)) {
@@ -3182,8 +3210,9 @@ export class RunnerApiController {
         // above for the reason the block below gives — a wake handed out again after its runner died
         // still has to say why. Not best-effort: this block is the turn, and one delivered without it
         // wakes the agent for nothing, so a failure rolls the claim back and leaves the turn queued.
-        if (t.kind === 'message' && isBackgroundWakeTurn(t.clientTurnId)) {
-          content = (await appendBackgroundWakeContext(tx, sessionId, t.clientTurnId, content)) ?? content;
+        // A job's exit written into the running turn is a steer, and carries its block the same way.
+        if ((t.kind === 'message' || t.kind === 'steer') && isBackgroundWakeTurn(t.clientTurnId)) {
+          content = (await appendBackgroundWakeContext(tx, sessionId, t.clientTurnId, content, t.kind)) ?? content;
           content = (await appendScheduledWakeupContext(tx, sessionId, t.clientTurnId, content)) ?? content;
         }
         // The outcomes of this session's own requests, handed back to it (session-request.ts, contract
@@ -3639,6 +3668,17 @@ export class RunnerApiController {
    * Wakes nobody has been handed yet are one turn: a wake arriving while one is queued files itself
    * onto it (MERGED). A session that has ended is neither woken nor revived (DROPPED), answered with a
    * 200 because there is nothing for the runner to try again.
+   *
+   * A job's exit is written into the turn the session is running, when it is running one this runtime
+   * and runner can steer (`steerIfLive`): the agent reads it at its next tool call instead of after
+   * the turn, and no turn is opened for it. It then joins only a steer still waiting for that same
+   * turn. A job's new output always waits for the next turn, joining the wake queued there — written
+   * into the running turn, a job that prints every minute would interrupt it every minute.
+   *
+   * Except that a job's exit is the last thing it says: steered, it takes that job's own output wake
+   * off the next-turn queue with it (`takeJobOffNextTurnQueue`), and an output wake arriving once the
+   * exit is on file is DROPPED (`StaleBackgroundWake`) — otherwise each would open a turn after the
+   * exit was read, to report output the exit already reported.
    */
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/:id/background-wake')
@@ -3658,19 +3698,28 @@ export class RunnerApiController {
         sessionId,
         { clientTurnId, content: '', intent: 'NEXT_TURN' },
         {
-          coalesce: async (tx, session) => {
+          steerIfLive: dto.trigger === 'exit',
+          coalesce: async (tx, session, route) => {
             if (sessionHasEnded(session)) throw new SessionNotSendable('the session has ended');
-            const queued = await undeliveredWakeTurn(tx, sessionId);
+            if (dto.trigger === 'output' && (await jobExitFiled(tx, sessionId, dto.jobId))) {
+              throw new StaleBackgroundWake(dto.jobId);
+            }
+            const queued = await undeliveredWakeTurn(tx, sessionId, route);
             merged = queued !== null;
-            await fileBackgroundJobWake(tx, sessionId, queued?.clientTurnId ?? clientTurnId, dto);
+            const filedOn = queued?.clientTurnId ?? clientTurnId;
+            await fileBackgroundJobWake(tx, sessionId, filedOn, dto);
+            if (route.kind === 'steer') await takeJobOffNextTurnQueue(tx, sessionId, filedOn, dto.jobId);
             return queued;
           },
         },
       );
       return { outcome: merged ? 'MERGED' : 'ENQUEUED', turnId: turn.turnId };
     } catch (e) {
-      // Ended (SessionNotSendable), or no longer there to wake (NotFoundException).
-      if (e instanceof SessionNotSendable || e instanceof NotFoundException) return { outcome: 'DROPPED' };
+      // Ended (SessionNotSendable), no longer there to wake (NotFoundException), or output its job's
+      // exit already reported (StaleBackgroundWake).
+      if (e instanceof SessionNotSendable || e instanceof NotFoundException || e instanceof StaleBackgroundWake) {
+        return { outcome: 'DROPPED' };
+      }
       throw e;
     }
   }
@@ -3766,9 +3815,12 @@ export class RunnerApiController {
           // How much of that budget is spent, for the one failure class whose wait is decided
           // here rather than by a reply's text — see `retryArmAt` below.
           retryAttempts: true,
-          // Which shared pool's key a failed turn may have ended on — see `keyRetryAt` below.
+          // Which shared pool's key, or login pool's account, a failed turn may have ended on — see
+          // `keyRetryAt` below.
           provider: true,
           poolKeyId: true,
+          poolCodexAccountId: true,
+          model: true,
           // Which of the runner's Codex accounts a turn its usage limit ended ran on, and whether it
           // was picked by hand — see `codexUsageLimit` below.
           codexAccount: true,
@@ -3898,7 +3950,7 @@ export class RunnerApiController {
       // on. The completed-turn read above serves the L0 shell path; neither query mutates the row.
       const steering = await tx.conversationTurn.findFirst({
         where: { id: dto.turnId, sessionId, kind: 'steer' },
-        select: { id: true, sendIntent: true, targetTurnId: true, deliveryStatus: true },
+        select: { id: true, sendIntent: true, targetTurnId: true, deliveryStatus: true, clientTurnId: true },
       });
       // `turnComplete` is retried when the response is lost. After the first successful
       // steer_requeue the SAME row is already a `message` (and may even have been leased for its
@@ -3961,6 +4013,9 @@ export class RunnerApiController {
             where: { id: sessionId, status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null },
             data: { status: RunStatus.PENDING, lastTurnAt: new Date() },
           });
+          // A background job's exit the engine never read is a wake turn of its own again, and a
+          // wake already queued for the next turn joins it rather than opening a second one.
+          await foldQueuedWakeTurnsInto(tx, sessionId, steering);
         }
         return {
           applied: requeued.count > 0,
@@ -4099,21 +4154,23 @@ export class RunnerApiController {
       // is closer to firing than anything computed now, and re-deciding it here would restart the
       // countdown on every attempt — the one shape that makes a bounded ladder unbounded.
       //
-      // A model turn a shared pool's key ended is armed ahead of that ladder: the gateway refused the key,
-      // or OpenAI said it is out of budget or refused it, and the next claim moves the session to another
-      // key. That is re-sent the moment another key can take it, or at the first reset when none can
-      // (QueueService.sharedPoolKeyRetryAt) — the account pool's "room on another member re-sends now",
-      // for keys. Decided from the keys, not from the engine's words, and never for a turn whose key can
-      // still run: that failure was not the key's. A login pool's turn its account's usage limit ended is
-      // armed the same way, at the reset the backend named (QueueService.loginPoolRetryAt) — the session
-      // waits for its one account and is never moved.
+      // A model turn a pool's credential ended is armed ahead of that ladder: the gateway refused the key,
+      // or OpenAI said it is out of budget or refused it, or the ChatGPT account the session ran on was
+      // spent or signed out, and the next claim moves the session to whatever else can run. That is
+      // re-sent the moment another credential can take it, or at the first reset when none can
+      // (QueueService.sharedPoolRetryAt, for a session on somebody else's pool — its keys and, for a pool
+      // of somebody's own, the accounts they run too) — the account pool's "room on another member
+      // re-sends now", for a pool. Decided from the credentials, not from the engine's words, and never
+      // for a turn whose own credential can still run: that failure was not its. A session of the pool's
+      // own owner is armed the same way, from its accounts (QueueService.loginPoolRetryAt): at once when
+      // another can take it, which the next claim moves the session to, else at the first account's reset.
       const keyRetryAt =
         dto.status === RunStatus.FAILED
         && completedTurn?.kind === 'message'
         && current.retryAt == null
         // Only a configured provider's slug can name a pool, as in quotaRetryAt.
         && !isBuiltinProvider(current.provider)
-          ? ((await this.queue.sharedPoolKeyRetryAt(tx, current, new Date()))
+          ? ((await this.queue.sharedPoolRetryAt(tx, current, new Date()))
             ?? (await this.queue.loginPoolRetryAt(tx, current, new Date())))
           : null;
       // A built-in Codex session whose account's usage limit ended the turn. Codex says so as the
@@ -4121,13 +4178,13 @@ export class RunnerApiController {
       // never armed it, and the session sat FAILED for good. On Automatic — nobody picked its account
       // by hand, and its workspace leaves the account to Orbit — it moves to another of the runner's
       // accounts with room and is re-sent there at once (its thread moves with it: runner
-      // codex_account_move.go); else it waits for this account's reset. A task's run is not: its
-      // failure settles the task, as it always has.
+      // codex_account_move.go); else it waits for this account's reset. A task's run too, as a Claude
+      // one does (retryPlanFor): the retry this arms holds its task's failure back (retryPending
+      // below), and the run goes on in its own checkout and thread rather than ending the attempt.
       const codexUsageLimit =
         failSession
         && completedTurn?.kind === 'message'
         && current.retryAt == null
-        && !current.taskId
         && current.provider === AgentProvider.CODEX
         && isUsageLimitErrorText(failureText)
           ? await this.codexUsageLimitRetry(tx, runner.id, current, failureText!)
@@ -4360,9 +4417,11 @@ export class RunnerApiController {
       let currentWorkTerminalized = 0;
       let currentWorkRequeued = 0;
       if (completedTurn && !failSession) {
-        currentWorkRequeued = (
-          await requeueUnreadCurrentWorkSteers(tx, sessionId, [completedTurn.id])
-        ).length;
+        const requeuedSteers = await requeueUnreadCurrentWorkSteers(tx, sessionId, [completedTurn.id]);
+        currentWorkRequeued = requeuedSteers.length;
+        // A background job's exit that missed this turn is a wake turn of its own again; a wake
+        // already queued for the next turn joins it rather than opening a second one behind it.
+        if (requeuedSteers.length > 0) await foldRequeuedWakeTurns(tx, sessionId, requeuedSteers);
       } else if (completedTurn) {
         // A failing turn takes the session with it, and the drain below answers every queued row.
         // Requeueing into a queue about to be emptied would lose the message with nothing said;
@@ -4589,6 +4648,19 @@ export class RunnerApiController {
           costUsd: mu.costUSD ?? 0,
         }));
         if (rows.length > 0) await tx.llmUsage.createMany({ data: rows });
+      } else if (dto.usage && current.model) {
+        // Codex reports tokenUsage.last, not the resumed thread's cumulative total.
+        await tx.llmUsage.create({
+          data: {
+            sessionId,
+            model: current.model,
+            inputTokens: dto.usage.input_tokens ?? 0,
+            outputTokens: dto.usage.output_tokens ?? 0,
+            cacheCreationInputTokens: dto.usage.cache_creation_input_tokens ?? 0,
+            cacheReadInputTokens: dto.usage.cache_read_input_tokens ?? 0,
+            costUsd: 0,
+          },
+        });
       }
       if (failSession) {
         const terminalized = await terminalizePendingCurrentWorkSteers(tx, sessionId, {
@@ -5635,15 +5707,17 @@ export class RunnerApiController {
               select: { env: true, codexAccount: true, claudeAccount: true },
             })
           : null;
-      // A shared pool's key that ended the run is waited out the same way, from the keys rather than the
-      // words (QueueService.sharedPoolKeyRetryAt): now while another key can take the work — and a login
-      // pool's spent account until the reset the backend named (QueueService.loginPoolRetryAt).
+      // A pool credential that ended the run is waited out the same way, from the pool's rows rather than
+      // the words (QueueService.sharedPoolRetryAt, for a session on somebody else's pool — its keys and,
+      // for a pool of somebody's own, the accounts they run too): now while another can take the work —
+      // and a pool's own owner's session from its ChatGPT accounts (QueueService.loginPoolRetryAt), now
+      // while another can take it, else until the first of them comes back.
       const keyRetryAt =
         effectiveStatus === RunStatus.FAILED
         && current.retryAt == null
         && !quotaSpent
         && !isBuiltinProvider(current.provider)
-          ? ((await this.queue.sharedPoolKeyRetryAt(tx, current, new Date()))
+          ? ((await this.queue.sharedPoolRetryAt(tx, current, new Date()))
             ?? (await this.queue.loginPoolRetryAt(tx, current, new Date())))
           : null;
       const quotaRetryAt = quotaSpent
@@ -5939,14 +6013,15 @@ export class RunnerApiController {
   }
 
   /** Startup worktree GC support: given the session ids of leftover checkouts on the runner,
-   *  return which are safe to remove. A checkout is kept while its session still exists and is
-   *  neither Completed nor deleted — it stays resumable, so idle-parked sessions
-   *  survive a runner restart. Everything else (Completed, deleted, or missing) is
-   *  removable leftover. */
+   *  return which are safe to remove. A checkout is kept while its session still exists, is
+   *  neither Completed nor deleted, and is still assigned to this runner — it stays resumable, so
+   *  idle-parked sessions survive a runner restart. Everything else (Completed, deleted, missing,
+   *  or moved to a workspace on another runner — docs/session-folders-move-design.md §5.4) is
+   *  removable leftover. The runner keeps a checkout's branch, and never removes a dirty one. */
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/worktrees-removable')
   async worktreesRemovable(
-    @CurrentRunner() _runner: { id: string },
+    @CurrentRunner() runner: { id: string },
     @Body() dto: WorktreesRemovableRequest,
   ): Promise<WorktreesRemovableResponse> {
     const ids = (dto.ids ?? []).slice(0, 1000);
@@ -5959,6 +6034,7 @@ export class RunnerApiController {
             completedAt: null,
             archivedAt: null,
             deletedAt: null,
+            OR: [{ assignedRunnerId: null }, { assignedRunnerId: runner.id }],
           },
           select: { id: true },
         })
@@ -6523,7 +6599,10 @@ export class RunnerApiController {
    * alone: a retry re-sends the person's latest message, and that message was answered before
    * this turn began, so arming here re-sent an already-answered question until one attempt got
    * through. The notification that woke it is not lost — the runtime hands it over with the next
-   * message it is sent.
+   * message it is sent. Its account's usage limit still says that account is spent, though: a session
+   * on Automatic moves off it as below, and only the re-send is left out. Left where it was, its engine
+   * stayed on the spent account and every background agent still running in it met the same limit —
+   * on 2026-10-02 a session sat there until its owner moved it by hand.
    */
   private async retryPlanFor(
     tx: RetryPlanTransaction,
@@ -6534,30 +6613,36 @@ export class RunnerApiController {
   ): Promise<{ retryAt?: Date | null; retryAttempts?: number; claudeAccount?: string; poolSwitchNotice?: string }> {
     const quotaSpent = isUsageLimitErrorText(text);
     if (!quotaSpent && !isRetryableApiErrorText(text)) return { retryAt: null, retryAttempts: 0 };
-    if (!delivered) return {};
+    if (!delivered && !quotaSpent) return {};
     const session = await tx.session.findUnique({
       where: { id: sessionId },
       select: {
         ownerId: true,
         provider: true,
-        taskId: true,
         retryAttempts: true,
         codexAccount: true,
         claudeAccount: true,
         claudeAccountPinned: true,
+        poolSwitchNotice: true,
         workspace: { select: { env: true, codexAccount: true, claudeAccount: true } },
       },
     });
     if (!session) return {};
     if (!quotaSpent) return { retryAt: apiErrorRetryAt(session.retryAttempts, new Date()) };
+    // A turn nobody delivered, in a session that still owes its "Switched to" line, ran on the engine
+    // that line's move is replacing: the account it found spent is the one already left, and taking it
+    // for the new one moved the session again — back onto the spent one when the snapshot lags.
+    if (!delivered && session.poolSwitchNotice) return {};
     // A built-in Claude session on Automatic — nobody picked its account by hand, and its workspace
     // leaves the account to Orbit — moves to another of the runner's accounts with room and is re-sent
     // at once: the events path queues the reload that re-spawns its engine there, and the runner
-    // carries the conversation across (CLAUDE_ACCOUNT_MOVE_V1). Not a task's run, as for Codex.
-    if (session.provider === AgentProvider.CLAUDE && !session.taskId) {
+    // carries the conversation across (CLAUDE_ACCOUNT_MOVE_V1). A task's run too: it is armed like any
+    // other session (above), and left on the spent account it waited for the reset while another had
+    // room — on 2026-10-02, 36 minutes for a 5-hour window, with Default at 1%.
+    if (session.provider === AgentProvider.CLAUDE) {
       const runner = await tx.runner.findUnique({
         where: { id: runnerId },
-        select: { planUsage: true, engines: true, capabilities: true },
+        select: { planUsage: true, engines: true, accountNames: true, capabilities: true },
       });
       const move = runner?.capabilities.includes(CLAUDE_ACCOUNT_MOVE_V1)
         ? accountAfterUsageLimit(
@@ -6569,14 +6654,15 @@ export class RunnerApiController {
             new Date(),
           )
         : null;
-      if (move) {
+      if (move && runner) {
         return {
-          retryAt: new Date(),
+          ...(delivered ? { retryAt: new Date() } : {}),
           claudeAccount: move.to,
-          poolSwitchNotice: accountSwitchNotice('claude', move, runner?.engines),
+          poolSwitchNotice: accountSwitchNotice('claude', move, runner),
         };
       }
     }
+    if (!delivered) return {};
     const at = await this.quotaRetryAt(tx, runnerId, session, text, session.workspace);
     // No defensible moment → leave any earlier arming standing rather than replacing it with
     // nothing; the card falls back to a manual retry.
@@ -6605,7 +6691,7 @@ export class RunnerApiController {
     const now = new Date();
     const runner = await tx.runner.findUnique({
       where: { id: runnerId },
-      select: { planUsage: true, engines: true, capabilities: true },
+      select: { planUsage: true, engines: true, accountNames: true, capabilities: true },
     });
     const workspace = session.workspaceId
       ? await tx.workspace.findUnique({
@@ -6623,7 +6709,7 @@ export class RunnerApiController {
           now,
         )
       : null;
-    if (move) return { retryAt: now, move: { to: move.to, notice: accountSwitchNotice('codex', move, runner?.engines) } };
+    if (move && runner) return { retryAt: now, move: { to: move.to, notice: accountSwitchNotice('codex', move, runner) } };
     const at = await this.quotaRetryAt(tx, runnerId, session, text, workspace);
     return at ? { retryAt: at } : null;
   }

@@ -70,6 +70,10 @@ function JobMark({ job }: { job: BackgroundWakeJob }) {
  *
  * The queued tail draws the same line while the wake waits behind the running turn, dashed, with
  * the queue's status line under it, so it keeps its shape when a runner takes it.
+ *
+ * A job that ended while a turn was running is written into that turn (a steer), so its line sits in
+ * the running turn's own stream, and how far it got is the line's to say — the same words a steer's
+ * bubble uses (lib/steerDelivery), from "Sending…" to "Sent into this turn".
  */
 export function BackgroundWakeCard({
   wake,
@@ -77,6 +81,7 @@ export function BackgroundWakeCard({
   ts,
   undelivered,
   queued,
+  steer,
   attached,
 }: {
   wake: BackgroundWake;
@@ -87,6 +92,8 @@ export function BackgroundWakeCard({
   undelivered?: boolean;
   /** The queued tail's status line, while the wake still waits for its turn. */
   queued?: ReactNode;
+  /** How far a wake written into the running turn has got (`steerDeliveryState(...).label`). */
+  steer?: string;
   /**
    * Whatever else the same note carried, as its own folded entry.
    *
@@ -183,6 +190,7 @@ export function BackgroundWakeCard({
         </div>
       ))}
       {undelivered && <div className="bgwake-undelivered">The session has not confirmed it received this.</div>}
+      {steer && <div className="bgwake-steer">{steer}</div>}
       {queued && <div className="bgwake-queued">{queued}</div>}
     </div>
   );

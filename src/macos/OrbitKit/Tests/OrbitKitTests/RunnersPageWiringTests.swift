@@ -326,7 +326,20 @@ final class RunnersPageWiringTests: XCTestCase {
                       "RunnerPageFormat.accountWindows(runner, engine: engine, account: line.id)",
                       "RunnerSignInView(runnerID: runner.id, engine: login, account: line.signInAccount)",
                       "Button(\"Add Account\")",
-                      "RunnerSignInView(runnerID: runner.id, engine: login, accountName: newAccountName)",
+                      // The press starts the sign-in under a name the page picks; the name typed over it
+                      // is saved as Rename… saves one, once the runner reports the account — and once
+                      // that account is signed in and named, the card folds back into Add Account.
+                      "newAccountPicked = RunnerPageFormat.defaultAccountName(accounts)",
+                      "RunnerSignInView(runnerID: runner.id, engine: login, accountName: newAccountName, autoStart: true)",
+                      ".focused($newAccountFocused)",
+                      ".onSubmit { newAccountFocused = false }",
+                      "if !focused { saveNewAccountName(health) }",
+                      ".onDisappear { saveNewAccountName(health) }",
+                      "await runners.renameAccount(id, engine: login, account: account.id, name: name)",
+                      ".onChange(of: newAccountDone(health)) { _, done in",
+                      "if done { closeSignIn() }",
+                      "guard let added = newAccount(health), added.auth == \"yes\" else { return false }",
+                      "return !newAccountFocused && newAccountWaiting == nil && !newAccountRenaming",
                       ".swipeActions(edge: .trailing, allowsFullSwipe: false) {",
                       "if !line.isDefault {",
                       "Button(role: .destructive) { pendingRemoval = line } label: {",
@@ -337,10 +350,33 @@ final class RunnersPageWiringTests: XCTestCase {
                       "RunnerAttention.updateNoteOf(health.update, nowMs: RunnerPageFormat.nowMs(now))"] {
             XCTAssertTrue(page.contains(piece), "the engine page lost \(piece)")
         }
+        // Any account — Default too — is renamed from its long-press menu, never from the swipe, and
+        // with the session rename's rules; the row says what a renamed Default still is.
+        for piece in [".contextMenu {",
+                      "renameDraft = line.name",
+                      "Label(\"Rename…\", systemImage: \"pencil\")",
+                      ".alert(\"Rename Account\", isPresented: renameAsked, presenting: renaming) { line in",
+                      "TextField(line.isDefault ? \"Default\" : \"Name\", text: $renameDraft)",
+                      "guard !name.isEmpty, name != line.name else { return }",
+                      "await runners.renameAccount(id, engine: login, account: line.id, name: name)",
+                      "if let subtitle = line.subtitle {"] {
+            XCTAssertTrue(page.contains(piece), "the engine page lost \(piece)")
+        }
+        try assertInOrder(page, [".contextMenu {", ".swipeActions(edge: .trailing, allowsFullSwipe: false) {"],
+                          "Rename is the menu's, not the swipe's")
+        let swipe = try slice(page, from: ".swipeActions(edge: .trailing, allowsFullSwipe: false) {", to: "addAccountRow(health, login: login")
+        XCTAssertFalse(swipe.contains("Rename"), "a swipe performs; it does not open an editor")
+        let runnersModel = code(try appSource("RunnersModel.swift"))
+        XCTAssertTrue(runnersModel.contains("api.renameRunnerAccount(id, engine: engine, account: account, name: name)"))
+
         let signIn = code(try appSource("Views/RunnerSignInView.swift"))
         XCTAssertTrue(signIn.contains("var account: String? = nil"), "the sign-in card takes an account")
         XCTAssertTrue(signIn.contains("var accountName: String? = nil"), "or a new account's name")
         XCTAssertTrue(signIn.contains("Task { await model.begin(accountName: accountName) }"))
+        XCTAssertTrue(signIn.contains("var autoStart = false"), "or starts as it appears")
+        try assertInOrder(code(signIn), ["let fresh = model == nil", "if autoStart, fresh {",
+                                         "await m.begin(accountName: accountName)", "await m.refresh()"],
+                          "an Add Account card starts its sign-in on its first appearance only")
         let model = code(try appSource("RunnerSignInModel.swift"))
         XCTAssertTrue(model.contains("api.startRunnerLogin(runnerID, engine: engine, account: account, accountName: name)"))
         XCTAssertTrue(model.contains("if adding { return startedHere }"),

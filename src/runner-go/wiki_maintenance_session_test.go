@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -540,6 +541,9 @@ func TestWikiMaintenanceSessionIsTheContracts(t *testing.T) {
 	if run["maxTurns"].(float64) != 120 || run["permissionMode"] != "dontAsk" || run["runtime"] != providerClaude {
 		t.Errorf("the contract's run is %v", run)
 	}
+	if run["bashTimeoutMs"] != float64(wikiMaintainRunBudget.Milliseconds()) {
+		t.Errorf("the contract's bashTimeoutMs %v is not this runner's Bash budget %d", run["bashTimeoutMs"], wikiMaintainRunBudget.Milliseconds())
+	}
 	disallowed := []string{}
 	for _, tool := range run["disallowedTools"].([]interface{}) {
 		disallowed = append(disallowed, tool.(string))
@@ -735,5 +739,24 @@ func TestWikiMaintenanceSessionDrivesTheRealClaudeCodeCleanly(t *testing.T) {
 	// The command the model asked for was never pre-approved: refused, and nobody was asked.
 	if !strings.Contains(seen[1].Body, `"is_error":true`) {
 		t.Errorf("the unapproved command was not refused: %s", seen[1].Body)
+	}
+	// The engine took the five hours from the environment: the Bash tool it offers says a call may ask for
+	// them, where its own most is ten minutes.
+	var offered struct {
+		Tools []struct {
+			Name        string `json:"name"`
+			InputSchema struct {
+				Properties map[string]struct {
+					Description string `json:"description"`
+				} `json:"properties"`
+			} `json:"input_schema"`
+		} `json:"tools"`
+	}
+	_ = json.Unmarshal([]byte(seen[0].Body), &offered)
+	budget := strconv.FormatInt(wikiMaintainRunBudget.Milliseconds(), 10)
+	for _, tool := range offered.Tools {
+		if timeout := tool.InputSchema.Properties["timeout"].Description; tool.Name == "Bash" && !strings.Contains(timeout, budget) {
+			t.Errorf("the Bash tool offers its timeout as %q: the engine did not take the %s ms of the environment", timeout, budget)
+		}
 	}
 }

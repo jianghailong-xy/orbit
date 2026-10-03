@@ -34,6 +34,11 @@ test('concurrent task-list indexes for one owner execute one query group', async
         return [];
       },
     },
+    // `runningTasks`: the tasks a work session carries, counted per list in SQL.
+    $queryRaw: async () => {
+      calls.aggregates += 1;
+      return [];
+    },
   });
 
   const first = service.list(OWNER_ID);
@@ -62,6 +67,7 @@ test('task-list index single-flight isolates owners', async () => {
       },
     },
     task: { groupBy: async () => [] },
+    $queryRaw: async () => [],
   });
 
   const first = service.list(OWNER_ID);
@@ -84,6 +90,7 @@ test('a failed task-list index is removed from single-flight and can be retried'
       },
     },
     task: { groupBy: async () => [] },
+    $queryRaw: async () => [],
   });
 
   await assert.rejects(service.list(OWNER_ID), /task-list read failed/);

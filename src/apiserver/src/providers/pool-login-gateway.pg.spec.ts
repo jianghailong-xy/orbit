@@ -15,8 +15,9 @@
  *      reading onto the account. The claim hands the runner the gateway and a token, and nothing of the
  *      login.
  *  (2) A token is refused (401) once its session ended, moved to another provider or is not its person's,
- *      it expired or was revoked, its account left the pool or the pool was deleted; a good one reaches
- *      nothing but POST /responses (403) — and none of it reaches the backend.
+ *      it expired or was revoked, or its pool was deleted; a good one reaches nothing but POST /responses
+ *      (403) — and none of it reaches the backend. A session whose account the pool no longer holds keeps
+ *      its token and is answered 403, as a pool holding no account is.
  *  (3) usage_limit_reached (recorded): answered as it came, asked once, and the account recorded spent
  *      until the reset it names; the session is owed the line, its failed turn waits for that reset, and it
  *      stays on the same account; the claim that runs it again has a resident engine say the line first;
@@ -32,6 +33,11 @@
  *  (7) The ledger: per session and hour, summed; a row whose session is gone before the write is dropped.
  *  (8) No database connection is held while a response streams.
  *  (9) Nothing the gateway logged carries a token, in the clear or encrypted.
+ * (10) The account is the session's, not the token's (migration 0355): a token minted on one account
+ *      follows its session to another — the backend gets the new account's ChatGPT-Account-ID and access
+ *      token — and taking the account it was minted on out of the pool leaves it working. A session whose
+ *      account the pool no longer holds, or which has none, is answered as a pool holding no account, and
+ *      nothing goes out.
  *
  * It only adds rows, and refuses to run anywhere but the disposable server `coordinator-pg-test-safety`
  * identifies.
@@ -71,7 +77,8 @@ import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from '../sessions/sessions.service';
-import { CODEX_OAUTH_CLIENT_ID } from './codex-login-gateway';
+import { maskedAccount } from './codex-login';
+import { CODEX_OAUTH_CLIENT_ID, loginMissingReason } from './codex-login-gateway';
 import { CodexLoginService } from './codex-login.service';
 import { responseCostMicros } from './openai-prices';
 import { ProviderPlanUsageService } from './plan-usage.service';
@@ -363,19 +370,32 @@ suite("a login pool's gateway, end to end on real PostgreSQL", { timeout: 600_00
   const owner = await person(db, 'Owner');
   const stranger = await person(db, 'Stranger');
 
-  /** A Codex pool of the owner's own, with a ChatGPT account signed in as the sign-in would store it. */
-  async function world(label: string, access?: { exp?: number }) {
-    const made = await providers.createPool(owner.id, { label, engine: 'codex' });
+  /** One more ChatGPT account signed in on `poolId`, as the sign-in would store it. */
+  /**
+   * How many accounts this spec has added, so each gets a `created_at` of its own: the column is
+   * TIMESTAMP(3), and two rows added within the same millisecond order by their random account id — which
+   * one a claim lands on would be a coin flip (the pool's accounts are ordered by `created_at` first).
+   */
+  let accountsAdded = 0;
+  async function addAccount(poolId: string, access?: { exp?: number }) {
     const accountId = `acct-${randomUUID()}`;
     const email = `owner-${randomUUID().slice(0, 8)}@chatgpt.invalid`;
     const login = pair(accountId, email, access?.exp ?? FAR);
     const stored = await db.poolCodexLogin.create({
       data: {
-        poolId: made.id, userId: owner.id, accountId, email, plan: 'plus',
+        poolId, userId: owner.id, accountId, email, plan: 'plus',
         accessTokenEnc: encryptSecret(login.access), refreshTokenEnc: encryptSecret(login.refresh), expiresAt: login.exp,
+        createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000 + accountsAdded++ * 60_000),
       },
     });
     secrets.push(stored.accessTokenEnc, stored.refreshTokenEnc);
+    return { accountId, email, login };
+  }
+
+  /** A Codex pool of the owner's own, with a ChatGPT account signed in as the sign-in would store it. */
+  async function world(label: string, access?: { exp?: number }) {
+    const made = await providers.createPool(owner.id, { label, engine: 'codex' });
+    const { accountId, email, login } = await addAccount(made.id, access);
     const sessionOf = async () =>
       (await sessions.create(owner.id, { prompt: 'hello', title: label, workspaceId: owner.workspaceId, provider: made.slug })).id;
     return { id: made.id, slug: made.slug, label, accountId, email, login, sessionOf };
@@ -399,8 +419,10 @@ suite("a login pool's gateway, end to end on real PostgreSQL", { timeout: 600_00
       assert.ok(!text(claimed).includes(secret), 'the claim carried the login');
     }
     assert.equal((await sessionRow(session)).poolCodexAccountId, pool.accountId, 'the session names the account it runs on');
+    // The token names its (pool, person, session) and no account at all (migration 0355).
     const minted = await db.poolLoginToken.findMany({ where: { sessionId: session } });
-    assert.deepEqual(minted.map((row) => [row.poolId, row.userId, row.accountId]), [[pool.id, owner.id, pool.accountId]]);
+    assert.deepEqual(minted.map((row) => [row.poolId, row.userId]), [[pool.id, owner.id]]);
+    assert.deepEqual(Object.keys(minted[0]).filter((column) => column.includes('account')), []);
     assert.ok(!JSON.stringify(minted).includes(token), 'the token is stored, not its hash');
     // The session's own read names no account id.
     assert.ok(!text(await sessions.get(owner.id, session)).includes(pool.accountId), 'a session read names the account id');
@@ -480,7 +502,7 @@ suite("a login pool's gateway, end to end on real PostgreSQL", { timeout: 600_00
     assert.equal((page as { login: { usageUnavailable: unknown } }).login.usageUnavailable, null);
   });
 
-  await t.test('(2) a token is refused once its session ended, moved or is not its person\'s, it expired or was revoked, its account left or its pool went — and a good one reaches nothing but POST /responses', async () => {
+  await t.test('(2) a token is refused once its session ended, moved or is not its person\'s, it expired or was revoked, or its pool went — and a good one reaches nothing but POST /responses', async () => {
     const pool = await world('Doors');
     const refused = async (token: string | null, why: string) => {
       const answer = await ask(token);
@@ -542,7 +564,7 @@ suite("a login pool's gateway, end to end on real PostgreSQL", { timeout: 600_00
     await db.session.update({ where: { id: theirs }, data: { provider: pool.slug, providerBuiltin: false } });
     const foreign = `orbit-gwl-${randomUUID()}`;
     await db.poolLoginToken.create({
-      data: { tokenHash: sha256(foreign), poolId: pool.id, userId: owner.id, accountId: pool.accountId, sessionId: theirs, expiresAt: new Date(Date.now() + 3_600_000) },
+      data: { tokenHash: sha256(foreign), poolId: pool.id, userId: owner.id, sessionId: theirs, expiresAt: new Date(Date.now() + 3_600_000) },
     });
     await refused(foreign, "a session that is not the token's person's");
     await assert.rejects(
@@ -552,12 +574,15 @@ suite("a login pool's gateway, end to end on real PostgreSQL", { timeout: 600_00
       'a token naming anybody but the pool\'s owner was stored',
     );
 
-    // The account is taken out of the pool: its tokens go with it.
+    // The account the session ran on is taken out of the pool: the token stays — it names no account
+    // (migration 0355) — and the gateway answers it as a pool holding no account, which is 403, not 401.
     token = tokenOf(await claim(owner, session));
     assert.equal((await ask(token)).status, 200);
     await logins.signOut(owner.id, pool.id);
-    await refused(token, 'its account left the pool');
-    assert.equal(await db.poolLoginToken.count({ where: { sessionId: session } }), 0);
+    const emptied = await ask(token);
+    assert.equal(emptied.status, 403, 'the session whose account left the pool');
+    assert.equal(errorOf(emptied).code, 'orbit_pool_login_missing');
+    assert.equal(await db.poolLoginToken.count({ where: { sessionId: session } }), 1);
 
     // The pool is deleted.
     const next = await world('Doors again');
@@ -625,7 +650,7 @@ suite("a login pool's gateway, end to end on real PostgreSQL", { timeout: 600_00
     const again = tokenOf(await claim(owner, session, false));
     assert.equal((await sessionRow(session)).poolCodexAccountId, pool.accountId);
     assert.deepEqual(await carriers(session), [{ content: '{}', status: 'PENDING' }]);
-    assert.deepEqual((await db.poolLoginToken.findMany({ where: { sessionId: session } })).map((row) => row.accountId), [pool.accountId, pool.accountId]);
+    assert.equal(await db.poolLoginToken.count({ where: { sessionId: session } }), 2, 'the second claim minted a token beside the first');
     const carrier = await dequeue(owner, session);
     assert.equal(carrier?.kind, 'reload');
     assert.equal(carrier?.env, undefined);
@@ -641,6 +666,11 @@ suite("a login pool's gateway, end to end on real PostgreSQL", { timeout: 600_00
     assert.equal((await ask(again)).status, 200);
     assert.equal(backendRequests()[0].headers.authorization, `Bearer ${pool.login.access}`);
     await eventually(async () => (await loginRow(pool.id, pool.accountId)).spentUntil === null, 'the spent mark cleared');
+    // And the window reading that answer carried takes the spent one's place at the ledger's next write:
+    // a reading with a window used up keeps the account off too (pool-login-select.ts loginCanRun).
+    await ledger.flush();
+    const read = await loginRow(pool.id, pool.accountId);
+    assert.equal((read.usage as { primary: { utilization: number } }).primary.utilization, 42);
     const at = new Date();
     assert.deepEqual(await queue.accountPoolResumesAt(owner.id, pool.slug, at), at);
   });
@@ -926,5 +956,62 @@ exit 0
     assert.ok(all.length > 20);
     const leaked = logged.filter((line) => all.some((secret) => line.includes(secret)) || /orbit-gwl-|Bearer |rt_/.test(line));
     assert.deepEqual(leaked, [], 'a log line carried a credential');
+  });
+
+  await t.test('(10) the account is the session\'s, not the token\'s: a warm token follows its session to another account, and one account leaving does not take it with it', async () => {
+    const pool = await world('Moved');
+    const second = await addAccount(pool.id);
+    const session = await pool.sessionOf();
+    // The token a warm engine holds was minted while the session was on the pool's first account.
+    const token = tokenOf(await claim(owner, session));
+    assert.equal((await sessionRow(session)).poolCodexAccountId, pool.accountId);
+
+    // The session moves to the pool's other account — what a claim does — and the engine goes on with the
+    // token it was started with. The account the backend is asked as is the session's now, not the one the
+    // token was minted on, and the use is booked to the account it really ran on.
+    await db.session.update({ where: { id: session }, data: { poolCodexAccountId: second.accountId } });
+    seen.length = 0;
+    const answer = await ask(token);
+    assert.equal(answer.status, 200, answer.body.toString('utf8'));
+    assert.ok(answer.body.equals(RECORDED_STREAM));
+    const [sent, ...more] = backendRequests();
+    assert.deepEqual(more, []);
+    assert.equal(sent.headers['chatgpt-account-id'], second.accountId);
+    assert.equal(sent.headers.authorization, `Bearer ${second.login.access}`);
+    await ledger.flush();
+    assert.deepEqual(
+      (await db.poolLoginUsage.findMany({ where: { sessionId: session } })).map((row) => row.accountId),
+      [second.accountId],
+    );
+
+    // A session naming no account with the pool holding two: nothing is picked for it, and nothing goes out.
+    await db.session.update({ where: { id: session }, data: { poolCodexAccountId: null } });
+    seen.length = 0;
+    const unnamed = await ask(token);
+    assert.equal(unnamed.status, 403);
+    assert.equal(errorOf(unnamed).code, 'orbit_pool_login_missing');
+    assert.equal(seen.length, 0, 'a refused request reached the backend');
+    await db.session.update({ where: { id: session }, data: { poolCodexAccountId: second.accountId } });
+
+    // The account the token was minted on is taken out of the pool: the token keeps working on the account
+    // its session is on — it names no account, so nothing about it was deleted (migration 0355).
+    assert.deepEqual(await logins.signOut(owner.id, pool.id, maskedAccount(pool.accountId)), { removed: 1 });
+    assert.equal(await db.poolLoginToken.count({ where: { sessionId: session } }), 1, 'the token went with the account it was minted on');
+    seen.length = 0;
+    assert.equal((await ask(token)).status, 200);
+    assert.equal(backendRequests()[0].headers['chatgpt-account-id'], second.accountId);
+    assert.equal(backendRequests()[0].headers.authorization, `Bearer ${second.login.access}`);
+
+    // The session's own account leaving is the pool's no-account answer, not a refusal of the token: the
+    // token is still good, and what it is told is that there is no account to run on.
+    assert.deepEqual(await logins.signOut(owner.id, pool.id, maskedAccount(second.accountId)), { removed: 1 });
+    seen.length = 0;
+    const emptied = await ask(token);
+    assert.equal(emptied.status, 403, 'the session whose account left the pool');
+    assert.deepEqual(errorOf(emptied), {
+      message: loginMissingReason(pool.label), type: 'orbit_gateway', param: null, code: 'orbit_pool_login_missing',
+    });
+    assert.equal(seen.length, 0, 'a refused request reached the backend');
+    assert.equal(await db.poolLoginToken.count({ where: { sessionId: session } }), 1, 'the token went with the account');
   });
 });

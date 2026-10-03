@@ -29,6 +29,10 @@
  *  16. What one session sent another counts for the hour it was sent in, whatever happens to it next:
  *      queued messages an interrupt drops, or the owner withdraws, still count, and so do the ones a
  *      session drops itself with an interrupt that carries one more — the 21st is refused.
+ *  22. (the server's half) The Retry door's key follows the failure the session is stopped on: a re-send
+ *      that fails before its echo — refused by the runtime before it was written, with only the runner's
+ *      receipt to show for it — is re-sent by the next press, and only once however often it is pressed;
+ *      a re-send that went through, or the sweep's own, is never sent a second time by a press after it.
  *
  * The doors are the real controllers and the real orchestration credential; the inbox and the event
  * ingest are reached over real HTTP, through the guard and the public-id interceptor main.ts installs.
@@ -307,7 +311,8 @@ test('one session’s message to another is signed, delivered as such, and bound
       // The messages here carry no `#`-references and reach no list console.
       { provide: ReferenceExpansionService, useValue: { expand: async (_owner: string, content?: string) => content } },
       { provide: ListEventsService, useValue: { appendFor: async (_tx: unknown, _id: string, content?: string) => content } },
-      { provide: AttemptBudgetMeterService, useValue: {} },
+      // A completed turn's spend is metered after it commits; nothing these sessions run is budgeted.
+      { provide: AttemptBudgetMeterService, useValue: { meterQuietly: async () => undefined } },
       { provide: ProjectAcceptanceService, useValue: {} },
       { provide: TasksService, useValue: {} },
       { provide: MergeReceiptService, useValue: {} },
@@ -939,22 +944,31 @@ test('one session’s message to another is signed, delivered as such, and bound
       });
 
       const steersBefore = steers.length;
-      const key = randomUUID();
-      const resent = await door.resendRetryMessage(user, recipient, { clientTurnId: key });
-      assert.equal(await senderOf(recipient, key), worker, 'the re-send went out in the owner’s name');
+      const resent = await door.resendRetryMessage(user, recipient);
+      const resentTurn = await prisma.conversationTurn.findUniqueOrThrow({ where: { id: resent.turnId } });
+      assert.equal(await senderOf(recipient, resentTurn.clientTurnId), worker, 'the re-send went out in the owner’s name');
       assert.equal((await prisma.sessionRequest.findUniqueOrThrow({ where: { id: request.id } })).turnId, resent.turnId,
         'the request stayed on the turn that failed');
       assert.equal(steers.length, steersBefore, 'the re-send was charged as a steer');
       assert.equal((await prisma.session.findUniqueOrThrow({ where: { id: recipient } })).retryAt, null,
         'the armed retry would send it a second time');
-      // A replay of the click — a lost response, a double tap — is its receipt, not a second re-send.
-      assert.equal((await door.resendRetryMessage(user, recipient, { clientTurnId: key })).turnId, resent.turnId);
+      // §8 criterion 19: pressing again — a lost response, a double tap — is the turn already
+      // queued, not a second one. Pressed here, at the instant the runner has taken the re-send and
+      // its echo has not yet moved what "the failed message" is: the session is running again, so
+      // with a key minted per click — what this door took before — the second press went through the
+      // live path and queued a second, signed, uncharged copy of the same message. Called with a
+      // body an older client still sends: this door takes no key, and ignores it.
+      const clickAgain = door.resendRetryMessage.bind(door) as unknown as (
+        user: unknown, id: string, body?: { clientTurnId?: string },
+      ) => Promise<{ turnId: string }>;
+      const redelivered = await claimAndPoll(recipient);
+      assert.equal(redelivered.json.turnId, resent.turnId);
+      assert.equal((await clickAgain(user, recipient, { clientTurnId: randomUUID() })).turnId, resent.turnId,
+        'a second press queued a second turn for one failed message');
       assert.equal((await turnsOf(recipient)).filter((turn) => turn.content === words).length, 2,
         'the failed turn and its one re-send');
 
       // The engine reads the worker's request again: the words, then the block, asking for a reply.
-      const redelivered = await claimAndPoll(recipient);
-      assert.equal(redelivered.json.turnId, resent.turnId);
       const content = String(redelivered.json.content ?? '');
       assert.ok(content.startsWith(`${words}\n\n<orbit-session-message from-session="${uuidToBase62(worker)}"`),
         `the engine was handed something else:\n${content}`);
@@ -962,6 +976,12 @@ test('one session’s message to another is signed, delivered as such, and bound
       assert.match(content, new RegExp(`session_reply\\(requestId="${request.requestId}"\\)`));
       const stored = await echo(recipient, 2, redelivered.json.turnId, { text: content });
       assert.equal((stored.sessionMessage as Record<string, unknown>).requestId, request.requestId);
+      // …and once that echo has moved what a Retry would re-send to the re-sent turn itself, a press
+      // is STILL that turn: the failed message is the one it re-sent, and the key names it (§2.1).
+      assert.equal((await clickAgain(user, recipient, { clientTurnId: randomUUID() })).turnId, resent.turnId,
+        'a press after the engine took the re-send queued a second turn');
+      assert.equal((await turnsOf(recipient)).filter((turn) => turn.content === words).length, 2,
+        'the failed turn and its one re-send');
 
       // Charged to nobody's hour: with the request, nineteen more from the worker make twenty, and the
       // next is refused — the re-send is none of them.
@@ -977,31 +997,154 @@ test('one session’s message to another is signed, delivered as such, and bound
       const recipient = await session('the conversation a provider error failed on the request');
       const request = await ask(worker, recipient, 'cut the release branch?', 'card-revive-1');
       await failAndArm(recipient, RunStatus.FAILED);
-      const key = randomUUID();
-      const resent = await door.resendRetryMessage(user, recipient, { clientTurnId: key });
+      const resent = await door.resendRetryMessage(user, recipient);
       assert.equal(resent.revived, true, 'the failed run was not revived');
-      assert.equal(await senderOf(recipient, key), worker);
+      const resentTurn = await prisma.conversationTurn.findUniqueOrThrow({ where: { id: resent.turnId } });
+      assert.equal(await senderOf(recipient, resentTurn.clientTurnId), worker);
       assert.equal((await prisma.sessionRequest.findUniqueOrThrow({ where: { id: request.id } })).turnId, resent.turnId);
       assert.equal((await prisma.session.findUniqueOrThrow({ where: { id: recipient } })).status, RunStatus.PENDING);
     }
   });
 
-  await t.test('the Retry door takes a key of the caller’s own and nothing else', async () => {
+  await t.test('a re-send that fails before its echo is re-sent by the next press; one that went through is not sent twice (§8 criterion 22)', async () => {
+    const door = new SessionsController(
+      sessions, prisma as unknown as PrismaService, realtime as never, {} as never, {} as never, autoRetry,
+    );
+    const user = { userId: ownerId } as never;
+    const askingDoor = new RunnerSessionsController(
+      sessions, orchestration, {} as never, attempts as never, undefined,
+      new SessionRequestService(prisma as unknown as PrismaService, sessions, realtime as never),
+    );
+    async function ask(worker: string, recipient: string, words: string, key: string): Promise<string> {
+      const asked = await askingDoor.sendMessage(
+        runner, undefined, worker, await orchestration.issue(runnerId, worker), recipient,
+        { message: words, clientTurnId: key, expectReply: true } as never,
+      ) as { requestId?: string };
+      assert.ok(asked.requestId, `the send asked for no reply: ${JSON.stringify(asked)}`);
+      return base62ToUuid(String(asked.requestId));
+    }
+    /** The runner's account of a turn, posted as it posts one: events, then the completion. */
+    async function report(sessionId: string, events: Array<{ seq: number; type: string; turnId: string; payload: unknown }>) {
+      const posted = await http('POST', `/runner/sessions/${uuidToBase62(sessionId)}/events`, {
+        events: events.map((event) => ({ ...event, ts: new Date().toISOString() })),
+      });
+      assert.equal(posted.status, 202, `events answered ${posted.status}: ${posted.text}`);
+    }
+    async function complete(sessionId: string, body: Record<string, unknown>) {
+      const done = await http('POST', `/runner/sessions/${uuidToBase62(sessionId)}/turn-complete`, body);
+      assert.equal(done.status, 200, `turn-complete answered ${done.status}: ${done.text}`);
+    }
+    /** Claude's delivery failure (runner-go session.go, `failUndeliveredTurn`): the runtime refused the
+     *  message before writing it, so there is no echo — only the runner's receipt and a FAILED turn. */
+    async function refusedBeforeWritten(sessionId: string, seq: number, turnId: string) {
+      const why = 'write |1: broken pipe';
+      await report(sessionId, [{
+        seq, type: 'user_delivery', turnId, payload: { turnId, delivery: 'failed', reason: why, retryable: true },
+      }]);
+      await complete(sessionId, {
+        turnId, status: 'FAILED', subtype: 'delivery_failed', numTurns: 0, costUsd: 0,
+        result: `message not delivered to the engine: ${why}`,
+      });
+    }
+    const press = (recipient: string) => door.resendRetryMessage(user, recipient);
+    const copiesOf = async (sessionId: string, words: string) =>
+      (await turnsOf(sessionId)).filter((turn) => turn.content === words);
+
+    // The re-send meets a runtime that will not take it: no echo, the runner's receipt, the turn FAILED.
+    // The next press re-sends it — a new turn, carrying the request on — where it used to answer with
+    // the very turn that had failed, on every press after.
+    {
+      const worker = await session('Worker: whose re-send is refused before it is written');
+      const recipient = await session('the conversation whose CLI stops reading stdin');
+      const words = 'ship it or hold? (refused before written)';
+      const requestId = await ask(worker, recipient, words, 'card-refused-1');
+      await failAndArm(recipient, RunStatus.AWAITING_INPUT);
+      const first = await press(recipient);
+      const handed = await claimAndPoll(recipient);
+      assert.equal(handed.json.turnId, first.turnId);
+      await refusedBeforeWritten(recipient, 2, first.turnId);
+      const failed = await prisma.session.findUniqueOrThrow({ where: { id: recipient } });
+      assert.equal(failed.status, RunStatus.FAILED);
+      assert.equal((await prisma.sessionRequest.findUniqueOrThrow({ where: { id: requestId } })).state, 'OPEN');
+
+      const second = await press(recipient);
+      assert.notEqual(second.turnId, first.turnId, 'the press answered with the re-send that had already failed');
+      const secondTurn = await prisma.conversationTurn.findUniqueOrThrow({ where: { id: second.turnId } });
+      assert.equal(secondTurn.content, words);
+      assert.equal(await senderOf(recipient, secondTurn.clientTurnId), worker, 'the re-send went out in the owner’s name');
+      assert.equal((await prisma.sessionRequest.findUniqueOrThrow({ where: { id: requestId } })).turnId, second.turnId,
+        'the request stayed on the turn that failed');
+      // Within this failure, a press is still the one turn: before the runner has it, and after.
+      assert.equal((await press(recipient)).turnId, second.turnId, 'a second press queued a second turn');
+      const again = await claimAndPoll(recipient);
+      assert.equal(again.json.turnId, second.turnId);
+      assert.equal((await press(recipient)).turnId, second.turnId);
+      assert.equal((await copiesOf(recipient, words)).length, 3, 'the failed turn, its failed re-send, and one more');
+    }
+
+    // The re-send went through and was answered; only its response was lost. Pressed again, it is that
+    // turn — where a press after it settled used to queue a signed, uncharged second copy.
+    {
+      const worker = await session('Worker: whose re-send goes through');
+      const recipient = await session('the conversation that answers the re-send');
+      const words = 'ship it or hold? (went through)';
+      await ask(worker, recipient, words, 'card-through-1');
+      await failAndArm(recipient, RunStatus.AWAITING_INPUT);
+      const first = await press(recipient);
+      const handed = await claimAndPoll(recipient);
+      assert.equal(handed.json.turnId, first.turnId);
+      await report(recipient, [
+        { seq: 2, type: 'user', turnId: first.turnId, payload: { text: String(handed.json.content ?? '') } },
+        { seq: 3, type: 'assistant', turnId: first.turnId, payload: { text: 'Shipping it.' } },
+      ]);
+      await complete(recipient, { turnId: first.turnId, status: 'SUCCEEDED', subtype: 'success', numTurns: 1, costUsd: 0 });
+      assert.equal((await prisma.session.findUniqueOrThrow({ where: { id: recipient } })).status, RunStatus.AWAITING_INPUT);
+
+      assert.equal((await press(recipient)).turnId, first.turnId, 'a press after the re-send went through re-sent it again');
+      assert.equal((await copiesOf(recipient, words)).length, 2, 'the failed turn and its one re-send');
+    }
+
+    // The sweep's own re-send went through: there is no failure left for a press to re-send.
+    {
+      const worker = await session('Worker: whose message the sweep re-sends');
+      const recipient = await session('the conversation the sweep revives');
+      const words = 'ship it or hold? (re-sent by the sweep)';
+      await ask(worker, recipient, words, 'card-swept-1');
+      await autoRetry.sweep(await failAndArm(recipient, RunStatus.AWAITING_INPUT));
+      const [resent] = await resentOn(recipient);
+      assert.ok(resent, 'the sweep re-sent nothing');
+      const handed = await claimAndPoll(recipient);
+      assert.equal(handed.json.turnId, resent.id);
+      await report(recipient, [
+        { seq: 2, type: 'user', turnId: resent.id, payload: { text: String(handed.json.content ?? '') } },
+        { seq: 3, type: 'assistant', turnId: resent.id, payload: { text: 'Holding.' } },
+      ]);
+      await complete(recipient, { turnId: resent.id, status: 'SUCCEEDED', subtype: 'success', numTurns: 1, costUsd: 0 });
+      await assert.rejects(() => press(recipient), (error: unknown) => {
+        assert.equal((error as { getStatus?: () => number }).getStatus?.(), 409);
+        assert.match(String((error as Error).message), /not stopped on a failure/);
+        return true;
+      }, 'a press over a message that did not fail re-sent it');
+      assert.equal((await copiesOf(recipient, words)).length, 2, 'the failed turn and the sweep’s one re-send');
+    }
+  });
+
+  await t.test('the Retry door names no key of the caller’s: the server derives it from the failed message', async () => {
     const recipient = await session('a conversation the door is asked about');
     const door = new SessionsController(
       sessions, prisma as unknown as PrismaService, realtime as never, {} as never, {} as never, autoRetry,
     );
     const user = { userId: ownerId } as never;
-    for (const clientTurnId of [undefined, '', '   ', `${AUTO_RETRY_TURN_KEY_PREFIX}mine`]) {
-      assert.throws(() => door.resendRetryMessage(user, recipient, { clientTurnId } as never), (error: unknown) => {
-        assert.equal((error as { getStatus?: () => number }).getStatus?.(), 400);
+    // Nothing to re-send is refused as itself, whatever body arrives with the call — including the
+    // `clientTurnId` an older client still mints, which is ignored rather than refused (§2.1).
+    const call = door.resendRetryMessage.bind(door) as unknown as (
+      user: unknown, id: string, body?: { clientTurnId?: string },
+    ) => Promise<unknown>;
+    for (const extra of [{}, { clientTurnId: randomUUID() }, { clientTurnId: `${AUTO_RETRY_TURN_KEY_PREFIX}mine` }]) {
+      await assert.rejects(() => call(user, recipient, extra), (error: unknown) => {
+        assert.equal((error as { getStatus?: () => number }).getStatus?.(), 409);
         return true;
-      }, `the door took ${JSON.stringify(clientTurnId)}`);
+      }, `the door answered something else for ${JSON.stringify(extra)}`);
     }
-    // Nothing to re-send is refused as itself.
-    await assert.rejects(() => door.resendRetryMessage(user, recipient, { clientTurnId: randomUUID() }), (error: unknown) => {
-      assert.equal((error as { getStatus?: () => number }).getStatus?.(), 409);
-      return true;
-    });
   });
 });

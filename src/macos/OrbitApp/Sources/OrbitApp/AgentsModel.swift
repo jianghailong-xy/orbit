@@ -132,10 +132,11 @@ final class AgentsModel {
         _ = try? await api.cancelCodexLogin(poolID: pool.id)
     }
 
-    /// Sign the pool's account out: the server deletes the sign-in it held. Why it didn't, or nil.
-    func signOutCodexLogin(_ pool: ProviderPool) async -> String? {
+    /// Sign one of the pool's accounts out: the server deletes the sign-in it held, and the pool's other
+    /// accounts stay. Why it didn't, or nil.
+    func signOutCodexLogin(_ pool: ProviderPool, _ login: CodexLogin) async -> String? {
         do {
-            try await api.signOutCodexLogin(poolID: pool.id)
+            try await api.signOutCodexLogin(poolID: pool.id, fingerprint: login.fingerprint)
             await reloadPools()
             return nil
         } catch {
@@ -263,6 +264,13 @@ final class AgentsModel {
     func applyMovedSession(_ id: String, folderID: String?) {
         guard let index = agentSessions.firstIndex(where: { $0.id == id }) else { return }
         agentSessions[index] = agentSessions[index].settingFolder(folderID)
+    }
+
+    /// Take a row moved to another workspace out of this pane's list, which is one workspace's — for
+    /// the same reason: a Completed row isn't in the Open snapshot. See `AppModel.moveSession(_:to:…)`.
+    func applyMovedSession(_ id: String, toWorkspace workspaceID: String) {
+        guard lastSessionQuery?.agentID != workspaceID else { return }
+        agentSessions = SessionFilter.removing(id, from: agentSessions)
     }
     #endif
 

@@ -1,0 +1,37 @@
+{
+  "agy": "1.2.15",
+  "recorded": "2026-10-03",
+  "argv": [
+    "--gemini_dir=/work/orbit-gemini",
+    "--print=",
+    "--input-format",
+    "stream-json",
+    "--output-format",
+    "stream-json",
+    "--dangerously-skip-permissions"
+  ],
+  "settings": {
+    "enableTelemetry": false
+  },
+  "exit": 0,
+  "note": "A stdio MCP server from <gemini_dir>/config/mcp_config.json is reached through call_mcp_tool; the server inherits agy's environment (ORBIT_SESSION_ID).",
+  "files": {
+    "gd:config/mcp_config.json": {
+      "mcpServers": {
+        "orbit": {
+          "command": "python3",
+          "args": [
+            "/work/tools/fakemcp.py",
+            "orbit"
+          ]
+        }
+      }
+    }
+  },
+  "driver": [
+    "write stdin line 1",
+    "wait for result #1",
+    "close stdin",
+    "wait for exit"
+  ]
+}

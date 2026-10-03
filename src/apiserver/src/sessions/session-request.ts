@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException } from '@nestjs/common';
 import { Prisma, type ConversationTurn, type SessionRequest } from '@prisma/client';
 import {
   deriveSessionState,
+  RunEventType,
   uuidToBase62,
   WATCH_LIMITS,
   type SessionReplyCard,
@@ -572,7 +573,8 @@ export type UnrunSessionRequests =
    * (§4) — and whose turn in flight is still its runner's to finish.
    *
    * `retryArmed`: the run has a retry armed, so the same session goes on, and the retry's re-send is
-   * the next turn it is handed. `failedTurnKey`: the turn whose failure is ending the run, already
+   * the next turn it is handed — which is why the request on that turn is kept OPEN rather than closed
+   * UNDELIVERED (criterion 18). `failedTurnKey`: the turn whose failure is ending the run, already
    * acknowledged by the time this runs — what it carried was not read through either.
    */
   | { code: 'SESSION_ENDED'; closesRequests: boolean; retryArmed: boolean; failedTurnKey?: string };
@@ -584,14 +586,16 @@ export type UnrunSessionRequests =
  *
  * Two kinds of turn are taken. A REQUEST another session sent here that no engine read is closed
  * UNDELIVERED, with what took it: one still queued, and — when a run is ending — a steer still in
- * flight that the engine never acknowledged. A turn of this session as an ASKER may carry outcomes
- * back to it — a reply turn still queued, or any turn they were written into when it was handed out —
- * and those outcomes are not lost with it, nor with the turn whose failure is ending the run. When
- * the session lives on — interrupted, the owner withdrew the turn, or a retry is armed — they are held
- * on their rows for the next turn it is handed: stopping means stopping, so no new reply turn is
- * queued for them, and a retry's re-send is that next turn (a failed reply turn is re-sent as one,
- * auto-retry.service.ts). When its run is over they are let go again, and the hand-off finds an asker
- * that has ended, holds them and writes on its task (§4.3).
+ * flight that the engine never acknowledged. The one exception is the turn the retry re-sends (§8
+ * criteria 18 and 23): its request stays OPEN and goes with the re-sent turn, because those words are
+ * not being dropped — provided the retry can find them again. A turn of this session as an ASKER may
+ * carry outcomes back to it — a reply turn still queued, or any turn they were written into when it
+ * was handed out — and those outcomes are not lost with it, nor with the turn whose failure is ending
+ * the run. When the session lives on — interrupted, the owner withdrew the turn, or a retry is armed —
+ * they are held on their rows for the next turn it is handed: stopping means stopping, so no new reply
+ * turn is queued for them, and a retry's re-send is that next turn (a failed reply turn is re-sent as
+ * one, auto-retry.service.ts). When its run is over they are let go again, and the hand-off finds an
+ * asker that has ended, holds them and writes on its task (§4.3).
  */
 export async function settleUnrunSessionRequests(
   tx: Prisma.TransactionClient,
@@ -620,7 +624,25 @@ export async function settleUnrunSessionRequests(
     });
   }
   if (ending && !unrun.closesRequests) return;
-  const queued = unrunTurns.filter((turn) => turn.status === 'PENDING').map((turn) => turn.id);
+  // §8 criterion 18: a turn the auto-retry is going to re-send is not lost with the queue. The turn
+  // whose failure ended the run is the one the sweep re-sends — an engine that produced nothing comes
+  // back as the same message on the sweeper's own ladder — and the request it carries travels with it
+  // (`moveSessionRequestToTurn`). Closing it UNDELIVERED would tell the asker the request was dropped
+  // for good, and the block on the re-sent turn would say it is closed, which is the one reading the
+  // retry exists to avoid. Without a retry armed the words really are gone and it is UNDELIVERED.
+  //
+  // §8 criterion 23: and only when the sweep can find those words again. It reads them off what the
+  // runner recorded for the turn (`turnsTheRetryCanFind`); a failed turn with no record at all would be
+  // passed over for an older message, and its request would sit OPEN on a turn nothing will ever
+  // deliver until its deadline. Such a turn is not re-sent, so its request is UNDELIVERED now.
+  const resent = new Set(ending && unrun.retryArmed && unrun.failedTurnKey
+    ? await turnsTheRetryCanFind(tx, sessionId, unrunTurns
+        .filter((turn) => turn.clientTurnId === unrun.failedTurnKey)
+        .map((turn) => turn.id))
+    : []);
+  const queued = unrunTurns
+    .filter((turn) => turn.status === 'PENDING' && !resent.has(turn.id))
+    .map((turn) => turn.id);
   if (queued.length > 0) {
     await tx.sessionRequest.updateMany({
       where: { toSessionId: sessionId, turnId: { in: queued }, state: 'OPEN' },
@@ -661,6 +683,41 @@ export async function closeUnreadSteerRequests(
 }
 
 /**
+ * The runner's receipt for a message it was handed and could not give the engine: a `user_delivery`
+ * whose `delivery` is `failed`, naming the turn in its payload. For Claude it is the ONLY trace of such
+ * a message — a write queue that refuses the turn (a CLI that stopped reading stdin, a process already
+ * gone) fails it before the `user` echo is written (runner-go session.go, `failUndeliveredTurn`), so a
+ * reader that looks for the words by their echo alone walks past the message that failed to the one
+ * before it. The retry reads its words off the receipt's turn instead (`AutoRetryService.messageToResend`).
+ */
+export const FAILED_DELIVERY_RECEIPT = {
+  type: RunEventType.USER_DELIVERY,
+  payload: { path: ['delivery'], equals: 'failed' },
+} satisfies Prisma.RunEventWhereInput;
+
+/**
+ * Of these failed turns, the ones the auto-retry will find again — the words it re-sends are read off
+ * a turn's `user` echo, or, for a message the engine was never handed, off the runner's receipt saying
+ * so (`FAILED_DELIVERY_RECEIPT`). Both are filed against the turn they are about.
+ */
+export async function turnsTheRetryCanFind(
+  db: Pick<Prisma.TransactionClient, 'runEvent'>,
+  sessionId: string,
+  turnIds: readonly string[],
+): Promise<string[]> {
+  if (turnIds.length === 0) return [];
+  const recorded = await db.runEvent.findMany({
+    where: {
+      sessionId,
+      turnId: { in: [...turnIds] },
+      OR: [{ type: RunEventType.USER }, FAILED_DELIVERY_RECEIPT],
+    },
+    select: { turnId: true },
+  });
+  return [...new Set(recorded.flatMap((event) => (event.turnId ? [event.turnId] : [])))];
+}
+
+/**
  * Whether any outcome of this session's own requests is waiting for a turn to be said on: closed, and
  * on no turn of it yet — held, or about to be handed back. What decides that the auto-retry sweep
  * re-sends a failed reply turn as a reply turn rather than dropping it: the turn's own failure held
@@ -680,23 +737,49 @@ export async function hasHeldSessionReplies(
 }
 
 /**
- * §4.3, §8 criterion 17: a session a transient failure stopped — the provider failed its turn, or its
- * quota ran out and it parked idle — with an auto-retry armed. It has NOT ended: the retry re-sends the
- * turn that failed, and an outcome of its own requests is said on that turn. Nor is it to be handed a
- * reply turn of its own meanwhile: a new turn disarms the retry (`createTurn`), and the message the
- * failure killed would never be re-sent. The shapes the auto-retry sweep re-sends from (its `due`), read
- * off one row.
+ * How long a claim (`retry_claimed_at`) is believed: its lease. The sweep writes the turn it claimed
+ * the retry for in the next transaction — seconds, even with attachments to copy — so a claim older
+ * than this is one whose writer died between the two, and that session is not coming back on its own:
+ * believing it anyway would hold an outcome for a turn that will never be handed, and say nothing on
+ * the task. Both ends keep to it. Readers stop believing a claim past it, the re-send is written only
+ * inside it (`AutoRetryService.whileClaimHeld`), and the sweep gives up a claim that outlived it
+ * (`AutoRetryService.releaseExpiredClaims`, §8 criterion 24) — in a statement migration 0352's trigger
+ * reads as the retry given up, which is what hands over whatever was held for it.
  */
-export function awaitsAutoRetry(session: {
-  status: string;
-  retryAt: Date | null;
-  cancelRequestedAt: Date | null;
-  completedAt: Date | null;
-  archivedAt: Date | null;
-  deletedAt: Date | null;
-}): boolean {
-  if (session.retryAt == null || session.deletedAt || session.completedAt || session.archivedAt) return false;
-  return session.status === 'FAILED' || (session.status === 'AWAITING_INPUT' && session.cancelRequestedAt == null);
+export const RETRY_CLAIM_WINDOW_MS = 10 * 60_000;
+
+/**
+ * §4.3, §8 criteria 17 and 20: a session a transient failure stopped — the provider failed its turn, or
+ * its quota ran out and it parked idle — with an auto-retry armed, or with one the sweep has CLAIMED
+ * and not yet re-sent. It has NOT ended: the retry re-sends the turn that failed, and an outcome of its
+ * own requests is said on that turn. Nor is it to be handed a reply turn of its own meanwhile: a new
+ * turn disarms the retry (`createTurn`), and the message the failure killed would never be re-sent. The
+ * shapes the auto-retry sweep re-sends from (its `due`), read off one row.
+ *
+ * The claim is the one that needs saying: the claim clears `retry_at` in the same statement that spends
+ * an attempt, and the re-sent turn is written a moment later — in between, the row looks exactly like a
+ * retry that was given up (`retry_at` NULL, still parked). Reading that window as "ended" wrote the
+ * asker's task a comment saying its request would never be answered, and then the retry's turn said the
+ * outcome as well: told twice, and once wrongly.
+ */
+export function awaitsAutoRetry(
+  session: {
+    status: string;
+    retryAt: Date | null;
+    retryClaimedAt: Date | null;
+    cancelRequestedAt: Date | null;
+    completedAt: Date | null;
+    archivedAt: Date | null;
+    deletedAt: Date | null;
+  },
+  now: Date = new Date(),
+): boolean {
+  if (session.deletedAt || session.completedAt || session.archivedAt) return false;
+  const parked = session.status === 'FAILED'
+    || (session.status === 'AWAITING_INPUT' && session.cancelRequestedAt == null);
+  if (!parked) return false;
+  if (session.retryAt != null) return true;
+  return session.retryClaimedAt != null && now.getTime() - session.retryClaimedAt.getTime() < RETRY_CLAIM_WINDOW_MS;
 }
 
 /**

@@ -96,7 +96,12 @@ const SHARED = {
   membersCanAdd: true,
   ownKeyFirst: true,
   viewerRole: 'MEMBER',
-  window: { start: '2026-09-01T00:00:00.000Z', end: '2026-10-01T00:00:00.000Z' },
+  // This month, whenever the test runs: a cap gauge past its window's end reads as the fresh month it
+  // is (currentPlanUsageRows), so fixed dates would turn the bars below to 0% once they went by.
+  window: {
+    start: new Date(Date.now() - 15 * 24 * 3600_000).toISOString(),
+    end: new Date(Date.now() + 15 * 24 * 3600_000).toISOString(),
+  },
   people: [],
   keys: [sharedKey(ORG1, 'orbit-org-1', 12.5, true), sharedKey(ORG2, 'orbit-org-2', 31, false)],
 };

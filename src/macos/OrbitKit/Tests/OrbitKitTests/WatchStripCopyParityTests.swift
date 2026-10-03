@@ -159,10 +159,29 @@ final class WatchStripCopyParityTests: XCTestCase {
             let targets: [Target]
             let line: String
         }
+        struct Row: Decodable {
+            struct RowWatch: Decodable {
+                struct Target: Decodable {
+                    let id: String
+                    let kind: String
+                    let title: String
+                    let state: String?
+                    let status: WatchTargetStatus?
+                }
+                let state: String
+                let predicate: AnyJSON
+                let targets: [Target]
+            }
+            let `case`: String
+            let watches: [RowWatch]
+            let word: String
+            let line: String
+        }
         let now: String
         let sentences: [Sentence]
         let stale: [Stale]
         let counts: [Count]
+        let rows: [Row]
         let sessionWords: [String: String]
     }
 
@@ -234,6 +253,31 @@ final class WatchStripCopyParityTests: XCTestCase {
                                                             watches: [WatchFixture.watch(targets: targets)]))
             XCTAssertEqual(summary.lineParts.map(\.text).joined(separator: SessionCreatedTasksCopy.separator),
                            c.line, c.case)
+        }
+    }
+
+    /// A session list row over a session these watches will resume: the strip's line in one string,
+    /// and the header's word its glyph says — the browser's `watchingSessions` over the same rows.
+    func testASessionListRowSaysTheStripsLineAndTheHeadersWord() throws {
+        let f = try fixture()
+        XCTAssertGreaterThan(f.rows.count, 8)
+        for c in f.rows {
+            let watches = try c.watches.enumerated().map { index, w in
+                let targets: [[String: Any]] = w.targets.map { t in
+                    var object = WatchFixture.target(t.id, kind: t.kind, state: t.state ?? "OBSERVED")
+                    object["targetTitle"] = t.title
+                    if let status = t.status {
+                        object["targetStatus"] = ["status": status.status, "running": status.running,
+                                                  "queued": status.queued]
+                    }
+                    return object
+                }
+                let predicate = try XCTUnwrap(w.predicate.value as? [String: Any], c.case)
+                return WatchFixture.watch(id: "W\(index)", state: w.state, predicate: predicate, targets: targets)
+            }
+            let summary = try XCTUnwrap(WatchSessionSummary(sessionID: "S1", watches: watches), c.case)
+            XCTAssertEqual(summary.rowLine, c.line, c.case)
+            XCTAssertEqual(summary.word, c.word, c.case)
         }
     }
 

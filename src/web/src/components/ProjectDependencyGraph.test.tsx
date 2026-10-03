@@ -453,6 +453,33 @@ describe('a task with a session on it', () => {
     expect(edge.style?.stroke).toBe(EDGE_COLORS.active);
   });
 
+  it('says why a running task is running, and never Ready to run', () => {
+    // The work session ended its turn to wait for a job it started: the server reports the task
+    // RUNNING with the reason, and the node says both.
+    const { html, edge } = drawFirst({ running: true, runReason: 'BACKGROUND_JOB', workState: 'RUNNING' });
+
+    expect(html).toContain('Running · Background job');
+    expect(html).not.toContain('Ready to run');
+    expect(html).not.toContain('no output');
+    expect(html).toContain('aria-label="Clone the repo, Running · Background job"');
+    expect(edge.style?.stroke).toBe(EDGE_COLORS.active);
+
+    expect(drawFirst({ running: true, runReason: 'TURN', workState: 'RUNNING' }).html)
+      .toContain('Running · Turn in progress');
+    expect(drawFirst({ running: true, runReason: 'WAITING', workState: 'RUNNING' }).html)
+      .toContain('Running · Waiting to be woken');
+  });
+
+  it('says when the background job a run waits on has stopped producing output', () => {
+    const { html } = drawFirst({
+      running: true, runReason: 'BACKGROUND_JOB', runStalled: true, workState: 'RUNNING',
+    });
+
+    // Still running — a quiet job is still a process that will wake the session — with the hint.
+    expect(html).toContain('Running · Background job · no output 10+ min');
+    expect(html).toContain('aria-label="Clone the repo, Running · Background job · no output 10+ min"');
+  });
+
   it('says Queued for a task waiting on a runner slot', () => {
     const { html, edge } = drawFirst({ queued: true });
 

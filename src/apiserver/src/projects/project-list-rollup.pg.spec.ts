@@ -56,6 +56,10 @@ interface Listed {
   buckets: typeof ZEROES;
   lastActivityAt: Date | null;
   _count: { tasks: number };
+  /** The summary the amber count reads. Optional: only the rail's scenarios assert on it. */
+  attention?: Record<string, unknown>;
+  /** The coordinator's pulse. Optional for the same reason. */
+  coordinatorActivity?: { working: boolean; lastTurnAt: Date | null } | null;
 }
 
 async function makeProject(
@@ -84,6 +88,7 @@ async function makeTask(
   projectId: string,
   title: string,
   status: TaskStatus,
+  overrides: Partial<Prisma.TaskUncheckedCreateInput> = {},
 ): Promise<string> {
   let assigneeId = workspaceByOwner.get(ownerId);
   if (!assigneeId) {
@@ -105,6 +110,7 @@ async function makeTask(
     data: {
       id, ownerId, projectId, title, creatorType: CreatorType.USER, creatorId: ownerId,
       assigneeId, status, completionCriterion: 'EVIDENCE_JUDGMENT',
+      ...overrides,
     },
   });
   return id;
@@ -649,6 +655,258 @@ test('the index writes no temp file, however many tasks it classifies',
           done: 1_961, failed: 0, cancelled: 0,
         });
         assert.deepEqual(rows[0].buckets, (await projects.panorama(ownerId, projectId)).buckets);
+      });
+    } finally {
+      await db.$disconnect();
+      await identity.end();
+    }
+  });
+
+/**
+ * `GET /projects/sidebar` — the rail's read — against `GET /projects`, on real PostgreSQL.
+ *
+ * The rail is polled every 15 seconds by every open tab, so it may not classify every task of
+ * every project the way the index does. It reaches `running` from the rows that CAN be RUNNING —
+ * IN_PROGRESS, or held by a live work session — and applies the classifier to those. That is a
+ * claim about a SUPERSET, and only a real database can check it: a candidate set that leaves one
+ * RUNNING row out still returns a number, wrong by one, silently, on the one surface whose job is
+ * to say whether work is moving.
+ *
+ * So every scenario asserts the rail against the index for the same fixture AND against the hand
+ * count, because agreement between two reads that share a mistake is not agreement with the work.
+ * The gate row here is the mistake they would share: IN_PROGRESS with a live session on it, which
+ * the canonical expression still refuses to call work in flight.
+ */
+test('the rail reaches the index’s running count from the rows that can be running',
+  { skip: !URL, timeout: 300_000 }, async (t) => {
+    assertCoordinatorPgUrlIsIsolated(URL);
+    const identity = new Client({ connectionString: URL, connectionTimeoutMillis: 2_000 });
+    await identity.connect();
+    await verifyCoordinatorPgIdentity(identity);
+
+    const db = prismaClientFor(URL);
+
+    // Counts what the rail's read actually spends. It is polled from every open tab, so the
+    // property to hold is the one the index's read holds: a constant number of page-wide readers,
+    // not one per project.
+    let rawQueries = 0;
+    const counting = new Proxy(db, {
+      get(target, property, receiver) {
+        if (property === '$queryRaw') {
+          rawQueries += 1;
+          return (target as PrismaClient).$queryRaw.bind(target);
+        }
+        const value = Reflect.get(target, property, receiver);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    }) as unknown as PrismaService;
+
+    const rail = new ProjectsService(counting);
+    // The parity side reads through the plain client, so a fault in the proxy cannot make both
+    // sides of a comparison wrong in the same direction.
+    const index = new ProjectsService(db as unknown as PrismaService);
+
+    interface RailRow {
+      id: string;
+      status: string;
+      buckets: { running: number };
+      lastActivityAt: Date | null;
+      attention: Record<string, unknown>;
+      coordinatorActivity: { working: boolean; lastTurnAt: Date | null } | null;
+    }
+
+    /** A session on a task — the only place a dispatched run is written down. */
+    const session = async (
+      ownerId: string,
+      taskId: string | null,
+      status: RunStatus,
+      extra: Partial<Prisma.SessionUncheckedCreateInput> = {},
+    ): Promise<string> => {
+      const id = randomUUID();
+      await db.session.create({
+        data: {
+          id, ownerId, creatorId: ownerId, taskId, title: `run of ${taskId}`, prompt: 'do it',
+          status, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+          ...extra,
+        },
+      });
+      return id;
+    };
+
+    try {
+      const ownerId = randomUUID();
+      await db.user.create({
+        data: { id: ownerId, email: `rail-${ownerId}@rollup.invalid`, name: 'rail', passwordHash: 'x' },
+      });
+
+      //   r1 OPEN + RUNNING session           -> running   (a dispatched run)
+      //   r2 OPEN + PENDING session           -> running   (queued: the task is taken)
+      //   r3 IN_PROGRESS, no session          -> running   (the row the status alone carries)
+      //   r4 OPEN, never dispatched           -> ready     (not in flight)
+      //   r5 DONE                             -> done
+      //   r6 gate, IN_PROGRESS + live session -> AWAITING_VERIFICATION, NOT running
+      //   r7 OPEN + AWAITING_INPUT, wake source -> running (parked, and something will move it)
+      //   r8 OPEN + AWAITING_INPUT, nothing pending -> ready (idle in the plain sense)
+      const railId = await makeProject(db, ownerId, 'the rail');
+      const r1 = await makeTask(db, ownerId, railId, 'r1', TaskStatus.OPEN);
+      const r2 = await makeTask(db, ownerId, railId, 'r2', TaskStatus.OPEN);
+      const r3 = await makeTask(db, ownerId, railId, 'r3', TaskStatus.IN_PROGRESS);
+      const r4 = await makeTask(db, ownerId, railId, 'r4', TaskStatus.OPEN);
+      const r5 = await makeTask(db, ownerId, railId, 'r5', TaskStatus.DONE);
+      const r7 = await makeTask(db, ownerId, railId, 'r7', TaskStatus.OPEN);
+      const r8 = await makeTask(db, ownerId, railId, 'r8', TaskStatus.OPEN);
+      // A task that does no work of its own and is settled only by an independent check: it is
+      // judged by where its verifier stands, BEFORE its stored status. Left IN_PROGRESS with
+      // nothing passing it, it waits on a check rather than being in flight — the one row a
+      // candidate set read as "IN_PROGRESS means running" would count and the index would not.
+      const r6 = await makeTask(db, ownerId, railId, 'r6', TaskStatus.IN_PROGRESS, {
+        completionCriterion: 'VERIFICATION',
+        completionPolicy: 'VERIFICATION_PASSED',
+        verifiesTaskId: null,
+      });
+      await session(ownerId, r1, RunStatus.RUNNING);
+      await session(ownerId, r2, RunStatus.PENDING);
+      await session(ownerId, r6, RunStatus.RUNNING);
+      // Parked at AWAITING_INPUT with a runner-hosted job still running: nothing is producing
+      // output right now, and the job's exit will wake the session — so the task is being worked
+      // on. The same session without a wake source (r8) is idle, and its task is ready to run.
+      await session(ownerId, r7, RunStatus.AWAITING_INPUT, { runningBgJobs: ['bgj-rail'] });
+      await session(ownerId, r8, RunStatus.AWAITING_INPUT);
+      // Every write in the project is pinned to an instant the fixture chose, so `lastActivityAt`
+      // is a known number rather than whenever the rows happened to be inserted — and r4 holds the
+      // newest of them.
+      const wrote = Date.now() - 3_600_000;
+      let tick = 0;
+      for (const id of [r1, r2, r3, r5, r6, r7, r8]) {
+        tick += 1_000;
+        await db.task.update({ where: { id }, data: { updatedAt: new Date(wrote + tick) } });
+      }
+      const newest = new Date(wrote + 60_000);
+      await db.task.update({ where: { id: r4 }, data: { updatedAt: newest } });
+      // A blocker the owner owns, so `attention` is not the empty shape on both sides: a rail that
+      // forgot to send it at all must fail the comparison rather than tie on nothing.
+      await db.projectBlocker.create({
+        data: {
+          id: randomUUID(), projectId: railId, kind: 'MERGE_CONFLICT', owner: 'USER',
+          recovery: 'HUMAN', severity: 'WARNING', requiredAction: 'approve the merge',
+          nextCheckAt: new Date(), subjectType: 'PROJECT', subjectId: railId,
+          dedupeKey: `rail-${railId}`, lifecycleGeneration: 1n, conditionVersion: 'd'.repeat(64),
+          firstSeenAt: new Date(), lastSeenAt: new Date(),
+        },
+      });
+
+      // An open project with no tasks at all: no group in the aggregate, and the rail still lists
+      // it — with nothing in flight and no activity, rather than with missing fields.
+      const emptyId = await makeProject(db, ownerId, 'nothing filed yet');
+      // A coordinator mid-turn with no task of its project running: the dot lights on the
+      // conversation, which no task row records.
+      const turnAt = new Date(Date.now() - 5_000);
+      const coordinatorId = randomUUID();
+      await db.session.create({
+        data: {
+          id: coordinatorId, ownerId, creatorId: ownerId, title: 'the conversation on it',
+          prompt: 'coordinate', status: RunStatus.RUNNING,
+          dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false, lastTurnAt: turnAt,
+        },
+      });
+      const coordinatedId = await makeProject(db, ownerId, 'coordinated, nothing dispatched');
+      await db.project.update({
+        where: { id: coordinatedId }, data: { coordinatorSessionId: coordinatorId },
+      });
+      await makeTask(db, ownerId, coordinatedId, 'q1', TaskStatus.OPEN);
+      // A closed project whose task is being run right now: work in flight, off the rail.
+      const closedId = await makeProject(db, ownerId, 'closed with a run', ProjectStatus.CANCELLED);
+      const c1 = await makeTask(db, ownerId, closedId, 'c1', TaskStatus.OPEN);
+      await session(ownerId, c1, RunStatus.RUNNING);
+
+      const railRows = async (): Promise<Map<string, RailRow>> => {
+        const rows = (await rail.listSidebar(ownerId)) as unknown as RailRow[];
+        return new Map(rows.map((row) => [row.id, row]));
+      };
+      const indexRows = async (): Promise<Map<string, Listed>> => {
+        const rows = (await index.list(ownerId)) as unknown as Listed[];
+        return new Map(rows.map((row) => [row.id, row]));
+      };
+
+      await t.test('the rail counts the rows the index calls running, and the hand count', async () => {
+        const rows = await railRows();
+        assert.deepEqual([...rows.keys()].sort(), [railId, emptyId, coordinatedId].sort(),
+          'open projects only — the rail is not a second index');
+        assert.equal(rows.get(railId)!.buckets.running, 4,
+          'a dispatched run, a queued run, an IN_PROGRESS row and a parked one with a wake source');
+        assert.equal((await indexRows()).get(railId)!.buckets.running, 4,
+          'the index agrees about the four, so the rail is not counting a lane of its own');
+        // The two rows a candidate set could get wrong, each in its own direction: the gate row is
+        // IN_PROGRESS with a live session and is NOT work in flight, while the parked row is not
+        // executing anything and IS. Neither verdict is readable off the status.
+        assert.equal(
+          await db.task.count({ where: { projectId: railId, status: TaskStatus.IN_PROGRESS } }),
+          2, 'two rows are IN_PROGRESS, and only one of them is in flight');
+        assert.deepEqual((await indexRows()).get(railId)!.buckets,
+          { running: 4, ready: 2, blocked: 0, awaitingVerification: 1,
+            done: 1, failed: 0, cancelled: 0 },
+          'the gate row waits on its check, and the parked row with nothing pending is ready');
+      });
+
+      await t.test('the rail sends only the field it draws, and the same activity instant', async () => {
+        const rows = await railRows();
+        const row = rows.get(railId)!;
+        assert.deepEqual(Object.keys(row.buckets), ['running'],
+          'the rail draws one lane, and the read does not compute the other six');
+        assert.equal(row.status, 'OPEN');
+        assert.deepEqual(row.lastActivityAt, newest,
+          'max(updated_at) over the project’s tasks, not the fixture’s build time');
+        assert.deepEqual(row.lastActivityAt, (await indexRows()).get(railId)!.lastActivityAt,
+          'the same instant the index orders the same project by');
+
+        const empty = rows.get(emptyId)!;
+        assert.equal(empty.buckets.running, 0);
+        assert.equal(empty.lastActivityAt, null,
+          'nothing has happened in it, and its createdAt would be activity nobody performed');
+      });
+
+      await t.test('attention and the coordinator pulse are the index’s own answers', async () => {
+        const rows = await railRows();
+        const listed = await indexRows();
+        for (const projectId of [railId, emptyId, coordinatedId]) {
+          assert.deepEqual(rows.get(projectId)!.attention, listed.get(projectId)!.attention,
+            `the amber count and the page must read one summary for ${projectId}`);
+          assert.deepEqual(rows.get(projectId)!.coordinatorActivity,
+            listed.get(projectId)!.coordinatorActivity);
+        }
+        assert.equal((rows.get(railId)!.attention as { userBlockers: number }).userBlockers, 1,
+          'and that summary is the computed one, not the empty stand-in');
+        assert.equal(rows.get(emptyId)!.coordinatorActivity, null,
+          'no coordinator bound is null, not absent');
+        // The dot lights on the coordinator’s turn while no task of the project runs.
+        assert.deepEqual(rows.get(coordinatedId)!.buckets, { running: 0 });
+        assert.deepEqual(rows.get(coordinatedId)!.coordinatorActivity,
+          { working: true, lastTurnAt: turnAt });
+      });
+
+      await t.test('another owner’s run colours nobody else’s rail', async () => {
+        const strangerId = randomUUID();
+        await db.user.create({
+          data: { id: strangerId, email: `sr-${strangerId}@rollup.invalid`, name: 'sr', passwordHash: 'x' },
+        });
+        const theirsId = await makeProject(db, strangerId, 'theirs');
+        const s1 = await makeTask(db, strangerId, theirsId, 's1', TaskStatus.OPEN);
+        await session(strangerId, s1, RunStatus.RUNNING);
+
+        const rows = await railRows();
+        assert.equal(rows.has(theirsId), false, 'not the reader’s project');
+        assert.equal(rows.get(railId)!.buckets.running, 4,
+          'a live session in somebody else’s project does not light this one');
+      });
+
+      await t.test('the rail’s read is page-wide, not one query per project', async () => {
+        rawQueries = 0;
+        assert.equal((await rail.listSidebar(ownerId)).length, 3);
+        // Three: the running count and the activity instant, the blockers behind the amber count,
+        // and the open items behind them. The project rows themselves are a `findMany`. The
+        // property under test is that this number does not grow with the number of projects, which
+        // is what the rail’s 15-second cadence needs.
+        assert.equal(rawQueries, 3, 'canonical running count, blockers and the items behind them');
       });
     } finally {
       await db.$disconnect();

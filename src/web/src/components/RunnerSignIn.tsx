@@ -1,6 +1,6 @@
 import { CheckCircleFilled, ExportOutlined, LoadingOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { LoginEngine, RunnerEngineHealth, RunnerLoginState } from '@orbit/shared';
 import { api } from '../api';
 import { runnersQuery } from '../lib/queries';
@@ -56,8 +56,9 @@ export function probeReportsSignedIn(
 }
 
 /** How often the runner list is re-read while waiting for that probe, and for how long: the
- *  runner re-probes the moment the CLI exits but only reports on its next heartbeat, so this is
- *  a check-in (30s) plus the probe, with room for one missed heartbeat. */
+ *  runner re-probes the moment the CLI exits and reports it with a heartbeat of its own, but an
+ *  older one only reports on its next heartbeat, so this is a check-in (30s) plus the probe, with
+ *  room for one missed heartbeat. */
 const PROBE_POLL_MS = 4000;
 const PROBE_WAIT_MS = 90_000;
 
@@ -96,7 +97,7 @@ export function RunnerSignIn({
   onDone,
   onUseApiKey,
   onCancel,
-  children,
+  autoStart,
 }: {
   runnerId: string;
   engine?: LoginEngine;
@@ -112,9 +113,9 @@ export function RunnerSignIn({
   onUseApiKey?: () => void;
   /** Close the card. Offered beside the button, while there is no sign-in of its own to cancel. */
   onCancel?: () => void;
-  /** What the sign-in still needs from the user, shown above its button until one is under way —
-   *  a new account's name, say. */
-  children?: ReactNode;
+  /** Start signing in as the card opens, not on its button: the press that opened it — "+ Account"
+   *  — already asked for the sign-in. */
+  autoStart?: boolean;
 }) {
   const qc = useQueryClient();
   const [code, setCode] = useState('');
@@ -194,6 +195,18 @@ export function RunnerSignIn({
     start.mutate();
   };
 
+  // No tab is parked for this one: the press that asked was on another button, and a tab opened from
+  // an effect can't count on that press's gesture. The page opens from the card's own link once the
+  // URL lands, as a device flow's always does. The ref keeps StrictMode's second mount from starting
+  // it twice.
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (!autoStart || autoStarted.current) return;
+    autoStarted.current = true;
+    setStartedHere(true);
+    start.mutate();
+  }, [autoStart, start.mutate]);
+
   const s = state.data;
   // A runner runs one relay at a time. If the one in flight is for the other engine (another card,
   // another tab), this card has nothing to report — show it as idle so pressing it takes over.
@@ -218,11 +231,11 @@ export function RunnerSignIn({
   }, [reported]);
 
   // A finished sign-in does not move the engine row this card opened under: that row reads the
-  // runner's last heartbeat probe, and the runner only re-probes once the CLI exits, then waits
-  // for its next check-in — half a minute at worst, with nothing pushing it here and no refetch
-  // on focus. So the row kept saying "Signed out", quota withheld, directly beneath this card's
-  // "this runner is ready", until the page was reloaded. Re-read the runner list until that
-  // machine's own probe agrees — a single refetch on `done` would only lose the same race.
+  // runner's last heartbeat probe, and the runner only re-probes once the CLI exits, then (an
+  // older one) waits for its next check-in — half a minute at worst, with nothing pushing it here
+  // and no refetch on focus. So the row kept saying "Signed out", quota withheld, directly beneath
+  // this card's "this runner is ready", until the page was reloaded. Re-read the runner list until
+  // that machine's own probe agrees — a single refetch on `done` would only lose the same race.
   const [awaitingProbe, setAwaitingProbe] = useState(false);
   useEffect(() => {
     if (status !== 'done') return;
@@ -407,7 +420,6 @@ export function RunnerSignIn({
     <div className="rsi">
       {status === 'failed' && s?.message && <div className="rsi-warn">{s.message}</div>}
       {err && <div className="rsi-warn">{err.message}</div>}
-      {children}
       <div className="rsi-actions">
         <button
           className="rsi-btn"

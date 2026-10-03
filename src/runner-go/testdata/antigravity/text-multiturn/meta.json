@@ -1,0 +1,25 @@
+{
+  "agy": "1.2.15",
+  "recorded": "2026-10-03",
+  "argv": [
+    "--gemini_dir=/work/orbit-gemini",
+    "--print=",
+    "--input-format",
+    "stream-json",
+    "--output-format",
+    "stream-json"
+  ],
+  "settings": {
+    "enableTelemetry": false
+  },
+  "exit": 0,
+  "note": "Two turns in one process. The thought part the model sent is never surfaced; text arrives as ACTIVE deltas then a DONE step; result.num_turns and result.usage are cumulative over the session.",
+  "driver": [
+    "write stdin line 1",
+    "wait for result #1",
+    "write stdin line 2",
+    "wait for result #2",
+    "close stdin",
+    "wait for exit"
+  ]
+}

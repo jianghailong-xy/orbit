@@ -206,6 +206,18 @@ describe('which Codex account a workspace runs on', () => {
     expect(patches[0].codexAccount).toBe(WORK.id);
   });
 
+  it('offers a renamed Default by its name, saying under it what it is', async () => {
+    mount(runner([{ ...DEFAULT, name: 'jianghailong.main' }, WORK]), workspace(null));
+    await openAdvanced();
+
+    const offered = await options();
+    expect(offered.map((o) => o.text)).toEqual([
+      ['Automatic', 'each new session starts on the account whose quota resets soonest'],
+      ['jianghailong.main', 'Default · ~/.codex · 5h limit 62% · signed in'],
+      ['Work', 'signed in'],
+    ]);
+  });
+
   it('saves Automatic as no account at all, and Default as a choice of its own', async () => {
     for (const [pick, saved] of [
       [0, null],

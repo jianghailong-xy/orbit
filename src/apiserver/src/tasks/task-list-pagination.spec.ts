@@ -5,6 +5,13 @@ import { TaskStatus } from '@orbit/shared';
 import { TasksService } from './tasks.service';
 import { recordingQueryRaw } from './query-raw-test-helper';
 import { everyPrerequisiteDoneOrRetiredSql } from './task-dependencies';
+import { taskCarriedSql } from '../sessions/task-work-carrier';
+
+/** One row of the carrier read behind `running` / `queued` (sessions/task-work-carrier.ts). */
+const carrier = (taskId: string, status: RunStatus) => ({
+  taskId, sessionId: `session-${taskId}`, status, runReason: 'TURN',
+  runningBgJobs: [], runningBgJobActivity: {}, startedAt: null,
+});
 
 const OWNER_ID = '00000000-0000-7000-8000-000000000001';
 
@@ -15,15 +22,10 @@ function serviceWith(prisma: unknown): TasksService {
 test('legacy list handles more than PostgreSQL bind limit without a giant task-id query', async () => {
   const tasks = Array.from({ length: 40_001 }, (_, i) => ({ id: `task-${i}` }));
   const dependencyChunks: string[][] = [];
-  let busyWhere: any;
+  const raw = recordingQueryRaw(() => []);
   const service = serviceWith({
+    $queryRaw: raw.$queryRaw,
     task: { findMany: async () => tasks },
-    session: {
-      groupBy: async (args: any) => {
-        busyWhere = args.where;
-        return [];
-      },
-    },
     taskDependency: {
       findMany: async (args: any) => {
         dependencyChunks.push(args.where.taskId.in);
@@ -35,8 +37,10 @@ test('legacy list handles more than PostgreSQL bind limit without a giant task-i
   const result = await service.list(OWNER_ID);
 
   assert.equal(result.length, 40_001);
-  assert.equal(busyWhere.ownerId, OWNER_ID);
-  assert.deepEqual(busyWhere.taskId, { not: null });
+  // The live overlay is the owner's carriers, bound to the owner alone — never to 40,001 ids.
+  assert.equal(raw.statements.length, 1);
+  assert.deepEqual(raw.statements[0].values, [OWNER_ID]);
+  assert.match(raw.statements[0].text, /carrier\."owner_id" = \$1::uuid/);
   assert.equal(dependencyChunks.length, 9);
   assert.equal(dependencyChunks.flat().length, 40_001);
   assert.ok(dependencyChunks.every((chunk) => chunk.length <= 5_000));
@@ -52,7 +56,9 @@ test('paged list applies database filters, caps rows, and returns aggregate coun
   let findManyArgs: any;
   const countWheres: any[] = [];
   const raw = recordingQueryRaw((sql) =>
-    sql.includes('count(*)') ? [{ count: 3 }] : rows.map(({ id }) => ({ id })),
+    sql.includes('"runReason"')
+      ? [carrier(rows[0].id, RunStatus.RUNNING), carrier(rows[1].id, RunStatus.PENDING)]
+      : sql.includes('count(*)') ? [{ count: 3 }] : rows.map(({ id }) => ({ id })),
   );
   const service = serviceWith({
     $queryRaw: raw.$queryRaw,
@@ -70,12 +76,6 @@ test('paged list applies database filters, caps rows, and returns aggregate coun
       groupBy: async () => [
         { status: TaskStatus.OPEN, _count: { _all: 12 } },
         { status: TaskStatus.DONE, _count: { _all: 5 } },
-      ],
-    },
-    session: {
-      groupBy: async () => [
-        { taskId: rows[0].id, status: RunStatus.RUNNING, _count: { _all: 1 } },
-        { taskId: rows[1].id, status: RunStatus.PENDING, _count: { _all: 1 } },
       ],
     },
     taskDependency: { findMany: async () => [] },
@@ -110,14 +110,16 @@ test('paged list applies database filters, caps rows, and returns aggregate coun
     runnable: 3,
   });
   // Filtered total + running + queued stay Prisma counts. Raw SQL is exactly one scope-wide Ready
-  // badge plus one bounded overlay for every row on this page — never one query per row.
+  // badge, one bounded overlay for every row on this page, and the owner's work sessions carrying
+  // tasks (the running/queued overlay) — never one query per row.
   assert.equal(countWheres.length, 3);
-  assert.equal(raw.statements.length, 2);
+  assert.equal(raw.statements.length, 3);
   assert.equal(raw.statements.filter(({ text }) => /count\(\*\)::int/.test(text)).length, 1);
   assert.equal(raw.statements.filter(({ text }) => /t\.id IN \(/.test(text)).length, 1);
+  assert.equal(raw.statements.filter(({ text }) => /FROM "session" carrier/.test(text)).length, 1);
   assert.deepEqual(
-    raw.statements.map(({ invocation }) => invocation),
-    ['tagged-template', 'sql-object'],
+    raw.statements.map(({ invocation }) => invocation).sort(),
+    ['sql-object', 'sql-object', 'tagged-template'],
   );
 });
 
@@ -143,10 +145,9 @@ test('runnable filter is applied before pagination with the same rules as the Ru
       sql,
       /EXISTS \([\s\S]*FROM workspace a[\s\S]*a\.runner_id IS NOT NULL[\s\S]*a\.enabled = true/,
     );
-    assert.match(
-      sql,
-      /NOT EXISTS \([\s\S]*FROM session s[\s\S]*s\.deleted_at IS NULL[\s\S]*s\.starts_task_work = true[\s\S]*'PENDING'::run_status, 'RUNNING'::run_status/,
-    );
+    // "No work run already in flight" is the shared carrier predicate: a turn queued or running,
+    // or a session parked with something that will wake it.
+    assert.ok(sql.includes(`NOT ${taskCarriedSql('t', 'runnable_carrier')}`));
     // A missing/cross-owner/cyclic tail returns NULL. The inner NOT EXISTS then remains true and
     // the outer anti-join blocks the task, so malformed dependency data cannot fail open.
     assert.match(

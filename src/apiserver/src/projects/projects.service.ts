@@ -114,13 +114,22 @@ import {
   sessionRequestReceipt,
   TooManyOpenRequests,
 } from '../sessions/session-request';
+import {
+  readTaskWorkCarriers,
+  taskRunOverlay,
+  type TaskRunOverlay,
+} from '../sessions/task-work-carrier';
 import { SessionsService, type SessionReceiveBlockedReason } from '../sessions/sessions.service';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import { coordinatorFuseUsage, readCoordinatorWakeups } from './coordinator-progress';
 import { openFuseEpisodeId } from './project-fuse';
 import { ProjectPanorama, readProjectPanorama } from './project-panorama';
 import { readTaskIntegrationViews } from './project-task-integration';
-import { emptyProjectListRollup, readProjectListRollups } from './project-list-rollup';
+import {
+  emptyProjectListRollup,
+  readProjectListRollups,
+  readProjectSidebarRollups,
+} from './project-list-rollup';
 import {
   emptyProjectListAttention,
   readProjectListAttention,
@@ -180,7 +189,7 @@ import {
   resumeWrite,
 } from './project-pause';
 import { projectMoves } from '../tasks/project-pause-dispatch';
-import { readProjectTaskWorkStates } from './project-task-work-state';
+import { readProjectTaskWorkStates, type ProjectTaskWorkStateFields } from './project-task-work-state';
 import { taskNotRetiredSql, verificationFailureIsHistorySql } from '../tasks/task-supersession';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import {
@@ -430,6 +439,22 @@ const PROJECT_LIST_SELECT = {
   updatedAt: true,
   ...COORDINATION_INCLUDE,
   // At most one row apiece, joined by its own unique key, like the two above.
+  coordinatorSession: { select: COORDINATOR_ACTIVITY_SELECT },
+} satisfies Prisma.ProjectSelect;
+
+/**
+ * A row of `GET /projects/sidebar`, as opposed to a project document.
+ *
+ * The rail draws four things of a project — it is working, it waits on the reader, how recently it
+ * moved, and its title — and this is the select behind them. `goal`, `updatedAt` and the
+ * coordination bindings are absent on purpose: nothing on the rail reads them, and the whole point
+ * of this endpoint is that a 15-second poll does not carry what a page view carries.
+ */
+const SIDEBAR_PROJECT_SELECT = {
+  id: true,
+  title: true,
+  status: true,
+  createdAt: true,
   coordinatorSession: { select: COORDINATOR_ACTIVITY_SELECT },
 } satisfies Prisma.ProjectSelect;
 
@@ -2567,6 +2592,54 @@ export class ProjectsService {
     };
   }
 
+  /**
+   * The open projects the web sidebar's Projects group draws, and only what it draws them from.
+   *
+   * `list`'s Open read is the same rows plus seven task lanes, the integration line and the whole
+   * attention summary, and the rail polls this every 15 seconds from every open tab. Classifying
+   * every task of every project for a dot that reads one lane is what made a browser tab the
+   * single largest consumer of this database (2026-09-29: ~5,400 calls/day, ~1.1s of PostgreSQL
+   * execution each, ~100 minutes/day), so the rail got its own read: the same `running` count and
+   * the same `lastActivityAt`, from `readProjectSidebarRollups`.
+   *
+   * The fields it keeps are the ones `SidebarProject` declares — `buckets` carries `running` alone,
+   * and `attention` is the same whole summary the index sends (its `ownerItems` and
+   * `startRequest` are what the row's amber count reads). Absent fields are absent for a reason:
+   * depth here is paid for twice a minute by every open tab.
+   *
+   * `buckets.running` is the index's own number, not a second reading of IN_PROGRESS — see the
+   * reader, which reaches it with the same `projectTaskWorkStateSql` the index uses. A rail that
+   * disagreed with the page it opens would be worse than a slow one.
+   */
+  listSidebar(ownerId: string) {
+    // Several open tabs poll in lockstep, and a project write invalidates all of them at once.
+    // Same argument as `list`: identical concurrent reads share one pass.
+    return this.listSingleFlight.run(`${ownerId}:sidebar`, () => this.loadSidebar(ownerId));
+  }
+
+  private async loadSidebar(ownerId: string) {
+    const projects = await this.prisma.project.findMany({
+      where: { ownerId, status: ProjectStatus.OPEN },
+      orderBy: { createdAt: 'desc' },
+      select: SIDEBAR_PROJECT_SELECT,
+    });
+    if (projects.length === 0) return [];
+    const [rollups, attention] = await Promise.all([
+      readProjectSidebarRollups(this.prisma, ownerId),
+      // The same reader the index folds, narrowed to the projects this read returns, so the rail
+      // and the page cannot disagree about what waits on the reader.
+      readProjectListAttention(this.prisma, ownerId, ProjectStatus.OPEN),
+    ]);
+    return projects.map(({ coordinatorSession, ...project }) => ({
+      ...project,
+      // A project with no tasks has no group in the aggregate, and reports nothing in flight and
+      // no activity rather than making the client read two shapes.
+      ...(rollups.get(project.id) ?? { buckets: { running: 0 }, lastActivityAt: null }),
+      attention: attention.get(project.id) ?? emptyProjectListAttention(),
+      coordinatorActivity: coordinatorActivityOf(coordinatorSession),
+    }));
+  }
+
   /** The project's integration line, as `GET /projects/:id/integration` serves it (contract §1.6). */
   async integration(ownerId: string, id: string): Promise<ProjectIntegrationView> {
     const project = await this.prisma.project.findFirst({
@@ -2784,9 +2857,11 @@ export class ProjectsService {
     ]);
     const items = page.map(({ _count, ...task }) => {
       const dependency = dependencies.get(task.id) ?? UNCONNECTED_TASK;
-      const work = workStates.get(task.id) ?? {
-        workState: 'BLOCKED' as const,
+      const work: ProjectTaskWorkStateFields = workStates.get(task.id) ?? {
+        workState: 'BLOCKED',
         verificationState: null,
+        runReason: null,
+        runStalled: false,
       };
       return {
         ...task,
@@ -3038,7 +3113,7 @@ export class ProjectsService {
           ),
         ])
       : [
-          new Map<string, { running: boolean; queued: boolean }>(),
+          new Map<string, TaskRunOverlay>(),
           new Map(),
         ];
     const tasks = rowsInGraph.map(({ createdAt: _createdAt, ...task }) => ({
@@ -3100,50 +3175,34 @@ export class ProjectsService {
   }
 
   /**
-   * Which of this project's tasks have a run on them right now: `running` = a RUNNING Session,
-   * `queued` = a PENDING one with nothing running yet.
+   * Which of this project's tasks have a run on them right now: `running` = a work Session
+   * carrying it (a turn executing, or the session parked waiting for something that will wake it),
+   * `queued` = a PENDING one, plus why it is running and whether its background jobs went quiet.
    *
    * The graph needs this because `Task.status` does not carry it. Dispatch opens a Session and
    * leaves the row `OPEN` — only `reclaimStalledTask` and a retry ever write `IN_PROGRESS` — so a
    * project graph drawn from the column alone reports the task somebody is watching as untouched,
    * which is exactly the state a reader opens the picture to find.
    *
-   * The same two flags, derived the same way, as `TasksService.withRunning`: the task list, the
-   * task-rooted graph and this canvas must not describe one running task in three ways. Scoped by
-   * the tasks' PROJECT rather than by their ids, for the reason the edge query is — the id list is
-   * as long as the project, and a 23,442-element `IN` is a query plan nobody wants.
+   * The same flags, derived from the same carriers (`sessions/task-work-carrier.ts`), as
+   * `TasksService.withRunning`: the task list, the task-rooted graph and this canvas must not
+   * describe one running task in three ways. Scoped by the tasks' PROJECT rather than by their
+   * ids, for the reason the edge query is — the id list is as long as the project, and a
+   * 23,442-element `IN` is a query plan nobody wants.
    */
   private async liveTaskState(
     ownerId: string,
     projectId: string,
-  ): Promise<Map<string, { running: boolean; queued: boolean }>> {
-    const busy = await this.prisma.session.groupBy({
-      by: ['taskId', 'status'],
-      where: {
-        ownerId,
-        status: { in: [RunStatus.PENDING, RunStatus.RUNNING] },
-        task: { ownerId, projectId },
-      },
-      _count: { _all: true },
-    });
-    const running = new Set(
-      busy.filter((row) => row.status === RunStatus.RUNNING).map((row) => row.taskId),
+  ): Promise<Map<string, TaskRunOverlay>> {
+    const carriers = await readTaskWorkCarriers(
+      this.prisma,
+      Prisma.sql`carrier."owner_id" = ${ownerId}::uuid
+        AND carrier."task_id" IN (
+          SELECT project_task."id" FROM "task" project_task
+           WHERE project_task."owner_id" = ${ownerId}::uuid
+             AND project_task."project_id" = ${projectId}::uuid)`,
     );
-    const queued = new Set(
-      busy.filter((row) => row.status === RunStatus.PENDING).map((row) => row.taskId),
-    );
-    const live = new Map<string, { running: boolean; queued: boolean }>();
-    for (const taskId of new Set([...running, ...queued])) {
-      if (!taskId) continue;
-      // A task with both is simply running; `queued` is only meaningful when nothing is running
-      // yet. `session_task_execution_claim_idx` makes that pair impossible anyway — this is here
-      // so the two flags mean the same thing they mean in `TasksService.withRunning`.
-      live.set(taskId, {
-        running: running.has(taskId),
-        queued: queued.has(taskId) && !running.has(taskId),
-      });
-    }
-    return live;
+    return new Map([...carriers].map(([taskId, carrier]) => [taskId, taskRunOverlay(carrier)]));
   }
 
   /**

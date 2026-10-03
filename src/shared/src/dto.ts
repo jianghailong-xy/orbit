@@ -45,6 +45,55 @@ export interface SessionCapabilities {
   canRestore: boolean;
 }
 
+/** A session folder as the Move panel lists it (`GET /sessions/:id/move-targets`). */
+export interface SessionMoveFolder {
+  id: string;
+  name: string;
+  /** Sessions filed in it, those in Trash aside. */
+  sessionCount: number;
+}
+
+/** Another of the owner's workspaces, as a place to move a session to
+ *  (docs/session-folders-move-design.md §5.2). */
+export interface SessionMoveTarget {
+  workspaceId: string;
+  name: string;
+  /** What the workspace's next session would start on — its badge, the workspace list's `lastProvider`. */
+  provider: string;
+  runnerId: string | null;
+  runnerName: string | null;
+  /** An offline runner does not stop the move; the session's next message waits for it. */
+  runnerOnline: boolean;
+  workDir: string | null;
+  /** Null when the session can move here; otherwise why not, in English, shown as it is. */
+  reason: string | null;
+  /** How the agent's memory of the conversation comes along: `continues` — the same runner carries
+   *  it over as it is; `rebuilt` — another runner rebuilds it from Orbit's record, the earlier part
+   *  summarized. */
+  conversation: 'continues' | 'rebuilt';
+  /** The folders the session can be filed in there. */
+  folders: SessionMoveFolder[];
+}
+
+/** `GET /sessions/:id/move-targets`: everything the Move panel and its confirmation need. */
+export interface SessionMoveTargets {
+  workspaceId: string | null;
+  folderId: string | null;
+  /** The folders of the session's own workspace. */
+  folders: SessionMoveFolder[];
+  /** Why the session cannot move to another workspace at all; null when it can. */
+  reason: string | null;
+  /** Idle but not ended: it has to be ended before it moves (the panel's End and Move). */
+  needsEnd: boolean;
+  /** The branch its changes stay on in the old workspace's repository. */
+  branch: string | null;
+  /** Files the branch changed, and how many of those are not in `mergeTarget` yet. */
+  changedFiles: number;
+  unmergedFiles: number;
+  mergeTarget: string | null;
+  targets: SessionMoveTarget[];
+}
+
 /** What actually happens to an action the session's policy has not pre-approved. */
 export type UnapprovedAction = 'ask' | 'deny' | 'allow';
 
@@ -1026,7 +1075,9 @@ export interface RunnerEngineAccount {
   /** `default` — the directory the runner's own environment selects — or the id of a slot the
    *  runner added: the same value LoginCommand.account names. */
   id: string;
-  /** What the user called the account. Absent for Default, and for a slot whose record was lost. */
+  /** What the user called the account: the name it was renamed to in Orbit, else the one it was
+   *  added under. Absent for a Default never renamed, and for a slot whose record was lost and that
+   *  was never renamed. */
   name?: string;
   /** The account's directory on that machine, absolute: a CODEX_HOME or a CLAUDE_CONFIG_DIR. */
   home: string;

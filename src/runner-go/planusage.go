@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -129,7 +132,9 @@ type planUsageProbe struct {
 // newClaudePlanUsageProbe reads the usage of the login the runner's own environment selects — the
 // machine's Default account.
 func newClaudePlanUsageProbe() *planUsageProbe {
-	return &planUsageProbe{client: &http.Client{}, name: "claude plan-usage", fetch: fetchClaudePlanUsage}
+	read := &claudeUsageRead{name: "claude plan-usage"}
+	fetch := func(ctx context.Context, client *http.Client) (*PlanUsage, error) { return read.fetch(ctx, client, "") }
+	return &planUsageProbe{client: &http.Client{}, name: read.name, fetch: fetch}
 }
 
 
@@ -305,23 +310,60 @@ func claudeCredentialsPathIn(configDir string) string {
 
 func claudeCredentialsPath() string { return claudeCredentialsPathIn("") }
 
-func claudeOAuthTokenIn(configDir string) (string, error) {
-	b, err := claudeCredentialsJSONIn(configDir)
-	if err != nil {
-		return "", err
-	}
+// claudeOAuthLogin is what the runner takes from one login's stored credentials: the access token a
+// usage read sends, when that token expires (zero when the CLI recorded no time), and whether a
+// refresh token is stored beside it — never the refresh token itself, which is the CLI's alone
+// (claudeUsageRead).
+type claudeOAuthLogin struct {
+	accessToken string
+	expiresAt   time.Time
+	refreshable bool
+}
+
+// expiresWithin is a token at most lead from its expiry, or past it — with no lead, one the endpoint
+// will refuse. A login with no recorded expiry never is.
+func (l claudeOAuthLogin) expiresWithin(lead time.Duration, now time.Time) bool {
+	return !l.expiresAt.IsZero() && !now.Add(lead).Before(l.expiresAt)
+}
+
+// parseClaudeOAuthLogin reads the {"claudeAiOauth":{...}} blob Claude Code stores, whatever it holds:
+// a login the CLI signed out — it empties both tokens when the server refuses a refresh — parses too.
+func parseClaudeOAuthLogin(b []byte) (claudeOAuthLogin, error) {
 	var c struct {
 		ClaudeAiOauth struct {
-			AccessToken string `json:"accessToken"`
+			AccessToken  string `json:"accessToken"`
+			RefreshToken string `json:"refreshToken"`
+			// Milliseconds since the epoch, as the CLI writes it. Read loosely: an expiry in a shape
+			// this runner does not know reads as none, rather than costing the login its reading.
+			ExpiresAt interface{} `json:"expiresAt"`
 		} `json:"claudeAiOauth"`
 	}
 	if err := json.Unmarshal(b, &c); err != nil {
-		return "", err
+		return claudeOAuthLogin{}, err
 	}
-	if c.ClaudeAiOauth.AccessToken == "" {
-		return "", fmt.Errorf("no oauth token (api-key auth?)")
+	login := claudeOAuthLogin{accessToken: c.ClaudeAiOauth.AccessToken, refreshable: c.ClaudeAiOauth.RefreshToken != ""}
+	if ms, ok := int64Value(c.ClaudeAiOauth.ExpiresAt); ok && ms > 0 {
+		login.expiresAt = time.UnixMilli(ms)
 	}
-	return c.ClaudeAiOauth.AccessToken, nil
+	return login, nil
+}
+
+// claudeStoredLoginIn is the login kept in configDir as stored, signed out or not.
+func claudeStoredLoginIn(configDir string) (claudeOAuthLogin, error) {
+	b, err := claudeCredentialsJSONIn(configDir)
+	if err != nil {
+		return claudeOAuthLogin{}, err
+	}
+	return parseClaudeOAuthLogin(b)
+}
+
+// claudeOAuthLoginIn is the login kept in configDir, with an access token to send.
+func claudeOAuthLoginIn(configDir string) (claudeOAuthLogin, error) {
+	login, err := claudeStoredLoginIn(configDir)
+	if err == nil && login.accessToken == "" {
+		err = fmt.Errorf("no oauth token (api-key auth?)")
+	}
+	return login, err
 }
 
 // claudeCredentialsJSONIn returns the raw {"claudeAiOauth":{...}} blob Claude Code stores. On
@@ -339,36 +381,106 @@ func claudeCredentialsJSONIn(configDir string) ([]byte, error) {
 		return b, nil
 	}
 	if configDir == "" && runtime.GOOS == "darwin" {
-		if kb, kerr := keychainCredentials(); kerr == nil {
+		if kb, kerr := keychainCredentials(context.Background(), claudeKeychainService("")); kerr == nil {
 			return kb, nil
 		}
 	}
 	return nil, err
 }
 
+// claudeKeychainService names the macOS Keychain item Claude Code keeps a login's credentials in:
+// "Claude Code-credentials" for a CLI run with no CLAUDE_CONFIG_DIR, and for one run with it, the
+// first eight hex digits of that directory's SHA-256 after a dash (2.1.288).
+func claudeKeychainService(configDir string) string {
+	if configDir == "" {
+		return "Claude Code-credentials"
+	}
+	sum := sha256.Sum256([]byte(configDir))
+	return "Claude Code-credentials-" + hex.EncodeToString(sum[:])[:8]
+}
+
 // keychainCredentials reads Claude Code's OAuth credentials from the macOS login
-// Keychain (item "Claude Code-credentials"), where the CLI stores them on darwin. The
+// Keychain item service, where the CLI stores them on darwin. The
 // first read from the runner triggers a one-time Keychain access prompt; choosing
 // "Always Allow" makes subsequent reads silent.
-func keychainCredentials() ([]byte, error) {
-	out, err := exec.Command("security", "find-generic-password", "-s", "Claude Code-credentials", "-w").Output()
+func keychainCredentials(ctx context.Context, service string) ([]byte, error) {
+	out, err := exec.CommandContext(ctx, "security", "find-generic-password", "-s", service, "-w").Output()
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// fetchClaudePlanUsage reads the machine's own login (newClaudePlanUsageProbe).
-func fetchClaudePlanUsage(ctx context.Context, client *http.Client) (*PlanUsage, error) {
-	return fetchClaudePlanUsageIn(ctx, client, "")
+var (
+	// claudeCLIRefreshLead is how near its expiry Claude Code takes a token to need refreshing, from
+	// any command it runs: five minutes (2.1.288 refreshes once now+300000 >= expiresAt).
+	claudeCLIRefreshLead = 5 * time.Minute
+	// claudeTokenRefreshRetry is how soon a login whose token Claude Code did not refresh is asked
+	// again: the CLI missing, the network down, a refresh token the server no longer takes. Each ask
+	// is a CLI process, and a login that would not refresh on one pass will not on the next.
+	claudeTokenRefreshRetry = 30 * time.Minute
+	// claudeTokenRefreshTimeout stops only a CLI that hangs: a refresh cut off after the server has
+	// rotated the token leaves the login holding a spent one (claudeStatusRefreshWindow), so the run
+	// is given far longer than it takes. Measured on 2.1.288: about 20s the first time it runs in an
+	// account's directory, which syncs that account's plugins and skills; 11–13s against a token
+	// endpoint answering in 8s.
+	claudeTokenRefreshTimeout = 5 * time.Minute
+)
+
+// claudeRefreshing is every config directory a refresh run is under way in ("" for the runner's
+// own), so that no directory gets a second before the first has ended — a read whose loop was
+// stopped does not stop its refresh (refreshClaudeToken), and the loop that replaces it could
+// otherwise start another.
+var claudeRefreshing = struct {
+	sync.Mutex
+	dirs map[string]bool
+}{dirs: map[string]bool{}}
+
+var errClaudeRefreshRunning = errors.New("a refresh is already running for this login")
+
+// errClaudeTokenRefused is a login whose token the usage endpoint answered 401. The passes that skip
+// that token return the same error the refusal did, so they log nothing new.
+var errClaudeTokenRefused = errors.New("usage endpoint -> 401; this token is not sent again")
+
+// claudeUsageRead is one Claude login's usage read, and what it keeps between passes.
+//
+// The token it sends is the CLI's, read from the login's credentials on every pass, and only Claude
+// Code ever refreshes it: a refresh rotates the refresh token too, and the CLI does it under a lock
+// in the config directory, re-reading what another process may have written meanwhile. A refresher
+// outside that lock could spend a refresh token the CLI is about to use and sign the account out.
+//
+// The CLI refreshes a token as it starts any command once the token is within claudeCLIRefreshLead
+// of expiring, so a login sessions run on keeps itself fresh. A login none run on — an account whose
+// quota is spent, the one no session is sent to — sees only the runner's own commands, and the one
+// that refreshed it was the engine probe's `claude auth status`, which does not wait for the refresh
+// it starts: cut short, it left the login holding a spent refresh token (claudeStatusRefreshWindow,
+// which now keeps the probe out of that window). On wikova (2026-10-02) such an account read 401 for
+// twelve hours under a page that said Signed in, and the next refresh signed it out. So the read has
+// the token refreshed itself once it is due, with a run that waits for the refresh to land
+// (refreshClaudeToken): renewed before it expires, an idle login's reading never stops.
+type claudeUsageRead struct {
+	// name is the probe's, for the line this read logs when it has a token refreshed.
+	name string
+	// refused is the SHA-256 of the token the endpoint last answered 401 — never the token itself.
+	// That token is not sent again: the answer will not change, and each request spent on it counts
+	// against the rate limit the next good read has to get past (on wikova the 401s came with 429s).
+	// Any other token is read at once, and one that expires is refreshed.
+	refused [sha256.Size]byte
+	// asked is when Claude Code was last asked to refresh this login's token, and askErr how that
+	// ask ended, repeated on every pass until the next ask.
+	asked  time.Time
+	askErr error
 }
 
-func fetchClaudePlanUsageIn(ctx context.Context, client *http.Client, configDir string) (*PlanUsage, error) {
-	// Read the token fresh every cycle: Claude Code rotates it in place, so a cached
-	// token would go stale. A 401 here just means we'll pick up the refreshed one next.
-	token, err := claudeOAuthTokenIn(configDir)
+// fetch reads the usage of the login kept in configDir ("" for the runner's own).
+func (r *claudeUsageRead) fetch(ctx context.Context, client *http.Client, configDir string) (*PlanUsage, error) {
+	login, err := r.login(ctx, configDir)
 	if err != nil {
 		return nil, err
+	}
+	sum := sha256.Sum256([]byte(login.accessToken))
+	if sum == r.refused {
+		return nil, errClaudeTokenRefused
 	}
 	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -376,7 +488,7 @@ func fetchClaudePlanUsageIn(ctx context.Context, client *http.Client, configDir 
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("authorization", "Bearer "+token)
+	req.Header.Set("authorization", "Bearer "+login.accessToken)
 	req.Header.Set("anthropic-beta", planUsageBeta)
 	req.Header.Set("accept", "application/json")
 	req.Header.Set("user-agent", "orbit-runner/"+version)
@@ -386,10 +498,87 @@ func fetchClaudePlanUsageIn(ctx context.Context, client *http.Client, configDir 
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode == http.StatusUnauthorized {
+		r.refused = sum
+		return nil, errClaudeTokenRefused
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("usage endpoint -> %d", resp.StatusCode)
 	}
 	return parsePlanUsage(body)
+}
+
+// login is the token the read sends: the stored one, or — once that is due for refreshing — whatever
+// Claude Code leaves on disk after being asked to refresh it. An expired token is never sent.
+//
+// A login whose refresh token the server has already spent — one an earlier refresh was cut short
+// on — cannot be refreshed: asked, the CLI is refused and empties it. That is a login signed out,
+// which is what it was; the engine probe says so from then on, where it used to say Signed in.
+func (r *claudeUsageRead) login(ctx context.Context, configDir string) (claudeOAuthLogin, error) {
+	login, err := claudeOAuthLoginIn(configDir)
+	if err != nil || !login.expiresWithin(claudeCLIRefreshLead, time.Now()) {
+		return login, err
+	}
+	expiry := login.expiresAt.UTC().Format(time.RFC3339)
+	if time.Since(r.asked) >= claudeTokenRefreshRetry {
+		r.asked = time.Now()
+		r.askErr = refreshClaudeToken(ctx, configDir)
+		if login, err = claudeStoredLoginIn(configDir); err != nil {
+			return login, err
+		}
+		if login.accessToken == "" {
+			return login, errors.New("signed out: Claude Code's refresh was refused, and it cleared the login")
+		}
+		if !login.expiresWithin(claudeCLIRefreshLead, time.Now()) {
+			logln(r.name + ": Claude Code refreshed the access token (expiry " + expiry + ")")
+			return login, nil
+		}
+	}
+	// Not refreshed, but not expired either: still a token to read with.
+	if !login.expiresWithin(0, time.Now()) {
+		return login, nil
+	}
+	if r.askErr != nil {
+		return login, fmt.Errorf("access token expired at %s; Claude Code did not refresh it: %v", expiry, r.askErr)
+	}
+	return login, fmt.Errorf("access token expired at %s; Claude Code did not refresh it", expiry)
+}
+
+// claudeTokenRefreshArgs is a CLI run that bills nothing and has a token that is due refreshed:
+// `/help` is answered client-side, with nothing sent to a model (num_turns 0, total_cost_usd 0 —
+// the run probeClaudeSlashAssets reads its registry from), yet the CLI gets its OAuth token ready
+// as it starts, and — unlike `auth status` — waits for the refresh to land before it exits.
+// Measured on 2.1.288: on an idle account whose token had expired, the access and refresh tokens
+// rotated and expiresAt moved eight hours on, and with the token still good nothing changed;
+// against a fake token endpoint answering in 2.5, 5 and 8 seconds, the rotated pair was written
+// every time.
+var claudeTokenRefreshArgs = []string{"-p", "/help", "--output-format", "stream-json", "--verbose", "--no-session-persistence"}
+
+// refreshClaudeToken asks Claude Code to refresh the token of the login kept in configDir ("" for
+// the runner's own), unless a refresh is already under way there.
+func refreshClaudeToken(ctx context.Context, configDir string) error {
+	claudeRefreshing.Lock()
+	if claudeRefreshing.dirs[configDir] {
+		claudeRefreshing.Unlock()
+		return errClaudeRefreshRunning
+	}
+	claudeRefreshing.dirs[configDir] = true
+	claudeRefreshing.Unlock()
+	defer func() {
+		claudeRefreshing.Lock()
+		delete(claudeRefreshing.dirs, configDir)
+		claudeRefreshing.Unlock()
+	}()
+	// Not cut off with the read: a refresh stopped once the server has rotated the token leaves the
+	// login holding a spent one, so a runner shutting down or an account being removed lets it end.
+	cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), claudeTokenRefreshTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(cctx, "claude", claudeTokenRefreshArgs...)
+	cmd.Env = envWithAgent(nil)
+	if configDir != "" {
+		cmd.Env = envWithValue(cmd.Env, "CLAUDE_CONFIG_DIR", configDir)
+	}
+	return cmd.Run()
 }
 
 // parsePlanUsage maps the endpoint's snake_case windows to our compact shape. Each

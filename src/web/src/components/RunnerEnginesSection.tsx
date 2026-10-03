@@ -2,11 +2,11 @@ import { RightOutlined } from '@ant-design/icons';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from 'antd';
 import { Link } from 'react-router-dom';
-import type { ReportedEngine, RunnerEngineHealth } from '@orbit/shared';
+import { accountToStartOn, type ReportedEngine, type RunnerEngineHealth } from '@orbit/shared';
 import { api } from '../api';
-import { engineKeepsAccounts } from '../lib/engineAccounts';
+import { accountNameOf, accountPlanUsage, engineKeepsAccounts } from '../lib/engineAccounts';
 import { encodeId } from '../lib/idCodec';
-import { planUsageRows, planUsageSnapshotForProvider } from '../lib/planUsage';
+import { currentPlanUsageRows, planUsageSnapshotForProvider } from '../lib/planUsage';
 import { runnersQuery } from '../lib/queries';
 import {
   RUNNER_ENGINES,
@@ -195,9 +195,22 @@ function EngineLine({ runner, health }: { runner: Runner; health: RunnerEngineHe
   const signIn = signInOf(runner, health);
   // A quota belongs to a login that is in: signed out, its last reading is about a session that
   // can no longer start. Same reading Providers shows at the head of its row.
-  const signedIn = health.engine !== 'opencode' && rowKindOf(health, runner.install, health.engine) === 'in';
-  const snapshot = signedIn ? planUsageSnapshotForProvider(runner.planUsage, health.engine) : null;
-  const quota = snapshot ? planUsageRows(snapshot) : [];
+  const kind = health.engine === 'opencode' ? null : rowKindOf(health, runner.install, health.engine);
+  // With several accounts the engine's own snapshot is Default's alone, and one account's windows
+  // under "2 accounts signed in" would read as the machine's. The windows shown are those of the
+  // account a new session starts on, named — what an account pool's head shows for its next one.
+  const engine = health.engine === 'claude' || health.engine === 'codex' ? health.engine : null;
+  const accounts = engine && (kind === 'in' || kind === 'out' || kind === 'unknown') ? (health.accounts ?? []) : [];
+  const nextId =
+    engine && accounts.length >= 2 ? accountToStartOn(engine, accounts, runner.planUsage, new Date()) : null;
+  const next = accounts.find((account) => account.id === nextId);
+  const signedIn = accounts.length >= 2 ? !!next : kind === 'in';
+  const snapshot = !signedIn
+    ? null
+    : engine && next
+      ? accountPlanUsage(runner.planUsage, engine, next.id)
+      : planUsageSnapshotForProvider(runner.planUsage, health.engine);
+  const quota = snapshot ? currentPlanUsageRows(snapshot) : [];
   const name = ENGINE_CLI_NAME[health.engine] ?? health.engine;
   return (
     <Link className="rd-engine-row" to={engineSignInHref(runner.id, health.engine)}>
@@ -221,6 +234,7 @@ function EngineLine({ runner, health }: { runner: Runner; health: RunnerEngineHe
       </div>
       <div className={`rd-engine-auth ${signIn.tone}`}>{signIn.text}</div>
       <div className={`rd-engine-quota${quota.length === 0 && !signedIn ? ' empty' : ''}`}>
+        {quota.length > 0 && next && <div className="rd-quota-next">{`Next: ${accountNameOf(next)}`}</div>}
         {quota.length > 0 ? (
           quota.map((row) => (
             <div key={row.key} className={`rd-quota${row.nearLimit ? ' near' : ''}`}>

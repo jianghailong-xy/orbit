@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { TasksService } from './tasks.service';
+import { runDoorSessionRead } from './query-raw-test-helper';
 import { withReceiptStore } from './task-run-receipt-fake';
 
 const TASK_ID = '550e8400-e29b-41d4-a716-446655440000';
@@ -37,7 +38,9 @@ function retryFixture(status: string, updated = 1) {
     // A dispatch copies the task's input files into the run it opens
     // (`copyTaskAttachments`); these fixtures attach none, so nothing is copied.
     attachment: { findMany: async () => [] },
-    $queryRaw: async () => [{ id: null, requiresResync: false }],
+    // No session carries the task; every other raw read is the retry's status write.
+    $queryRaw: async (query: unknown) =>
+      (runDoorSessionRead(query) ? [] : [{ id: null, requiresResync: false }]),
     // A paused run's delivery is read by its own turn key before it is written (H2F).
     conversationTurn: { findUnique: async () => null },
     session: {
@@ -131,7 +134,9 @@ test('batch-running a FAILED task clears it the same way', async () => {
     // A dispatch copies the task's input files into the run it opens
     // (`copyTaskAttachments`); these fixtures attach none, so nothing is copied.
     attachment: { findMany: async () => [] },
-    $queryRaw: async () => [{ id: null, requiresResync: false }],
+    // No session carries the task; every other raw read is the retry's status write.
+    $queryRaw: async (query: unknown) =>
+      (runDoorSessionRead(query) ? [] : [{ id: null, requiresResync: false }]),
     session: {
       // The door reads THIS request's own Session by id before it writes (H2F).
       findUnique: async () => null, findMany: async () => [] },

@@ -8,6 +8,9 @@ import {
 } from './sessionProviderChoices';
 import type { ConfiguredProvider } from './workspaceDefaults';
 import { PROVIDER_GLYPHS } from './providerGlyphs';
+import { encodeId } from './idCodec';
+import type { CodexLogin } from './codexLogin';
+import { sharedPoolAsProviderPool, type SharedPool, type SharedPoolKey, type SharedPoolPerson } from './sharedPools';
 
 const deepseek: ConfiguredProvider = {
   slug: 'deepseek',
@@ -203,6 +206,18 @@ describe('the runner’s Codex accounts, under the Codex choice', () => {
       { id: 'c0ffee42', label: 'Account c0ffee42', unavailable: 'Not signed in' },
     ]);
     expect(accountsOf(choices, 'claude')).toBeUndefined();
+  });
+
+  it('lists an account by what it was renamed to in Orbit, Default included', () => {
+    const choices = providerChoices(
+      [],
+      catalog,
+      undefined,
+      codex([{ id: 'default', name: 'jianghailong.main', auth: 'yes' }, { id: '3fa91c2e', name: 'Research', auth: 'yes' }]),
+      [],
+      usage,
+    );
+    expect(accountsOf(choices)?.map((account) => account.label)).toEqual(['jianghailong.main', 'Research']);
   });
 
   it('lists none for a single account, or for an engine that cannot run', () => {
@@ -477,5 +492,136 @@ describe('shared pools among the choices', () => {
     const choices = providerChoices(configured, catalog, undefined, undefined, [team]);
     expect(sameRuntimeChoices('codex', choices, configured, catalog).map((c) => c.slug)).toEqual(['codex', 'team-codex']);
     expect(sameRuntimeChoices('claude', choices, configured, catalog).map((c) => c.slug)).not.toContain('team-codex');
+  });
+});
+
+describe('a Codex pool somebody was added to, in their picker', () => {
+  // jianghailong's Codex Pool (docs/mocks/account-pool-access/02), as Zhang Min, whom he added, reads it —
+  // and as WorkspaceView hands it in: its ChatGPT accounts and its keys as members
+  // (sharedPoolAsProviderPool), and a Codex entry in the catalogue (poolsAsProviders). His accounts run
+  // her sessions too (2026-10-03), so the pool is pickable while one of them can run, keys or no keys.
+  const POOL_ID = '0195c0de-0000-7000-8000-000000000800';
+  const NAMES: Record<string, string> = { jiang: 'jianghailong', zhang: 'Zhang Min', lin: 'Lin Wei' };
+  const spend = { inputTokens: 0, outputTokens: 0, costUsd: 0 };
+  /** One of his ChatGPT accounts as the pool carries it — the first one the next session's. */
+  const account = (email: string, over: Partial<CodexLogin> = {}): CodexLogin => ({
+    state: 'ACTIVE',
+    email,
+    plan: 'plus',
+    fingerprint: `…${email.slice(0, 4)}`,
+    lastError: null,
+    expiresAt: '2026-10-06T00:00:00.000Z',
+    linkedAt: '2026-09-28T00:00:00.000Z',
+    usage: null,
+    usageUnavailable: null,
+    ...over,
+  });
+  const ACCOUNTS: CodexLogin[] = [account('jianghailong.rd@gmail.com'), account('hl.work@gmail.com')];
+  const key = (label: string, contributor: string, viewer: string, over: Partial<SharedPoolKey> = {}): SharedPoolKey => ({
+    id: `${label}-id`,
+    label,
+    fingerprint: 'sk-…AB12',
+    state: 'ACTIVE',
+    enabled: true,
+    shareCap: null,
+    spentUntil: null,
+    contributor: { userId: contributor, name: NAMES[contributor], you: contributor === viewer },
+    usage: { ...spend, othersCostUsd: 0 },
+    running: false,
+    next: false,
+    ...over,
+  });
+  const codexPool = (
+    viewer: string,
+    keys: SharedPoolKey[] = [],
+    over: Partial<SharedPool> = {},
+    logins: CodexLogin[] = ACCOUNTS,
+  ): SharedPool => ({
+    id: POOL_ID,
+    slug: 'codex-pool',
+    label: 'Codex Pool',
+    engine: 'codex',
+    shared: false,
+    logins: logins.map((login, index) => ({ ...login, next: index === 0 })),
+    membersCanAdd: true,
+    ownKeyFirst: true,
+    viewerRole: viewer === 'jiang' ? 'ADMIN' : 'MEMBER',
+    window: { start: '2026-10-01T00:00:00.000Z', end: '2026-11-01T00:00:00.000Z' },
+    people: ['jiang', 'zhang', 'lin'].map(
+      (userId): SharedPoolPerson => ({
+        userId,
+        name: NAMES[userId],
+        role: userId === 'jiang' ? 'ADMIN' : 'MEMBER',
+        creator: userId === 'jiang',
+        you: userId === viewer,
+        keys: keys.filter((row) => row.contributor.userId === userId).length,
+        sessions: 0,
+        usage: spend,
+      }),
+    ),
+    keys,
+    ...over,
+  });
+  const configured: ConfiguredProvider[] = [
+    { slug: 'codex-pool', label: 'Codex Pool', runtime: 'codex', models: [], presetSlug: 'openai', modelsFromRuntime: true },
+  ];
+  const tileOf = (pool: SharedPool, engineHealth?: Parameters<typeof providerChoices>[3]) =>
+    providerChoices(configured, catalog, undefined, engineHealth, [sharedPoolAsProviderPool(pool)]).find(
+      (c) => c.slug === 'codex-pool',
+    )!;
+
+  it('offers it for a pick on his ChatGPT accounts while the pool has no API key at all', () => {
+    const tile = tileOf(codexPool('zhang'));
+    // Still listed, as the pool it is — and pickable: his accounts run her sessions, and one of them is
+    // marked next. The tile counts credentials, and they are not keys alone any more.
+    expect(tile).toMatchObject({
+      kind: 'pool',
+      label: 'Codex Pool',
+      poolSize: 2,
+    });
+    expect(tile.poolUnit).toBeUndefined();
+    expect(tile.unavailable).toBeUndefined();
+    expect(tile.fixHref).toBeUndefined();
+  });
+
+  it('says the same while every key it has is switched off or refused by OpenAI — the accounts still run', () => {
+    const keys = [
+      key('orbit-org-1', 'jiang', 'zhang', { state: 'INVALID' }),
+      key('zm-proj', 'zhang', 'zhang', { enabled: false }),
+    ];
+    expect(tileOf(codexPool('zhang', keys)).unavailable).toBeUndefined();
+    expect(tileOf(codexPool('lin')).unavailable).toBeUndefined();
+  });
+
+  it('greys it out with "Signed out" when its accounts are signed out and its keys refused or off too', () => {
+    const keys = [key('orbit-org-1', 'jiang', 'zhang', { state: 'INVALID' })];
+    const logins = ACCOUNTS.map((login) => account(login.email!, { state: 'SIGNED_OUT' }));
+    const tile = tileOf(codexPool('zhang', keys, {}, logins));
+    expect(tile.unavailable).toBe('Signed out');
+    expect(tile.fixHref).toBe(`/providers/pools/${encodeId(POOL_ID)}`);
+    expect(tile.fixEngine).toBeUndefined();
+  });
+
+  it('counts accounts with the keys once a key of it can run', () => {
+    const tile = tileOf(codexPool('zhang', [key('orbit-org-1', 'jiang', 'zhang')]));
+    expect(tile.unavailable).toBeUndefined();
+    expect(tile.fixHref).toBeUndefined();
+    expect(tile.poolSize).toBe(3);
+    expect(tile.poolUnit).toBeUndefined();
+  });
+
+  it('keeps the words of a shared pool’s own maker, whom nobody added', () => {
+    // A pool made on the shared pools page, read by the person who made it: no accounts, so "No keys", as
+    // before — and its unit is the key.
+    const tile = tileOf(codexPool('jiang', [], { shared: true }, []));
+    expect(tile.unavailable).toBe('No keys');
+    expect(tile.poolUnit).toBe('key');
+  });
+
+  it('still says first that this runner has no Codex CLI to run it on', () => {
+    expect(tileOf(codexPool('zhang'), [{ engine: 'codex', installed: false, auth: 'unknown' }])).toMatchObject({
+      unavailable: 'Not installed',
+      fixEngine: 'codex',
+    });
   });
 });

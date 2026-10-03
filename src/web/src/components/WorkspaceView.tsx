@@ -154,7 +154,7 @@ import {
   type LocalStatusRow,
 } from '../lib/slashCommands';
 import { sessionPlanUsage } from '../lib/planUsage';
-import { accountPlanUsage } from '../lib/engineAccounts';
+import { accountNameOf, accountPlanUsage } from '../lib/engineAccounts';
 import { poolsAsProviders, providerPoolsQuery, sessionPoolAccount } from '../lib/providerPools';
 import { sharedPoolAsProviderPool, sharedPoolsQuery } from '../lib/sharedPools';
 import {
@@ -178,7 +178,14 @@ import { OpenItemDeliveryCard } from './OpenItemDeliveryCard';
 import { OrbitLinkCardsProvider } from './OrbitLinkCard';
 import { ProjectStartedCard } from './ProjectStartedCard';
 import { SessionMessageCard } from './SessionMessageCard';
-import { parseWatchWake, watchingCountWord, watchingWord } from '../lib/watches';
+import {
+  parseWatchWake,
+  sessionWatching,
+  watchingCountWord,
+  watchingSessions,
+  watchingWord,
+  type SessionWatching,
+} from '../lib/watches';
 import { parseBackgroundWake } from '../lib/backgroundWake';
 import { returnsToComposer } from '../lib/queuedTurnRestore';
 import type { BgShell } from '../lib/backgroundShells';
@@ -319,8 +326,7 @@ import {
   type AccountEngine,
 } from '@orbit/shared';
 import { lastTypedUserMessage } from '../lib/deliveredMessage';
-import { compatibleUuid } from '../lib/uuid';
-import { planUsageRows } from '../lib/planUsage';
+import { bindingPlanUsageRow, currentPlanUsageRows } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
 import { setSessionTags } from '../lib/sessionTags';
 import { tagChipLabels } from '../lib/tagColor';
@@ -882,11 +888,11 @@ const parkedWorkLabel = (s: any): ParkedWork | null => {
 // surface its current state — the tool in flight, that it's blocked on you, or a bare
 // "Running…" — so the row never collapses to just a title with no sign of progress.
 // Otherwise it's the flattened last reply, falling back to the run's own state word.
-// `tone` drives the colour: blue = working, amber = needs you, grey = queued or a
-// left-up background process, default = reply content.
+// `tone` drives the colour: blue = working, amber = needs you, grey = queued, a left-up
+// background process or a watch that will resume it, default = reply content.
 type SessionLine = {
   text: string;
-  tone: 'preview' | 'running' | 'approval' | 'queued' | 'background';
+  tone: 'preview' | 'running' | 'approval' | 'queued' | 'background' | 'watching';
 };
 // The line for a message of YOURS the workspace hasn't answered yet. Prefixed, because the preview
 // line is otherwise the workspace's voice: unmarked, a message you sent and a reply to it read
@@ -948,7 +954,9 @@ const waitingLabel = (s: any): string => {
   return 'Waiting for approval';
 };
 
-export const sessionLine = (s: any, live: boolean): SessionLine => {
+// `watching` is this session as an observer — what its row says about the live watches that will
+// resume it (lib/watches `watchingSessions`) — and absent wherever a caller holds no watches.
+export const sessionLine = (s: any, live: boolean, watching?: SessionWatching | null): SessionLine => {
   const state = sessionRunStateOf(s);
   // Somebody is waiting on YOU here, which outranks everything else the row could say: every other
   // line reports what the workspace is doing, and this one is the only one you can act on.
@@ -986,8 +994,12 @@ export const sessionLine = (s: any, live: boolean): SessionLine => {
   // parent at AWAITING_INPUT while it runs, so this (not the RUNNING branch) is what usually
   // surfaces "Running Agent…".
   const parked = live ? parkedWorkLabel(s) : null;
-  if (parked)
-    return { text: `${parked.text}…`, tone: parked.kind === 'subagent' ? 'running' : 'background' };
+  if (parked?.kind === 'subagent') return { text: `${parked.text}…`, tone: 'running' };
+  // Parked on a live watch that will resume it: not idle, not waiting on you, and — whatever else it
+  // left running — not a background process (contract §9.2). Said in the strip's own line, so the row
+  // and the strip above its composer read the same.
+  if (live && watching && state === 'AWAITING_INPUT') return { text: watching.line, tone: 'watching' };
+  if (parked) return { text: `${parked.text}…`, tone: 'background' };
   // A message that never got an answer — the turn was interrupted, or failed, before any reply
   // landed — outranks the previous turn's reply: it's the newer of the two, and it's what the
   // session is left waiting on. The server only keeps lastUserText while it stands unanswered.
@@ -1175,7 +1187,10 @@ export function orbitLinkStateWord(row: any): string {
 // connection, not a crash, so it gets the neutral disconnect glyph, not a red X.
 // New payloads carry the authoritative runState. The resolver retains a centralized fallback
 // for old servers whose raw status collapses graceful ends to CANCELLED.
-export function StatusIcon({ session }: { session: any }) {
+//
+// `watching` is the word for the live watches that will resume this session (`statusLabel`'s), and
+// absent wherever a caller holds no watches.
+export function StatusIcon({ session, watching }: { session: any; watching?: string | null }) {
   const state = sessionRunStateOf(session);
   const fontSize = 16;
   // First, and outside the generating gate — see `statusLabel`. The glyph and the label branch in
@@ -1217,6 +1232,16 @@ export function StatusIcon({ session }: { session: any }) {
     // that will end), still while the only thing up is a `service`. Never spinning: the shape and
     // the colour keep meaning "not the agent working", and only the motion says "work is happening
     // here", which is the one claim a left-up process cannot make.
+    //
+    // Parked on a live watch, below a sub-workspace and above a left-up process: a wake is coming,
+    // so neither the reply bubble nor the terminal fits — a watch is not a process (contract §9.2).
+    // The strip's eye, still, because nothing here is running.
+    if (watching && work?.kind !== 'subagent')
+      return (
+        <Tooltip title={watching}>
+          <EyeOutlined style={{ color: 'var(--text-3)', fontSize }} />
+        </Tooltip>
+      );
     if (work)
       return (
         <Tooltip title={work.text}>
@@ -2304,6 +2329,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         ? watchingWord(watchesForHeaderQ.data as WatchView[], selectedId)
         : null,
     [watchesForHeaderQ.data, selectedId],
+  );
+  // The same read for every row of the list: what each session a watch will resume says about the
+  // wait, so a row, the header and the strip cannot disagree about it either.
+  const watchingBySession = useMemo(
+    () => watchingSessions(Array.isArray(watchesForHeaderQ.data) ? (watchesForHeaderQ.data as WatchView[]) : []),
+    [watchesForHeaderQ.data],
   );
   // The project this conversation coordinates, if any — see projectBackLink. Read the merged row
   // so a fresh detail can enrich (or correct) the compact list snapshot during rolling upgrades.
@@ -5832,7 +5863,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const readyImages = images.filter((im) => im.status === 'done' && im.id);
 
   function showLocalStatus(): void {
-    const planRow = shownPlanUsage ? planUsageRows(shownPlanUsage)[0] : undefined;
+    const planRow = shownPlanUsage ? bindingPlanUsageRow(currentPlanUsageRows(shownPlanUsage)) : undefined;
     const rows = localStatusRows({
       surface: 'Web',
       runnerName: runner.displayName || runner.name,
@@ -6512,13 +6543,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const shownAccountsHere = shownAccountEngine ? accountsOf(runner, shownAccountEngine) : [];
   const shownAccountRow =
     shownAccountsHere.length >= 2
-      ? (shownAccountsHere.find((account) => account.id === shownAccount) ?? { id: 'default', name: undefined })
+      ? (shownAccountsHere.find((account) => account.id === shownAccount) ??
+        // An account the runner does not report runs on Default — under whatever Default is called.
+        shownAccountsHere.find((account) => account.id === 'default') ?? { id: 'default', name: undefined })
       : null;
-  const shownAccountLabel = shownAccountRow
-    ? shownAccountRow.id === 'default'
-      ? 'Default'
-      : shownAccountRow.name || `Account ${shownAccountRow.id}`
-    : null;
+  const shownAccountLabel = shownAccountRow ? accountNameOf(shownAccountRow) : null;
   const shownPlanUsage = shownPool
     ? (shownPoolAccount?.member.planUsage ?? null)
     : (shownProvider === 'codex' || shownProvider === 'claude') && shownAccount !== 'default'
@@ -6587,12 +6616,22 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // as the words, or off the server's answer when the window held none.
   const retryFromSession = retryText ? retry.sessionMessage : serverRetry?.sessionMessage;
   const resendFromSession = useMutation({
-    mutationFn: (sessionId: string) => resendSessionRetryMessage(sessionId, compatibleUuid()),
+    mutationFn: (sessionId: string) => resendSessionRetryMessage(sessionId),
     onSuccess: (_answer, sessionId) => qc.invalidateQueries({ queryKey: ['session', sessionId] }),
-    onError: (e: Error) => message.error(e.message || 'Could not re-send that message'),
+    // Said, not returned: an error toast stays until it is dismissed, and React Query waits on what
+    // `onError` hands back before the press stops being in flight. Returned, a press that failed — or
+    // whose answer was lost — held Retry disabled for as long as the toast stood, and pressing again
+    // is exactly how such a press is answered (§8 criterion 22): the server's key is the failure's.
+    onError: (e: Error) => void message.error(e.message || 'Could not re-send that message'),
   });
   const resendFromSessionMutate = resendFromSession.mutate;
   const sendMutate = send.mutate;
+  // §2.1, §8 criterion 19: a Retry already in flight is not offered a second time. The server is
+  // idempotent on the failed message, so a second click could not queue a second turn for one — but
+  // the owner's own message goes through the send door, where a second call would be a second turn,
+  // and either way the button must not promise an attempt it is not making. Both cards draw it
+  // disabled from this, and both handlers refuse a re-entry that reaches them anyway.
+  const retryInFlight = send.isPending || resendFromSession.isPending;
   const authErrorHelp: AuthErrorHelp = useMemo(
     () => ({
       provider: shownProvider,
@@ -6601,9 +6640,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       onRetry:
         retryText && !selectedTrashed && !selectedMissing
           ? retry.sessionMessage && selectedId
-            ? () => resendFromSessionMutate(selectedId)
-            : () => sendMutate({ content: retryText, images: [], attachmentIds: retry.attachmentIds })
+            ? () => {
+                if (retryInFlight) return;
+                resendFromSessionMutate(selectedId);
+              }
+            : () => {
+                if (retryInFlight) return;
+                sendMutate({ content: retryText, images: [], attachmentIds: retry.attachmentIds });
+              }
           : undefined,
+      retryDisabled: retryInFlight,
       retryText,
       // The provider gallery, not a preset vendor: the engine narrows it to a runtime, not to
       // whose key the user actually holds.
@@ -6617,6 +6663,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       runner.id,
       retry,
       retryText,
+      retryInFlight,
       selectedId,
       selectedTrashed,
       selectedMissing,
@@ -6671,15 +6718,21 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       onRetry:
         autoRetryText && !selectedTrashed && !selectedMissing
           ? retryFromSession && selectedId
-            ? () => resendFromSessionMutate(selectedId)
-            : () =>
+            ? () => {
+                if (retryInFlight) return;
+                resendFromSessionMutate(selectedId);
+              }
+            : () => {
+                if (retryInFlight) return;
                 sendMutate({
                   content: autoRetryText,
                   images: [],
                   attachmentIds: retry.attachmentIds,
                   source: 'autoRetry',
-                })
+                });
+              }
           : undefined,
+      retryDisabled: retryInFlight,
       retryText: autoRetryText,
       // The card's own Retry goes through `send`, so its refusal arrives in the same handler as a
       // typed message's. Handed to the card rather than left to the toast: it is the card's offer
@@ -6712,6 +6765,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       detailForSelected?.retryAt,
       detailForSelected?.retryAttempts,
       autoRetryText,
+      retryInFlight,
       retryFromSession,
       runConflict?.conflict,
       selectedTrashed,
@@ -7036,7 +7090,38 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       : [];
     return rows.length > 1 ? rows : [];
   };
+  // A task run whose model smart selection picked (docs/model-routing-design.md §9): the chip carries
+  // a ✦ on a light blue ground, and its menu opens on why — the decision's own first sentence — and
+  // on where to fix the model for every run. Only while the chip still shows the pick: a model
+  // changed here is this run's own. A session opened by hand has no route, and a run on an Agent
+  // without smart selection has one that was not applied, so both look as they always have.
+  const smartRoute = (() => {
+    const route = detailForSelected?.route;
+    return selected?.taskId && route?.applied && route.level && route.model === shownModel ? route : null;
+  })();
   const modelMenuItems: MenuProps['items'] = [
+    ...(smartRoute
+      ? [
+          {
+            key: 'smart-route',
+            type: 'group' as const,
+            label: (
+              <div className="composer-route-note">
+                <div className="composer-route-head">
+                  <span className="composer-model-spark">✦</span>
+                  Picked by smart selection · tier {smartRoute.level}
+                </div>
+                {smartRoute.reasons[0] && <div className="composer-route-reason">{smartRoute.reasons[0]}</div>}
+                <div className="composer-route-reason">
+                  Changing the model here applies to this run only. To fix the model for every run, set it on the
+                  task.
+                </div>
+              </div>
+            ),
+          },
+          { key: 'smart-route-divider', type: 'divider' as const },
+        ]
+      : []),
     // Only when there is somewhere to go: a second account with the same vendor, another endpoint on
     // the same CLI, or another of the runner's Codex accounts. One entry means no switch is possible,
     // and the row is left out rather than shown inert — the common case, one Claude sign-in and no
@@ -7190,6 +7275,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               ),
               onClick: () => pickFastMode(option.value),
             })),
+          },
+        ]
+      : []),
+    ...(smartRoute
+      ? [
+          { key: 'smart-route-open-divider', type: 'divider' as const },
+          {
+            key: 'open-task',
+            label: <span className="composer-route-open">Open task ›</span>,
+            onClick: () => navigate(`/tasks/${encodeId(selected.taskId)}`),
           },
         ]
       : []),
@@ -7456,7 +7551,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 // The selected row may have a fresher detail payload than the list poll. Use the
                 // merged row for both status surfaces so the banner and its list warning point at
                 // the same canonical obligation during that refresh gap.
-                const line = sessionLine(actionSession, openable);
+                const watching = sessionWatching(watchingBySession, s.id);
+                const line = sessionLine(actionSession, openable, watching);
                 const drag = swipeDrag?.id === s.id ? swipeDrag : null;
                 const swipeTx = drag
                   ? drag.dx
@@ -7525,7 +7621,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                       style={swipeTx ? { transform: `translateX(${swipeTx}px)` } : undefined}
                     >
                       <span className="session-icon">
-                        <StatusIcon session={actionSession} />
+                        <StatusIcon session={actionSession} watching={watching?.word} />
                       </span>
                       <div className="session-main">
                         <SessionTitleRow session={s} hoverTipOpen={hoverTipOpen} />
@@ -8984,6 +9080,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               }
               if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
+                // An Enter with something to send is the send's alone. The send empties the box
+                // before the key reaches the window, where a waiting card answers Enter on an
+                // empty field (CardHotkey) — so the same press also started a project. An Enter on
+                // an empty box still goes on to the card.
+                if (text.trim() || readyImages.length > 0) e.stopPropagation();
                 onSend();
               }
             }}
@@ -9161,10 +9262,17 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               >
                 <button
                   type="button"
-                  className="composer-model-chip"
+                  className={`composer-model-chip${smartRoute ? ' is-smart' : ''}`}
                   disabled={!configEditable}
-                  aria-label={`Model ${shownModelLabel}, effort ${shownEffortLabel}`}
+                  aria-label={`Model ${shownModelLabel}, effort ${shownEffortLabel}${
+                    smartRoute ? ', picked by smart selection' : ''
+                  }`}
                 >
+                  {smartRoute && (
+                    <span className="composer-model-spark" aria-hidden="true">
+                      ✦
+                    </span>
+                  )}
                   <span className="composer-model-name">{shownModelLabel}</span>
                   <span className="composer-model-effort">
                     {fastModeUsable && shownFastMode ? `${shownEffortLabel} · Fast` : shownEffortLabel}

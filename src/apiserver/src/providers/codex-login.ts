@@ -1,8 +1,8 @@
 import type { PlanUsageSnapshot } from '@orbit/shared';
 
 /**
- * The account a codex login pool runs on: the owner's own ChatGPT/Codex subscription login, signed in by
- * this server with the official codex CLI and held encrypted (migration 0323,
+ * The accounts a codex login pool holds: each one the owner's own ChatGPT/Codex subscription login, signed
+ * in by this server with the official codex CLI and held encrypted (migration 0323,
  * docs/codex-shared-pool-design.md §2.4–§2.5 in this direction). Nothing in this file holds a token for
  * longer than the call that read it, and nothing it builds carries one: what a response shows of an
  * account is its email and `maskedAccount`'s last four characters.
@@ -193,31 +193,41 @@ export function codexLoginView(
  * and only its owner can sign in again. The doors that write a provider onto a session or a task refuse
  * such a pool with this string (QueueService.accountPoolRefusal) — the same shape the member pools'
  * refusals take, and for the same reason: taken, the claim could only run on the runner's own login.
+ * `byOwner` says who reads it: the pool's owner, who acts on its page, or one of the people they added,
+ * who can only ask them to (2026-10-03 — a pool of somebody's own runs their sessions too).
  */
 export function codexLoginUnavailableReason(
   label: string,
   account: { email: string | null; state: string } | null,
+  byOwner = true,
 ): string | null {
   if (!account) {
-    return `the pool "${label}" has no ChatGPT account signed in — sign in on its page, or pick another provider`;
+    return byOwner
+      ? `the pool "${label}" has no ChatGPT account signed in — sign in on its page, or pick another provider`
+      : `the pool "${label}" has no ChatGPT account signed in — ask its owner to sign in, on the pool's page, or pick another provider`;
   }
   if (account.state !== 'ACTIVE') {
     const who = account.email ?? 'the account';
-    return `the ChatGPT account ${who} on the pool "${label}" was rejected by OpenAI — sign in again on its page, or pick another provider`;
+    return byOwner
+      ? `the ChatGPT account ${who} on the pool "${label}" was rejected by OpenAI — sign in again on its page, or pick another provider`
+      : `the ChatGPT account ${who} on the pool "${label}" was rejected by OpenAI — ask its owner to sign in again, on the pool's page, or pick another provider`;
   }
   return null;
 }
 
 /**
- * When work on a Codex pool of one's own can go again, for the brakes that hold work back rather than send
- * it (QueueService.accountPoolResumesAt): while the account's usage limit is reached — `spentUntil`, the
- * reset the Codex backend named, still ahead — at that reset; `now` otherwise. Null while the pool holds no
- * account or its account is signed out: nothing comes back by waiting, only by its owner signing in.
+ * codexLoginUnavailableReason, for a codex pool that may hold API keys beside its accounts (migration
+ * 0358): a session of it runs on a key when no account can, so the pool is refused only while no key of
+ * it is switched on and unrefused either — the same test a shared pool's refusal makes of its keys
+ * (shared-pool.ts sharedPoolUnavailableReason). The reason given is still the accounts': they are what
+ * such a pool's sessions run on first. `byOwner` as above.
  */
-export function loginPoolResumesAt(
-  account: { state: string; spentUntil: Date | null } | null,
-  now: Date,
-): Date | null {
-  if (!account || account.state !== 'ACTIVE') return null;
-  return account.spentUntil && account.spentUntil.getTime() > now.getTime() ? account.spentUntil : now;
+export function codexPoolUnavailableReason(
+  label: string,
+  account: { email: string | null; state: string } | null,
+  keys: ReadonlyArray<{ enabled: boolean; state: string }>,
+  byOwner = true,
+): string | null {
+  if (keys.some((key) => key.enabled && key.state === 'ACTIVE')) return null;
+  return codexLoginUnavailableReason(label, account, byOwner);
 }

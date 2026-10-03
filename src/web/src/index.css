@@ -46,6 +46,8 @@
   --warning-solid: #fa8c16;
   --warning-bg: #fff4e6;
   --warning-border: #ffd591;
+  /* what smart model selection would have picked, on a run that kept the agent's own model */
+  --route-shadow: #5b2fb8;
   /* high-contrast inverted button (dark CTA on light, light CTA on dark) */
   --invert-surface: #1f2329;
   --invert-surface-hover: #000000;
@@ -89,6 +91,7 @@
   --warning-solid: #e0902b;
   --warning-bg: rgba(250, 140, 22, 0.15);
   --warning-border: rgba(250, 140, 22, 0.38);
+  --route-shadow: #b69cf5;
   --invert-surface: #e6e8eb;
   --invert-surface-hover: #ffffff;
   --invert-text: #16171a;
@@ -963,6 +966,84 @@ body {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-2);
+}
+/* The Workspaces head's one action: Edit, then Done while the rows are arranged. It shows on hover
+   like the caret beside it (opacity, so the keyboard can still reach it), and always in the touch
+   drawer, which has no hover. */
+.tp-group-action {
+  margin-left: auto;
+  padding: 1px 6px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.tp-group-head:hover .tp-group-action,
+.tp-group-action:focus-visible,
+.tp-group-action.editing {
+  opacity: 1;
+}
+.tp-group-action:hover,
+.tp-group-action:focus-visible {
+  background: var(--bg-hover-strong);
+  color: var(--text-1);
+  outline: none;
+}
+.tp-group-action.editing {
+  color: var(--brand);
+  font-weight: 600;
+}
+@media (max-width: 960px) {
+  .tp-group-action {
+    opacity: 1;
+  }
+}
+/* A Workspace row while the list is arranged: it opens nothing, and the Runners page's drag handle
+   stands in the folder's column. */
+.tp-item.editing {
+  cursor: default;
+}
+.tp-workspace-handle {
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 28px;
+  margin: 0 -2px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-4);
+  font-size: 15px;
+  cursor: grab;
+  touch-action: none;
+}
+.tp-workspace-handle:hover,
+.tp-workspace-handle:focus-visible {
+  background: var(--bg-hover-strong);
+  color: var(--text-2);
+  outline: none;
+}
+.tp-workspace-handle:active {
+  cursor: grabbing;
+}
+.tp-workspace-handle:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+.tp-workspace-sortable.dragging {
+  position: relative;
+  z-index: 1;
+}
+.tp-workspace-sortable.dragging .tp-item {
+  background: var(--bg-raised);
+  box-shadow: 0 8px 24px rgba(31, 35, 41, 0.16), 0 0 0 1px var(--brand-border);
 }
 .tp-add {
   color: var(--text-3);
@@ -2309,6 +2390,15 @@ body {
   min-width: 0;
   font-size: 12.5px;
 }
+/* Whose windows these are, when the engine has several accounts: the one a new session starts on. */
+.rd-quota-next {
+  margin-bottom: 4px;
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .rd-quota-head {
   display: flex;
   justify-content: space-between;
@@ -2685,6 +2775,56 @@ body {
 .rd-set-row .ant-switch {
   margin-top: 2px;
   flex: none;
+}
+/* The engines smart selection may move a task run to (model routing §6), under the switch's own
+   explanation: one chip per engine, the agent's own ticked and fixed. Qualified with .rd-engines-list
+   so antd's single-class checkbox rules, injected after this stylesheet, do not win on order. */
+.rd-route-engines {
+  margin-top: 10px;
+}
+.rd-engines-label {
+  font-size: 12px;
+  color: var(--text-2);
+}
+.rd-engines-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.rd-engines-list .ant-checkbox-wrapper {
+  margin-inline-start: 0;
+  padding: 2px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.rd-engines-list .ant-checkbox-wrapper.is-on {
+  border-color: var(--brand-border);
+  background: var(--brand-tint);
+  color: var(--brand-strong);
+  font-weight: 600;
+}
+/* The agent's own engine cannot be unticked, but it is ticked: drawn as on, not as greyed out. */
+.rd-engines-list .ant-checkbox-wrapper-disabled.is-on {
+  cursor: default;
+}
+.rd-engines-list .ant-checkbox-wrapper-disabled.is-on .ant-checkbox-inner {
+  background: var(--brand);
+  border-color: var(--brand);
+}
+.rd-engines-list .ant-checkbox-wrapper-disabled.is-on .ant-checkbox-inner::after {
+  border-color: #fff;
+}
+.rd-engines-list .ant-checkbox-wrapper-disabled.is-on .ant-checkbox + span {
+  color: var(--brand-strong);
+}
+.rd-engines-note {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 6px;
+  line-height: 1.5;
 }
 /* Advanced disclosure — folded by default, but it has to admit when it hides something. */
 .rd-adv-toggle {
@@ -4782,8 +4922,9 @@ html[data-theme='dark'] .session-tag-chip {
   text-overflow: ellipsis;
 }
 /* Live status line (in place of a reply, while the agent works). Colour matches the
-   status glyph: blue = running, amber = waiting on you, grey = queued or a background
-   process the agent left up (which outlives the turn but isn't the agent working). */
+   status glyph: blue = running, amber = waiting on you, grey = queued, a background
+   process the agent left up (which outlives the turn but isn't the agent working), or a
+   watch that will resume the session (nothing is running, and nobody is being asked). */
 .session-preview.tone-running {
   color: var(--brand);
 }
@@ -4791,7 +4932,8 @@ html[data-theme='dark'] .session-tag-chip {
   color: var(--warning-solid);
 }
 .session-preview.tone-queued,
-.session-preview.tone-background {
+.session-preview.tone-background,
+.session-preview.tone-watching {
   color: var(--text-3);
 }
 /* Row actions overlay the right edge instead of taking layout space: while idle
@@ -5558,6 +5700,44 @@ html[data-theme='dark'] .session-tag-chip {
 }
 .composer-model-menu.ant-dropdown-menu {
   min-width: 200px;
+}
+/* A task run on smart selection's pick (model routing §9): a ✦ and a light blue ground, no wider
+   than before — why it is this model opens at the top of the menu. */
+.composer-model-chip.is-smart {
+  background: var(--brand-tint);
+}
+.composer-model-chip.is-smart.ant-dropdown-open {
+  background: var(--brand-tint-hover);
+}
+.composer-model-chip.is-smart .composer-model-name {
+  color: var(--brand-strong);
+}
+.composer-model-spark {
+  align-self: center;
+  color: var(--brand);
+  font-size: 12px;
+}
+.composer-route-note {
+  max-width: 320px;
+  white-space: normal;
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.composer-route-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 650;
+}
+.composer-route-reason {
+  margin-top: 6px;
+}
+.composer-route-open {
+  color: var(--brand-strong);
+  font-weight: 600;
 }
 /* Lightweight, borderless controls (Claude-style): text-only label, with a faint
    rounded background surfacing only on hover. The pill category is named via Tooltip. */
@@ -7829,6 +8009,20 @@ button.chat-jump-start:hover {
 .chat-quota-retry[data-primary='true']:hover {
   background: var(--brand-strong);
   color: #fff;
+}
+/* A Retry already in flight (docs/session-request-reply-contract.md §2.1, §8 criterion 19): the
+   button stays where it was and stops offering, so a double tap cannot read as two attempts.
+   Placed after the variants above so it wins their hovers at equal specificity. */
+.chat-authfix-retry:disabled,
+.chat-quota-retry:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.chat-authfix-retry:disabled:hover,
+.chat-quota-retry:disabled:hover {
+  border-color: var(--border);
+  background: var(--bg-raised);
+  color: var(--text-1);
 }
 .chat-quota-note {
   color: var(--text-3);
@@ -10320,6 +10514,67 @@ button.chat-jump-start:hover {
   background: var(--bg-hover);
   border-radius: 4px;
 }
+/* The Suggested tier (model routing §9): its picker with the coordinator's reason under it, and in
+   the picker each tier's dot, its model and effort, and the work it is for. */
+.tdp-field-stack {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.tdp-field-note {
+  margin-top: 1px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-3);
+}
+.tdp-hint-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.tdp-hint-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+.tdp-hint-dot.is-s {
+  background: var(--success-solid);
+}
+.tdp-hint-dot.is-m {
+  background: var(--brand);
+}
+.tdp-hint-dot.is-l {
+  background: var(--warning-solid);
+}
+.tdp-hint-dot.is-xl {
+  background: var(--error);
+}
+.tdp-hint-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  max-width: 340px;
+  white-space: normal;
+}
+.tdp-hint-option .tdp-hint-dot {
+  margin-top: 6px;
+}
+.tdp-hint-option-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.tdp-hint-option.is-none .tdp-hint-option-name {
+  font-weight: 400;
+  color: var(--text-3);
+}
+.tdp-hint-option-detail {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
 /* 「Start at」editor: the label keeps the shared 76px gutter, everything the control needs —
    input, its two actions, and the line under them — stacks in the remaining column. */
 .tdp-schedule {
@@ -11347,6 +11602,69 @@ button.chat-jump-start:hover {
   font-size: 11px;
   color: var(--text-3);
   margin-top: 1px;
+}
+/* A run's routing (model routing §9): the tier smart selection put it on — amber when a failed run
+   moved it up — or, where the Agent has not turned it on, the purple line saying what it would
+   have picked. Either opens the Why under the row. */
+.tdp-route-tag {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 0 5px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--brand-tint);
+  color: var(--brand-strong);
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 650;
+  line-height: 16px;
+  vertical-align: 1px;
+  cursor: pointer;
+}
+.tdp-route-tag.is-up {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.tdp-route-would {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--route-shadow);
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+.tdp-route-would:hover {
+  text-decoration: underline;
+}
+.tdp-route-why {
+  margin: 6px 0 2px 26px;
+  padding: 10px 12px;
+  border: 1px solid var(--brand-border);
+  border-radius: 9px;
+  background: var(--brand-tint);
+}
+.tdp-route-why-title {
+  margin-bottom: 5px;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--text-1);
+}
+.tdp-route-why ul {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--text-2);
+}
+.tdp-route-why-foot {
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--text-3);
 }
 .tdp-dot {
   width: 8px;
@@ -12871,11 +13189,16 @@ button.chat-jump-start:hover {
 .re-card + .re-card {
   margin-top: 10px;
 }
-/* An offline runner's rows describe its last check-in, not its present state. */
+/* An offline runner's rows describe its last check-in, not its present state: everything in them but
+   an account's rename mark, which asks nothing of the machine — a name is kept in Orbit — and so stays
+   as live as it is. Faded part by part, since nothing inside a faded element can be less faded. */
 .re-card.offline {
   background: var(--bg-subtle);
 }
-.re-card.offline .re-row {
+.re-card.offline .re-row > :not(.re-id),
+.re-card.offline .re-id > :not(.re-id-main),
+.re-card.offline .re-id-main > :not(.re-name):not(.re-name-input),
+.re-card.offline .re-name > :not(.re-rename) {
   opacity: 0.62;
 }
 .re-head {
@@ -13003,6 +13326,59 @@ button.chat-jump-start:hover {
     display: none;
   }
 }
+/* A runner's engines and their accounts (RunnerEngines). Each row's quota is every window of its
+   login with when it resets, under a status that says whether the login can run now — the account
+   pools' login rows, which share these classes and keep the layout above. The status is sized for
+   the longest thing it says, "Spent · resets Mon 19:00"; the last column holds the widest pair of
+   actions, `+ Account` beside `Sign in` on a one-account row that is signed out, Re-sign in and
+   Remove being marks narrower than either. On a narrow card the quota's bar gives way before the
+   name does: the name keeps 137px, an engine's name on one line clear of the status beside it. */
+.re-runner-card .re-row {
+  grid-template-columns: minmax(137px, 1fr) 168px minmax(128px, 190px) 160px;
+  /* Against the top: the quota stacks a window per line, and the name, status and actions stay level
+     with the first of them. */
+  align-items: start;
+}
+/* A group's head has no status or quota of its own — its accounts do — so its line runs the width
+   of the row, and its one action sits level with the name it belongs to. */
+@media (min-width: 701px) {
+  .re-runner-card .re-row.re-grp {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+  /* Too narrow for those floors (665px, 663 inside the border), as above: name and status, then
+     quota and actions. */
+  @container re-card (max-width: 662px) {
+    .re-runner-card .re-row {
+      grid-template-columns: minmax(0, 1fr) max-content;
+    }
+    .re-runner-card .re-row > :nth-child(2) {
+      justify-self: end;
+    }
+    .re-runner-card .re-quota {
+      margin-left: 38px;
+    }
+  }
+}
+@media (max-width: 700px) {
+  /* Name, status and the way back in on the first line, and the quota a line of its own under the
+     name, bars and resets kept — the account pools' rows on a phone. A long status gives way with an
+     ellipsis before the name does; what it would have said is in the resets under it. */
+  .re-runner-card .re-row {
+    grid-template-columns: minmax(96px, 1fr) minmax(0, max-content) max-content;
+    gap: 8px 10px;
+  }
+  .re-runner-card .re-row > .re-act {
+    grid-row: 1;
+    grid-column: 3;
+  }
+  .re-runner-card .re-quota {
+    display: block;
+    grid-row: 2;
+    grid-column: 1 / -1;
+    margin-left: 38px;
+  }
+}
 .re-id {
   display: flex;
   align-items: center;
@@ -13050,12 +13426,45 @@ button.chat-jump-start:hover {
   font-size: 11px;
   color: var(--text-4);
 }
+/* One window under another, each with when it resets — the account pools' login rows. */
+.re-window + .re-window {
+  margin-top: 8px;
+}
+.re-reset {
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+/* A reading older than the runner's reads: the numbers above are as of then, not now. A fact in the
+   resets' grey, not a warning — a runner reads an engine no workspace defaults to only while one of
+   its sessions runs, so an idle Codex login's reading is often this old with nothing wrong. */
+.re-stale {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.re-status {
+  min-width: 0;
+}
+.re-status .ant-tag {
+  max-width: 100%;
+  margin-inline-end: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
 .re-act {
   display: flex;
   justify-content: flex-end;
-  /* An account's row holds two actions — sign in, and off this machine — and a group head one;
+  /* An account's row holds two actions — off this machine, and sign in — and a group head one;
      one child is a no-op. */
   gap: 8px;
+}
+/* Re-sign in and Remove are marks, grey at rest. Remove turns red only under the pointer, like the
+   account pools' sign-out mark: red on a row that is fine reads as something wrong with it. */
+.re-act .re-icon.ant-btn:not(:disabled) {
+  color: var(--text-3);
 }
 /* Codex with more than one account: the engine's row heads a group, and each account is a row
    under it. The head keeps what the engine owns — binary, version, updates — and says how many. */
@@ -13104,7 +13513,7 @@ button.chat-jump-start:hover {
   bottom: auto;
   height: 28px;
 }
-/* DEFAULT: the machine's own ~/.codex, the one a terminal's `codex` shares. */
+/* A mark beside a name: NEXT, where the next session starts — on a pool, or among a runner's accounts. */
 .re-chip {
   display: inline-block;
   margin-left: 6px;
@@ -13116,6 +13525,54 @@ button.chat-jump-start:hover {
   font-weight: 600;
   line-height: 16px;
   vertical-align: 1px;
+}
+/* An account's rename mark, after its name and its marks: grey at rest like the row's other marks. */
+.re-rename {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-left: 3px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-3);
+  font-size: 12px;
+  vertical-align: -4px;
+  cursor: pointer;
+}
+.re-rename:hover {
+  color: var(--text-1);
+  background: var(--fill-muted);
+}
+/* The name being renamed: the session title's underlined input (.workspace-name-input), at the
+   name's own size, its width set from the unseen twin below so the underline hugs the text. */
+.re-name-input {
+  display: block;
+  box-sizing: content-box;
+  max-width: 100%;
+  min-width: 3ch;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-bottom: 1px solid var(--brand);
+  background: transparent;
+  outline: none;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.re-name-mirror {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  visibility: hidden;
+  white-space: pre;
+  font-size: 13px;
+  font-weight: 600;
 }
 /* Two slots, one account: said under the second slot's row, in the second slot's own words, with
    the way out beside it. Indented past the rail so it reads as that row's and not the card's. */
@@ -13139,15 +13596,14 @@ button.chat-jump-start:hover {
   display: flex;
   align-items: center;
   gap: 10px;
+  /* The sign-in below starts flush in a panel (.re-panel .rsi), so the gap between them is this row's. */
+  margin-bottom: 10px;
 }
 .re-add-label {
   flex: none;
   width: 118px;
   font-size: 12.5px;
   color: var(--text-2);
-}
-.re-add-hint {
-  margin: 10px 0;
 }
 
 /* An install or a sign-in in flight, opened under the row it belongs to. */
@@ -13327,6 +13783,11 @@ button.chat-jump-start:hover {
 .pool-gauge-pct {
   font-variant-numeric: tabular-nums;
   color: var(--text-2);
+}
+/* Its tightest window at 90% or more: orange with its bar, as the composer's quota turns. */
+.pool-gauge-pct.near-limit {
+  color: var(--warning);
+  font-weight: 600;
 }
 .pool-gauge.spent {
   color: var(--warning);
@@ -13671,6 +14132,188 @@ button.chat-jump-start:hover {
   color: var(--text-3);
 }
 
+/* ── A Codex pool by who reads it: its owner, or somebody they added (docs/mocks/account-pool-access) ── */
+/* The subtitle: who can use it first, a shade darker. */
+.pool-sub {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.pool-sub b {
+  color: var(--text-2);
+  font-weight: 500;
+}
+/* Whose sessions an account runs, after its fingerprint: a ChatGPT account its owner's alone, a key
+   everybody's. */
+.pool-runs-for {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.pool-runs-for.all {
+  color: var(--success);
+}
+.pool-runs-for .anticon {
+  font-size: 11px;
+}
+/* The owner's ChatGPT accounts, as somebody they added sees them: one locked line. */
+.pool-card .re-row.pool-row-locked {
+  grid-template-columns: minmax(0, 1fr);
+  background: var(--bg-subtle);
+}
+.pool-row-locked .re-name {
+  color: var(--text-2);
+}
+.pool-lock-tile {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px dashed var(--border);
+  border-radius: 7px;
+  background: var(--fill-muted);
+  color: var(--text-3);
+  font-size: 13px;
+}
+/* Who can use it: the switch with what it means beside it, then each person, the one rule, and why the
+   owner's ChatGPT accounts are never anybody else's. */
+.who-card .re-head {
+  gap: 10px;
+}
+.who-mode {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.who-mode:last-child {
+  border-bottom: 0;
+}
+.who-mode-h {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-3);
+}
+.who-card .pool-rule {
+  border-top: 1px solid var(--border-subtle);
+}
+.pool-runs {
+  color: var(--text-3);
+}
+.pool-runs.all {
+  color: var(--text-2);
+}
+.who-foot {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-subtle);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-3);
+}
+.who-foot .anticon {
+  flex: none;
+  margin-top: 4px;
+  font-size: 12px;
+}
+.who-foot b {
+  color: var(--text-2);
+  font-weight: 600;
+}
+/* Shared with people, and no API key yet: none of them can start a session, and what fixes it. */
+.who-warn {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 14px;
+  border-top: 1px solid var(--warning-border);
+  background: var(--warning-bg);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+.who-warn > .anticon {
+  flex: none;
+  font-size: 15px;
+  color: var(--warning-solid);
+}
+.who-warn b {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.who-warn .ant-btn {
+  flex: none;
+  margin-left: auto;
+}
+.pool-share-emails {
+  width: 100%;
+}
+/* "Add account": each kind a card that is its own radio, what it runs said on it. */
+.add-kinds {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+.add-kinds .ant-radio-wrapper.add-kind {
+  display: flex;
+  align-items: flex-start;
+  margin-inline-end: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-raised);
+}
+.add-kinds .ant-radio-wrapper.add-kind.ant-radio-wrapper-checked {
+  border-color: var(--brand);
+  background: var(--brand-tint);
+}
+.add-kinds .add-kind .ant-radio {
+  align-self: flex-start;
+  margin-top: 3px;
+}
+.add-kinds .add-kind .ant-radio-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding-inline: 12px 0;
+}
+.add-kind-t {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.add-kind-s {
+  display: block;
+  margin-top: 2px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+.add-kind-s b {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.add-kind-key {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #6b7280, #4b5563);
+  color: #fff;
+  font-size: 13px;
+}
+
 /* ── "Add a key" / "Replace key" ─────────────────────────────────────────────── */
 .pa-lead {
   font-size: 13px;
@@ -13768,6 +14411,12 @@ button.chat-jump-start:hover {
 .pool-login-window + .pool-login-window {
   margin-top: 8px;
 }
+/* The sign-out mark rests grey and turns red only under the pointer: red on a row that is fine read
+   as something wrong with it. Weightier than antd's resting colour, lighter than its :hover and
+   :active, which keep the danger button's own red. */
+.pool-row .pool-signout.ant-btn {
+  color: var(--text-3);
+}
 .pool-login-reset {
   margin-top: 3px;
   font-size: 11px;
@@ -13827,7 +14476,7 @@ button.chat-jump-start:hover {
 }
 @media (max-width: 700px) {
   /* The quota is what an account's row is about: a line of its own under the name, bars and resets
-     kept — unlike a Claude account's, whose gauge waits for a wider window. */
+     kept — as a runner's accounts have it on Providers. */
   .pool-row .re-quota.pool-login-quota {
     display: block;
     grid-column: 1 / -1;
@@ -16824,6 +17473,14 @@ button.chat-jump-start:hover {
   margin: 2px 0 0 22px;
   color: var(--warning);
   font-size: 12px;
+}
+/* A wake written into the running turn: how far it got, in a steer bubble's own words and tone
+   (.chat-steer-state). */
+.bgwake-steer {
+  margin: 2px 0 0 22px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-3);
 }
 /* Still waiting behind the running turn (WorkspaceView's queued tail): dashed like a queued
    message, with the queue's own status line under it. */

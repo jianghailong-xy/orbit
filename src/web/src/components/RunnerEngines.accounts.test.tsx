@@ -113,8 +113,10 @@ function mount(runners: Runner[]) {
 
 const rows = (el: ParentNode, selector: string) => [...el.querySelectorAll<HTMLElement>(selector)];
 const tags = (row: Element) => rows(row, '.ant-tag').map((tag) => tag.textContent?.trim());
+/** A button's words, or the name of a mark that has none (Re-sign in, Remove). */
+const labelOf = (b: Element) => b.textContent?.trim() || b.getAttribute('aria-label');
 const button = (el: ParentNode, label: string) => {
-  const found = rows(el, 'button').find((b) => b.textContent?.trim() === label);
+  const found = rows(el, 'button').find((b) => labelOf(b) === label);
   if (!found) throw new Error(`no "${label}" button in ${el.textContent}`);
   return found as HTMLButtonElement;
 };
@@ -136,8 +138,9 @@ describe('a runner with two Codex accounts', () => {
     const accounts = rows(page, '.re-acct');
     expect(accounts).toHaveLength(2);
     // One tag per account row, and they are that account's own: Work is signed out even though
-    // the engine — whose `auth` is Default's answer — says signed in.
-    expect(accounts.map(tags)).toEqual([['Signed in'], ['Signed out']]);
+    // the engine — whose `auth` is Default's answer — says signed in. Default is in with room left
+    // in the one window it reported, so it can take a session.
+    expect(accounts.map(tags)).toEqual([['Available'], ['Signed out']]);
 
     const [head] = rows(page, '.re-grp');
     expect(head).toBeDefined();
@@ -145,10 +148,10 @@ describe('a runner with two Codex accounts', () => {
     // each account's, not the engine's.
     expect(head.querySelector('.re-name')?.textContent).toBe('Codex');
     expect(tags(head)).toEqual([]);
-    expect(head.querySelector('.re-quota')?.textContent).toBe('');
-    expect(head.querySelector('.re-meta')?.textContent).toContain('2 accounts');
-    expect(button(head, '+ Account')).toBeTruthy();
-    expect(head.textContent).not.toContain('Re-sign in');
+    expect(head.querySelector('.re-quota')).toBeNull();
+    // It counts the accounts that could take a session now: Work, signed out, is not one.
+    expect(head.querySelector('.re-meta')?.textContent).toBe('0.156.0 · 1 of 2 accounts available');
+    expect(rows(head, 'button').map(labelOf)).toEqual(['+ Account']);
 
     // The other engines are untouched rows, each still with its own tag.
     const engineRows = rows(page, '.re-row:not(.re-acct)');
@@ -165,8 +168,10 @@ describe('a runner with two Codex accounts', () => {
     const page = mount([runner({ accounts: [DEFAULT, WORK] })]);
     const [defaultRow, workRow] = rows(page, '.re-acct');
 
-    expect(defaultRow.querySelector('.re-name')?.textContent).toBe('DefaultDEFAULT');
-    expect(defaultRow.querySelector('.re-chip')?.textContent).toBe('DEFAULT');
+    // Its name says it is Default. The mark says where a session nobody picked an account for
+    // starts — Default here, Work being signed out.
+    expect(defaultRow.querySelector('.re-name')?.textContent).toBe('DefaultNEXT');
+    expect(defaultRow.querySelector('.re-chip')?.textContent).toBe('NEXT');
     expect(defaultRow.querySelector('.re-meta')?.textContent).toBe('~/.codex · account cxa1_9f3a41c7…');
     expect(defaultRow.querySelector('.re-meta')?.getAttribute('title')).toBe('/root/.codex');
 
@@ -209,7 +214,7 @@ describe('a runner with two Codex accounts', () => {
       expect(workRow.querySelector('.re-quota')?.textContent).toBe('5h limit8%');
       expect(bar(workRow)).toBe('8%');
       // The group's head speaks for neither account.
-      expect(rows(page, '.re-grp')[0].querySelector('.re-quota')?.textContent).toBe('');
+      expect(rows(page, '.re-grp')[0].querySelector('.re-quota')).toBeNull();
       act(() => root?.unmount());
       host?.remove();
       root = host = null;
@@ -251,23 +256,39 @@ describe('a runner with two Codex accounts', () => {
     expect(loginPosts()).toEqual([{ engine: 'codex', account: 'default' }]);
   });
 
-  it('adds an account under the name typed for it, and not before there is one', async () => {
+  it('adds an account the moment + Account is pressed, under a name it picks, and never under none', async () => {
     const page = mount([runner({ accounts: [DEFAULT, WORK] })]);
 
     await click(button(rows(page, '.re-grp')[0], '+ Account'));
-    const start = button(page, 'Sign in to Codex');
-    // A blank name would read as no account at all — the runner's own login.
-    expect(start.disabled).toBe(true);
-
+    // Default and Work are the machine's first two accounts, so this one is its third.
     const input = page.querySelector<HTMLInputElement>('.re-add input')!;
-    await act(async () => {
-      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
-      set.call(input, '  Personal ');
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    expect(button(page, 'Sign in to Codex').disabled).toBe(false);
+    expect(input.value).toBe('Account 3');
+    expect(loginPosts()).toEqual([{ engine: 'codex', accountName: 'Account 3' }]);
+    expect(page.textContent).toContain('Starting sign-in on the runner…');
+
+    // Cancelled, the panel offers the sign-in again — under whatever name is typed, and not under a
+    // blank one, which would read as no account at all: the runner's own login.
+    const answer = apiMock.getMockImplementation()!;
+    apiMock.mockImplementation(async (path: string, options?: { method?: string }) =>
+      path.endsWith('/login') && options?.method === 'DELETE'
+        ? { status: null, engine: null, url: null, userCode: null, message: null, account: null }
+        : answer(path, options),
+    );
+    await click(button(page, 'Cancel'));
+    const type = async (value: string) =>
+      act(async () => {
+        const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+        set.call(input, value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    await type('  ');
+    expect(button(page, 'Sign in to Codex').disabled).toBe(true);
+    await type('  Personal ');
     await click(button(page, 'Sign in to Codex'));
-    expect(loginPosts()).toEqual([{ engine: 'codex', accountName: 'Personal' }]);
+    expect(loginPosts()).toEqual([
+      { engine: 'codex', accountName: 'Account 3' },
+      { engine: 'codex', accountName: 'Personal' },
+    ]);
   });
 
   it('lets a folded card say an account still needs signing in', () => {
@@ -291,8 +312,8 @@ describe('a runner with one Codex account', () => {
       expect(rows(page, '.re-acct')).toHaveLength(0);
       expect(rows(page, '.re-grp')).toHaveLength(0);
       const codexRow = rows(page, '.re-row').find((row) => row.querySelector('.re-name')?.textContent === 'Codex')!;
-      expect(tags(codexRow)).toEqual(['Signed in']);
-      expect(codexRow.querySelector('.re-meta')?.textContent).toBe('codex 0.156.0');
+      expect(tags(codexRow)).toEqual(['Available']);
+      expect(codexRow.querySelector('.re-meta')?.textContent).toBe('0.156.0');
       // Not the group's: it is how one account gets to two, so the Codex row holds it too.
       expect(button(codexRow, '+ Account')).toBeTruthy();
       expect(codexRow.textContent).not.toContain('DEFAULT');

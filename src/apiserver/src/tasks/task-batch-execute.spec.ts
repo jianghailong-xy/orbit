@@ -4,7 +4,7 @@ import {
   BATCH_EXECUTE_DISPATCH_CONCURRENCY,
   TasksService,
 } from './tasks.service';
-import { fakeReceiptStore } from './task-run-receipt-fake';
+import { fakeReceiptStore, withReceiptStore } from './task-run-receipt-fake';
 
 const flush = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
 
@@ -18,7 +18,8 @@ async function waitUntil(predicate: () => boolean, message: string): Promise<voi
 
 function makeService(
   count: number,
-  sessions: { taskId: string; status: string }[] = [],
+  /** `wakes`: the session is parked with something that will wake it (a job, a watch, a wake-up). */
+  sessions: { taskId: string; status: string; wakes?: boolean }[] = [],
   /** Ids the fixture answers `task.findFirst` for with null — a task that has been deleted. */
   gone: ReadonlySet<string> = new Set(),
 ) {
@@ -33,9 +34,9 @@ function makeService(
     children: [] as Array<{ id: string }>,
     assignee: { id: `workspace-${index}`, runnerId: 'runner-1' },
   }));
-  const prisma = {
-    // Every run door opens its receipt (0137) before anything else.
-    ...fakeReceiptStore(),
+  // Every run door opens its receipt (0137) before anything else — composed with this double's
+  // own raw read rather than spread under it, so both keep being answered.
+  const prisma = withReceiptStore({
     task: {
       findMany: async () => tasks,
       // A failed item is classified against its own artifact before it is called failed (H2F), and
@@ -44,24 +45,26 @@ function makeService(
         (gone.has(where.id) ? null : tasks.find((t: { id: string }) => t.id === where.id) ?? null),
     },
     taskDependency: { findMany: async () => [] },
-    // Honour the status filter the caller asks for, so a test can assert *which* session
-    // states batchExecute counts as "already running" rather than trusting a fixed stub.
     // A paused run's delivery is read by its own turn key before it is written (H2F).
     conversationTurn: { findUnique: async () => null },
     session: {
       // The door reads THIS request's own Session by id before it writes (H2F).
       findUnique: async () => null,
-      // The id travels with the taskId now: "already running" is not the answer when the run that
-      // is already running is THIS PRESS'S OWN, and only the id can tell the two apart (H2F).
-      findMany: async (args: { where: { status: { in: string[] } } }) =>
-        sessions
-          .filter((s) => args.where.status.in.includes(s.status))
-          .map((s, index) => ({
-            taskId: s.taskId,
-            id: `00000000-0000-4000-8000-00000000000${index}`,
-          })),
     },
-  } as never;
+    // The one raw read the classification makes: the work sessions carrying the batch's tasks
+    // (sessions/task-work-carrier.ts). Answered by that rule over the fixture's sessions, so a test
+    // can assert *which* sessions batchExecute counts as "already running" rather than trusting a
+    // fixed stub. The id travels with the taskId: "already running" is not the answer when the run
+    // that is already running is THIS PRESS'S OWN, and only the id can tell the two apart (H2F).
+    $queryRaw: async () =>
+      sessions
+        .filter((s) => s.status === 'PENDING' || s.status === 'RUNNING'
+          || (s.status === 'AWAITING_INPUT' && s.wakes === true))
+        .map((s, index) => ({
+          taskId: s.taskId,
+          id: `00000000-0000-4000-8000-00000000000${index}`,
+        })),
+  }) as never;
   return new TasksService(prisma, {} as never, {} as never);
 }
 
@@ -115,19 +118,21 @@ test('batchExecute bounds session initialization independently of runtime maxCon
 });
 
 /**
- * Bulk Run and the single-task Run must mean the same thing. Only PENDING/RUNNING
- * (SINGLE_RUN_DEDUP) counts as already-running: a session parked at AWAITING_INPUT /
- * INTERRUPTED is idle, and the row's Run button, the Ready filter (runnableTaskWhere) and
- * the detail panel all offer such a task as runnable, so the batch has to dispatch it too.
- * Skipping it here made bulk Run silently no-op on exactly the tasks the list showed as ready.
+ * Bulk Run and the single-task Run must mean the same thing. Already-running is a work session
+ * CARRYING the task: PENDING/RUNNING, or parked at AWAITING_INPUT with something that will wake it.
+ * A session parked with nothing to wake it, or INTERRUPTED, is idle, and the row's Run button, the
+ * Ready filter (manualRunnableTaskSql) and the detail panel all offer such a task as runnable, so
+ * the batch has to dispatch it too. Skipping it here made bulk Run silently no-op on exactly the
+ * tasks the list showed as ready — and dispatching the waiting one handed its agent the task brief.
  */
-test('batchExecute dispatches parked sessions and skips only in-flight ones', async () => {
-  const service = makeService(5, [
+test('batchExecute dispatches idle parked sessions and skips the ones still carrying their task', async () => {
+  const service = makeService(6, [
     { taskId: 'task-0', status: 'AWAITING_INPUT' },
     { taskId: 'task-1', status: 'INTERRUPTED' },
     { taskId: 'task-2', status: 'PENDING' },
     { taskId: 'task-3', status: 'RUNNING' },
     // task-4 has no session at all.
+    { taskId: 'task-5', status: 'AWAITING_INPUT', wakes: true },
   ]);
   const dispatched: string[] = [];
   (service as unknown as Record<string, unknown>).planWorkspaceRun =
@@ -141,7 +146,7 @@ test('batchExecute dispatches parked sessions and skips only in-flight ones', as
 
   const result = await service.batchExecute(
     'owner-1',
-    Array.from({ length: 5 }, (_, index) => `task-${index}`),
+    Array.from({ length: 6 }, (_, index) => `task-${index}`),
   );
 
   assert.deepEqual(dispatched, ['task-0', 'task-1', 'task-4']);
@@ -152,6 +157,7 @@ test('batchExecute dispatches parked sessions and skips only in-flight ones', as
     // is somebody else's, so the answer says whose (H2F).
     { id: 'task-2', title: 'Task 2', reason: 'Already running or queued (session 1VgEh72lXvTXkG)' },
     { id: 'task-3', title: 'Task 3', reason: 'Already running or queued (session 1VgEh72lXvTXkH)' },
+    { id: 'task-5', title: 'Task 5', reason: 'Already running or queued (session 1VgEh72lXvTXkI)' },
   ]);
 });
 
