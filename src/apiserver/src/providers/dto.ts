@@ -4,12 +4,14 @@ import { IsPublicId } from '../common/public-id';
 // Custom providers borrow one of the configurable runtimes: `claude` for Anthropic-compatible endpoints,
 // `codex` for endpoints that serve the OpenAI Responses API (OpenAI itself; codex dropped Chat
 // Completions in February 2026, so a Chat Completions-only endpoint cannot run on it), `kimi` for
-// Moonshot's own API. The runner translates a codex provider's OPENAI_BASE_URL into codex
-// `-c model_providers.*` overrides (wire_api="responses"), and a kimi provider's key into the CLI's
-// KIMI_MODEL_* provider.
-// This is the runtime a row *borrows*; `kimi` remains reserved as a provider SLUG (provider-slug.ts),
-// so a configured row can run on the Kimi CLI without claiming the built-in engine's identity.
-const RUNTIMES = ['claude', 'codex', 'kimi'];
+// Moonshot's own API, `antigravity` for Google's Gemini API. The runner translates a codex provider's
+// OPENAI_BASE_URL into codex `-c model_providers.*` overrides (wire_api="responses"), a kimi
+// provider's key into the CLI's KIMI_MODEL_* provider, and hands an antigravity provider's key and
+// endpoint to agy as GEMINI_API_KEY / GOOGLE_GEMINI_BASE_URL.
+// This is the runtime a row *borrows*; `kimi` and `antigravity` remain reserved as provider SLUGS
+// (provider-slug.ts), so a configured row can run on their CLIs without claiming the built-in
+// engine's identity.
+const RUNTIMES = ['claude', 'codex', 'kimi', 'antigravity'];
 
 export class CreateModelProviderDto {
   /** Preferred dispatch identifier. Normally omitted: the server derives one from the preset or
@@ -39,7 +41,8 @@ export class TestModelProviderDto {
   /** Model to probe with; the picker sends the default (or the first) model. */
   @IsOptional() @IsString() model?: string;
   /** Which dialect to probe: claude → Anthropic Messages, codex → OpenAI Responses, kimi → OpenAI
-   *  Chat Completions — the endpoint that runtime's CLI will actually call. */
+   *  Chat Completions, antigravity → Gemini generateContent — the endpoint that runtime's CLI will
+   *  actually call. */
   @IsOptional() @IsIn(RUNTIMES) runtime?: string;
 }
 

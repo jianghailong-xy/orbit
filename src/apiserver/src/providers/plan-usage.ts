@@ -58,7 +58,13 @@ export type SubscriptionUsageRefusal = 'NOT_CLAUDE_RUNTIME' | 'NOT_SUBSCRIPTION_
  * without being chosen.
  */
 export function subscriptionUsageRefusal(row: UsageProbeRow, apiKey: string): SubscriptionUsageRefusal | null {
-  if (row.runtime === AgentProvider.CODEX || row.runtime === AgentProvider.KIMI) return 'NOT_CLAUDE_RUNTIME';
+  if (
+    row.runtime === AgentProvider.CODEX ||
+    row.runtime === AgentProvider.KIMI ||
+    row.runtime === AgentProvider.ANTIGRAVITY
+  ) {
+    return 'NOT_CLAUDE_RUNTIME';
+  }
   if (!apiKey.trim().startsWith(OAUTH_TOKEN_PREFIX)) return 'NOT_SUBSCRIPTION_TOKEN';
   try {
     if (new URL(row.baseUrl).hostname.toLowerCase() === ANTHROPIC_HOST) return null;

@@ -36,7 +36,8 @@ export interface ConfiguredProvider {
    *  withPreset(). */
   presetSlug?: string | null;
   /** True when this vendor's endpoint is the runtime CLI's own (Anthropic for claude, OpenAI for
-   *  codex), so the runner's live catalogue describes it and `models` is only a fallback. */
+   *  codex, Gemini for antigravity), so the runner's live catalogue describes it and `models` is
+   *  only a fallback. */
   modelsFromRuntime?: boolean;
   /** Subscription quota for *this row's credential*, when it has one to report (an Anthropic
    *  endpoint reached with a subscription token). Null for a metered API key or a third-party
@@ -57,11 +58,13 @@ export const runtimeForProvider = (
   configured?: ConfiguredProvider[] | null,
 ): AgentProvider => {
   const custom = configuredProvider(provider, configured);
-  // Configured providers borrow Claude, Codex or Kimi; invalid/legacy runtime values use the same
-  // safe Claude fallback as the backend. First-class Kimi is also the literal built-in slug below.
+  // Configured providers borrow Claude, Codex, Kimi or Antigravity; invalid/legacy runtime values
+  // use the same safe Claude fallback as the backend. First-class Kimi and Antigravity are also the
+  // literal built-in slugs below.
   if (custom) {
     if (custom.runtime === AgentProvider.CODEX) return AgentProvider.CODEX;
     if (custom.runtime === AgentProvider.KIMI) return AgentProvider.KIMI;
+    if (custom.runtime === AgentProvider.ANTIGRAVITY) return AgentProvider.ANTIGRAVITY;
     return AgentProvider.CLAUDE;
   }
   const value = provider;
@@ -206,10 +209,10 @@ export const modelOptionsForProvider = (
     // …except when the vendor IS the runtime's own endpoint: there the runner's probe of the
     // installed CLI is more current than any list we ship, so it leads and the stored list is
     // the fallback. The catalogue is read under the borrowed runtime's key, never the slug, so
-    // an OpenAI provider reads Codex models and can't land in Claude's namespace.
+    // an OpenAI provider reads Codex models (and a Gemini one agy's) and can't land in Claude's
+    // namespace.
     if (custom.modelsFromRuntime) {
-      const runtime =
-        custom.runtime === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;
+      const runtime = runtimeForProvider(provider, configured);
       const live = catalogOptionsForProvider(runtime, modelCatalog);
       if (live) return live;
     }
@@ -261,8 +264,7 @@ export const defaultModelForProvider = (
   // A configured provider owns a separate model space even though it borrows a built-in runtime
   // for execution. Never let the underlying Runtime's Claude/Codex default leak into that space.
   if (custom) {
-    const customRuntime =
-      custom.runtime === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;
+    const customRuntime = runtimeForProvider(provider, configured);
     // Same precedence as the option list: for a vendor the runtime CLI speaks to natively, what
     // that CLI reports as its default beats the id we shipped in the preset.
     if (custom.modelsFromRuntime) {
@@ -311,11 +313,7 @@ export const livePinnedModel = (
   if (!model) return !custom && provider === AgentProvider.ANTIGRAVITY ? undefined : model;
   if (!custom && provider === AgentProvider.OPENCODE) return model;
   if (custom && !custom.modelsFromRuntime) return model;
-  const runtime = custom
-    ? custom.runtime === AgentProvider.CODEX
-      ? AgentProvider.CODEX
-      : AgentProvider.CLAUDE
-    : runtimeForProvider(provider, configured);
+  const runtime = runtimeForProvider(provider, configured);
   return isRetiredModel(
     model,
     catalogOptionsForProvider(runtime, modelCatalog),

@@ -114,13 +114,15 @@ const ENGINE_LABELS: Record<string, string> = {
 
 /** One line about a provider's endpoint, for the gallery card and the connect form's identity bar.
  *  Claude and Codex borrow a CLI to speak a dialect the vendor exposes for it, so the dialect is
- *  the useful fact. Kimi is the vendor's own CLI on its own API, where it isn't. */
+ *  the useful fact. Kimi and Antigravity are a CLI on its vendor's own API, where it isn't. */
 export const runtimeSummary = (runtime?: string | null): string =>
   runtime === AgentProvider.KIMI
     ? 'Runs on the Kimi CLI'
-    : runtime === AgentProvider.CODEX
-      ? 'OpenAI-compatible'
-      : 'Anthropic-compatible';
+    : runtime === AgentProvider.ANTIGRAVITY
+      ? 'Runs on the Antigravity CLI'
+      : runtime === AgentProvider.CODEX
+        ? 'OpenAI-compatible'
+        : 'Anthropic-compatible';
 
 // A built-in engine has no ModelProvider row, so it has no preset to inherit a look from. Borrow
 // the vendor preset that ships the same mark: the engine and the BYOK provider are the same
@@ -131,8 +133,9 @@ export const ENGINE_PRESET: Record<string, string> = {
   [AgentProvider.KIMI]: 'moonshot',
 };
 
-// An engine whose vendor ships no preset carrying its mark. Antigravity is Google's, but Google's
-// preset is the Gemini API reached through another CLI, and the two should not be one logo.
+// An engine whose vendor ships no preset carrying its mark. Antigravity is Google's, and Google's
+// preset (Gemini) now runs on it, but that preset is named for the models a Gemini key buys while
+// the engine is the CLI that drives them — two products, so two logos.
 const ENGINE_BRAND: Record<string, { brand: ProviderBrand; glyphKey: string }> = {
   [AgentProvider.ANTIGRAVITY]: {
     brand: { mono: 'A', from: '#3186ff', to: '#00b95c' },

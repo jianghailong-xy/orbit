@@ -135,8 +135,9 @@ public enum SessionProviderChoices {
     /// A built-in engine has no configured row, so it has no preset to inherit a look from. Borrow
     /// the vendor preset carrying the same mark: the engine and the BYOK provider are the same
     /// company, and a user who sees both should see one logo. Antigravity's vendor ships no preset
-    /// carrying its mark — Google's is the Gemini API reached through another CLI, and the two
-    /// should not be one logo — so its key names its own mark (web's `ENGINE_BRAND`).
+    /// carrying its mark — Google's (Gemini) runs on it, but is named for the models a Gemini key
+    /// buys while the engine is the CLI that drives them — so its key names its own mark (web's
+    /// `ENGINE_BRAND`).
     static let enginePreset: [String: String] = [
         "claude": "anthropic", "codex": "openai", "kimi": "moonshot", "antigravity": "antigravity",
     ]
@@ -283,12 +284,12 @@ public enum SessionProviderChoices {
     /// The built-in runtime that actually executes an identity, mirroring the server's
     /// `execRuntime`. Deliberately not `AgentDefaults.runtime(for:)`, which answers "claude" for
     /// the OpenCode slug — harmless where it is used for model defaults, but here it would offer
-    /// an OpenCode session every Claude provider on the account. No configured provider borrows
-    /// Antigravity yet, so it only ever executes its own slug.
+    /// an OpenCode session every Claude provider on the account. A Gemini key borrows Antigravity,
+    /// so it executes on the same CLI as the engine's own slug.
     static func executingRuntime(_ provider: String, configured: [ConfiguredProvider]) -> String {
         if let custom = configured.first(where: { $0.slug == provider }) {
             let borrowed = custom.runtime ?? ""
-            return borrowed == "codex" || borrowed == "kimi" ? borrowed : "claude"
+            return ["codex", "kimi", "antigravity"].contains(borrowed) ? borrowed : "claude"
         }
         return ["codex", "kimi", "opencode", "antigravity"].contains(provider) ? provider : "claude"
     }

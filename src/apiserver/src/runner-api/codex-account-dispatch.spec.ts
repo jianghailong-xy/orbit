@@ -148,7 +148,12 @@ function prismaFor(s: Scenario) {
       findUniqueOrThrow: async () => row,
       findMany: async () => [row],
     },
-    modelProvider: { findFirst: async () => s.customRow ?? null },
+    modelProvider: {
+      findFirst: async () => s.customRow ?? null,
+      // A runner that names no runtime makes the claim/reclaim ask which providers borrow one
+      // (providerSlugsOn); none do here.
+      findMany: async () => [],
+    },
     runEvent: { aggregate: async () => ({ _max: { seq: 7 } }) },
     user: { findUnique: async () => null },
     $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
