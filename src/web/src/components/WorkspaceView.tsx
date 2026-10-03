@@ -9035,6 +9035,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               }
               if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
+                // An Enter with something to send is the send's alone. The send empties the box
+                // before the key reaches the window, where a waiting card answers Enter on an
+                // empty field (CardHotkey) — so the same press also started a project. An Enter on
+                // an empty box still goes on to the card.
+                if (text.trim() || readyImages.length > 0) e.stopPropagation();
                 onSend();
               }
             }}
