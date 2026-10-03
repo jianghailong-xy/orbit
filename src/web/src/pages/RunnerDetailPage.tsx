@@ -28,6 +28,7 @@ import type { RunnerRepoHealth } from '@orbit/shared';
 import {
   App as AntdApp,
   Button,
+  Checkbox,
   Dropdown,
   Input,
   InputNumber,
@@ -144,6 +145,9 @@ interface Workspace {
   /** Smart model selection (docs/model-routing-design.md §7.2): on, a fresh task run here is created
    *  on the routed model and effort; off (the default), routing is only recorded in shadow. */
   modelRouting?: boolean;
+  /** The other engines smart selection may move this Agent's task runs to (§6). Empty = none: a run
+   *  stays on this Agent's own engine. */
+  modelRoutingProviders?: string[];
   /** Default a new session under this workspace inherits. null = inherit the account default.
    *  The permission mode is deliberately NOT here — it belongs to the run (Session), with an
    *  account-level default. */
@@ -325,6 +329,7 @@ export function RunnerDetailPage() {
   const [fRepoUrl, setFRepoUrl] = useState('');
   const [fEnableWorktree, setFEnableWorktree] = useState(false);
   const [fModelRouting, setFModelRouting] = useState(false);
+  const [fRoutingEngines, setFRoutingEngines] = useState<string[]>([]);
   const [fEnv, setFEnv] = useState<{ key: string; value: string }[]>([]);
   // null = Default, the runner's own Codex account.
   const [fCodexAccount, setFCodexAccount] = useState<string | null>(null);
@@ -352,6 +357,7 @@ export function RunnerDetailPage() {
         repoUrl: fRepoUrl.trim() || undefined,
         enableWorktree: fEnableWorktree,
         modelRouting: fModelRouting,
+        modelRoutingProviders: fRoutingEngines,
         env: Object.fromEntries(
           fEnv.map((r) => [r.key.trim(), r.value]).filter(([k]) => k),
         ),
@@ -534,6 +540,7 @@ export function RunnerDetailPage() {
     setFRepoUrl(a?.repoUrl ?? '');
     setFEnableWorktree(a?.enableWorktree ?? false);
     setFModelRouting(a?.modelRouting ?? false);
+    setFRoutingEngines(a?.modelRoutingProviders ?? []);
     setFEnv(Object.entries(a?.env ?? {}).map(([key, value]) => ({ key, value })));
     setFCodexAccount(a?.codexAccount ?? null);
     setFClaudeAccount(a?.claudeAccount ?? null);
@@ -727,7 +734,16 @@ export function RunnerDetailPage() {
           setFModelRouting(v);
           setDirty(true);
         }}
-      />
+      >
+        <RoutingEngines
+          own={formProvider}
+          value={fRoutingEngines}
+          onChange={(next) => {
+            setFRoutingEngines(next);
+            setDirty(true);
+          }}
+        />
+      </SettingRow>
 
       {/* Model is not a workspace field: it resolves from the runtime/provider this project last
           ran on. Stated read-only because the row displays it — otherwise it reads as a setting
@@ -1523,19 +1539,71 @@ function SettingRow({
   desc,
   checked,
   onChange,
+  children,
 }: {
   label: string;
   desc: string;
   checked: boolean;
   onChange: (v: boolean) => void;
+  /** What belongs to this setting, under its explanation. */
+  children?: ReactNode;
 }) {
   return (
     <div className="rd-set-row">
       <div className="rd-set-main">
         <div className="rd-set-label">{label}</div>
         <div className="rd-set-desc">{desc}</div>
+        {children}
       </div>
       <Switch checked={checked} onChange={onChange} />
+    </div>
+  );
+}
+
+/** The engines a task run can be routed onto: the built-in ones with a tier table
+ *  (docs/model-routing-design.md §4.3). */
+const ROUTING_ENGINES = ['claude', 'codex'];
+
+/**
+ * The engines smart selection may move this Agent's task runs to (docs/model-routing-design.md §6),
+ * saved as `modelRoutingProviders`. The Agent's own engine is always one, so it is ticked and cannot
+ * be unticked; every other one is a tick the owner makes here, and none is ticked until they do.
+ */
+function RoutingEngines({
+  own,
+  value,
+  onChange,
+}: {
+  own: string;
+  value: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const engines = ROUTING_ENGINES.includes(own) ? ROUTING_ENGINES : [own, ...ROUTING_ENGINES];
+  return (
+    <div className="rd-engines">
+      <div className="rd-engines-label">Engines it may use</div>
+      <div className="rd-engines-list">
+        {engines.map((engine) => {
+          const on = engine === own || value.includes(engine);
+          return (
+            <Checkbox
+              key={engine}
+              className={on ? 'is-on' : undefined}
+              checked={on}
+              disabled={engine === own}
+              onChange={(e) =>
+                onChange(e.target.checked ? [...value, engine] : value.filter((v) => v !== engine))
+              }
+            >
+              {engine}
+            </Checkbox>
+          );
+        })}
+      </div>
+      <div className="rd-engines-note">
+        Only this agent's own engine is ticked by default, so a task never moves to another engine
+        unless you tick it here.
+      </div>
     </div>
   );
 }
