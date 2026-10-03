@@ -2701,7 +2701,7 @@ body {
 /* The engines smart selection may move a task run to (model routing §6), under the switch's own
    explanation: one chip per engine, the agent's own ticked and fixed. Qualified with .rd-engines-list
    so antd's single-class checkbox rules, injected after this stylesheet, do not win on order. */
-.rd-engines {
+.rd-route-engines {
   margin-top: 10px;
 }
 .rd-engines-label {
