@@ -1,0 +1,8 @@
+4-why-sheet: in view after 13 drag(s) at (32.0, 545.3333333333333, 292.66666666666663, 80.33333333333337)
+tapping 9 label="Why Opus 5.5 · high" value="" frame=(332.66666666666663, 415.3333333333332, 19.666666666666686, 19.0) hittable=true
+why 'Why ': 48 label="Why Opus 5.5 · high" value="" frame=(124.50414593698173, 441.592039800995, 152.67164179104475, 19.844112769485946) hittable=true
+why 'Tier L': 48 label="Tier L: one above run 1 (M), because run 1 failed its acceptance command" value="" frame=(54.72968490878939, 530.2504145936981, 308.54394693200663, 40.64842454394693) hittable=true
+why 'Run 1 started': 48 label="Run 1 started at M: suggested by the coordinator — one service plus its spec" value="" frame=(56.33001658374792, 599.7048092868988, 285.8192371475953, 40.64842454394693) hittable=true
+why 'Engine claude': 48 label="Engine claude: this agent's own engine" value="" frame=(56.65008291873963, 669.9593698175787, 283.89883913764515, 19.524046434494153) hittable=true
+why 'Policy v1': 48 label="Policy v1 · decided Oct 3, 4:54 PM · a failure from a usage limit would not have moved the tier" value="" frame=(23.36318407960199, 704.686567164179, 355.27363184079604, 43.849087893864066) hittable=true
+why 'Done': 1 label="Done" value="" frame=(311.742951907131, 434.2305140961857, 63.05306799336648, 34.56716417910445) hittable=true

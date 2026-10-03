@@ -1,0 +1,12 @@
+chip candidate: 9 label="Model Opus 5.5, effort High, picked by smart selection" value="" frame=(181.66666666666666, 795.0, 132.33333333333334, 22.0) hittable=true
+menu '✦ Picked by smart selection': 1 — 9 label="✦ Picked by smart selection · tier L" value="" frame=(64.0, 307.0, 250.0, 62.0) hittable=true
+menu 'Tier L: one above run 1': 1 — 9 label="Tier L: one above run 1 (M), because run 1 failed its acceptance command" value="" frame=(64.0, 369.0, 250.0, 82.0) hittable=true
+menu 'Changing the model here': 1 — 9 label="Changing the model here applies to this run only. To fix the model for every run, set it on the task." value="" frame=(64.0, 451.0, 250.0, 82.0) hittable=true
+menu 'Opus 5.5': 3 — 9 label="Opus 5.5" value="" frame=(64.0, 554.0, 250.0, 60.0) hittable=true | 9 label="Model Opus 5.5, effort High, picked by smart selection" value="" frame=(181.66666666666666, 795.0, 132.33333333333334, 22.0) hittable=false | 48 label="Opus 5.5" value="" frame=(205.66666666666666, 797.0, 64.33333333333334, 18.0) hittable=false
+menu 'Sonnet 5.5': 1 — 9 label="Sonnet 5.5" value="" frame=(64.0, 614.0, 250.0, 42.0) hittable=true
+menu 'Effort': 1 — 9 label="Effort, High" value="" frame=(64.0, 677.0, 250.0, 60.0) hittable=true
+menu 'Open task': 1 — 9 label="Open task ›" value="" frame=(64.0, 818.0, 250.0, 42.0) hittable=false
+Open task before scrolling: 9 label="Open task ›" value="" frame=(64.0, 818.0, 250.0, 42.0) hittable=false
+Open task after scrolling: 9 label="Open task ›" value="" frame=(64.0, 765.0, 250.0, 42.0) hittable=true
+tapping 9 label="Open task ›" value="" frame=(64.0, 765.0, 250.0, 42.0) hittable=true
+back button: 9 label="Back" value="" frame=(16.0, 62.0, 44.0, 44.0) hittable=true

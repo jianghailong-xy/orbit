@@ -1,0 +1,383 @@
+==> fixture API on 127.0.0.1:8765
+curl: (7) Failed to connect to 127.0.0.1 port 8765 after 0 ms: Couldn't connect to server
+[{"id": "a1", "name": "orbit", "provider": "claude", "lastProvider": "claude", "runnerId": "r1", "enabled": true, "modelRouting": true, "enableWorktree": true, "effort": "", "workDir": "/srv/orbit", "appendSystemPrompt": "", "workDirExists": true, "workDirIsGit": true}]
+==> runtimes available:
+iOS 26.2 (26.2 - 23C54) - com.apple.CoreSimulator.SimRuntime.iOS-26-2
+iOS 26.4 (26.4.1 - 23E254a) - com.apple.CoreSimulator.SimRuntime.iOS-26-4
+iOS 26.5 (26.5 - 23F77) - com.apple.CoreSimulator.SimRuntime.iOS-26-5
+==> iPhone: iPhone 17 Pro  runtime: com.apple.CoreSimulator.SimRuntime.iOS-26-5
+==> iphone
+Test Case '-[RouteProbeUITests.RouteShotTests test1TaskDetails]' started.
+Test Case '-[RouteProbeUITests.RouteShotTests test1TaskDetails]' passed (61.130 seconds).
+Test Case '-[RouteProbeUITests.RouteShotTests test2SuggestedMenu]' started.
+Test Case '-[RouteProbeUITests.RouteShotTests test2SuggestedMenu]' passed (49.030 seconds).
+Test Case '-[RouteProbeUITests.RouteShotTests test3Runs]' started.
+Test Case '-[RouteProbeUITests.RouteShotTests test3Runs]' passed (76.949 seconds).
+Test Case '-[RouteProbeUITests.RouteShotTests test4WhySheet]' started.
+    t =    66.75s Find the "Tier L: one above run 1 (M), because run 1 failed its acceptance command" StaticText
+    t =    67.23s Find the "Tier L: one above run 1 (M), because run 1 failed its acceptance command" StaticText
+    t =    67.68s Find the "Tier L: one above run 1 (M), because run 1 failed its acceptance command" StaticText
+    t =    68.00s Find the "Tier L: one above run 1 (M), because run 1 failed its acceptance command" StaticText
+Test Case '-[RouteProbeUITests.RouteShotTests test4WhySheet]' passed (76.977 seconds).
+Test Case '-[RouteProbeUITests.RouteShotTests test5AgentSettings]' started.
+    t =    10.59s Find the "Smart model selection for tasks, Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected." Switch
+    t =    10.84s Checking existence of `"Smart model selection for tasks, Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected." Switch`
+    t =    11.07s Find the "Smart model selection for tasks, Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected." Switch
+    t =    14.28s Checking existence of `"Smart model selection for tasks, Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected." Switch`
+    t =    14.53s Find the "Smart model selection for tasks, Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected." Switch
+    t =    14.77s Find the "Smart model selection for tasks, Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected." Switch
+    t =    15.00s Find the "Smart model selection for tasks, Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected." Switch
+    t =    17.18s Checking existence of `"Smart model selection for tasks, Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected." Switch`
+    t =    17.41s Find the "Smart model selection for tasks, Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected." Switch
+    t =    17.73s Find the "Smart model selection for tasks, Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected." Switch
+    t =    17.96s Find the "Smart model selection for tasks, Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected." Switch
+    t =    18.17s Find the "Smart model selection for tasks, Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected." Switch
+    t =    18.41s Find the "Smart model selection for tasks, Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected." Switch
+    t =    20.70s Checking existence of `"Smart model selection for tasks, Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected." Switch`
+    t =    24.53s Checking existence of `"Smart model selection for tasks, Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected." Switch`
+    t =    24.73s Find the "Smart model selection for tasks, Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected." Switch
+    t =    24.90s Find the "Smart model selection for tasks, Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected." Switch
+    t =    25.07s Find the "Smart model selection for tasks, Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected." Switch
+    t =    25.24s Find the "Smart model selection for tasks, Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected." Switch
+    t =    25.41s Find the "Smart model selection for tasks, Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected." Switch
+Test Case '-[RouteProbeUITests.RouteShotTests test5AgentSettings]' passed (32.306 seconds).
+Test Case '-[RouteProbeUITests.RouteShotTests test6Composer]' started.
+    t =    19.00s Find the "Tier L: one above run 1 (M), because run 1 failed its acceptance command" Button
+    t =    19.07s Find the "Tier L: one above run 1 (M), because run 1 failed its acceptance command" Button
+    t =    19.13s Find the "Tier L: one above run 1 (M), because run 1 failed its acceptance command" Button
+    t =    19.20s Find the "Tier L: one above run 1 (M), because run 1 failed its acceptance command" Button
+Test Case '-[RouteProbeUITests.RouteShotTests test6Composer]' passed (36.834 seconds).
+Test Case '-[RouteProbeUITests.RouteShotTests test8TaskDetailDark]' started.
+Test Case '-[RouteProbeUITests.RouteShotTests test8TaskDetailDark]' passed (58.214 seconds).
+Test Suite 'RouteShotTests' passed at 2026-10-03 17:28:57.719.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 391.441 (391.455) seconds
+Test Suite 'RouteProbeUITests.xctest' passed at 2026-10-03 17:28:57.721.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 391.441 (391.456) seconds
+Test Suite 'Selected tests' passed at 2026-10-03 17:28:57.722.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 391.441 (391.458) seconds
+==> requests the app made:
+17:13:12 "GET /api/agents HTTP/1.1" 200 -
+    POST /__reset body: 
+17:22:32 "POST /__reset HTTP/1.1" 200 -
+17:22:53 "GET /api/agents HTTP/1.1" 200 -
+17:22:53 "GET /api/runners HTTP/1.1" 200 -
+17:22:54 "GET /api/providers HTTP/1.1" 200 -
+17:22:54 "GET /api/providers/pools HTTP/1.1" 200 -
+17:22:54 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+17:22:54 "GET /api/sessions?view=open HTTP/1.1" 200 -
+17:22:54 "GET /api/task-lists HTTP/1.1" 200 -
+17:22:54 "GET /api/session-tags HTTP/1.1" 200 -
+17:22:54 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:22:54 "GET /api/tasks/T1/share HTTP/1.1" 200 -
+17:22:54 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+17:22:54 "GET /api/tasks/T1/row HTTP/1.1" 200 -
+17:22:55 "GET /api/session-folders HTTP/1.1" 200 -
+17:22:55 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+17:22:55 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+17:23:03 "GET /api/tasks/T1/attribution HTTP/1.1" 200 -
+17:23:03 "GET /api/tasks/T1/dependency-graph?direction=both&maxNodes=500&pairUnary=true HTTP/1.1" 404 -
+17:23:03 "GET /api/task-lists HTTP/1.1" 200 -
+17:23:03 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+17:23:03 "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+17:23:03 "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+17:23:03 "GET /api/watches HTTP/1.1" 200 -
+17:23:03 "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+17:23:07 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:23:11 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:23:15 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:23:20 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:23:24 "GET /api/tasks/T1 HTTP/1.1" 200 -
+    POST /__reset body: 
+17:23:28 "POST /__reset HTTP/1.1" 200 -
+17:23:33 "GET /api/agents HTTP/1.1" 200 -
+17:23:34 "GET /api/runners HTTP/1.1" 200 -
+17:23:34 "GET /api/providers HTTP/1.1" 200 -
+17:23:34 "GET /api/providers/pools HTTP/1.1" 200 -
+17:23:34 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+17:23:34 "GET /api/sessions?view=open HTTP/1.1" 200 -
+17:23:34 "GET /api/task-lists HTTP/1.1" 200 -
+17:23:34 "GET /api/session-tags HTTP/1.1" 200 -
+17:23:34 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:23:34 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+17:23:34 "GET /api/tasks/T1/share HTTP/1.1" 200 -
+17:23:35 "GET /api/tasks/T1/row HTTP/1.1" 200 -
+17:23:35 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+17:23:35 "GET /api/session-folders HTTP/1.1" 200 -
+17:23:35 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+17:23:36 "GET /api/tasks/T1/attribution HTTP/1.1" 200 -
+17:23:36 "GET /api/tasks/T1/dependency-graph?direction=both&maxNodes=500&pairUnary=true HTTP/1.1" 404 -
+17:23:36 "GET /api/task-lists HTTP/1.1" 200 -
+17:23:36 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+17:23:36 "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+17:23:36 "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+17:23:36 "GET /api/watches HTTP/1.1" 200 -
+17:23:36 "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+17:23:40 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:23:44 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:23:48 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:23:52 "GET /api/tasks/T1 HTTP/1.1" 200 -
+    PATCH /api/tasks/T1 body: {"modelHint":"L","modelHintReason":null}
+17:23:56 "PATCH /api/tasks/T1 HTTP/1.1" 200 -
+17:23:56 "GET /api/tasks/active?projectId=none HTTP/1.1" 200 -
+17:23:56 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:23:56 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:24:01 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:24:05 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:24:09 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:24:13 "GET /api/tasks/T1 HTTP/1.1" 200 -
+    POST /__reset body: 
+17:24:16 "POST /__reset HTTP/1.1" 200 -
+17:24:30 "GET /api/agents HTTP/1.1" 200 -
+17:24:32 "GET /api/runners HTTP/1.1" 200 -
+17:24:32 "GET /api/providers HTTP/1.1" 200 -
+17:24:32 "GET /api/providers/pools HTTP/1.1" 200 -
+17:24:32 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+17:24:32 "GET /api/task-lists HTTP/1.1" 200 -
+17:24:32 "GET /api/sessions?view=open HTTP/1.1" 200 -
+17:24:32 "GET /api/session-tags HTTP/1.1" 200 -
+17:24:32 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:24:32 "GET /api/tasks/T1/share HTTP/1.1" 200 -
+17:24:32 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+17:24:32 "GET /api/tasks/T1/row HTTP/1.1" 200 -
+17:24:33 "GET /api/session-folders HTTP/1.1" 200 -
+17:24:33 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+17:24:33 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+17:24:34 "GET /api/tasks/T1/attribution HTTP/1.1" 200 -
+17:24:34 "GET /api/tasks/T1/dependency-graph?direction=both&maxNodes=500&pairUnary=true HTTP/1.1" 404 -
+17:24:34 "GET /api/task-lists HTTP/1.1" 200 -
+17:24:34 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+17:24:34 "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+17:24:34 "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+17:24:34 "GET /api/watches HTTP/1.1" 200 -
+17:24:34 "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+17:24:38 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:24:42 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:24:46 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:24:51 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:24:55 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:24:59 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:25:03 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:25:07 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:25:12 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:25:16 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:25:20 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:25:24 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:25:28 "GET /api/tasks/T1 HTTP/1.1" 200 -
+    POST /__reset body: 
+17:25:33 "POST /__reset HTTP/1.1" 200 -
+17:25:39 "GET /api/agents HTTP/1.1" 200 -
+17:25:39 "GET /api/runners HTTP/1.1" 200 -
+17:25:39 "GET /api/providers HTTP/1.1" 200 -
+17:25:40 "GET /api/providers/pools HTTP/1.1" 200 -
+17:25:40 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+17:25:40 "GET /api/task-lists HTTP/1.1" 200 -
+17:25:40 "GET /api/session-tags HTTP/1.1" 200 -
+17:25:40 "GET /api/sessions?view=open HTTP/1.1" 200 -
+17:25:40 "GET /api/tasks/T1/share HTTP/1.1" 200 -
+17:25:40 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:25:40 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+17:25:40 "GET /api/tasks/T1/row HTTP/1.1" 200 -
+17:25:40 "GET /api/session-folders HTTP/1.1" 200 -
+17:25:40 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+17:25:41 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+17:25:41 "GET /api/tasks/T1/attribution HTTP/1.1" 200 -
+17:25:41 "GET /api/tasks/T1/dependency-graph?direction=both&maxNodes=500&pairUnary=true HTTP/1.1" 404 -
+17:25:42 "GET /api/task-lists HTTP/1.1" 200 -
+17:25:42 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+17:25:42 "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+17:25:42 "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+17:25:42 "GET /api/watches HTTP/1.1" 200 -
+17:25:42 "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+17:25:46 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:25:50 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:25:54 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:25:58 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:26:02 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:26:06 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:26:10 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:26:15 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:26:19 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:26:23 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:26:27 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:26:31 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:26:35 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:26:40 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:26:44 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:26:48 "GET /api/tasks/T1 HTTP/1.1" 200 -
+    POST /__reset body: 
+17:26:50 "POST /__reset HTTP/1.1" 200 -
+17:26:54 "GET /api/agents HTTP/1.1" 200 -
+17:26:54 "GET /api/runners HTTP/1.1" 200 -
+17:26:54 "GET /api/providers HTTP/1.1" 200 -
+17:26:54 "GET /api/providers/pools HTTP/1.1" 200 -
+17:26:54 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+17:26:55 "GET /api/session-tags HTTP/1.1" 200 -
+17:26:55 "GET /api/sessions?view=open HTTP/1.1" 200 -
+17:26:55 "GET /api/session-folders HTTP/1.1" 200 -
+    PATCH /api/agents/a1 body: {"name":"orbit","effort":"","modelRouting":false,"workDir":"\/srv\/orbit","enabled":true}
+17:27:17 "PATCH /api/agents/a1 HTTP/1.1" 200 -
+17:27:17 "GET /api/agents HTTP/1.1" 200 -
+17:27:17 "GET /api/runners HTTP/1.1" 200 -
+17:27:17 "GET /api/providers HTTP/1.1" 200 -
+17:27:17 "GET /api/providers/pools HTTP/1.1" 200 -
+17:27:17 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+    POST /__reset body: 
+17:27:22 "POST /__reset HTTP/1.1" 200 -
+17:27:25 "GET /api/agents HTTP/1.1" 200 -
+17:27:26 "GET /api/runners HTTP/1.1" 200 -
+17:27:26 "GET /api/providers HTTP/1.1" 200 -
+17:27:26 "GET /api/providers/pools HTTP/1.1" 200 -
+17:27:26 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+17:27:26 "GET /api/sessions?view=open HTTP/1.1" 200 -
+17:27:26 "GET /api/session-tags HTTP/1.1" 200 -
+17:27:27 "GET /api/sessions/S2 HTTP/1.1" 200 -
+17:27:27 "GET /api/sessions/S2/created-tasks HTTP/1.1" 404 -
+17:27:27 "GET /api/sessions/S2 HTTP/1.1" 200 -
+17:27:27 "GET /api/sessions/S2/events/page?tail=200&maxPayload=2048 HTTP/1.1" 200 -
+17:27:27 "GET /api/session-folders HTTP/1.1" 200 -
+17:27:27 "GET /api/sessions/S2 HTTP/1.1" 200 -
+17:27:27 "GET /api/sessions/S2/turns HTTP/1.1" 200 -
+17:27:27 "GET /api/sessions/S2/approvals?status=PENDING HTTP/1.1" 404 -
+17:27:27 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S2 HTTP/1.1" 404 -
+17:27:28 "GET /api/sessions/S2/background HTTP/1.1" 404 -
+17:27:28 "GET /api/sessions/S2/events?sinceSeq=2&maxPayload=2048 HTTP/1.1" 404 -
+17:27:28 "GET /api/runners HTTP/1.1" 200 -
+17:27:28 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+17:27:28 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S2 HTTP/1.1" 404 -
+17:27:28 "GET /api/providers/pools HTTP/1.1" 200 -
+17:27:28 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+17:27:28 "GET /api/providers HTTP/1.1" 200 -
+17:27:29 "GET /api/sessions/S2/turns HTTP/1.1" 200 -
+17:27:29 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+17:27:29 "GET /api/sessions/S2/background HTTP/1.1" 404 -
+17:27:29 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S2 HTTP/1.1" 404 -
+17:27:29 "GET /api/sessions/S2/events?sinceSeq=2&maxPayload=2048 HTTP/1.1" 404 -
+17:27:30 "GET /api/sessions/S2/approvals?status=PENDING HTTP/1.1" 404 -
+17:27:31 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S2 HTTP/1.1" 404 -
+17:27:31 "GET /api/sessions/S2/approvals?status=PENDING HTTP/1.1" 404 -
+17:27:31 "GET /api/sessions/S2/background HTTP/1.1" 404 -
+17:27:31 "GET /api/sessions/S2/events?sinceSeq=2&maxPayload=2048 HTTP/1.1" 404 -
+17:27:31 "GET /api/sessions/S2/turns HTTP/1.1" 200 -
+17:27:31 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+17:27:36 "GET /api/sessions/S2/events?sinceSeq=2&maxPayload=2048 HTTP/1.1" 404 -
+17:27:36 "GET /api/sessions/S2/background HTTP/1.1" 404 -
+17:27:36 "GET /api/sessions/S2/approvals?status=PENDING HTTP/1.1" 404 -
+17:27:36 "GET /api/sessions/S2/turns HTTP/1.1" 200 -
+17:27:36 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+17:27:37 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S2 HTTP/1.1" 404 -
+17:27:45 "GET /api/sessions/S2/background HTTP/1.1" 404 -
+17:27:45 "GET /api/sessions/S2/events?sinceSeq=2&maxPayload=2048 HTTP/1.1" 404 -
+17:27:45 "GET /api/sessions/S2/approvals?status=PENDING HTTP/1.1" 404 -
+17:27:45 "GET /api/sessions/S2/turns HTTP/1.1" 200 -
+17:27:45 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+17:27:46 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S2 HTTP/1.1" 404 -
+17:27:52 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:27:52 "GET /api/tasks/T1/share HTTP/1.1" 200 -
+17:27:52 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+17:27:52 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+17:27:52 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+17:27:53 "GET /api/tasks/T1/attribution HTTP/1.1" 200 -
+17:27:53 "GET /api/tasks/T1/dependency-graph?direction=both&maxNodes=500&pairUnary=true HTTP/1.1" 404 -
+17:27:53 "GET /api/task-lists HTTP/1.1" 200 -
+17:27:53 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+17:27:53 "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+17:27:53 "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+17:27:53 "GET /api/watches HTTP/1.1" 200 -
+17:27:53 "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+17:27:57 "GET /api/tasks/T1 HTTP/1.1" 200 -
+    POST /__reset body: 
+17:27:59 "POST /__reset HTTP/1.1" 200 -
+17:28:02 "GET /api/agents HTTP/1.1" 200 -
+17:28:02 "GET /api/runners HTTP/1.1" 200 -
+17:28:02 "GET /api/providers HTTP/1.1" 200 -
+17:28:02 "GET /api/providers/pools HTTP/1.1" 200 -
+17:28:03 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+17:28:03 "GET /api/session-tags HTTP/1.1" 200 -
+17:28:03 "GET /api/sessions?view=open HTTP/1.1" 200 -
+17:28:03 "GET /api/task-lists HTTP/1.1" 200 -
+17:28:03 "GET /api/tasks/T1/share HTTP/1.1" 200 -
+17:28:03 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+17:28:03 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:28:03 "GET /api/tasks/T1/row HTTP/1.1" 200 -
+17:28:03 "GET /api/session-folders HTTP/1.1" 200 -
+17:28:03 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+17:28:03 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+17:28:04 "GET /api/tasks/T1/attribution HTTP/1.1" 200 -
+17:28:04 "GET /api/tasks/T1/dependency-graph?direction=both&maxNodes=500&pairUnary=true HTTP/1.1" 404 -
+17:28:04 "GET /api/task-lists HTTP/1.1" 200 -
+17:28:04 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+17:28:04 "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+17:28:04 "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+17:28:04 "GET /api/watches HTTP/1.1" 200 -
+17:28:04 "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+17:28:08 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:28:12 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:28:16 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:28:20 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:28:24 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:28:29 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:28:33 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:28:37 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:28:41 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:28:45 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:28:49 "GET /api/tasks/T1 HTTP/1.1" 200 -
+17:28:53 "GET /api/tasks/T1 HTTP/1.1" 200 -
+==> what was written (PATCH bodies):
+    PATCH /api/tasks/T1 body: {"modelHint":"L","modelHintReason":null}
+17:23:56 "PATCH /api/tasks/T1 HTTP/1.1" 200 -
+    PATCH /api/agents/a1 body: {"name":"orbit","effort":"","modelRouting":false,"workDir":"\/srv\/orbit","enabled":true}
+17:27:17 "PATCH /api/agents/a1 HTTP/1.1" 200 -
+==> what 404ed:
+   6 "GET /api/tasks/T1/dependency-graph?direction=both&maxNodes=500&pairUnary=true HTTP/1.1" 404 -
+   6 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S2 HTTP/1.1" 404 -
+   5 "GET /api/sessions/S2/events?sinceSeq=2&maxPayload=2048 HTTP/1.1" 404 -
+   5 "GET /api/sessions/S2/background HTTP/1.1" 404 -
+   5 "GET /api/sessions/S2/approvals?status=PENDING HTTP/1.1" 404 -
+   1 "GET /api/sessions/S2/created-tasks HTTP/1.1" 404 -
+==> shots:
+total 12824
+drwxr-xr-x  45 runner  staff    1440 Oct  3 17:29 .
+drwxr-xr-x  13 runner  staff     416 Oct  3 17:16 ..
+-rw-r--r--   1 runner  staff  321031 Oct  3 17:23 0-task-top.png
+-rw-r--r--   1 runner  staff  446171 Oct  3 17:23 1-task-details.png
+-rw-r--r--   1 runner  staff   17436 Oct  3 17:23 1b-suggested-row.png
+-rw-r--r--   1 runner  staff   13684 Oct  3 17:23 1c-model-row.png
+-rw-r--r--   1 runner  staff  672948 Oct  3 17:23 2-suggested-menu.png
+-rw-r--r--   1 runner  staff  452774 Oct  3 17:24 2b-picked-L.png
+-rw-r--r--   1 runner  staff  398273 Oct  3 17:25 3-runs.png
+-rw-r--r--   1 runner  staff   24421 Oct  3 17:25 3b-run2-row.png
+-rw-r--r--   1 runner  staff   24697 Oct  3 17:25 3c-run1-row.png
+-rw-r--r--   1 runner  staff   44106 Oct  3 17:25 3d-run0-shadow-row.png
+-rw-r--r--   1 runner  staff  575054 Oct  3 17:26 4-why-sheet.png
+-rw-r--r--   1 runner  staff  281822 Oct  3 17:27 5-agent-settings.png
+-rw-r--r--   1 runner  staff   67961 Oct  3 17:27 5b-task-runs-cell.png
+-rw-r--r--   1 runner  staff  255666 Oct  3 17:27 6-composer-chip.png
+-rw-r--r--   1 runner  staff   63205 Oct  3 17:27 6b-composer-zoom.png
+-rw-r--r--   1 runner  staff    8654 Oct  3 17:27 6c-composer-chip-alone.png
+-rw-r--r--   1 runner  staff  427021 Oct  3 17:27 7-composer-menu.png
+-rw-r--r--   1 runner  staff  321150 Oct  3 17:27 7b-open-task.png
+-rw-r--r--   1 runner  staff  422343 Oct  3 17:27 7c-composer-menu-end.png
+-rw-r--r--   1 runner  staff  371078 Oct  3 17:28 8-task-details-dark.png
+-rw-r--r--   1 runner  staff  336607 Oct  3 17:28 8b-runs-dark.png
+-rw-r--r--   1 runner  staff     441 Oct  3 17:29 not-served.txt
+-rw-r--r--   1 runner  staff     285 Oct  3 17:29 patch-bodies.txt
+-rw-r--r--   1 runner  staff   14264 Oct  3 17:28 requests.log
+-rw-r--r--@  1 runner  staff    1415 Oct  3 17:23 RouteShotTeststest1TaskDetails-notes.txt
+-rw-r--r--@  1 runner  staff    2715 Oct  3 17:24 RouteShotTeststest2SuggestedMenu-notes.txt
+-rw-r--r--@  1 runner  staff    2135 Oct  3 17:25 RouteShotTeststest3Runs-notes.txt
+-rw-r--r--@  1 runner  staff    1359 Oct  3 17:26 RouteShotTeststest4WhySheet-notes.txt
+-rw-r--r--@  1 runner  staff    1256 Oct  3 17:27 RouteShotTeststest5AgentSettings-notes.txt
+-rw-r--r--@  1 runner  staff    1743 Oct  3 17:27 RouteShotTeststest6Composer-notes.txt
+-rw-r--r--@  1 runner  staff     205 Oct  3 17:28 RouteShotTeststest8TaskDetailDark-notes.txt
+-rw-r--r--   1 runner  staff       0 Oct  3 17:12 stub.out
+-rw-r--r--@  1 runner  staff   16911 Oct  3 17:23 tree-1-task-details.txt
+-rw-r--r--@  1 runner  staff   19748 Oct  3 17:23 tree-2-suggested-menu.txt
+-rw-r--r--@  1 runner  staff   16732 Oct  3 17:24 tree-2b-picked-L.txt
+-rw-r--r--@  1 runner  staff   15641 Oct  3 17:25 tree-3-runs.txt
+-rw-r--r--@  1 runner  staff   22571 Oct  3 17:26 tree-4-why-sheet.txt
+-rw-r--r--@  1 runner  staff   17407 Oct  3 17:27 tree-5-agent-settings.txt
+-rw-r--r--@  1 runner  staff    8939 Oct  3 17:27 tree-6-composer-chip.txt
+-rw-r--r--@  1 runner  staff   12721 Oct  3 17:27 tree-7-composer-menu.txt
+-rw-r--r--@  1 runner  staff   14474 Oct  3 17:27 tree-7b-open-task.txt
+-rw-r--r--@  1 runner  staff   12725 Oct  3 17:27 tree-7c-composer-menu-end.txt
+-rw-r--r--   1 runner  staff  730865 Oct  3 17:29 xcodebuild-iphone.log

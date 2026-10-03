@@ -1,0 +1,4 @@
+    PATCH /api/tasks/T1 body: {"modelHint":"L","modelHintReason":null}
+17:23:56 "PATCH /api/tasks/T1 HTTP/1.1" 200 -
+    PATCH /api/agents/a1 body: {"name":"orbit","effort":"","modelRouting":false,"workDir":"\/srv\/orbit","enabled":true}
+17:27:17 "PATCH /api/agents/a1 HTTP/1.1" 200 -

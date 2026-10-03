@@ -1,0 +1,10 @@
+3-runs: in view after 13 drag(s) at (32.0, 545.3333333333333, 292.66666666666663, 80.33333333333337)
+3-runs run Running button: 9 label="orbit, 18m, Running, · Opus 5.5 · high, ✦ L ↑" value="1" frame=(32.0, 404.6666666666665, 292.66666666666663, 40.333333333333314) hittable=true
+3-runs run Failed button: 9 label="orbit, 55m ago, Failed, · Sonnet 5.5 · medium, ✦ M" value="" frame=(32.0, 475.0, 292.66666666666663, 40.33333333333337) hittable=true
+3-runs run Ended button: 9 label="orbit, 1d ago, Ended, · Opus 5.5 · max, ✦ Smart selection would have picked Sonnet 5.5 · medium (M)" value="" frame=(32.0, 545.3333333333333, 292.66666666666663, 80.33333333333337) hittable=true
+3-runs ⓘ: 9 label="Why Opus 5.5 · high" value="" frame=(332.66666666666663, 415.3333333333332, 19.666666666666686, 19.0) hittable=true
+3-runs ⓘ: 9 label="Why Sonnet 5.5 · medium" value="" frame=(332.66666666666663, 485.6666666666667, 19.666666666666686, 19.0) hittable=true
+3-runs ⓘ: 9 label="Why Sonnet 5.5 · medium" value="" frame=(332.66666666666663, 575.9999999999999, 19.666666666666686, 19.0) hittable=true
+3-runs '✦ L ↑': 2 element(s) — 9 label="orbit, 18m, Running, · Opus 5.5 · high, ✦ L ↑" value="1" frame=(32.0, 404.6666666666665, 292.66666666666663, 40.333333333333314) hittable=true | 48 label="✦ L ↑" value="" frame=(245.0, 428.1666666666665, 35.0, 15.666666666666686) hittable=true
+3-runs '✦ M': 2 element(s) — 9 label="orbit, 55m ago, Failed, · Sonnet 5.5 · medium, ✦ M" value="" frame=(32.0, 475.0, 292.66666666666663, 40.33333333333337) hittable=true | 48 label="✦ M" value="" frame=(266.6666666666666, 498.5, 25.333333333333314, 15.666666666666629) hittable=true
+3-runs 'Smart selection would have picked': 2 element(s) — 9 label="orbit, 1d ago, Ended, · Opus 5.5 · max, ✦ Smart selection would have picked Sonnet 5.5 · medium (M)" value="" frame=(32.0, 545.3333333333333, 292.66666666666663, 80.33333333333337) hittable=true | 48 label="✦ Smart selection would have picked Sonnet 5.5 · medium (M)" value="" frame=(60.0, 587.6666666666666, 257.3333333333333, 38.0) hittable=true

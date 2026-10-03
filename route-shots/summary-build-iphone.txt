@@ -1,0 +1,18 @@
+Test Case '-[RouteProbeUITests.RouteShotTests test1TaskDetails]' started.
+Test Case '-[RouteProbeUITests.RouteShotTests test1TaskDetails]' passed (61.130 seconds).
+Test Case '-[RouteProbeUITests.RouteShotTests test2SuggestedMenu]' started.
+Test Case '-[RouteProbeUITests.RouteShotTests test2SuggestedMenu]' passed (49.030 seconds).
+Test Case '-[RouteProbeUITests.RouteShotTests test3Runs]' started.
+Test Case '-[RouteProbeUITests.RouteShotTests test3Runs]' passed (76.949 seconds).
+Test Case '-[RouteProbeUITests.RouteShotTests test4WhySheet]' started.
+Test Case '-[RouteProbeUITests.RouteShotTests test4WhySheet]' passed (76.977 seconds).
+Test Case '-[RouteProbeUITests.RouteShotTests test5AgentSettings]' started.
+Test Case '-[RouteProbeUITests.RouteShotTests test5AgentSettings]' passed (32.306 seconds).
+Test Case '-[RouteProbeUITests.RouteShotTests test6Composer]' started.
+Test Case '-[RouteProbeUITests.RouteShotTests test6Composer]' passed (36.834 seconds).
+Test Case '-[RouteProbeUITests.RouteShotTests test8TaskDetailDark]' started.
+Test Case '-[RouteProbeUITests.RouteShotTests test8TaskDetailDark]' passed (58.214 seconds).
+	 Executed 7 tests, with 0 failures (0 unexpected) in 391.441 (391.455) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 391.441 (391.456) seconds
+	 Executed 7 tests, with 0 failures (0 unexpected) in 391.441 (391.458) seconds
+** TEST SUCCEEDED **
