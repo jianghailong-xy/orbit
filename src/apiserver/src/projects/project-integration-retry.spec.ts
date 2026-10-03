@@ -33,6 +33,7 @@ function facts(over: Partial<IntegrationRetryFacts> = {}): IntegrationRetryFacts
     taskStatus: 'DONE',
     newestLanding: { id: 'job-1', generation: 1, state: 'CHECK_FAILED', checks: [RED] },
     openItems: [{ id: 'item-1', kind: 'INTEGRATION_CHECK_FAILED', assignee: 'COORDINATOR', assigneeReason: 'DEFAULT' }],
+    deliveryReviews: [],
     ownerBlockers: [],
     ...over,
   };
@@ -125,6 +126,32 @@ test('escalated to the owner, or an owner blocker open on the task: refused', ()
   const blocked = refusalOf(facts({ ownerBlockers: [{ id: 'b-1', kind: 'AWAITING_USER_APPROVAL' }] }));
   assert.equal(blocked.status, 409);
   assert.equal(blocked.code, INTEGRATION_RETRY_OWNER_BLOCKER);
+});
+
+test('a delivery review of the same task: the coordinator\'s is left for it to decide, the owner\'s holds the rerun', () => {
+  // The coordinator's own review is a question a rerun does not answer: the rerun goes ahead and
+  // supersedes the failed check's item only.
+  assert.deepEqual(decideIntegrationRetry(facts({
+    deliveryReviews: [{ id: 'review-1', assignee: 'COORDINATOR', assigneeReason: 'DEFAULT' }],
+  })), {
+    ok: true,
+    retryOfJobId: 'job-1',
+    failureClass: 'CHECK_FAILED',
+    supersede: ['item-1'],
+  });
+
+  // Escalated, the landing's question is the owner's — whoever still holds the failed check — and a
+  // rerun would land the delivery they are deciding about.
+  const decision = decideIntegrationRetry(facts({
+    deliveryReviews: [{ id: 'review-1', assignee: 'OWNER', assigneeReason: 'ESCALATED' }],
+  }));
+  assert.equal(decision.ok, false, 'the coordinator reran a landing whose review is the owner\'s');
+  if (decision.ok) throw new Error('unreachable');
+  assert.equal(decision.status, 409);
+  assert.equal(decision.body.code, INTEGRATION_RETRY_OWNER_ITEM);
+  assert.deepEqual(decision.body.itemIds, ['review-1']);
+  assert.match(decision.body.message, /ESCALATED/);
+  assert.match(decision.body.message, /Ask the coordinator again/);
 });
 
 test('in flight, not DONE, never landed, landed or conflicted: refused, each saying why', () => {

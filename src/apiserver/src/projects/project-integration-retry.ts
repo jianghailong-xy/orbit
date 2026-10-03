@@ -49,6 +49,14 @@ export interface IntegrationRetryFacts {
   newestLanding: { id: string; generation: number; state: string; checks: unknown } | null;
   /** The task's OPEN `INTEGRATION_*` items. */
   openItems: ReadonlyArray<{ id: string; kind: string; assignee: string; assigneeReason: string }>;
+  /**
+   * The task's OPEN `DELIVERY_REVIEW` items (`blocker-disposition.ts` §4): the other question about
+   * this same landing. A rerun does not answer one — whether files outside the declaration belong to
+   * the work is not something a landing decides — so the coordinator's are never superseded here; one
+   * that is the account owner's is their say over this landing, exactly as an integration item of
+   * theirs is.
+   */
+  deliveryReviews: ReadonlyArray<{ id: string; assignee: string; assigneeReason: string }>;
   /** The task's open `project_blocker` episodes that wait on the account owner. */
   ownerBlockers: ReadonlyArray<{ id: string; kind: string }>;
 }
@@ -93,7 +101,9 @@ function refuse(
  * it is the owner's standing grant that the coordinator carries the project's landings. An item the
  * owner handed back to the coordinator ("Ask the coordinator again") is the coordinator's whatever
  * the switch says — the press is the owner putting that one decision in front of it, which is the
- * reading `ProjectOpenItemService.deliver` gives the same press.
+ * reading `ProjectOpenItemService.deliver` gives the same press. A delivery review of the task is an
+ * item about this landing too: once it is the owner's, a rerun would land the delivery they are
+ * deciding about, so it holds the rerun the way an integration item of theirs does.
  */
 export function decideIntegrationRetry(facts: IntegrationRetryFacts): IntegrationRetryDecision {
   if (facts.taskStatus !== 'DONE') {
@@ -124,7 +134,8 @@ export function decideIntegrationRetry(facts: IntegrationRetryFacts): Integratio
     });
   }
 
-  const owners = facts.openItems.filter((item) => item.assignee !== 'COORDINATOR');
+  const owners = [...facts.openItems, ...facts.deliveryReviews]
+    .filter((item) => item.assignee !== 'COORDINATOR');
   if (owners.length > 0) {
     const reasons = [...new Set(owners.map((item) => item.assigneeReason))];
     return refuse(409, INTEGRATION_RETRY_OWNER_ITEM,

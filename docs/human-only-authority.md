@@ -48,7 +48,9 @@ criterion does not apply (`EDIT_ACCEPTANCE_CRITERIA`) and a criterion that moved
 (`CONFIRM_ACCEPTANCE_CRITERIA`). With Automatic off nothing is handed to the coordinator at all:
 the unlanded-criterion fact is refused by the switch, every exception item is the owner's from
 birth, and the coordinator's hand-close of one is refused `OPEN_ITEM_NOT_COORDINATOR_ITEM` and its
-rerun `INTEGRATION_RETRY_OWNER_ITEM`, which is the observable form of that boundary.
+rerun `INTEGRATION_RETRY_OWNER_ITEM`, which is the observable form of that boundary. A review that
+escalated is the owner's the same way: until they hand it back, the coordinator's hand-close of it
+and its rerun of that task's landing are refused with the same two codes.
 `blocker-disposition.ts` §4 is the rule, and
 `src/apiserver/src/projects/automatic-coordinator-routing.pg.spec.ts` holds it against real rows.
 

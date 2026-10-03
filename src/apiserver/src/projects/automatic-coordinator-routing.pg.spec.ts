@@ -77,7 +77,8 @@ import { WakeDispositionService } from './wake-disposition.service';
  *   (e) an item nobody acts on reaches the owner at its project's window — it never hangs;
  *   (f) a branch git refused is the coordinator's too, and ends when the work lands;
  *   (g) a failed landing under a path warning is the coordinator's to rerun, with a reason — the
- *       hang above is gone, and the legacy owner blocker still holds it, as a control;
+ *       hang above is gone, and the legacy owner blocker still holds it, as a control; a review that
+ *       escalated to the owner holds it too, until the owner hands it back;
  *   (h) the same failure in a project that is not Automatic is the owner's, and the coordinator is
  *       refused with codes that say so;
  *   (i) an OWNER_CONFIRMED task keeps its owner gate in an Automatic project.
@@ -933,6 +934,32 @@ test('a failed landing under a path warning is the coordinator’s to rerun with
             WHERE "id" = $1::uuid`,
           [legacy],
         );
+      });
+
+    await t.test('a review that escalated to the owner holds the rerun until the owner hands it back',
+      async () => {
+        // The same landing's other question, left past the project's window: it is the owner's now,
+        // and a rerun would land the delivery they are deciding about — so the coordinator waits, as
+        // it does for an integration item of theirs.
+        const [review] = await itemsOf(stack, f.projectId, 'DELIVERY_REVIEW');
+        await age(stack, review!.id, 20);
+        const escalated = await stack.escalation.sweep();
+        assert.ok(escalated.some((one) => one.itemId === review!.id), 'the review did not escalate');
+        assert.ok(!escalated.some((one) => one.itemId === landing.itemId),
+          'the failed check escalated too, so this proves nothing about the review');
+        await refusedWith(
+          stack.openItems.retryIntegration(
+            f.ownerId, f.projectId, landing.taskId, { reason }, f.coordinatorSessionId,
+          ),
+          409,
+          INTEGRATION_RETRY_OWNER_ITEM,
+        );
+        assert.equal(await stack.db.projectIntegrationJob.count({ where: { taskId: landing.taskId } }), 1,
+          'a refused rerun queued a landing anyway');
+        // "Ask the coordinator again": the owner puts the question back in front of the conversation,
+        // and the decision comes back with it.
+        const back = await stack.openItems.returnToCoordinator(f.ownerId, f.projectId, review!.id);
+        assert.equal(back.assignee, 'COORDINATOR');
       });
 
     await t.test('the coordinator reruns it: the next generation is queued and the item carries why',

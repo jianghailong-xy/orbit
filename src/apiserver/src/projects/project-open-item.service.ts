@@ -1130,6 +1130,11 @@ export class ProjectOpenItemService {
         select: { id: true, kind: true, assignee: true, assigneeReason: true },
         orderBy: [{ waitingSince: 'asc' }, { id: 'asc' }],
       });
+      const deliveryReviews = await tx.projectOpenItem.findMany({
+        where: { projectId, taskId, kind: DELIVERY_REVIEW_KIND, state: 'OPEN' },
+        select: { id: true, assignee: true, assigneeReason: true },
+        orderBy: [{ waitingSince: 'asc' }, { id: 'asc' }],
+      });
       const ownerBlockers = await tx.projectBlocker.findMany({
         where: { projectId, subjectType: 'TASK', subjectId: taskId, owner: 'USER', resolvedAt: null },
         select: { id: true, kind: true },
@@ -1139,6 +1144,7 @@ export class ProjectOpenItemService {
         taskStatus: locked.status,
         newestLanding,
         openItems,
+        deliveryReviews,
         ownerBlockers,
       });
       if (!decision.ok) throw new HttpException(decision.body, decision.status);
