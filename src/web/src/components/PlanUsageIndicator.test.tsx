@@ -358,6 +358,44 @@ describe('the Plan usage pill', () => {
   });
 });
 
+describe("the pill's one number", () => {
+  type Reading = { utilization: number; hours: number };
+  const usage = (now: Date, primary: Reading, secondary: Reading) => ({
+    ...resetRunner(now),
+    planUsage: {
+      codex: {
+        provider: 'codex',
+        primary: {
+          utilization: primary.utilization,
+          windowDurationMins: 300,
+          resetsAt: new Date(now.getTime() + primary.hours * 3600_000).toISOString(),
+        },
+        secondary: {
+          utilization: secondary.utilization,
+          windowDurationMins: 7 * 24 * 60,
+          resetsAt: new Date(now.getTime() + secondary.hours * 3600_000).toISOString(),
+        },
+      },
+    },
+  });
+
+  it('is the window that stops the login, not the first one', async () => {
+    // 6% of the 5-hour window says nothing of a week that is spent.
+    await mount(usage(new Date(), { utilization: 6, hours: 2 }, { utilization: 100, hours: 66 }), false);
+    expect(pill().getAttribute('aria-label')).toBe('Plan usage 100%');
+    expect(pill().classList.contains('full')).toBe(true);
+  });
+
+  it('reads a window past its reset as the fresh one it now is, on the pill and in the popover', async () => {
+    await mount(usage(new Date(), { utilization: 100, hours: -1 }, { utilization: 59, hours: 66 }), false);
+    expect(pill().getAttribute('aria-label')).toBe('Plan usage 59%');
+    await openUsage();
+    const rows = [...usagePanel()!.querySelectorAll('.cu-row')].map((row) => row.textContent);
+    expect(rows[0]).toBe('5h limit0%');
+    expect(rows[1]).toMatch(/^Weekly limit59%Resets /);
+  });
+});
+
 describe('confirming a reset', () => {
   it('asks first with focus on Cancel, and a double press of Use reset sends one create under one clientRequestId', async () => {
     const server = new FakeResetApi();
