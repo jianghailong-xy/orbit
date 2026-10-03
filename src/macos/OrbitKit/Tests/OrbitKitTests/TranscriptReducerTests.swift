@@ -1702,6 +1702,57 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(message, "--dangerously-skip-permissions cannot be used with root/sudo privileges")
     }
 
+    func testRecoverableStructuredStderrBecomesANoticeRow() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .system, payload: .object([
+            "stderr": .string("2026-10-03T15:27:44.249024Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 401 Unauthorized"),
+            "diagnostic": .object([
+                "component": .string("model_catalog"),
+                "phase": .string("startup"),
+                "severity": .string("WARN"),
+                "impact": .string("degraded"),
+                "recoverable": .bool(true),
+                "code": .string("codex_model_catalog_auth")
+            ])
+        ])))
+
+        guard case .notice(_, let message)? = r.state.items.last else {
+            return XCTFail("expected a notice row, got \(String(describing: r.state.items.last))")
+        }
+        XCTAssertTrue(message.hasPrefix("Startup · model_catalog · codex_model_catalog_auth:"))
+        XCTAssertFalse(r.state.items.contains { if case .error = $0 { return true }; return false })
+    }
+
+    func testPersistedLegacyRecoverableStderrBecomesANoticeRow() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .system, payload: .object([
+            "stderr": .string("2026-10-03T15:27:44.249024Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 401 Unauthorized: token_invalidated")
+        ])))
+
+        guard case .notice(_, let message)? = r.state.items.last else {
+            return XCTFail("expected a notice row, got \(String(describing: r.state.items.last))")
+        }
+        XCTAssertTrue(message.hasPrefix("Startup · model_catalog · token_invalidated:"))
+    }
+
+    func testUnknownStructuredStderrKeepsTheErrorPath() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .system, payload: .object([
+            "stderr": .string("engine failed to start"),
+            "diagnostic": .object([
+                "component": .string("engine"),
+                "severity": .string("ERROR"),
+                "impact": .string("fatal"),
+                "recoverable": .bool(false)
+            ])
+        ])))
+
+        guard case .error(_, let message)? = r.state.items.last else {
+            return XCTFail("expected an error row, got \(String(describing: r.state.items.last))")
+        }
+        XCTAssertEqual(message, "engine failed to start")
+    }
+
     /// apply_patch writes its verification explanation over adjacent stderr events. The reducer
     /// keeps those lines in one row so the native card can show a compact summary and disclose the
     /// complete log on demand.

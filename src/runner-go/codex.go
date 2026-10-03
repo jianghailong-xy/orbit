@@ -477,7 +477,12 @@ func runCodexTurn(ctx context.Context, job *ClaimedSession, execDir, prompt stri
 		s := bufio.NewScanner(stderr)
 		s.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 		for s.Scan() {
-			emit(evSystem, map[string]interface{}{"stderr": stripANSI(s.Text()) + "\n"})
+			line := stripANSI(s.Text())
+			payload := map[string]interface{}{"stderr": line + "\n"}
+			if diagnostic, ok := codexStderrDiagnostic(line); ok {
+				payload["diagnostic"] = diagnostic
+			}
+			emit(evSystem, payload)
 		}
 	}()
 
