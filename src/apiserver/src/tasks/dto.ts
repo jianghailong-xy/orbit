@@ -42,12 +42,18 @@ import {
 } from './task-completion-criterion';
 import { MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS } from './task-criterion-shape-advice';
 import { MAX_TASK_CODELESS_REASON_CHARS } from './task-codeless';
+import {
+  MAX_OWNER_CONFIRMATION_REASON_NOTE_CHARS,
+  OWNER_CONFIRMATION_REASONS,
+  type OwnerConfirmationReasonValue,
+} from './owner-confirmation-reason';
 
 const TASK_STATUSES = Object.values(TaskStatus);
 const TASK_COMPLETION_POLICY_VALUES = [...TASK_COMPLETION_POLICIES];
 const TASK_VERDICT_VALUES = [...TASK_VERDICTS];
 const TASK_COMPLETION_CRITERION_VALUES = [...TASK_COMPLETION_CRITERIA];
 const TASK_TERMINAL_REASON_VALUES = [...TASK_TERMINAL_REASONS];
+const OWNER_CONFIRMATION_REASON_VALUES = [...OWNER_CONFIRMATION_REASONS];
 
 /**
  * Bounds on one task's labels. Not a taxonomy — a stop on a caller that has confused the label
@@ -433,6 +439,14 @@ export class CreateTaskDto {
   // server question. Optional on the first attempt; a mismatch without it returns an ADVISORY.
   @IsOptional() @IsString() @MaxLength(MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS)
   completionCriterionOverrideReason?: string;
+  // Why only the account owner can settle this task, for an OWNER_CONFIRMED declaration
+  // (`owner-confirmation-reason.ts`). Required of a session declaring OWNER_CONFIRMED outside an
+  // Automatic project — the write is refused 409 without it — and stored on the task either way.
+  @IsOptional() @IsIn(OWNER_CONFIRMATION_REASON_VALUES)
+  ownerConfirmationReason?: OwnerConfirmationReasonValue;
+  // The one sentence that may go with that reason. Never on its own.
+  @IsOptional() @IsString() @MaxLength(MAX_OWNER_CONFIRMATION_REASON_NOTE_CHARS)
+  ownerConfirmationReasonNote?: string;
   // How this task's own completion is decided once it has subtasks. Omitted is MANUAL, which is
   // what every task has always been: nothing completes it but a status write. See §13.1.
   @IsOptional() @IsIn(TASK_COMPLETION_POLICY_VALUES) completionPolicy?: TaskCompletionPolicyValue;
@@ -669,6 +683,14 @@ export class UpdateTaskDto {
   // but it is now recorded, beside the criterion being left behind.
   @IsOptional() @IsString() @MaxLength(MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS)
   completionCriterionOverrideReason?: string;
+  // See CreateTaskDto.ownerConfirmationReason. Three-state: omit to keep the stored reason, null to
+  // clear it together with its sentence, a value to (re)state it. Asked of a session's write only
+  // when it moves the criterion, the project or the criterion served, as the 09-29 rule is; a write
+  // that takes the task off OWNER_CONFIRMED clears both on its own.
+  @IsOptional() @IsIn(OWNER_CONFIRMATION_REASON_VALUES)
+  ownerConfirmationReason?: OwnerConfirmationReasonValue | null;
+  @IsOptional() @IsString() @MaxLength(MAX_OWNER_CONFIRMATION_REASON_NOTE_CHARS)
+  ownerConfirmationReasonNote?: string | null;
   @IsOptional() @IsDateString() dueDate?: string | null;
   // Three-state like dueDate above: omit to keep the current schedule, null to cancel it, an ISO
   // instant to (re)schedule. Rescheduling a task whose dispatch is in flight is safe — the

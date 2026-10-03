@@ -27,7 +27,7 @@ interface CreateResult {
   generatedPassword?: string;
 }
 
-// Admin-only account management (gated by role on both the nav entry and every
+// Admin-only account management (gated by role on both the account-menu entry and every
 // endpoint). Create/reset return a one-time password shown once in a dialog.
 export function AdminUsersPage() {
   const { modal } = AntdApp.useApp();

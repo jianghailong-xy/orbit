@@ -122,8 +122,9 @@ interface TopNavItem {
   shortcut?: string;
 }
 
-// Fixed product destinations (Admin is appended for admins below). Individual Workspace rows are
-// primary destinations in their own right, so there is no proxy Workspaces parent here.
+// Fixed product destinations, the same for every account: Admin is a row of the account menu at the
+// panel's foot, not one of these. Individual Workspace rows are primary destinations in their own
+// right, so there is no proxy Workspaces parent here.
 const TOP: TopNavItem[] = [
   {
     key: 'projects',
@@ -310,11 +311,6 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   // No Wiki row at all for an account the server has not switched the wiki on for (WIKI_DISABLED):
   // an entry that led to a refusal would be worse than none.
   const topItems = wikiShown(wikiSpaces) ? TOP : TOP.filter((t) => t.key !== 'wiki');
-  // Admins get an extra top-nav entry: user management.
-  const navItems: TopNavItem[] =
-    me.data?.role === 'ADMIN'
-      ? [...topItems, { key: 'admin', icon: <TeamOutlined />, label: 'Admin' }]
-      : topItems;
 
   // The open workspace comes from /workspaces/<id>; behind a /sessions/<id> link, resolve
   // it from that session so its row highlights there too. The session query reuses
@@ -717,9 +713,9 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
         })}
       </div>
 
-      <div className="tp-scroll">
+      <div className="tp-scroll autohide-scrollbar">
         <div className="tp-section">
-          {navItems.map((t) => (
+          {topItems.map((t) => (
             <div
               key={t.key}
               className={`tp-item ${sel === t.key ? 'active' : ''}`}
@@ -920,6 +916,19 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
                 label: 'Settings',
                 onClick: () => navigate('/settings'),
               },
+              // User management, for admins only. It opens a settings page as the row above does, so
+              // it sits in that row's group. The menu opens from the collapsed rail's avatar too, so
+              // Admin stays reachable with the panel collapsed.
+              ...(me.data?.role === 'ADMIN'
+                ? [
+                    {
+                      key: 'admin',
+                      icon: <TeamOutlined />,
+                      label: 'Admin',
+                      onClick: () => navigate('/admin'),
+                    },
+                  ]
+                : []),
               { type: 'divider' },
               {
                 key: 'logout',

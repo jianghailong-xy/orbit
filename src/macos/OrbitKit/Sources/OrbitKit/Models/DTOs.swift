@@ -311,8 +311,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// are already inside `pendingApprovals`; this says which they are, so the bar can name one and
     /// open its card. Empty (or nil, from an older control plane) when none.
     public let ownerItems: [SessionOwnerItem]?
-    /// Who this conversation is waiting on for a reply, and who is waiting on it (session requests,
-    /// `SessionRequestCopy.peersLine`). Nil from an older control plane; empty when none is open.
+    /// Who this conversation is waiting on for a reply, and who is waiting on it (session requests).
+    /// Nil from an older control plane; empty when none is open.
     public let awaitingReplyFrom: [SessionRequestPeer]?
     public let owesReplyTo: [SessionRequestPeer]?
     /// The task whose run this is; nil for an ordinary conversation. It is how the console finds the

@@ -708,8 +708,8 @@ public enum AgentDefaults {
 
     /// Claude's Auto mode is model-specific. Every other runtime has it runtime-wide, for any
     /// model — Codex spells it `on-request` ("the model decides when to ask the user for
-    /// approval"), Kimi and OpenCode expose it as a plain mode, and Antigravity, which can ask
-    /// nobody, runs it as `--dangerously-skip-permissions`.
+    /// approval"), Kimi and OpenCode expose it as a plain mode, and Antigravity runs it as
+    /// `--dangerously-skip-permissions`, on any model it lists.
     ///
     /// Used ONLY where the assigned runner's catalog has not answered for that model. It is a
     /// fallback and no longer a gate: the runner asks the CLI it will actually run the session

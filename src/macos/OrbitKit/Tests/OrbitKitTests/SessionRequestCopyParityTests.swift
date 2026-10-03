@@ -107,8 +107,6 @@ final class SessionRequestCopyParityTests: XCTestCase {
         assertDeclares(web, "SESSION_REPLY_OPEN_REQUEST", SessionRequestCopy.openRequest)
         assertDeclares(web, "SESSION_REPLY_NOT_YOU", SessionRequestCopy.notYou)
         assertDeclares(web, "SESSION_REPLY_NEVER_SEEN", SessionRequestCopy.neverSeen)
-        assertDeclares(web, "SESSION_REQUEST_AWAITING", SessionRequestCopy.awaiting)
-        assertDeclares(web, "SESSION_REQUEST_OWES", SessionRequestCopy.owes)
     }
 
     func testEveryStateAndOutcomeIsCalledTheSameThing() throws {
@@ -117,14 +115,5 @@ final class SessionRequestCopyParityTests: XCTestCase {
             + SessionRequestOutcome.allCases.map { ($0.rawValue, SessionRequestCopy.stateLabel(.closed($0))) })
         try assertLabels(web, "SESSION_REPLY_OUTCOME_LABEL",
                          SessionRequestOutcome.allCases.map { ($0.rawValue, SessionRequestCopy.outcomeLabel($0)) })
-    }
-
-    /// The list line is composed the same way at both ends: the word, a space, the titles, two at most.
-    func testTheListLineIsBuiltTheSameWay() throws {
-        let web = try flat(Self.webLib)
-        XCTAssertTrue(web.contains("`${titles.slice(0, 2).join(', ')} +${titles.length - 2}`"))
-        XCTAssertTrue(web.contains("`${SESSION_REQUEST_AWAITING} ${names(awaiting)}`"))
-        XCTAssertTrue(web.contains("`${SESSION_REQUEST_OWES} ${names(owes)}`"))
-        XCTAssertTrue(web.contains("parts.join(' · ')"))
     }
 }

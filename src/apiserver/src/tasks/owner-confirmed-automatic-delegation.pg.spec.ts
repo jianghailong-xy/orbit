@@ -19,7 +19,8 @@
  *    written either), and an update that lands on it by changing the criterion, the criterion it
  *    serves, or the project. Against a criterion that does not ask for the owner, and against none;
  *  - let through: a criterion that asks for the owner, a write with no session header (the owner),
- *    and a project with Automatic off;
+ *    and a project with Automatic off — where, since 2026-10-03, the session names why only the owner
+ *    can settle it (`owner-confirmation-reason.pg.spec.ts` pins that rule's two sides);
  *  - rows that already stand are not re-judged by an edit that declares nothing new, and the way
  *    out — re-declaring EVIDENCE_JUDGMENT — stays open.
  *
@@ -391,14 +392,19 @@ suite('in an Automatic project a session cannot hand a task to the owner unless 
       assert.equal((await stored(judged)).completion_criterion, 'OWNER_CONFIRMED');
     });
 
-    await t.test('with Automatic off, a session declares it exactly as before', async () => {
+    await t.test('with Automatic off, this rule does not apply: the criterion is not asked', async () => {
+      // Not asked whether the criterion served asks for the owner — this rule is the Automatic
+      // project's. What is asked instead, since 2026-10-03, is the session's reason
+      // (`owner-confirmation-reason.ts`), which every write below names.
       const single = await createFrom(manual.coordinator, {
         title: 'manual-single', projectId: manual.id,
         completionCriterion: 'OWNER_CONFIRMED', criterionKey: manualPlain.key,
+        ownerConfirmationReason: 'OWNER_TRADE_OFF',
       });
       assert.equal((await stored(single.id)).completion_criterion, 'OWNER_CONFIRMED');
       const none = await createFrom(manual.coordinator, {
         title: 'manual-single-none', projectId: manual.id, completionCriterion: 'OWNER_CONFIRMED',
+        ownerConfirmationReason: 'OWNER_TRADE_OFF',
       });
       assert.equal((await stored(none.id)).completion_criterion, 'OWNER_CONFIRMED');
 
@@ -406,6 +412,7 @@ suite('in an Automatic project a session cannot hand a task to the owner unless 
         {
           title: 'manual-batch', projectId: manual.id,
           completionCriterion: 'OWNER_CONFIRMED', criterionKey: manualPlain.key,
+          ownerConfirmationReason: 'OWNER_TRADE_OFF',
         },
       ]);
       assert.equal((await stored(batch[0].id)).completion_criterion, 'OWNER_CONFIRMED');
@@ -414,6 +421,7 @@ suite('in an Automatic project a session cannot hand a task to the owner unless 
       await updateFrom(manual.coordinator, judged, {
         completionCriterion: 'OWNER_CONFIRMED',
         completionCriterionOverrideReason: 'the owner confirms this one',
+        ownerConfirmationReason: 'OWNER_TRADE_OFF',
       });
       assert.equal((await stored(judged)).completion_criterion, 'OWNER_CONFIRMED');
     });

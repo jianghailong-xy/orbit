@@ -84,6 +84,9 @@ export class CreateSharedPoolDto {
 export class UpdateSharedPoolDto {
   @IsOptional() @IsString() @MinLength(1) label?: string;
   @IsOptional() @IsBoolean() membersCanAdd?: boolean;
+  // Migration 0371: whether a member may sign a ChatGPT account of their own in. Its own rule, beside the
+  // keys' — an admin of the pool always may.
+  @IsOptional() @IsBoolean() membersCanAddAccounts?: boolean;
   @IsOptional() @IsBoolean() ownKeyFirst?: boolean;
 }
 

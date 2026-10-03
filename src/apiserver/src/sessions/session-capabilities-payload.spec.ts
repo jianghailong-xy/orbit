@@ -86,6 +86,9 @@ test('UI list and detail payloads include the same derived capabilities', async 
         titleManagedByProject: true,
         titleBeforeProjectManagement: 'Dormant session',
       }),
+      // Which of the rows are runs of a task, for the evidence cards of dispatched tasks a run can
+      // hold (`tasks/pending-evidence-judgments.ts#countDispatchedEvidenceJudgments`): none.
+      findMany: async () => [],
     },
     // The list's `pendingApprovals` is blocked tool calls plus the owner decisions each row is the
     // surface for (`projects/owner-decision-signal.ts`). This row coordinates nothing and no
@@ -93,6 +96,8 @@ test('UI list and detail payloads include the same derived capabilities', async 
     // are unaffected either way.
     project: { findMany: async () => [] },
     taskOwnerConfirmationRequest: { findMany: async () => [] },
+    // …the evidence of tasks it dispatched outside any project (`tasks/evidence-review.ts`), none…
+    task: { findMany: async () => [] },
     // …and the four owner items a project can be waiting on its owner for (§7.6 V13),
     // which these fixtures have none of either.
     sessionRequest: noSessionRequests(),

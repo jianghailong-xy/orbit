@@ -14,10 +14,11 @@ import type { LoginAccount } from './pool-login-select';
  *  (2) Every account used up or signed out: a key, the owner's own first, the move saying why it left the
  *      account.
  *  (3) An account back: the next choosing moves the session off its key onto it, and says so.
- *  (4) Anybody else's session too runs on the pool's ChatGPT accounts first — its owner's sessions and the
- *      people they added's alike (2026-10-03) — and on its keys while none can run: their own first, none
- *      the others spent to its share cap. On a shared pool (0321), which holds no account, everybody's —
- *      its maker's too — on its keys.
+ *  (4) Any session runs on the pool's ChatGPT accounts first — whoever in the pool signed each one in
+ *      (2026-10-03, and migration 0371 for accounts a member contributed) — and on its keys while none can
+ *      run: the requester's own first, none the others spent to its share cap. A pool holding no account —
+ *      what a shared pool (0321) is until somebody in it signs one in — is the same rule with nothing to
+ *      choose on the account side.
  *  (5) Nothing can run: nothing is chosen, and the session keeps the credential it has.
  */
 
@@ -59,7 +60,6 @@ const reading = (fiveHour: number, weekly: number, weekEnds: Date): PlanUsageSna
 });
 const pool = (over: Partial<CredentialPool<LoginAccount, Key>>): CredentialPool<LoginAccount, Key> => ({
   ownerId: OLGA,
-  shared: false,
   accounts: [],
   keys: [],
   ownKeyFirst: true,
@@ -176,9 +176,21 @@ test("(4) anybody else's session too runs on the pool's ChatGPT accounts first, 
   assert.equal(choose(pool({ accounts: down, keys: k2Spent }), PIA, on(null, 'k2')).notice, 'Switched to k3-key — k2-key is out of budget');
 });
 
-test('(4) on a shared pool everybody runs on its keys, its maker too — and an account carried over from another pool is dropped without a line', () => {
-  const shared = pool({ shared: true, keys: [key('k1', MAX), key('k2', OLGA)] });
-  assert.deepEqual(choose(shared, OLGA, on('a9', null)), { chosen: on(null, 'k2'), next: on(null, 'k2'), notice: null });
+test('(4) a pool holding no account is the same rule: its keys do the work, and a row naming an account it does not hold moves on with a line', () => {
+  // A keys-only pool — what a shared pool (0321) is until somebody in it signs an account in (0371) — and
+  // a session whose row names an account this pool does not hold: it goes to a key, and the line says
+  // which account it left (one carried over from another pool, or one this pool no longer holds).
+  const keysOnly = pool({ keys: [key('k1', MAX), key('k2', OLGA)] });
+  assert.deepEqual(choose(keysOnly, OLGA, on('a9', null)), {
+    chosen: on(null, 'k2'),
+    next: on(null, 'k2'),
+    notice: 'Switched to k2-key — the previous account is no longer in this pool',
+  });
+  // A session that names nothing moves without a line: it starts here.
+  assert.deepEqual(choose(keysOnly, OLGA), { chosen: on(null, 'k2'), next: on(null, 'k2'), notice: null });
+  // The same pool once the account IS one of its own (0371): the session stays on it.
+  const withAccount = pool({ accounts: [account('a9')], keys: [key('k1', MAX), key('k2', OLGA)] });
+  assert.deepEqual(choose(withAccount, OLGA, on('a9', null)), { chosen: on('a9', null), next: on('a9', null), notice: null });
 });
 
 test('(5) nothing can run: nothing is chosen, and the session keeps the credential it has', () => {
