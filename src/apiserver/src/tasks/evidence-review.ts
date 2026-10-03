@@ -31,7 +31,10 @@ import { describeEvidenceCitations, parseEvidenceEnvelope, type EvidenceEnvelope
  *    independence rule (`decidingSessionDisqualification`) are untouched;
  *  - while the reviewer holds it the owner is not asked (`reviewerHolds`), and when it stops holding
  *    it — 30 minutes after the delivery, or the moment that session has ended — the owner's card is
- *    drawn and counted (`ownerEvidenceCard`, `owner-decision-signal.ts`).
+ *    drawn and counted (`ownerEvidenceCard`, `owner-decision-signal.ts`);
+ *  - a task in no project with no dispatching session at all — filed with none, or whose dispatching
+ *    session was deleted for good — has nobody to hold it, so its owner card is drawn in its run
+ *    from the start, counted there, and decided there by the owner (`ownerDecidesInTheRun`).
  *
  * WHY NO ROW OF ITS OWN
  * ---------------------
@@ -139,20 +142,24 @@ export async function reviewerHolds(
 }
 
 /**
- * Where the owner's card for a dispatched task's revision is drawn once its reviewer stops holding
- * it, and in whose name the decision it records is made.
+ * Where the owner's card for the revision of a task in no project is drawn once nobody else holds it,
+ * and in whose name the decision it records is made.
  *
  *  - In the dispatching session, while that conversation is not in Trash. For this work it is what
  *    a project's coordinator conversation is to a project's work, and that is where a project's
- *    evidence card is drawn.
+ *    evidence card is drawn. The decision is that session's.
  *  - Once it is in Trash, in the task's own run — the session that submitted the revision — so the
- *    question is still in front of the owner somewhere they can open.
+ *    question is still in front of the owner somewhere they can open. The decision is still the
+ *    dispatching session's: the door names the conversation a decision is given in and refuses one
+ *    that did the work, and the run did; the dispatching session did not, and its row is still there.
+ *  - With no dispatching session at all — the task was filed with none, or the one it was filed from
+ *    was deleted for good, which empties `creator_session_id` (ON DELETE SET NULL) — in the run as
+ *    well, and from the start: nobody is delivered it and nobody holds it. The decision is recorded
+ *    in the run's name, because there is no other conversation left to record it in, and the door
+ *    takes it from the account owner pressing the card in the app and from nobody else
+ *    (`ownerDecidesInTheRun`). Without that the task could never be settled at all.
  *
- * Either way the decision is recorded as the dispatching session's (`decidingSessionId`). The door
- * names the conversation a decision is given in and refuses one that did the work, and the run did;
- * the dispatching session did not, and it is whose question this was. A dispatching session that was
- * deleted for good takes `creator_session_id` with it (ON DELETE SET NULL), and the task is then one
- * with no dispatching session: nobody holds it, nobody is delivered it, and no card is drawn for it.
+ * Null when the conversation the card would be drawn in is gone too.
  */
 export interface OwnerEvidenceCard {
   sessionId: string;
@@ -163,10 +170,50 @@ export function ownerEvidenceCard(
   dispatching: { id: string; deletedAt: Date | null } | null,
   run: { id: string; deletedAt: Date | null } | null,
 ): OwnerEvidenceCard | null {
-  if (!dispatching) return null;
-  if (dispatching.deletedAt === null) return { sessionId: dispatching.id, decidingSessionId: dispatching.id };
-  if (run && run.deletedAt === null) return { sessionId: run.id, decidingSessionId: dispatching.id };
-  return null;
+  if (dispatching && dispatching.deletedAt === null) {
+    return { sessionId: dispatching.id, decidingSessionId: dispatching.id };
+  }
+  if (!run || run.deletedAt !== null) return null;
+  return { sessionId: run.id, decidingSessionId: dispatching ? dispatching.id : run.id };
+}
+
+/**
+ * The one decision the door takes from a session that did the work: the account owner, in the app,
+ * pressing the owner card of a task in no project that has no dispatching session, in the run that
+ * submitted its latest revision — the only conversation that card can be drawn in
+ * (`ownerEvidenceCard`).
+ *
+ * The independence rule (`decidingSessionDisqualification`) is about who DECIDES: a run may not
+ * settle its own work. Here the run decides nothing — the owner does, and the run is only where they
+ * pressed. Every other caller is refused as before: an agent, a request carrying a session header, a
+ * task in a project, a task whose dispatching session still exists (its card decides as that
+ * session), and any session other than that run. `ownerInTheApp` is the OWNER_CONFIRMED door's own
+ * test of the principal (`ownerConfirmationPrincipalRefusal`), asked by the caller.
+ */
+export async function ownerDecidesInTheRun(
+  tx: Db,
+  scope: { ownerId: string; taskId: string },
+  decidingSessionId: string,
+  ownerInTheApp: boolean,
+): Promise<boolean> {
+  if (!ownerInTheApp) return false;
+  const task = await tx.task.findFirst({
+    where: { id: scope.taskId, ownerId: scope.ownerId },
+    select: {
+      projectId: true,
+      completionCriterion: true,
+      creatorSession: { select: { id: true } },
+      completionEvidence: { orderBy: { revision: 'desc' }, take: 1, select: { sourceSessionId: true } },
+    },
+  });
+  if (!task || task.projectId !== null || task.completionCriterion !== 'EVIDENCE_JUDGMENT') return false;
+  if (task.creatorSession !== null) return false;
+  if (task.completionEvidence[0]?.sourceSessionId !== decidingSessionId) return false;
+  const run = await tx.session.findFirst({
+    where: { id: decidingSessionId, ownerId: scope.ownerId },
+    select: { deletedAt: true },
+  });
+  return run !== null && run.deletedAt === null;
 }
 
 /** §2 D4's vocabulary, for a delivery this door would not make. Nothing is written for any of them. */

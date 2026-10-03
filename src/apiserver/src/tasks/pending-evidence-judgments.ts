@@ -64,8 +64,10 @@ import {
  * still open, 30 minutes not yet passed) the revision is in nobody's `pending`. Once it stops holding
  * it, the revision is the owner's card in exactly ONE conversation — the dispatching session, or the
  * task's run once that one is in Trash (`ownerEvidenceCard`) — and in that conversation's `pending`
- * alone, carrying the session the decision is recorded as (`ownerCard`). A task in no project that no
- * session dispatched is read exactly as before.
+ * alone, carrying the session the decision is recorded as (`ownerCard`). A task in no project with no
+ * dispatching session — filed with none, or whose dispatching session was deleted for good — has
+ * nobody to hold it: its card is in its run from the start, and the owner's press there decides it
+ * (`ownerDecidesInTheRun`). Only a row whose card has nowhere left to be drawn is read as before.
  *
  * WHY EACH ROW CARRIES A REASON RATHER THAN A FLAG
  * ------------------------------------------------
@@ -148,10 +150,10 @@ export interface PendingEvidenceJudgment {
    *  `ownerCard`, from the session that card decides as. */
   independence: JudgmentIndependence;
   /**
-   * For a task a session dispatched outside any project: the conversation the account owner's card
-   * for it is drawn in, and the session its decision is recorded as (`ownerEvidenceCard`) — the
-   * `decidingSessionId` a press posts, which is not always the conversation it is pressed in. Null on
-   * every other row: a project's are drawn in its coordinator conversation, by `projectId`.
+   * For a task in no project: the conversation the account owner's card for it is drawn in, and the
+   * session its decision is recorded as (`ownerEvidenceCard`) — the `decidingSessionId` a press
+   * posts, which is not always the conversation it is pressed in. Null on every other row: a
+   * project's are drawn in its coordinator conversation, by `projectId`.
    */
   ownerCard: OwnerEvidenceCard | null;
 }
@@ -305,13 +307,13 @@ async function coordinatorHolds(
  * The tasks whose LATEST evidence revision carries no decision yet, each with that revision and
  * whether the project's coordinator holds it (`coordinatorHolds`) — the population both the queue
  * and the badge's count (`countPendingEvidenceJudgments`) place, read by one query so the two
- * cannot come to disagree about it. `projectIds` narrows it to those projects, and `dispatched` to
- * the tasks a session filed in no project — further, when it names `taskIds`, to tasks the given
- * conversations could draw a card for (`countDispatchedEvidenceJudgments`).
+ * cannot come to disagree about it. `projectIds` narrows it to those projects, and
+ * `outsideProjects` to the tasks in none — further, when it names `creatorSessionIds`, to tasks the
+ * given conversations could draw a card for (`countEvidenceCardsOutsideProjects`).
  *
- * A dispatched row — in no project, with a dispatching session — also carries whether that session
- * holds it (`reviewerHolds`), where the owner's card for it is drawn (`ownerEvidenceCard`), and the
- * dispatching session itself, which is what that card decides as.
+ * A row in no project also carries its dispatching session, if it still has one, whether that
+ * session holds it (`reviewerHolds`), and where the owner's card for it is drawn and in whose name it
+ * decides (`ownerEvidenceCard`) — null when that conversation is gone as well.
  */
 async function unansweredLatestEvidence(
   tx: PrismaTypes.TransactionClient,
@@ -319,20 +321,20 @@ async function unansweredLatestEvidence(
   readAt: Date,
   scope: {
     projectIds?: readonly string[];
-    dispatched?: { creatorSessionIds?: readonly string[]; taskIds?: readonly string[] };
+    outsideProjects?: { creatorSessionIds?: readonly string[]; taskIds?: readonly string[] };
   } = {},
 ) {
-  const narrowed = scope.dispatched?.creatorSessionIds !== undefined;
+  const narrowed = scope.outsideProjects?.creatorSessionIds !== undefined;
   const tasks = await tx.task.findMany({
     where: {
       ownerId,
       ...(scope.projectIds ? { projectId: { in: [...scope.projectIds] } } : {}),
-      ...(scope.dispatched ? { projectId: null, creatorSessionId: { not: null } } : {}),
+      ...(scope.outsideProjects ? { projectId: null } : {}),
       ...(narrowed
         ? {
           OR: [
-            { creatorSessionId: { in: [...scope.dispatched!.creatorSessionIds!] } },
-            { id: { in: [...(scope.dispatched!.taskIds ?? [])] } },
+            { creatorSessionId: { in: [...scope.outsideProjects!.creatorSessionIds!] } },
+            { id: { in: [...(scope.outsideProjects!.taskIds ?? [])] } },
           ],
         }
         : {}),
@@ -388,22 +390,26 @@ async function unansweredLatestEvidence(
       : []
   ));
   const heldByReviewer = await reviewerHolds(tx, dispatched, readAt);
-  // The runs a card falls back to: only asked about for a dispatching session that is in Trash.
+  // The runs a card falls back to: asked about only where there is no dispatching session to draw it
+  // in — none at all, or one that is in Trash.
   const runIds = [...new Set(unanswered.flatMap(({ task, latest }) => (
-    task.projectId === null && task.creatorSession?.deletedAt ? [latest.sourceSessionId] : []
+    task.projectId === null && (!task.creatorSession || task.creatorSession.deletedAt)
+      ? [latest.sourceSessionId]
+      : []
   )))];
   const runs = runIds.length === 0 ? [] : await tx.session.findMany({
     where: { id: { in: runIds }, ownerId },
     select: { id: true, deletedAt: true },
   });
   return unanswered.map((row) => {
-    const dispatching = row.task.projectId === null ? row.task.creatorSession : null;
+    const outsideProjects = row.task.projectId === null;
+    const dispatching = outsideProjects ? row.task.creatorSession : null;
     return {
       ...row,
       heldByCoordinator: held.has(row.task.id),
       dispatching,
       heldByReviewer: heldByReviewer.has(row.task.id),
-      ownerCard: dispatching
+      ownerCard: outsideProjects
         ? ownerEvidenceCard(dispatching, runs.find((run) => run.id === row.latest.sourceSessionId) ?? null)
         : null,
     };
@@ -457,14 +463,21 @@ export async function readPendingEvidenceJudgments(
       { ownerId, taskId: task.id },
       decidingSession,
     );
-    // A dispatched row's card decides as its dispatching session wherever it is drawn, so in the
-    // card's conversation that session is the one the door's independence question is about.
-    const isCardHere = dispatching !== null && ownerCard?.sessionId === decidingSession.id;
-    const independenceOf = !isCardHere || ownerCard!.decidingSessionId === decidingSession.id
+    // A row in no project is asked of the one conversation its owner card is drawn in. That card
+    // decides as its dispatching session wherever it is drawn, so there that session is the one the
+    // door's independence question is about; with no dispatching session it is the owner's own
+    // press in the task's run, which the door takes from the owner in the app
+    // (`ownerDecidesInTheRun`), so there is nobody else's independence to ask about.
+    const isCardHere = ownerCard?.sessionId === decidingSession.id;
+    const independenceOf = !isCardHere
       ? disqualification
-      : await decidingSessionDisqualification(
-        tx, { ownerId, taskId: task.id }, { id: dispatching!.id, taskId: dispatching!.taskId },
-      );
+      : !dispatching
+        ? null
+        : ownerCard!.decidingSessionId === decidingSession.id
+          ? disqualification
+          : await decidingSessionDisqualification(
+            tx, { ownerId, taskId: task.id }, { id: dispatching.id, taskId: dispatching.taskId },
+          );
     // Asked of the door's own predicate rather than re-derived from `envelope` above: whether a
     // decision can be recorded is the door's question, and a second opinion here is exactly the
     // drift that would put an undecidable row back among the answerable ones.
@@ -493,7 +506,7 @@ export async function readPendingEvidenceJudgments(
         disqualification: independenceOf,
         requiredAction: independenceOf === null ? null : REQUIRES_INDEPENDENT_SESSION_ACTION,
       },
-      ownerCard: dispatching ? ownerCard : null,
+      ownerCard,
     };
     // The placement, in the order the door asks: is there a standard to decide this against at
     // all, and then is this reader one the door would take the decision from. Two of the four
@@ -504,10 +517,11 @@ export async function readPendingEvidenceJudgments(
     // is worded. And a decidable row an Automatic project's coordinator holds is not asked of
     // anybody else until the hold ends — that is the whole of what the hold changes.
     //
-    // A row a session dispatched outside any project is asked of one conversation only — its card's,
-    // once the dispatching session has stopped holding it — and from there in the dispatching
-    // session's name. The run that has to refile an undecidable one is told so as before.
-    if (dispatching) {
+    // A row in no project with an owner card is asked of one conversation only — its card's, once
+    // nobody else holds it — and from there in the name the card carries. The run that has to refile
+    // an undecidable one is told so as before. One whose card has nowhere left to be drawn is read
+    // as every row in no project was before.
+    if (ownerCard) {
       if (standing === null) {
         if (isCardHere && !heldByReviewer && independenceOf === null) pending.push(row);
       } else if (disqualification !== null) {
@@ -602,17 +616,19 @@ export async function countPendingEvidenceJudgments(
 }
 
 /**
- * How many rows `readPendingEvidenceJudgments` would put in `pending` for the conversation each
- * dispatched task's owner card is drawn in — a task a session filed in no project, whose revision
- * that session has stopped holding — by that conversation (`ownerEvidenceCard`). The "Needs you"
- * badge's source for them (`owner-decision-signal.ts`), asked in the queue's own order: a live
- * standard, not held, and a decision the door would take in the dispatching session's name.
+ * How many rows `readPendingEvidenceJudgments` would put in `pending` for the conversation the owner
+ * card of each task in no project is drawn in, by that conversation (`ownerEvidenceCard`): the
+ * dispatching session once it stops holding the revision, or the task's run when that session is in
+ * Trash or there is none. The "Needs you" badge's source for them (`owner-decision-signal.ts`), asked
+ * in the queue's own order: a live standard, not held, and a decision the door would take in the
+ * name the card carries.
  *
  * `sessionIds` narrows the read to the cards those conversations could hold — tasks they filed, and
- * the tasks they are runs of (a card moves to the run when its dispatching session is in Trash) —
- * so a session row's summary, built on every publish, reads that and not the whole account.
+ * the tasks they are runs of (a card is drawn in the run when there is no dispatching session to
+ * draw it in) — so a session row's summary, built on every publish, reads that and not the whole
+ * account.
  */
-export async function countDispatchedEvidenceJudgments(
+export async function countEvidenceCardsOutsideProjects(
   tx: PrismaTypes.TransactionClient,
   ownerId: string,
   readAt: Date = new Date(),
@@ -627,15 +643,19 @@ export async function countDispatchedEvidenceJudgments(
     })
     : [];
   const unanswered = await unansweredLatestEvidence(tx, ownerId, readAt, {
-    dispatched: sessionIds
+    outsideProjects: sessionIds
       ? { creatorSessionIds: sessionIds, taskIds: runs.flatMap((run) => (run.taskId ? [run.taskId] : [])) }
       : {},
   });
   for (const { task, latest, dispatching, heldByReviewer, ownerCard } of unanswered) {
-    if (!dispatching || !ownerCard || heldByReviewer) continue;
+    if (!ownerCard || heldByReviewer) continue;
     if ((await criterionStandingRefusal(tx, task, latest.evidence)) !== null) continue;
-    const decider = { id: dispatching.id, taskId: dispatching.taskId };
-    if ((await decidingSessionDisqualification(tx, { ownerId, taskId: task.id }, decider)) !== null) continue;
+    // In the dispatching session's name, the door asks that session's independence; with none, the
+    // card is the owner's own press in the run (`ownerDecidesInTheRun`), and nothing more is asked.
+    if (dispatching) {
+      const decider = { id: dispatching.id, taskId: dispatching.taskId };
+      if ((await decidingSessionDisqualification(tx, { ownerId, taskId: task.id }, decider)) !== null) continue;
+    }
     counts.set(ownerCard.sessionId, (counts.get(ownerCard.sessionId) ?? 0) + 1);
   }
   return counts;

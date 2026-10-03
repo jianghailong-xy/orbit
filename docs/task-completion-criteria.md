@@ -96,9 +96,8 @@ that somebody must later clear.
 A task filed outside any project by a session — `creator_session_id`, the dispatching session — may
 declare `EVIDENCE_JUDGMENT` (rules of 2026-10-03, `src/apiserver/src/tasks/evidence-review.ts`).
 Its evidence quotes the task's own `acceptanceCriteria`, as every task in no project does, so state
-them. A task with no dispatching session — the owner's own, one filed with no session header, or one
-whose dispatching session was deleted for good (the reference is cleared on purge) — is still
-refused that declaration with `EVIDENCE_JUDGMENT_REQUIRES_PROJECT`: nobody would be handed its
+them. A write with no dispatching session — the owner's own, or one filed with no session header — is
+still refused that declaration with `EVIDENCE_JUDGMENT_REQUIRES_PROJECT`: nobody would be handed its
 evidence.
 
 - **Delivery.** Each evidence revision the run submits is handed to the dispatching session as a
@@ -124,6 +123,15 @@ evidence.
   names. The conversation's row counts it in needs-you (owner-decision kind `EVIDENCE_DECISION`,
   which reads "Waiting for approval" like a project's evidence card), in the Open scope only. A
   delivery that was refused, or never made, is the owner's from the start.
+- **No dispatching session at all.** A task in no project whose dispatching session was deleted for
+  good (Delete permanently empties `creator_session_id`), or that never had one (a row from before
+  this rule), has nobody to hold its revision: its owner card is drawn in the run that submitted it
+  from the start — no 30 minutes — and counted there. The decision is recorded in that run's name,
+  the only conversation left, and the door takes it from the account owner pressing the card in the
+  app and from nobody else (`ownerDecidesInTheRun`, read the way the OWNER_CONFIRMED door reads its
+  caller: the app's door, with no session header). An agent, a request carrying a session header, or
+  any other session deciding as the run is still refused `EVIDENCE_JUDGMENT_REQUIRES_INDEPENDENT_SESSION`:
+  the owner decides there, not the run.
 
 ## Shape advice and deliberate overrides
 

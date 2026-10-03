@@ -33,7 +33,8 @@ import {
 } from './task-evidence-envelope';
 import { TasksService } from './tasks.service';
 import { EvidenceReviewService } from './evidence-review.service';
-import { ownerEvidenceCard } from './evidence-review';
+import { ownerDecidesInTheRun, ownerEvidenceCard } from './evidence-review';
+import { ownerConfirmationPrincipalRefusal, type OwnerConfirmationPrincipal } from './task-owner-confirmation';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import { completionEvidenceRevisedFact } from '../projects/completion-input';
 import { enqueueForDoneTask } from '../projects/project-integration-job';
@@ -658,6 +659,11 @@ export class TaskCompletionEvidenceService {
     taskId: string,
     actor: CompletionEvidenceActor,
     input: DecideCompletionEvidence,
+    /** Who is asking, as the app's door sees it. Read for one thing only: whether this is the account
+     *  owner in the app, which is who may decide the owner card of a task in no project that has no
+     *  dispatching session from the run it is drawn in (`ownerDecidesInTheRun`). Absent on the
+     *  runner's door, which is never the owner in the app. */
+    principal?: OwnerConfirmationPrincipal,
   ) {
     if (!UUID_RE.test(actor.id) || !Object.values(CreatorType).includes(actor.type)) {
       throw new BadRequestException('evidence actor is invalid');
@@ -692,7 +698,15 @@ export class TaskCompletionEvidenceService {
         select: { id: true, taskId: true },
       });
       if (!decidingSession) throw new NotFoundException('deciding session not found');
-      await assertIndependentDecidingSession(tx, { ownerId, taskId }, decidingSession);
+      // The independence rule, with the one press it does not refuse: the account owner in the app
+      // deciding the owner card of a task in no project that has no dispatching session, in the run
+      // that card is drawn in — the only conversation left to draw it in. The owner decides there,
+      // not the run; every other session that did the work is refused exactly as before.
+      const ownerInTheApp = principal !== undefined
+        && ownerConfirmationPrincipalRefusal(ownerId, principal) === null;
+      if (!(await ownerDecidesInTheRun(tx, { ownerId, taskId }, decidingSession.id, ownerInTheApp))) {
+        await assertIndependentDecidingSession(tx, { ownerId, taskId }, decidingSession);
+      }
 
       const latest = await tx.taskCompletionEvidence.findFirst({
         where: { taskId },

@@ -18,7 +18,9 @@
  *   (7) a dispatching session in Trash: the card moves to the task's run, decided in the dispatching
  *       session's name;
  *   (8) a send-back leaves the task open, and the next revision is delivered and held again;
- *   (9) a task in no project that no session dispatched is read exactly as before.
+ *   (9) a task in no project that no session dispatched: its card is in its run from the start,
+ *       counted there, and only the owner's own press in the app decides it from there;
+ *  (10) a dispatching session deleted for good: the same, at once — no 30 minutes.
  *
  * Destructive: it truncates. COORDINATOR_PG_URL must name the disposable guarded database with
  * current migrations applied:
@@ -502,33 +504,103 @@ suite('outside a project the dispatching session settles the evidence, and the o
           /has submitted revision 2 since this one/);
       });
 
+    /** The press the owner makes on a card from the app: the user door, with no session header. */
+    const inTheApp = { door: 'USER' as const, userId: ownerId };
+
+    /** Refused by the door's independence rule, and nothing written. */
+    async function refusedAsTheRun(
+      taskId: string,
+      run: string,
+      principal?: { door: 'USER'; userId: string; actingSessionId?: string },
+    ) {
+      let refused: { code?: string } | null = null;
+      try {
+        await evidence.decide(ownerId, taskId, principal ? theOwner : agent, {
+          decidingSessionId: run, evidenceRevision: '1', decision: 'CONFIRM',
+        }, principal);
+      } catch (error) {
+        assert.ok(error instanceof ForbiddenException, `expected a 403, got ${error}`);
+        refused = (error as HttpException).getResponse() as { code?: string };
+      }
+      assert.equal(refused?.code, 'EVIDENCE_JUDGMENT_REQUIRES_INDEPENDENT_SESSION');
+      assert.equal(await db.taskEvidenceDecision.count({ where: { taskId } }), 0, 'nothing was written');
+    }
+
     // (9) -------------------------------------------------------------------------------------------
-    await t.test('(9) a task in no project that no session dispatched is read exactly as before', async () => {
-      // As the population that already exists: written to the table, filed from no session.
-      const taskId = randomUUID();
-      await db.task.create({
-        data: {
-          id: taskId, ownerId, title: 'the owner’s standalone task', creatorType: CreatorType.USER,
-          creatorId: ownerId, assigneeId: workspaceId, status: TaskStatus.IN_PROGRESS,
-          completionCriterion: 'EVIDENCE_JUDGMENT', acceptanceCriteria: STANDARD,
-        },
+    await t.test('(9) a task in no project that no session dispatched: its card is in its run, and the owner settles it there',
+      async () => {
+        // As the population that already exists: written to the table, filed from no session.
+        const taskId = randomUUID();
+        await db.task.create({
+          data: {
+            id: taskId, ownerId, title: 'the owner’s standalone task', creatorType: CreatorType.USER,
+            creatorId: ownerId, assigneeId: workspaceId, status: TaskStatus.IN_PROGRESS,
+            completionCriterion: 'EVIDENCE_JUDGMENT', acceptanceCriteria: STANDARD,
+          },
+        });
+        const run = await conversation('standalone run', { taskId, startsTaskWork: true });
+        await db.toolCall.create({
+          data: {
+            sessionId: run, name: 'Bash', toolUseId: `toolu_${run.slice(0, 8)}`,
+            input: { command: 'npm test', description: 'the suite' }, isError: false,
+          },
+        });
+        const turnsBefore = await db.conversationTurn.count({ where: { clientTurnId: { startsWith: PREFIX } } });
+        await submit({ taskId, run }, 'done');
+        assert.equal(await db.conversationTurn.count({ where: { clientTurnId: { startsWith: PREFIX } } }), turnsBefore,
+          'nobody is handed it: there is no dispatching session to hand it to');
+
+        // Nobody holds it, so the owner is asked at once — in the run, the one conversation it has.
+        const card = await cardIn(run, taskId);
+        assert.ok(card, 'the owner card is drawn in the task’s run');
+        assert.deepEqual(card.ownerCard, { sessionId: run, decidingSessionId: run });
+        assert.equal(card.independence.independent, true);
+        assert.deepEqual(await anywhere(taskId, [bystander]), [], 'and in no other conversation');
+        assert.equal(await waitingOn(run), 1, 'counted where it is drawn');
+
+        // Only the owner's own press is taken from the run: not an agent's, and not one carrying a
+        // session header.
+        await refusedAsTheRun(taskId, run);
+        await refusedAsTheRun(taskId, run, { ...inTheApp, actingSessionId: bystander });
+        await evidence.decide(ownerId, taskId, theOwner, {
+          decidingSessionId: run, evidenceRevision: '1', decision: 'CONFIRM',
+        }, inTheApp);
+        assert.equal(await status(taskId), TaskStatus.DONE, 'the owner’s press in the run settled it');
+        assert.equal(await waitingOn(run), 0);
       });
-      const run = await conversation('standalone run', { taskId, startsTaskWork: true });
-      await db.toolCall.create({
-        data: {
-          sessionId: run, name: 'Bash', toolUseId: `toolu_${run.slice(0, 8)}`,
-          input: { command: 'npm test', description: 'the suite' }, isError: false,
-        },
+
+    // (10) ------------------------------------------------------------------------------------------
+    await t.test('(10) a dispatching session deleted for good: the card is in the run, counted, and the owner settles it',
+      async () => {
+        const gone = await conversation('files work, then is deleted for good');
+        const orphan = await dispatched('back up the photo library', gone);
+        await submit(orphan, 'backed up 3,102 photos');
+        const revision = await latestEvidence(orphan.taskId);
+        assert.equal((await deliveredTo(gone)).length, 1, 'delivered while the session existed');
+        assert.equal(await cardIn(orphan.run, orphan.taskId), null, 'and held by it');
+
+        // Trash, then Delete permanently: the session row goes, and `creator_session_id` with it.
+        await db.session.update({ where: { id: gone }, data: { deletedAt: new Date() } });
+        await sessions.purge(ownerId, gone);
+        assert.equal(await db.session.count({ where: { id: gone } }), 0);
+        assert.equal((await db.task.findUniqueOrThrow({ where: { id: orphan.taskId } })).creatorSessionId, null);
+
+        // At once — no 30 minutes: there is nobody left to hold it.
+        const card = await cardIn(orphan.run, orphan.taskId);
+        assert.ok(card, 'the owner card is drawn in the task’s run');
+        assert.deepEqual(card.ownerCard, { sessionId: orphan.run, decidingSessionId: orphan.run });
+        assert.equal(card.evidenceRevision, revision.revision.toString());
+        assert.deepEqual(await anywhere(orphan.taskId, [bystander]), [], 'and in no other conversation');
+        assert.equal(await waitingOn(orphan.run), 1, 'counted in needs-you where it is drawn');
+        const signals = await readOwnerDecisionSignals(db, ownerId, { sessionIds: [orphan.run] });
+        assert.deepEqual(signals, [{ sessionId: orphan.run, projectId: null, count: 1, kind: 'EVIDENCE_DECISION' }]);
+
+        // The press: the owner's, from the app, in the run — taken; the run's own, refused.
+        await refusedAsTheRun(orphan.taskId, orphan.run);
+        await evidence.decide(ownerId, orphan.taskId, theOwner, {
+          decidingSessionId: card.ownerCard!.decidingSessionId, evidenceRevision: '1', decision: 'CONFIRM',
+        }, inTheApp);
+        assert.equal(await status(orphan.taskId), TaskStatus.DONE, 'the owner’s press settled it');
+        assert.equal(await waitingOn(orphan.run), 0, 'and the row goes dark');
       });
-      const turnsBefore = await db.conversationTurn.count({ where: { clientTurnId: { startsWith: PREFIX } } });
-      await submit({ taskId, run }, 'done');
-      assert.equal(await db.conversationTurn.count({ where: { clientTurnId: { startsWith: PREFIX } } }), turnsBefore,
-        'nobody is handed it');
-      const reader = await db.session.findUniqueOrThrow({ where: { id: bystander }, select: { id: true, taskId: true } });
-      const row = (await readPendingEvidenceJudgments(db, ownerId, reader)).pending
-        .find((each) => each.taskId === taskId);
-      assert.ok(row, 'it is still on the derived read of a session that may answer it');
-      assert.equal(row.ownerCard, null, 'and no conversation is named for an owner card');
-      assert.equal(await waitingOn(bystander), 0);
-    });
   });

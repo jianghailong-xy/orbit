@@ -48,7 +48,7 @@ test('the window is the 30 minutes a confirmation review gets outside a project'
   assert.equal(EVIDENCE_REVIEW_WINDOW_SECONDS, OWNER_CONFIRMATION_REVIEW_WINDOW_SECONDS_OUTSIDE_PROJECTS);
 });
 
-test('the owner’s card is drawn where the work was dispatched, or in its run once that is in Trash', () => {
+test('the owner’s card is drawn where the work was dispatched, or in its run once there is no dispatching session to draw it in', () => {
   const live = { id: 'dispatcher', deletedAt: null };
   const trashed = { id: 'dispatcher', deletedAt: new Date() };
   const run = { id: 'run', deletedAt: null };
@@ -58,5 +58,9 @@ test('the owner’s card is drawn where the work was dispatched, or in its run o
     'decided in the dispatching session’s name: the run did the work');
   assert.equal(ownerEvidenceCard(trashed, { id: 'run', deletedAt: new Date() }), null);
   assert.equal(ownerEvidenceCard(trashed, null), null);
-  assert.equal(ownerEvidenceCard(null, run), null, 'a task nobody dispatched has no card here');
+  // No dispatching session at all — filed with none, or deleted for good: the run, in its own name,
+  // which the door takes from the owner in the app and nobody else (`ownerDecidesInTheRun`).
+  assert.deepEqual(ownerEvidenceCard(null, run), { sessionId: 'run', decidingSessionId: 'run' });
+  assert.equal(ownerEvidenceCard(null, { id: 'run', deletedAt: new Date() }), null);
+  assert.equal(ownerEvidenceCard(null, null), null);
 });
