@@ -847,13 +847,22 @@ JSON 里是 `maintenance.run`；服务端在 `wiki/wiki-maintenance-session.ts`�
   `--mcp-config` 只挂 orbit 一个 server，且它只提供 `task_get`、`task_comment`、`task_progress_report`（不给 `task_update`：
   光它的 schema 每次请求就约 4k token，运行的成败由任务的验收命令判，不由运行自己写）；
   `--system-prompt` 只说维护运行做什么（按任务执行 `orbit wiki maintain`，按结果汇报）；`--max-turns 120`、`--disallowedTools`、
-  `--permission-mode dontAsk`、`--allowedTools`（上面三个 orbit 工具和 `orbit wiki …` 命令）。HOME 与 CLAUDE_CONFIG_DIR 是会话
+  `--permission-mode dontAsk`、`--allowedTools`（上面三个 orbit 工具和 `orbit wiki …` 命令，写路径、写裸命令都算，见下条）。HOME 与 CLAUDE_CONFIG_DIR 是会话
   自己在 runner scratch 下的目录，第一次建出来时只有 onboarding 标记——不读本机的登录、记忆、设置和 CLAUDE.md，会话自己的
   transcript 留在那里供 `--resume`。项目里的 `.claude/settings.json` 在 `--bare` 下照样会读，所以要 `--setting-sources ''`。
+- **`orbit` 写路径或裸命令都放行**（`cleanStart.orbitCommand`）：dontAsk 下没预批准的命令一律拒绝。平台给会话的规则写的是 CLI 的
+  绝对路径（带引号的，以及路径是一个 shell 词时不带引号的），系统提示给的也是这个路径；任务描述（19.3、21.7、21.9）写的却是裸命令
+  `orbit wiki maintain --space <id>` 等，模型两种都会照抄。10-01 至 10-03，裸的 `orbit wiki maintain` 16 次全被拒，写绝对路径的
+  66 次全放行，有 4 次运行因此失败。所以同一族 `orbit wiki` 命令也按裸命令放行（只这一族：CLI 的其他命令、别的程序都不放行），
+  前提是交给引擎的 PATH 上的 `orbit` 就是 runner 自己的可执行文件：PATH 上第一个名为 orbit 的可执行文件与它是同一个文件，且它前面
+  没有空目录或相对目录（shell 会到会话的 checkout 里找）。这个 PATH 就是 runner 自己的；只有补上 CLI 所在目录就能解析到它时，才把
+  这个目录补在末尾。前面有别的 orbit、或有空目录 / 相对目录时，PATH 原样不动，也不放行裸命令：宁可拒绝，也不执行到别的 orbit。
+  自带 PATH、串接、管道、命令替换或重定向的命令不匹配任何一条规则。
 - **鉴权与 thinking**：`--settings` 只有 `apiKeyHelper: printenv ANTHROPIC_AUTH_TOKEN`（Bearer）；bare 模式下 `ANTHROPIC_API_KEY`
   走 x-api-key，vLLM 回 401，所以这个变量根本不交给引擎。thinking 默认关：`CLAUDE_CODE_EFFORT_LEVEL=unset` 加
   `MAX_THINKING_TOKENS=0`（只设前者仍会发 `thinking: adaptive`）。环境从零搭：provider 的端点、token、模型、自定义头、上下文窗口，
-  runner 的 PATH、locale、TMPDIR、证书与代理，`ORBIT_HOME` 和会话上下文；runner 与 workspace 的其他变量都不带。
+  runner 的 PATH（需要时在末尾补上 CLI 所在目录，见上条）、locale、TMPDIR、证书与代理，`ORBIT_HOME` 和会话上下文；runner 与
+  workspace 的其他变量都不带。
 - **一次 Bash 跑完整个运行**（`cleanStart.bash`、`bashCall`）：环境里 `BASH_DEFAULT_TIMEOUT_MS` 与 `BASH_MAX_TIMEOUT_MS` 都是
   `bashTimeoutMs`（18000000，5 小时），`CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`：模型不传 timeout 也有 5 小时，而不是 2 分钟；
   命令也不会被挪到后台（只有 Bash、没有 Read 的运行读不到后台命令的结局）。`--settings` 不带 env 块，它会盖过进程环境。
