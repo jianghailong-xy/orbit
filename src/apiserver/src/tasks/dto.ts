@@ -59,6 +59,10 @@ export const TASK_LABEL_MAX_LENGTH = 64;
 /** Same cap and same reasoning as the project's own criteria (see projects/dto.ts). */
 export const MAX_TASK_ACCEPTANCE_CRITERIA_CHARS = 4_000;
 
+export const TASK_MODEL_HINTS = ['S', 'M', 'L', 'XL'] as const;
+export type TaskModelHint = (typeof TASK_MODEL_HINTS)[number];
+export const MAX_TASK_MODEL_HINT_REASON_CHARS = 500;
+
 /**
  * A day, matching 0236's `task_acceptance_timeout_shape_check`. Not a policy about how long work
  * may take — it is the point past which "this is a wall-clock budget for one command" stops being
@@ -464,6 +468,10 @@ export class CreateTaskDto {
   // null) inherits from the assignee, which is the historical behaviour.
   @IsOptional() @IsString() @MaxLength(64) provider?: string | null;
   @IsOptional() @IsString() @MaxLength(200) model?: string | null;
+  // Suggested difficulty, distinct from the model pin; provider still chooses the engine.
+  @IsOptional() @IsIn(TASK_MODEL_HINTS) modelHint?: TaskModelHint | null;
+  @IsOptional() @IsString() @MaxLength(MAX_TASK_MODEL_HINT_REASON_CHARS)
+  modelHintReason?: string | null;
   // Prerequisite task ids this new task should wait on (each must be owned by the
   // caller). The task only runs once they're all DONE.  //
   // Name the SUBJECT, not its verification task. "B waits for A to be verified" is spelled
@@ -654,6 +662,10 @@ export class UpdateTaskDto {
   // runs to that provider / model id. Omit to leave the current pin alone.
   @IsOptional() @IsString() @MaxLength(64) provider?: string | null;
   @IsOptional() @IsString() @MaxLength(200) model?: string | null;
+  // Three-state for each field: omitted preserves it, a value replaces it, null clears it.
+  @IsOptional() @IsIn(TASK_MODEL_HINTS) modelHint?: TaskModelHint | null;
+  @IsOptional() @IsString() @MaxLength(MAX_TASK_MODEL_HINT_REASON_CHARS)
+  modelHintReason?: string | null;
   // Full replacement for this task's prerequisites. Omit to keep them unchanged;
   // pass [] to clear them all.  //
   // Name the SUBJECT, not its verification task. "B waits for A to be verified" is spelled

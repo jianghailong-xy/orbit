@@ -106,7 +106,7 @@ final class CodexLoginPoolTests: XCTestCase {
         XCTAssertNil(codex.resetsAt)
         // How the pickers count it: two accounts.
         XCTAssertEqual(ProviderPools.readyCount(codex), 2)
-        XCTAssertEqual(CodexLoginPool.summary(codex), "Just me · 2 of 2 accounts available")
+        XCTAssertEqual(ProvidersOverview.codexPoolLine(codex), "Just me · 2 of 2 accounts available")
     }
 
     /// An older server names only `login`: the pool runs on that one account, as before.
@@ -169,7 +169,7 @@ final class CodexLoginPoolTests: XCTestCase {
         XCTAssertEqual(codex.resetsAt, "2099-09-28T14:05:00.000Z")
         XCTAssertFalse(codex.members.contains(where: \.next))
         XCTAssertNil(codex.unavailable)
-        XCTAssertEqual(CodexLoginPool.summary(codex), "Just me · 0 of 2 accounts available")
+        XCTAssertEqual(ProvidersOverview.codexPoolLine(codex), "Just me · 0 of 2 accounts available")
         XCTAssertTrue(ProviderPools.headline(codex).hasPrefix("All spent · resets "))
     }
 
@@ -201,21 +201,21 @@ final class CodexLoginPoolTests: XCTestCase {
 
     func testTheProvidersRowAndThePageSayWhereTheAccountsStand() throws {
         let codex = try pool(account())
-        XCTAssertEqual(CodexLoginPool.summary(codex), "Just me · 1 of 1 account available")
+        XCTAssertEqual(ProvidersOverview.codexPoolLine(codex), "Just me · 1 of 1 account available")
         // The row's value is the head's gauge: the tightest window of the account the next session starts
         // on — here its weekly one, at 41% beside 23% for its 5 hours.
-        XCTAssertEqual(ProvidersOverview.poolSummary(codex), "Weekly 41%")
+        XCTAssertEqual(ProvidersOverview.codexPoolValue(codex)?.label, "Weekly 41%")
         XCTAssertEqual(ProviderPools.headline(codex), "wikova@orbitd.io", "one account is named, not \"next\"")
         let two = try pool(lin, work)
         XCTAssertEqual(ProviderPools.headline(two), "Next: jianghailong.rd@gmail.com")
-        XCTAssertEqual(ProvidersOverview.poolSummary(two), "Weekly 97%")
+        XCTAssertEqual(ProvidersOverview.codexPoolValue(two), PoolStatus(label: "Weekly 97%", tone: .warning))
         let none = try pool()
-        XCTAssertEqual(CodexLoginPool.summary(none), "Just me · 0 of 0 accounts available")
-        XCTAssertEqual(ProvidersOverview.poolSummary(none), "Not signed in")
+        XCTAssertEqual(ProvidersOverview.codexPoolLine(none), "Just me · 0 of 0 accounts available")
+        XCTAssertEqual(ProvidersOverview.codexPoolValue(none)?.label, "Not signed in")
         XCTAssertEqual(ProviderPools.headline(none), "Not signed in")
-        XCTAssertEqual(ProvidersOverview.poolSummary(try pool(account(state: "SIGNED_OUT"))), "Signed out")
+        XCTAssertEqual(ProvidersOverview.codexPoolValue(try pool(account(state: "SIGNED_OUT")))?.label, "Signed out")
         let spent = try pool(account(primary: 100, primaryReset: "2099-09-28T14:05:00.000Z"))
-        XCTAssertTrue(ProvidersOverview.poolSummary(spent).hasPrefix("All spent · resets "))
+        XCTAssertTrue(ProvidersOverview.codexPoolValue(spent)?.label.hasPrefix("All spent · resets ") == true)
         XCTAssertTrue(ProviderPools.headline(spent).hasPrefix("All spent · resets "))
 
         let row = try XCTUnwrap(CodexLoginPool.windows(login(usage: windows(23, 41))).first)
@@ -238,8 +238,10 @@ final class CodexLoginPoolTests: XCTestCase {
                        "Its sign-in is deleted from the Orbit server, and no session runs on it until you sign in again — My Codex keeps running on its other account.")
         let three = try pool(lin, work, account(email: "third@example.com", fingerprint: "…9ZZ9"))
         XCTAssertTrue(CodexLoginPool.signOutNote(three).hasSuffix("— My Codex keeps running on its other accounts."))
-        XCTAssertEqual(CodexLoginPool.deleteNote(try pool(account())), "Its ChatGPT sign-in is deleted from the Orbit server with it.")
-        XCTAssertEqual(CodexLoginPool.deleteNote(try pool(lin, work)), "Its ChatGPT sign-ins are deleted from the Orbit server with it.")
+        XCTAssertEqual(CodexPoolPage(own: try pool(account()), access: nil)?.outNote,
+                       "Its ChatGPT sign-in is deleted from the Orbit server with it.")
+        XCTAssertEqual(CodexPoolPage(own: try pool(lin, work), access: nil)?.outNote,
+                       "Its ChatGPT sign-ins are deleted from the Orbit server with it.")
     }
 
     // MARK: - signing in

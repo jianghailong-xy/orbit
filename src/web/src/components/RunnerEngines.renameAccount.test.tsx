@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act } from 'react';
+import { act, StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
@@ -50,6 +50,7 @@ let root: Root | null = null;
 let host: HTMLDivElement | null = null;
 /** What the server holds: a rename changes it, and the list read after it returns it. */
 let served: Runner[] = [];
+let client: QueryClient | null = null;
 
 beforeAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -92,7 +93,7 @@ function renamed(path: string, name: string): RunnerEngineAccount {
   return account!;
 }
 
-function mount(runners: Runner[]) {
+function mount(runners: Runner[], { strict = false } = {}) {
   served = runners;
   localStorage.setItem('orbit:providers-expanded-runners', JSON.stringify(runners.map((r) => r.id)));
   apiMock.mockImplementation(async (path: string, options?: { method?: string; body?: unknown }) => {
@@ -106,19 +107,27 @@ function mount(runners: Runner[]) {
   });
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(['runners'], runners);
+  client = qc;
   host = document.createElement('div');
   document.body.appendChild(host);
   root = createRoot(host);
-  act(() =>
-    root!.render(
-      <MemoryRouter initialEntries={['/providers']}>
-        <QueryClientProvider client={qc}>
-          <RunnerEngines />
-        </QueryClientProvider>
-      </MemoryRouter>,
-    ),
+  const page = (
+    <MemoryRouter initialEntries={['/providers']}>
+      <QueryClientProvider client={qc}>
+        <RunnerEngines />
+      </QueryClientProvider>
+    </MemoryRouter>
   );
+  act(() => root!.render(strict ? <StrictMode>{page}</StrictMode> : page));
   return host;
+}
+
+/** The runner's next heartbeat: these are what it reports now, and the page reads the list again. */
+async function report(runners: Runner[]) {
+  served = runners;
+  await act(async () => {
+    await client!.invalidateQueries({ queryKey: ['runners'] });
+  });
 }
 
 const rows = (el: ParentNode, selector: string) => [...el.querySelectorAll<HTMLElement>(selector)];
@@ -280,5 +289,79 @@ describe('renaming an account on a runner', () => {
         { timeout: 20_000, interval: 20 },
       );
     });
+  });
+});
+
+describe('naming an account while + Account adds it', () => {
+  // The slot the runner makes for the new account: an id of its own, under the name it was added with.
+  const ADDED: RunnerEngineAccount = {
+    id: '7c41d2aa',
+    name: 'Account 2',
+    home: '/root/.orbit/claude-accounts/7c41d2aa',
+    auth: 'yes',
+  };
+  const claudeRow = (page: ParentNode) =>
+    rows(page, '.re-row').find((row) => row.querySelector('.re-name')?.textContent === 'Claude Code')!;
+  const loginPosts = () =>
+    apiMock.mock.calls
+      .filter(([path, options]) => path === `/runners/${RUNNER_ID}/login` && options?.method === 'POST')
+      .map(([, options]) => (options as { body?: unknown }).body);
+  /** Press + Account on the Claude row, and put the caret in the name it opens with. */
+  async function add(page: HTMLElement): Promise<HTMLInputElement> {
+    await act(async () => {
+      button(claudeRow(page), '+ Account').click();
+    });
+    const input = page.querySelector<HTMLInputElement>('.re-add input')!;
+    await act(async () => input.focus());
+    return input;
+  }
+
+  it('saves a name typed while the sign-in runs once the runner reports the account it added', async () => {
+    const page = mount([runner([DEFAULT])]);
+    const input = await add(page);
+    expect(input.value).toBe('Account 2');
+    expect(loginPosts()).toEqual([{ engine: 'claude', accountName: 'Account 2' }]);
+
+    await type(input, 'Work');
+    await press(input, 'Enter');
+    // Nothing to name yet: the runner has not reported the account.
+    expect(renames()).toEqual([]);
+
+    await report([runner([DEFAULT, ADDED])]);
+    await vi.waitFor(() =>
+      expect(renames()).toEqual([[`/runners/${RUNNER_ID}/accounts/claude/7c41d2aa`, { name: 'Work' }]]),
+    );
+    await vi.waitFor(() => expect(accountsOf(page).map(nameOf)).toEqual(['Default', 'Work']));
+    // Named, not added again: the one sign-in is still the only one.
+    expect(loginPosts()).toHaveLength(1);
+  });
+
+  it('saves a name changed after the account is reported at once, and nothing for the same name or none', async () => {
+    const page = mount([runner([DEFAULT])]);
+    const input = await add(page);
+    await report([runner([DEFAULT, ADDED])]);
+    // Reported under the name the page picked: there is nothing to save.
+    expect(renames()).toEqual([]);
+
+    await type(input, ' Personal ');
+    await press(input, 'Enter');
+    expect(renames()).toEqual([[`/runners/${RUNNER_ID}/accounts/claude/7c41d2aa`, { name: 'Personal' }]]);
+    await vi.waitFor(() => expect(nameOf(accountsOf(page)[1])).toBe('Personal'));
+
+    await act(async () => input.focus());
+    await type(input, 'Personal');
+    await press(input, 'Enter');
+    await act(async () => input.focus());
+    await type(input, '   ');
+    await press(input, 'Enter');
+    expect(renames()).toHaveLength(1);
+    // An emptied name goes back to the one the account has.
+    expect(input.value).toBe('Personal');
+  });
+
+  it('starts one sign-in, even mounted twice by StrictMode', async () => {
+    const page = mount([runner([DEFAULT])], { strict: true });
+    await add(page);
+    expect(loginPosts()).toEqual([{ engine: 'claude', accountName: 'Account 2' }]);
   });
 });

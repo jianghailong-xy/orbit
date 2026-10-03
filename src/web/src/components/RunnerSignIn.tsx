@@ -1,6 +1,6 @@
 import { CheckCircleFilled, ExportOutlined, LoadingOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { LoginEngine, RunnerEngineHealth, RunnerLoginState } from '@orbit/shared';
 import { api } from '../api';
 import { runnersQuery } from '../lib/queries';
@@ -97,7 +97,7 @@ export function RunnerSignIn({
   onDone,
   onUseApiKey,
   onCancel,
-  children,
+  autoStart,
 }: {
   runnerId: string;
   engine?: LoginEngine;
@@ -113,9 +113,9 @@ export function RunnerSignIn({
   onUseApiKey?: () => void;
   /** Close the card. Offered beside the button, while there is no sign-in of its own to cancel. */
   onCancel?: () => void;
-  /** What the sign-in still needs from the user, shown above its button until one is under way —
-   *  a new account's name, say. */
-  children?: ReactNode;
+  /** Start signing in as the card opens, not on its button: the press that opened it — "+ Account"
+   *  — already asked for the sign-in. */
+  autoStart?: boolean;
 }) {
   const qc = useQueryClient();
   const [code, setCode] = useState('');
@@ -194,6 +194,18 @@ export function RunnerSignIn({
     setStartedHere(true);
     start.mutate();
   };
+
+  // No tab is parked for this one: the press that asked was on another button, and a tab opened from
+  // an effect can't count on that press's gesture. The page opens from the card's own link once the
+  // URL lands, as a device flow's always does. The ref keeps StrictMode's second mount from starting
+  // it twice.
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (!autoStart || autoStarted.current) return;
+    autoStarted.current = true;
+    setStartedHere(true);
+    start.mutate();
+  }, [autoStart, start.mutate]);
 
   const s = state.data;
   // A runner runs one relay at a time. If the one in flight is for the other engine (another card,
@@ -408,7 +420,6 @@ export function RunnerSignIn({
     <div className="rsi">
       {status === 'failed' && s?.message && <div className="rsi-warn">{s.message}</div>}
       {err && <div className="rsi-warn">{err.message}</div>}
-      {children}
       <div className="rsi-actions">
         <button
           className="rsi-btn"

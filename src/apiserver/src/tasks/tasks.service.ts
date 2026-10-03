@@ -194,6 +194,8 @@ import { clearDispatchRefusal } from './task-dispatch-refusal';
 import {
   TASK_RUN_ACTION,
   TASK_RUN_LEASE_MS,
+  readBatchPlan,
+  readExecuteTarget,
   taskAlreadyRunning,
   taskRunFingerprint,
   taskRunInProgress,
@@ -211,8 +213,18 @@ import {
   type TaskRunBatchPlan,
   type TaskRunPlan,
   type TaskRunReceipt,
+  type TaskRunRoute,
   type TaskRunStandDownTarget,
 } from './task-run-receipt';
+import {
+  planTaskRunRoute,
+  readModelHintOptions,
+  readTaskRouteSummaries,
+  recordTaskRouteDecision,
+  taskRouteReads,
+  type TaskRouteReads,
+  type TaskRouteSubject,
+} from './task-route-decision';
 import {
   TASK_RUN_TRIGGER,
   taskRunBatchId,
@@ -438,7 +450,46 @@ type TaskRunTarget = {
   title: string;
   provider?: string | null;
   model?: string | null;
+  /** What a fresh Session is created with instead of the pins, when smart selection routed it
+   *  (docs/model-routing-design.md §8.3). The pins stay what a refusal names: nobody pinned these. */
+  routed?: { provider: string; model: string | null; effort: string | null } | null;
 };
+
+/**
+ * What a run is created with (docs/model-routing-design.md §7.4): the route's provider, model and
+ * effort when it is applied — the provider written out rather than left to `sessions.create`, whose
+ * Agent seed may have moved by the time a takeover carries the plan out — and otherwise the task's
+ * pins, naming no effort, exactly as before routing.
+ */
+function taskRunDispatch(
+  task: { provider?: string | null; model?: string | null },
+  route: TaskRunRoute | null,
+): Pick<TaskRunExecuteTarget, 'provider' | 'model' | 'effort'> {
+  return route?.applied
+    ? { provider: route.provider, model: route.model, effort: route.effort }
+    : { provider: task.provider ?? null, model: task.model ?? null, effort: null };
+}
+
+/**
+ * The task a bound run target carries out. A routed target names what routing chose, not the task's
+ * pins, so the pins are read back from the decision: its model is never one — a pinned model is not
+ * routed — and its provider is one only when the task pinned it.
+ */
+function boundRunTask(
+  target: Pick<TaskRunExecuteTarget, 'taskId' | 'title' | 'provider' | 'model' | 'effort' | 'route'>,
+): TaskRunTarget {
+  const { route } = target;
+  if (!route?.applied) {
+    return { id: target.taskId, title: target.title, provider: target.provider, model: target.model };
+  }
+  return {
+    id: target.taskId,
+    title: target.title,
+    provider: route.baseline.providerSource === 'task-pin' ? target.provider : null,
+    model: null,
+    routed: { provider: target.provider ?? route.provider, model: target.model, effort: target.effort },
+  };
+}
 
 export function buildTaskExecutionPrompt(task: {
   title: string;
@@ -735,6 +786,8 @@ export const TASK_LIST_SELECT = {
   priority: true,
   provider: true,
   model: true,
+  modelHint: true,
+  modelHintReason: true,
   // Two enum columns and the relation they are about, in for the same reason parentTaskId is: a
   // reader looking at a project's tree needs to know which rows complete themselves, which rows
   // are checks and of what, and what those checks concluded — and the only alternative is one GET
@@ -4014,6 +4067,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       labels: dto.labels ? normalizeTaskLabels(dto.labels) : undefined,
       provider: dto.provider,
       model: dto.model,
+      modelHint: dto.modelHint,
+      modelHintReason: dto.modelHintReason,
       autoRunWhenReady: dto.autoRunWhenReady,
       // Omitted leaves the column default, MANUAL — the behaviour every task created before
       // migration 0123 has, and the one that never completes anything on its own.
@@ -5482,6 +5537,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         listId: item.listId ?? null,
         provider: item.provider ?? null,
         model: item.model ?? null,
+        modelHint: item.modelHint ?? null,
+        modelHintReason: item.modelHintReason ?? null,
         autoRunWhenReady: item.autoRunWhenReady ?? null,
         runAt: item.runAt ?? null,
         dueDate: item.dueDate ?? null,
@@ -7925,6 +7982,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             archivedAt: true,
             deletedAt: true,
             createdAt: true,
+            // What the run actually ran on, for the Runs list's "model · effort" (model routing §9):
+            // the route beside it says what smart selection picked, or would have picked.
+            model: true,
+            effort: true,
             workspace: { select: { name: true } },
           },
         },
@@ -7965,7 +8026,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // `completion_policy` with `verifies_task_id`, the same two columns the Ready predicate and the
     // work lanes ask: a `VERIFICATION` criterion says who settles the task, not whether it has work,
     // and a row with work of its own is one whose detail has a verifier state like any other.
-    const [dependencyFacts, supersession, autoRunSkipped, workState, progress, verifier] =
+    const [
+      dependencyFacts, supersession, autoRunSkipped, workState, progress, verifier, routes, modelHintOptions,
+    ] =
       await Promise.all([
         this.dependencyFactsFor(ownerId, [id]),
         this.supersession(ownerId, task),
@@ -7977,11 +8040,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // The check that settles this row, for any row that has one: the panel shows it under the
         // subject itself, which is the one place the relation is legible without a query of one's own.
         readCurrentVerifier(this.prisma, ownerId, task.id),
+        // The Route Decision behind each run, by the Session its plan named (model routing §7.5).
+        readTaskRouteSummaries(this.prisma, ownerId, (task.sessions ?? []).map((session) => session.id)),
+        this.modelHintOptions(ownerId, task),
       ]);
     const dependencyState = computeDependencyState(dependencyFacts.get(id) ?? []);
     return {
       ...task,
-      sessions: (task.sessions ?? []).map((session) => withSessionState(session)),
+      sessions: (task.sessions ?? []).map((session) => ({
+        ...withSessionState(session),
+        route: routes.get(session.id) ?? null,
+      })),
       creatorSession: task.creatorSession ? withSessionState(task.creatorSession) : null,
       comments: await this.resolveCommentAuthors(task.comments),
       dependencyState,
@@ -8006,8 +8075,26 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // above: that one, with `progressState` and `convergenceCounters`, is the project convergence
       // ledger's (projects/convergence-ledger.ts), which no progress report writes.
       progress,
+      // What each suggested tier runs as for this task, so no client keeps a tier table of its own.
+      modelHintOptions,
       ...supersession,
     };
+  }
+
+  /**
+   * The Suggested picker's tiers, resolved for this task's engine on its Agent's runner — or null
+   * when they could not be read: a decoration on the task page, and never a reason to fail it.
+   */
+  private async modelHintOptions(
+    ownerId: string,
+    task: { id: string; provider: string | null; assigneeId: string | null },
+  ) {
+    try {
+      return await readModelHintOptions(taskRouteReads(this.prisma, ownerId), task);
+    } catch (e) {
+      this.logger.warn(`task ${task.id}: model hint options not read: ${(e as Error)?.message ?? e}`);
+      return null;
+    }
   }
 
   /**
@@ -8446,6 +8533,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // pin, null goes back to inheriting the assignee's provider/model.
       provider: dto.provider === undefined ? undefined : (dto.provider ?? null),
       model: dto.model === undefined ? undefined : (dto.model ?? null),
+      modelHint: dto.modelHint,
+      modelHintReason: dto.modelHintReason,
       acceptanceCriteria:
         dto.acceptanceCriteria === undefined ? undefined : (dto.acceptanceCriteria ?? null),
       acceptanceCommand:
@@ -12613,7 +12702,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // created it — so a task re-pinned to a different provider can't be continued on the old
     // session. Falling through to create() is what makes re-pinning take effect on the next run;
     // resuming instead would silently keep running the previous provider forever. A model change
-    // needs no such split: resume() re-spawns the runtime and applies it.
+    // needs no such split: the paused run is moved onto the pinned model before the prompt is
+    // handed to it (`applyWorkspaceRun`).
     if (latest && task.provider && task.provider !== latest.provider) {
       // A session's provider is fixed for its lifetime, and the task has since been re-pinned. The
       // old behaviour fell through to create() — which, now that the execution claim covers all
@@ -12683,6 +12773,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // on the same key anyway — the unique index is what makes it exactly-once — but reading first
       // keeps a takeover out of the whole resume path for a turn that is already on the row.
       if (await this.hasTurn(plan.sessionId, plan.turnId)) return plan.sessionId;
+      // The task's model pin, put on the paused run BEFORE the turn that carries the prompt. Never
+      // routed (model routing §8.3): a run that has started keeps its model unless the task pins one.
+      if (task.model != null) await this.movePausedRunToPinnedModel(ownerId, plan.sessionId, task.model);
       // The task's inputs, copied into THIS session before the turn that carries them. After the
       // hasTurn check, so a redelivery of a turn already on the row makes no second copy.
       const resumeAttachments = await this.copyTaskAttachments(task.id, plan.sessionId);
@@ -12694,6 +12787,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             clientTurnId: plan.turnId,
             content: prompt,
             ...(resumeAttachments.length > 0 ? { attachmentIds: resumeAttachments } : {}),
+            // Applied only if the run has ended by now and is revived: a live one takes this turn
+            // through `createTurn`, which has no model — hence the move above.
             ...(task.model != null ? { model: task.model } : {}),
           },
           // §13.6 SU6: a paused run being handed the task's prompt IS doing the task's work, so the
@@ -12711,6 +12806,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await this.clearStaleDispatchRefusal(task.id, plan.sessionId);
       return plan.sessionId;
     }
+    const created = task.routed ?? { provider: task.provider, model: task.model, effort: null };
     const session = await this.createTaskSessionOrReadWinner(
       ownerId,
       task,
@@ -12723,9 +12819,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         taskId: task.id,
         title: newSessionTitle.slice(0, 80),
         // Unpinned (null) fields are left off entirely so the session keeps inheriting the
-        // workspace's provider/model, exactly as before these columns existed.
-        ...(task.provider != null ? { provider: task.provider } : {}),
-        ...(task.model != null ? { model: task.model } : {}),
+        // workspace's provider/model/effort, exactly as before these columns existed. A routed run
+        // names what routing chose (model routing §8.3).
+        ...(created.provider != null ? { provider: created.provider } : {}),
+        ...(created.model != null ? { model: created.model } : {}),
+        ...(created.effort != null ? { effort: created.effort } : {}),
       },
       // Task runs belong in Active regardless of whether they were started manually,
       // as a batch, by dependency auto-run, or from an @-mention. Keep `source`
@@ -12745,6 +12843,28 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     );
     await this.clearStaleDispatchRefusal(task.id, session.id);
     return session.id;
+  }
+
+  /**
+   * Put a paused run on the model its task is pinned to, before the task's prompt is handed to it.
+   *
+   * `resume` cannot be relied on for this. A paused run is live, so `resume` hands the turn to
+   * `createTurn`, whose dto has no model: the pin used to ride along there and was dropped, and the
+   * run went on with the model it had. This is the same `updateConfig` a person's model picker
+   * sends, which queues the change ahead of the turn written next.
+   *
+   * Only when the two differ — re-stating the same model would still queue a control turn — and only
+   * while the run has not ended: `updateConfig` refuses an ended one, and `resume` revives that with
+   * the pin applied from its own dto.
+   */
+  private async movePausedRunToPinnedModel(ownerId: string, sessionId: string, model: string): Promise<void> {
+    // By id, as the plan named it; `updateConfig` itself is owner-scoped.
+    const paused = await this.prisma.session.findUnique({
+      where: { id: sessionId },
+      select: { model: true, status: true },
+    });
+    if (!paused || paused.model === model || SessionsService.TERMINAL.includes(paused.status)) return;
+    await this.sessions.updateConfig(ownerId, sessionId, { model });
   }
 
   /**
@@ -12912,7 +13032,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // version, a kind it has never heard of — is refused rather than guessed at: finishing
       // somebody else's command is worse than saying it cannot, and the replica that DOES
       // understand it still holds or will take the lease.
-      if (bound?.v === 1 && bound.kind === 'RUN') return this.applyExecuteTarget(lease, bound);
+      const run = readExecuteTarget(bound);
+      if (run) return this.applyExecuteTarget(lease, run);
       // A stand-down that was decided and bound but not yet frozen — its holder died in between.
       // The plan says the request writes nothing, so finishing it is recording that answer, which
       // is exactly what the holder was about to do.
@@ -12934,6 +13055,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         projectId: true,
         provider: true,
         model: true,
+        // The suggested tier, which routing reads for a fresh run.
+        modelHint: true,
+        modelHintReason: true,
         status: true,
         listId: true,
         isForeman: true,
@@ -13137,8 +13261,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       { id: task.assignee!.id, runnerId: task.assignee!.runnerId! },
       runRequestToken,
     );
+    // Routed for a fresh run only (docs/model-routing-design.md §8.1). The decision is frozen and
+    // recorded either way; only an Agent with smart selection on is dispatched with it — any other
+    // run keeps the task's pins and names no effort, as before routing. A RESUME or ADOPT is never
+    // routed: that run has already started.
+    const route = planned.kind === 'CREATE'
+      ? await this.routeFreshRun(
+        taskRouteReads(this.prisma, ownerId),
+        task,
+        { id: task.assignee!.id, runnerId: task.assignee!.runnerId! },
+        prompt,
+      )
+      : null;
     const frozen: TaskRunExecuteTarget = {
-      v: 1,
+      v: 2,
       kind: 'RUN',
       plan: planned,
       taskId: task.id,
@@ -13146,8 +13282,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       prompt,
       workspaceId: task.assignee!.id,
       runnerId: task.assignee!.runnerId!,
-      provider: task.provider ?? null,
-      model: task.model ?? null,
+      ...taskRunDispatch(task, route),
+      route,
       projectId: task.projectId ?? null,
       // The list doubles as a durable batch so its cap is enforced by the claim transaction's
       // existing batch gate — no second scheduler. Only when the list actually sets a cap:
@@ -13184,16 +13320,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (!bound) throw taskRunInProgress(lease.claim.actionKind, requestToken);
     // The plan in force may not be the one this call computed — a takeover may have bound its own —
     // and it may not even be a run. Both are read off the row rather than assumed.
-    if (!(bound.v === 1 && bound.kind === 'RUN')) {
-      throw taskRunUnreadableTarget(lease.claim.actionKind, requestToken);
-    }
-    const target = bound;
-    const task: TaskRunTarget = {
-      id: target.taskId,
-      title: target.title,
-      provider: target.provider,
-      model: target.model,
-    };
+    const target = readExecuteTarget(bound);
+    if (!target) throw taskRunUnreadableTarget(lease.claim.actionKind, requestToken);
+    const task = boundRunTask(target);
+    // The BOUND plan's decision, so a takeover records the one that is being carried out.
+    await this.recordRouteDecision(ownerId, target.taskId, requestToken, target.plan, target.route);
     let sessionId: string;
     try {
       sessionId = await this.runTaskWorkTranslatingFences(() => this.applyWorkspaceRun(
@@ -13264,6 +13395,42 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // loses the compare-and-set to whoever took over, and handing back its own local answer would
     // give a caller a result the request does not have.
     return this.completeRunReceipt<TaskRunAnswer>(lease.claim, { ok: true as const, sessionId });
+  }
+
+  /**
+   * The route for one fresh run, or null when it could not be worked out. Routing never refuses
+   * (contract §7.2 P7): a failure here is logged and the run is planned exactly as without it.
+   */
+  private async routeFreshRun(
+    reads: TaskRouteReads,
+    task: TaskRouteSubject,
+    workspace: { id: string; runnerId: string },
+    prompt: string,
+  ): Promise<TaskRunRoute | null> {
+    try {
+      return await planTaskRunRoute(reads, task, workspace, prompt);
+    } catch (e) {
+      this.logger.warn(`task ${task.id}: no route decided: ${(e as Error)?.message ?? e}`);
+      return null;
+    }
+  }
+
+  /**
+   * Record a bound CREATE plan's route as its Route Decision, after the bind and before the effect
+   * (docs/model-routing-design.md §8.1). Idempotent per run request, so a replay adds nothing; and
+   * never in the run's way — the decision is a record about the run, not a gate in front of it.
+   */
+  private async recordRouteDecision(
+    ownerId: string,
+    taskId: string,
+    requestToken: string,
+    plan: TaskRunPlan,
+    route: TaskRunRoute | null,
+  ): Promise<void> {
+    if (!route || plan.kind !== 'CREATE') return;
+    await recordTaskRouteDecision(this.prisma, {
+      ownerId, taskId, requestToken, sessionId: plan.sessionId, route,
+    }).catch((e) => this.logger.warn(`task ${taskId}: route decision not recorded: ${e?.message ?? e}`));
   }
 
   /**
@@ -13424,10 +13591,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // answer is a tally over rows that all move, so re-classifying is answering a different
       // question with the same name on it.
       if (lease.status === 'BOUND') {
-        const bound = lease.target as TaskRunTargetRecord;
-        if (!(bound?.v === 1 && bound.kind === 'BATCH')) {
-          throw taskRunUnreadableTarget(TASK_RUN_ACTION.batchExecute, pressToken);
-        }
+        const bound = readBatchPlan(lease.target);
+        if (!bound) throw taskRunUnreadableTarget(TASK_RUN_ACTION.batchExecute, pressToken);
         return await this.applyBatchPlan(lease, bound);
       }
       return await this.batchExecuteLeased(ownerId, taskIds, maxConcurrent, pressToken, lease);
@@ -13461,6 +13626,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         projectId: true,
         provider: true,
         model: true,
+        // The suggested tier, which routing reads for a fresh run, as the single Run does.
+        modelHint: true,
+        modelHintReason: true,
         status: true,
         runAt: true,
         // Same inputs the single-task Run assembles its prompt from: a task must not get a
@@ -13620,7 +13788,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // mutable. Re-classifying is how a repeat reports `dispatched: 0, skipped: N` about work the
     // press itself started.
     const planned: TaskRunBatchPlan = {
-      v: 1,
+      v: 2,
       kind: 'BATCH',
       batchId: batch?.id ?? null,
       maxConcurrent: maxConcurrent ?? null,
@@ -13628,32 +13796,38 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       runnerIds,
       items: [],
     };
+    // One set of reads for the whole press: its tasks share a few Agents, runners and one account.
+    const routeReads = taskRouteReads(this.prisma, ownerId);
     for (const t of runnable) {
+      const prompt = this.buildExecutePrompt(t);
+      const workspace = { id: t.assignee!.id, runnerId: t.assignee!.runnerId! };
+      const itemPlan = await this.planWorkspaceRun(
+        ownerId, t, workspace, TASK_RUN_TRIGGER.batch(pressToken, t.id),
+      );
+      // Routed per item, exactly as the single Run does it: a fresh run only, and dispatched with
+      // the route only when the item's Agent has smart selection on.
+      const route = itemPlan.kind === 'CREATE'
+        ? await this.routeFreshRun(routeReads, t, workspace, prompt)
+        : null;
       planned.items.push({
         taskId: t.id,
         title: `执行任务：${t.title}`,
-        prompt: this.buildExecutePrompt(t),
-        workspaceId: t.assignee!.id,
-        runnerId: t.assignee!.runnerId!,
-        provider: t.provider ?? null,
-        model: t.model ?? null,
+        prompt,
+        workspaceId: workspace.id,
+        runnerId: workspace.runnerId,
+        ...taskRunDispatch(t, route),
+        route,
         runAt: t.runAt ? t.runAt.toISOString() : null,
         clearFailed: t.status === TaskStatus.FAILED,
         projectId: t.projectId ?? null,
-        ...(await this.planWorkspaceRun(
-          ownerId,
-          t,
-          { id: t.assignee!.id, runnerId: t.assignee!.runnerId },
-          TASK_RUN_TRIGGER.batch(pressToken, t.id),
-        )),
+        ...itemPlan,
       });
     }
-    const bound = await this.bindRunRequest(lease.claim, planned) as TaskRunTargetRecord | null;
+    const bound = await this.bindRunRequest(lease.claim, planned);
     if (!bound) throw taskRunInProgress(TASK_RUN_ACTION.batchExecute, pressToken);
-    if (!(bound.v === 1 && bound.kind === 'BATCH')) {
-      throw taskRunUnreadableTarget(TASK_RUN_ACTION.batchExecute, pressToken);
-    }
-    return this.applyBatchPlan(lease, bound);
+    const plan = readBatchPlan(bound);
+    if (!plan) throw taskRunUnreadableTarget(TASK_RUN_ACTION.batchExecute, pressToken);
+    return this.applyBatchPlan(lease, plan);
   }
 
   /**
@@ -13677,9 +13851,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (!(await this.renewRunRequest(lease.claim))) {
         throw taskRunInProgress(TASK_RUN_ACTION.batchExecute, pressToken);
       }
-      const task: TaskRunTarget = {
-        id: item.taskId, title: item.title, provider: item.provider, model: item.model,
-      };
+      const task = boundRunTask(item);
+      // Under this item's own request name, which is what its run is named by too.
+      await this.recordRouteDecision(
+        ownerId, item.taskId, TASK_RUN_TRIGGER.batch(pressToken, item.taskId), item, item.route,
+      );
       try {
         const sessionId = await this.runTaskWorkTranslatingFences(() => this.applyWorkspaceRun(
           ownerId,

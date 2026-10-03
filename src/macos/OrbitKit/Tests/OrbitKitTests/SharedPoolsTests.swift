@@ -17,7 +17,8 @@ final class SharedPoolsTests: XCTestCase {
     private static let wikova = id(1), zhang = id(2), chen = id(3), lin = id(4)
 
     /// What the server answers Wikova, the pool's creator: base62 ids, as the public-id interceptor
-    /// leaves them, and the fields this client doesn't read (timestamps, `shared`).
+    /// leaves them, and the fields this client doesn't read (timestamps). A server from before scheme A
+    /// says nothing of whose ChatGPT accounts are in it.
     private static let payload = """
     [{
       "id": "\(id(900))", "slug": "team-codex", "label": "Team Codex", "engine": "codex", "shared": true,
@@ -82,7 +83,8 @@ final class SharedPoolsTests: XCTestCase {
                                  contributor: PoolKeyContributor(userId: c.userId, name: c.name, you: c.userId == userId),
                                  usage: key.usage, running: key.running)
         }
-        return SharedPool(id: pool.id, slug: pool.slug, label: pool.label, engine: pool.engine,
+        return SharedPool(id: pool.id, slug: pool.slug, label: pool.label, engine: pool.engine, shared: pool.shared,
+                          ownerHasChatGPT: pool.ownerHasChatGPT,
                           membersCanAdd: pool.membersCanAdd, ownKeyFirst: pool.ownKeyFirst, viewerRole: role,
                           window: pool.window, people: pool.people.map(mark), keys: pool.keys.map(mark))
     }
@@ -102,6 +104,8 @@ final class SharedPoolsTests: XCTestCase {
         XCTAssertEqual(pool.slug, "team-codex")
         XCTAssertEqual(pool.label, "Team Codex")
         XCTAssertEqual(pool.engine, "codex")
+        XCTAssertTrue(pool.shared, "made on the shared pools page")
+        XCTAssertFalse(pool.ownerHasChatGPT)
         XCTAssertEqual(pool.viewerRole, .admin)
         XCTAssertTrue(pool.membersCanAdd)
         XCTAssertTrue(pool.ownKeyFirst)
@@ -152,9 +156,23 @@ final class SharedPoolsTests: XCTestCase {
         XCTAssertEqual(try pools("[\(broken), \(Self.payload.dropFirst().dropLast())]").map(\.slug), ["team-codex"])
     }
 
+    /// A Codex pool of somebody's own, as one of the people they added reads it (migration 0358): not made
+    /// on the shared pools page, and its owner's ChatGPT accounts in it — which is all it says of them.
+    func testDecodesAPoolOfSomebodysOwnTheyWereAddedTo() throws {
+        let json = Self.payload
+            .replacingOccurrences(of: "\"shared\": true,", with: "\"shared\": false, \"ownerHasChatGPT\": true,")
+        let pool = asMember(try team(json), userId: Self.zhang)
+        XCTAssertFalse(pool.shared)
+        XCTAssertTrue(pool.ownerHasChatGPT)
+        XCTAssertEqual(CodexPoolPage(own: nil, access: pool)?.lockedOwner, "Wikova")
+        XCTAssertNil(CodexPoolPage(own: nil, access: try team(json))?.lockedOwner, "its owner reads their accounts themselves")
+    }
+
     func testOptionalFieldsFallBackWhenAServerOmitsThem() throws {
         let pool = try team(#"[{"id": "p1", "slug": "pool-a", "keys": [{"id": "k1", "contributor": {"userId": "u1"}}]}]"#)
         XCTAssertEqual(pool.label, "pool-a")
+        XCTAssertTrue(pool.shared, "an older server lists only pools made on the shared pools page")
+        XCTAssertFalse(pool.ownerHasChatGPT)
         XCTAssertEqual(pool.viewerRole, .unknown)
         XCTAssertTrue(pool.people.isEmpty)
         XCTAssertNil(pool.window)
@@ -184,19 +202,38 @@ final class SharedPoolsTests: XCTestCase {
 
     // MARK: - Settings → Providers
 
-    func testTheProvidersRowSaysSharedWithHowManyAndHowManyKeysCanRun() throws {
-        let pool = try team()
-        XCTAssertEqual(ProvidersOverview.sharedPoolLine(pool), "Shared · 4 members")
-        XCTAssertEqual(ProvidersOverview.sharedPoolSummary(pool), "2 of 5 available")
-        let alone = SharedPool(id: "p", slug: "p", label: "P", people: [SharedPoolPerson(userId: "u", name: "U")])
-        XCTAssertEqual(ProvidersOverview.sharedPoolLine(alone), "Shared · 1 member")
-        XCTAssertEqual(ProvidersOverview.sharedPoolSummary(alone), "0 of 0 available")
+    /// Its maker reads how many of its keys a session could start on, beside SHARED; anybody else whose it
+    /// is and how many keys they can run on; and its maker alone in it, "Just me".
+    func testTheProvidersRowSaysWhoseItIsAndHowManyCanRun() throws {
+        let pool = SharedPools.asProviderPool(try team())
+        XCTAssertTrue(ProvidersOverview.isShared(pool))
+        XCTAssertEqual(ProvidersOverview.codexPoolLine(pool), "2 of 5 accounts available")
+        let zhang = SharedPools.asProviderPool(asMember(try team(), userId: Self.zhang))
+        XCTAssertEqual(ProvidersOverview.codexPoolLine(zhang), "Wikova’s · 5 keys you can run on")
+        XCTAssertNil(ProvidersOverview.codexPoolValue(zhang))
+        let alone = SharedPools.asProviderPool(SharedPool(id: "p", slug: "p", label: "P", people: [
+            SharedPoolPerson(userId: "u", name: "U", role: .admin, creator: true, you: true),
+        ]))
+        XCTAssertFalse(ProvidersOverview.isShared(alone))
+        XCTAssertEqual(ProvidersOverview.codexPoolLine(alone), "Just me · 0 of 0 accounts available")
+        XCTAssertEqual(ProvidersOverview.codexPoolValue(alone)?.label, "No keys")
     }
 
     // MARK: - the head
 
-    func testTheHeadCountsPeopleAndTheKeysASessionCouldStartOn() throws {
-        XCTAssertEqual(SharedPoolPage.subtitle(try team()), "4 members · 2 of 5 keys available")
+    /// Its maker reads who else can use it and how many of its keys a session could start on; a pool made
+    /// on the shared pools page runs on its keys alone, which the line ends by saying.
+    func testTheHeadSaysWhoCanUseItAndHowManyKeysCanRun() throws {
+        let page = try XCTUnwrap(CodexPoolPage(own: nil, access: try team()))
+        XCTAssertEqual(page.who, "Me and 3 people")
+        XCTAssertEqual(page.subtitleRest, " · 2 of 5 accounts available")
+        XCTAssertEqual(page.howSentence, "Each session starts on the key with the most room, and stays on it until that one runs out.")
+        XCTAssertEqual(page.adding, .key)
+        let chen = try XCTUnwrap(CodexPoolPage(own: nil, access: asMember(try team(), userId: Self.chen)))
+        XCTAssertEqual(chen.who, "Wikova’s")
+        XCTAssertEqual(chen.subtitleRest, " · 4 people · 3 of 5 keys you can run on available")
+        XCTAssertEqual(chen.howSentence, "Your sessions run on the API keys, your own first.")
+        XCTAssertNil(chen.lockedOwner, "a pool made on the shared pools page holds no ChatGPT account")
     }
 
     // MARK: - keys
@@ -246,16 +283,16 @@ final class SharedPoolsTests: XCTestCase {
                                 people: pool.people, keys: pool.keys + [spent])
         // No session starts on it: what can run is what the other keys made of the pool.
         XCTAssertEqual(SharedPoolPage.keyState(spent), .spent)
-        XCTAssertEqual(SharedPoolPage.availableCount(withIt), 2)
-        XCTAssertEqual(SharedPoolPage.subtitle(withIt), "4 members · 2 of 6 keys available")
-        XCTAssertEqual(SharedPoolPage.keysHeadline(withIt), "Next: orbit-org-1")
+        XCTAssertEqual(ProviderPools.readyCount(SharedPools.asProviderPool(withIt)), 2)
+        XCTAssertEqual(ProviderPools.availability(SharedPools.asProviderPool(withIt)), "2 of 6 accounts available")
+        XCTAssertEqual(ProviderPools.headline(SharedPools.asProviderPool(withIt)), "Next for you: orbit-org-1")
         // Nothing that can run: the head names OpenAI's mark — the soonest key back — rather than the month.
         let only = SharedPool(id: "p", slug: "p", label: "P", window: pool.window, keys: [spent])
-        XCTAssertEqual(SharedPoolPage.keysHeadline(only), "All out of budget · resets Sep 30")
+        XCTAssertEqual(ProviderPools.headline(SharedPools.asProviderPool(only)), "All out of budget · resets Sep 30")
         // A cap among the stops keeps the cap's words, with the reset the first of them comes back at.
         let mixed = SharedPool(id: "p", slug: "p", label: "P", window: pool.window,
                                keys: [try key(pool, "ios-build"), spent])
-        XCTAssertEqual(SharedPoolPage.keysHeadline(mixed), "All at cap · resets Sep 30")
+        XCTAssertEqual(ProviderPools.headline(SharedPools.asProviderPool(mixed)), "All at cap · resets Sep 30")
 
         // Its own contributor is stopped too, and out of budget outranks a cap the others have spent.
         let mine = SharedPoolKey(id: "k", label: "k", fingerprint: "sk-…0000",
@@ -276,7 +313,7 @@ final class SharedPoolsTests: XCTestCase {
     func testAKeyAtItsCapIsAvailableToItsContributor() throws {
         let chen = asMember(try team(), userId: Self.chen)
         XCTAssertEqual(SharedPoolPage.status(try key(chen, "ios-build"), in: chen).label, "Available")
-        XCTAssertEqual(SharedPoolPage.subtitle(chen), "4 members · 3 of 5 keys available")
+        XCTAssertEqual(ProviderPools.availability(SharedPools.asProviderPool(chen)), "3 of 5 keys you can run on available")
     }
 
     /// Its contributor, or an admin, is told to replace a refused key; anyone else is told who can.
@@ -322,17 +359,20 @@ final class SharedPoolsTests: XCTestCase {
         XCTAssertEqual(SharedPoolPage.keyLine(try key(try team(), "orbit-org-2")), "Zhang Min · sk-…7K2P")
     }
 
-    /// The Keys header: the key the server says a session starting now runs on, or why there is none.
-    func testTheKeysHeaderNamesTheNextKeyOrWhyThereIsNone() throws {
+    /// The Accounts header: the key the server says a session of the reader's starts on now — theirs, once
+    /// other people use the pool — or why there is none.
+    func testTheAccountsHeaderNamesTheNextKeyOrWhyThereIsNone() throws {
         let pool = try team()
-        XCTAssertEqual(SharedPoolPage.nextKey(pool)?.label, "orbit-org-1")
-        XCTAssertEqual(SharedPoolPage.keysHeadline(pool), "Next: orbit-org-1")
-        XCTAssertEqual(SharedPoolPage.keysHeadline(SharedPool(id: "p", slug: "p", label: "P")), "No keys")
+        func headline(_ pool: SharedPool) -> String { ProviderPools.headline(SharedPools.asProviderPool(pool)) }
+        XCTAssertEqual(headline(pool), "Next for you: orbit-org-1")
+        XCTAssertEqual(headline(SharedPool(id: "p", slug: "p", label: "P", keys: [try key(pool, "orbit-org-1")])),
+                       "Next: orbit-org-1")
+        XCTAssertEqual(headline(SharedPool(id: "p", slug: "p", label: "P")), "No keys")
         let dead = SharedPool(id: "p", slug: "p", label: "P",
                               keys: [try key(pool, "wikova-backup"), try key(pool, "zhang-old")])
-        XCTAssertEqual(SharedPoolPage.keysHeadline(dead), "No key can run")
+        XCTAssertEqual(headline(dead), "No key can run")
         let capped = SharedPool(id: "p", slug: "p", label: "P", window: pool.window, keys: [try key(pool, "ios-build")])
-        XCTAssertEqual(SharedPoolPage.keysHeadline(capped), "All at cap · resets Oct 1")
+        XCTAssertEqual(headline(capped), "All at cap · resets Oct 1")
     }
 
     // MARK: - people
@@ -369,20 +409,20 @@ final class SharedPoolsTests: XCTestCase {
         XCTAssertTrue(SharedPoolPage.canRemove(try key(pool, "orbit-org-2"), in: pool), "an admin removes anyone's key")
         XCTAssertFalse(SharedPoolPage.canSwitch(try key(pool, "orbit-org-2")), "only its contributor switches it")
         XCTAssertTrue(SharedPoolPage.canSwitch(try key(pool, "orbit-org-1")))
-        // An admin manages everyone but themselves and the pool's creator.
-        XCTAssertEqual(pool.people.map { SharedPoolPage.canManage($0, in: pool) }, [false, true, true, true])
+        // Its maker manages everybody they added.
+        let card = WhoCanUseIt(pool: pool, accounts: nil)
+        XCTAssertEqual(pool.people.map(card.manages), [false, true, true, true])
+        XCTAssertTrue(card.offersRoles, "a pool made on the shared pools page may have more admins than its maker")
 
         let zhang = asMember(pool, userId: Self.zhang)
         XCTAssertFalse(SharedPoolPage.isAdmin(zhang))
         XCTAssertTrue(SharedPoolPage.canAddKey(zhang), "members add keys while the rule is on")
         XCTAssertTrue(SharedPoolPage.canRemove(try key(zhang, "orbit-org-2"), in: zhang))
         XCTAssertFalse(SharedPoolPage.canRemove(try key(zhang, "orbit-org-1"), in: zhang))
-        XCTAssertEqual(zhang.people.map { SharedPoolPage.canManage($0, in: zhang) }, [false, false, false, false])
+        XCTAssertEqual(zhang.people.map(WhoCanUseIt(pool: zhang, accounts: nil).manages), [false, false, false, false])
         let closed = SharedPool(id: zhang.id, slug: zhang.slug, label: zhang.label, membersCanAdd: false,
                                 viewerRole: .member, people: zhang.people, keys: zhang.keys)
         XCTAssertFalse(SharedPoolPage.canAddKey(closed))
-        XCTAssertEqual(SharedPoolPage.membersCanAddHint(pool),
-                       "Anyone in Team Codex can put an OpenAI API key in. Off: only admins can.")
     }
 
     func testTheSentencesThatNameThePoolAKeyOrAPerson() throws {
@@ -390,10 +430,10 @@ final class SharedPoolsTests: XCTestCase {
         let key = try key(pool, "orbit-org-2")
         XCTAssertEqual(SharedPoolPage.removeKeyTitle(key), "Remove orbit-org-2?")
         XCTAssertEqual(SharedPoolPage.removedKey(key), "orbit-org-2 is out of the pool")
-        XCTAssertEqual(SharedPoolPage.deleteTitle(pool), "Delete Team Codex?")
-        XCTAssertEqual(SharedPoolPage.leaveTitle(pool), "Leave Team Codex?")
-        XCTAssertEqual(SharedPoolPage.addMembersTitle(pool), "Add members to Team Codex")
-        XCTAssertEqual(SharedPoolPage.added(pool), "Added to Team Codex")
+        XCTAssertEqual(CodexPoolPage.deleteTitle(pool.label), "Delete Team Codex?")
+        XCTAssertEqual(CodexPoolPage.leaveTitle(pool.label), "Leave Team Codex?")
+        XCTAssertEqual(SharePool.title(pool), "Share Team Codex")
+        XCTAssertEqual(SharePool.outcome(pool, missed: []), "Added to Team Codex")
         XCTAssertEqual(SharedPoolPage.removePersonTitle(pool.people[1], in: pool), "Remove Zhang Min from Team Codex?")
     }
 

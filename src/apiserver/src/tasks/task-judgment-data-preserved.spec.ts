@@ -1694,7 +1694,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // INSERT, UPDATE or DELETE: nothing is backfilled. (Written as 0359 on its own branch and
       // renumbered before it landed: 0359 and 0360 are spelled by other branches not yet landed, and
       // 0361 is the one just above.)
-      '0362_runner_account_names'],
+      '0362_runner_account_names',
+      // Model-routing storage (0364): two nullable task suggestion columns and their CHECK,
+      // two workspace settings with constant defaults, and a new task_route_decision table
+      // with its own indexes and foreign keys. Read against the claims above: no existing column
+      // is dropped or retyped, no DML or function/trigger replacement appears, and neither the
+      // 0177 pair, criterion enum nor any project_acceptance_* object is named.
+      '0364_task_model_routing'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

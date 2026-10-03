@@ -1,4 +1,5 @@
 import { ConflictException } from '@nestjs/common';
+import type { ModelRoutingLevel } from './model-routing';
 
 /**
  * The doors a legacy run request can arrive at. One token used at two doors is two requests, so the
@@ -48,6 +49,24 @@ export type TaskRunPlan =
   | { kind: 'CREATE'; sessionId: string };
 
 /**
+ * The model-routing decision a fresh run was planned with (docs/model-routing-design.md §7.4) —
+ * the same values its `task_route_decision` row records, frozen here so a takeover records the
+ * decision the holder made instead of routing again against a world that has since moved.
+ */
+export interface TaskRunRoute {
+  policyVersion: number;
+  /** Whether the run is dispatched with this result; false is the shadow, where the baseline runs. */
+  applied: boolean;
+  level: ModelRoutingLevel | null;
+  provider: string;
+  model: string | null;
+  effort: string | null;
+  baseline: Record<string, unknown>;
+  features: Record<string, unknown>;
+  reasons: string[];
+}
+
+/**
  * THE FROZEN COMMAND for a single run — every input its effects need, and nothing that has to be
  * looked up again.
  *
@@ -61,7 +80,7 @@ export type TaskRunPlan =
  * may never do is choose a different plan because the world moved.
  */
 export interface TaskRunExecuteTarget {
-  v: 1;
+  v: 2;
   kind: 'RUN';
   plan: TaskRunPlan;
   taskId: string;
@@ -72,6 +91,10 @@ export interface TaskRunExecuteTarget {
   runnerId: string;
   provider: string | null;
   model: string | null;
+  /** The effort the Session is created with; null names none, leaving the workspace's or account's. */
+  effort: string | null;
+  /** The routing decision, on a CREATE plan only. */
+  route: TaskRunRoute | null;
   /** The Project this run's durable USER signal belongs to, decided when the press was read. */
   projectId: string | null;
   /** The list-as-batch admission this run was planned under. */
@@ -100,6 +123,9 @@ export type TaskRunBatchItemPlan = TaskRunPlan & {
   runnerId: string;
   provider: string | null;
   model: string | null;
+  /** As on the single run: the effort the Session is created with, and the route on a CREATE. */
+  effort: string | null;
+  route: TaskRunRoute | null;
   runAt: string | null;
   clearFailed: boolean;
   /** The Project this item's durable USER signal belongs to, as the press saw it. */
@@ -108,13 +134,22 @@ export type TaskRunBatchItemPlan = TaskRunPlan & {
 
 /** A bulk Run's plan: the batch it admits its Sessions under, and where each task goes. */
 export interface TaskRunBatchPlan {
-  v: 1;
+  v: 2;
   kind: 'BATCH';
   batchId: string | null;
   maxConcurrent: number | null;
   items: TaskRunBatchItemPlan[];
   skipped: Array<{ id: string; title: string; reason: string }>;
   runnerIds: string[];
+}
+
+/** The single run's target as receipts bound before targets carried an effort and a route. */
+type TaskRunExecuteTargetV1 = Omit<TaskRunExecuteTarget, 'v' | 'effort' | 'route'> & { v: 1 };
+
+/** The bulk plan as receipts bound before its items carried an effort and a route. */
+interface TaskRunBatchPlanV1 extends Omit<TaskRunBatchPlan, 'v' | 'items'> {
+  v: 1;
+  items: Array<TaskRunPlan & Omit<TaskRunBatchItemPlan, 'effort' | 'route' | keyof TaskRunPlan>>;
 }
 
 /**
@@ -159,8 +194,38 @@ export interface TaskRunStandDownTarget {
  */
 export type TaskRunTargetRecord =
   | TaskRunExecuteTarget
+  | TaskRunExecuteTargetV1
   | TaskRunBatchPlan
+  | TaskRunBatchPlanV1
   | TaskRunStandDownTarget;
+
+/**
+ * A bound single-run plan as this binary carries it out, or null when it is not one this binary
+ * can read. v1 — bound by a binary that predates routing, and still finished by a takeover after
+ * an upgrade — is read as a plan that routed nothing and named no effort, which is what it was.
+ */
+export function readExecuteTarget(bound: unknown): TaskRunExecuteTarget | null {
+  const target = bound as TaskRunTargetRecord | null;
+  if (target?.kind !== 'RUN') return null;
+  if (target.v === 2) return target;
+  if (target.v === 1) return { ...target, v: 2, effort: null, route: null };
+  return null;
+}
+
+/** The bulk counterpart of {@link readExecuteTarget}, item by item. */
+export function readBatchPlan(bound: unknown): TaskRunBatchPlan | null {
+  const plan = bound as TaskRunTargetRecord | null;
+  if (plan?.kind !== 'BATCH') return null;
+  if (plan.v === 2) return plan;
+  if (plan.v === 1) {
+    return {
+      ...plan,
+      v: 2,
+      items: plan.items.map((item) => ({ ...item, effort: null, route: null })),
+    };
+  }
+  return null;
+}
 
 /** A receipt as it comes back off the row. */
 export interface TaskRunReceipt {

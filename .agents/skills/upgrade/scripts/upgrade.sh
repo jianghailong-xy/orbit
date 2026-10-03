@@ -3,7 +3,7 @@
 # postgres running; --pull-base opts into refreshing and potentially recreating base services.
 set -euo pipefail
 
-GIT_PULL=0
+GIT_PULL=auto
 NO_CACHE=0
 PRUNE=0
 PULL_BASE=0
@@ -11,9 +11,10 @@ ALLOW_DIRTY=0
 
 usage() {
   cat <<'EOF'
-Usage: upgrade.sh [--pull] [--pull-base] [--no-cache] [--prune] [--allow-dirty]
+Usage: upgrade.sh [--no-pull] [--pull] [--pull-base] [--no-cache] [--prune] [--allow-dirty]
 
-  --pull       git pull --ff-only before building
+  --no-pull    deploy the checkout as it is (on main the default is git pull --ff-only first)
+  --pull       git pull --ff-only even when the checkout is not on main
   --pull-base  refresh postgres and gateway base images; may restart postgres
   --no-cache   rebuild apiserver/web images without Docker layer cache
   --prune      prune dangling images after a successful upgrade
@@ -27,6 +28,7 @@ EOF
 while [ $# -gt 0 ]; do
   case "$1" in
     --pull) GIT_PULL=1 ;;
+    --no-pull) GIT_PULL=0 ;;
     --pull-base) PULL_BASE=1 ;;
     --no-cache) NO_CACHE=1 ;;
     --prune) PRUNE=1 ;;
@@ -91,9 +93,23 @@ if [ -n "$UNTRACKED" ]; then
   echo "$UNTRACKED" | sed 's/^/         /' >&2
 fi
 
+# A checkout on main deploys origin's main: merges also reach origin without passing through this
+# checkout, which would otherwise rebuild a stale tree. --ff-only rewrites nothing and stops on a
+# diverged checkout; --no-pull deploys the checkout as it is, --pull also pulls off main.
+if [ "$GIT_PULL" = auto ]; then
+  if [ "$(git -C "$REPO_ROOT" symbolic-ref --quiet --short HEAD 2>/dev/null)" = main ]; then
+    GIT_PULL=1
+  else
+    GIT_PULL=0
+  fi
+fi
 if [ "$GIT_PULL" -eq 1 ]; then
   echo "==> git pull --ff-only"
-  git pull --ff-only
+  if ! git pull --ff-only; then
+    echo "error: git pull --ff-only failed — nothing was built or recreated." >&2
+    echo "       Reconcile this checkout with its upstream, or pass --no-pull to deploy it as it is." >&2
+    exit 1
+  fi
 fi
 
 # The web image builds the downloadable runner from a context that carries no Git metadata, so the
