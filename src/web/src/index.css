@@ -17182,6 +17182,14 @@ button.chat-jump-start:hover {
   color: var(--warning);
   font-size: 12px;
 }
+/* A wake written into the running turn: how far it got, in a steer bubble's own words and tone
+   (.chat-steer-state). */
+.bgwake-steer {
+  margin: 2px 0 0 22px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-3);
+}
 /* Still waiting behind the running turn (WorkspaceView's queued tail): dashed like a queued
    message, with the queue's own status line under it. */
 .bgwake.is-queued .bgwake-row {
