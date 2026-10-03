@@ -73,6 +73,7 @@ export class WorkspacesService {
         autoInitGit: dto.autoInitGit ?? false,
         enableWorktree: dto.enableWorktree ?? false,
         defaultMergeTarget: dto.defaultMergeTarget,
+        modelRouting: dto.modelRouting ?? false,
       },
     });
     // Brand-new: no sessions yet, so the seed is the floor. Shaped like every other read.
@@ -269,6 +270,7 @@ export class WorkspacesService {
       defaultMergeTarget: dto.defaultMergeTarget,
       codexAccount: dto.codexAccount,
       claudeAccount: dto.claudeAccount,
+      modelRouting: dto.modelRouting,
     };
     if (dto.disallowedTools) data.disallowedTools = dto.disallowedTools as Prisma.InputJsonValue;
     if (dto.providerFallbacks) {

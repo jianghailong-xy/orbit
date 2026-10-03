@@ -450,7 +450,46 @@ type TaskRunTarget = {
   title: string;
   provider?: string | null;
   model?: string | null;
+  /** What a fresh Session is created with instead of the pins, when smart selection routed it
+   *  (docs/model-routing-design.md §8.3). The pins stay what a refusal names: nobody pinned these. */
+  routed?: { provider: string; model: string | null; effort: string | null } | null;
 };
+
+/**
+ * What a run is created with (docs/model-routing-design.md §7.4): the route's provider, model and
+ * effort when it is applied — the provider written out rather than left to `sessions.create`, whose
+ * Agent seed may have moved by the time a takeover carries the plan out — and otherwise the task's
+ * pins, naming no effort, exactly as before routing.
+ */
+function taskRunDispatch(
+  task: { provider?: string | null; model?: string | null },
+  route: TaskRunRoute | null,
+): Pick<TaskRunExecuteTarget, 'provider' | 'model' | 'effort'> {
+  return route?.applied
+    ? { provider: route.provider, model: route.model, effort: route.effort }
+    : { provider: task.provider ?? null, model: task.model ?? null, effort: null };
+}
+
+/**
+ * The task a bound run target carries out. A routed target names what routing chose, not the task's
+ * pins, so the pins are read back from the decision: its model is never one — a pinned model is not
+ * routed — and its provider is one only when the task pinned it.
+ */
+function boundRunTask(
+  target: Pick<TaskRunExecuteTarget, 'taskId' | 'title' | 'provider' | 'model' | 'effort' | 'route'>,
+): TaskRunTarget {
+  const { route } = target;
+  if (!route?.applied) {
+    return { id: target.taskId, title: target.title, provider: target.provider, model: target.model };
+  }
+  return {
+    id: target.taskId,
+    title: target.title,
+    provider: route.baseline.providerSource === 'task-pin' ? target.provider : null,
+    model: null,
+    routed: { provider: target.provider ?? route.provider, model: target.model, effort: target.effort },
+  };
+}
 
 export function buildTaskExecutionPrompt(task: {
   title: string;
@@ -12579,7 +12618,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // created it — so a task re-pinned to a different provider can't be continued on the old
     // session. Falling through to create() is what makes re-pinning take effect on the next run;
     // resuming instead would silently keep running the previous provider forever. A model change
-    // needs no such split: resume() re-spawns the runtime and applies it.
+    // needs no such split: the paused run is moved onto the pinned model before the prompt is
+    // handed to it (`applyWorkspaceRun`).
     if (latest && task.provider && task.provider !== latest.provider) {
       // A session's provider is fixed for its lifetime, and the task has since been re-pinned. The
       // old behaviour fell through to create() — which, now that the execution claim covers all
@@ -12649,6 +12689,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // on the same key anyway — the unique index is what makes it exactly-once — but reading first
       // keeps a takeover out of the whole resume path for a turn that is already on the row.
       if (await this.hasTurn(plan.sessionId, plan.turnId)) return plan.sessionId;
+      // The task's model pin, put on the paused run BEFORE the turn that carries the prompt. Never
+      // routed (model routing §8.3): a run that has started keeps its model unless the task pins one.
+      if (task.model != null) await this.movePausedRunToPinnedModel(ownerId, plan.sessionId, task.model);
       // The task's inputs, copied into THIS session before the turn that carries them. After the
       // hasTurn check, so a redelivery of a turn already on the row makes no second copy.
       const resumeAttachments = await this.copyTaskAttachments(task.id, plan.sessionId);
@@ -12660,6 +12703,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             clientTurnId: plan.turnId,
             content: prompt,
             ...(resumeAttachments.length > 0 ? { attachmentIds: resumeAttachments } : {}),
+            // Applied only if the run has ended by now and is revived: a live one takes this turn
+            // through `createTurn`, which has no model — hence the move above.
             ...(task.model != null ? { model: task.model } : {}),
           },
           // §13.6 SU6: a paused run being handed the task's prompt IS doing the task's work, so the
@@ -12677,6 +12722,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await this.clearStaleDispatchRefusal(task.id, plan.sessionId);
       return plan.sessionId;
     }
+    const created = task.routed ?? { provider: task.provider, model: task.model, effort: null };
     const session = await this.createTaskSessionOrReadWinner(
       ownerId,
       task,
@@ -12689,9 +12735,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         taskId: task.id,
         title: newSessionTitle.slice(0, 80),
         // Unpinned (null) fields are left off entirely so the session keeps inheriting the
-        // workspace's provider/model, exactly as before these columns existed.
-        ...(task.provider != null ? { provider: task.provider } : {}),
-        ...(task.model != null ? { model: task.model } : {}),
+        // workspace's provider/model/effort, exactly as before these columns existed. A routed run
+        // names what routing chose (model routing §8.3).
+        ...(created.provider != null ? { provider: created.provider } : {}),
+        ...(created.model != null ? { model: created.model } : {}),
+        ...(created.effort != null ? { effort: created.effort } : {}),
       },
       // Task runs belong in Active regardless of whether they were started manually,
       // as a batch, by dependency auto-run, or from an @-mention. Keep `source`
@@ -12711,6 +12759,28 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     );
     await this.clearStaleDispatchRefusal(task.id, session.id);
     return session.id;
+  }
+
+  /**
+   * Put a paused run on the model its task is pinned to, before the task's prompt is handed to it.
+   *
+   * `resume` cannot be relied on for this. A paused run is live, so `resume` hands the turn to
+   * `createTurn`, whose dto has no model: the pin used to ride along there and was dropped, and the
+   * run went on with the model it had. This is the same `updateConfig` a person's model picker
+   * sends, which queues the change ahead of the turn written next.
+   *
+   * Only when the two differ — re-stating the same model would still queue a control turn — and only
+   * while the run has not ended: `updateConfig` refuses an ended one, and `resume` revives that with
+   * the pin applied from its own dto.
+   */
+  private async movePausedRunToPinnedModel(ownerId: string, sessionId: string, model: string): Promise<void> {
+    // By id, as the plan named it; `updateConfig` itself is owner-scoped.
+    const paused = await this.prisma.session.findUnique({
+      where: { id: sessionId },
+      select: { model: true, status: true },
+    });
+    if (!paused || paused.model === model || SessionsService.TERMINAL.includes(paused.status)) return;
+    await this.sessions.updateConfig(ownerId, sessionId, { model });
   }
 
   /**
@@ -13107,10 +13177,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       { id: task.assignee!.id, runnerId: task.assignee!.runnerId! },
       runRequestToken,
     );
-    // Routed for a fresh run only (docs/model-routing-design.md §8.1), and in shadow: the decision
-    // is frozen and recorded, while provider and model stay the task's pins and no effort is named.
+    // Routed for a fresh run only (docs/model-routing-design.md §8.1). The decision is frozen and
+    // recorded either way; only an Agent with smart selection on is dispatched with it — any other
+    // run keeps the task's pins and names no effort, as before routing. A RESUME or ADOPT is never
+    // routed: that run has already started.
     const route = planned.kind === 'CREATE'
-      ? await this.shadowRoute(
+      ? await this.routeFreshRun(
         taskRouteReads(this.prisma, ownerId),
         task,
         { id: task.assignee!.id, runnerId: task.assignee!.runnerId! },
@@ -13126,9 +13198,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       prompt,
       workspaceId: task.assignee!.id,
       runnerId: task.assignee!.runnerId!,
-      provider: task.provider ?? null,
-      model: task.model ?? null,
-      effort: null,
+      ...taskRunDispatch(task, route),
       route,
       projectId: task.projectId ?? null,
       // The list doubles as a durable batch so its cap is enforced by the claim transaction's
@@ -13168,12 +13238,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // and it may not even be a run. Both are read off the row rather than assumed.
     const target = readExecuteTarget(bound);
     if (!target) throw taskRunUnreadableTarget(lease.claim.actionKind, requestToken);
-    const task: TaskRunTarget = {
-      id: target.taskId,
-      title: target.title,
-      provider: target.provider,
-      model: target.model,
-    };
+    const task = boundRunTask(target);
     // The BOUND plan's decision, so a takeover records the one that is being carried out.
     await this.recordRouteDecision(ownerId, target.taskId, requestToken, target.plan, target.route);
     let sessionId: string;
@@ -13252,7 +13317,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * The route for one fresh run, or null when it could not be worked out. Routing never refuses
    * (contract §7.2 P7): a failure here is logged and the run is planned exactly as without it.
    */
-  private async shadowRoute(
+  private async routeFreshRun(
     reads: TaskRouteReads,
     task: TaskRouteSubject,
     workspace: { id: string; runnerId: string },
@@ -13655,19 +13720,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const itemPlan = await this.planWorkspaceRun(
         ownerId, t, workspace, TASK_RUN_TRIGGER.batch(pressToken, t.id),
       );
+      // Routed per item, exactly as the single Run does it: a fresh run only, and dispatched with
+      // the route only when the item's Agent has smart selection on.
+      const route = itemPlan.kind === 'CREATE'
+        ? await this.routeFreshRun(routeReads, t, workspace, prompt)
+        : null;
       planned.items.push({
         taskId: t.id,
         title: `执行任务：${t.title}`,
         prompt,
         workspaceId: workspace.id,
         runnerId: workspace.runnerId,
-        provider: t.provider ?? null,
-        model: t.model ?? null,
-        // Shadow routing per item, exactly as the single Run does it.
-        effort: null,
-        route: itemPlan.kind === 'CREATE'
-          ? await this.shadowRoute(routeReads, t, workspace, prompt)
-          : null,
+        ...taskRunDispatch(t, route),
+        route,
         runAt: t.runAt ? t.runAt.toISOString() : null,
         clearFailed: t.status === TaskStatus.FAILED,
         projectId: t.projectId ?? null,
@@ -13702,9 +13767,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (!(await this.renewRunRequest(lease.claim))) {
         throw taskRunInProgress(TASK_RUN_ACTION.batchExecute, pressToken);
       }
-      const task: TaskRunTarget = {
-        id: item.taskId, title: item.title, provider: item.provider, model: item.model,
-      };
+      const task = boundRunTask(item);
       // Under this item's own request name, which is what its run is named by too.
       await this.recordRouteDecision(
         ownerId, item.taskId, TASK_RUN_TRIGGER.batch(pressToken, item.taskId), item, item.route,

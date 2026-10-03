@@ -149,8 +149,10 @@ export interface TaskRouteSubject {
  * Route one fresh run: read the router's inputs, call it, and return the decision with the
  * baseline and features it is recorded with (§7.3).
  *
- * Shadow mode only: `applied` is false, so the run is dispatched exactly as it was before routing
- * existed and the decision records what routing would have picked.
+ * `applied` when the Agent has smart selection on (`workspace.modelRouting`) and a tier was decided:
+ * the run is then created on the routed provider, model and effort (§7.4). Otherwise it is the
+ * shadow — the run is dispatched exactly as it was before routing existed, and the decision records
+ * what routing would have picked.
  */
 export async function planTaskRunRoute(
   reads: TaskRouteReads,
@@ -213,7 +215,9 @@ export async function planTaskRunRoute(
     : null;
   return {
     policyVersion: decision.policyVersion,
-    applied: false,
+    // Only a decided tier is applied: one that kept the baseline (a model pin, no tier table, no
+    // suggestion, no catalogue) changes nothing whether the switch is on or not.
+    applied: agent?.modelRouting === true && decision.level !== null,
     level: decision.level,
     provider: decision.provider,
     model: decision.model,
