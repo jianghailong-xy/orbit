@@ -56,8 +56,9 @@ export function probeReportsSignedIn(
 }
 
 /** How often the runner list is re-read while waiting for that probe, and for how long: the
- *  runner re-probes the moment the CLI exits but only reports on its next heartbeat, so this is
- *  a check-in (30s) plus the probe, with room for one missed heartbeat. */
+ *  runner re-probes the moment the CLI exits and reports it with a heartbeat of its own, but an
+ *  older one only reports on its next heartbeat, so this is a check-in (30s) plus the probe, with
+ *  room for one missed heartbeat. */
 const PROBE_POLL_MS = 4000;
 const PROBE_WAIT_MS = 90_000;
 
@@ -218,11 +219,11 @@ export function RunnerSignIn({
   }, [reported]);
 
   // A finished sign-in does not move the engine row this card opened under: that row reads the
-  // runner's last heartbeat probe, and the runner only re-probes once the CLI exits, then waits
-  // for its next check-in — half a minute at worst, with nothing pushing it here and no refetch
-  // on focus. So the row kept saying "Signed out", quota withheld, directly beneath this card's
-  // "this runner is ready", until the page was reloaded. Re-read the runner list until that
-  // machine's own probe agrees — a single refetch on `done` would only lose the same race.
+  // runner's last heartbeat probe, and the runner only re-probes once the CLI exits, then (an
+  // older one) waits for its next check-in — half a minute at worst, with nothing pushing it here
+  // and no refetch on focus. So the row kept saying "Signed out", quota withheld, directly beneath
+  // this card's "this runner is ready", until the page was reloaded. Re-read the runner list until
+  // that machine's own probe agrees — a single refetch on `done` would only lose the same race.
   const [awaitingProbe, setAwaitingProbe] = useState(false);
   useEffect(() => {
     if (status !== 'done') return;

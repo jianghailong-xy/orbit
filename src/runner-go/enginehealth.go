@@ -184,7 +184,11 @@ func (r EngineHealthReport) signedIn() bool {
 type engineHealthProbe struct {
 	mu       sync.Mutex
 	snapshot []EngineHealthReport
-	// Serialises refreshes so a forced one during the timer's own run doesn't double the probe.
+	// Serialises refreshes. One asked for while another runs waits for it and then probes again:
+	// the run in flight may have asked the CLIs before whatever prompted this one — a sign-in that
+	// just landed, an install that just finished — and dropping the request, which a TryLock here
+	// did, left the Providers page calling a freshly signed-in engine signed out until the next
+	// five-minute tick.
 	refreshMu sync.Mutex
 	// What a refresh runs: probeEngineHealth, unless a test stands in for the machine's CLIs.
 	probe func() []EngineHealthReport
@@ -200,9 +204,7 @@ type engineHealthProbe struct {
 }
 
 func (p *engineHealthProbe) refresh() {
-	if !p.refreshMu.TryLock() {
-		return
-	}
+	p.refreshMu.Lock()
 	defer p.refreshMu.Unlock()
 	probe := p.probe
 	if probe == nil {
