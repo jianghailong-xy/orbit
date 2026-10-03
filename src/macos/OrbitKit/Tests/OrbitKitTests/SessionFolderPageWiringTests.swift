@@ -131,8 +131,8 @@ final class SessionFolderPageWiringTests: XCTestCase {
         ]
         XCTAssertEqual(order, order.sorted(), "Rename… then Delete Folder…")
         XCTAssertTrue(menu.contains("renamingFolder = row.folder"))
-        XCTAssertTrue(menu.contains("SessionFolderDeletion(folder: row.folder, sessionCount: row.sessionCount)"),
-                      "the confirmation is given the count the row showed")
+        XCTAssertTrue(menu.contains("deletingFolder = SessionFolderDeletion(folder: row.folder)"),
+                      "the confirmation is given the folder alone — its body names no count")
         XCTAssertTrue(agents.contains(".sessionFolderManagement(renaming: $renamingFolder, deleting: $deletingFolder)"))
 
         // The page's ⋯ is the same two, and the same modifier presents them (`SessionFolderPage`).
@@ -149,7 +149,7 @@ final class SessionFolderPageWiringTests: XCTestCase {
         XCTAssertTrue(management.contains(".alert(SessionFolderCopy.renameTitle, isPresented: renamingPresented)"))
         XCTAssertTrue(management.contains("TextField(SessionFolderCopy.namePlaceholder, text: $draft)"))
         XCTAssertTrue(management.contains(".confirmationDialog(deleteTitle, isPresented: deletingPresented, titleVisibility: .visible)"))
-        XCTAssertTrue(management.contains("Text(SessionFolderCopy.deleteMessage(sessionCount: deleting?.sessionCount ?? 0))"))
+        XCTAssertTrue(management.contains("Text(SessionFolderCopy.deleteMessage)"))
         XCTAssertTrue(management.contains("Button(SessionFolderCopy.deleteConfirm, role: .destructive) { delete() }"))
         XCTAssertTrue(management.contains("await app.renameSessionFolder(folder.id, to: name)"))
         XCTAssertTrue(management.contains("await app.deleteSessionFolder(deletion.folder.id)"))
