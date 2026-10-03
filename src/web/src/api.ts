@@ -1,6 +1,8 @@
 import type { MergeRecovery, MergeRecoveryAction } from '@orbit/shared';
 import type {
   BgShell,
+  ConfirmationReturnCard,
+  ConfirmationReviewRequestCard,
   ConversationTurnKind,
   OpenItemDeliveryCard,
   ProjectStartedCard,
@@ -624,6 +626,10 @@ export interface ActiveSessionTurn {
   openItemDelivery?: OpenItemDeliveryCard;
   /** The same for the message telling a coordinator its project was started (`ProjectStartedCard`). */
   projectStarted?: ProjectStartedCard;
+  /** A confirmation request handed to this conversation to review, and a reviewer's return handed to
+   *  the run (docs/owner-confirmation-review-contract.md §2 D7, §8 B3). Orbit's turns. */
+  confirmationReviewRequest?: ConfirmationReviewRequestCard;
+  confirmationReturn?: ConfirmationReturnCard;
   /** Another Orbit session's message (`SessionMessageCard`): who sent it, as the runner's echo will
    *  carry it. Its words are that session's, not the reader's. Absent on every turn nobody's session
    *  sent. */

@@ -27,6 +27,10 @@ public enum SessionHeader {
         // Read here rather than per-branch, or a parked session with one waiting would answer
         // "Waiting for your reply" over a question the reader can answer.
         if (s.pendingApprovals ?? 0) > 0 { return waitingWord(for: s) }
+        // Where "Waiting for your confirmation" would be, while the run's report is still with its
+        // reviewer (contract §5 N3): the card is there, but nobody is asking the owner yet. Web
+        // parity: `statusLabel`'s `confirmationUnderReview` branch.
+        if s.confirmationUnderReview != nil { return OwnerConfirmations.underReview }
         switch s.effectiveRunState {
         case .queued:
             return "Queued"

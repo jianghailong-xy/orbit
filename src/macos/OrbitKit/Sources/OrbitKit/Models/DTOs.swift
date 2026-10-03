@@ -311,6 +311,11 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// are already inside `pendingApprovals`; this says which they are, so the bar can name one and
     /// open its card. Empty (or nil, from an older control plane) when none.
     public let ownerItems: [SessionOwnerItem]?
+    /// The OWNER_CONFIRMED request on this run's session that is still with its reviewer
+    /// (docs/owner-confirmation-review-contract.md §5 N3): the row and the header say "Under review"
+    /// where they would say "Waiting for your confirmation", and it is not in `pendingApprovals`. Nil
+    /// when there is none, from an older control plane, and for a value this build cannot read.
+    public let confirmationUnderReview: ConfirmationUnderReview?
     /// Who this conversation is waiting on for a reply, and who is waiting on it (session requests,
     /// `SessionRequestCopy.peersLine`). Nil from an older control plane; empty when none is open.
     public let awaitingReplyFrom: [SessionRequestPeer]?
@@ -473,6 +478,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         pendingApprovals = try values.decodeIfPresent(Int.self, forKey: .pendingApprovals)
         waitingKind = try values.decodeIfPresent(SessionWaitingKind.self, forKey: .waitingKind)
         ownerItems = try values.decodeIfPresent([SessionOwnerItem].self, forKey: .ownerItems)
+        confirmationUnderReview = try? values.decodeIfPresent(ConfirmationUnderReview.self,
+                                                              forKey: .confirmationUnderReview)
         awaitingReplyFrom = try? values.decodeIfPresent([SessionRequestPeer].self, forKey: .awaitingReplyFrom)
         owesReplyTo = try? values.decodeIfPresent([SessionRequestPeer].self, forKey: .owesReplyTo)
         taskId = try values.decodeIfPresent(String.self, forKey: .taskId)
@@ -530,7 +537,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 codexAccount: String? = nil, codexAccountPinned: Bool? = nil,
                 claudeAccount: String? = nil, claudeAccountPinned: Bool? = nil,
                 awaitingReplyFrom: [SessionRequestPeer]? = nil, owesReplyTo: [SessionRequestPeer]? = nil,
-                folderId: String? = nil) {
+                folderId: String? = nil,
+                confirmationUnderReview: ConfirmationUnderReview? = nil) {
         self.id = id
         self.title = title
         self.status = status
@@ -553,6 +561,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.pendingApprovals = pendingApprovals
         self.waitingKind = waitingKind
         self.ownerItems = ownerItems
+        self.confirmationUnderReview = confirmationUnderReview
         self.awaitingReplyFrom = awaitingReplyFrom
         self.owesReplyTo = owesReplyTo
         self.taskId = taskId
@@ -803,6 +812,15 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     /// sent, and from a server that predates the field.
     public let sessionMessage: JSONValue?
     public var senderCard: SessionMessage? { SessionMessage.parseCard(sessionMessage) }
+    /// A confirmation review's two turns — the request a reviewer is handed and the reviewer's
+    /// return handed to the run — held raw for the readers the echo's payload is read by
+    /// (`ConfirmationReviewTurns.swift`). Nil on every other turn, and from an older server.
+    public let confirmationReviewRequest: JSONValue?
+    public var reviewRequestCard: ConfirmationReviewRequestCard? {
+        ConfirmationReviewRequestCard.parseCard(confirmationReviewRequest)
+    }
+    public let confirmationReturn: JSONValue?
+    public var reviewReturnCard: ConfirmationReturnCard? { ConfirmationReturnCard.parseCard(confirmationReturn) }
     /// The control plane wrote this turn itself — an acceptance round, a task's brief, a wake, a
     /// delivery — so nobody typed its words. Nil on every turn somebody sent, and from a server that
     /// predates the field.
@@ -811,7 +829,8 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     public init(turnId: String, kind: String? = nil, content: String,
                 attachments: [Attachment]? = nil, openItemDelivery: JSONValue? = nil,
                 projectStarted: JSONValue? = nil, sessionMessage: JSONValue? = nil,
-                authoredByOrbit: Bool? = nil) {
+                authoredByOrbit: Bool? = nil, confirmationReviewRequest: JSONValue? = nil,
+                confirmationReturn: JSONValue? = nil) {
         self.turnId = turnId
         self.kind = kind
         self.content = content
@@ -820,6 +839,8 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
         self.projectStarted = projectStarted
         self.sessionMessage = sessionMessage
         self.authoredByOrbit = authoredByOrbit
+        self.confirmationReviewRequest = confirmationReviewRequest
+        self.confirmationReturn = confirmationReturn
     }
 }
 
