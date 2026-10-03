@@ -1260,6 +1260,37 @@ export interface MergeRepairSession {
   completedAt?: string | null;
 }
 
+/** The tiers a task can be suggested at (`task.modelHint`, docs/model-routing-design.md §3.1). */
+export type ModelHintLevel = 'S' | 'M' | 'L' | 'XL';
+
+/** One tier of a task's Suggested picker, resolved by the server for the task's engine on its
+ *  Agent's runner (`modelHintOptions`, §7.5). model, label and effort are null where the engine has
+ *  no tier table or no runner has reported its models. */
+export interface ModelHintOption {
+  level: ModelHintLevel;
+  provider: string | null;
+  model: string | null;
+  label: string | null;
+  effort: string | null;
+}
+
+/** The routing decision a task run was planned with (§7.5), as the task detail's runs and the
+ *  session detail carry it. `level` null = not routed; `applied` false = shadow, what smart
+ *  selection would have picked while the run used the Agent's own model. */
+export interface TaskRunRoute {
+  level: ModelHintLevel | null;
+  provider: string;
+  model: string | null;
+  effort: string | null;
+  applied: boolean;
+  /** One tier above the previous run, because that run failed. */
+  escalated: boolean;
+  /** The router's own sentences, shown as they are. */
+  reasons: string[];
+  policyVersion: number;
+  decidedAt: string;
+}
+
 /** A single session's detail, as returned by GET /sessions/:id. Only the fields the web
  *  reads are typed; `branch`/`baseSha`/`changedFiles`/`isolationStatus` carry the
  *  per-session git worktree result (null until the runner reports completion). */
@@ -1290,6 +1321,8 @@ export interface SessionDetail {
   source?: string | null;
   assignedRunnerId: string | null;
   provider?: string | null;
+  /** The routing decision this task run was planned with; null on any other session. */
+  route?: TaskRunRoute | null;
   /** On an account pool: the member its last claim dispatched on (null before the first). */
   poolMemberProviderId?: string | null;
   /** On a shared pool: the key its last claim chose (null before the first, or when none could run). */

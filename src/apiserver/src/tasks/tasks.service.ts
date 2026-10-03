@@ -7955,6 +7955,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             archivedAt: true,
             deletedAt: true,
             createdAt: true,
+            // What the run actually ran on, for the Runs list's "model · effort" (model routing §9):
+            // the route beside it says what smart selection picked, or would have picked.
+            model: true,
+            effort: true,
             workspace: { select: { name: true } },
           },
         },
