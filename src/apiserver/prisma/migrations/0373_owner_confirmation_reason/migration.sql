@@ -1,4 +1,4 @@
--- 0371 —— agent 声明 OWNER_CONFIRMED 时写明的 owner 专属理由（docs/task-completion-criteria.md
+-- 0373 —— agent 声明 OWNER_CONFIRMED 时写明的 owner 专属理由（docs/task-completion-criteria.md
 -- 「agent 声明 OWNER_CONFIRMED 要写明理由」）。
 --
 -- 量化报告（任务 34Z35uEB5SDTmJPgU1Hw5）：近 30 天被要求确认的 77 个任务全部由 agent 建，项目外抽样
@@ -17,6 +17,9 @@
 -- 不加的约束：「只有 OWNER_CONFIRMED 任务才带理由」不写成 CHECK。服务端在判据离开 OWNER_CONFIRMED
 -- 的那次写入里把两列一起清掉；写成 CHECK 的话，任何一条改判据却没经过 TasksService.update 的路径都会
 -- 变成 500，而这两列只是审计材料，不参与任何结案。
+--
+-- 号：写的时候是 0371；落地前 main 先用了 0371（0371_pool_login_person），另一个工作区占了 0372
+-- （0372_gemini_antigravity_runtime），所以改成 0373。
 --
 -- 向后兼容
 -- ========

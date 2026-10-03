@@ -4072,7 +4072,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       completionFenceRevision: TASK_COMPLETION_FENCE_REVISION,
       completionCriterionOverrideReason:
         normaliseTaskCriterionOverrideReason(dto.completionCriterionOverrideReason),
-      // Migration 0371: why only the owner can settle it, when the declaration said
+      // Migration 0373: why only the owner can settle it, when the declaration said
       // (`owner-confirmation-reason.ts`). Both already checked to belong to an OWNER_CONFIRMED
       // declaration; undefined leaves them out of the INSERT, as every task before them.
       ownerConfirmationReason: dto.ownerConfirmationReason ?? undefined,
@@ -8423,7 +8423,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         completionCriterion, verifiesTaskIdAfter, null, before.creatorSessionId,
       );
     }
-    // Migration 0371's reason and its sentence, as this write leaves them (`owner-confirmation-reason.ts`).
+    // Migration 0373's reason and its sentence, as this write leaves them (`owner-confirmation-reason.ts`).
     // They explain OWNER_CONFIRMED and nothing else, so a write that lands on another criterion
     // clears both, and refuses only what it SENT: a reason or a sentence beside that criterion. On
     // OWNER_CONFIRMED the stored ones stand unless replaced, and null takes both back.

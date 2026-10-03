@@ -1793,7 +1793,7 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // (Written as 0367 on its own branch and renumbered before it landed: 0367 is the antigravity
       // runtime above, and 0369 and 0370 landed first.)
       '0371_pool_login_person',
-      // Why only the owner can settle an agent's OWNER_CONFIRMED task (0371,
+      // Why only the owner can settle an agent's OWNER_CONFIRMED task (0373,
       // tasks/owner-confirmation-reason.ts): one new enum and two nullable columns on `task` with a
       // CHECK over those two columns only. Read against every claim above: no existing column of
       // `task` is dropped, retyped or written — `task.acceptance_command`,
@@ -1801,8 +1801,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `task_completion_criterion` are not named — and no stored row moves. It carries no `CREATE OR
       // REPLACE FUNCTION` and no trigger, so it is not another writer of the DONE fence and names none
       // of the six preserved objects; no `project_acceptance_*` object is named. No INSERT, UPDATE or
-      // DELETE.
-      '0371_owner_confirmation_reason'],
+      // DELETE. (Written as 0371 on its own branch and renumbered before it landed: 0371 is the pool
+      // login person above, and 0372 is spelled by another branch not yet landed.)
+      '0373_owner_confirmation_reason'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

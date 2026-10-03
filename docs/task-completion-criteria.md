@@ -60,7 +60,7 @@ priority order or an escalation chain:
   confirm in the 30 days before, every one had been filed by an agent, and of 30 sampled outside
   any project two needed the owner at all. The reason is one of four, with one optional sentence
   beside it, and both are stored on the task and read back by `task_get`
-  (`ownerConfirmationReason`, `ownerConfirmationReasonNote`; migration 0371):
+  (`ownerConfirmationReason`, `ownerConfirmationReasonNote`; migration 0373):
 
   - `DEPLOY` — a release, a deploy, shipping a build, a change to a live database;
   - `IRREVERSIBLE` — a step that cannot be undone, such as a `DROP` or deleting data;

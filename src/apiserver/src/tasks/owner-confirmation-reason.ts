@@ -21,7 +21,7 @@ import type { TaskCompletionCriterionValue } from './task-completion-criterion';
  *   OWNER_DEVICE_OR_ACCOUNT  the owner's own device, account or keys;
  *   OWNER_TRADE_OFF          a trade-off only the owner can make.
  *
- * One sentence may go with it. Both are stored on the task (migration 0371) and `task_get` reads
+ * One sentence may go with it. Both are stored on the task (migration 0373) and `task_get` reads
  * them back; no gate reads them after the write.
  *
  * WHO IT BINDS, AND WHEN
