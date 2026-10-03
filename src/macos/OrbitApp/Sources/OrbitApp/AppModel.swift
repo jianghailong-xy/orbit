@@ -383,6 +383,10 @@ final class AppModel {
     private(set) var controlPlaneLive = false
     private var controlRefreshPending = false
     private var controlRefreshTask: Task<Void, Never>?
+    /// The earliest moment a loaded row's review is due, and the re-read scheduled for a second after
+    /// it (`scheduleReviewDueRefresh`).
+    private var reviewDueAt: Date?
+    private var reviewDueTask: Task<Void, Never>?
     private var controlRefreshGeneration = 0
     /// Dedup exact refreshes when a control nudge and the fallback poll land together.
     private var sessionDetailRefreshes: Set<String> = []
@@ -961,6 +965,16 @@ final class AppModel {
         default:
             break
         }
+        // A reviewer's own conversation moving can end the review of another row (contract §5 N5):
+        // that run's row says "Under review" until then, and nothing names it, so read the list again.
+        switch ev.type {
+        case .sessionCreated, .sessionUpdated, .sessionEnded:
+            if sessions.contains(where: { $0.confirmationUnderReview?.reviewerSessionId == ev.sessionId }) {
+                scheduleControlRefresh()
+            }
+        default:
+            break
+        }
         // A project's lanes move when one of its tasks does, and an owner item rides the approval
         // count; no event names projects, so a loaded index refetches shortly after either.
         switch ev.type {
@@ -1061,6 +1075,25 @@ final class AppModel {
         // anything a newer server adds.
         default:
             scheduleControlRefresh()
+        }
+    }
+
+    /// A row saying "Under review" stops saying it when its review's window runs out, which nothing on
+    /// the server announces (contract §5 N5): the window is read, never swept. So the list reads again
+    /// a second after the earliest such row is due — web's `reviewDueAt` effect.
+    private func scheduleReviewDueRefresh(_ list: [Session]) {
+        let due = list.compactMap { $0.confirmationUnderReview.flatMap { RelativeTime.parse($0.dueAt) } }.min()
+        guard due != reviewDueAt else { return }
+        reviewDueAt = due
+        reviewDueTask?.cancel()
+        reviewDueTask = nil
+        guard let due else { return }
+        let wait = max(0, due.timeIntervalSinceNow + 1)
+        reviewDueTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+            guard !Task.isCancelled, let self else { return }
+            self.reviewDueAt = nil
+            self.scheduleControlRefresh()
         }
     }
 
@@ -1336,6 +1369,7 @@ final class AppModel {
         // they have their own first-run rules, and a launch whose first snapshot happens to match
         // still has to reconcile whatever a silent push left on the icon.
         if list != sessions { adoptOpenList(list) }
+        scheduleReviewDueRefresh(list)
         let summary = MenuBar.summary(from: list)
         if summary != menuSummary { menuSummary = summary }
         if !didWriteBadge || lastBadge != summary.badge {
