@@ -108,7 +108,7 @@ public enum SessionProviderChoices {
             }
             return AccountChoice(
                 id: account.id,
-                label: account.id == CodexAccounts.defaultID ? "Default" : (account.name ?? "Account \(account.id)"),
+                label: CodexAccounts.label(account.id, accounts: accounts),
                 quota: row.map { r in "\(compactWindowLabel(r.label)) \(r.percent)%" },
                 nearLimit: (row?.window.utilization ?? 0) >= 90,
                 unavailable: account.auth == "no" ? "Not signed in" : nil)

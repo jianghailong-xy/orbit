@@ -1684,7 +1684,17 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `project_acceptance_*` object is. No INSERT, UPDATE or DELETE: the build reads every task
       // row once and writes none. (It is in place of a maintained column on `project`, another
       // preserved relation, whose backfill would have been an UPDATE of every project row.)
-      '0361_task_project_activity_idx'],
+      '0361_task_project_activity_idx',
+      // What the user calls each account a runner reports (0362): one `ADD COLUMN` on `runner` —
+      // `account_names` JSONB, nullable with no default, catalog-only. Read against every claim above:
+      // `runner` is none of the preserved relations, so no `task`, `session`, `project` or
+      // `project_acceptance_*` object is named and the 0177 pair and every stored task and criterion row
+      // are out of its reach. No function, trigger, type or constraint is created, replaced or dropped,
+      // so it is not another writer of the DONE fence and names none of the six preserved objects. No
+      // INSERT, UPDATE or DELETE: nothing is backfilled. (Written as 0359 on its own branch and
+      // renumbered before it landed: 0359 and 0360 are spelled by other branches not yet landed, and
+      // 0361 is the one just above.)
+      '0362_runner_account_names'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

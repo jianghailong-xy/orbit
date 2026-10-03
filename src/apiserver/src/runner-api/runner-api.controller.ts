@@ -1844,6 +1844,15 @@ export class RunnerApiController {
         codexAccountRemoveMessage: status === 'failed' ? (body.message ?? null) : null,
       },
     });
+    // The name the account was given in Orbit goes with it (RunnersService.renameAccount): nothing
+    // would show it again, and a slot added later under the same id must not inherit it.
+    if (count > 0 && status === 'done' && body.account) {
+      await this.prisma.$executeRaw`
+        UPDATE "runner"
+           SET "account_names" = "account_names" #- ARRAY[${engine}::text, ${body.account}::text]
+         WHERE "id" = ${runnerId}::uuid
+           AND "account_names" #> ARRAY[${engine}::text, ${body.account}::text] IS NOT NULL`;
+    }
     return { ok: true, applied: count > 0 };
   }
 
@@ -3771,6 +3780,7 @@ export class RunnerApiController {
           provider: true,
           poolKeyId: true,
           poolCodexAccountId: true,
+          model: true,
           // Which of the runner's Codex accounts a turn its usage limit ended ran on, and whether it
           // was picked by hand — see `codexUsageLimit` below.
           codexAccount: true,
@@ -4592,6 +4602,19 @@ export class RunnerApiController {
           costUsd: mu.costUSD ?? 0,
         }));
         if (rows.length > 0) await tx.llmUsage.createMany({ data: rows });
+      } else if (dto.usage && current.model) {
+        // Codex reports tokenUsage.last, not the resumed thread's cumulative total.
+        await tx.llmUsage.create({
+          data: {
+            sessionId,
+            model: current.model,
+            inputTokens: dto.usage.input_tokens ?? 0,
+            outputTokens: dto.usage.output_tokens ?? 0,
+            cacheCreationInputTokens: dto.usage.cache_creation_input_tokens ?? 0,
+            cacheReadInputTokens: dto.usage.cache_read_input_tokens ?? 0,
+            costUsd: 0,
+          },
+        });
       }
       if (failSession) {
         const terminalized = await terminalizePendingCurrentWorkSteers(tx, sessionId, {
@@ -6572,7 +6595,7 @@ export class RunnerApiController {
     if (session.provider === AgentProvider.CLAUDE) {
       const runner = await tx.runner.findUnique({
         where: { id: runnerId },
-        select: { planUsage: true, engines: true, capabilities: true },
+        select: { planUsage: true, engines: true, accountNames: true, capabilities: true },
       });
       const move = runner?.capabilities.includes(CLAUDE_ACCOUNT_MOVE_V1)
         ? accountAfterUsageLimit(
@@ -6584,11 +6607,11 @@ export class RunnerApiController {
             new Date(),
           )
         : null;
-      if (move) {
+      if (move && runner) {
         return {
           ...(delivered ? { retryAt: new Date() } : {}),
           claudeAccount: move.to,
-          poolSwitchNotice: accountSwitchNotice('claude', move, runner?.engines),
+          poolSwitchNotice: accountSwitchNotice('claude', move, runner),
         };
       }
     }
@@ -6621,7 +6644,7 @@ export class RunnerApiController {
     const now = new Date();
     const runner = await tx.runner.findUnique({
       where: { id: runnerId },
-      select: { planUsage: true, engines: true, capabilities: true },
+      select: { planUsage: true, engines: true, accountNames: true, capabilities: true },
     });
     const workspace = session.workspaceId
       ? await tx.workspace.findUnique({
@@ -6639,7 +6662,7 @@ export class RunnerApiController {
           now,
         )
       : null;
-    if (move) return { retryAt: now, move: { to: move.to, notice: accountSwitchNotice('codex', move, runner?.engines) } };
+    if (move && runner) return { retryAt: now, move: { to: move.to, notice: accountSwitchNotice('codex', move, runner) } };
     const at = await this.quotaRetryAt(tx, runnerId, session, text, workspace);
     return at ? { retryAt: at } : null;
   }

@@ -955,6 +955,20 @@ describe('wiki contract', () => {
     expect(run.cleanStart.flags).toEqual(expect.arrayContaining(['--bare', '--strict-mcp-config', '--max-turns 120']));
     expect(run.cleanStart.thinking).toMatch(/CLAUDE_CODE_EFFORT_LEVEL=unset and MAX_THINKING_TOKENS=0/u);
     expect(run.cleanStart.auth).toMatch(/apiKeyHelper/u);
+    // The one Bash call is the whole run: five hours whether or not the model names a timeout, and every
+    // maintenance session's task tells it to name that and not to run a call the tool cut off again (2026-10-03).
+    expect(run.bashTimeoutMs).toBe(WIKI_MAINTENANCE_RUN.bashTimeoutMs);
+    expect(WIKI_MAINTENANCE_RUN.bashTimeoutMs).toBe(5 * 60 * 60 * 1000);
+    expect(run.cleanStart.bash).toMatch(/BASH_DEFAULT_TIMEOUT_MS and BASH_MAX_TIMEOUT_MS are bashTimeoutMs/u);
+    expect(run.cleanStart.bash).toMatch(/The --settings file carries no env block, which would outrank the environment/u);
+    expect(run.bashCall).toMatch(/tell the model to give the call timeout bashTimeoutMs, never a shorter one/u);
+    expect(run.bashCall).toMatch(/the command is not run again, with any timeout, and no retry is spent on it: the run reports what it printed up to there and ends/u);
+    expect(run.bashCall).toMatch(/That is not the one retry maintenance\.job\.recovery\.inSession keeps/u);
+    expect(CONTRACT.maintenance.job.recovery.inSession).toMatch(/is no such run: it is not run again at all \(maintenance\.run\.bashCall\)/u);
+    for (const description of [CONTRACT.maintenance.job.task.description, CONTRACT.plan.jobs.task.description]) {
+      expect(description).toMatch(/timeout maintenance\.run\.bashTimeoutMs/u);
+      expect(description).toMatch(/is not run again \(maintenance\.run\.bashCall\)/u);
+    }
   });
 
   it('re-verifies the anchors git can check, on the routes and by the rules the contract states', () => {

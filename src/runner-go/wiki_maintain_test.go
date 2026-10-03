@@ -1555,25 +1555,57 @@ func TestWikiMaintainIsRefusedToAnyButAMaintenanceRun(t *testing.T) {
 
 // ── What it is made of ──────────────────────────────────────────────────────────────────────────
 
-// The maintenance session's one Bash call is the whole run: Claude Code must neither kill it at two
-// minutes nor move it to the background, where a session with no Read could never learn how it ended.
+// The maintenance session's one Bash call is the whole run — a plan job's draft, revision or build too, whose
+// sessions the server claims with the same clean start: Claude Code must neither kill it at two minutes nor
+// move it to the background, where a session with no Read could never learn how it ended. Five hours when
+// the model names no timeout, with no env block in the settings to outrank the environment; and since a
+// timeout the call names wins, the system prompt tells the model to name the five hours, and never to run a
+// call the tool cut off again (2026-10-03: 600000, cut off at ten minutes, then again with 1800000).
 func TestWikiMaintainCleanStartLetsTheRunFinish(t *testing.T) {
-	job := maintenanceJob(t)
-	_, env, _ := startMaintenance(t, job, true)
 	budget := strconv.FormatInt(wikiMaintainRunBudget.Milliseconds(), 10)
-	for key, want := range map[string]string{
-		"BASH_DEFAULT_TIMEOUT_MS":              budget,
-		"BASH_MAX_TIMEOUT_MS":                  budget,
-		"CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1",
-	} {
-		if env[key] != want {
-			t.Errorf("%s=%q, want %q", key, env[key], want)
-		}
-	}
 	// Five hours: the same clean start runs a plan job's draft (wiki_plan_draft.go), whose four steps and
 	// three gate rounds take longer on a shared GPU than a maintenance run's three hours.
 	if budget != "18000000" {
 		t.Errorf("the run's budget is %s ms, want five hours", budget)
+	}
+	for _, task := range []struct{ title, command string }{
+		{"Wiki maintenance: a space", "orbit wiki maintain"},
+		{"Wiki plan draft: a space", "orbit wiki plan draft"},
+		{"Wiki plan redraft: a space", "orbit wiki plan revise"},
+		{"Wiki documents: a space", "orbit wiki docs build"},
+	} {
+		t.Run(task.command, func(t *testing.T) {
+			job := maintenanceJob(t)
+			job.Title, job.Prompt = task.title, "Run this once, with the Bash tool: "+task.command+" --space "+maintenanceSpaceID
+			args, env, _ := startMaintenance(t, job, true)
+			def, defErr := strconv.ParseInt(env["BASH_DEFAULT_TIMEOUT_MS"], 10, 64)
+			most, mostErr := strconv.ParseInt(env["BASH_MAX_TIMEOUT_MS"], 10, 64)
+			if defErr != nil || mostErr != nil || time.Duration(def)*time.Millisecond < 5*time.Hour || most < def {
+				t.Errorf("BASH_DEFAULT_TIMEOUT_MS=%q BASH_MAX_TIMEOUT_MS=%q: want five hours at least, and the most no less",
+					env["BASH_DEFAULT_TIMEOUT_MS"], env["BASH_MAX_TIMEOUT_MS"])
+			}
+			if env["CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"] != "1" {
+				t.Errorf("CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=%q, want 1", env["CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"])
+			}
+			path, _ := argAfter(args, "--settings")
+			raw, err := os.ReadFile(path)
+			var settings map[string]interface{}
+			if err != nil || json.Unmarshal(raw, &settings) != nil {
+				t.Fatalf("the settings %s could not be read: %v %s", path, err, raw)
+			}
+			if block, outranks := settings["env"]; outranks {
+				t.Errorf("the settings carry an env block, which outranks the environment: %v", block)
+			}
+			prompt, _ := argAfter(args, "--system-prompt")
+			for _, want := range []string{
+				"with the Bash tool and `timeout: " + budget + "`, never a shorter one",
+				"a command the Bash tool came back from before it ended — it timed out, or was cut off — is never run again",
+			} {
+				if !strings.Contains(prompt, want) {
+					t.Errorf("the system prompt does not say %q: %s", want, prompt)
+				}
+			}
+		})
 	}
 }
 

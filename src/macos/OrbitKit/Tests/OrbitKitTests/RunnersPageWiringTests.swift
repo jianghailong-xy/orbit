@@ -337,6 +337,25 @@ final class RunnersPageWiringTests: XCTestCase {
                       "RunnerAttention.updateNoteOf(health.update, nowMs: RunnerPageFormat.nowMs(now))"] {
             XCTAssertTrue(page.contains(piece), "the engine page lost \(piece)")
         }
+        // Any account — Default too — is renamed from its long-press menu, never from the swipe, and
+        // with the session rename's rules; the row says what a renamed Default still is.
+        for piece in [".contextMenu {",
+                      "renameDraft = line.name",
+                      "Label(\"Rename…\", systemImage: \"pencil\")",
+                      ".alert(\"Rename Account\", isPresented: renameAsked, presenting: renaming) { line in",
+                      "TextField(line.isDefault ? \"Default\" : \"Name\", text: $renameDraft)",
+                      "guard !name.isEmpty, name != line.name else { return }",
+                      "await runners.renameAccount(id, engine: login, account: line.id, name: name)",
+                      "if let subtitle = line.subtitle {"] {
+            XCTAssertTrue(page.contains(piece), "the engine page lost \(piece)")
+        }
+        try assertInOrder(page, [".contextMenu {", ".swipeActions(edge: .trailing, allowsFullSwipe: false) {"],
+                          "Rename is the menu's, not the swipe's")
+        let swipe = try slice(page, from: ".swipeActions(edge: .trailing, allowsFullSwipe: false) {", to: "addAccountRow(login: login")
+        XCTAssertFalse(swipe.contains("Rename"), "a swipe performs; it does not open an editor")
+        let runnersModel = code(try appSource("RunnersModel.swift"))
+        XCTAssertTrue(runnersModel.contains("api.renameRunnerAccount(id, engine: engine, account: account, name: name)"))
+
         let signIn = code(try appSource("Views/RunnerSignInView.swift"))
         XCTAssertTrue(signIn.contains("var account: String? = nil"), "the sign-in card takes an account")
         XCTAssertTrue(signIn.contains("var accountName: String? = nil"), "or a new account's name")

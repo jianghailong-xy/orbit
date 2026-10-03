@@ -4,7 +4,7 @@ import { Button } from 'antd';
 import { Link } from 'react-router-dom';
 import { accountToStartOn, type ReportedEngine, type RunnerEngineHealth } from '@orbit/shared';
 import { api } from '../api';
-import { accountPlanUsage, engineKeepsAccounts } from '../lib/engineAccounts';
+import { accountNameOf, accountPlanUsage, engineKeepsAccounts } from '../lib/engineAccounts';
 import { encodeId } from '../lib/idCodec';
 import { currentPlanUsageRows, planUsageSnapshotForProvider } from '../lib/planUsage';
 import { runnersQuery } from '../lib/queries';
@@ -22,7 +22,7 @@ import { ENGINE_CLI_NAME, engineVersionNumber, updateNoteOf } from '../lib/runne
 import { ENGINE_PRESET } from '../lib/sessionProviderChoices';
 import { useToast } from '../lib/toast';
 import { ProviderTile } from './ProviderGallery';
-import { accountNameOf, rowKindOf } from './RunnerEngines';
+import { rowKindOf } from './RunnerEngines';
 import type { Runner } from './TasksSidePanel';
 
 /** Where an engine's sign-in and accounts live: its card on Providers, opened at this engine. */

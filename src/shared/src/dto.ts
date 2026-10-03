@@ -1075,7 +1075,9 @@ export interface RunnerEngineAccount {
   /** `default` — the directory the runner's own environment selects — or the id of a slot the
    *  runner added: the same value LoginCommand.account names. */
   id: string;
-  /** What the user called the account. Absent for Default, and for a slot whose record was lost. */
+  /** What the user called the account: the name it was renamed to in Orbit, else the one it was
+   *  added under. Absent for a Default never renamed, and for a slot whose record was lost and that
+   *  was never renamed. */
   name?: string;
   /** The account's directory on that machine, absolute: a CODEX_HOME or a CLAUDE_CONFIG_DIR. */
   home: string;

@@ -535,6 +535,11 @@ model Runner {
   // Per-engine health on this machine — installed / version / signed in — reported by heartbeat
   // from the same probe `orbit doctor` prints. Shape: @orbit/shared RunnerEngineHealth[].
   engines        Json?     @map("engines")
+  // What the user calls each account `engines` reports, set in Orbit rather than on the machine —
+  // the accounts' displayName. Shape: { "<engine>": { "<account id>": "<name>" } }. Laid over the
+  // reported names wherever an account is named (namedRunnerEngines), which is how Default, the one
+  // account the machine never names, gets a name at all. NULL until the first rename.
+  accountNames   Json?     @map("account_names")
 
   // Browser-driven install of one engine CLI, the same one-slot relay shape as the sign-in above
   // (a machine installs one CLI at a time; the request is redelivered until the runner reports).

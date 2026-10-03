@@ -85,7 +85,8 @@ export function sanitizeRunnerEngines(value: unknown): RunnerEngineHealth[] | nu
 /** How many accounts one report may carry. Each is a sign-in somebody made by hand, so a real
  *  machine sits far below this: what it bounds is a runaway report, not a user. */
 export const ENGINE_ACCOUNTS_MAX = 16;
-/** StartLoginDto's limit on a new account's name, the way a name reaches a runner from here. */
+/** StartLoginDto's limit on a new account's name, the way a name reaches a runner from here — and
+ *  RenameAccountDto's, the way one reaches `runner.account_names`. */
 const ACCOUNT_NAME_MAX = 60;
 /** A config directory is shown, not followed; this is room for any real home directory, not a log
  *  line. */
@@ -144,6 +145,52 @@ function sanitizeEngineAccounts(value: unknown): RunnerEngineAccount[] | undefin
     });
   }
   return out.length ? out : undefined;
+}
+
+/** The names the user gave a runner's accounts in Orbit, by engine and then account id. */
+export type AccountNames = Partial<Record<LoginEngine, Record<string, string>>>;
+
+/**
+ * Read `runner.account_names` (which RunnersService.renameAccount writes) the way a report is read:
+ * an engine that keeps accounts, an id an account can have, a name renameAccount could have written.
+ * Anything else is dropped rather than shown.
+ */
+export function sanitizeAccountNames(value: unknown): AccountNames {
+  const out: AccountNames = {};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return out;
+  for (const [engine, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (!engineKeepsAccounts(engine) || !raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+    const names: Record<string, string> = {};
+    for (const [id, name] of Object.entries(raw as Record<string, unknown>)) {
+      if (!ACCOUNT_ID_PATTERN.test(id) || typeof name !== 'string') continue;
+      const trimmed = name.trim();
+      if (trimmed && trimmed.length <= ACCOUNT_NAME_MAX) names[id] = trimmed;
+    }
+    if (Object.keys(names).length) out[engine] = names;
+  }
+  return out;
+}
+
+/**
+ * A runner's engines as everything that NAMES an account has to read them: the report
+ * (sanitizeRunnerEngines) with the name the user gave each account in Orbit laid over the one the
+ * machine reports. Default is never named by the machine, so this is the only name it can have.
+ *
+ * `accountNames` is required on purpose: a select that forgets the column would otherwise compile, and
+ * name every account the way the runner does whatever it was renamed to.
+ */
+export function namedRunnerEngines(runner: { engines: unknown; accountNames: unknown }): RunnerEngineHealth[] | null {
+  const engines = sanitizeRunnerEngines(runner.engines);
+  const names = sanitizeAccountNames(runner.accountNames);
+  if (!engines) return engines;
+  return engines.map((entry) => {
+    const own = engineKeepsAccounts(entry.engine) ? names[entry.engine] : undefined;
+    if (!own || !entry.accounts) return entry;
+    return {
+      ...entry,
+      accounts: entry.accounts.map((account) => (own[account.id] ? { ...account, name: own[account.id] } : account)),
+    };
+  });
 }
 
 /** How long a message from the runner may be. Long enough for an installer's last words plus the
