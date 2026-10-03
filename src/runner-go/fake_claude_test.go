@@ -57,6 +57,13 @@ func TestMain(m *testing.M) {
 		cmdMcp()
 		os.Exit(0)
 	}
+	// This binary as the `orbit` CLI itself, when a real Claude Code's Bash runs `orbit wiki …` from a
+	// maintenance run — bare, off a link named orbit on its PATH, or by this binary's own path, as the run's
+	// rules name the CLI (wiki_maintenance_session_test.go). `go test` never starts it with a subcommand.
+	if len(os.Args) > 1 && os.Args[1] == "wiki" {
+		main()
+		os.Exit(0)
+	}
 	clearCallingSession()
 	// The PATH the runner service runs with (resolveRunnerEnv): the engine installers' own
 	// directories, which a bare shell need not have. The probes of a real engine run in parallel,
