@@ -1498,6 +1498,7 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'tasks/tasks.service.ts#lockPlanExecutionIdentity', under: 'tasks.create, tasks.createMany — rank 10 then rank 15, before either takes a list or a session' },
   { at: 'tasks/tasks.service.ts#assertPlanAuthorityUnchanged', under: 'tasks.create, tasks.createMany — the preflight facts, re-read under the locks now held and before the first row' },
   { at: 'tasks/tasks.service.ts#assertDependencyCrossingsAtEffect', under: 'tasks.create, tasks.createMany — the cross-project edges, re-judged under a rank-50 lock on the prerequisites' },
+  { at: 'tasks/tasks.service.ts#copyAttachmentsToTask', under: 'tasks.create, tasks.createMany — the input files copied onto the new task, in the transaction that inserts it and after its row; a source deleted after the preflight fails the recheck and rolls the task back with them' },
   { at: 'projects/session-attempt.service.ts#bySessionId', under: 'sessionAttempt.evaluate, .close and chargeSteer' },
   { at: 'projects/session-attempt.service.ts#chargeSteer', under: 'sessions.createTurn and sessions.interrupt — only as an explicit transaction participant after the Session idempotency receipt check; lock order is Session rank 30 then task_attempt child rank 60' },
   { at: 'projects/projects.service.ts#lockLiveAgent', under: 'projects.update, .remove' },
