@@ -1908,6 +1908,8 @@ Output the JSON array now.`
 // Claude Code gives a command two minutes and then moves it to the background, where a run whose only
 // tool is that shell, with no Read to follow the output file, could never learn how it ended: so the
 // default and the most a command may ask for are the whole run's budget, and background tasks are off.
+// A timeout the call names still wins over the default, so the system prompt and the task tell the model
+// to name the budget (contracts/wiki.contract.json `maintenance.run.bashCall`).
 func wikiMaintainBashEnv() []string {
 	budget := strconv.FormatInt(wikiMaintainRunBudget.Milliseconds(), 10)
 	return []string{

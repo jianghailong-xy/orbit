@@ -55,6 +55,7 @@ import {
   WIKI_MAINTENANCE_JOB,
   WIKI_MAINTENANCE_RECOVERY,
   WIKI_MAINTENANCE_RULES,
+  WIKI_MAINTENANCE_RUN,
   WIKI_REVIEW_RULES,
   toUuid,
   uuidToBase62,
@@ -379,6 +380,21 @@ async function maintenanceTasks(h: Harness, s: Space) {
         FROM "task" WHERE "list_id" = $1 ORDER BY "created_at"`, [s.listId])).rows;
 }
 
+/**
+ * A maintenance session's task gives its one Bash call the clean start's five hours, never less, and says that a
+ * call the tool cut off is not run again — the run of 2026-10-03 gave 600000, was cut off, and ran it again
+ * (contract `maintenance.run.bashCall`). `next` is what the task says picks the work up.
+ */
+function assertBashCall(description: string | null, next: string, what: string): void {
+  const text = description ?? '';
+  assert.equal(WIKI_MAINTENANCE_RUN.bashTimeoutMs, 18_000_000, 'the run\'s Bash timeout is five hours');
+  assert.ok(text.includes('Give that Bash call `timeout: 18000000` (five hours), never a shorter one'),
+    `${what} does not give its Bash call five hours: ${text}`);
+  assert.ok(text.includes('If the Bash tool comes back before the command has ended — it timed out, or was cut off — do not run it '
+    + 'again, with this timeout or any other, and spend no retry on it: report what it printed up to there, say it was cut off, '
+    + `and end; ${next}`), `${what} does not say a call the tool cut off is not run again: ${text}`);
+}
+
 async function cursorRow(h: Harness, s: Space) {
   return (await h.sql.query<{
     position_at: Date | null; consecutive_failures: number; last_outcome: string | null; held_reason: string | null; held_at: Date | null;
@@ -483,6 +499,10 @@ test('twenty sessions with a fact after the cursor make the task — pinned, at 
   assert.ok(runAt && Math.abs(runAt.getTime() - Date.now()) < 60_000, `runAt is now: ${runAt?.toISOString()}`);
   assert.equal(row.title, 'Wiki maintenance: threshold space');
   assert.match(row.description, new RegExp(`orbit wiki maintain --space ${uuidToBase62(s.spaceId)}`));
+  // A call the tool cut off is not the run the command itself says may be run again after a 5xx: that keeps its retry.
+  assertBashCall(row.description, 'the next run takes up where this one stopped.', 'the maintenance task');
+  const retry = row.description.indexOf('a run it says you may run again is safe to run again at once');
+  assert.ok(retry >= 0 && retry < row.description.indexOf('If the Bash tool comes back'), 'the 5xx retry is not told apart from a cut-off');
   assert.equal(row.completion_criterion, 'EXECUTABLE');
   assert.equal(row.acceptance_command, `orbit wiki check --space ${uuidToBase62(s.spaceId)} --expect-cursor ${made.expect}`);
   assert.equal(row.acceptance_expected_exit_code, 0);
@@ -1385,6 +1405,7 @@ test('the owner\'s confirmation makes one build task; a second waits and is neve
   assert.equal(made.completionCriterion, 'EXECUTABLE');
   assert.equal(made.acceptanceCommand, `orbit wiki plan check --space ${uuidToBase62(s.spaceId)} --job ${uuidToBase62(first.id)}`);
   assert.match(made.description ?? '', new RegExp(`orbit wiki docs build --space ${uuidToBase62(s.spaceId)}`));
+  assertBashCall(made.description, 'the sections it wrote are kept, and a later build leaves them as they are.', 'the build task');
   assert.ok(h.announced.some((a) => a.ownerId === s.owner.id && JSON.stringify(a.change).includes(first.task_id!)), 'the task made is published');
   const state = await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/plan`);
   expectStatus(state, 200, 'the owner reads the plan');

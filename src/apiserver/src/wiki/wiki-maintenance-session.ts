@@ -107,6 +107,25 @@ export function withWikiMaintenanceRun<
 }
 
 /**
+ * What every maintenance session's task tells its model of the one Bash call that is its whole run (contract
+ * `maintenance.run.bashCall`): the timeout to give it. The clean start gives a call that names none five hours
+ * already, but a timeout the call names wins, and a model names one of its own unless told: on 2026-10-03 one
+ * gave 600000 and was cut off at ten minutes.
+ */
+export const WIKI_RUN_BASH_TIMEOUT = `Give that Bash call \`timeout: ${WIKI_MAINTENANCE_RUN.bashTimeoutMs}\` (five hours), never a shorter one`;
+
+/**
+ * …and what to do when the tool comes back before the command has ended: not run it again — the run of
+ * 2026-10-03 did, with 1800000, was cut off again, and spent its one retry on it — but report what it printed
+ * and end. `next` says what picks the work up.
+ */
+export function wikiRunCutOff(next: string): string {
+  return 'If the Bash tool comes back before the command has ended — it timed out, or was cut off — do not run it '
+    + 'again, with this timeout or any other, and spend no retry on it: report what it printed up to there, say it '
+    + `was cut off, and end; ${next}`;
+}
+
+/**
  * SQL: the session row `sessionAlias` is a maintenance session — `isWikiMaintenanceSession` in the form the
  * claim asks it, inside its locked statement, to withhold the row from a runner that cannot start it clean.
  */
