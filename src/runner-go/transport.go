@@ -215,7 +215,7 @@ func isLeaseOwnershipError(err error) bool {
 // Sent on claim/reclaim from the first release that safely understands OpenCode. The server uses
 // this positive capability advertisement instead of trusting a stale heartbeat version during a
 // rolling upgrade. Older control planes ignore the header.
-const runnerSupportedProviders = "claude,codex,opencode"
+const runnerSupportedProviders = "claude,codex,opencode,antigravity"
 
 func NewTransport(baseURL, token string) *Transport {
 	leaseOwner, err := newLeaseGeneration()

@@ -36,3 +36,9 @@ func terminateSessionProcessTree(cmd *exec.Cmd) error {
 	}
 	return err
 }
+
+// interruptSessionProcessGroup has no group signal to send on Windows, so it ends the tree: the
+// engine's conversation is on disk, and the next turn resumes it.
+func interruptSessionProcessGroup(cmd *exec.Cmd) error {
+	return terminateSessionProcessTree(cmd)
+}

@@ -293,7 +293,7 @@ agy 会加载工作区里的 `.agents/hooks.json` 和 `.agents/mcp_config.json`�
 
 **runner 的中断步骤**：
 
-1. 不往 stdin 写任何东西，向 agy PID 发 SIGINT。
+1. 不往 stdin 写任何东西，向 agy PID 发 SIGINT。（1.2.16 更正：发给整个进程组，见 §13。）
 2. 最多等 10 秒（实测 0.8–1.3 秒就退出）。
 3. 还没退：先按父进程号快照 agy 的直接子进程，把它们各自的进程组号记下来，再 SIGKILL agy 的进程组和这些记下来的组。
    "只杀自己记录过 PID 的进程组"这个约束不变，命令的进程组是在快照时记录的。必须先快照再杀：agy 一死，命令进程就被
@@ -587,6 +587,7 @@ gemini-3.1-pro-low	Gemini 3.1 Pro (Low)
 ### 9.3 上下文读数
 
 agy 不报上下文窗口大小，按模型维护一张表（阶段 1 定值；真实 key 到位后可以从 API 的 `inputTokenLimit` 核对）。
+（1.2.16 更正：`input_tokens` 不含缓存命中，读数要加上 `cache_read_tokens`，见 §13。）
 占用读数取**最近一个** `agent_response` 步骤的 `usage.total_tokens`（= `input_tokens + output_tokens`；按官方文档的例子，
 `cache_read_tokens` 包含在 `input_tokens` 里）。每个 `agent_response` 步骤的 `usage` 是那一次模型调用的量【实测】，可以随步骤更新读数（同 `contextPinger`）。
 
@@ -664,6 +665,24 @@ runner 上没有真实 Gemini key。owner 把 key 写进 runner 上的 `/root/.c
 | 配置隔离 | 待定，优先不改 HOME | `--gemini_dir`，不改 HOME（§3） |
 
 ---
+
+## 13. agy 1.2.16 补充（阶段 1）
+
+阶段 1 的 runner 引擎和契约测试是在 runner workstation 上、**agy 1.2.16** 上做的（这台机器原先没有 agy，2026-10-03
+用官方脚本装到 `/root/.local/bin/agy`）。上文的结论由 `src/runner-go/antigravity_contract_test.go` 的
+`TestAntigravityContract*` 在 1.2.16 上重新验证过；下面是不同的或上文没覆盖的【实测】：
+
+| 项 | 1.2.16 实测 | runner 的做法 |
+| --- | --- | --- |
+| 用量 | mock 回 prompt 1200（其中缓存 300）、candidates 40、thoughts 7：agy 报 `input_tokens` 900、`cache_read_tokens` 300、`output_tokens` 47、`total_tokens` 947。`input_tokens` 不含缓存命中，`total_tokens` 也不含 | 更正 §9.3：上下文读数取 `input_tokens + cache_read_tokens + output_tokens`（这里 1247），不取 `total_tokens`；`TokenUsage` 一一对应（同 claude 的拆法）。§2.4 的"`output_tokens` 已含思考"不变 |
+| 中断 | 只向 agy 的 PID 发 SIGINT：照样写 `interrupted` 的 `result`、退出 1，但 PreToolUse hook 起的子进程（在 agy 进程组里）成孤儿活下来；向整个进程组发 SIGINT：一起结束 | 更正 §4.1 第 1 步：向进程组发 SIGINT（`interruptSessionProcessGroup`），agy 退出后再按进程组 SIGKILL 兜底 |
+| `--effort` | help 列出 `low\|medium\|high\|xhigh\|max`，但每个模型只收自己的档位（`gemini-3.1-pro` 只有 low/high）；档位不对时 `result` 的 `error` 为 `invalid model selection …`、`conversation_id` 为空、退出 1，没有 `init` | 只传模型目录里该模型有的档位，否则用它的默认档（有 high 就 high）。没选模型时 `--model`、`--effort` 都不传 |
+| 全局规则 | `<gd>/GEMINI.md`、`<gd>/AGENTS.md`、`<gd>/config/GEMINI.md`、`<gd>/config/AGENTS.md` 都作为用户全局规则进系统指令（"user-defined rules that you MUST ALWAYS FOLLOW"） | agy 没有 system prompt 参数：agent 的 systemPrompt / appendSystemPrompt 和 Orbit 自己的说明写进 `<gd>/GEMINI.md` |
+| `.agents/` | changelog：skills.json、rules.json 等清单改为从工作目录到项目根之间每一级 `.agents/` 加载 | §3.5 的闸门检查会话目录到仓库根之间的每一级 `.agents/` |
+| `bin/` 共享 | 两个新 gemini 目录同时启动、`bin/` 软链到同一个新的共享目录：两个都正常，解出的 webm_encoder 与单独解出的逐字节相同 | 按 §3.1 链到 `<ORBIT_HOME>/antigravity/bin` |
+| `agy --version` | 不写 HOME，不拉起 `--bg-updater` | 引擎探针照常每 5 分钟跑一次 |
+| `agy update` | 无人值守可用（已是最新时打印 `You are already on the latest version.`、退出 0）；带 `--gemini_dir=<目录>` 时更新器状态只写进该目录，目录不存在会自建 | 引擎更新命令是 `agy --gemini_dir=<ORBIT_HOME>/antigravity/updater update`；`agy models` 同样在 `<ORBIT_HOME>/antigravity/catalog` 里跑，用占位 key（它不调 API） |
+| 安装脚本 | 与 §6.4 相同：`agy install` 往 `~/.bashrc`、`~/.profile` 各追加一行 PATH | 这次安装留下的两行没有删 |
 
 ## 附录：实测记录索引
 
