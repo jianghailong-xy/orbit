@@ -12,7 +12,7 @@ import {
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { codexPoolUnavailableReason } from '../providers/codex-login';
-import { loginCanRun, loginPoolResumesAt } from '../providers/pool-login-select';
+import { loginCanRun, loginPoolResumesAt, type LoginAccount } from '../providers/pool-login-select';
 import { choosePoolCredential } from '../providers/pool-credential-select';
 import { isBuiltinProvider, resolveProviderExec, type ModelProviderRow } from '../providers/custom-provider';
 import { ProviderPlanUsageService } from '../providers/plan-usage.service';
@@ -843,11 +843,11 @@ export class QueueService {
 
   /**
    * The Codex pool on `slug` `ownerId` runs on as one of its people, or null — nobody else's is theirs to
-   * name: a shared pool they are in (migration 0321), which holds API keys alone, or a pool of somebody
-   * else's own its owner added them to (migration 0358), whose ChatGPT accounts are its owner's but whose
-   * sessions they run too (pool-credential-select.ts, 2026-10-03). A pool of their own is not this but
-   * accountPool's (resolveLoginPool). `logins` are the pool's accounts, oldest first, as choosing reads
-   * them — empty for a shared pool, which holds none.
+   * name: a shared pool they are in (migration 0321), or a pool of somebody else's own its owner added
+   * them to (migration 0358). Either may hold ChatGPT accounts — whoever in the pool signed each one in
+   * (migration 0371) — and every person's sessions run on them (pool-credential-select.ts). A pool of
+   * their own is not this but accountPool's (resolveLoginPool). `logins` are the pool's accounts, oldest
+   * first, as choosing reads them.
    */
   private async sharedPoolOf(db: Prisma.TransactionClient | PrismaService, ownerId: string, slug: string) {
     const pool = await db.providerPool.findFirst({
@@ -857,23 +857,10 @@ export class QueueService {
         people: { some: { userId: ownerId } },
         OR: [{ shared: true }, { ownerId: { not: ownerId } }],
       },
-      select: {
-        id: true,
-        label: true,
-        ownKeyFirst: true,
-        ownerId: true,
-        shared: true,
-        logins: {
-          orderBy: [{ createdAt: 'asc' }, { accountId: 'asc' }],
-          select: { accountId: true, email: true, state: true, spentUntil: true, usage: true },
-        },
-      },
+      select: { id: true, label: true, ownKeyFirst: true, ownerId: true, shared: true },
     });
     if (!pool) return null;
-    return {
-      ...pool,
-      logins: pool.logins.map((login) => ({ ...login, usage: login.usage as PlanUsageSnapshot | null })),
-    };
+    return { ...pool, logins: await poolLogins(db, pool.id) };
   }
 
   /**
@@ -886,12 +873,13 @@ export class QueueService {
    * A pool whose members are all spent is not refused. It waits for the first of them to reset, as
    * the claim and the brakes above already make it.
    *
-   * A shared pool `ownerId` is in (migration 0321) is refused the same way when none of its keys can run
-   * — it has none, or each is switched off or refused by OpenAI — and not when its keys are only spent to
-   * their share caps, which come back on the first of the month (sharedPoolUnavailableReason). A pool of
-   * somebody else's own its owner added them to (migration 0358) holds its owner's ChatGPT accounts,
-   * which run their sessions first, so it is refused only while neither an account nor a key can run
-   * (codexPoolUnavailableReason) — in the words of someone who can only ask its owner to sign in.
+   * A pool of somebody else's own `ownerId` was added to (migration 0358, and 0321's shared pools too
+   * since 2026-10-03): every session of it runs on its ChatGPT accounts first — whoever in the pool signed
+   * each one in (migration 0371) — and on its API keys while none can, so it is refused only while
+   * neither can run (codexPoolUnavailableReason). A pool holding no account at all is refused in the
+   * keys' own words (sharedPoolUnavailableReason) — it has none, or each is switched off or refused by
+   * OpenAI — and not when its keys are only spent to their share caps, which come back on the first of
+   * the month.
    */
   async accountPoolRefusal(
     ownerId: string,
@@ -907,14 +895,9 @@ export class QueueService {
         orderBy: { id: 'asc' },
         select: { label: true, enabled: true, state: true },
       });
-      return shared.shared
-        ? sharedPoolUnavailableReason(shared.label, keys)
-        : codexPoolUnavailableReason(
-            shared.label,
-            shared.logins.find((login) => login.state === 'ACTIVE') ?? shared.logins[0] ?? null,
-            keys,
-            false,
-          );
+      if (shared.logins.length === 0) return sharedPoolUnavailableReason(shared.label, keys);
+      const account = shared.logins.find((login) => login.state === 'ACTIVE') ?? shared.logins[0] ?? null;
+      return codexPoolUnavailableReason(shared.label, account, keys, account?.userId === ownerId);
     }
     // A Codex pool of the owner's own (migration 0323) has no members to choose from: its accounts are the
     // credential, and it takes a session exactly while one of them is ACTIVE, which the claim can put the
@@ -924,11 +907,8 @@ export class QueueService {
     // not been read is not that and does not appear here at all; nor does a spent one, which is waited for.
     if (pool.engine === AgentProvider.CODEX) {
       const keys = await db.poolApiKey.findMany({ where: { poolId: pool.id }, select: { enabled: true, state: true } });
-      return codexPoolUnavailableReason(
-        pool.label,
-        pool.logins.find((login) => login.state === 'ACTIVE') ?? pool.logins[0] ?? null,
-        keys,
-      );
+      const account = pool.logins.find((login) => login.state === 'ACTIVE') ?? pool.logins[0] ?? null;
+      return codexPoolUnavailableReason(pool.label, account, keys, account?.userId === ownerId);
     }
     if (selectPoolMember(pool.candidates, null, new Date()).kind !== 'UNAVAILABLE') return null;
     return poolUnavailableReason(pool.label, pool.rows);
@@ -948,14 +928,6 @@ export class QueueService {
         engine: true,
         // A `codex` pool's rule for choosing among its API keys (migration 0358), as a shared pool's.
         ownKeyFirst: true,
-        // A `codex` pool of one's own holds ChatGPT logins instead of members (migration 0323), one per
-        // account signed in, oldest first: which of them a session runs on is chosen from each one's state,
-        // the reset the backend named (`spent_until`, migration 0324) and the last window reading its
-        // answers carried (`usage`) — pool-login-select.ts.
-        logins: {
-          orderBy: [{ createdAt: 'asc' }, { accountId: 'asc' }],
-          select: { accountId: true, email: true, state: true, spentUntil: true, usage: true },
-        },
         members: {
           where: { ownerId },
           orderBy: { provider: { slug: 'asc' } },
@@ -977,8 +949,15 @@ export class QueueService {
           usageUnreadable: standing === 'USAGE_UNKNOWN',
         };
       });
-    const logins = pool.logins.map((login) => ({ ...login, usage: login.usage as PlanUsageSnapshot | null }));
-    return { id: pool.id, label: pool.label, engine: pool.engine, ownKeyFirst: pool.ownKeyFirst, logins, rows, candidates };
+    return {
+      id: pool.id,
+      label: pool.label,
+      engine: pool.engine,
+      ownKeyFirst: pool.ownKeyFirst,
+      logins: await poolLogins(db, pool.id),
+      rows,
+      candidates,
+    };
   }
 
   /**
@@ -1179,12 +1158,11 @@ export class QueueService {
     const pool = await this.sharedPoolOf(db, session.ownerId, slug);
     if (!pool) return null;
     const now = new Date();
-    // This person's sessions run on the pool's ChatGPT accounts first and on its keys when none can run
-    // (pool-credential-select.ts); a shared pool (0321) holds no account and so has none to hand it.
+    // This person's sessions run on the pool's ChatGPT accounts first — whoever in the pool signed each
+    // one in (migration 0371) — and on its keys when none can run (pool-credential-select.ts).
     const { next, notice } = choosePoolCredential(
       {
         ownerId: pool.ownerId,
-        shared: pool.shared,
         accounts: pool.logins,
         keys: await sharedPoolKeyCandidates(db, pool.id, now),
         ownKeyFirst: pool.ownKeyFirst,
@@ -1261,6 +1239,23 @@ export class QueueService {
     });
     return opened !== null;
   }
+}
+
+/**
+ * A pool's ChatGPT logins as choosing reads them, oldest first — each signed in by whichever person of
+ * the pool contributed it (migration 0371), so they hang off no relation of the pool's row. Never a token
+ * or a ciphertext: none is selected.
+ */
+async function poolLogins(
+  db: Prisma.TransactionClient | PrismaService,
+  poolId: string,
+): Promise<Array<LoginAccount & { userId: string }>> {
+  const rows = await db.poolCodexLogin.findMany({
+    where: { poolId },
+    orderBy: [{ createdAt: 'asc' }, { accountId: 'asc' }],
+    select: { accountId: true, userId: true, email: true, state: true, spentUntil: true, usage: true },
+  });
+  return rows.map((login) => ({ ...login, usage: login.usage as PlanUsageSnapshot | null }));
 }
 
 /** The earlier of two times, either of which may be none: when the first of two things comes back. */

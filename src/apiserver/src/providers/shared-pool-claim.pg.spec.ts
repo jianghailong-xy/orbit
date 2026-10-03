@@ -425,7 +425,8 @@ suite('a shared pool at the claim: the gateway and a session token, nothing of a
 
     // The doors that take a provider: neither of them refuses her the pool. With both keys switched off the
     // account can still run her sessions (2026-10-03), so it is still taken; with the account signed out
-    // too it is refused in the words of somebody who can only ask its owner to sign in again.
+    // too it is refused, and for Pia — whose account it is not — the words say that only the person who
+    // signed it in can sign it in again (migration 0371).
     await db.poolApiKey.updateMany({ where: { poolId: own.id }, data: { enabled: false } });
     assert.equal(await queue.accountPoolRefusal(pia.id, own.slug), null, 'its account runs her sessions');
     assert.equal(await queue.accountPoolRefusal(olga.id, own.slug), null, "its owner's too");
@@ -436,7 +437,7 @@ suite('a shared pool at the claim: the gateway and a session token, nothing of a
     assert.equal(
       await queue.accountPoolRefusal(pia.id, own.slug),
       'the ChatGPT account olga@codex-login.invalid on the pool "Olga Codex" was rejected by OpenAI — '
-        + "ask its owner to sign in again, on the pool's page, or pick another provider",
+        + "only the person who signed it in can sign it in again, on the pool's page, or pick another provider",
     );
     await db.poolCodexLogin.update({
       where: { poolId_accountId: { poolId: own.id, accountId } },

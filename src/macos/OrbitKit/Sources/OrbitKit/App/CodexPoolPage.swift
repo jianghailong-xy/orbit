@@ -44,13 +44,10 @@ public struct CodexPoolPage: Equatable, Sendable {
     /// Its ChatGPT accounts, oldest first: from the owner's own providers read where there is one, and from
     /// the pool's page for one of the people the owner added — they run their sessions too (2026-10-03).
     public var logins: [CodexLogin] { own.map { CodexLoginPool.logins($0) } ?? access?.logins ?? [] }
-    /// How many ChatGPT accounts it holds, as "Who can use it" and its dialogs count them — nil for a pool
-    /// made on the shared pools page, which never holds one (web's `accounts`).
-    public var accounts: Int? {
-        if own != nil { return logins.count }
-        guard let access, !access.shared else { return nil }
-        return logins.count
-    }
+    /// How many ChatGPT accounts it holds, as "Who can use it" and its dialogs count them — read by
+    /// everyone in the pool, whose sessions the accounts run (migration 0371). Nil only for a pool that
+    /// cannot hold one at all: anything but Codex (web's `accounts`).
+    public var accounts: Int? { pool.engine == "codex" ? logins.count : nil }
     /// Whose the pool is (web's `poolOwner`).
     public var owner: SharedPoolPerson? { access.flatMap(SharedPoolPage.owner) }
 
@@ -115,17 +112,25 @@ public struct CodexPoolPage: Equatable, Sendable {
         case key
     }
 
+    /// Whether the reader may put something in: its owner always, a member while the pool's own rule for
+    /// that kind says so (web's `mayAddAccount`/`mayAddKey`).
+    public var mayAddAccount: Bool { mine || (access.map(SharedPoolPage.canAddAccount) ?? false) }
+    public var mayAddKey: Bool { mine || (access.map(SharedPoolPage.canAddKey) ?? false) }
+
     /// The head's press, or nil: its owner always has one — one ChatGPT account after another, or a key, on
-    /// a pool of their own; a key on one made on the shared pools page — and anybody else has "Add a key"
-    /// while the pool lets them put one in.
+    /// a pool of their own; a key on one made on the shared pools page — and anybody the pool lets put
+    /// something in has one too: "Add account" while a ChatGPT account may go in (migration 0371), "Add a
+    /// key" while only keys may.
     public var adding: Adding? {
-        guard mine else { return access.map(SharedPoolPage.canAddKey) == true ? .key : nil }
-        guard own != nil else { return .key }
+        guard mayAddAccount || mayAddKey else { return nil }
+        guard mayAddAccount else { return .key }
+        guard mine else { return .choose }
         return access == nil ? .signIn : .choose
     }
 
-    /// The press's words: "Add account" on its owner's own pool, "Add a key" anywhere else.
-    public var addLabel: String { mine && own != nil ? Self.addAccount : Self.addKey }
+    /// The press's words: "Add account" wherever an account of the reader's may go in, "Add a key" where
+    /// only keys may.
+    public var addLabel: String { mayAddAccount ? Self.addAccount : Self.addKey }
 
     // MARK: the Accounts card
 
@@ -147,7 +152,9 @@ public struct CodexPoolPage: Equatable, Sendable {
     public var emptyNote: String? {
         guard pool.members.isEmpty else { return nil }
         guard CodexLoginPool.isLoginPool(pool) else { return SharedPoolPage.noKeys }
-        return mine ? CodexLoginPool.noAccount : CodexLoginPool.noAccountOwner
+        // "you sign in" wherever the reader may sign one in themselves — its owner, or a member the pool's
+        // rule lets (migration 0371) — "its owner signs in" for anybody the pool does not.
+        return mayAddAccount ? CodexLoginPool.noAccount : CodexLoginPool.noAccountOwner
     }
 
     // MARK: going out of it
@@ -206,16 +213,17 @@ public struct CodexPoolPage: Equatable, Sendable {
         public let rest: String
     }
 
-    /// "Add account" (03-1): which kind goes in — another ChatGPT account of the owner's, which runs the
-    /// sessions of everyone in the pool once it is shared (2026-10-03), or an OpenAI API key, which runs
-    /// everybody's — said on the choice rather than found out after. `accounts` is how many ChatGPT accounts
-    /// the pool holds already.
-    public static func kinds(accounts: Int) -> [Kind] {
+    /// "Add account" (03-1): which kind goes in — another ChatGPT account of the reader's, which runs the
+    /// sessions of everyone in the pool, or an OpenAI API key, which runs everybody's — said on the choice
+    /// rather than found out after. `accounts` is how many ChatGPT accounts the pool holds already, and
+    /// `mine` whether the reader is its owner: a member's own account runs everyone's here from the moment
+    /// it is in (migration 0371), where the owner may still share the pool later.
+    public static func kinds(accounts: Int, mine: Bool = true) -> [Kind] {
         [
             Kind(id: .chatGPT, title: CodexSignIn.title,
                  lead: accounts > 0 ? "Another ChatGPT account of yours." : "A ChatGPT account of yours.",
                  bold: "Everyone in the pool runs on it",
-                 rest: " once you share the pool — until then, your sessions alone."),
+                 rest: mine ? " once you share the pool — until then, your sessions alone." : ", you included."),
             Kind(id: .key, title: "Paste an OpenAI API key", lead: "An organization or project key.",
                  bold: "Everyone who can use this pool runs on it", rest: ", up to a monthly limit you set."),
         ]

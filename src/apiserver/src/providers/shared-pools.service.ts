@@ -32,7 +32,7 @@ const POOL_VIEW_SELECT = {
   shared: true,
   membersCanAdd: true,
   ownKeyFirst: true,
-  // Migration 0366: whether a member may sign a ChatGPT account of their own in beside the pool's keys.
+  // Migration 0371: whether a member may sign a ChatGPT account of their own in beside the pool's keys.
   membersCanAddAccounts: true,
   createdAt: true,
   updatedAt: true,
@@ -61,7 +61,7 @@ const KEY_VIEW_SELECT = {
 const LOGIN_VIEW_SELECT = {
   poolId: true,
   accountId: true,
-  // Who signed it in (migration 0366): the person whose account a row is, and the one who may sign it in
+  // Who signed it in (migration 0371): the person whose account a row is, and the one who may sign it in
   // again.
   userId: true,
   email: true,
@@ -133,7 +133,6 @@ function poolView(
   const { chosen } = choosePoolCredential(
     {
       ownerId: pool.ownerId,
-      shared: pool.shared,
       accounts: logins.map((login) => ({ ...login, usage: login.usage as PlanUsageSnapshot | null })),
       keys: keys.map((key) => ({
         ...key,
@@ -308,7 +307,12 @@ export class SharedPoolsService {
     await this.adminOf(userId, poolId, 'change its rules');
     await this.prisma.providerPool.update({
       where: { id: poolId },
-      data: { label: dto.label, membersCanAdd: dto.membersCanAdd, ownKeyFirst: dto.ownKeyFirst },
+      data: {
+        label: dto.label,
+        membersCanAdd: dto.membersCanAdd,
+        membersCanAddAccounts: dto.membersCanAddAccounts,
+        ownKeyFirst: dto.ownKeyFirst,
+      },
     });
     this.publish(await this.peopleOf(poolId), poolId);
     return this.get(userId, poolId);

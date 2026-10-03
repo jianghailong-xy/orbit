@@ -43,6 +43,8 @@ const spend = (costUsd: number) => ({ inputTokens: 0, outputTokens: 0, costUsd }
 
 /** jianghailong's ChatGPT account, as GET /providers/pools serves it to him. */
 const ACCOUNT: CodexLogin = {
+  // Signed in by jianghailong, the pool's owner (migration 0371).
+  userId: JIANG,
   state: 'ACTIVE',
   email: 'jianghailong.rd@gmail.com',
   plan: 'plus',
@@ -117,6 +119,7 @@ function access(
     shared,
     logins: logins.map((login, index) => ({ ...login, next: index === 0 })),
     membersCanAdd: true,
+    membersCanAddAccounts: true,
     ownKeyFirst: true,
     viewerRole: viewer === JIANG ? 'ADMIN' : 'MEMBER',
     window: { start: '2026-10-01T00:00:00.000Z', end: '2026-11-01T00:00:00.000Z' },
@@ -262,15 +265,25 @@ describe('a Codex pool shared with people before it has an API key', () => {
     await click(button('Add an API key', warn));
     expect(text(dialog()?.querySelector('.ant-modal-title'))).toBe('Add a key to Orbit Codex');
     expect(sent).toEqual([]);
+
+    // The same state on the boards' own pool — its owner, Zhang Min and Lin Wei, and no account signed in
+    // this time — reads in that pool's own words (the native parity test looks this sentence up).
+    await act(async () => root.unmount());
+    container.remove();
+    asOwner([ZHANG, LIN], { logins: [] });
+    await mount();
+    expect(text(warning()?.querySelector('span:not(.anticon)'))).toBe(
+      'Zhang Min and Lin Wei can’t start a session here yet. Codex Pool has no API key and no ChatGPT account signed in.',
+    );
   });
 
-  it('leaves the ChatGPT accounts out of it on a pool made on the shared pools page, which holds none', async () => {
+  it('names the accounts too on a pool made on the shared pools page, which can hold them since migration 0371', async () => {
     ownPools = [];
     sharedList = [access(JIANG, [ZHANG, LIN], { label: 'Team Codex', shared: true })];
     ownAccess = null;
     await mount();
     expect(text(warning()?.querySelector('span:not(.anticon)'))).toBe(
-      'Zhang Min and Lin Wei can’t start a session here yet. Team Codex has no API key.',
+      'Zhang Min and Lin Wei can’t start a session here yet. Team Codex has no API key and no ChatGPT account signed in.',
     );
     expect(button('Add an API key', warning()!)).not.toBeNull();
   });

@@ -405,7 +405,10 @@ suite('a shared pool, door by door: every cell of §2.5, on real PostgreSQL', { 
 
   await t.test('(4) change the rules — admin ✓; member ✗; a person not in it: not found', async () => {
     const rules = async () => {
-      const row = await db.providerPool.findUniqueOrThrow({ where: { id: pool.id }, select: { label: true, membersCanAdd: true, ownKeyFirst: true } });
+      const row = await db.providerPool.findUniqueOrThrow({
+        where: { id: pool.id },
+        select: { label: true, membersCanAdd: true, membersCanAddAccounts: true, ownKeyFirst: true },
+      });
       return row;
     };
     const before = await rules();
@@ -415,7 +418,13 @@ suite('a shared pool, door by door: every cell of §2.5, on real PostgreSQL', { 
     const changed = await call(200, adam.id, 'PATCH', at, { ownKeyFirst: false });
     assert.equal(changed.json.ownKeyFirst, false);
     assert.deepEqual(await rules(), { ...before, ownKeyFirst: false });
-    await call(200, ann.id, 'PATCH', at, { ownKeyFirst: true });
+    // The account rule is its own (migration 0371): an admin changes it, a member cannot, and neither rule
+    // moves the other.
+    await call(403, mia.id, 'PATCH', at, { membersCanAddAccounts: false });
+    await call(200, adam.id, 'PATCH', at, { membersCanAddAccounts: false });
+    assert.deepEqual(await rules(), { ...before, ownKeyFirst: false, membersCanAddAccounts: false });
+    assert.equal((await call(200, ann.id, 'PATCH', at, { ownKeyFirst: true, membersCanAddAccounts: true })).json.membersCanAddAccounts, true);
+    assert.deepEqual(await rules(), before);
   });
 
   await t.test('(4) add and remove people, and say who is an admin — admin ✓; member ✗; a person not in it: not found', async () => {

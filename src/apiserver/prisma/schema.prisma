@@ -5570,10 +5570,6 @@ model ProviderPool {
   ownKeyFirst           Boolean    @default(true) @map("own_key_first")
   membersCanAddAccounts Boolean    @default(true) @map("members_can_add_accounts")
   people        ProviderPoolPerson[]
-  // Migration 0323: the ChatGPT logins a `codex` pool runs on, whoever in it signed each one in
-  // (migration 0366 holds a login to a person of the pool). The primary key of a row is (pool, account),
-  // so a pool may hold more than one, one per account.
-  logins        PoolCodexLogin[]
   // Migration 0324: the session tokens a login pool's claims mint, and its ledger.
   loginTokens   PoolLoginToken[]
   loginUsage    PoolLoginUsage[]

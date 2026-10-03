@@ -43,6 +43,8 @@ const CODE_EXPIRES = new Date(Date.now() + 15 * 60 * 1000).toISOString();
 /** The account the board draws: Plus, both windows read, the next session's. */
 function account(over: Partial<CodexLogin> = {}): CodexLogin {
   return {
+    // Signed in by the pool's owner — Lin, `id(1)` on its people (migration 0371).
+    userId: id(1),
     state: 'ACTIVE',
     email: 'lin@example.com',
     plan: 'plus',
@@ -74,7 +76,7 @@ function codexPool(...logins: CodexLogin[]): ProviderPool {
     unavailable:
       logins.length > 0
         ? null
-        : 'the pool "My Codex" has no ChatGPT account signed in — sign in on its page, or pick another provider',
+        : 'the pool "My Codex" has no ChatGPT account signed in — sign one in on its page, or pick another provider',
     members: [],
   };
 }
@@ -92,6 +94,7 @@ function alone(): SharedPool {
     // The pool's accounts, as the shared-pools read serves them — the same ones the providers read carries.
     logins: [{ ...account(), next: true }],
     membersCanAdd: true,
+    membersCanAddAccounts: true,
     ownKeyFirst: true,
     viewerRole: 'ADMIN',
     window: { start: '2026-10-01T00:00:00.000Z', end: '2026-11-01T00:00:00.000Z' },
@@ -295,7 +298,8 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     expect(head.querySelector('.pool-gauge-pct')?.textContent).toBe('Weekly 41%');
 
     expect(row().querySelector('.re-name')?.textContent).toBe('lin@example.com');
-    expect(row().querySelector('.pool-key-mask')?.textContent).toBe('ChatGPT Plus · …AB12');
+    // Led by whoever signed it in — Lin, the pool's owner (migration 0371).
+    expect(row().querySelector('.pool-key-mask')?.textContent).toBe('Lin · ChatGPT Plus · …AB12');
     expect(row().querySelector('.pool-status')?.textContent).toBe('Available');
     const windows = Array.from(row().querySelectorAll('.pool-login-window')).map((el) => el.textContent);
     expect(windows).toEqual([
@@ -435,7 +439,8 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     expect(button('Add account')).not.toBeNull();
     expect(container.querySelector('.pool-detail .re-runner')?.textContent).toBe('Accounts1');
     expect(container.querySelector('.pool-detail .pool-head-count')?.textContent).toBe('1');
-    expect(row().querySelector('.pool-key-mask')?.textContent).toBe('ChatGPT Plus · …AB12');
+    // Led by whoever signed it in — Lin, the pool's owner (migration 0371).
+    expect(row().querySelector('.pool-key-mask')?.textContent).toBe('Lin · ChatGPT Plus · …AB12');
     expect(container.querySelector('.pool-danger-note')?.textContent).toBe(
       'Its ChatGPT sign-in is deleted from the Orbit server with it.',
     );
@@ -645,8 +650,8 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
       'hl.work@gmail.com',
     ]);
     expect(rows.map((el) => el.querySelector('.pool-key-mask')?.textContent)).toEqual([
-      'ChatGPT Plus · …AB12',
-      'ChatGPT Pro · …7QX4',
+      'Lin · ChatGPT Plus · …AB12',
+      'Lin · ChatGPT Pro · …7QX4',
     ]);
 
     await act(async () => root.unmount());

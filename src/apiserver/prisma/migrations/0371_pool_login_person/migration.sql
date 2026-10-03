@@ -1,4 +1,4 @@
--- 0366 — a ChatGPT account of a Codex pool belongs to a PERSON of the pool, not only to its owner
+-- 0371 — a ChatGPT account of a Codex pool belongs to a PERSON of the pool, not only to its owner
 -- (docs/codex-shared-pool-design.md D10, 2026-10-03): the pool owner asked that a person a pool is shared
 -- with may sign in with their own ChatGPT account and add it, so its accounts stop being the owner's
 -- alone. The 2026-10-02 rule this replaces — "a ChatGPT account runs its owner's sessions, and since D9

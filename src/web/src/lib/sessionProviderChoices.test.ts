@@ -549,6 +549,8 @@ describe('a Codex pool somebody was added to, in their picker', () => {
   const spend = { inputTokens: 0, outputTokens: 0, costUsd: 0 };
   /** One of his ChatGPT accounts as the pool carries it — the first one the next session's. */
   const account = (email: string, over: Partial<CodexLogin> = {}): CodexLogin => ({
+    // His: jianghailong, the pool's owner, signs them in again (migration 0371).
+    userId: 'jiang',
     state: 'ACTIVE',
     email,
     plan: 'plus',
@@ -588,6 +590,7 @@ describe('a Codex pool somebody was added to, in their picker', () => {
     shared: false,
     logins: logins.map((login, index) => ({ ...login, next: index === 0 })),
     membersCanAdd: true,
+    membersCanAddAccounts: true,
     ownKeyFirst: true,
     viewerRole: viewer === 'jiang' ? 'ADMIN' : 'MEMBER',
     window: { start: '2026-10-01T00:00:00.000Z', end: '2026-11-01T00:00:00.000Z' },

@@ -10,7 +10,7 @@ import {
 
 /**
  * Which credential of a Codex pool a session runs on — one of the ChatGPT accounts logged into it
- * (migrations 0323, 0366), or one of its API keys (migrations 0321, 0358) — chosen at every door that
+ * (migrations 0323, 0371), or one of its API keys (migrations 0321, 0358) — chosen at every door that
  * builds the session's engine (QueueService.resolveLoginPool for a pool of the session owner's own,
  * resolveSharedPool for one somebody else made that they are a person of) and recorded on the session,
  * which is all the gateway sends on. Within each kind the rules are pool-login-select.ts's and
@@ -19,7 +19,7 @@ import {
  * - every session runs on the pool's ChatGPT accounts first, and on its keys only while none of them can
  *   run: a subscription's quota costs nothing more to use, where a key is billed by what it runs. A
  *   session on a key goes back onto an account at the first choosing that finds one that can.
- * - the accounts are persons of the pool's, each signed in by whoever contributed it (migration 0366),
+ * - the accounts are persons of the pool's, each signed in by whoever contributed it (migration 0371),
  *   and run every person in the pool's sessions; who may sign one in or out is CodexLoginService's, and
  *   a shared pool (0321) that holds no account simply has none to choose.
  */

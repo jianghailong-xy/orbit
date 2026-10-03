@@ -1773,7 +1773,26 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // INSERT, UPDATE or DELETE: no request or decision is backfilled. (Written as 0365 on its own
       // branch and renumbered before it landed: 0365, 0366, 0367 and 0369 landed first, just above,
       // and 0368 is spelled by another project's branch not yet landed.)
-      '0370_owner_confirmation_review'],
+      '0370_owner_confirmation_review',
+      // Accounts belong to a person of the pool (0371): `pool_codex_login`'s composite foreign key is
+      // dropped and added again over `provider_pool_person(pool_id, user_id)` — the fence
+      // `pool_api_key`'s contributor already has — so a person a pool is shared with may sign a
+      // ChatGPT account of their own in, instead of only the pool's owner holding one; and
+      // `provider_pool` gains `members_can_add_accounts` (BOOLEAN NOT NULL DEFAULT true), the rule
+      // that lets them, with the constant default that makes the ADD COLUMN catalog-only. Read
+      // against every claim above: no function, trigger, type or enum is created, replaced or
+      // dropped, so it is not another writer of the DONE fence; `provider_pool_person` is not one of
+      // the preserved relations and no `task`, `project` or `project_acceptance_*` object is named,
+      // so the 0177 pair and every stored task and criterion row are out of its reach. `pool_codex_login`
+      // and `provider_pool` are not preserved either: the ADD CONSTRAINT validates every stored login
+      // once, without rewriting one, and every one of them names its pool's owner — who since 0358 has
+      // the person row the new key points at — so validation passes as the rows stand. The CASCADE now
+      // hangs off a person rather than the pool's owner, which deletes a person's logins with the
+      // person; this migration deletes no person, and no other row of any table moves. No INSERT,
+      // UPDATE or DELETE.
+      // (Written as 0367 on its own branch and renumbered before it landed: 0367 is the antigravity
+      // runtime above, and 0369 and 0370 landed first.)
+      '0371_pool_login_person'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

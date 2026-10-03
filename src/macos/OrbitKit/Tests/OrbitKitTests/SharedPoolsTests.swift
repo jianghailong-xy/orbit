@@ -231,18 +231,20 @@ final class SharedPoolsTests: XCTestCase {
     // MARK: - the head
 
     /// Its maker reads who else can use it and how many of its keys a session could start on; a pool made
-    /// on the shared pools page runs on its keys alone, which the line ends by saying.
+    /// on the shared pools page holds no account yet but may hold one (migration 0371), so its press asks
+    /// what kind goes in and its line reads its keys while none is in.
     func testTheHeadSaysWhoCanUseItAndHowManyKeysCanRun() throws {
         let page = try XCTUnwrap(CodexPoolPage(own: nil, access: try team()))
         XCTAssertEqual(page.who, "Me and 3 people")
         XCTAssertEqual(page.subtitleRest, " · 2 of 5 accounts available")
         XCTAssertEqual(page.howSentence, "Each session starts on the key with the most room, and stays on it until that one runs out.")
-        XCTAssertEqual(page.adding, .key)
+        XCTAssertEqual(page.adding, .choose)
         let chen = try XCTUnwrap(CodexPoolPage(own: nil, access: asMember(try team(), userId: Self.chen)))
         XCTAssertEqual(chen.who, "Wikova’s")
         XCTAssertEqual(chen.subtitleRest, " · 4 people · 3 of 5 keys you can run on available")
         XCTAssertEqual(chen.howSentence, "Your sessions run on the API keys, your own first.")
-        XCTAssertNil(chen.accounts, "a pool made on the shared pools page holds no ChatGPT account")
+        XCTAssertEqual(chen.accounts, 0, "a pool made on the shared pools page holds no ChatGPT account yet")
+        XCTAssertEqual(chen.adding, .choose, "a member the pool's rule lets signs one of their own in")
     }
 
     // MARK: - keys
@@ -432,6 +434,40 @@ final class SharedPoolsTests: XCTestCase {
         let closed = SharedPool(id: zhang.id, slug: zhang.slug, label: zhang.label, membersCanAdd: false,
                                 viewerRole: .member, people: zhang.people, keys: zhang.keys)
         XCTAssertFalse(SharedPoolPage.canAddKey(closed))
+
+        // Accounts go in on their own rule (migration 0371): an admin always, a member while it is on —
+        // apart from the keys' rule, which says nothing about them.
+        XCTAssertTrue(SharedPoolPage.canAddAccount(zhang), "members sign accounts of their own in while the rule is on")
+        let accountsClosed = SharedPool(id: zhang.id, slug: zhang.slug, label: zhang.label,
+                                        membersCanAddAccounts: false, viewerRole: .member,
+                                        people: zhang.people, keys: zhang.keys)
+        XCTAssertFalse(SharedPoolPage.canAddAccount(accountsClosed))
+        XCTAssertTrue(SharedPoolPage.canAddAccount(SharedPool(id: accountsClosed.id, slug: accountsClosed.slug,
+                                                               label: accountsClosed.label, membersCanAddAccounts: false,
+                                                               viewerRole: .admin, people: zhang.people)))
+
+        // Signing one in again, and taking it out: the person who signed it in's — its admins take anybody's
+        // out, and only their own back in.
+        XCTAssertEqual(SharedPoolPage.viewerId(zhang), Self.zhang)
+        XCTAssertEqual(SharedPoolPage.viewerId(zhang), Self.zhang)
+        XCTAssertEqual(SharedPoolPage.viewerId(pool), Self.wikova)
+        let hers = CodexLogin(state: "SIGNED_OUT", email: "zhang@orbitd.io", fingerprint: "…AB12", userId: Self.zhang)
+        let his = CodexLogin(state: "SIGNED_OUT", email: "wikova@orbitd.io", fingerprint: "…7K2P", userId: Self.wikova)
+        // As Zhang (a member) reads them: hers is hers to bring back and to take out, Wikova's is neither.
+        XCTAssertTrue(SharedPoolPage.canSignInAgain(hers, in: zhang))
+        XCTAssertTrue(SharedPoolPage.canSignOut(hers, in: zhang))
+        XCTAssertFalse(SharedPoolPage.canSignInAgain(his, in: zhang), "only the person who signed it in brings it back")
+        XCTAssertFalse(SharedPoolPage.canSignOut(his, in: zhang))
+        // As its admin reads them: her own to bring back, anybody's to take out — an admin has no
+        // credential for somebody else's account.
+        XCTAssertTrue(SharedPoolPage.canSignInAgain(his, in: pool))
+        XCTAssertTrue(SharedPoolPage.canSignOut(his, in: pool), "an admin takes anybody's account out")
+        XCTAssertFalse(SharedPoolPage.canSignInAgain(hers, in: pool))
+        XCTAssertTrue(SharedPoolPage.canSignOut(hers, in: pool))
+        // An account an older server sends without a `userId` is nobody's to bring back — an admin may still
+        // take it out.
+        XCTAssertFalse(SharedPoolPage.canSignInAgain(CodexLogin(email: "x@y.io", fingerprint: "…zzzz"), in: pool))
+        XCTAssertTrue(SharedPoolPage.canSignOut(CodexLogin(email: "x@y.io", fingerprint: "…zzzz"), in: pool))
     }
 
     func testTheSentencesThatNameThePoolAKeyOrAPerson() throws {
