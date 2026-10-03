@@ -1,6 +1,7 @@
 import { queryOptions } from '@tanstack/react-query';
 import { AgentProvider, type PlanUsageSnapshot } from '@orbit/shared';
 import { api } from '../api';
+import { loginName, loginSpentUntil, loginState, type CodexLogin } from './codexLogin';
 import { encodeId } from './idCodec';
 import type { PoolMember, PoolMemberState, ProviderPool } from './providerPools';
 
@@ -69,8 +70,13 @@ export interface SharedPool {
   /** Made on the shared pools page (migration 0321): API keys alone, never a ChatGPT account. False on a
    *  Codex pool of somebody's own (0323), which takes people and keys beside its owner's accounts (0358). */
   shared: boolean;
-  /** Whether its owner has ChatGPT accounts in it — all anybody else is told of them. */
-  ownerHasChatGPT: boolean;
+  /**
+   * The ChatGPT accounts a pool of somebody's own holds (migrations 0323/0324), as its owner's page reads
+   * them (CodexLoginService) — and, since 2026-10-03, as everyone in the pool reads them: the accounts run
+   * their sessions too (pool-credential-select.ts). Which of them the viewer's next session runs on is
+   * `next`. A shared pool holds none.
+   */
+  logins: SharedPoolLogin[];
   membersCanAdd: boolean;
   ownKeyFirst: boolean;
   viewerRole: SharedPoolRole;
@@ -78,6 +84,13 @@ export interface SharedPool {
   window: { start: string; end: string };
   people: SharedPoolPerson[];
   keys: SharedPoolKey[];
+}
+
+/** One of a pool's ChatGPT accounts as everybody in it reads it: an account of the owner's, whose
+ *  sign-in only they may change, and one their sessions and everyone else's run on. */
+export interface SharedPoolLogin extends CodexLogin {
+  /** The account a session the viewer starts now runs on — the claim's own choice, asked for them. */
+  next: boolean;
 }
 
 export const SHARED_POOLS_BASE = '/providers/shared-pools';
@@ -150,12 +163,35 @@ function keyWindow(key: SharedPoolKey, pool: SharedPool): PlanUsageSnapshot | nu
 }
 
 /**
- * A shared pool in the shape an account pool is drawn in — its keys as members — so the Providers page
- * card, the session picker and the composer take it as they take one: each member carries its `key`,
- * and the pool itself the whole view (`shared`) for what only a shared pool has.
+ * A pool read as its people and keys as an account pool is drawn — its ChatGPT accounts first, then its
+ * keys — so the Providers page card, the session picker and the composer take it as they take one: each
+ * member carries its `login` or its `key`, and the pool itself the whole view (`shared`) for what only a
+ * shared pool has. The order is every session's: the accounts while any can run, its keys after
+ * (pool-credential-select.ts).
  */
 export function sharedPoolAsProviderPool(pool: SharedPool): ProviderPool {
-  return keysPool(pool, keyMembers(pool));
+  // A payload that leaves `logins` out is a pool whose accounts nothing is known of (an older server):
+  // it is drawn as it was — its keys — rather than as a crash.
+  return keysPool(pool, [...(pool.logins ?? []).map((login) => loginMember(pool, login)), ...keyMembers(pool)]);
+}
+
+/** One of the pool's ChatGPT accounts as a member of it: named by its email, where it stands
+ *  (loginState), and — the account the viewer's next session runs on, which the server chose for them —
+ *  the one wearing NEXT. Its email, plan, `…AB12` and quota are the pool's own view of it. */
+function loginMember(pool: SharedPool, login: SharedPoolLogin): PoolMember {
+  const state = loginState(login);
+  return {
+    id: `login:${login.fingerprint}`,
+    slug: pool.slug,
+    label: loginName(login),
+    enabled: true,
+    presetSlug: 'openai',
+    planUsage: login.usage,
+    state,
+    resetsAt: state === 'SPENT' ? (loginSpentUntil(login) ?? null) : null,
+    next: login.next,
+    login,
+  };
 }
 
 /**
@@ -222,16 +258,35 @@ function keyMembers(pool: SharedPool): PoolMember[] {
 
 function keysPool(pool: SharedPool, members: PoolMember[]): ProviderPool {
   const free = members.some((member) => member.state === 'AVAILABLE' || member.state === 'RUNNING');
-  const runnable = pool.keys.some((key) => key.enabled && key.state === 'ACTIVE');
+  const accounts = members.flatMap((member) => (member.login ? [member.login] : []));
+  // Whether waiting brings anything back: an account that is not signed out — a spent one comes back by
+  // the hour — or a key OpenAI still takes that is switched on. A signed-out account, an off key and a
+  // refused one come back only by their owner's or contributor's hand.
+  const revives =
+    accounts.some((login) => loginState(login) !== 'SIGNED_OUT') ||
+    pool.keys.some((key) => key.enabled && key.state === 'ACTIVE');
   const stops = members.flatMap((member) => (member.state === 'SPENT' && member.resetsAt ? [member.resetsAt] : []));
   return {
     id: pool.id,
     slug: pool.slug,
     label: pool.label,
-    // The EARLIEST of the stops, as an account pool's own `resetsAt` is: one key free of its reason is
-    // enough for work to continue, whether that is the month turning or OpenAI's mark running out.
+    // The EARLIEST of the stops, as an account pool's own `resetsAt` is: one credential free of its
+    // reason is enough for work to continue, whether that is the month turning, OpenAI's mark running
+    // out, or an account's window resetting.
     resetsAt: !free && stops.length > 0 ? earliest(stops) : null,
-    unavailable: runnable ? null : pool.keys.length === 0 ? 'No keys' : 'No key can run',
+    // Why nothing can run, in the words the owner's own pool page uses (codexLogin.withLogin,
+    // ownPoolWithAccess): 'Signed out' while the pool holds accounts and OpenAI refused every one of
+    // them — which waiting does not mend — else the keys' own answer. A shared pool holds no account:
+    // its keys are the whole answer, as before.
+    unavailable: revives
+      ? null
+      : accounts.length > 0
+        ? 'Signed out'
+        : pool.keys.length === 0
+          ? pool.shared
+            ? 'No keys'
+            : 'Not signed in'
+          : 'No key can run',
     members,
     shared: pool,
   };

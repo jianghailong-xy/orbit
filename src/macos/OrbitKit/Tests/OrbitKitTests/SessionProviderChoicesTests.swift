@@ -464,22 +464,45 @@ final class SessionProviderChoicesTests: XCTestCase {
         XCTAssertNil(tile?.fixEngine, "nothing on a runner gives it a key that can run")
     }
 
-    /// Somebody a pool's maker added runs on its API keys alone, so for them a pool none of whose keys can
-    /// run is greyed as the one thing it is to them, whatever the pool's own words — while its maker reads
-    /// those (docs/mocks/account-pool-access/02, note 4).
-    func testAPoolGreyedForSomebodyItsMakerAddedSaysNoKeyTheyCanRunOn() {
+    /// Somebody a pool's maker added reads the same words its maker does: since 2026-10-03 the pool's
+    /// ChatGPT accounts run their sessions too, so what the pool holds is what they can run on.
+    func testAPoolSomebodyItsMakerAddedReadsSaysThePoolsOwnWords() {
         let refused = SharedPoolKey(id: "k", label: "orbit-org-1", fingerprint: "sk-…0000", state: .invalid,
                                     contributor: PoolKeyContributor(userId: "wikova", name: "Wikova"))
         func tile(_ pool: ProviderPool) -> ProviderChoice? {
             SessionProviderChoices.choices(configured: withPools([], [pool]), pools: [pool])
                 .first { $0.slug == "team-codex" }
         }
-        XCTAssertEqual(tile(sharedPool([], added: true))?.unavailable, "No key you can run on")
-        XCTAssertEqual(tile(sharedPool([refused], added: true))?.unavailable, "No key you can run on")
+        XCTAssertEqual(tile(sharedPool([], added: true))?.unavailable, "No keys")
+        XCTAssertEqual(tile(sharedPool([refused], added: true))?.unavailable, "No key can run")
         XCTAssertNil(tile(sharedPool([refused], added: true))?.fixEngine)
         XCTAssertEqual(tile(sharedPool([]))?.unavailable, "No keys", "its maker reads the pool's own words")
         XCTAssertNil(tile(sharedPool([sharedKey("orbit-org-1")], added: true))?.unavailable,
                      "a key of it can run: the pool takes the pick")
+    }
+
+    /// A pool of somebody's own, read by one of the people they added: its ChatGPT accounts run their
+    /// sessions too (2026-10-03), so the pool is pickable with no key in it at all — and greyed as
+    /// "Signed out" only once every account is out and no key can run.
+    func testAPoolOfSomebodysOwnIsPickableForThemOnItsAccounts() {
+        func tile(_ logins: [CodexLogin], _ keys: [SharedPoolKey] = []) -> ProviderChoice? {
+            let pool = SharedPools.asProviderPool(SharedPool(
+                id: "pool-2", slug: "team-codex", label: "Team Codex", shared: false,
+                logins: logins,
+                people: [SharedPoolPerson(userId: "wikova", name: "Wikova", role: .admin, creator: true),
+                         SharedPoolPerson(userId: "me", name: "Me", you: true)],
+                keys: keys))
+            return SessionProviderChoices.choices(configured: withPools([], [pool]), pools: [pool])
+                .first { $0.slug == "team-codex" }
+        }
+        let account = CodexLogin(state: "ACTIVE", email: "wikova@orbitd.io", fingerprint: "…7QX4", next: true)
+        XCTAssertNil(tile([account])?.unavailable, "an account of it can run: the pool takes the pick")
+        XCTAssertEqual(tile([account])?.poolSize, 1)
+        XCTAssertNil(tile([account])?.poolUnit, "an account is not a key")
+        let out = CodexLogin(state: "SIGNED_OUT", email: "wikova@orbitd.io", fingerprint: "…7QX4", next: true)
+        XCTAssertEqual(tile([out])?.unavailable, "Signed out")
+        XCTAssertNil(tile([out], [sharedKey("orbit-org-1", you: true)])?.unavailable,
+                     "a key of theirs can run")
     }
 
     /// A Codex pool of one's own runs on its owner's ChatGPT accounts through the Codex CLI: the picker

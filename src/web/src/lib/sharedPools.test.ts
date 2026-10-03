@@ -57,7 +57,7 @@ const pool = (keys: SharedPoolKey[], over: Partial<SharedPool> = {}): SharedPool
   label: 'Team Codex',
   engine: 'codex',
   shared: true,
-  ownerHasChatGPT: false,
+  logins: [],
   membersCanAdd: true,
   ownKeyFirst: true,
   viewerRole: 'ADMIN',
@@ -208,8 +208,9 @@ describe('a Codex pool of one’s own, its ChatGPT accounts read beside its peop
       { id: id(900), slug: 'my-codex', label: 'My Codex', engine: 'codex', login: logins[0] ?? null, logins, resetsAt: null, members: [] },
       NOW,
     );
-  /** Its people and keys, as Ann — its owner — reads them. */
-  const access = (keys: SharedPoolKey[]) => pool(keys, { shared: false, ownerHasChatGPT: true });
+  /** Its people, accounts and keys, as Ann — its owner — reads them; `ownPoolWithAccess` draws the
+   *  accounts from `own` (the providers read), so the accounts here are the same ones. */
+  const access = (keys: SharedPoolKey[], logins: CodexLogin[] = []) => pool(keys, { shared: false, logins });
 
   it('draws its accounts first and its keys after, the next session on an account while one can take it', () => {
     const drawn = ownPoolWithAccess(
@@ -252,6 +253,50 @@ describe('a Codex pool of one’s own, its ChatGPT accounts read beside its peop
     expect(ownPoolWithAccess(own(), access([key(1, ANN, { enabled: false })])).unavailable).toBe('No key can run');
     // A working key is enough while no account is signed in.
     expect(ownPoolWithAccess(own(), access([key(1, ANN)])).unavailable).toBeNull();
+  });
+
+  it('draws the pool for one of the people Ann added with her accounts as members too, before its keys', () => {
+    // As Mia reads it: Ann's accounts (2026-10-03, they run her sessions), the account the server marked
+    // next first, then the keys as they were.
+    const drawn = sharedPoolAsProviderPool(
+      pool([key(1, ANN), key(2, MIA)], {
+        shared: false,
+        viewerRole: 'MEMBER',
+        people: [person(ANN, 'Ann', { role: 'ADMIN', creator: true }), person(MIA, 'Mia', { you: true })],
+        logins: [
+          { ...account('ann@example.com', 6), next: true },
+          { ...account('work@example.com', 18), next: false },
+        ],
+      }),
+    );
+    expect(drawn.members.map((m) => [m.label, m.state, m.next, !!m.login])).toEqual([
+      ['ann@example.com', 'AVAILABLE', true, true],
+      ['work@example.com', 'AVAILABLE', false, true],
+      ['key-1', 'AVAILABLE', false, false],
+      ['key-2', 'AVAILABLE', false, false],
+    ]);
+    expect(drawn.unavailable).toBeNull();
+    // Nothing waiting mends: every account signed out and every key refused or switched off.
+    const stopped = sharedPoolAsProviderPool(
+      pool([key(1, ANN, { state: 'INVALID' }), key(2, MIA, { enabled: false })], {
+        shared: false,
+        logins: [account('ann@example.com', 6, { state: 'SIGNED_OUT' })],
+      }),
+    );
+    expect(stopped.unavailable).toBe('Signed out');
+    // A spent account, though, comes back by the hour: not a pool nothing can run on. (Its window resets
+    // ahead of the real clock this adapter reads, unlike this file's fixed NOW.)
+    const soon = new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString();
+    const spent = sharedPoolAsProviderPool(
+      pool([], {
+        shared: false,
+        logins: [account('ann@example.com', 100, {
+          usage: { provider: 'codex', primary: { utilization: 100, resetsAt: soon, windowDurationMins: 300 } },
+        })],
+      }),
+    );
+    expect(spent.unavailable).toBeNull();
+    expect(spent.resetsAt).toBe(soon);
   });
 
   it('tells its owner from the people they added, and Just me from Me and people I add', () => {

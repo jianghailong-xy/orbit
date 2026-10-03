@@ -6,10 +6,10 @@ import OrbitKit
 // into on that machine — Default and each one the runner added — with that account's own sign-in
 // state and quota (`CodexAccounts`, the same split the New Session picker reads). Signing in, again
 // or for the first time, is `RunnerSignInView` for that account; Add Account starts signing a new one
-// in at once, under a name it picks and the user can change; an added account swipes off the machine,
-// after asking. None of it can reach a machine that is offline, so there the presses are greyed and
-// the page says why — all but Rename…, in every account's long-press menu, Default's too: a name is
-// a label Orbit keeps, and the machine has no say.
+// in at once, under a name it picks and the user can change, and folds back once that account is
+// signed in; an added account swipes off the machine, after asking. None of it can reach a machine
+// that is offline, so there the presses are greyed and the page says why — all but Rename…, in every
+// account's long-press menu, Default's too: a name is a label Orbit keeps, and the machine has no say.
 
 /// The engine page for `engine` on the runner `runnerID` — the frame `NavNode.runnerEngine` names.
 struct RunnerEnginePage: View {
@@ -42,6 +42,10 @@ private struct RunnerEngineContent: View {
     @State private var newAccountPicked = ""
     @State private var accountsBeforeAdd: Set<String>?
     @State private var newAccountWaiting: String?
+    /// The name field has the caret, which the card waits for; a rename of the added account is on
+    /// its way, which it waits for too.
+    @FocusState private var newAccountFocused: Bool
+    @State private var newAccountRenaming = false
     @State private var pendingRemoval: RunnerPageFormat.AccountLine?
     /// The account whose rename alert is up, and the name being typed into it — seeded in the same
     /// press that raises the alert, as the session rename's is (SessionRenameAlert.swift).
@@ -248,9 +252,10 @@ private struct RunnerEngineContent: View {
     /// Add Account: the same sign-in as every account here, started by the press itself under a name
     /// the page picks (`RunnerPageFormat.defaultAccountName`). The runner gives the account a directory
     /// of its own, so Default — and the CLI in a terminal — is untouched. The name stays editable, and
-    /// Return or the card going away saves it as Rename… does — which names only an account the
-    /// runner reports, so a name saved before the new one is reported waits for it (web
-    /// AddEngineAccount).
+    /// Return, leaving the field or the card going away saves it as Rename… does — which names only an
+    /// account the runner reports, so a name saved before the new one is reported waits for it. Once
+    /// that account is signed in, reported and named, the card folds back into Add Account: its row is
+    /// what was added, and Rename… is where its name changes from then on (web AddEngineAccount).
     @ViewBuilder private func addAccountRow(_ health: RunnerEngineHealth, login: LoginEngine,
                                             offline: Bool) -> some View {
         if signingIn == Self.adding {
@@ -258,13 +263,21 @@ private struct RunnerEngineContent: View {
                 TextField("Account name", text: $newAccountName, prompt: Text("Work"))
                     .textFieldStyle(.roundedBorder)
                     .autocorrectionDisabled()
-                    .onSubmit { saveNewAccountName(health) }
+                    .focused($newAccountFocused)
+                    // Return is done typing: the focus leaving saves the name, as a click elsewhere does.
+                    .onSubmit { newAccountFocused = false }
                 RunnerSignInView(runnerID: runner.id, engine: login, accountName: newAccountName, autoStart: true)
                 Button("Close") { closeSignIn() }
                     .buttonStyle(.borderless)
                     .font(.orbitLabel)
             }
             .padding(.vertical, 4)
+            .onChange(of: newAccountFocused) { _, focused in
+                if !focused { saveNewAccountName(health) }
+            }
+            .onChange(of: newAccountDone(health)) { _, done in
+                if done { closeSignIn() }
+            }
             .onDisappear { saveNewAccountName(health) }
         } else {
             Button("Add Account") {
@@ -347,6 +360,17 @@ private struct RunnerEngineContent: View {
         return (health.accounts ?? []).last { !had.contains($0.id) }
     }
 
+    /// Whether Add Account is done: the account it added is signed in by the runner's own word and
+    /// carries the name in the field. Not while that name is still being typed or saved — a rename
+    /// that failed leaves it differing, and the card open — and never after a sign-in that failed or
+    /// was cancelled, which reports no such account.
+    private func newAccountDone(_ health: RunnerEngineHealth) -> Bool {
+        guard let added = newAccount(health), added.auth == "yes" else { return false }
+        return !newAccountFocused && newAccountWaiting == nil && !newAccountRenaming
+            && newAccountName.trimmingCharacters(in: .whitespacesAndNewlines)
+                == CodexAccounts.label(added.id, accounts: [added])
+    }
+
     /// Save the name typed for the account Add Account is adding. An empty one changes nothing, as in
     /// Rename…: the field goes back to the name the account has.
     private func saveNewAccountName(_ health: RunnerEngineHealth) {
@@ -367,8 +391,10 @@ private struct RunnerEngineContent: View {
         guard let login = RunnerPageFormat.loginEngine(engine),
               name != CodexAccounts.label(account.id, accounts: [account]) else { return }
         let id = runner.id
+        newAccountRenaming = true
         Task {
             if let failure = await runners.renameAccount(id, engine: login, account: account.id, name: name) { show(failure) }
+            newAccountRenaming = false
         }
     }
 

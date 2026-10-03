@@ -162,16 +162,13 @@ public enum SessionProviderChoices {
         health?.installed == false ? "Not installed" : nil
     }
 
-    /// Why a pool none of whose members can run is greyed out, in the server's own words — except to
-    /// somebody its owner added, who runs on its API keys alone: for them it is always the one thing, whatever
-    /// else the pool holds, while its owner's ChatGPT accounts may be running the owner's own sessions all
-    /// along (docs/mocks/account-pool-access/02, note 4). Mirrors web's `providerChoices`.
+    /// Why a pool none of whose credentials can run is greyed out, in the pool's own words: what it holds
+    /// is what its reader can run on — its ChatGPT accounts first and its keys when none can (2026-10-03),
+    /// built for one of the people its owner added the same way it is for its owner (web's
+    /// `providerChoices`, ProviderPool.unavailable). Mirrors web's `providerChoices`.
     static func poolBlocker(_ pool: ProviderPool) -> String? {
-        guard let reason = ProviderPools.unavailableReason(pool) else { return nil }
-        return ProviderPools.readByMember(pool) ? noKeyYouCanRunOn : reason
+        ProviderPools.unavailableReason(pool)
     }
-
-    public static let noKeyYouCanRunOn = "No key you can run on"
 
     /// The picker's contents. Engines always come first and are always all of them: they are what a
     /// user with nothing configured can still run, so the list is never empty.
@@ -224,7 +221,9 @@ public enum SessionProviderChoices {
                 unavailable: blocker ?? poolBlocker(pool),
                 fixEngine: blocker == nil ? nil : runtime,
                 poolSize: pool.members.count,
-                poolUnit: pool.shared != nil ? "key" : nil,
+                // 'N keys' only where the pool really is nothing but keys; a pool holding ChatGPT accounts
+                // counts accounts (the reader's own words — ProviderPools.memberNoun).
+                poolUnit: pool.shared != nil && !pool.members.contains { $0.login != nil } ? "key" : nil,
                 note: ProviderPools.spentNote(pool, now: now))
         }
         let poolSlugs = Set(pools.map(\.slug))

@@ -203,11 +203,11 @@ enum CodexPoolSheet: Identifiable {
 
 /// A Codex pool's page (docs/mocks/account-pool-access/), drawn for whoever reads it (`CodexPoolPage`):
 /// what the pool is, whose, and how many of its accounts or keys can run, and the press that puts one in;
-/// its Accounts — its owner's ChatGPT accounts (each signed out with its mark or a swipe, and signed in
-/// again from its row), or, to anybody else, one locked line in their place — then its API keys (switched
-/// off or taken out with a swipe, a refused one replaced from its row), each saying whose sessions it runs
-/// once the pool is shared; who can use it (`WhoCanUseIt`); and deleting the pool (its owner) or leaving it
-/// (anybody else). Every press is the server's to allow.
+/// its Accounts — its owner's ChatGPT accounts (read by everybody in the pool since 2026-10-03, and signed
+/// out with its mark or a swipe only by its owner) — then its API keys (switched off or taken out with a
+/// swipe, a refused one replaced from its row), each saying whose sessions it runs once the pool is shared;
+/// who can use it (`WhoCanUseIt`); and deleting the pool (its owner) or leaving it (anybody else). Every
+/// press is the server's to allow.
 struct CodexPoolPageView: View {
     let page: CodexPoolPage
     /// What its ChatGPT accounts' presses do: its owner's, on a pool of their own.
@@ -349,9 +349,6 @@ struct CodexPoolPageView: View {
     /// run on, under them.
     private var accountsSection: some View {
         Section {
-            if let owner = page.lockedOwner {
-                LockedAccountsRow(owner: owner)
-            }
             if let note = page.emptyNote {
                 Text(note)
                     .foregroundStyle(.secondary)
@@ -370,11 +367,15 @@ struct CodexPoolPageView: View {
     @ViewBuilder private func memberRow(_ member: PoolMember) -> some View {
         if let login = member.login {
             CodexAccountRow(member: member, login: login, next: CodexLoginPool.showsNext(member, in: pool),
-                            tagged: page.tagged, now: now, signInAgain: { sheet = .signIn(login) },
+                            tagged: page.tagged, manages: page.mine, now: now,
+                            signInAgain: { sheet = .signIn(login) },
                             signOut: { signingOut = login })
+                // Signing it out is the pool owner's alone: a member's row has no such swipe.
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    Button(role: .destructive) { signingOut = login } label: {
-                        Label(CodexLoginPool.signOut, systemImage: "rectangle.portrait.and.arrow.right")
+                    if page.mine {
+                        Button(role: .destructive) { signingOut = login } label: {
+                            Label(CodexLoginPool.signOut, systemImage: "rectangle.portrait.and.arrow.right")
+                        }
                     }
                 }
         } else if let key = member.key, let access = page.access {
@@ -402,8 +403,8 @@ struct CodexPoolPageView: View {
 
     /// Who can use it: its owner's switch and what it means, each person's row (taken out, or made an admin
     /// on a pool made on the shared pools page, with a swipe), "Add people", whether they may put keys of
-    /// their own in, the lock on its owner's ChatGPT accounts, and — shared with nobody able to start a
-    /// session yet — what fixes it.
+    /// their own in, the notice that the ChatGPT accounts run everyone's sessions here, and — shared with
+    /// nothing anybody added could run on — what fixes it.
     @ViewBuilder private func whoCanUseIt(_ card: WhoCanUseIt) -> some View {
         Section {
             if card.showsMode {
@@ -594,45 +595,14 @@ struct CodexPoolPageView: View {
     }
 }
 
-/// Whose sessions an account of a shared pool runs, said on its owner's page (web's `RunsFor`): a ChatGPT
-/// account only ever its owner's, a key everybody's — a rule rather than a setting. The mark and its words
-/// are one unit on the line: where the line wraps, they go to the next one together.
-private func runsFor(everyone: Bool) -> Text {
-    let words = (everyone ? CodexPoolPage.everyoneHere : CodexPoolPage.onlyYou)
-        .replacingOccurrences(of: " ", with: "\u{00A0}")
-    return (Text(Image(systemName: everyone ? "person.2.fill" : "lock.fill")) + Text(verbatim: "\u{00A0}")
+/// Whose sessions a credential of a shared pool runs, said on its owner's page (web's `RunsFor`): since
+/// 2026-10-03 a ChatGPT account runs everybody's as a key does — a rule rather than a setting. The mark and
+/// its words are one unit on the line: where the line wraps, they go to the next one together.
+private func runsFor() -> Text {
+    let words = CodexPoolPage.everyoneHere.replacingOccurrences(of: " ", with: "\u{00A0}")
+    return (Text(Image(systemName: "person.2.fill")) + Text(verbatim: "\u{00A0}")
         + Text(verbatim: words))
-        .foregroundStyle(everyone ? PoolTone.color(.success) : Color.secondary)
-}
-
-/// The owner's ChatGPT accounts as somebody they added sees them (web's `LockedAccountsRow`): one locked
-/// line — whose they are, never their email, plan or quota, which are the owner's own subscription's.
-private struct LockedAccountsRow: View {
-    let owner: String
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .strokeBorder(Color.secondary.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
-                .frame(width: 28, height: 28)
-                .overlay {
-                    Image(systemName: "lock.fill")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.top, 2)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(CodexPoolPage.lockedTitle(owner))
-                    .font(.headline)
-                    .foregroundStyle(.secondary)
-                Text(CodexPoolPage.lockedLine(owner))
-                    .font(.orbitLabel)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(.vertical, 4)
-    }
+        .foregroundStyle(PoolTone.color(.success))
 }
 
 /// One key: whose it is and its name, where it stands, what the others spent on it against its cap —
@@ -666,7 +636,7 @@ private struct PoolKeyRow: View {
                         PoolChip(text: SharedPoolPage.nextChip)
                     }
                 }
-                (Text(SharedPoolPage.keyLine(key)) + (tagged ? Text(verbatim: " · ") + runsFor(everyone: true) : Text(verbatim: "")))
+                (Text(SharedPoolPage.keyLine(key)) + (tagged ? Text(verbatim: " · ") + runsFor() : Text(verbatim: "")))
                     .font(.orbitLabel)
                     .foregroundStyle(.secondary)
                 Text(status.label)
@@ -865,7 +835,7 @@ private struct SharePoolSheet: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                 }
-                if SharePool.noKey(pool) {
+                if SharePool.empty(pool, accounts: accounts) {
                     Section {
                         let risk = SharePool.risk(pool, accounts: accounts)
                         HStack(alignment: .top, spacing: 10) {
@@ -1226,15 +1196,17 @@ private struct FactText: View {
 // MARK: - A Codex pool's ChatGPT accounts
 
 /// One of the pool's ChatGPT accounts: its email and plan — NEXT, when it is the one the next session
-/// starts on among several; once the pool is shared, that it runs its owner's sessions alone — where it
-/// stands, each of its windows with when it resets, and its sign-out mark; once OpenAI signed it out, why
-/// and the press that signs it in again.
+/// starts on among several; once the pool is shared, that it runs everybody's sessions (2026-10-03) —
+/// where it stands, and each of its windows with when it resets; once OpenAI signed it out, why and — to
+/// the pool's owner alone, whose the sign-in is — the press that signs it in again, and the sign-out mark.
 private struct CodexAccountRow: View {
     let member: PoolMember
     let login: CodexLogin
     let next: Bool
-    /// It says whose sessions it runs: its owner's alone.
+    /// It says whose sessions it runs: everybody's.
     let tagged: Bool
+    /// The reader is the pool's owner, who alone may sign the account in or out.
+    let manages: Bool
     let now: Date
     let signInAgain: () -> Void
     let signOut: () -> Void
@@ -1255,36 +1227,41 @@ private struct CodexAccountRow: View {
                             PoolChip(text: SharedPoolPage.nextChip)
                         }
                     }
-                    (Text(CodexLoginPool.line(login)) + (tagged ? Text(verbatim: " · ") + runsFor(everyone: false) : Text(verbatim: "")))
+                    (Text(CodexLoginPool.line(login)) + (tagged ? Text(verbatim: " · ") + runsFor() : Text(verbatim: "")))
                         .font(.orbitLabel)
                         .foregroundStyle(.secondary)
                     Text(status.label)
                         .font(.orbitListSubtitle)
                         .foregroundStyle(PoolTone.color(status.tone))
                     if member.state == .signedOut {
-                        Text(CodexLoginPool.signedOutReason)
+                        Text(manages ? CodexLoginPool.signedOutReason : CodexLoginPool.signedOutReasonMember)
                             .font(.orbitLabel)
                             .foregroundStyle(PoolTone.color(.danger))
                             .padding(.top, 2)
-                        Button(CodexLoginPool.signInAgain, action: signInAgain)
-                            .buttonStyle(.borderedProminent)
-                            .buttonBorderShape(.capsule)
-                            .controlSize(.small)
-                            .padding(.top, 7)
+                        if manages {
+                            Button(CodexLoginPool.signInAgain, action: signInAgain)
+                                .buttonStyle(.borderedProminent)
+                                .buttonBorderShape(.capsule)
+                                .controlSize(.small)
+                                .padding(.top, 7)
+                        }
                     }
                 }
                 Spacer(minLength: 0)
                 // Signing this account out: the mark rests in the row's grey — red on a row that is fine
                 // reads as something wrong with it — and asks before it does anything. The tint, not a
-                // style on the image: a borderless button draws its label in its tint.
-                Button(action: signOut) {
-                    Image(systemName: "rectangle.portrait.and.arrow.right")
-                        .frame(width: 30, height: 30)
-                        .contentShape(Rectangle())
+                // style on the image: a borderless button draws its label in its tint. Its owner's alone:
+                // the accounts run everyone's sessions, but the sign-in is not a member's to change.
+                if manages {
+                    Button(action: signOut) {
+                        Image(systemName: "rectangle.portrait.and.arrow.right")
+                            .frame(width: 30, height: 30)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.borderless)
+                    .tint(Color.secondary)
+                    .accessibilityLabel(CodexLoginPool.signOutLabel(login))
                 }
-                .buttonStyle(.borderless)
-                .tint(Color.secondary)
-                .accessibilityLabel(CodexLoginPool.signOutLabel(login))
             }
             if windows.isEmpty {
                 Text(CodexLoginPool.noQuota)

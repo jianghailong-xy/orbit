@@ -106,23 +106,11 @@ public enum SharedPoolPage {
         return !stopped.isEmpty && stopped.allSatisfy { $0.spentUntil != nil }
     }
 
-    /// When `key` can run again: OpenAI's own out-of-budget mark, else the first of the next month, when
-    /// a share cap counts from zero. Nil when the pool names no month to read it from.
-    static func reset(_ key: SharedPoolKey, in pool: SharedPool) -> String? {
-        key.spentUntil ?? pool.window?.end
-    }
-
-    /// The EARLIEST of some reset instants — one key free of its reason is enough for work to continue —
-    /// parsed rather than compared as text, so the answer does not ride on how the server spells a time.
+    /// The EARLIEST of some reset instants — one key or account free of its reason is enough for work to
+    /// continue — parsed rather than compared as text, so the answer does not ride on how the server
+    /// spells a time.
     static func earliest(_ resets: [String]) -> String? {
         resets.min { (RelativeTime.parse($0) ?? .distantFuture) < (RelativeTime.parse($1) ?? .distantFuture) }
-    }
-
-    /// When the first key of a pool that cannot run comes back: the earliest of the stops' own resets,
-    /// which is what a pool's head names. Nil while one of its keys can run, or with none stopped.
-    static func firstReset(_ pool: SharedPool) -> String? {
-        let stopped = pool.keys.filter { keyState($0) == .spent }.compactMap { reset($0, in: pool) }
-        return stopped.isEmpty ? nil : earliest(stopped)
     }
 
     /// "$12.40 of $50": what the others spent on the key this month, against the cap its contributor

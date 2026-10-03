@@ -72,7 +72,8 @@ function team(viewer: string, over: Partial<SharedPool> = {}): SharedPool {
     label: 'Team Codex',
     engine: 'codex',
     shared: true,
-    ownerHasChatGPT: false,
+    // A pool made on the shared pools page: API keys alone, no ChatGPT account of anybody's.
+    logins: [],
     membersCanAdd: true,
     ownKeyFirst: true,
     viewerRole: viewer === WIKOVA ? 'ADMIN' : 'MEMBER',

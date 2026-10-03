@@ -14,8 +14,10 @@ import type { LoginAccount } from './pool-login-select';
  *  (2) Every account used up or signed out: a key, the owner's own first, the move saying why it left the
  *      account.
  *  (3) An account back: the next choosing moves the session off its key onto it, and says so.
- *  (4) Anybody else's session runs on the keys alone — their own first, none the others spent to its share
- *      cap — and never on an account, whatever its row names; on a shared pool its maker's too.
+ *  (4) Anybody else's session too runs on the pool's ChatGPT accounts first — its owner's sessions and the
+ *      people they added's alike (2026-10-03) — and on its keys while none can run: their own first, none
+ *      the others spent to its share cap. On a shared pool (0321), which holds no account, everybody's —
+ *      its maker's too — on its keys.
  *  (5) Nothing can run: nothing is chosen, and the session keeps the credential it has.
  */
 
@@ -135,30 +137,43 @@ test('(3) an account back: the next choosing takes the session off its key onto 
   assert.deepEqual(choose(pool({ accounts: [windowSpent], keys }), OLGA, on(null, 'k1'), later(121)).chosen, on('a1', null));
 });
 
-test("(4) anybody else's session runs on the keys alone: their own first, none the others spent to its share cap", () => {
-  // Olga's account can run — and is never Pia's to run on.
+test("(4) anybody else's session too runs on the pool's ChatGPT accounts first, and on its keys while none can run", () => {
   const accounts = [account('a1')];
   // Olga's key, capped at $10 a month for everybody else, who have spent all of it.
   const capped = key('k1', OLGA, { shareCap: 10, othersCostMicros: dollars(10) });
   const keys = [capped, key('k2', PIA), key('k3', MAX, { shareCap: 10, othersCostMicros: dollars(9) })];
-  assert.deepEqual(choose(pool({ accounts, keys }), PIA), { chosen: on(null, 'k2'), next: on(null, 'k2'), notice: null });
-  // Her own switched off: Max's, with a dollar of its cap left — never Olga's, though its id is lower.
-  const ownOff = [capped, key('k2', PIA, { enabled: false }), keys[2]];
-  assert.deepEqual(choose(pool({ accounts, keys: ownOff }), PIA).chosen, on(null, 'k3'));
-  // The cap is on everybody but its contributor: Olga runs on her own key all the same, once her accounts cannot.
-  assert.deepEqual(choose(pool({ accounts: [account('a1', { state: 'SIGNED_OUT' })], keys: [capped] }), OLGA).chosen, on(null, 'k1'));
-  // A row that names Olga's account — carried over, or written by hand — is put on a key all the same, and
-  // says nothing: the session never ran on the account here.
+  // Pia's session starts on Olga's account — since 2026-10-03 the accounts run everybody's in the pool,
+  // its owner's sessions and the people they added's alike — before any key.
+  assert.deepEqual(choose(pool({ accounts, keys }), PIA), { chosen: on('a1', null), next: on('a1', null), notice: null });
+  // A row that names that account is already where she runs.
   assert.deepEqual(choose(pool({ accounts, keys }), PIA, on('a1', null)), {
-    chosen: on(null, 'k2'),
-    next: on(null, 'k2'),
+    chosen: on('a1', null),
+    next: on('a1', null),
     notice: null,
   });
-  // No key at all: still never the account.
-  assert.deepEqual(choose(pool({ accounts, keys: [] }), PIA, on('a1', null)), { chosen: null, next: on(null, null), notice: null });
+  // Every account down: her own key first, none the others spent to its share cap.
+  const down = [account('a1', { state: 'SIGNED_OUT' })];
+  assert.deepEqual(choose(pool({ accounts: down, keys }), PIA), { chosen: on(null, 'k2'), next: on(null, 'k2'), notice: null });
+  // Her own switched off: Max's, with a dollar of its cap left — never Olga's, though its id is lower.
+  const ownOff = [capped, key('k2', PIA, { enabled: false }), keys[2]];
+  assert.deepEqual(choose(pool({ accounts: down, keys: ownOff }), PIA).chosen, on(null, 'k3'));
+  // The cap is on everybody but its contributor: Olga runs on her own key all the same, once her accounts cannot.
+  assert.deepEqual(choose(pool({ accounts: down, keys: [capped] }), OLGA).chosen, on(null, 'k1'));
+  // An account back: off the key onto it — with the line for one of the people added, whose accounts it is not.
+  assert.deepEqual(choose(pool({ accounts, keys }), PIA, on(null, 'k2')), {
+    chosen: on('a1', null),
+    next: on('a1', null),
+    notice: "Switched to a1@chatgpt.invalid — the pool's ChatGPT accounts come first",
+  });
+  // No key at all, and only an account that cannot run: nothing chosen, and the session goes to the
+  // account chooseLoginAccount falls back to — the one that comes back first — so the gateway answers
+  // with that account's refusal rather than as a pool holding no account.
+  assert.deepEqual(choose(pool({ accounts: down, keys: [] }), PIA), { chosen: null, next: on('a1', null), notice: null });
+  // A pool holding neither: nothing chosen, nothing named.
+  assert.deepEqual(choose(pool({ accounts: [], keys: [] }), PIA), { chosen: null, next: on(null, null), notice: null });
   // A move between keys says why, as pool-key-select.ts says it.
   const k2Spent = [capped, key('k2', PIA, { spentUntil: later(30) }), keys[2]];
-  assert.equal(choose(pool({ accounts, keys: k2Spent }), PIA, on(null, 'k2')).notice, 'Switched to k3-key — k2-key is out of budget');
+  assert.equal(choose(pool({ accounts: down, keys: k2Spent }), PIA, on(null, 'k2')).notice, 'Switched to k3-key — k2-key is out of budget');
 });
 
 test('(4) on a shared pool everybody runs on its keys, its maker too — and an account carried over from another pool is dropped without a line', () => {
@@ -187,4 +202,7 @@ test('(5) nothing can run: nothing is chosen, and the session keeps the credenti
     next: on('a1', null),
     notice: 'Switched to a1@chatgpt.invalid — the previous account is no longer in this pool',
   });
+  // One of the people the owner added, the same: her session names the account that comes back first, so
+  // the gateway answers with its limit rather than as a pool with no account.
+  assert.deepEqual(choose(pool({ accounts, keys: dead }), PIA), { chosen: null, next: on('a1', null), notice: null });
 });

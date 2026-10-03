@@ -279,8 +279,9 @@ export class SessionRequestService {
    *     The hold was for the retry's turn; with the retry gone it is released first, so the ordinary
    *     hand-off says it (`handOff`, which queues or merges the reply turn).
    *
-   * An asker that has been armed again in the meantime waits: the retry's turn says the outcome, and
-   * whichever turn takes it clears the mark (`attachHeldReplies`, `appendSessionRepliesContext`).
+   * An asker that has been armed again in the meantime waits: the retry's turn says the outcome. Its
+   * mark is answered all the same (`waitForRetry`) — the retry given up again marks it again — so that
+   * it stops holding a place at the head of every pass's batch.
    */
   async tellStoppedAsker(requestId: string): Promise<StoppedAskerTold> {
     const request = await this.prisma.sessionRequest.findUnique({ where: { id: requestId } });
@@ -298,7 +299,9 @@ export class SessionRequestService {
       await this.clearMark(request);
       return 'ALREADY';
     }
-    if (awaitsAutoRetry(asker)) return 'WAITED';
+    // Looked at again under the asker's lock before the mark goes: an asker that stopped waiting in
+    // between keeps its mark, and the next pass reads where it stands then.
+    if (awaitsAutoRetry(asker)) return (await this.waitForRetry(request)) ? 'WAITED' : 'ALREADY';
     if (!sessionHasEnded(asker) && !asker.cancelRequestedAt) {
       if (!(await this.releaseHeld(request.id))) return 'ALREADY';
       await this.handOff(request.id);
@@ -306,6 +309,42 @@ export class SessionRequestService {
     }
     if (asker.taskId) await this.commentOnAskerTask(request, { title: asker.title, taskId: asker.taskId }, 'STOPPED');
     return (await this.clearMark(request)) ? 'COMMENTED' : 'ALREADY';
+  }
+
+  /**
+   * Answer the mark of an outcome whose asker is waiting on a retry again — re-armed, or its retry
+   * claimed — so the retry's turn will say it. Left standing, the mark kept its place at the head of
+   * the worker's batch (oldest first) for as long as the asker waited, and twenty-five of them were a
+   * batch that told nobody anything. Nothing is lost by answering it: an outcome held with no mark is
+   * marked again by the statement that gives the retry up (0352's trigger, 0366's for a claim taken
+   * back, `AutoRetryService.releaseExpiredClaims` for one that ran out).
+   *
+   * Under the asker's row FOR SHARE, as `holdForRetry` decides, and for the same reason: an UPDATE that
+   * gives the retry up waits for this lock, so its trigger runs after the mark is gone and marks the
+   * outcome again — never before it, where this clear would erase that mark. Answers whether the asker
+   * was still waiting, and so whether the mark was this pass's to answer.
+   */
+  private async waitForRetry(request: SessionRequest): Promise<boolean> {
+    return withTransactionRetry(this.prisma, async (tx) => {
+      await tx.$queryRaw(Prisma.sql`
+        SELECT 1 FROM "session"
+         WHERE "id" = ${request.fromSessionId}::uuid AND "owner_id" = ${request.ownerId}::uuid
+         FOR SHARE
+      `);
+      const asker = await tx.session.findFirst({
+        where: { id: request.fromSessionId, ownerId: request.ownerId },
+        select: {
+          status: true, retryAt: true, retryClaimedAt: true, cancelRequestedAt: true,
+          completedAt: true, archivedAt: true, deletedAt: true,
+        },
+      });
+      if (!asker || !awaitsAutoRetry(asker)) return false;
+      await tx.sessionRequest.updateMany({
+        where: { id: request.id, replyCommentDueAt: request.replyCommentDueAt, replyClientTurnId: null },
+        data: { replyCommentDueAt: null },
+      });
+      return true;
+    }, loggedRetry(this.log, 'sessionRequests.waitForRetry'));
   }
 
   /** Answer migration 0352's mark, by a compare-and-set on the mark as it was read. */

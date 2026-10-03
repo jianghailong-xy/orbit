@@ -2701,7 +2701,7 @@ body {
 /* The engines smart selection may move a task run to (model routing §6), under the switch's own
    explanation: one chip per engine, the agent's own ticked and fixed. Qualified with .rd-engines-list
    so antd's single-class checkbox rules, injected after this stylesheet, do not win on order. */
-.rd-engines {
+.rd-route-engines {
   margin-top: 10px;
 }
 .rd-engines-label {
@@ -13518,6 +13518,8 @@ button.chat-jump-start:hover {
   display: flex;
   align-items: center;
   gap: 10px;
+  /* The sign-in below starts flush in a panel (.re-panel .rsi), so the gap between them is this row's. */
+  margin-bottom: 10px;
 }
 .re-add-label {
   flex: none;

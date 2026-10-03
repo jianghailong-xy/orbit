@@ -3,7 +3,8 @@ import Foundation
 /// A Codex pool of the user's own ChatGPT accounts (migration 0323) on iOS — the web's `withLogin`
 /// (lib/codexLogin.ts) and its account rows (`LoginRow` in components/AccountPools.tsx) in their words:
 /// every account it holds, where each one stands, its windows with when each resets, and what its owner —
-/// the only person who ever sees them — can do about them. The page they are drawn on is `CodexPoolPage`.
+/// who alone may sign one in or out, while the accounts run the sessions of everyone in the pool
+/// (2026-10-03) — can do about them. The page they are drawn on is `CodexPoolPage`.
 /// `CodexSignInCopyParityTests` holds every word here to the web source.
 public enum CodexLoginPool {
     // MARK: drawing it as a pool
@@ -105,6 +106,8 @@ public enum CodexLoginPool {
     public static let noQuota = "No quota reported"
     /// Why a signed-out account is out, and what brings it back.
     public static let signedOutReason = "OpenAI signed this account out — sign in again to put it back in the pool."
+    /// The same, read by one of the people the pool's owner added: the sign-in is not theirs to make.
+    public static let signedOutReasonMember = "OpenAI signed this account out — only its owner can sign it in again."
 
     /// Whether the account's row wears NEXT (`SharedPoolPage.nextChip`, web's `LoginRow`): with one
     /// account there is nothing to choose between, so the mark would say nothing.
@@ -115,6 +118,8 @@ public enum CodexLoginPool {
     // MARK: on its page
 
     public static let noAccount = "No account yet — no session can start on this pool until you sign in with ChatGPT."
+    /// The same on the page of one of the people the owner added: the sign-in is not theirs to make.
+    public static let noAccountOwner = "No account yet — no session can start on this pool until its owner signs in with ChatGPT."
     /// A signed-out account comes back from its row.
     public static let signInAgain = "Sign in again"
 

@@ -1366,7 +1366,10 @@ model Session {
   // retry given up looks like; this is the fact that tells them apart (`awaitsAutoRetry`). NULL =
   // no claim in flight. Cleared by the turn the resume writes, a re-arm, a disarm and the attempt
   // a give-up hands back; a reader also treats a claim older than `RETRY_CLAIM_WINDOW_MS` as dead,
-  // so a sweep that died mid-claim cannot leave a session reading as on-its-way forever.
+  // so a sweep that died mid-claim cannot leave a session reading as on-its-way forever — and the
+  // sweep gives such a claim up (migration 0366, §8 criterion 24). It is also the claim's lease: the
+  // re-send is written only while the claim it was claimed for is still this column's value.
+  // Partially indexed in 0366 (`session_retry_claimed_at_idx`), which schema.prisma cannot express.
   retryClaimedAt       DateTime? @map("retry_claimed_at")
   createdAt            DateTime  @default(now()) @map("created_at")
   updatedAt            DateTime  @updatedAt @map("updated_at")

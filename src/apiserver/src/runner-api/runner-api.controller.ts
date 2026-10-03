@@ -4161,22 +4161,23 @@ export class RunnerApiController {
       // is closer to firing than anything computed now, and re-deciding it here would restart the
       // countdown on every attempt — the one shape that makes a bounded ladder unbounded.
       //
-      // A model turn a shared pool's key ended is armed ahead of that ladder: the gateway refused the key,
-      // or OpenAI said it is out of budget or refused it, and the next claim moves the session to another
-      // key. That is re-sent the moment another key can take it, or at the first reset when none can
-      // (QueueService.sharedPoolKeyRetryAt) — the account pool's "room on another member re-sends now",
-      // for keys. Decided from the keys, not from the engine's words, and never for a turn whose key can
-      // still run: that failure was not the key's. A login pool's turn its account ended — spent, or signed
-      // out by OpenAI — is armed the same way, from its ChatGPT accounts (QueueService.loginPoolRetryAt):
-      // at once when another can take it, which the next claim moves the session to, else at the first
-      // account's reset.
+      // A model turn a pool's credential ended is armed ahead of that ladder: the gateway refused the key,
+      // or OpenAI said it is out of budget or refused it, or the ChatGPT account the session ran on was
+      // spent or signed out, and the next claim moves the session to whatever else can run. That is
+      // re-sent the moment another credential can take it, or at the first reset when none can
+      // (QueueService.sharedPoolRetryAt, for a session on somebody else's pool — its keys and, for a pool
+      // of somebody's own, the accounts they run too) — the account pool's "room on another member
+      // re-sends now", for a pool. Decided from the credentials, not from the engine's words, and never
+      // for a turn whose own credential can still run: that failure was not its. A session of the pool's
+      // own owner is armed the same way, from its accounts (QueueService.loginPoolRetryAt): at once when
+      // another can take it, which the next claim moves the session to, else at the first account's reset.
       const keyRetryAt =
         dto.status === RunStatus.FAILED
         && completedTurn?.kind === 'message'
         && current.retryAt == null
         // Only a configured provider's slug can name a pool, as in quotaRetryAt.
         && !isBuiltinProvider(current.provider)
-          ? ((await this.queue.sharedPoolKeyRetryAt(tx, current, new Date()))
+          ? ((await this.queue.sharedPoolRetryAt(tx, current, new Date()))
             ?? (await this.queue.loginPoolRetryAt(tx, current, new Date())))
           : null;
       // A built-in Codex session whose account's usage limit ended the turn. Codex says so as the
@@ -5713,16 +5714,17 @@ export class RunnerApiController {
               select: { env: true, codexAccount: true, claudeAccount: true },
             })
           : null;
-      // A shared pool's key that ended the run is waited out the same way, from the keys rather than the
-      // words (QueueService.sharedPoolKeyRetryAt): now while another key can take the work — and a login
-      // pool's account from its ChatGPT accounts, now while another can take it, else until the first of
-      // them comes back (QueueService.loginPoolRetryAt).
+      // A pool credential that ended the run is waited out the same way, from the pool's rows rather than
+      // the words (QueueService.sharedPoolRetryAt, for a session on somebody else's pool — its keys and,
+      // for a pool of somebody's own, the accounts they run too): now while another can take the work —
+      // and a pool's own owner's session from its ChatGPT accounts (QueueService.loginPoolRetryAt), now
+      // while another can take it, else until the first of them comes back.
       const keyRetryAt =
         effectiveStatus === RunStatus.FAILED
         && current.retryAt == null
         && !quotaSpent
         && !isBuiltinProvider(current.provider)
-          ? ((await this.queue.sharedPoolKeyRetryAt(tx, current, new Date()))
+          ? ((await this.queue.sharedPoolRetryAt(tx, current, new Date()))
             ?? (await this.queue.loginPoolRetryAt(tx, current, new Date())))
           : null;
       const quotaRetryAt = quotaSpent
