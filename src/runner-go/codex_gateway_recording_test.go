@@ -177,12 +177,14 @@ func TestRealCodexThroughThePoolGateway(t *testing.T) {
 		},
 	}}
 	env, home := isolatedCodexProbeEnv(t)
+	dir := t.TempDir()
 	for key, value := range job.Agent.Env {
 		env = envWithValue(env, key, value)
 	}
 	// No Orbit executable: no MCP server is launched beside it.
 	cmd := exec.Command(exe, codexAppServerCommandArgs(job, home+"/state", "")...)
 	cmd.Env = env
+	configureCodexProbeProcess(cmd)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		t.Fatal(err)
@@ -194,7 +196,11 @@ func TestRealCodexThroughThePoolGateway(t *testing.T) {
 	if err := cmd.Start(); err != nil {
 		t.Skipf("cannot run %s app-server: %v", exe, err)
 	}
-	t.Cleanup(func() { stdin.Close(); _ = cmd.Process.Kill(); _ = cmd.Wait() })
+	t.Cleanup(func() {
+		if err := stopCodexProbeProcess(cmd, stdin); err != nil {
+			t.Errorf("app-server cleanup: %v", err)
+		}
+	})
 	out := bufio.NewReaderSize(stdout, 1<<20)
 	next := 0
 	send := func(msg map[string]interface{}) {
@@ -231,7 +237,6 @@ func TestRealCodexThroughThePoolGateway(t *testing.T) {
 	})
 	send(map[string]interface{}{"method": "initialized", "params": map[string]interface{}{}})
 
-	dir := t.TempDir()
 	started := request("thread/start", codexThreadParams(job, dir, dir))
 	if started.Error != nil {
 		t.Fatalf("thread/start: %v", started.Error.Message)
