@@ -63,7 +63,7 @@ struct BackgroundWakeCardView: View {
                         Text(BackgroundWakeCard.name(job))
                             .font(.orbitMeta).foregroundStyle(Color.secondary)
                     }
-                    BackgroundWakeOutput(text: job.outputTail)
+                    BackgroundWakeFailedOutput(text: job.outputTail)
                 }
                 .padding(.leading, 20)
             }
@@ -74,8 +74,8 @@ struct BackgroundWakeCardView: View {
                     .padding(.leading, 20)
             }
             if let steerState {
-                // A steer's progress, in the words and tone its bubble uses (`UserBubbleView`).
-                Text(steerState)
+                // Keep the delivery state; localize only this card's confirmed receipt.
+                Text(steerState == "Sent into this turn" ? "已送达当前轮次" : steerState)
                     .font(.orbitMeta).foregroundStyle(.secondary)
                     .padding(.leading, 20)
             }
@@ -84,9 +84,8 @@ struct BackgroundWakeCardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// The one line. Everything on it when it fits; where it does not — a phone, beside a long
-    /// description — the name takes a line of its own under the title (web's `max-width: 600px` rule)
-    /// rather than being cut to a few letters.
+    /// Everything stays on one line when it fits; on a phone or beside a long description, the name
+    /// and closing metadata each take a line under the title so the details label cannot crowd it.
     private var line: some View {
         ViewThatFits(in: .horizontal) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -99,11 +98,14 @@ struct BackgroundWakeCardView: View {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     mark
                     title
-                    closing
                 }
                 if let name = BackgroundWakeCard.lineName(wake) {
                     nameText(name).lineLimit(1).truncationMode(.tail).padding(.leading, 20)
                 }
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    closing
+                }
+                .padding(.leading, 20)
             }
         }
         .font(.orbitLabel)
@@ -159,6 +161,8 @@ struct BackgroundWakeCardView: View {
         if let ts, let when = RelativeTime.format(ts) {
             Text(when).font(.orbitMeta).foregroundStyle(Color.secondary).fixedSize()
         }
+        Text(wake.jobs.isEmpty ? "详情" : "任务详情")
+            .font(.orbitMeta).foregroundStyle(Color.secondary).fixedSize()
         // One glyph turned, never two swapped (`ToolCardView`'s chevron, for the same reason).
         Image(systemName: "chevron.right")
             .font(.orbitMeta.weight(.semibold)).foregroundStyle(.tertiary)
@@ -278,9 +282,34 @@ struct BackgroundWakeCardView: View {
     }
 }
 
-/// A block of the output a wake carried, folded past the few lines the line shows — web's `Pre` at
-/// the line's own threshold (`BackgroundWakeCard.tailLines`), in the words a tool card's output
-/// already folds behind.
+/// A failed job's received output tail, bounded by rendered lines so compact JSON cannot fill the
+/// transcript. Its disclosure is independent of the job details above it.
+private struct BackgroundWakeFailedOutput: View {
+    let text: String
+    @State private var open = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("输出末尾")
+                .font(.orbitMeta).foregroundStyle(.secondary)
+            Text(text)
+                .font(.orbitMono)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .lineLimit(open ? nil : 3)
+                .truncationMode(.tail)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button(open ? "收起输出" : "展开输出") { open.toggle() }
+                .buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.tint)
+        }
+        .padding(.horizontal, 10).padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 6))
+    }
+}
+
+/// A scheduled wakeup's prompt, retaining the logical-line fold shared with web's `Pre`.
 private struct BackgroundWakeOutput: View {
     let text: String
     @State private var open = false
