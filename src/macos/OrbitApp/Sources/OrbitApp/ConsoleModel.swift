@@ -1442,6 +1442,10 @@ final class ConsoleModel {
         // session has no project and makes none of those reads.
         projectID = s.projectId
         if projectID != nil { Task { [weak self] in await self?.refreshRulerQuestions() } }
+        // A conversation that coordinates nothing can still hold an evidence card: a task it
+        // dispatched outside any project is settled here, and the owner's card for it is drawn
+        // here once this session stops holding it (`refreshEvidenceDecisions`).
+        if projectID == nil { Task { [weak self] in await self?.refreshEvidenceDecisions() } }
         // The task this conversation is a run of, if it is one. That — and not the project — is
         // what decides whether an owner confirmation is asked here, so it is read separately and
         // kicked separately: an OWNER_CONFIRMED task may be filed under no project at all.
@@ -1560,6 +1564,9 @@ final class ConsoleModel {
             waitingSignal = waiting
             if projectID != nil {
                 Task { [weak self] in await self?.refreshRulerQuestions(force: true) }
+            } else {
+                // The count an evidence card of a dispatched task adds lands here too.
+                Task { [weak self] in await self?.refreshEvidenceDecisions(force: true) }
             }
         }
         // A run ending its turn moves this SESSION's row, not the task, so no task event re-reads
@@ -3090,6 +3097,9 @@ final class ConsoleModel {
     /// recycles that row back on screen, so scrolling past the card must not be a way to spend
     /// requests; the reads that must never be throttled say so (`force`).
     private var lastRulerRead = Date.distantPast
+    /// The evidence read's own pair: it runs in every conversation, not only a coordinator's.
+    private var loadingEvidence = false
+    private var lastEvidenceRead = Date.distantPast
     /// Web's card re-reads on a 20s timer. This one re-reads on the events that can change the
     /// answer — context load, reconnect, the card appearing, a press — with this as the floor
     /// between two of them.
@@ -3272,6 +3282,9 @@ final class ConsoleModel {
     /// iOS-specific gap — a suspended socket misses everything), when a card scrolls into view, and
     /// after any press. What it may never do is remove a card.
     func refreshRulerQuestions(force: Bool = false) async {
+        // The evidence cards first, and in every conversation (`refreshEvidenceDecisions`): every
+        // door that asks for the ruler's reads — reconnect, a card appearing, a press — asks for them.
+        await refreshEvidenceDecisions(force: force)
         guard !isDraft, let projectID, !loadingRuler else { return }
         if !force, Date().timeIntervalSince(lastRulerRead) < Self.rulerReadThrottle { return }
         loadingRuler = true
@@ -3283,14 +3296,6 @@ final class ConsoleModel {
             criteriaDecisions = queue
             for row in queue.pending { deliver(.criteriaDecision(intentID: row.intentId)) }
             adoptReceipts(queue)
-        }
-        // Scoped to THIS session: every row says whether the door would take an answer from here.
-        if let queue = try? await api.pendingEvidenceDecisions(decidingSessionID: sessionID) {
-            evidenceDecisions = queue
-            for row in EvidenceDecisions.cardRows(queue: queue, projectId: projectID) {
-                deliver(.evidenceDecision(taskID: row.taskId, evidenceRevision: row.evidenceRevision))
-            }
-            adoptEvidenceReceipts(queue)
         }
         if let standing = try? await api.acceptanceConfirmation(projectID: projectID) {
             acceptanceConfirmation = standing
@@ -3791,8 +3796,29 @@ final class ConsoleModel {
     /// Where one delivered evidence card stands right now — re-derived from the read on every call,
     /// never a frame the card kept.
     func evidenceStanding(_ taskID: String, _ evidenceRevision: String) -> EvidenceDecisionStanding {
-        EvidenceDecisions.standing(queue: evidenceDecisions, projectId: projectID, taskId: taskID,
-                                   evidenceRevision: evidenceRevision)
+        EvidenceDecisions.standing(queue: evidenceDecisions, projectId: projectID, sessionId: sessionID,
+                                   taskId: taskID, evidenceRevision: evidenceRevision)
+    }
+
+    /// Re-read the evidence decisions this conversation draws cards for — in EVERY conversation,
+    /// not only a project's coordinator. A coordinator draws its project's rows; a task a session
+    /// dispatched outside any project has its owner card in that session, or in the task's run once
+    /// that one is in Trash, and the read names which (`EvidenceDecisionRow.ownerCard`). Asked with
+    /// the ruler's reads (`refreshRulerQuestions`), and on its own where those are not made.
+    func refreshEvidenceDecisions(force: Bool = false) async {
+        guard !isDraft, !loadingEvidence else { return }
+        if !force, Date().timeIntervalSince(lastEvidenceRead) < Self.rulerReadThrottle { return }
+        loadingEvidence = true
+        defer { loadingEvidence = false }
+        // Scoped to THIS session: every row says whether the door would take an answer from here.
+        if let queue = try? await api.pendingEvidenceDecisions(decidingSessionID: sessionID) {
+            evidenceDecisions = queue
+            for row in EvidenceDecisions.cardRows(queue: queue, projectId: projectID, sessionId: sessionID) {
+                deliver(.evidenceDecision(taskID: row.taskId, evidenceRevision: row.evidenceRevision))
+            }
+            adoptEvidenceReceipts(queue)
+            lastEvidenceRead = Date()
+        }
     }
 
     /// Answer one revision of a task's evidence at the decision door, FROM this session and with

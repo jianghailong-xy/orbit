@@ -523,27 +523,42 @@ test('a task in no project derives no fact at all, and is still asked about',
         'an evidence revision was delivered to a conversation',
       );
 
-      // (3) The defined behaviour: it is still asked about, beside the one that was delivered, and
-      // it is decidable — the derived read holds a task in no project to its OWN stated standard.
+      // (3) The defined behaviour: it is still asked about, and it is decidable — the derived read
+      // holds a task in no project to its OWN stated standard. Since 2026-10-03 (the B line,
+      // `evidence-review.ts`) it is asked where its owner card is drawn: a task in no project with
+      // no dispatching session has it in its run, the one conversation left to draw it in, and
+      // nobody else's read carries it — the sibling stays on this reader's.
       const queue = await stack.evidence.pending(w.ownerId, reader);
       assert.deepEqual(
-        asked(queue, [unfiled, filed]).sort(), [unfiled, filed].sort(),
-        'the evidence of a task in no project fell off the pending read',
+        asked(queue, [unfiled, filed]), [filed],
+        'the evidence of a task in no project is broadcast to a reader that draws no card for it',
       );
-      const row = queue.pending.find((pending) => pending.taskId === unfiled)!;
+      // (The sibling, a project's task, is on the run's read as on any reader's that may answer it:
+      // a project's row is drawn only in its coordinator conversation, by `projectId`.)
+      const inRun = await stack.evidence.pending(w.ownerId, unfiledRun);
+      assert.deepEqual(asked(inRun, [unfiled]), [unfiled],
+        'the evidence of a task in no project fell off the read of the run its card is drawn in');
+      const row = inRun.pending.find((pending) => pending.taskId === unfiled)!;
       assert.equal(row.projectId, null);
+      assert.deepEqual(row.ownerCard, { sessionId: unfiledRun, decidingSessionId: unfiledRun });
       assert.equal(row.decidability.decidable, true);
       assert.equal(row.decidability.refusal, null);
-      assert.equal(row.independence.independent, true);
+      assert.equal(row.independence.independent, true,
+        'the owner presses it there, and the door takes that from the owner in the app');
       assert.deepEqual(row.criterion, { key: unfiled, text: STANDARD });
 
-      // (4) Answering it takes it off, and leaves the sibling on: the read filters by the answer,
-      // not by having run out of rows.
+      // (4) Answering it — the owner, pressing that card in the app — takes it off, and leaves the
+      // sibling on: the read filters by the answer, not by having run out of rows.
       await stack.evidence.decide(
         w.ownerId,
         unfiled,
         { type: CreatorType.USER, id: w.ownerId },
-        { decidingSessionId: reader, evidenceRevision: '1', decision: 'CONFIRM' },
+        { decidingSessionId: unfiledRun, evidenceRevision: '1', decision: 'CONFIRM' },
+        { door: 'USER', userId: w.ownerId },
+      );
+      assert.deepEqual(
+        asked(await stack.evidence.pending(w.ownerId, unfiledRun), [unfiled]), [],
+        'the answered evidence is still being asked about in the run',
       );
       assert.deepEqual(
         asked(await stack.evidence.pending(w.ownerId, reader), [unfiled, filed]), [filed],

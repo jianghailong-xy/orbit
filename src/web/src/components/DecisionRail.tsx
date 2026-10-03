@@ -58,11 +58,12 @@ import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
  * ---------------------------------------
  * A pointer is only worth having if it arrives somewhere. The card is drawn from the same read as
  * these rows and waits on no turn, so what a waiting row can lack is a card in THIS conversation:
- * one is drawn only in the coordinator session of the project the row's task is filed under. An
- * ordinary session draws none, and a coordinator draws none for another project's task or for a
- * task in no project. The caller answers it with the card's own filter over the read it already
- * holds (`evidenceDecisionCardRows` in `EvidenceDecisionCard.tsx`): is there a card for this row
- * on screen.
+ * one is drawn only in the coordinator session of the project the row's task is filed under — or,
+ * for a task a session dispatched outside any project, in the one conversation the row's
+ * `ownerCard` names (that session, or the task's run once it is in Trash). An ordinary session
+ * draws none of the rest, and a coordinator draws none for another project's task. The caller
+ * answers it with the card's own filter over the read it already holds (`evidenceDecisionCardRows`
+ * in `EvidenceDecisionCard.tsx`): is there a card for this row on screen.
  *
  * A row without one is not counted here. It used to be listed, as text saying where its card was
  * drawn instead, and every coordinator in the account then led with the same number about other
@@ -157,12 +158,27 @@ export interface PendingDecisionDecidability {
   requiredAction: string | null;
 }
 
+/**
+ * Where the owner's card for a row of a task a session dispatched outside any project is drawn, and
+ * the session its decision is recorded as — the `decidingSessionId` a press posts, which is not the
+ * conversation it is pressed in when the card has moved to the task's run (the run did the work, and
+ * the door refuses it).
+ */
+export interface PendingDecisionOwnerCard {
+  sessionId: string;
+  decidingSessionId: string;
+}
+
 export interface PendingDecisionRow {
   taskId: string;
   title: string;
   /** The project the task is filed under, or null for a task in none. A conversation draws an
-   *  evidence card only for its own project's rows (`EvidenceDecisionCard.tsx`). */
+   *  evidence card for its own project's rows, and for the rows whose `ownerCard` names it
+   *  (`EvidenceDecisionCard.tsx`). */
   projectId: string | null;
+  /** Set on a row of a task a session dispatched outside any project; null or absent on every
+   *  other row, and from a server older than that rule. */
+  ownerCard?: PendingDecisionOwnerCard | null;
   criterion: { key: string; text: string } | null;
   evidenceRevision: string;
   ageSeconds: number;

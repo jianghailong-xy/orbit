@@ -266,6 +266,7 @@ import {
   readConfirmationReturnCard,
   readConfirmationReviewRequestCard,
 } from '../tasks/owner-confirmation-review-turn';
+import { appendEvidenceReviewContext } from '../tasks/evidence-review';
 import { OwnerConfirmationReviewService } from '../tasks/owner-confirmation-review.service';
 import { OWNER_CONFIRMATION_UNSETTLED_STATUSES } from '../tasks/task-owner-confirmation';
 import {
@@ -3259,10 +3260,12 @@ export class RunnerApiController {
         // A confirmation request handed to this session for review, and a reviewer's return handed to
         // a run (docs/owner-confirmation-review-contract.md §2 D6, §8 B3): turns with nobody's words,
         // whose block is rendered from the rows now and recorded as the control plane's note. Not
-        // best-effort, for the reason the replies are not: the block IS the turn.
+        // best-effort, for the reason the replies are not: the block IS the turn. The same for an
+        // evidence revision handed to the session that dispatched its task (tasks/evidence-review.ts).
         if (t.kind === 'message') {
           content = (await appendOwnerConfirmationReviewContext(tx, t.clientTurnId, content)) ?? content;
           content = (await appendConfirmationReturnContext(tx, t.clientTurnId, content)) ?? content;
+          content = (await appendEvidenceReviewContext(tx, t.clientTurnId, content)) ?? content;
         }
         // The background work this session left running, said to the engine that comes back to it.
         // Outside the branch above on purpose: a re-delivery replaced the person's text with a

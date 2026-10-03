@@ -1801,7 +1801,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     target:
       | { kind: 'approval'; id: string }
       | { kind: 'ownerConfirmation'; taskId: string; requestId: string }
-      | { kind: 'evidenceDecision'; taskId: string; evidenceRevision: string }
+      // `decidingSessionId`: the session the card it was armed from decides as, when that is not
+      // this one (`evidenceDecidingSession`) — a dispatched task's card drawn in its run.
+      | { kind: 'evidenceDecision'; taskId: string; evidenceRevision: string; decidingSessionId: string | null }
       | { kind: 'planChange'; projectId: string; criteriaDigest: string };
     /** What the reply bar says it is about to answer, whole — built by whoever armed it. */
     banner: string;
@@ -4440,12 +4442,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   });
 
   // Which of those rows the pinned strip lists: the ones the evidence card below is drawn for, by
-  // the card's own filter over the same read and the project this session coordinates. The strip
+  // the card's own filter over the same read, the project this session coordinates and this
+  // session itself (a dispatched task's card names the one conversation it is drawn in). The strip
   // counts and points at those and no others; a row this conversation draws no card for is counted
-  // by the coordinator that draws it.
+  // by the conversation that draws it.
   const decisionCards = new Set(
-    evidenceDecisionCardRows(pendingDecisions.data ?? null, selectedSession?.projectId ?? null)
-      .map(decisionRowKey),
+    evidenceDecisionCardRows(
+      pendingDecisions.data ?? null,
+      selectedSession?.projectId ?? null,
+      selectedId,
+    ).map(decisionRowKey),
   );
 
   // The confirmation of the OWNER_CONFIRMED task this session runs, through the key the card below
@@ -4478,10 +4484,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const evidenceDecision = useMutation({
     mutationFn: (press: {
       sessionId: string;
+      decidingSessionId: string;
       taskId: string;
       evidenceRevision: string;
       note: string;
-    }) => sendEvidenceDecision(press, press.sessionId, 'SEND_BACK', press.note),
+    }) => sendEvidenceDecision(press, press.decidingSessionId, 'SEND_BACK', press.note),
     // Said as staleness when that is what the door's code means, for the reason the card gives: a
     // reader told only "it failed" has been told the button is broken.
     onError: (error: Error) => void message.error(evidenceDecisionRefusal(error).title),
@@ -4802,9 +4809,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       const read = pendingDecisions.data;
       if (!read) return;
       const address = decisionRowKey(replyTo.target);
-      const still = evidenceDecisionCardRows(read, selectedSession?.projectId ?? null).some(
-        (row) => decisionRowKey(row) === address,
-      );
+      const still = evidenceDecisionCardRows(
+        read, selectedSession?.projectId ?? null, selectedId,
+      ).some((row) => decisionRowKey(row) === address);
       if (!still) setReplyTo(null);
       return;
     }
@@ -6166,13 +6173,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       // is sent and the bar stays armed.
       if (replyTo.target.kind === 'evidenceDecision') {
         if (!c || !selectedId) return;
-        const { taskId, evidenceRevision } = replyTo.target;
+        const { taskId, evidenceRevision, decidingSessionId } = replyTo.target;
         pinToBottom();
         setReplyTo(null);
         setText('');
         setComposerRefs({});
         setHistIdx(-1);
-        evidenceDecision.mutate({ sessionId: selectedId, taskId, evidenceRevision, note: c });
+        evidenceDecision.mutate({
+          sessionId: selectedId,
+          decidingSessionId: decidingSessionId ?? selectedId,
+          taskId,
+          evidenceRevision,
+          note: c,
+        });
         return;
       }
       // Talking about a plan before it is started reaches no door either: it is an ordinary turn at
@@ -6597,6 +6610,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         kind: 'evidenceDecision',
         taskId: row.taskId,
         evidenceRevision: row.evidenceRevision,
+        decidingSessionId: row.ownerCard?.decidingSessionId ?? null,
       },
       banner: DECISION_SENDING_BACK_PREFIX + row.title,
       placeholder: DECISION_SEND_BACK_LABEL,
