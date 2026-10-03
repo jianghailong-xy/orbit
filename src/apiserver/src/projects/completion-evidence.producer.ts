@@ -111,6 +111,7 @@ export class CompletionEvidenceProducer {
         id: true,
         title: true,
         projectId: true,
+        criterionDefinitionId: true,
         acceptanceCriteria: true,
         completionEvidence: {
           orderBy: { revision: 'desc' },

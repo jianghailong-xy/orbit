@@ -77,18 +77,25 @@ export interface CompletionCriterionSnapshotInput {
 
 interface LockedCriterionTask extends CompletionCriterionSnapshotInput {}
 
+/** What `submit` reads off the locked Task: the snapshot it digests, and the criterion declaration
+ * that says which standard the receipt's `criterionMatch` compares the quote against. */
+interface LockedSubmissionTask extends LockedCriterionTask {
+  criterionDefinitionId: string | null;
+}
+
 /**
- * What `decide` has to read off the locked Task: the project it quotes, its own criterion, and the
- * acceptance criteria it states for itself.
+ * What `decide` has to read off the locked Task: the project it quotes, its own criterion, the
+ * project criterion it declares, and the acceptance criteria it states for itself.
  *
- * The third is here because check 2 holds the evidence against a LIVE stated standard, and a task
- * in no project has one of those without having a project criterion: its own `acceptanceCriteria`.
- * Selecting it here rather than reading it inside the check keeps that read under the Task mutex
- * this transaction already holds.
+ * The last two are here because check 2 holds the evidence against a LIVE stated standard, and a
+ * task that declares no project criterion has one of those all the same: its own
+ * `acceptanceCriteria`. Selecting them here rather than reading them inside the check keeps that
+ * read under the Task mutex this transaction already holds.
  */
 interface LockedDecisionTask {
   projectId: string | null;
   completionCriterion: TaskCompletionCriterionValue;
+  criterionDefinitionId: string | null;
   acceptanceCriteria: string | null;
 }
 
@@ -272,14 +279,15 @@ export class TaskCompletionEvidenceService {
 
     const committed = await withTransactionRetry(this.prisma, async (tx) => {
       // One Task mutex serialises revision allocation, stable-fact dedupe and retry-key binding.
-      const [task] = await tx.$queryRaw<LockedCriterionTask[]>(Prisma.sql`
+      const [task] = await tx.$queryRaw<LockedSubmissionTask[]>(Prisma.sql`
         SELECT "title", "project_id" AS "projectId", "status",
                "completion_criterion"::text AS "completionCriterion",
                "acceptance_criteria" AS "acceptanceCriteria",
                "acceptance_command" AS "acceptanceCommand",
                "acceptance_expected_exit_code" AS "acceptanceExpectedExitCode",
                "completion_policy"::text AS "completionPolicy",
-               "verifies_task_id" AS "verifiesTaskId"
+               "verifies_task_id" AS "verifiesTaskId",
+               "criterion_definition_id" AS "criterionDefinitionId"
           FROM "task"
          WHERE "id" = ${taskId}::uuid AND "owner_id" = ${ownerId}::uuid
          FOR UPDATE
@@ -686,6 +694,7 @@ export class TaskCompletionEvidenceService {
       const [task] = await tx.$queryRaw<LockedDecisionTask[]>(Prisma.sql`
         SELECT "project_id" AS "projectId",
                "completion_criterion"::text AS "completionCriterion",
+               "criterion_definition_id" AS "criterionDefinitionId",
                "acceptance_criteria" AS "acceptanceCriteria"
           FROM "task"
          WHERE "id" = ${taskId}::uuid AND "owner_id" = ${ownerId}::uuid
