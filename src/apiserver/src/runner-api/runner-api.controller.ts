@@ -3780,6 +3780,7 @@ export class RunnerApiController {
           provider: true,
           poolKeyId: true,
           poolCodexAccountId: true,
+          model: true,
           // Which of the runner's Codex accounts a turn its usage limit ended ran on, and whether it
           // was picked by hand — see `codexUsageLimit` below.
           codexAccount: true,
@@ -4601,6 +4602,19 @@ export class RunnerApiController {
           costUsd: mu.costUSD ?? 0,
         }));
         if (rows.length > 0) await tx.llmUsage.createMany({ data: rows });
+      } else if (dto.usage && current.model) {
+        // Codex reports tokenUsage.last, not the resumed thread's cumulative total.
+        await tx.llmUsage.create({
+          data: {
+            sessionId,
+            model: current.model,
+            inputTokens: dto.usage.input_tokens ?? 0,
+            outputTokens: dto.usage.output_tokens ?? 0,
+            cacheCreationInputTokens: dto.usage.cache_creation_input_tokens ?? 0,
+            cacheReadInputTokens: dto.usage.cache_read_input_tokens ?? 0,
+            costUsd: 0,
+          },
+        });
       }
       if (failSession) {
         const terminalized = await terminalizePendingCurrentWorkSteers(tx, sessionId, {
