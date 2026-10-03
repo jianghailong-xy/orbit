@@ -3356,7 +3356,7 @@ body {
      list never scrolls sideways (titles/previews already ellipsize). */
   overflow-x: hidden;
 }
-/* Recency ("Today", "Previous 7 Days", …) / tag section headings over the rows below them.
+/* Recency ("Today", "2–7 days ago", …) / tag section headings over the rows below them.
    Sticky so the heading of the group being scrolled through stays legible, and light enough
    that the rows — not the headings — carry the list's weight. */
 .session-section-head {

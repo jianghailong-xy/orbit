@@ -37,8 +37,8 @@ describe('sessionTimeSections', () => {
     expect(out.map((s) => s.title)).toEqual([
       'Today',
       'Yesterday',
-      'Previous 7 Days',
-      'Previous 30 Days',
+      '2–7 days ago',
+      '8–30 days ago',
       'Older',
     ]);
     expect(out.map((s) => s.sessions.map((x) => x.id))).toEqual([
@@ -99,11 +99,11 @@ describe('sessionTimeSections', () => {
   it('splits on the 7- and 30-day boundaries', () => {
     expect(
       titles([
-        session('d7', { lastTurnAt: at(2026, 7, 1) }), // exactly 7 days → Previous 7 Days
-        session('d8', { lastTurnAt: at(2026, 6, 30) }), // 8 days → Previous 30 Days
+        session('d7', { lastTurnAt: at(2026, 7, 1) }), // exactly 7 days → 2–7 days ago
+        session('d8', { lastTurnAt: at(2026, 6, 30) }), // 8 days → 8–30 days ago
         session('d31', { lastTurnAt: at(2026, 6, 7) }), // 31 days → Older
       ]),
-    ).toEqual(['Previous 7 Days', 'Previous 30 Days', 'Older']);
+    ).toEqual(['2–7 days ago', '8–30 days ago', 'Older']);
   });
 });
 
