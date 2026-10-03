@@ -77,7 +77,7 @@ test('an automatic Task List run carries distinct auditable provenance', async (
     task: {
       findFirst: async () => ({
         id: 'task-1', title: 'Auto', description: null, status: 'OPEN', runAt: null,
-        dispatchAuthority: 'LEGACY', dispatchHold: false,
+        dispatchHold: false,
         // §13.1 AG6's two facts. Every task in this fixture is an ordinary leaf; the
         // aggregate-parent gate has its own coverage in `task-aggregate-parent-execute.spec.ts`.
         completionPolicy: 'MANUAL',
@@ -121,7 +121,7 @@ test('an automatic Task List run carries distinct auditable provenance', async (
   });
 });
 
-test('automatic dispatch runs a coordinated Project\'s task like any other', async () => {
+test('automatic dispatch opens the run on the task\'s own settings alone', async () => {
   let creates = 0;
   const service = new TasksService({
     // Every run door opens its receipt (0137) before anything else.
@@ -129,12 +129,15 @@ test('automatic dispatch runs a coordinated Project\'s task like any other', asy
     task: {
       findFirst: async () => ({
         id: 'task-1', title: 'Coordinated', description: null, status: 'OPEN', runAt: null,
-        // What 0122's `task_dispatch_authority_derive` writes for every task in a
-        // `coordinator_enabled` Project. This door used to stand down on it and hand the dispatch
-        // to the Coordinator's pass; that pass was removed with the control loop, so standing down
-        // handed the task to nobody and it never ran. Whether a task starts by itself is the task's
-        // own opt-in, not a fact about the Project it is filed under.
-        dispatchAuthority: 'COORDINATOR', dispatchHold: false,
+        // This case used to carry 0122's derived `dispatchAuthority = 'COORDINATOR'` — what the
+        // trigger wrote for every task of a `coordinator_enabled` Project — because this door used
+        // to stand down on it and hand the dispatch to the Coordinator's pass. That pass was
+        // removed with the control loop, so standing down handed the task to nobody and it never
+        // ran. Whether a task starts by itself is the task's own opt-in, not a fact about the
+        // Project it is filed under; 0329 then dropped the column, so no row can carry that value
+        // any more and this case is the plain one. The wedge it used to cause is pinned against a
+        // real database in `auto-run-coordinator-decoupled.pg.spec.ts`.
+        dispatchHold: false,
         completionPolicy: 'MANUAL', children: [],
         assignee: { id: 'workspace-1', runnerId: 'runner-1' },
       }),

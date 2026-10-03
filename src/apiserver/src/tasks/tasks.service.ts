@@ -984,17 +984,17 @@ const DEPENDENCY_TOKEN_TASK_SQL = Prisma.sql`
  * prerequisites instead it seeks the few hundred finished tasks through
  * `task_dependency_depends_on_task_id_idx`: 264ms -> 32ms.
  *
- * `dispatch_authority` is deliberately NOT read here, nor in SCHEDULED_DUE_SQL, nor at execute()'s
+ * `dispatch_authority` was deliberately NOT read here, nor in SCHEDULED_DUE_SQL, nor at execute()'s
  * automatic door. It named the Coordinator's dispatch pass as the starter for a coordinated
  * Project's tasks, and that pass was removed with the control loop — so the column stopped naming a
  * second starter and started naming none at all: every task in a `coordinator_enabled` Project
- * (0122's `task_dispatch_authority_derive` gives them COORDINATOR at birth) fell out of this
+ * (0122's `task_dispatch_authority_derive` gave them COORDINATOR at birth) fell out of this
  * candidate set and never ran, with nothing else scanning for it. Whether a task runs by itself is
  * now answered by the task's own auto-run opt-in and its prerequisites — and, for a task filed under
  * a project, by whether that project moves (started and not paused: project-pause-dispatch.ts),
- * which is not the Automatic switch either. The column and 0122's
- * triggers that derive it are left standing — no reader of them is left in this service, but
- * removing them is its own change.
+ * which is not the Automatic switch either. The column, the enum and the trigger that derived it
+ * were then dropped — 0290 took the fanout, 0329 the rest — so there is no column here to read even
+ * by mistake.
  */
 const AUTO_RUN_READY_SQL = Prisma.sql`
   t.status = 'OPEN'::task_status
