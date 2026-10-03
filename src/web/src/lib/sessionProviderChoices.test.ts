@@ -8,6 +8,8 @@ import {
 } from './sessionProviderChoices';
 import type { ConfiguredProvider } from './workspaceDefaults';
 import { PROVIDER_GLYPHS } from './providerGlyphs';
+import { encodeId } from './idCodec';
+import { sharedPoolAsProviderPool, type SharedPool, type SharedPoolKey, type SharedPoolPerson } from './sharedPools';
 
 const deepseek: ConfiguredProvider = {
   slug: 'deepseek',
@@ -477,5 +479,107 @@ describe('shared pools among the choices', () => {
     const choices = providerChoices(configured, catalog, undefined, undefined, [team]);
     expect(sameRuntimeChoices('codex', choices, configured, catalog).map((c) => c.slug)).toEqual(['codex', 'team-codex']);
     expect(sameRuntimeChoices('claude', choices, configured, catalog).map((c) => c.slug)).not.toContain('team-codex');
+  });
+});
+
+describe('a Codex pool somebody was added to, in their picker', () => {
+  // jianghailong's Codex Pool (docs/mocks/account-pool-access/02), as Zhang Min, whom he added, reads it —
+  // and as WorkspaceView hands it in: its keys as members (sharedPoolAsProviderPool), and a Codex entry in
+  // the catalogue (poolsAsProviders). His ChatGPT accounts only ever run his own sessions, so hers run on
+  // its API keys alone.
+  const POOL_ID = '0195c0de-0000-7000-8000-000000000800';
+  const NAMES: Record<string, string> = { jiang: 'jianghailong', zhang: 'Zhang Min', lin: 'Lin Wei' };
+  const spend = { inputTokens: 0, outputTokens: 0, costUsd: 0 };
+  const key = (label: string, contributor: string, viewer: string, over: Partial<SharedPoolKey> = {}): SharedPoolKey => ({
+    id: `${label}-id`,
+    label,
+    fingerprint: 'sk-…AB12',
+    state: 'ACTIVE',
+    enabled: true,
+    shareCap: null,
+    spentUntil: null,
+    contributor: { userId: contributor, name: NAMES[contributor], you: contributor === viewer },
+    usage: { ...spend, othersCostUsd: 0 },
+    running: false,
+    next: false,
+    ...over,
+  });
+  const codexPool = (viewer: string, keys: SharedPoolKey[] = [], over: Partial<SharedPool> = {}): SharedPool => ({
+    id: POOL_ID,
+    slug: 'codex-pool',
+    label: 'Codex Pool',
+    engine: 'codex',
+    shared: false,
+    ownerHasChatGPT: true,
+    membersCanAdd: true,
+    ownKeyFirst: true,
+    viewerRole: viewer === 'jiang' ? 'ADMIN' : 'MEMBER',
+    window: { start: '2026-10-01T00:00:00.000Z', end: '2026-11-01T00:00:00.000Z' },
+    people: ['jiang', 'zhang', 'lin'].map(
+      (userId): SharedPoolPerson => ({
+        userId,
+        name: NAMES[userId],
+        role: userId === 'jiang' ? 'ADMIN' : 'MEMBER',
+        creator: userId === 'jiang',
+        you: userId === viewer,
+        keys: keys.filter((row) => row.contributor.userId === userId).length,
+        sessions: 0,
+        usage: spend,
+      }),
+    ),
+    keys,
+    ...over,
+  });
+  const configured: ConfiguredProvider[] = [
+    { slug: 'codex-pool', label: 'Codex Pool', runtime: 'codex', models: [], presetSlug: 'openai', modelsFromRuntime: true },
+  ];
+  const tileOf = (pool: SharedPool, engineHealth?: Parameters<typeof providerChoices>[3]) =>
+    providerChoices(configured, catalog, undefined, engineHealth, [sharedPoolAsProviderPool(pool)]).find(
+      (c) => c.slug === 'codex-pool',
+    )!;
+
+  it('greys it out while it has no API key, saying "No key you can run on", and sends the pick to its page', () => {
+    const tile = tileOf(codexPool('zhang'));
+    // Still listed, as the pool it is — but `unavailable` is what the picker greys a row out by
+    // (NewSessionProviderHero's np-unavailable): it shows these words where the model would be, and a
+    // press goes to the pool's own page instead of picking it.
+    expect(tile).toMatchObject({
+      kind: 'pool',
+      label: 'Codex Pool',
+      poolSize: 0,
+      poolUnit: 'key',
+      unavailable: 'No key you can run on',
+      fixHref: `/providers/pools/${encodeId(POOL_ID)}`,
+    });
+    expect(tile.fixEngine).toBeUndefined();
+  });
+
+  it('says the same while every key it has is switched off or refused by OpenAI', () => {
+    const keys = [
+      key('orbit-org-1', 'jiang', 'zhang', { state: 'INVALID' }),
+      key('zm-proj', 'zhang', 'zhang', { enabled: false }),
+    ];
+    expect(tileOf(codexPool('zhang', keys)).unavailable).toBe('No key you can run on');
+    // Nor is it Zhang Min's word alone: Lin Wei, whom he added too, reads the same.
+    expect(tileOf(codexPool('lin')).unavailable).toBe('No key you can run on');
+  });
+
+  it('offers it for a pick once a key of it can run', () => {
+    const tile = tileOf(codexPool('zhang', [key('orbit-org-1', 'jiang', 'zhang')]));
+    expect(tile.unavailable).toBeUndefined();
+    expect(tile.fixHref).toBeUndefined();
+    expect(tile.poolSize).toBe(1);
+  });
+
+  it('keeps the words of a shared pool’s own maker, whom nobody added', () => {
+    // A pool made on the shared pools page, read by the person who made it: "No keys", as before.
+    expect(tileOf(codexPool('jiang', [], { shared: true, ownerHasChatGPT: false })).unavailable).toBe('No keys');
+  });
+
+  it('still says first that this runner has no Codex CLI to run it on', () => {
+    expect(tileOf(codexPool('zhang'), [{ engine: 'codex', installed: false, auth: 'unknown' }])).toMatchObject({
+      unavailable: 'Not installed',
+      fixEngine: 'codex',
+    });
   });
 });
