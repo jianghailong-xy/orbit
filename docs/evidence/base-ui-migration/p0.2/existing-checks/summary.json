@@ -1,0 +1,129 @@
+{
+  "sourceCommit": "f4d47e853877fdfddbb5cc7f15cace4d25e27b1e",
+  "checks": [
+    {
+      "name": "npm-ci",
+      "command": "npm ci --ignore-scripts --no-audit --no-fund --cache /tmp/orbit-p02-npm-cache",
+      "exitCode": 130,
+      "termination": "Interrupted after repeated EAI_AGAIN DNS failures; no packages were downloaded.",
+      "finishedAt": "2026-10-03T19:20:42.410634+00:00",
+      "log": "npm-ci.log",
+      "debugLog": "npm-ci.debug.log"
+    },
+    {
+      "name": "npm-ci-network",
+      "command": "npm ci --ignore-scripts --no-audit --no-fund --cache /tmp/orbit-p02-npm-cache --fetch-retries=0 --fetch-timeout=15000",
+      "exitCode": 0,
+      "network": "Executed outside sandbox after DNS failures in sandbox.",
+      "log": "npm-ci-network.log"
+    },
+    {
+      "name": "shared-build",
+      "command": "npm run build -w @orbit/shared",
+      "startedAt": "2026-10-03T19:21:27.728610+00:00",
+      "finishedAt": "2026-10-03T19:21:27.864944+00:00",
+      "durationSeconds": 0.136,
+      "exitCode": 0,
+      "log": "shared-build.log"
+    },
+    {
+      "name": "web-build",
+      "command": "NO_COLOR=1 npm run build -w @orbit/web",
+      "startedAt": "2026-10-03T19:21:48.111374+00:00",
+      "finishedAt": "2026-10-03T19:21:49.705694+00:00",
+      "durationSeconds": 1.594,
+      "exitCode": 0,
+      "log": "web-build.log",
+      "testConfiguration": "Existing build script runs tsc -b && vite build."
+    },
+    {
+      "name": "web-test",
+      "command": "NO_COLOR=1 npm run test -w @orbit/web",
+      "startedAt": "2026-10-03T19:21:49.705965+00:00",
+      "finishedAt": "2026-10-03T19:24:44.479430+00:00",
+      "durationSeconds": 174.773,
+      "exitCode": 0,
+      "log": "web-test.log",
+      "testConfiguration": "Existing package script includes --maxWorkers=2; no timeout or assertion changes."
+    }
+  ],
+  "tests": {
+    "filesPassed": 287,
+    "filesFailed": 0,
+    "testsPassed": 3527,
+    "testsFailed": 0,
+    "vitestDurationSeconds": 174.47
+  },
+  "existingApplicationFailures": [],
+  "environmentFailures": [
+    {
+      "command": "npm ci --ignore-scripts --no-audit --no-fund --cache /tmp/orbit-p02-npm-cache",
+      "reason": "Sandbox DNS EAI_AGAIN; interrupted with exit 130; same locked install succeeded with network access.",
+      "resolved": true
+    }
+  ],
+  "warnings": [
+    {
+      "kind": "build",
+      "description": "Existing Vite warning: chunks greater than 500 kB after minification. No change made to chunk size warning limit."
+    }
+  ],
+  "limitations": [
+    "Measurements characterize this recorded Linux machine and fixture baseline; they do not establish cross-machine wall-clock performance thresholds.",
+    "Web tsc -b excludes test files by existing tsconfig; this record does not claim separate test-source type checking."
+  ],
+  "artifacts": {
+    "bundle-size.json": {
+      "bytes": 4110,
+      "sha256": "166dfe1581c95bf5a9c1a2e64d9d17817b9d6d275e540dfae590aecd2682a963"
+    },
+    "environment.json": {
+      "bytes": 909,
+      "sha256": "81e0a752283b062bc854622c59d0dc1ac2d4667e2e5260cf45d7a26ad854ffd2"
+    },
+    "npm-ci-network.json": {
+      "bytes": 257,
+      "sha256": "881e09b9175d1c052fc1f33c51c3387dcd566dca1a171c5c33371ae1e6c996e0"
+    },
+    "npm-ci-network.log": {
+      "bytes": 148,
+      "sha256": "2bc163269afb16654935f5b8080c1963f9dda3b57956234504edc3174a494cbe"
+    },
+    "npm-ci.debug.log": {
+      "bytes": 379585,
+      "sha256": "3c71368153b3f6f10fb685041ea0e85ccf45db09abec6702add5af410f345140"
+    },
+    "npm-ci.json": {
+      "bytes": 325,
+      "sha256": "583035c3c6736f7fa4268e825f7d48558e30f889a281431b4b58be59cea5c4e8"
+    },
+    "npm-ci.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "shared-build.json": {
+      "bytes": 227,
+      "sha256": "3112a9cdba3e3172e017623803e764c4cda029f2d547bb106ac3a6e8840d0b1c"
+    },
+    "shared-build.log": {
+      "bytes": 53,
+      "sha256": "02298cf72615ab6cb9c310eeba49986572da4ec1450f6d5e737a8389b6df0917"
+    },
+    "web-build.json": {
+      "bytes": 307,
+      "sha256": "34ad897c00f991b1d50a646b1601b188f84d6369a8f076cf7c9a6edaa2fa651f"
+    },
+    "web-build.log": {
+      "bytes": 1697,
+      "sha256": "4a83e92856acb3b3dd3174c6eef1b705f5792283295609c624c544422fc2d420"
+    },
+    "web-test.json": {
+      "bytes": 340,
+      "sha256": "85232cd8c1de41be0c8b63e1b8577f6ea564ed58ff1d81d90236cdb8eecd7087"
+    },
+    "web-test.log": {
+      "bytes": 598,
+      "sha256": "fef871aa71202230d92fd92b07f820961d7331edc8ed6d9e8cb5863539ccb956"
+    }
+  }
+}

@@ -1,0 +1,170 @@
+
+> @orbit/web@0.1.0 pretest:ui-migration
+> npm run build -w @orbit/shared && npm run build
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 build
+> tsc -b && vite build
+
+vite v8.3.1 building client environment for production...
+transforming...
+✓ 4070 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                     6.08 kB │ gzip:   2.58 kB
+dist/assets/Transcript-DdKuH37F.css                 1.06 kB │ gzip:   0.44 kB
+dist/assets/TaskDependencyGraph-DLioOiRN.css       15.41 kB │ gzip:   2.56 kB
+dist/assets/index-Ck-NDcBU.css                    356.27 kB │ gzip:  58.85 kB
+dist/assets/rolldown-runtime-hePW80VL.js            0.71 kB │ gzip:   0.42 kB
+dist/assets/ProjectTaskPanel-DwSS0Gg1.js            1.06 kB │ gzip:   0.61 kB
+dist/assets/projectTaskRoute-CSicv1Wh.js            5.49 kB │ gzip:   2.39 kB
+dist/assets/ProjectDependencyGraph-BqIuVMeZ.js     14.28 kB │ gzip:   5.22 kB
+dist/assets/projectDependencyGraph-DdLb_0Bs.js    163.57 kB │ gzip:  55.35 kB
+dist/assets/TaskDependencyGraph-D_KCtGEp.js       190.12 kB │ gzip:  61.39 kB
+dist/assets/taskDependencyGraph-CraDAEzb.js       536.66 kB │ gzip: 176.35 kB
+dist/assets/Transcript-D2EUKdRY.js                747.75 kB │ gzip: 229.50 kB
+dist/assets/sessionExport-fu3Uf8MF.js             788.30 kB │ gzip: 191.39 kB
+dist/assets/index-Bvjc8RIE.js                   1,687.72 kB │ gzip: 505.06 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 661ms
+
+> @orbit/web@0.1.0 test:ui-migration
+> playwright test --config ui-migration/playwright.config.mjs
+
+[WebServer] (node:3925775) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 104 tests using 1 worker
+
+(node:3925849) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓    1 [chromium-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (8.1s)
+  ✘    2 [chromium-light-desktop] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-1: task share Escape restores focus (2.0s)
+  ✘    3 [chromium-light-desktop] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-2: task share Done restores focus (2.4s)
+  ✓    4 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › task (2.9s)
+  ✓    5 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › share (404ms)
+  ✓    6 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (2.5s)
+  ✓    7 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (1.1s)
+  ✓    8 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (661ms)
+  ✓    9 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (983ms)
+  ✓   10 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › session (3.1s)
+  ✓   11 [chromium-light-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline (17.2s)
+  ✓   12 [chromium-light-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (475ms)
+  ✓   13 [chromium-light-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (1.7s)
+(node:3926601) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -   14 [chromium-light-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✘   15 [chromium-light-phone] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-1: task share Escape restores focus (2.1s)
+  ✘   16 [chromium-light-phone] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-2: task share Done restores focus (2.8s)
+  ✓   17 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › task (2.5s)
+  ✓   18 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › share (352ms)
+  ✓   19 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › projects (2.2s)
+  ✓   20 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (1.1s)
+  ✓   21 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › settings (611ms)
+  ✓   22 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › profile (900ms)
+  ✓   23 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › session (2.9s)
+  -   24 [chromium-light-phone] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓   25 [chromium-light-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (433ms)
+  ✓   26 [chromium-light-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (1.7s)
+(node:3926987) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   27 [chromium-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (7.9s)
+  ✘   28 [chromium-dark-desktop] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-1: task share Escape restores focus (2.1s)
+  ✘   29 [chromium-dark-desktop] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-2: task share Done restores focus (2.7s)
+  ✓   30 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task (2.8s)
+  ✓   31 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › share (421ms)
+  ✓   32 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (2.4s)
+  ✓   33 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (1.0s)
+  ✓   34 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (622ms)
+  ✓   35 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (925ms)
+  ✓   36 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › session (3.1s)
+  -   37 [chromium-dark-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓   38 [chromium-dark-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (475ms)
+  ✓   39 [chromium-dark-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (1.7s)
+(node:3927596) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -   40 [chromium-dark-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✘   41 [chromium-dark-phone] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-1: task share Escape restores focus (2.1s)
+  ✘   42 [chromium-dark-phone] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-2: task share Done restores focus (2.7s)
+  ✓   43 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › task (2.6s)
+  ✓   44 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › share (388ms)
+  ✓   45 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › projects (2.3s)
+  ✓   46 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (1.1s)
+  ✓   47 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › settings (615ms)
+  ✓   48 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › profile (914ms)
+  ✓   49 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › session (2.9s)
+  -   50 [chromium-dark-phone] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓   51 [chromium-dark-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (391ms)
+  ✓   52 [chromium-dark-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (1.7s)
+(node:3927999) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   53 [webkit-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (9.2s)
+  ✘   54 [webkit-light-desktop] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-1: task share Escape restores focus (2.6s)
+  ✘   55 [webkit-light-desktop] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-2: task share Done restores focus (3.1s)
+  ✓   56 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › task (3.5s)
+  ✓   57 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › share (590ms)
+  ✓   58 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (2.7s)
+  ✓   59 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (1.5s)
+  ✓   60 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (958ms)
+  ✓   61 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (1.3s)
+  ✓   62 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › session (3.7s)
+  -   63 [webkit-light-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓   64 [webkit-light-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (794ms)
+  ✓   65 [webkit-light-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.3s)
+(node:3929522) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -   66 [webkit-light-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✘   67 [webkit-light-phone] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-1: task share Escape restores focus (2.6s)
+  ✘   68 [webkit-light-phone] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-2: task share Done restores focus (3.3s)
+  ✓   69 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › task (3.1s)
+  ✓   70 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › share (572ms)
+  ✓   71 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › projects (2.5s)
+  ✓   72 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (1.5s)
+  ✓   73 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › settings (780ms)
+  ✓   74 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › profile (1.1s)
+  ✓   75 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › session (3.3s)
+  -   76 [webkit-light-phone] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓   77 [webkit-light-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (729ms)
+  ✓   78 [webkit-light-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.2s)
+(node:3930824) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   79 [webkit-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (8.7s)
+  ✘   80 [webkit-dark-desktop] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-1: task share Escape restores focus (2.5s)
+  ✘   81 [webkit-dark-desktop] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-2: task share Done restores focus (3.1s)
+  ✓   82 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task (3.3s)
+  ✓   83 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › share (578ms)
+  ✓   84 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (2.7s)
+  ✓   85 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (1.3s)
+  ✓   86 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (814ms)
+  ✓   87 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (1.2s)
+  ✓   88 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › session (3.6s)
+  -   89 [webkit-dark-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓   90 [webkit-dark-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (742ms)
+  ✓   91 [webkit-dark-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.2s)
+(node:3932246) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -   92 [webkit-dark-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✘   93 [webkit-dark-phone] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-1: task share Escape restores focus (2.5s)
+  ✘   94 [webkit-dark-phone] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-2: task share Done restores focus (3.2s)
+  ✓   95 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › task (2.9s)
+  ✓   96 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › share (509ms)
+  ✓   97 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › projects (2.5s)
+  ✓   98 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (1.4s)
+  ✓   99 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › settings (708ms)
+  ✓  100 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › profile (1.0s)
+  ✓  101 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › session (3.3s)
+  -  102 [webkit-dark-phone] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓  103 [webkit-dark-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (647ms)
+  ✓  104 [webkit-dark-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.2s)
+
+  11 skipped
+  93 passed (3.6m)

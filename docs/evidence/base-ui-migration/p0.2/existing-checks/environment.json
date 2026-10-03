@@ -1,0 +1,25 @@
+{
+  "capturedAt": "2026-10-03T19:21:27.657752+00:00",
+  "sourceCommit": "f4d47e853877fdfddbb5cc7f15cace4d25e27b1e",
+  "node": "v26.10.0",
+  "npm": "11.19.1",
+  "platform": "Linux-6.12.107+deb13-amd64-x86_64-with-glibc2.41",
+  "architecture": "x86_64",
+  "cpuCount": 24,
+  "packages": {
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "antd": "6.6.5",
+    "vitest": "5.0.2",
+    "vite": "8.3.1",
+    "typescript": "7.0.2",
+    "@vitejs/plugin-react": "6.1.1",
+    "jsdom": "30.1.1",
+    "@ant-design/icons": "6.3.4",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0"
+  },
+  "packageLockSha256": "ff58bfbe94fd74805d3ee77c87e7c9855afe7daf6f473cf022376583b764f1c9",
+  "webPackageSha256": "01a98f2f68cc56910be45a7dcac3d1874b820cc876857ce2e4c0f9d692c6436a",
+  "dependencyPreparation": "npm ci --ignore-scripts succeeded against unchanged package-lock.json; no dependency versions substituted."
+}

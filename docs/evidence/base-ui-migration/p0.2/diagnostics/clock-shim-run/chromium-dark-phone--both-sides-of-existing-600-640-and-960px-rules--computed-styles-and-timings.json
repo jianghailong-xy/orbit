@@ -1,0 +1,10 @@
+{
+  "project": "chromium-dark-phone",
+  "test": "both sides of existing 600, 640 and 960px rules",
+  "browser": "153.0.8010.12",
+  "captures": [],
+  "timings": [],
+  "requests": [],
+  "unhandled": [],
+  "pageErrors": []
+}

@@ -1,0 +1,133 @@
+{
+  "capturedAt": "2026-10-03T19:22:32.844026+00:00",
+  "sourceCommit": "f4d47e853877fdfddbb5cc7f15cace4d25e27b1e",
+  "command": "NO_COLOR=1 npm run build -w @orbit/web",
+  "compression": "Python gzip.compress(data, compresslevel=9, mtime=0); byte counts, not rounded kB. Vite console gzip uses its own defaults.",
+  "initialDefinition": "JS/CSS script, stylesheet, or modulepreload URLs directly referenced by production dist/index.html; excludes lazy route imports until loaded.",
+  "assets": [
+    {
+      "path": "assets/ProjectDependencyGraph-BqIuVMeZ.js",
+      "kind": "js",
+      "bytes": 14289,
+      "gzipBytes": 5215,
+      "sha256": "57e3c7c7e12d383318602e2fcf3e40b918d6181c7cf002bd6f16c0bcbc7655f4",
+      "initialHtmlReference": false
+    },
+    {
+      "path": "assets/ProjectTaskPanel-DwSS0Gg1.js",
+      "kind": "js",
+      "bytes": 1062,
+      "gzipBytes": 610,
+      "sha256": "47b0841c429c7284552af091251d09743f62b7de9ca3c4296f14a03f82d2c432",
+      "initialHtmlReference": false
+    },
+    {
+      "path": "assets/TaskDependencyGraph-DLioOiRN.css",
+      "kind": "css",
+      "bytes": 15413,
+      "gzipBytes": 2536,
+      "sha256": "b0cb7bd6fec5951c9c8f5808821438206604b1629a912c96009ac427f38e7d69",
+      "initialHtmlReference": false
+    },
+    {
+      "path": "assets/TaskDependencyGraph-D_KCtGEp.js",
+      "kind": "js",
+      "bytes": 190123,
+      "gzipBytes": 60584,
+      "sha256": "77cf8f5342d557a97cab652fb7d8c1cd489492295ca672a1c99ffbfed8b19a67",
+      "initialHtmlReference": false
+    },
+    {
+      "path": "assets/Transcript-D2EUKdRY.js",
+      "kind": "js",
+      "bytes": 747750,
+      "gzipBytes": 226155,
+      "sha256": "a712d6b63aaf39279f861b4391074f76dd18efc6ff6bde132d1fb3c809082048",
+      "initialHtmlReference": true
+    },
+    {
+      "path": "assets/Transcript-DdKuH37F.css",
+      "kind": "css",
+      "bytes": 1062,
+      "gzipBytes": 449,
+      "sha256": "5174637ef4f9e852377f33c6754b6591b55fafa18e02f643e0f09844bdedc562",
+      "initialHtmlReference": true
+    },
+    {
+      "path": "assets/index-Bvjc8RIE.js",
+      "kind": "js",
+      "bytes": 1687724,
+      "gzipBytes": 498653,
+      "sha256": "f78522dc2188a57bd530f19634466bf851c3c81d00a4becd62d9266ebdd6a691",
+      "initialHtmlReference": true
+    },
+    {
+      "path": "assets/index-Ck-NDcBU.css",
+      "kind": "css",
+      "bytes": 356271,
+      "gzipBytes": 58141,
+      "sha256": "0c58258959e5dd3cbf667d4a56a7a152d69ffbcdfaf92af0fb092886094becf4",
+      "initialHtmlReference": true
+    },
+    {
+      "path": "assets/projectDependencyGraph-DdLb_0Bs.js",
+      "kind": "js",
+      "bytes": 163574,
+      "gzipBytes": 54578,
+      "sha256": "2093957d2c3b8f08f7acdf0659592b4fe7d3ae0d289ae0c626fe95b0fe783a4a",
+      "initialHtmlReference": true
+    },
+    {
+      "path": "assets/projectTaskRoute-CSicv1Wh.js",
+      "kind": "js",
+      "bytes": 5490,
+      "gzipBytes": 2355,
+      "sha256": "0af3e6ad0b995c5498b5f16f538adee5ef810d54077587a22f6124cfb72e6710",
+      "initialHtmlReference": true
+    },
+    {
+      "path": "assets/rolldown-runtime-hePW80VL.js",
+      "kind": "js",
+      "bytes": 716,
+      "gzipBytes": 430,
+      "sha256": "580ad8c58061a4dde99bde0a56905e382f0568516ee2f5b84dbfb52085709021",
+      "initialHtmlReference": true
+    },
+    {
+      "path": "assets/sessionExport-fu3Uf8MF.js",
+      "kind": "js",
+      "bytes": 788305,
+      "gzipBytes": 189472,
+      "sha256": "78cda4eac1869ca4e88fa4f9a47a3a7b856028d6b54193bff6ecc85f150e8edf",
+      "initialHtmlReference": false
+    },
+    {
+      "path": "assets/taskDependencyGraph-CraDAEzb.js",
+      "kind": "js",
+      "bytes": 536663,
+      "gzipBytes": 173776,
+      "sha256": "6dd6db8f866420ed3a10d28862fdebaac1ad112e346fd42b31d051aa54ae3cdb",
+      "initialHtmlReference": true
+    }
+  ],
+  "initialTotals": {
+    "js": {
+      "bytes": 3141917,
+      "gzipBytes": 955947
+    },
+    "css": {
+      "bytes": 357333,
+      "gzipBytes": 58590
+    }
+  },
+  "allAssetTotals": {
+    "js": {
+      "bytes": 4135696,
+      "gzipBytes": 1211828
+    },
+    "css": {
+      "bytes": 372746,
+      "gzipBytes": 61126
+    }
+  }
+}

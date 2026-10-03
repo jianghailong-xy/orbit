@@ -1,0 +1,21 @@
+{
+  "command": "NO_COLOR=1 npm run test:ui-migration -w @orbit/web",
+  "shellCommand": "NO_COLOR=1 npm run test:ui-migration -w @orbit/web > /tmp/orbit-p02-native-browser-replay.txt 2>&1",
+  "exitCode": 0,
+  "snapshotsUpdated": false,
+  "snapshotHashesUnchanged": true,
+  "screenshotCount": 252,
+  "stats": {
+    "startTime": "2026-10-03T19:49:52.100Z",
+    "duration": 218352.592,
+    "expected": 93,
+    "skipped": 11,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "normalPassed": 77,
+  "expectedFailures": 16,
+  "log": "command-output.txt",
+  "logSha256": "2f0273bb839e1c910cdc29a3fd5d836a4197637b5fee68406025e970435a09d3",
+  "sourceHeadBeforeTask": "f4d47e853877fdfddbb5cc7f15cace4d25e27b1e"
+}

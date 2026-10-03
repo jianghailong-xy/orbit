@@ -1,0 +1,35 @@
+fonts-anonymous-pro	
+fonts-arphic-ukai	
+fonts-arphic-uming	
+fonts-croscore	
+fonts-dejavu-core	2.37-8
+fonts-dejavu-extra	
+fonts-dejavu-mono	2.37-8
+fonts-firacode	
+fonts-freefont-otf	
+fonts-freefont-ttf	20211204+svn4273-2
+fonts-hack	
+fonts-inconsolata	
+fonts-indic	
+fonts-ipafont-gothic	00303-23
+fonts-ipafont-mincho	
+fonts-japanese-gothic	
+fonts-japanese-mincho	
+fonts-jetbrains-mono	
+fonts-liberation	1:2.1.5-3
+fonts-liberation-sans-narrow	
+fonts-liberation2	
+fonts-nanum	
+fonts-noto-color-emoji	2.051-0+deb13u1
+fonts-noto-core	
+fonts-texgyre	
+fonts-tlwg-loma	
+fonts-tlwg-loma-otf	1:0.7.3-1
+fonts-unifont	1:15.1.01-1
+fonts-urw-base35	
+fonts-wqy-microhei	
+fonts-wqy-zenhei	0.9.45-8
+libfontconfig1:amd64	2.15.0-2.3
+libfreetype6:amd64	2.13.3+dfsg-1+deb13u1
+libharfbuzz0b:amd64	10.2.0-1+deb13u1
+libpng16-16t64:amd64	1.6.48-1+deb13u6
