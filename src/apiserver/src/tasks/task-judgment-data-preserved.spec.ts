@@ -1714,7 +1714,19 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `task_executable_acceptance_pair` and `task_completion_criterion` are not named, and no
       // `project_acceptance_*` object is. No INSERT, UPDATE or DELETE: the build reads every task
       // row once and writes none.
-      '0365_task_owner_creator_session_status_created_id_idx'],
+      '0365_task_owner_creator_session_status_created_id_idx',
+      // A retry claim taken back without its turn is a retry given up (0366): 0352's AFTER UPDATE
+      // trigger on `session`, `session_request_asker_stopped`, dropped and created again over the same
+      // function — one more column in its list (`retry_claimed_at`) and one more branch in its WHEN —
+      // and one partial index on `session.retry_claimed_at`. Read against every claim above: no
+      // function is created or replaced, and the trigger's function still writes only
+      // `session_request`, so it is not another writer of the DONE fence and names none of the six
+      // preserved objects; `session` is named only as the table the trigger and the index are on, and
+      // it is not a preserved relation; no `task`, `project` or `project_acceptance_*` object is named,
+      // so the 0177 pair and every stored task and criterion row are out of its reach. No INSERT,
+      // UPDATE or DELETE. (Written as 0360 on its own branch and renumbered before it landed: 0359 is
+      // spelled by a branch not yet landed, and 0361, 0362, 0364 and 0365 landed first.)
+      '0366_session_retry_claim_lease'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
