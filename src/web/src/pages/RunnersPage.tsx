@@ -97,13 +97,13 @@ export function RunnersPage() {
       void qc.invalidateQueries({ queryKey: ['runners'] });
       setRenaming(null);
     },
-    onError: (e: Error) => message.error(e.message || 'Rename failed'),
+    onError: (e: Error) => message.error("Couldn't rename the runner", e.message),
   });
 
   const deleteMut = useMutation({
     mutationFn: (id: string) => api(`/runners/${id}`, { method: 'DELETE' }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['runners'] }),
-    onError: (e: Error) => message.error(e.message || 'Delete failed'),
+    onError: (e: Error) => message.error("Couldn't delete the runner", e.message),
   });
 
   const reorderMut = useMutation({
@@ -129,7 +129,7 @@ export function RunnersPage() {
     },
     onError: (e: Error, _ids, context) => {
       if (context?.previous) qc.setQueryData(['runners'], context.previous);
-      message.error(e.message || 'Reorder failed');
+      message.error("Couldn't reorder the runners", e.message);
     },
     onSuccess: (data) => qc.setQueryData(['runners'], data),
     onSettled: () => void qc.invalidateQueries({ queryKey: ['runners'] }),

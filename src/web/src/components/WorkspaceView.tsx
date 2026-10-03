@@ -2489,7 +2489,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             sessionId: operation.id,
             sessionTitle: operation.title,
             event: 'merge-result',
-            headline: `Merge into ${target} failed`,
+            headline: `Couldn't merge into ${target}`,
             detail: d.mergeError ?? 'See the status bar for details.',
             tone: 'error',
           });
@@ -2519,7 +2519,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           sessionId: operation.id,
           sessionTitle: operation.title,
           event: 'commit-result',
-          headline: 'Commit failed',
+          headline: "Couldn't commit",
           // The runner's plain sentence when it gave one; git's words otherwise (commitFailureCopy).
           detail: commitFailureCopy(d.commitError, d.commitResultMessage).why,
           tone: 'error',
@@ -4433,7 +4433,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       sendOwnerDecision(press.taskId, press.requestId, press.decision, press.note),
     // Said as staleness when that is what the door's code means, for the reason the card gives: a
     // reader told only "it failed" has been told the button is broken.
-    onError: (error: Error) => void message.error(ownerDecisionRefusal(error).title),
+    onError: (error: Error) => {
+      const refusal = ownerDecisionRefusal(error);
+      message.error("Couldn't send the task back", refusal.stale ? refusal.title : error.message);
+    },
     onSettled: (_data, _error, press) => refreshOwnerConfirmationViews(qc, press.taskId),
   });
   // The send-back the composer completes from the evidence card's "Chat about this": it presses the
@@ -4452,7 +4455,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     }) => sendEvidenceDecision(press, press.decidingSessionId, 'SEND_BACK', press.note),
     // Said as staleness when that is what the door's code means, for the reason the card gives: a
     // reader told only "it failed" has been told the button is broken.
-    onError: (error: Error) => void message.error(evidenceDecisionRefusal(error).title),
+    onError: (error: Error) => {
+      const refusal = evidenceDecisionRefusal(error);
+      message.error("Couldn't send the task back", refusal.stale ? refusal.title : error.message);
+    },
     onSettled: (_data, _error, press) =>
       qc.invalidateQueries({ queryKey: pendingDecisionsQuery(press.sessionId).queryKey }),
   });
@@ -5152,7 +5158,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         setRunConflict({ conflict, vars });
         return;
       }
-      message.error(e.message);
+      message.error("Couldn't send the message", e.message);
     },
   });
   const sendMutateForConflict = send.mutate;
@@ -5201,7 +5207,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       setRunConflict(null);
       void qc.invalidateQueries({ queryKey: ['tasks'] });
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => message.error("Couldn't clear the task's pin", e.message),
   });
   /**
    * The reader's answer to whichever question the conflict asked.
@@ -5251,7 +5257,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       setQueued([]);
       qc.invalidateQueries({ queryKey: ['sessions'] });
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => message.error("Couldn't stop the session", e.message),
   });
   // Withdraw a queued message. Optimistically remove it; if the runner already leased
   // it (it's no longer cancellable) it'll arrive in the transcript via its `user` event.
@@ -5324,7 +5330,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         sessionId: session.id,
         sessionTitle: session.title,
         event: 'restore-error',
-        headline: 'Could not move to Open',
+        headline: "Couldn't move to Open",
         detail: e.message,
         tone: 'error',
       }),
@@ -5389,7 +5395,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         sessionId: session.id,
         sessionTitle: session.title,
         event: 'complete-error',
-        headline: 'Could not complete session',
+        headline: "Couldn't complete the session",
         detail: e.message,
         tone: 'error',
       }),
@@ -5465,7 +5471,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         sessionId: session.id,
         sessionTitle: session.title,
         event: 'trash-error',
-        headline: 'Could not move to Trash',
+        headline: "Couldn't move to Trash",
         detail: e.message,
         tone: 'error',
       }),
@@ -5508,7 +5514,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         workspace: { name: session.workspace?.name ?? null },
       });
     } catch (e) {
-      message.error(`Download failed: ${(e as Error).message}`);
+      message.error("Couldn't download the HTML", (e as Error).message);
     } finally {
       setDownloadingHtml(false);
     }
@@ -5516,7 +5522,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // Copy link: the signed-in address, for the owner's own use — never the public one (§8).
   const copySessionLink = (session: any): void => {
     void copyText(`${window.location.origin}/sessions/${encodeId(session.id)}`).then((ok) =>
-      ok ? message.success('Link copied') : message.error('Could not copy'),
+      ok ? message.success('Link copied') : message.error("Couldn't copy the link"),
     );
   };
   // Permanent delete (from Trash): unlike deleteMut there's no undo — the row and all its
@@ -5541,7 +5547,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         sessionId: session.id,
         sessionTitle: session.title,
         event: 'purge-error',
-        headline: 'Permanent deletion failed',
+        headline: "Couldn't delete the session permanently",
         detail: e.message,
         tone: 'error',
       }),
@@ -5566,7 +5572,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       qc.setQueriesData<any[]>({ queryKey: ['sessions'] }, (old) =>
         Array.isArray(old) ? old.map((s) => (s.id === id ? { ...s, title } : s)) : old,
       ),
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => message.error("Couldn't rename the session", e.message),
     onSettled: () => qc.invalidateQueries({ queryKey: ['sessions'] }),
   });
   // Pin/unpin a session to the top of the list. Optimistically flip pinnedAt in every cached
@@ -5582,7 +5588,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             )
           : old,
       ),
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error, { pin }) =>
+      message.error(pin ? "Couldn't pin the session" : "Couldn't unpin the session", e.message),
     onSettled: () => qc.invalidateQueries({ queryKey: ['sessions'] }),
   });
   // A tapped swipe button (or a full swipe) runs the same request as the row's menu
@@ -5622,7 +5629,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       if (context?.previousDetail !== undefined) {
         qc.setQueryData(['session', id], context.previousDetail);
       }
-      message.error(e.message);
+      message.error("Couldn't update the tags", e.message);
     },
     onSettled: (_data, _error, { id }) => {
       tagSaveInFlight.current = false;
@@ -5636,7 +5643,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     mutationFn: (workspaceId: string) => enableWorkspaceIsolation(workspaceId),
     onSuccess: () =>
       message.success('Isolation enabled — the next run will initialize git and isolate.'),
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => message.error("Couldn't enable worktree isolation", e.message),
   });
   const askEnableIsolation = (workspaceId: string) =>
     modal.confirm({
@@ -5659,7 +5666,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       message.success(REPO_CLEANUP_QUEUED);
       void qc.invalidateQueries({ queryKey: workspacesQuery().queryKey });
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => message.error("Couldn't clean up the checkout", e.message),
   });
   const askCleanUpRepo = (workspaceId: string, root: string) =>
     modal.confirm({
@@ -5694,7 +5701,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         sessionId: vars.id,
         sessionTitle: vars.title,
         event: 'merge-request-error',
-        headline: `Could not start merge${vars.target ? ` into ${vars.target}` : ''}`,
+        headline: `Couldn't start the merge${vars.target ? ` into ${vars.target}` : ''}`,
         detail: e.message,
         tone: 'error',
       }),
@@ -5716,7 +5723,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       navigate(`/sessions/${encodeId(session.id)}`);
       void qc.invalidateQueries({ queryKey: ['sessions'] });
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => message.error("Couldn't start the repair session", e.message),
   });
   // Resolve a merge conflict in-session: revive the session so its own workspace rebases the branch
   // onto the target that conflicted and fixes the conflicts (it has the context for its own
@@ -5773,7 +5780,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         sessionId: vars.id,
         sessionTitle: vars.title,
         event: 'resolve-conflict-error',
-        headline: 'Could not start conflict resolution',
+        headline: "Couldn't start resolving the conflict",
         detail: e.message,
         tone: 'error',
       }),
@@ -5811,7 +5818,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         sessionId: vars.id,
         sessionTitle: vars.title,
         event: 'resolve-commit-error',
-        headline: 'Could not hand the commit to the session',
+        headline: "Couldn't hand the commit to the session",
         detail: e.message,
         tone: 'error',
       }),
@@ -5838,7 +5845,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         sessionId: session.id,
         sessionTitle: session.title,
         event: 'commit-request-error',
-        headline: 'Could not start commit',
+        headline: "Couldn't start the commit",
         detail: e.message,
         tone: 'error',
       }),
@@ -5864,7 +5871,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         sessionId: session.id,
         sessionTitle: session.title,
         event: 'adopt-branch-error',
-        headline: 'Could not update tracked branch',
+        headline: "Couldn't update the tracked branch",
         detail: e.message,
         tone: 'error',
       }),
@@ -5891,9 +5898,22 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       );
       return { prev };
     },
-    onError: (e: Error, _cfg, ctx) => {
+    onError: (e: Error, cfg, ctx) => {
       if (ctx?.prev) qc.setQueryData(sessionsKey, ctx.prev);
-      message.error(e.message);
+      // Named by what was picked: a provider switch carries the model, mode and effort that follow
+      // it, and a model switch its mode and effort.
+      message.error(
+        cfg.provider !== undefined
+          ? "Couldn't switch the provider"
+          : cfg.model !== undefined
+            ? "Couldn't change the model"
+            : cfg.permissionMode !== undefined
+              ? "Couldn't change the mode"
+              : cfg.effort !== undefined
+                ? "Couldn't change the effort"
+                : "Couldn't change the speed",
+        e.message,
+      );
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ['sessions'] }),
   });
@@ -5902,7 +5922,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const accountMut = useMutation({
     mutationFn: ({ id, account }: { id: string; account: string }) => switchSessionAccount(id, account),
     onError: (e: Error) => {
-      message.error(e.message);
+      message.error("Couldn't switch the account", e.message);
     },
     onSettled: (_result, _error, vars) => {
       void qc.invalidateQueries({ queryKey: ['sessions'] });
@@ -5981,7 +6001,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         // Drop the failed chip and free its preview; the toast explains why.
         setImages((prev) => prev.filter((im) => im.uid !== uid));
         if (previewUrl) URL.revokeObjectURL(previewUrl);
-        message.error((e as Error).message);
+        message.error(
+          isInlineImage ? "Couldn't upload the image" : "Couldn't upload the file",
+          (e as Error).message,
+        );
       }
     },
     [canAttach, selected, message],
@@ -6101,7 +6124,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         const catalogKnown = slashItems.some((it) => it.type !== 'local');
         const knownRunnerCommand = slashItems.some((it) => it.type !== 'local' && it.name === commandName);
         if (catalogKnown && !knownRunnerCommand) {
-          message.warning(`/${commandName} isn't in this runner's catalog — sending anyway`);
+          message.info(`/${commandName} isn't in this runner's catalog — sending anyway`);
         }
       }
     }
@@ -6792,7 +6815,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     // `onError` hands back before the press stops being in flight. Returned, a press that failed — or
     // whose answer was lost — held Retry disabled for as long as the toast stood, and pressing again
     // is exactly how such a press is answered (§8 criterion 22): the server's key is the failure's.
-    onError: (e: Error) => void message.error(e.message || 'Could not re-send that message'),
+    onError: (e: Error) => void message.error("Couldn't re-send the message", e.message),
   });
   const resendFromSessionMutate = resendFromSession.mutate;
   const sendMutate = send.mutate;
@@ -6873,7 +6896,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     try {
       await cancelQueuedTurn(selectedId, turn.turnId);
     } catch (e) {
-      message.error(e instanceof Error ? e.message : 'Could not discard that message');
+      message.error("Couldn't discard the message", e instanceof Error ? e.message : undefined);
     }
   };
   // The same retry, plus the pending auto-retry, for the quota / provider-error card. Disarming
@@ -6918,14 +6941,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         ? () => {
             cancelAutoRetry(selected.id)
               .then(() => qc.invalidateQueries({ queryKey: ['session', selected.id] }))
-              .catch((e: Error) => message.error(e.message));
+              .catch((e: Error) => message.error("Couldn't turn off auto-retry", e.message));
           }
         : undefined,
       onArmAuto: selected?.id
         ? (at: Date) => {
             armAutoRetry(selected.id, at)
               .then(() => qc.invalidateQueries({ queryKey: ['session', selected.id] }))
-              .catch((e: Error) => message.error(e.message));
+              .catch((e: Error) => message.error("Couldn't turn on auto-retry", e.message));
           }
         : undefined,
     }),

@@ -47,17 +47,17 @@ export function ProfilePage() {
       setEdited(null);
       message.success('Name saved');
     },
-    onError: (e: Error) => message.error(`Couldn't save your name — ${e.message}`),
+    onError: (e: Error) => message.error("Couldn't save your name", e.message),
   });
   const upload = useMutation({
     mutationFn: async (file: File) => setAvatar(await squareJpeg(file)),
     onSuccess: adopt,
-    onError: (e: Error) => message.error(`Couldn't save your photo — ${e.message}`),
+    onError: (e: Error) => message.error("Couldn't save your photo", e.message),
   });
   const remove = useMutation({
     mutationFn: () => api<Me>('/users/me/avatar', { method: 'DELETE' }),
     onSuccess: adopt,
-    onError: (e: Error) => message.error(`Couldn't save your photo — ${e.message}`),
+    onError: (e: Error) => message.error("Couldn't remove your photo", e.message),
   });
 
   const changePwd = useMutation({
@@ -70,7 +70,7 @@ export function ProfilePage() {
       message.success('Password changed');
       form.resetFields();
     },
-    onError: (e: Error) => message.error(e.message || 'Failed to change password'),
+    onError: (e: Error) => message.error("Couldn't change the password", e.message),
   });
 
   return (

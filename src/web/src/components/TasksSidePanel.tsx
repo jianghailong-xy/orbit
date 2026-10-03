@@ -37,7 +37,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { App as AntdApp, Avatar, Dropdown, Tooltip } from 'antd';
+import { Avatar, Dropdown, Tooltip } from 'antd';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useLocation, useMatch, useNavigate } from 'react-router-dom';
 import type {
@@ -61,6 +61,7 @@ import {
 } from '../lib/queries';
 import { orderWorkspaces, reorderedWorkspaceIds, workspaceRunnerId } from '../lib/workspaceOrder';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
+import { useToast } from '../lib/toast';
 import {
   projectIsWorking,
   projectNeedsYouCount,
@@ -478,7 +479,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   // Each drop is saved at once, the Runners page's way: the rows (and their ⌘N) move immediately,
   // the server's list settles it, and a refusal puts them back.
   const qc = useQueryClient();
-  const { message } = AntdApp.useApp();
+  const message = useToast();
   const reorderWorkspaces = useMutation({
     mutationFn: (ids: string[]) =>
       api<Workspace[]>('/workspaces/reorder', { method: 'POST', body: { ids } }),
@@ -496,7 +497,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
     },
     onError: (e: Error, _ids, context) => {
       if (context?.previous) qc.setQueryData(['workspaces'], context.previous);
-      message.error(e.message || 'Reorder failed');
+      message.error("Couldn't reorder the workspaces", e.message);
     },
     onSuccess: (data) => qc.setQueryData(['workspaces'], data),
     onSettled: () => void qc.invalidateQueries({ queryKey: ['workspaces'] }),

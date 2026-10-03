@@ -26,7 +26,7 @@ export function useRunnerTokenRotation() {
       setCopied(false);
       setRevealed({ name: vars.name, token: data.token });
     },
-    onError: (e: Error) => message.error(e.message || 'Rotate failed'),
+    onError: (e: Error) => message.error("Couldn't rotate the token", e.message),
   });
 
   const confirmRotate = (r: Runner) =>

@@ -365,6 +365,6 @@ struct WikiSettingsView: View {
     }
 
     private func finish(_ answer: String?) {
-        if let answer { notice = answer } else { model.showToast(WikiCopy.saved) }
+        if let answer { notice = answer } else { model.showToast(WikiCopy.settingsSaved) }
     }
 }

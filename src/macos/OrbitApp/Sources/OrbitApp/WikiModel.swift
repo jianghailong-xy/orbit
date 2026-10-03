@@ -21,6 +21,9 @@ final class WikiModel {
     /// Every changeset with an op still waiting, across the spaces — the queue Review pages through.
     private(set) var review: [WikiChangeset] = []
     private(set) var reviewState = ListLoadState()
+    /// Ops answered here whose answer has landed but whose queue has not been read back yet: Review
+    /// leaves them out at once, so the pager moves on while the reads that follow a write run.
+    private(set) var answered: Set<String> = []
     /// The entry pages read so far, the ones the server would not show, and the ones whose last read
     /// failed with nothing in hand.
     private(set) var details: [String: WikiEntryDetail] = [:]
@@ -89,7 +92,9 @@ final class WikiModel {
     }
 
     /// The pending ops Review pages through.
-    var reviewCards: [WikiLogic.ReviewCard] { WikiLogic.reviewCards(review) }
+    var reviewCards: [WikiLogic.ReviewCard] {
+        WikiLogic.reviewCards(review).filter { !answered.contains($0.op.id) }
+    }
 
     @ObservationIgnored private var articlesSpaceID: String?
 
@@ -487,6 +492,11 @@ final class WikiModel {
     // MARK: Review
 
     /// The owner's answer to one pending op. Nil on success, else the sentence to show.
+    ///
+    /// Returns as soon as the answer lands, not after the three reads a write is followed by: the
+    /// caller's toast used to wait on all four requests and arrive seconds late, often on whatever
+    /// page the owner had moved to by then. The card leaves the queue at once (`answered`) and the
+    /// reads catch the queue, the drawer's count and the home page up behind it.
     func decide(_ card: WikiLogic.ReviewCard, _ action: WikiDecideAction,
                 reason: WikiRejectReason? = nil, edited: WikiEntryChanges? = nil) async -> String? {
         busy = true
@@ -496,12 +506,19 @@ final class WikiModel {
                 card.changeset.id,
                 WikiDecideRequest(decisions: [WikiDecision(opId: card.op.id, action: action,
                                                            edited: edited, reason: reason)]))
-            await reloadAfterWrite()
-            return nil
         } catch {
             await reloadAfterWrite()
             return Self.refusal(error)
         }
+        answered.insert(card.op.id)
+        Task { [weak self] in
+            guard let self else { return }
+            await self.reloadAfterWrite()
+            // Only what the server no longer lists as waiting comes off the list; an op a failed
+            // read left behind stays hidden rather than coming back as if unanswered.
+            self.answered.formIntersection(WikiLogic.reviewCards(self.review).map(\.op.id))
+        }
+        return nil
     }
 
     /// The entry an op names, for the cards that are about an existing entry (an amend, a retire).

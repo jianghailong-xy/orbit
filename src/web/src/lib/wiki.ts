@@ -23,6 +23,7 @@ import {
   WIKI_REJECT_REASONS,
   type WikiChangeset,
   type WikiChangesetOp,
+  type WikiDecideAction,
   type WikiEntry,
   type WikiEntryAppliedBy,
   type WikiEntryKind,
@@ -322,6 +323,37 @@ export const WIKI_REVIEW_EDIT = 'Edit';
 export const WIKI_REVIEW_REJECT = 'Reject';
 export const WIKI_REVIEW_KEEP = 'Keep';
 export const WIKI_REVIEW_RETIRE = 'Retire';
+/** What the toast says once a Review answer lands: the outcome, in the words of the answer and the
+ *  card it was given on, with the entry's title on the line under it. Keep on a retire card is a
+ *  rejection on the wire, but the owner kept the entry, so it says Kept; a bare "Decided" said
+ *  neither what was decided nor about what. */
+export const WIKI_DECIDED_ACCEPTED = 'Accepted';
+export const WIKI_DECIDED_EDITED = 'Accepted with your edits';
+export const WIKI_DECIDED_REJECTED = 'Rejected';
+export const WIKI_DECIDED_RETIRED = 'Retired';
+export const WIKI_DECIDED_KEPT = 'Kept';
+export const WIKI_DECIDED_RECONFIRMED = 'Re-confirmed';
+export const WIKI_DECIDED_AMENDED = 'Amended';
+export function wikiDecidedToast(op: string, action: WikiDecideAction): string {
+  switch (action) {
+    case 'edit':
+      return WIKI_DECIDED_EDITED;
+    case 'reconfirm':
+      return WIKI_DECIDED_RECONFIRMED;
+    case 'amend':
+      return WIKI_DECIDED_AMENDED;
+    case 'retire':
+      return WIKI_DECIDED_RETIRED;
+    case 'reject':
+      return op === 'retire' ? WIKI_DECIDED_KEPT : WIKI_DECIDED_REJECTED;
+    case 'accept':
+      return op === 'retire' ? WIKI_DECIDED_RETIRED : WIKI_DECIDED_ACCEPTED;
+  }
+}
+/** The space's settings, once written. */
+export const WIKI_SETTINGS_SAVED = 'Wiki settings saved';
+/** A Review answer the server refused: what failed, with its reason on the line under it. */
+export const WIKI_DECIDE_FAILED = "Couldn't record your answer";
 export const WIKI_ACCEPT_NOTE = 'Accepting makes it Confirmed';
 export const WIKI_WEB_DERIVED_NOTE = 'Web-derived is never auto-accepted';
 export const WIKI_REJECT_REASON_FOOT = 'The reason goes back to the session that proposed it.';

@@ -335,7 +335,7 @@ function EngineRow({
     mutationFn: () =>
       api(`/runners/${runner.id}/install`, { method: 'POST', body: { engine } }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
-    onError: (e: Error) => message.error(e.message || 'Could not start the install'),
+    onError: (e: Error) => message.error("Couldn't start the install", e.message),
   });
   const dismissInstall = useMutation({
     mutationFn: () => api(`/runners/${runner.id}/install`, { method: 'DELETE' }),
@@ -569,7 +569,7 @@ function AccountName({
       }),
     // Returned, so the new name stays on the row until the list carries it rather than flicking back.
     onSuccess: () => qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
-    onError: (e: Error) => message.error(e.message || 'Could not rename the account'),
+    onError: (e: Error) => message.error("Couldn't rename the account", e.message),
   });
   const shown = rename.isPending ? (rename.variables ?? accountNameOf(account)) : accountNameOf(account);
   // Default named something else says what it still is: the login this machine's own environment
@@ -693,10 +693,10 @@ function AccountRow({
     onSuccess: (state) => {
       // A refusal the control plane could make itself (an older runner, or the account that is the
       // machine's own CODEX_HOME) arrives as an error; anything the machine decided arrives here.
-      if (state?.status === 'failed' && state.message) message.error(state.message);
+      if (state?.status === 'failed' && state.message) message.error("Couldn't remove the account", state.message);
       void qc.invalidateQueries({ queryKey: runnersQuery().queryKey });
     },
-    onError: (e: Error) => message.error(e.message || 'Could not remove the account'),
+    onError: (e: Error) => message.error("Couldn't remove the account", e.message),
   });
   // Each account's quota is its own: the runner reads every account in that account's CODEX_HOME,
   // and an account it has not read shows none rather than borrowing another's limit.
@@ -848,7 +848,7 @@ function AddEngineAccount({
     // Not returned: an error toast stays until dismissed, and a mutation awaits what onError returns,
     // so returning it would hold the rename pending — and the panel waiting on it — until then.
     onError: (e: Error) => {
-      message.error(e.message || 'Could not rename the account');
+      message.error("Couldn't rename the account", e.message);
     },
   });
   const save = () => {
