@@ -38,7 +38,9 @@ import { SESSION_REPLY_TURN_KEY_PREFIX } from './watch-turn-key';
  *                    it — an interrupt dropping the queue, the owner withdrawing it
  *                    (`settleUnrunSessionRequests`) — or it was a steer the engine never confirmed:
  *                    the runner failed to write it into the running turn, or the run failed with it
- *                    still in flight (`closeUnreadSteerRequests`).
+ *                    still in flight (`closeUnreadSteerRequests`) — or its turn failed before any
+ *                    engine read it and was kept for a retry that another turn then took the place of
+ *                    (`closeRequestsTheRetryWillNotResend`).
  *
  * Migration 0350's guard refuses any later rewrite of an outcome, so "first wins" is the database's
  * rule and not only this file's.
@@ -516,6 +518,11 @@ export async function hasPendingWakeSource(
  * settles: an engine that read a message after its result is running a turn for it that no completion
  * here will report, and judging then would close a request it may be answering.
  *
+ * And one a turn of the owner's came after (§8 criterion 26): a message an engine was handed, whose run
+ * then failed before the engine answered it, kept for a retry the owner's message took the place of
+ * (`closeRequestsTheRetryWillNotResend`). Put back in the queue and drained with that run, its turn has
+ * lost the claim's stamp the read below goes by, but it was read, and is judged as read.
+ *
  * Answers the requests this closed, for the asker's hand-off once the transaction commits.
  */
 export async function closeUnansweredRequests(
@@ -532,7 +539,7 @@ export async function closeUnansweredRequests(
     select: { id: true, turnId: true },
   });
   if (open.length === 0) return [];
-  const received = new Set((await tx.conversationTurn.findMany({
+  const received: Set<string> = new Set((await tx.conversationTurn.findMany({
     where: {
       sessionId: session.id,
       id: { in: open.map((request) => request.turnId) },
@@ -545,6 +552,16 @@ export async function closeUnansweredRequests(
     },
     select: { id: true },
   })).map((turn) => turn.id));
+  const unstamped = open.filter((request) => !received.has(request.turnId)).map((request) => request.turnId);
+  if (unstamped.length > 0) {
+    const drained = await tx.conversationTurn.findMany({
+      where: { sessionId: session.id, id: { in: unstamped }, kind: 'message', status: 'ANSWERED', deliveredAt: null },
+      select: { id: true },
+    });
+    for (const turnId of await turnsAnEngineWasHanded(tx, session.id, drained.map((turn) => turn.id))) {
+      received.add(turnId);
+    }
+  }
   const due = open.filter((request) => received.has(request.turnId)).map((request) => request.id);
   if (due.length === 0) return [];
   if (await hasPendingWakeSource(tx, session)) return [];
@@ -588,7 +605,11 @@ export type UnrunSessionRequests =
  * UNDELIVERED, with what took it: one still queued, and — when a run is ending — a steer still in
  * flight that the engine never acknowledged. The one exception is the turn the retry re-sends (§8
  * criteria 18 and 23): its request stays OPEN and goes with the re-sent turn, because those words are
- * not being dropped — provided the retry can find them again. A turn of this session as an ASKER may
+ * not being dropped — provided the retry can find them again. A message in flight when a reap or a
+ * finalize ends the run keeps its request the same way: the runner took it, and the retry re-sends it
+ * even when the runner went away before recording anything of it (§8 criterion 27, `retryRecords`); if
+ * another turn takes that retry's place, what no engine read is closed then
+ * (`closeRequestsTheRetryWillNotResend`). A turn of this session as an ASKER may
  * carry outcomes back to it — a reply turn still queued, or any turn they were written into when it
  * was handed out — and those outcomes are not lost with it, nor with the turn whose failure is ending
  * the run. When the session lives on — interrupted, the owner withdrew the turn, or a retry is armed —
@@ -631,8 +652,8 @@ export async function settleUnrunSessionRequests(
   // for good, and the block on the re-sent turn would say it is closed, which is the one reading the
   // retry exists to avoid. Without a retry armed the words really are gone and it is UNDELIVERED.
   //
-  // §8 criterion 23: and only when the sweep can find those words again. It reads them off what the
-  // runner recorded for the turn (`turnsTheRetryCanFind`); a failed turn with no record at all would be
+  // §8 criterion 23: and only when the sweep can find those words again. It reads them off the records
+  // the sweep's own chooser reads (`turnsTheRetryCanFind`); a failed turn with no record at all would be
   // passed over for an older message, and its request would sit OPEN on a turn nothing will ever
   // deliver until its deadline. Such a turn is not re-sent, so its request is UNDELIVERED now.
   const resent = new Set(ending && unrun.retryArmed && unrun.failedTurnKey
@@ -688,33 +709,192 @@ export async function closeUnreadSteerRequests(
  * a message — a write queue that refuses the turn (a CLI that stopped reading stdin, a process already
  * gone) fails it before the `user` echo is written (runner-go session.go, `failUndeliveredTurn`), so a
  * reader that looks for the words by their echo alone walks past the message that failed to the one
- * before it. The retry reads its words off the receipt's turn instead (`AutoRetryService.messageToResend`).
+ * before it. The retry reads its words off the receipt's turn instead (`retryRecords`).
  */
 export const FAILED_DELIVERY_RECEIPT = {
   type: RunEventType.USER_DELIVERY,
   payload: { path: ['delivery'], equals: 'failed' },
 } satisfies Prisma.RunEventWhereInput;
 
+/** How many of the runner's records the retry reads back: enough to cover a run of image-only turns. */
+const RETRY_RECORDS = 20;
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** One record the runner left of a message it took (`retryRecords`). */
+export interface RetryRecord {
+  /** The turn it is about; null for an echo from before turns were attributed. */
+  turnId: string | null;
+  /** Where it stands in the session's stream — null for the message the runner went away with, which it wrote nothing of. */
+  seq: number | null;
+  payload: Prisma.JsonValue | null;
+}
+
 /**
- * Of these failed turns, the ones the auto-retry will find again — the words it re-sends are read off
- * a turn's `user` echo, or, for a message the engine was never handed, off the runner's receipt saying
- * so (`FAILED_DELIVERY_RECEIPT`). Both are filed against the turn they are about.
+ * The turn a receipt is about: the one it names. The runner files a delivery's settling under whatever
+ * turn is running when the write settles, which is often another (runner-go session.go, `reportDelivery`).
+ */
+function receiptTurn(receipt: { payload: Prisma.JsonValue; turnId: string | null }): string | null {
+  const named = (receipt.payload as { turnId?: unknown } | null)?.turnId;
+  return typeof named === 'string' && UUID.test(named) ? named : receipt.turnId;
+}
+
+/**
+ * §2.1: how the auto-retry finds the message it re-sends — the last one the runner took — read one way by
+ * both readers that need it: the chooser (`AutoRetryService.messageToResend`, which the failure card's
+ * Retry shares) and the drain that keeps a failed turn's request for that re-send (`turnsTheRetryCanFind`,
+ * from `settleUnrunSessionRequests`). A request kept for words the chooser then walks past is left on a
+ * turn nothing will deliver, and words the drain gave up on are re-sent carrying a request already closed.
+ *
+ * What the runner recorded, oldest first:
+ *
+ *   - its `user` echo, written as it hands a message to the engine. The events themselves rather than a
+ *     tail of the whole stream: one workspace turn emits hundreds of tool and system events after the
+ *     message that provoked it, so a fixed window of the end misses the very message a retry exists to
+ *     re-send. A handful covers a run of image-only turns, which carry no text;
+ *   - its receipt saying it could not hand one over (FAILED_DELIVERY_RECEIPT), for the turn the receipt
+ *     names: for Claude the only trace of a message the runtime refused before writing it;
+ *   - and last, the message it took and went away with before writing anything of it (`lostDelivery`).
+ */
+export async function retryRecords(
+  db: Pick<Prisma.TransactionClient, 'runEvent' | 'conversationTurn'>,
+  sessionId: string,
+): Promise<RetryRecord[]> {
+  const select = { payload: true, turnId: true, seq: true } as const;
+  const echoes = await db.runEvent.findMany({
+    where: { sessionId, type: RunEventType.USER },
+    orderBy: { seq: 'desc' },
+    take: RETRY_RECORDS,
+    select,
+  });
+  const receipts = await db.runEvent.findMany({
+    where: { sessionId, ...FAILED_DELIVERY_RECEIPT },
+    orderBy: { seq: 'desc' },
+    take: RETRY_RECORDS,
+    select,
+  });
+  const records: RetryRecord[] = receipts.length === 0 ? echoes.reverse() : [
+    ...echoes,
+    ...receipts.map((receipt) => ({ ...receipt, turnId: receiptTurn(receipt) })),
+  ].sort((a, b) => a.seq - b.seq).slice(-RETRY_RECORDS);
+  const lost = await lostDelivery(db, sessionId, records);
+  return lost ? [...records, { turnId: lost, seq: null, payload: null }] : records;
+}
+
+/**
+ * The message the runner took last, when it went away holding it before writing anything of it — no
+ * echo, no receipt, no reply: the runner was reaped as offline, or the run finalized with its engine
+ * gone, and the run's drain answered the turn unrun (§8 criterion 27). The claim's stamp, which that
+ * drain leaves on the row (`delivered_at`), is all there is to say it was taken, and it is the message
+ * the retry re-sends (§2.1) — not the one before it, which was answered. Message turns are taken one at
+ * a time and in order, so it is the newest message there is, unless one after it has a record of its
+ * own: put back in the queue when its engine never came up, and failed there.
+ */
+async function lostDelivery(
+  db: Pick<Prisma.TransactionClient, 'runEvent' | 'conversationTurn'>,
+  sessionId: string,
+  records: readonly RetryRecord[],
+): Promise<string | null> {
+  const taken = await db.conversationTurn.findFirst({
+    where: { sessionId, kind: 'message', deliveredAt: { not: null } },
+    orderBy: { seq: 'desc' },
+    select: { id: true, seq: true, status: true },
+  });
+  const recorded = new Set(records.flatMap((record) => (record.turnId ? [record.turnId] : [])));
+  // Still out on its delivery, or found by its own record.
+  if (!taken || taken.status !== 'ANSWERED' || recorded.has(taken.id)) return null;
+  // An engine that answered it left its reply under it, whatever became of the echo.
+  if (await db.runEvent.findFirst({ where: { sessionId, turnId: taken.id }, select: { id: true } })) return null;
+  const after = recorded.size === 0 ? null : await db.conversationTurn.findFirst({
+    where: { sessionId, kind: 'message', seq: { gt: taken.seq }, id: { in: [...recorded] } },
+    select: { id: true },
+  });
+  return after ? null : taken.id;
+}
+
+/**
+ * Of these failed turns, the ones the auto-retry will find again: a turn the records it reads are about
+ * (`retryRecords`), so the drain keeps a request for exactly the re-send the chooser will make.
  */
 export async function turnsTheRetryCanFind(
-  db: Pick<Prisma.TransactionClient, 'runEvent'>,
+  db: Pick<Prisma.TransactionClient, 'runEvent' | 'conversationTurn'>,
   sessionId: string,
   turnIds: readonly string[],
 ): Promise<string[]> {
   if (turnIds.length === 0) return [];
-  const recorded = await db.runEvent.findMany({
-    where: {
-      sessionId,
-      turnId: { in: [...turnIds] },
-      OR: [{ type: RunEventType.USER }, FAILED_DELIVERY_RECEIPT],
-    },
+  const asked = new Set(turnIds);
+  return [...new Set((await retryRecords(db, sessionId))
+    .flatMap((record) => (record.turnId && asked.has(record.turnId) ? [record.turnId] : [])))];
+}
+
+/**
+ * Of these message turns, the ones an engine was handed (§4, §8 criterion 26): the runner's last word on
+ * each is its `user` echo, written as it hands the words over, and not a receipt after it saying the
+ * handing failed — Claude echoes a message as it queues it for the CLI, and a write that then fails says
+ * so on a receipt (FAILED_DELIVERY_RECEIPT).
+ */
+async function turnsAnEngineWasHanded(
+  db: Pick<Prisma.TransactionClient, 'runEvent'>,
+  sessionId: string,
+  turnIds: readonly string[],
+): Promise<Set<string>> {
+  if (turnIds.length === 0) return new Set();
+  const echoes = await db.runEvent.findMany({
+    where: { sessionId, type: RunEventType.USER, turnId: { in: [...new Set(turnIds)] } },
+    select: { turnId: true, seq: true },
+  });
+  const lastEcho = new Map<string, number>();
+  for (const echo of echoes) {
+    if (echo.turnId) lastEcho.set(echo.turnId, Math.max(lastEcho.get(echo.turnId) ?? echo.seq, echo.seq));
+  }
+  if (lastEcho.size === 0) return new Set();
+  const refusals = await db.runEvent.findMany({
+    where: { sessionId, ...FAILED_DELIVERY_RECEIPT, seq: { gt: Math.min(...lastEcho.values()) } },
+    select: { payload: true, turnId: true, seq: true },
+  });
+  for (const refusal of refusals) {
+    const turnId = receiptTurn(refusal);
+    const echoed = turnId == null ? undefined : lastEcho.get(turnId);
+    if (turnId != null && echoed != null && echoed < refusal.seq) lastEcho.delete(turnId);
+  }
+  return new Set(lastEcho.keys());
+}
+
+/**
+ * §8 criterion 26: a new turn has taken the place of the retry a failed run was waiting on — the owner
+ * sent a message of their own instead of pressing Retry, or another door revived the session — and the
+ * retry is disarmed with it. A request kept for the retry's re-send (criteria 18 and 27) will not get
+ * one now: it is left on a turn the run's end answered unrun, which nothing will deliver again.
+ *
+ * What no engine was handed is UNDELIVERED at once (§4: taken away before any engine read it, and not
+ * to be re-sent). What one was is left OPEN — it was read — and is judged as read when a turn of this
+ * session next settles (§4.1, `closeUnansweredRequests`). The request worker hands the outcomes back.
+ *
+ * Called by the revive that writes that turn (`SessionsService.resume`), in its transaction and under
+ * the recipient's lock, after the turn and what rides on it are written: the sweep's own re-send, and
+ * the failure card's Retry, have by then taken their request onto the new turn and leave nothing here.
+ */
+export async function closeRequestsTheRetryWillNotResend(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+): Promise<void> {
+  const open = await tx.sessionRequest.findMany({
+    where: { toSessionId: sessionId, state: 'OPEN' },
     select: { turnId: true },
   });
-  return [...new Set(recorded.flatMap((event) => (event.turnId ? [event.turnId] : [])))];
+  if (open.length === 0) return;
+  const answered = await tx.conversationTurn.findMany({
+    where: { sessionId, id: { in: open.map((request) => request.turnId) }, kind: 'message', status: 'ANSWERED' },
+    select: { id: true },
+  });
+  const kept = await turnsTheRetryCanFind(tx, sessionId, answered.map((turn) => turn.id));
+  const handed = await turnsAnEngineWasHanded(tx, sessionId, kept);
+  const unread = kept.filter((turnId) => !handed.has(turnId));
+  if (unread.length === 0) return;
+  await tx.sessionRequest.updateMany({
+    where: { toSessionId: sessionId, turnId: { in: unread }, state: 'OPEN' },
+    data: { state: 'UNDELIVERED', closeReason: 'NOT_RESENT', closedAt: new Date() },
+  });
 }
 
 /**
@@ -989,6 +1169,7 @@ const UNDELIVERED_BECAUSE: Record<string, string> = {
   WITHDRAWN: '这条请求没有送到：它还在对方的队列里时，被账号 owner 撤回了。对方从没看到它。',
   DRAINED: '这条请求没有送到：对方正在跑的那一轮失败了，排队中的消息随队列一起被清掉（平台会重试失败的那一轮，但不会重发这条请求）。对方从没看到它。',
   STEER_UNCONFIRMED: '这条请求没有送到：它本要插进对方正在跑的那一轮，但对方的引擎没有确认收到它——没能写进去，或者那一轮在它送达前就结束了。对方很可能没看到它，需要的话请重新发送。',
+  NOT_RESENT: '这条请求没有送到：承载它的那一轮在对方的引擎收到它之前就失败了，之后对方的会话由另一条消息接着跑下去，失败的那一轮不会再重发。对方从没看到它，需要的话请重新发送。',
 };
 
 /** §4.2: one outcome, as the asker reads it. */
