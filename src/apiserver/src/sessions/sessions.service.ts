@@ -94,6 +94,7 @@ import {
   taskRunProviderSwitchConfirmation,
   type TaskRunEffectFence,
 } from '../tasks/task-run-receipt';
+import { readTaskRouteSummaries } from '../tasks/task-route-decision';
 import { TASK_OCCUPYING } from '../tasks/reclaim-stalled-task';
 import {
   accountDefaultPermissionMode,
@@ -3221,8 +3222,14 @@ export class SessionsService {
     const tags = tagLinks
       .map((l) => l.tag)
       .sort((a, b) => Number(b.isSystem) - Number(a.isSystem) || a.position - b.position);
+    // The Route Decision this task run was planned with (model routing §7.5). Only a task's run
+    // can have one, so no other session pays for the read.
+    const route = session.taskId
+      ? (await readTaskRouteSummaries(this.prisma, ownerId, [session.id])).get(session.id) ?? null
+      : null;
     return withSessionCapabilities({
       ...rest,
+      route,
       mergeRepairSession: children[0] ? withSessionState(children[0]) : null,
       mergeRecoverySupported: session.assignedRunner?.capabilities.includes(SESSION_MERGE_RECOVERY_V1) ?? false,
       tags,
