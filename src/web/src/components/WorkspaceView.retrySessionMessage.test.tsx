@@ -21,6 +21,11 @@ import type { Runner } from './TasksSidePanel';
  * It names no key of its own any more, and it is not offered again while it is in flight (§2.1, §8
  * criterion 19): the key is the server's, derived from the failed message, and the button is drawn
  * disabled for as long as the request it made is unanswered — a double tap is one attempt.
+ *
+ * And once that request has been answered, whatever it came to, the button is offered again and asks
+ * the same door (§8 criterion 22): a re-send that then failed before its echo is re-sent by the next
+ * press, and a press whose response was lost is answered with the turn it already queued — both the
+ * server's to tell apart, by the failure the session is stopped on.
  */
 
 vi.mock('../api', async (importOriginal) => {
@@ -292,6 +297,56 @@ describe('the failure card’s Retry, for another session’s message', { timeou
       retry!.click();
     });
     expect(vi.mocked(resendSessionRetryMessage)).toHaveBeenCalledTimes(1);
+    expect(ownersSends()).toEqual([]);
+  });
+
+  // §8 criterion 22: what a press over a failed message means is the server's to decide — the re-send it
+  // already queued for this failure, a new one when that re-send itself failed (even before its echo),
+  // nothing when it went through. The page's half is to ASK again once a press has been answered,
+  // whatever it came to, and to name nothing a second press could spell differently.
+
+  it('a re-send that failed before its echo is offered again, and the next press asks the server again', async () => {
+    vi.mocked(resendSessionRetryMessage).mockResolvedValueOnce({ turnId: 'resent-turn', placement: 'accepted' });
+    await mount(theirs(RATE_LIMITED), '.chat-quota');
+    await press('.chat-quota-retry');
+    await vi.waitFor(() => expect(vi.mocked(resendSessionRetryMessage)).toHaveBeenCalledTimes(1));
+
+    // The runtime refused the re-send before writing it: no echo, the runner's receipt, the run FAILED
+    // with the ladder armed again. Nothing new above the card says the outage is over, so it stays the
+    // live one — and its Retry comes back once the press it made has been answered.
+    vi.mocked(getSessionEventPage).mockResolvedValue({
+      events: [
+        ...theirs(RATE_LIMITED),
+        { seq: 42, type: 'user_delivery', payload: { turnId: 'resent-turn', delivery: 'failed', reason: 'write |1: broken pipe' } },
+      ],
+      hasMore: true,
+    } as never);
+    await act(async () => {
+      await vi.waitFor(() => expect(button('.chat-quota-retry')?.hasAttribute('disabled')).toBe(false), {
+        timeout: 5_000, interval: 10,
+      });
+    });
+    await press('.chat-quota-retry');
+    await vi.waitFor(() => expect(vi.mocked(resendSessionRetryMessage)).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(resendSessionRetryMessage).mock.calls as unknown[][]).toEqual([[SESSION_PUBLIC], [SESSION_PUBLIC]]);
+    expect(ownersSends(), 'the words went out again through the owner’s own send').toEqual([]);
+  });
+
+  it('a press whose answer was lost can be pressed again: the same door, naming nothing', async () => {
+    // The re-send went out, and its response never came back — what the server keys on is the failure,
+    // so asking again is safe, and it answers with the turn the first press queued.
+    vi.mocked(resendSessionRetryMessage).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    await mount(theirs(RATE_LIMITED), '.chat-quota');
+    await press('.chat-quota-retry');
+    await vi.waitFor(() => expect(vi.mocked(resendSessionRetryMessage)).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await vi.waitFor(() => expect(button('.chat-quota-retry')?.hasAttribute('disabled')).toBe(false), {
+        timeout: 5_000, interval: 10,
+      });
+    });
+    await press('.chat-quota-retry');
+    await vi.waitFor(() => expect(vi.mocked(resendSessionRetryMessage)).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(resendSessionRetryMessage).mock.calls as unknown[][]).toEqual([[SESSION_PUBLIC], [SESSION_PUBLIC]]);
     expect(ownersSends()).toEqual([]);
   });
 
