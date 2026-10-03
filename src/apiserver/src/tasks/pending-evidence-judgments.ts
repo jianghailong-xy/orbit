@@ -348,9 +348,10 @@ async function unansweredLatestEvidence(
       status: true,
       projectId: true,
       // Read for the standing check below and for nothing else: a task that declares no project
-      // criterion is held to its own acceptance criteria, so a queue that did not select both would
-      // ask the door a narrower question than the door asks itself.
+      // criterion is held to its own acceptance criteria, so a queue that did not select all three
+      // would ask the door a narrower question than the door asks itself.
       criterionDefinitionId: true,
+      criterionRevision: true,
       acceptanceCriteria: true,
       // The session that filed it: outside a project, the one that decides it (`evidence-review.ts`).
       creatorSession: { select: { id: true, taskId: true, deletedAt: true } },

@@ -104,17 +104,23 @@ function evidence(criterion: { key: string; text: string }): unknown {
 }
 
 function taskInNoProject(acceptanceCriteria: string | null): CriterionStandingTask {
-  return { projectId: null, criterionDefinitionId: null, acceptanceCriteria };
+  return { projectId: null, criterionDefinitionId: null, criterionRevision: null, acceptanceCriteria };
 }
 
 /** Filed under the project with `criterionKey` naming the live definition. */
 function taskDeclaringTheCriterion(acceptanceCriteria: string | null): CriterionStandingTask {
-  return { projectId: PROJECT_ID, criterionDefinitionId: DEFINITION_ID, acceptanceCriteria };
+  return { projectId: PROJECT_ID, criterionDefinitionId: DEFINITION_ID, criterionRevision: 1, acceptanceCriteria };
 }
 
 /** Filed under the same project, with no `criterionKey` at all. */
 function taskInProjectDeclaringNone(acceptanceCriteria: string | null): CriterionStandingTask {
-  return { projectId: PROJECT_ID, criterionDefinitionId: null, acceptanceCriteria };
+  return { projectId: PROJECT_ID, criterionDefinitionId: null, criterionRevision: null, acceptanceCriteria };
+}
+
+/** Declared the criterion, which the project has since deleted: the FK's ON DELETE SET NULL took
+ *  the id and left the revision (0232). */
+function taskWhoseDeclaredCriterionWasDeleted(acceptanceCriteria: string | null): CriterionStandingTask {
+  return { projectId: PROJECT_ID, criterionDefinitionId: null, criterionRevision: 1, acceptanceCriteria };
 }
 
 /** This task's own words: deliberately NOT the project criterion's, so borrowing one shows. */
@@ -320,6 +326,32 @@ test('the lane is the project\'s only when the task is filed there AND declares 
   assert.equal(heldToProjectCriterion(taskInNoProject(CRITERION_TEXT)), false);
   assert.equal(heldToProjectCriterion(taskInProjectDeclaringNone(CRITERION_TEXT)), false);
   assert.equal(heldToProjectCriterion(taskDeclaringTheCriterion(CRITERION_TEXT)), true);
+  assert.equal(heldToProjectCriterion(taskWhoseDeclaredCriterionWasDeleted(CRITERION_TEXT)), true);
+});
+
+test('a task whose declared criterion was deleted is decided against neither its own criteria nor another', async () => {
+  // The decoy: the task's own criteria repeat the deleted criterion word for word, so its own lane
+  // would match the old quote. Deleting a criterion is also how a rewording that drops the item's
+  // id arrives (the row is replaced), so this is the declared lane's "the wording moved" too. And
+  // the project still states a live criterion, word for word the same, under a key of its own: a
+  // declaration that no longer names one does not get to borrow it either.
+  const { tx, lookups } = transactionOver([LIVE_DEFINITION]);
+  const task = taskWhoseDeclaredCriterionWasDeleted(CRITERION_TEXT);
+  for (const quoted of [
+    { key: DEFINITION_KEY, text: CRITERION_TEXT },
+    { key: OWN_PUBLIC_ID_KEY, text: CRITERION_TEXT },
+  ]) {
+    assert.equal((await evidenceCriterionMatch(tx, task, quoted)).matchesLive, false,
+      `a task whose criterion was deleted passed quoting ${quoted.key}`);
+    const refusal = await criterionStandingRefusal(tx, task, evidence(quoted));
+    assert.ok(refusal, `a task whose criterion was deleted was decidable quoting ${quoted.key}`);
+    assert.equal(refusal?.criterionKey, quoted.key);
+    assert.match(String(refusal?.reason), /declared has since been deleted/);
+    assert.match(String(refusal?.message), /nothing was written/);
+    assert.match(String(refusal?.message), /criterionKey: null/,
+      'the refusal does not say how a declaration whose criterion is gone is taken back');
+  }
+  assert.deepEqual(lookups, [], 'a key was resolved for a declaration that names no criterion');
 });
 
 // ── 5. The project lane, unchanged in all four of its cases ─────────────────────────────────────
@@ -371,6 +403,32 @@ test('a task that declares a project criterion answers exactly as it did before 
         : [],
       each.name,
     );
+  }
+});
+
+test('a task that declares a criterion is held to it, not to another live criterion of its project', async () => {
+  // Both criteria are live and quoted word for word under their own keys; only one is this task's.
+  const otherId = '22222222-2222-7222-8222-222222222222';
+  const other: Definition = { id: otherId, projectId: PROJECT_ID, text: MOVED_TEXT };
+  const { tx, lookups } = transactionOver([LIVE_DEFINITION, other]);
+  const task = taskDeclaringTheCriterion(MOVED_TEXT);
+  const borrowed = { key: uuidToBase62(otherId), text: MOVED_TEXT };
+
+  assert.equal((await evidenceCriterionMatch(tx, task, borrowed)).matchesLive, false,
+    'another criterion of the project stood in for the one this task declares');
+  const refusal = await criterionStandingRefusal(tx, task, evidence(borrowed));
+  assert.ok(refusal, 'evidence measured against a criterion the task does not declare was decidable');
+  assert.equal(refusal?.reason,
+    `the criterion this evidence quotes (${borrowed.key}) is not the one this task declares (${DEFINITION_KEY})`);
+  assert.match(String(refusal?.message), /nothing was written/);
+  assert.match(String(refusal?.message), /criterionKey/);
+  assert.deepEqual(lookups, [], 'the borrowed key was resolved for a task that declares another');
+
+  // The criterion it declares still decides it, by the Base62 key or the raw UUID alike.
+  for (const key of [DEFINITION_KEY, DEFINITION_ID]) {
+    const own = { key, text: CRITERION_TEXT };
+    assert.equal((await evidenceCriterionMatch(tx, task, own)).matchesLive, true, key);
+    assert.equal(await criterionStandingRefusal(tx, task, evidence(own)), null, key);
   }
 });
 
@@ -464,14 +522,17 @@ test('all three callers hand the predicate the task row, not a project id', () =
 
 test('both locked rows read the declaration the lane is chosen by', () => {
   // The two doors lock the task with raw SQL, whose result type is whatever the call site says it
-  // is: a SELECT that never read `criterion_definition_id` would still compile, hand the predicate
-  // `undefined`, and send every task that declares a project criterion down its own lane. The
-  // Prisma selects of the other callers are checked by the compiler; these two only by reading.
+  // is: a SELECT that never read `criterion_definition_id` or `criterion_revision` would still
+  // compile and hand the predicate `undefined`, which is not null — so every task filed under a
+  // project would go down the project lane, which is the bug this lane exists to fix. The Prisma
+  // selects of the other callers are checked by the compiler; these two only by reading.
   const service = read('src/apiserver/src/tasks/task-completion-evidence.service.ts');
   const submit = service.slice(service.indexOf('  async submit('), service.indexOf('  async importLegacyComment('));
   const decide = service.slice(service.indexOf('  async decide('), service.indexOf('  async list('));
   for (const [door, source] of [['submission', submit], ['decision', decide]] as const) {
     assert.match(source, /"criterion_definition_id" AS "criterionDefinitionId"/,
       `the ${door} door locks the task row without reading the criterion it declares`);
+    assert.match(source, /"criterion_revision" AS "criterionRevision"/,
+      `the ${door} door locks the task row without reading whether it declared a criterion since deleted`);
   }
 });

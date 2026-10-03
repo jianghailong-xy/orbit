@@ -1,9 +1,12 @@
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import type { Prisma as PrismaTypes } from '@prisma/client';
+import { criterionKeyOf } from '../projects/project-acceptance';
 import {
   type CriterionStandingTask,
+  definitionIdFromKey,
   evidenceCriterionMatch,
   heldToProjectCriterion,
+  quotesDeclaredCriterion,
 } from './task-evidence-envelope';
 
 /**
@@ -122,16 +125,48 @@ export async function criterionStandingRefusal(
  *
  * Whether a decision may be recorded was already settled above by `evidenceCriterionMatch`; this
  * only says why, and it may not reach a different answer. So it asks nothing the row did not
- * already carry, and branches on the same `heldToProjectCriterion` the match did: a task that
- * declares no project criterion and has no `acceptanceCriteria` of its own states no standard at
- * all, which is a different sentence from a standard that moved and the only honest one when there
- * is nothing to have moved from. Reading that off the same row the predicate was given is what
+ * already carry, and branches on the same `heldToProjectCriterion` and `quotesDeclaredCriterion`
+ * the match did: a task that declares no project criterion and has no `acceptanceCriteria` of its
+ * own states no standard at all, which is a different sentence from a standard that moved and the
+ * only honest one when there is nothing to have moved from. Reading that off the same row the predicate was given is what
  * keeps this a wording choice rather than a second opinion.
  */
 function movedRefusal(
   task: CriterionStandingTask,
   key: string,
 ): { reason: string; message: string } {
+  if (heldToProjectCriterion(task) && task.criterionDefinitionId === null) {
+    // Declared, and the criterion is gone (`heldToProjectCriterion`): nothing moved that a new
+    // quote could follow, so the way out is the declaration itself.
+    const reason =
+      'the project criterion this task declared has since been deleted, so there is no live '
+      + 'standard to decide this evidence against';
+    return {
+      reason,
+      message:
+        `${reason}; nothing was written. Declare the criterion this task serves now (criterionKey), `
+        + 'or take the declaration back (criterionKey: null) to hold it to its own '
+        + 'acceptanceCriteria, then submit a revision quoting that standard',
+    };
+  }
+  if (
+    heldToProjectCriterion(task)
+    && task.criterionDefinitionId !== null
+    && definitionIdFromKey(key) !== null
+    && !quotesDeclaredCriterion(task, key)
+  ) {
+    // A key that names some other row — another criterion, or no criterion at all (a task's own
+    // public id decodes the same way): nothing the task declares moved, it was just not quoted.
+    const reason = `the criterion this evidence quotes (${key}) is not the one this task declares `
+      + `(${criterionKeyOf(task.criterionDefinitionId)})`;
+    return {
+      reason,
+      message:
+        `${reason}; nothing was written. A task that declares a project criterion is held to that `
+        + 'one and to no other: submit a revision quoting it, or, if the task really serves a '
+        + 'different criterion of its project, declare that one (criterionKey)',
+    };
+  }
   if (heldToProjectCriterion(task)) {
     // Word for word what this refusal has always said for a task held to a project criterion:
     // nothing about that path is being changed here, and its message is as much of it as its code.

@@ -81,6 +81,7 @@ interface LockedCriterionTask extends CompletionCriterionSnapshotInput {}
  * that says which standard the receipt's `criterionMatch` compares the quote against. */
 interface LockedSubmissionTask extends LockedCriterionTask {
   criterionDefinitionId: string | null;
+  criterionRevision: number | null;
 }
 
 /**
@@ -96,6 +97,7 @@ interface LockedDecisionTask {
   projectId: string | null;
   completionCriterion: TaskCompletionCriterionValue;
   criterionDefinitionId: string | null;
+  criterionRevision: number | null;
   acceptanceCriteria: string | null;
 }
 
@@ -287,7 +289,8 @@ export class TaskCompletionEvidenceService {
                "acceptance_expected_exit_code" AS "acceptanceExpectedExitCode",
                "completion_policy"::text AS "completionPolicy",
                "verifies_task_id" AS "verifiesTaskId",
-               "criterion_definition_id" AS "criterionDefinitionId"
+               "criterion_definition_id" AS "criterionDefinitionId",
+               "criterion_revision" AS "criterionRevision"
           FROM "task"
          WHERE "id" = ${taskId}::uuid AND "owner_id" = ${ownerId}::uuid
          FOR UPDATE
@@ -695,6 +698,7 @@ export class TaskCompletionEvidenceService {
         SELECT "project_id" AS "projectId",
                "completion_criterion"::text AS "completionCriterion",
                "criterion_definition_id" AS "criterionDefinitionId",
+               "criterion_revision" AS "criterionRevision",
                "acceptance_criteria" AS "acceptanceCriteria"
           FROM "task"
          WHERE "id" = ${taskId}::uuid AND "owner_id" = ${ownerId}::uuid

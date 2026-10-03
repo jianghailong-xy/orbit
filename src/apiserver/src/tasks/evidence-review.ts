@@ -255,6 +255,7 @@ export async function bindEvidenceReviewDelivery(
       completionCriterion: true,
       status: true,
       criterionDefinitionId: true,
+      criterionRevision: true,
       acceptanceCriteria: true,
     },
   });

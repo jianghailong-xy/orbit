@@ -25,7 +25,11 @@
  *    submission refuse the old revision as moved; and borrowing the project's criterion is refused;
  *  - declaring one (through `criterionKey` on the create door): the project criterion's CONTENT is
  *    still the standard — a rewording refuses the old evidence as moved even though the task's own
- *    criteria still say what the quote says, and deleting the criterion refuses it too.
+ *    criteria still say what the quote says; another live criterion of the project, quoted word
+ *    for word, does not stand in for the declared one; and once the criterion is deleted the task
+ *    is decided against nothing — not its own criteria repeating the deleted wording, not another
+ *    live criterion of the project — until the declaration is taken back (`criterionKey: null`),
+ *    after which it is held to its own criteria like any task that declares none.
  *
  * Nothing is stubbed: the services are the ones the API wires, over a real client, and every claim
  * about a write is read back out of the rows. Refusals are asserted by code AND requiredAction.
@@ -247,8 +251,10 @@ suite('a project task is decided against the standard it declares, or its own', 
     updated_at: Date;
     project_id: string | null;
     criterion_definition_id: string | null;
+    criterion_revision: number | null;
   }>(
-    'SELECT "status", "updated_at", "project_id", "criterion_definition_id" FROM "task" WHERE "id" = $1',
+    'SELECT "status", "updated_at", "project_id", "criterion_definition_id", "criterion_revision" '
+    + 'FROM "task" WHERE "id" = $1',
     [task.id],
   )).rows[0];
   const evidenceRow = async (task: Filed, revision: string) => (await sql.query<{
@@ -411,32 +417,107 @@ suite('a project task is decided against the standard it declares, or its own', 
       assert.equal(await decisionCount(task), 0);
     });
 
+  await t.test('a task that declares the criterion is not decided on another criterion of the project',
+    async () => {
+      const OTHER = 'a second criterion the project states, which this task does not serve';
+      const otherId = randomUUID();
+      await db.projectAcceptanceCriterionDefinition.create({
+        data: {
+          id: otherId,
+          projectId,
+          ordinal: 3,
+          text: OTHER,
+          verificationMethod: 'quoted below by a task that declares another',
+          contentHash: '0'.repeat(64),
+        },
+      });
+      const otherKey = uuidToBase62(otherId);
+      const task = await file('declared-borrow', OWN_CRITERIA, criterionKey);
+
+      // Live, word for word, under its own key — and still not this task's standard.
+      const submitted = await submit(task, { key: otherKey, text: OTHER });
+      assert.equal(submitted.criterionMatch?.matchesLive, false,
+        'another live criterion of the project stood in for the one this task declares');
+      const body = await refusal(
+        decide(task, '1', coordinatorSessionId, 'CONFIRM'),
+        ConflictException,
+        'EVIDENCE_JUDGMENT_CRITERION_MOVED',
+        'ASK_FOR_EVIDENCE_AGAINST_THE_CURRENT_CRITERION',
+      );
+      assert.match(String(body.message), new RegExp(`is not the one this task declares \\(${criterionKey}\\)`));
+      assert.equal(await decisionCount(task), 0);
+
+      // Declaring the criterion the evidence was measured against is the other way out, and then
+      // the same revision is decidable: the declaration says which standard it is, not the quote.
+      await tasks.update(ownerId, task.id, { criterionKey: otherKey } as never);
+      assert.equal((await taskRow(task)).criterion_definition_id, otherId);
+      assert.equal((await decide(task, '1', coordinatorSessionId, 'CONFIRM')).decision, 'CONFIRM');
+      assert.equal((await taskRow(task)).status, 'DONE');
+    });
+
   await t.test('deleting the declared criterion refuses the evidence that quoted it', async () => {
+    const DROPPED = 'a criterion the owner later drops';
     const goneId = randomUUID();
     await db.projectAcceptanceCriterionDefinition.create({
       data: {
         id: goneId,
         projectId,
         ordinal: 2,
-        text: 'a criterion the owner later drops',
+        text: DROPPED,
         verificationMethod: 'deleted below',
         contentHash: '0'.repeat(64),
       },
     });
-    const task = await file('dropped', OWN_CRITERIA, uuidToBase62(goneId));
+    // The decoy again: its own criteria are the dropped criterion word for word, so falling back to
+    // its own column once the definition is gone would pass the old quote.
+    const task = await file('dropped', DROPPED, uuidToBase62(goneId));
     assert.equal((await taskRow(task)).criterion_definition_id, goneId);
-    const submitted = await submit(task, { key: uuidToBase62(goneId), text: 'a criterion the owner later drops' });
+    const submitted = await submit(task, { key: uuidToBase62(goneId), text: DROPPED });
     assert.equal(submitted.criterionMatch?.matchesLive, true);
 
+    // Deleting the criterion — which is also what a rewording that drops the item's id does — takes
+    // the id and leaves the revision: still a declaration, of a criterion that is gone (0232).
     await db.projectAcceptanceCriterionDefinition.delete({ where: { id: goneId } });
-    assert.equal((await taskRow(task)).criterion_definition_id, null, 'ON DELETE SET NULL did not apply');
+    const orphaned = await taskRow(task);
+    assert.equal(orphaned.criterion_definition_id, null, 'ON DELETE SET NULL did not apply');
+    assert.notEqual(orphaned.criterion_revision, null);
 
+    for (const decision of ['CONFIRM', 'SEND_BACK'] as const) {
+      const body = await refusal(
+        decide(task, '1', coordinatorSessionId, decision, 'the criterion this quotes is gone'),
+        ConflictException,
+        'EVIDENCE_JUDGMENT_CRITERION_MOVED',
+        'ASK_FOR_EVIDENCE_AGAINST_THE_CURRENT_CRITERION',
+      );
+      assert.match(String(body.message), /declared has since been deleted/);
+      assert.match(String(body.message), /criterionKey: null/);
+    }
+
+    // Nor is the project's other, still-live criterion a standard it can borrow in its place.
+    const borrowed = await submit(task, { key: criterionKey, text: PROJECT_CRITERION });
+    assert.equal(borrowed.revision, '2');
+    assert.equal(borrowed.criterionMatch?.matchesLive, false,
+      'a declaration whose criterion is gone passed quoting another criterion of the project');
     await refusal(
-      decide(task, '1', coordinatorSessionId, 'CONFIRM'),
+      decide(task, '2', coordinatorSessionId, 'CONFIRM'),
       ConflictException,
       'EVIDENCE_JUDGMENT_CRITERION_MOVED',
       'ASK_FOR_EVIDENCE_AGAINST_THE_CURRENT_CRITERION',
     );
     assert.equal(await decisionCount(task), 0);
+    assert.equal((await taskRow(task)).status, 'OPEN');
+
+    // Taking the declaration back empties both columns, and the task is then one that declares
+    // none: held to its own criteria, and decided on a revision that quotes them.
+    await tasks.update(ownerId, task.id, { criterionKey: null } as never);
+    const undeclared = await taskRow(task);
+    assert.equal(undeclared.criterion_definition_id, null);
+    assert.equal(undeclared.criterion_revision, null);
+    const own = await submit(task, { key: task.key, text: DROPPED });
+    assert.equal(own.revision, '3');
+    assert.equal(own.criterionMatch?.matchesLive, true);
+    assert.equal((await decide(task, '3', coordinatorSessionId, 'CONFIRM')).decision, 'CONFIRM');
+    assert.equal(await decisionCount(task), 1);
+    assert.equal((await taskRow(task)).status, 'DONE');
   });
 });

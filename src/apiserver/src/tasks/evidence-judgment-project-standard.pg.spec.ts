@@ -419,13 +419,15 @@ suite('EVIDENCE_JUDGMENT cannot be declared on work that is in no project', asyn
       };
 
       const unfiled = await criterionStandingRefusal(
-        prisma as never, { projectId: null, criterionDefinitionId: null, acceptanceCriteria: null }, quoted,
+        prisma as never,
+        { projectId: null, criterionDefinitionId: null, criterionRevision: null, acceptanceCriteria: null },
+        quoted,
       );
       // Declaring the criterion is what holds a task to the project's wording of it; one filed
       // under the project without declaring any is held to its own criteria instead.
       const reworded = await criterionStandingRefusal(
         prisma as never,
-        { projectId: goalId, criterionDefinitionId: criterionId, acceptanceCriteria: null },
+        { projectId: goalId, criterionDefinitionId: criterionId, criterionRevision: 1, acceptanceCriteria: null },
         { ...quoted, criterion: { key: uuidToBase62(criterionId), text: `${CRITERION_TEXT}, twice` } },
       );
 
