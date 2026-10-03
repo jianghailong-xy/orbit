@@ -82,6 +82,10 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
     /// An OWNER_CONFIRMED task whose run is waiting on the owner right now — the same reading the
     /// session list's "Waiting for your confirmation" takes. Absent on an older server.
     public let awaitingOwnerConfirmation: Bool?
+    /// The same task whose run's report is still with its reviewer (contract §5 N3): the row says
+    /// "Under review" where it would say "Waiting for your confirmation". Never true together with
+    /// `awaitingOwnerConfirmation`; absent on an older server.
+    public let confirmationUnderReview: Bool?
     public let blocked: Bool?
     public let dependencyState: String?
     /// Authoritative server Ready predicate on incremental list-row reads. Full Ready pages are
@@ -113,7 +117,8 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
         case acceptanceCriteria, acceptanceCommand, acceptanceExpectedExitCode, runAt, attachments
         case labels, project
         case supersededByTaskIdAbsentReason, supersedes, successorChain
-        case running, queued, runningSince, awaitingOwnerConfirmation, blocked, dependencyState, runnable
+        case running, queued, runningSince, awaitingOwnerConfirmation, confirmationUnderReview, blocked
+        case dependencyState, runnable
         case assignee, comments, sessions, creatorSession, dependsOn, dependedOnBy
         case counts = "_count"
     }

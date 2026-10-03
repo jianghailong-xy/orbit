@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { AgentProvider } from '@orbit/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { KeyOutlined, PlusOutlined } from '@ant-design/icons';
 import { Button, Modal, Popconfirm, Radio, Spin } from 'antd';
@@ -25,6 +26,7 @@ import {
   type ProviderPool,
 } from '../lib/providerPools';
 import {
+  canAddAccount,
   canAddKey,
   hasPeople,
   ownPoolWithAccess,
@@ -67,7 +69,7 @@ export function ProviderPoolPage() {
       refresh();
       message.success(`${member.label} left the pool`);
     },
-    onError: (e: Error) => message.error(e.message || 'Failed'),
+    onError: (e: Error) => message.error("Couldn't remove the account from the pool", e.message),
   });
   const removePool = useMutation({
     mutationFn: () => api(`/providers/pools/${encodeId(poolId!)}`, { method: 'DELETE' }),
@@ -76,7 +78,7 @@ export function ProviderPoolPage() {
       message.success('Pool deleted');
       navigate('/providers');
     },
-    onError: (e: Error) => message.error(e.message || 'Failed'),
+    onError: (e: Error) => message.error("Couldn't delete the pool", e.message),
   });
 
   if (pools.isPending || shared.isPending || access.isLoading) {
@@ -189,18 +191,22 @@ function CodexPoolPage({
   const pool = own ? (access ? ownPoolWithAccess(own, access) : own) : sharedPoolAsProviderPool(access!);
   const mine = !access || ownsPool(access);
   const people = !!access && hasPeople(access);
-  const logins = own ? poolLogins(own) : [];
+  const logins = own ? poolLogins(own) : (access?.logins ?? []);
   const keys = access?.keys ?? [];
   // How many ChatGPT accounts the pool holds, to whoever reads it — what the card says about them is the
-  // same for its owner and for the people they added (the accounts run everyone's sessions); null for a
-  // pool that holds none at all (a shared pool, migration 0321).
-  const accounts = own ? logins.length : access && !access.shared ? (access.logins ?? []).length : null;
+  // same for its owner and for the people they added (the accounts run everyone's sessions, and a member
+  // may sign one of their own in, migration 0371); null for a pool that cannot hold one at all (a Claude
+  // pool).
+  const accounts = pool.engine === AgentProvider.CODEX ? logins.length : null;
+  // Who may put something in: the pool's owner always, and a member while the pool's own rule for that
+  // kind says so (an admin of a shared pool counts as the owner's side of both, migration 0371).
+  const mayAddAccount = mine || (!!access && canAddAccount(access));
+  const mayAddKey = mine || (!!access && canAddKey(access));
   const [dialog, setDialog] = useState<Dialog | null>(
     signInFirst && logins.length === 0 ? { kind: 'signIn', login: null } : null,
   );
   const at = `${SHARED_POOLS_BASE}/${encodeId(pool.id)}`;
   const refresh = () => void qc.invalidateQueries({ queryKey: ['providers'] });
-  const failed = (e: Error) => message.error(e.message || 'Failed');
   const signOut = useMutation({
     mutationFn: (login: CodexLogin) =>
       api(`${codexLoginPath(pool.id)}/account?fingerprint=${encodeURIComponent(login.fingerprint)}`, {
@@ -210,13 +216,14 @@ function CodexPoolPage({
       refresh();
       message.success(`${loginName(login)} is signed out`);
     },
-    onError: failed,
+    onError: (e: Error) => message.error("Couldn't sign out the account", e.message),
   });
   const switchKey = useMutation({
     mutationFn: ({ key, enabled }: { key: SharedPoolKey; enabled: boolean }) =>
       api(`${at}/keys/${encodeId(key.id)}`, { method: 'PATCH', body: { enabled } }),
     onSuccess: refresh,
-    onError: failed,
+    onError: (e: Error, { enabled }) =>
+      message.error(enabled ? "Couldn't enable the key" : "Couldn't disable the key", e.message),
   });
   const removeKey = useMutation({
     mutationFn: (key: SharedPoolKey) => api(`${at}/keys/${encodeId(key.id)}`, { method: 'DELETE' }),
@@ -224,7 +231,7 @@ function CodexPoolPage({
       refresh();
       message.success(`${key.label} is out of the pool`);
     },
-    onError: failed,
+    onError: (e: Error) => message.error("Couldn't remove the key", e.message),
   });
   // The way out: its owner deletes it — a pool of their own where its accounts are, one made on the
   // shared pools page where its keys are — and anybody else leaves it.
@@ -238,7 +245,7 @@ function CodexPoolPage({
       message.success(mine ? 'Pool deleted' : `You left ${pool.label}`);
       navigate('/providers');
     },
-    onError: failed,
+    onError: (e: Error) => message.error(mine ? "Couldn't delete the pool" : "Couldn't leave the pool", e.message),
   });
 
   // What deleting it takes off the Orbit server: its ChatGPT sign-ins, its API keys, or both.
@@ -288,24 +295,25 @@ function CodexPoolPage({
             {availabilityOf(pool, NO_REFUSALS)} · {how}
           </div>
         </div>
-        {/* Always here for its owner: one ChatGPT account after another, or a key — what kind is the
-            first thing asked. Anybody else puts a key in, while the pool lets them. */}
-        {mine ? (
+        {/* One ChatGPT account after another, or a key — what kind is the first thing asked — for anyone
+            the pool lets put something in: its owner always, a member while its rule for that kind says so
+            (migration 0371). A pool whose people are not read yet signs its owner straight in. */}
+        {(mayAddAccount || mayAddKey) && (
           <Button
             type="primary"
             icon={<PlusOutlined />}
             onClick={() =>
-              setDialog(!own ? { kind: 'addKey' } : access ? { kind: 'choose' } : { kind: 'signIn', login: null })
+              setDialog(
+                !mayAddAccount
+                  ? { kind: 'addKey' }
+                  : mine && !access
+                    ? { kind: 'signIn', login: null }
+                    : { kind: 'choose' },
+              )
             }
           >
-            {own ? 'Add account' : 'Add a key'}
+            {mayAddAccount ? 'Add account' : 'Add a key'}
           </Button>
-        ) : (
-          canAddKey(access!) && (
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setDialog({ kind: 'addKey' })}>
-              Add a key
-            </Button>
-          )
         )}
       </div>
 
@@ -320,12 +328,12 @@ function CodexPoolPage({
         <PoolMembers
           pool={pool}
           refusals={NO_REFUSALS}
-          loginActions={
-            own && {
-              onSignIn: (login) => setDialog({ kind: 'signIn', login }),
-              onSignOut: (login) => signOut.mutate(login),
-            }
-          }
+          // Offered to whoever the pool admits (an admin, or a member the rule lets add) and applied
+          // per row: PoolMembers knows the people, and so who may do what to which account.
+          loginActions={{
+            onSignIn: (login) => setDialog({ kind: 'signIn', login }),
+            onSignOut: (login) => signOut.mutate(login),
+          }}
           keyActions={{
             onReplace: (key) => setDialog({ kind: 'replace', key }),
             onSwitch: (key, enabled) => switchKey.mutate({ key, enabled }),
@@ -360,13 +368,14 @@ function CodexPoolPage({
       {dialog?.kind === 'choose' && (
         <AddAccountModal
           pool={pool}
+          mine={mine}
           accounts={logins.length}
           onClose={() => setDialog(null)}
           onContinue={(kind) => setDialog(kind === 'key' ? { kind: 'addKey' } : { kind: 'signIn', login: null })}
         />
       )}
-      {dialog?.kind === 'signIn' && own && (
-        <CodexSignInModal pool={own} login={dialog.login} onClose={() => setDialog(null)} />
+      {dialog?.kind === 'signIn' && (
+        <CodexSignInModal pool={own ?? pool} login={dialog.login} onClose={() => setDialog(null)} />
       )}
       {dialog?.kind === 'addKey' && access && <AddKeyModal pool={access} onClose={() => setDialog(null)} />}
       {dialog?.kind === 'replace' && access && (
@@ -377,17 +386,21 @@ function CodexPoolPage({
 }
 
 /**
- * "Add account" (03-1): which kind goes in — another ChatGPT account of the owner's, which runs their own
- * sessions alone, or an OpenAI API key, which runs everybody's — said on the choice rather than found out
- * after. Continue goes on to that kind's own dialog: the sign-in, or Add a key.
+ * "Add account" (03-1): which kind goes in — a ChatGPT account of the reader's, which runs the whole
+ * pool's sessions (its owner's, or one of the people they added's, migration 0371), or an OpenAI API key,
+ * which runs everybody's too — said on the choice rather than found out after. Continue goes on to that
+ * kind's own dialog: the sign-in, or Add a key.
  */
 function AddAccountModal({
   pool,
+  mine,
   accounts,
   onContinue,
   onClose,
 }: {
   pool: ProviderPool;
+  /** The reader is the pool's owner: the account may be shared with others yet, or already is. */
+  mine: boolean;
   /** How many ChatGPT accounts the pool holds already. */
   accounts: number;
   onContinue: (kind: 'chatgpt' | 'key') => void;
@@ -421,8 +434,16 @@ function AddAccountModal({
             <span className="add-kind-t">Sign in with ChatGPT</span>
             <span className="add-kind-s">
               {accounts > 0 ? 'Another ChatGPT account of yours.' : 'A ChatGPT account of yours.'}{' '}
-              <b>Everyone in the pool runs on it</b> once you share the pool — until then, your sessions
-              alone.
+              {mine ? (
+                <>
+                  <b>Everyone in the pool runs on it</b> once you share the pool — until then, your
+                  sessions alone.
+                </>
+              ) : (
+                <>
+                  <b>Everyone in the pool runs on it</b>, you included.
+                </>
+              )}
             </span>
           </span>
         </Radio>

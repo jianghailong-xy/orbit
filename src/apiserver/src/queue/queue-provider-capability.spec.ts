@@ -13,6 +13,8 @@ interface Captured {
   capability: unknown;
   /** The same for Antigravity rows. */
   antigravityCapability: unknown;
+  /** The same for a configured provider that borrows Antigravity (a Gemini key). */
+  borrowedAntigravityCapability: unknown;
   /** The value bound for each transaction-local GUC, read off the statement that sets it. */
   claimSetting: unknown;
   antigravitySetting: unknown;
@@ -75,6 +77,7 @@ async function capturedClaimCapability(supportedProviders: AgentProvider[]): Pro
   return {
     capability: boundBefore("COALESCE(s.provider, 'claude') <> 'opencode'"),
     antigravityCapability: boundBefore("COALESCE(s.provider, 'claude') <> 'antigravity'"),
+    borrowedAntigravityCapability: boundBefore('OR NOT EXISTS ('),
     claimSetting: settingFor('orbit.runner_supports_opencode'),
     antigravitySetting: settingFor('orbit.runner_supports_antigravity'),
     settingSql,
@@ -118,6 +121,24 @@ test('a runner that advertises OpenCode but not Antigravity is withheld Antigrav
   assert.match(captured.sql, /COALESCE\(s\.provider, 'claude'\) <> 'antigravity'/);
   // The two gates are independent: OpenCode still passes for this runner.
   assert.equal(captured.capability, true);
+});
+
+test('a runner that does not name Antigravity is withheld a Gemini key\'s rows too', async () => {
+  // The slug is the configured row's own, so the built-in slug's predicate cannot see it; the job
+  // is an `antigravity` one all the same. Held to the same capability, on the rows dispatch resolves.
+  const legacy = await capturedClaimCapability([AgentProvider.CLAUDE, AgentProvider.CODEX, AgentProvider.OPENCODE]);
+  assert.equal(legacy.borrowedAntigravityCapability, false);
+  assert.match(
+    legacy.sql,
+    /OR NOT EXISTS \(\s*SELECT 1 FROM "model_provider" mp\s+WHERE mp\."slug" = s\.provider\s+AND mp\."runtime" = 'antigravity'\s+AND mp\."enabled"\s+AND \(mp\."owner_id" IS NULL OR mp\."owner_id" = s\."owner_id"\)/,
+  );
+  const current = await capturedClaimCapability([
+    AgentProvider.CLAUDE,
+    AgentProvider.CODEX,
+    AgentProvider.OPENCODE,
+    AgentProvider.ANTIGRAVITY,
+  ]);
+  assert.equal(current.borrowedAntigravityCapability, true);
 });
 
 test('the atomic claim selection and database guard admit Antigravity for a runner that names it', async () => {

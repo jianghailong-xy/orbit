@@ -1442,6 +1442,10 @@ final class ConsoleModel {
         // session has no project and makes none of those reads.
         projectID = s.projectId
         if projectID != nil { Task { [weak self] in await self?.refreshRulerQuestions() } }
+        // A conversation that coordinates nothing can still hold an evidence card: a task it
+        // dispatched outside any project is settled here, and the owner's card for it is drawn
+        // here once this session stops holding it (`refreshEvidenceDecisions`).
+        if projectID == nil { Task { [weak self] in await self?.refreshEvidenceDecisions() } }
         // The task this conversation is a run of, if it is one. That — and not the project — is
         // what decides whether an owner confirmation is asked here, so it is read separately and
         // kicked separately: an OWNER_CONFIRMED task may be filed under no project at all.
@@ -1560,6 +1564,9 @@ final class ConsoleModel {
             waitingSignal = waiting
             if projectID != nil {
                 Task { [weak self] in await self?.refreshRulerQuestions(force: true) }
+            } else {
+                // The count an evidence card of a dispatched task adds lands here too.
+                Task { [weak self] in await self?.refreshEvidenceDecisions(force: true) }
             }
         }
         // A run ending its turn moves this SESSION's row, not the task, so no task event re-reads
@@ -1587,7 +1594,9 @@ final class ConsoleModel {
     /// The moment of a run's row, as a value that changes when and only when something about the run
     /// moved: web keys its confirmation re-read on the same pair.
     private func runMoment(_ s: Session) -> String {
-        "\(s.effectiveRunState.rawValue)|\(s.lastTurnAt ?? "")"
+        // The row's review is in it too: a reviewer that ends, answers or runs out of time moves
+        // this row and nothing about the task (contract §5 N5), and the card has to follow the row.
+        "\(s.effectiveRunState.rawValue)|\(s.lastTurnAt ?? "")|\(s.confirmationUnderReview?.requestId ?? "")"
     }
 
     /// Re-read the authoritative lifecycle + capabilities from REST (lighter than loadContext).
@@ -3063,6 +3072,8 @@ final class ConsoleModel {
     private(set) var ownerConfirmation: OwnerConfirmationView?
     private var loadingOwnerConfirmation = false
     private var lastOwnerRead = Date.distantPast
+    /// The re-read a card under review asks for a second after its review is due (`scheduleReviewDueRead`).
+    private var reviewDueRead: Task<Void, Never>?
     /// The moment of the run this conversation last re-read the confirmation for: web re-reads when
     /// a run's row moves, and the same change is what makes a report arrive.
     private var ownerReadMoment: String?
@@ -3086,6 +3097,9 @@ final class ConsoleModel {
     /// recycles that row back on screen, so scrolling past the card must not be a way to spend
     /// requests; the reads that must never be throttled say so (`force`).
     private var lastRulerRead = Date.distantPast
+    /// The evidence read's own pair: it runs in every conversation, not only a coordinator's.
+    private var loadingEvidence = false
+    private var lastEvidenceRead = Date.distantPast
     /// Web's card re-reads on a 20s timer. This one re-reads on the events that can change the
     /// answer — context load, reconnect, the card appearing, a press — with this as the floor
     /// between two of them.
@@ -3139,7 +3153,10 @@ final class ConsoleModel {
                 return waiting(EvidenceDecisions.isOpen(evidenceStanding(taskID, evidenceRevision)),
                                question: true)
             case .ownerConfirmation(let taskID, let requestID):
-                return waiting(OwnerConfirmations.isOpen(ownerStanding(taskID, requestID)),
+                // Still open while its report is with its reviewer — the card is drawn and can be
+                // pressed — but not asking the owner yet, so the bar does not count it or point at
+                // it (contract §5 N1: iOS's "1 open question below").
+                return waiting(OwnerConfirmations.asksNow(ownerStanding(taskID, requestID)),
                                question: true)
             case .ownerDecisionReceipt:
                 // A receipt is a record, not a question: it stays on screen and is never counted.
@@ -3265,6 +3282,9 @@ final class ConsoleModel {
     /// iOS-specific gap — a suspended socket misses everything), when a card scrolls into view, and
     /// after any press. What it may never do is remove a card.
     func refreshRulerQuestions(force: Bool = false) async {
+        // The evidence cards first, and in every conversation (`refreshEvidenceDecisions`): every
+        // door that asks for the ruler's reads — reconnect, a card appearing, a press — asks for them.
+        await refreshEvidenceDecisions(force: force)
         guard !isDraft, let projectID, !loadingRuler else { return }
         if !force, Date().timeIntervalSince(lastRulerRead) < Self.rulerReadThrottle { return }
         loadingRuler = true
@@ -3276,14 +3296,6 @@ final class ConsoleModel {
             criteriaDecisions = queue
             for row in queue.pending { deliver(.criteriaDecision(intentID: row.intentId)) }
             adoptReceipts(queue)
-        }
-        // Scoped to THIS session: every row says whether the door would take an answer from here.
-        if let queue = try? await api.pendingEvidenceDecisions(decidingSessionID: sessionID) {
-            evidenceDecisions = queue
-            for row in EvidenceDecisions.cardRows(queue: queue, projectId: projectID) {
-                deliver(.evidenceDecision(taskID: row.taskId, evidenceRevision: row.evidenceRevision))
-            }
-            adoptEvidenceReceipts(queue)
         }
         if let standing = try? await api.acceptanceConfirmation(projectID: projectID) {
             acceptanceConfirmation = standing
@@ -3692,8 +3704,16 @@ final class ConsoleModel {
 
         if let read = try? await api.ownerConfirmation(taskID: taskID) {
             ownerConfirmation = read
+            scheduleReviewDueRead(read)
             if let waiting = OwnerConfirmations.waitingIn(read, sessionID: sessionID) {
                 deliver(.ownerConfirmation(taskID: taskID, requestID: waiting.requestId))
+            }
+            // A report its reviewer sent back is drawn as the record its card became (contract
+            // §8 B6): in place, where this console drew the card while it waited, or — on a device
+            // that never saw it waiting — at the moment it was sent back.
+            for returned in OwnerConfirmations.reviewerReturnsIn(read, sessionID: sessionID) {
+                deliver(.ownerConfirmation(taskID: taskID, requestID: returned.requestId),
+                        placement: .at(returned.review.returned?.recordedAt ?? returned.requestedAt))
             }
             // The receipts this conversation has recorded — from the read rather than from the
             // press, so a reload or another device shows them too. Each is drawn where it was
@@ -3702,6 +3722,22 @@ final class ConsoleModel {
             adoptOwnerReceipts(read)
         }
         lastOwnerRead = Date()
+    }
+
+    /// Nothing on the server moves a review out of "under review" when its window runs out — it reads
+    /// as not reviewed from then on (contract §5 N5), and the clock is only ever read — so a card
+    /// showing one reads again a second after it is due, rather than at the next nudge.
+    private func scheduleReviewDueRead(_ read: OwnerConfirmationView) {
+        reviewDueRead?.cancel()
+        reviewDueRead = nil
+        guard let review = OwnerConfirmations.waitingIn(read, sessionID: sessionID)?.review,
+              review.state == .underReview, let due = RelativeTime.parse(review.dueAt) else { return }
+        let wait = max(0, due.timeIntervalSinceNow + 1)
+        reviewDueRead = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            await self?.refreshOwnerConfirmation(force: true)
+        }
     }
 
     /// Where one delivered confirmation card stands right now — re-derived from the read on every
@@ -3723,10 +3759,10 @@ final class ConsoleModel {
     /// the outcomes worth explaining, and the re-read below is what explains them. The receipt the
     /// answer leaves comes back with that read, so what is drawn is the record rather than a guess.
     func decideOwnerConfirmation(_ waiting: OwnerConfirmationWaiting, _ decision: OwnerDecision,
-                                 note: String? = nil) async {
+                                 note: String? = nil, review: OwnerDecisionReview? = nil) async {
         guard let taskID,
               let request = OwnerConfirmations.request(waiting: waiting, decision: decision,
-                                                       note: note) else { return }
+                                                       note: note, review: review) else { return }
         do {
             _ = try await api.decideOwnerConfirmation(taskID: taskID, request)
             close(.ownerConfirmation(taskID: taskID, requestID: waiting.requestId))
@@ -3744,11 +3780,45 @@ final class ConsoleModel {
         await refreshOwnerConfirmation(force: true)
     }
 
+    /// Reopen task, from a receipt whose late review found problems (contract §9 L4): the task
+    /// panel's own write (`TaskReopen.request`), not a door of its own. The read that follows is
+    /// what takes the button away again.
+    func reopenOwnerConfirmedTask() async {
+        guard let taskID else { return }
+        do {
+            _ = try await api.updateTask(taskID, TaskReopen.request)
+        } catch {
+            statusMessage = "Task status was not changed — \(APIClient.failureReason(error))."
+        }
+        await refreshOwnerConfirmation(force: true)
+    }
+
     /// Where one delivered evidence card stands right now — re-derived from the read on every call,
     /// never a frame the card kept.
     func evidenceStanding(_ taskID: String, _ evidenceRevision: String) -> EvidenceDecisionStanding {
-        EvidenceDecisions.standing(queue: evidenceDecisions, projectId: projectID, taskId: taskID,
-                                   evidenceRevision: evidenceRevision)
+        EvidenceDecisions.standing(queue: evidenceDecisions, projectId: projectID, sessionId: sessionID,
+                                   taskId: taskID, evidenceRevision: evidenceRevision)
+    }
+
+    /// Re-read the evidence decisions this conversation draws cards for — in EVERY conversation,
+    /// not only a project's coordinator. A coordinator draws its project's rows; a task a session
+    /// dispatched outside any project has its owner card in that session, or in the task's run once
+    /// that one is in Trash, and the read names which (`EvidenceDecisionRow.ownerCard`). Asked with
+    /// the ruler's reads (`refreshRulerQuestions`), and on its own where those are not made.
+    func refreshEvidenceDecisions(force: Bool = false) async {
+        guard !isDraft, !loadingEvidence else { return }
+        if !force, Date().timeIntervalSince(lastEvidenceRead) < Self.rulerReadThrottle { return }
+        loadingEvidence = true
+        defer { loadingEvidence = false }
+        // Scoped to THIS session: every row says whether the door would take an answer from here.
+        if let queue = try? await api.pendingEvidenceDecisions(decidingSessionID: sessionID) {
+            evidenceDecisions = queue
+            for row in EvidenceDecisions.cardRows(queue: queue, projectId: projectID, sessionId: sessionID) {
+                deliver(.evidenceDecision(taskID: row.taskId, evidenceRevision: row.evidenceRevision))
+            }
+            adoptEvidenceReceipts(queue)
+            lastEvidenceRead = Date()
+        }
     }
 
     /// Answer one revision of a task's evidence at the decision door, FROM this session and with

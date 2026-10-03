@@ -4381,6 +4381,12 @@ export class WikiService {
    * EACH ROW NAMES ITS CHANGESET (contract `reviewModes.run.timeline`): `changesetId`, and the review
    * mode that applied any op of it — so a client folds every run into one row and opens its page by the
    * run's own read (`GET /api/wiki/changesets/:id`), not only a run Review still holds.
+   *
+   * THE PAGE IS PICKED ON THE TWO COLUMNS IT IS ORDERED BY, and only its rows are joined to what they
+   * show. Ordered over the whole join, the sort sat under the joins to `wiki_entry`, where the LIMIT
+   * cannot bound it: every listed op of the space went through it with its whole `payload`, and a
+   * space of nine thousand ops wrote 4–7 MB of temp file per read. Picked first, it is a top-N heap of
+   * `limit` rows, however many ops the space holds.
    */
   async getTimeline(ownerId: string, spaceId: string, limit = 20): Promise<Record<string, unknown>> {
     await this.requireSpace(ownerId, spaceId);
@@ -4425,20 +4431,27 @@ export class WikiService {
              e."superseded_by_id" AS "supersededById",
              successor."title" AS "supersededByTitle",
              o."payload"->>'reason' AS "reason"
-        FROM "wiki_changeset_op" o
+        FROM (
+          SELECT p."id",
+                 CASE WHEN p."applied_by_mode" IS NULL THEN p."decided_at" ELSE COALESCE(p."verified_at", pc."created_at") END AS "at"
+            FROM "wiki_changeset_op" p
+            JOIN "wiki_changeset" pc ON pc."id" = p."changeset_id" AND pc."owner_id" = p."owner_id"
+           WHERE p."owner_id" = ${ownerId}::uuid
+             AND pc."space_id" = ${spaceId}::uuid
+             AND (
+               (p."decision" IN ('accepted', 'edited', 'auto_applied') AND p."decided_at" IS NOT NULL)
+               OR (p."spot_check" AND p."decision" = 'pending')
+             )
+           ORDER BY "at" DESC, p."id" DESC
+           LIMIT ${Math.min(Math.max(limit, 1), 100)}::int
+        ) page
+        JOIN "wiki_changeset_op" o ON o."id" = page."id"
         JOIN "wiki_changeset" c ON c."id" = o."changeset_id" AND c."owner_id" = o."owner_id"
         LEFT JOIN "wiki_entry" e
           ON e."id" = COALESCE(o."result_entry_id", o."entry_id") AND e."owner_id" = o."owner_id"
         LEFT JOIN "wiki_entry" successor
           ON successor."id" = e."superseded_by_id" AND successor."owner_id" = e."owner_id"
-       WHERE o."owner_id" = ${ownerId}::uuid
-         AND c."space_id" = ${spaceId}::uuid
-         AND (
-           (o."decision" IN ('accepted', 'edited', 'auto_applied') AND o."decided_at" IS NOT NULL)
-           OR (o."spot_check" AND o."decision" = 'pending')
-         )
        ORDER BY "at" DESC, o."id" DESC
-       LIMIT ${Math.min(Math.max(limit, 1), 100)}::int
     `);
     return {
       items: rows.map((row) => ({

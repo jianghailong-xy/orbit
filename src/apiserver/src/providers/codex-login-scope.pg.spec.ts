@@ -4,11 +4,12 @@
  * on — and for every other Orbit user it does not exist, at each of those doors and at the sign-in's own.
  *
  * "Does not exist" is what the shared pools answer a person who is not in them (migration 0321,
- * docs/codex-shared-pool-design.md §2.5), and it is the same answer here for a different reason: a login
- * pool has no membership table at all, because the account it runs on belongs to one person and is shared
- * with nobody. What the doors are asserted on is what they RESOLVED — the row written, the list it appears
- * in — before whether they refused, and every refusal is paired with the same request made by the pool's
- * owner, which has to go through.
+ * docs/codex-shared-pool-design.md §2.5), and it is the same answer here for the same reason: who a pool
+ * is for is its `provider_pool_person` rows (0358), and this pool's are its owner's alone — nobody else was
+ * added to it. Whoever its owner adds sees it and may run on it (0371 included, on an account of their
+ * own), so the doors are asserted against a user the pool holds no person row for. What they are asserted
+ * on is what they RESOLVED — the row written, the list it appears in — before whether they refused, and
+ * every refusal is paired with the same request made by the pool's owner, which has to go through.
  *
  * The last case is the one a quota could get wrong: an account whose quota nobody has read is ACTIVE and
  * runnable, and its view says the reading is missing rather than that the credential was refused.
@@ -27,7 +28,7 @@ import { Module, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
-import { toUuid } from '@orbit/shared';
+import { toUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -166,7 +167,7 @@ async function openDoors() {
 
 const suite = PG_URL ? test : test.skip;
 
-suite("a pool of one's own ChatGPT login, at every door — its owner's, and nobody else's", { timeout: 300_000 }, async (t) => {
+suite("a pool of one's own ChatGPT login, at every door — its owner's, and nobody it does not hold's", { timeout: 300_000 }, async (t) => {
   const url = PG_URL!;
   assertCoordinatorPgUrlIsIsolated(url);
   const client = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
@@ -251,7 +252,7 @@ suite("a pool of one's own ChatGPT login, at every door — its owner's, and nob
         slug: pool.slug,
         engine: 'codex',
         login: null,
-        unavailable: 'the pool "My ChatGPT" has no ChatGPT account signed in — sign in on its page, or pick another provider',
+        unavailable: 'the pool "My ChatGPT" has no ChatGPT account signed in — sign one in on its page, or pick another provider',
         members: [],
       },
     );
@@ -374,6 +375,9 @@ suite("a pool of one's own ChatGPT login, at every door — its owner's, and nob
       lastError: null,
       expiresAt: page.login.expiresAt,
       linkedAt: page.login.linkedAt,
+      // Who signed it in (migration 0371): the owner — served in both spellings, like every public id.
+      userId: uuidToBase62(owner.id),
+      userPublicId: uuidToBase62(owner.id),
       // Nothing has read this account's quota: that is what the null says, and the pool is runnable.
       usage: null,
       usageUnavailable: 'no quota has been read for this account yet',

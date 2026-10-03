@@ -1,5 +1,5 @@
 import { CheckCircleOutlined, CheckOutlined, GlobalOutlined, InfoCircleOutlined } from '@ant-design/icons';
-import { App, Button } from 'antd';
+import { Button } from 'antd';
 import { relTime } from './Transcript';
 import { WikiRejectButton, useRejectEntry } from './WikiRunPage';
 import {
@@ -18,6 +18,7 @@ import {
   wikiMarkBanner,
 } from '../lib/wikiReviewMode';
 import { confirmWikiEntry, useWikiWrite } from '../lib/wikiWrites';
+import { useToast } from '../lib/toast';
 
 /**
  * The owner's two answers to what a review mode applied (mocks 17–18 ①): Confirm for an entry agents
@@ -26,7 +27,7 @@ import { confirmWikiEntry, useWikiWrite } from '../lib/wikiWrites';
  * or confirmed is retired from the ⋯ menu, and a proposal is answered in Review.
  */
 export function WikiEntryAnswers({ entry }: { entry: WikiEntryDetail }) {
-  const { message } = App.useApp();
+  const message = useToast();
   const confirm = useWikiWrite((entryId: string) => confirmWikiEntry(entryId));
   const reject = useRejectEntry();
   if (!wikiEntryAnswerable(entry)) return null;
@@ -40,9 +41,9 @@ export function WikiEntryAnswers({ entry }: { entry: WikiEntryDetail }) {
           onClick={async () => {
             try {
               await confirm.mutateAsync(entry.id);
-              message.success(WIKI_CONFIRMED);
+              message.success(WIKI_CONFIRMED, entry.title);
             } catch (error) {
-              message.error(error instanceof Error ? error.message : 'The server refused it');
+              message.error("Couldn't confirm the entry", error instanceof Error ? error.message : undefined);
             }
           }}
         >

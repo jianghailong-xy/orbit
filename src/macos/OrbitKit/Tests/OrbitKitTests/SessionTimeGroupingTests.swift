@@ -2,7 +2,7 @@ import XCTest
 @testable import OrbitKit
 
 /// The iOS Agent-console list's recency sections: Pinned first, then Today / Yesterday /
-/// Previous 7 Days / Previous 30 Days / Older bucketed by the calendar day of last activity.
+/// 2–7 days ago / 8–30 days ago / Older bucketed by the calendar day of last activity.
 final class SessionTimeGroupingTests: XCTestCase {
     /// UTC so `startOfDay` boundaries are deterministic regardless of the test host's timezone.
     private var utc: Calendar {
@@ -38,7 +38,7 @@ final class SessionTimeGroupingTests: XCTestCase {
         ]
         let out = sections(s)
         XCTAssertEqual(out.map(\.title),
-                       ["Today", "Yesterday", "Previous 7 Days", "Previous 30 Days", "Older"])
+                       ["Today", "Yesterday", "2–7 days ago", "8–30 days ago", "Older"])
         XCTAssertEqual(out.map { $0.sessions.map(\.id) },
                        [["today"], ["yesterday"], ["prev7"], ["prev30"], ["older"]])
     }
@@ -86,10 +86,10 @@ final class SessionTimeGroupingTests: XCTestCase {
 
     func testDayBoundaries() {
         let s = [
-            session("d7", lastTurnAt: "2026-07-01T12:00:00Z"),  // exactly 7 days → Previous 7 Days
-            session("d8", lastTurnAt: "2026-06-30T12:00:00Z"),  // 8 days → Previous 30 Days
+            session("d7", lastTurnAt: "2026-07-01T12:00:00Z"),  // exactly 7 days → 2–7 days ago
+            session("d8", lastTurnAt: "2026-06-30T12:00:00Z"),  // 8 days → 8–30 days ago
             session("d31", lastTurnAt: "2026-06-07T12:00:00Z"), // 31 days → Older
         ]
-        XCTAssertEqual(sections(s).map(\.title), ["Previous 7 Days", "Previous 30 Days", "Older"])
+        XCTAssertEqual(sections(s).map(\.title), ["2–7 days ago", "8–30 days ago", "Older"])
     }
 }

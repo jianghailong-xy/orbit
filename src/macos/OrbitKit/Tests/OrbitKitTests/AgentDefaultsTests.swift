@@ -907,7 +907,7 @@ final class AgentDefaultsTests: XCTestCase {
         XCTAssertEqual(AgentDefaults.providerName("antigravity", configured: nil), "Antigravity")
         // Its catalog and Runtime default are keyed on its own name, never Claude's.
         XCTAssertEqual(AgentDefaults.runtime(for: "antigravity"), "antigravity")
-        // agy cannot ask anyone, so Auto is not a per-model question for it.
+        // agy runs Auto as --dangerously-skip-permissions on any model, so it is not a per-model question.
         XCTAssertTrue(AgentDefaults.supportsAuto("gemini-3.1-pro", provider: "antigravity"))
         XCTAssertEqual(AgentDefaults.clampPermissionMode(.auto, for: "gemini-3.1-pro",
                                                          provider: "antigravity"), .auto)
@@ -1057,6 +1057,38 @@ final class AgentDefaultsTests: XCTestCase {
         // A row without a window, or no catalog: nobody knows, and nothing is shipped for agy.
         XCTAssertNil(AgentDefaults.contextWindow(for: "gemini-3.1-pro", catalog: agyCatalog))
         XCTAssertNil(AgentDefaults.contextWindow(for: "gemini-3.8-flash", catalog: nil))
+    }
+
+    // MARK: a Gemini key on Antigravity (web parity: "A Gemini key, which runs on Antigravity")
+
+    /// A row connected from the Gemini preset, as GET /providers serves it: the server puts agy's
+    /// fallback list and the modelsFromRuntime flag on it.
+    private let geminiKey = ConfiguredProvider(
+        slug: "gemini", label: "Gemini", runtime: "antigravity",
+        models: [
+            ConfiguredProviderModel(value: "gemini-3.8-flash", label: "Gemini 3.8 Flash", contextWindow: 1_048_576),
+            ConfiguredProviderModel(value: "gemini-3.7-flash", label: "Gemini 3.7 Flash", contextWindow: 1_048_576),
+        ],
+        defaultModel: "gemini-3.8-flash", presetSlug: "gemini", modelsFromRuntime: true)
+
+    func testAGeminiKeyRunsOnTheAntigravityRuntimeItBorrows() {
+        XCTAssertEqual(AgentDefaults.runtime(for: "gemini", configured: [geminiKey]), "antigravity")
+        // agy's own models, from the runner — not Claude's, which is where the row used to read.
+        XCTAssertEqual(AgentDefaults.models(for: "gemini", catalog: agyCatalog, configured: [geminiKey]).map(\.id),
+                       ["gemini-3.8-flash", "gemini-3.1-pro"])
+        XCTAssertEqual(AgentDefaults.models(for: "gemini", catalog: liveClaudeCatalog,
+                                            configured: [geminiKey]).map(\.id),
+                       ["gemini-3.8-flash", "gemini-3.7-flash"])
+        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
+            for: "gemini", catalog: agyCatalog, configured: [geminiKey],
+            runtimeDefaults: ["claude": "claude-opus-5", "antigravity": "gemini-3.1-pro"]), "gemini-3.1-pro")
+        XCTAssertEqual(AgentDefaults.defaultModel(for: "gemini", catalog: agyCatalog, configured: [geminiKey]),
+                       "gemini-3.8-flash")
+        // A pin from when the row ran on Codex is one agy has never listed.
+        XCTAssertNil(AgentDefaults.livePin("gemini-2.5-pro", provider: "gemini", catalog: agyCatalog,
+                                           configured: [geminiKey], runtimeDefaults: nil))
+        XCTAssertEqual(AgentDefaults.livePin("gemini-3.1-pro", provider: "gemini", catalog: agyCatalog,
+                                             configured: [geminiKey], runtimeDefaults: nil), "gemini-3.1-pro")
     }
 
     // MARK: efforts a self-hosted model declares (web parity: "Efforts a self-hosted model declares")

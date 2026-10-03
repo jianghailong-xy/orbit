@@ -433,7 +433,8 @@ export async function configureProjectIntegration(
     const repository = await coordinationRepository(tx, ownerId, projectId);
     if (!repository) {
       throw repositoryUnknown('this project has no repository to integrate into: its coordination '
-        + 'workspace names no remote. Open its coordinator in a workspace cloned from a repository first.');
+        + 'workspace has no recorded remote. Wait for the runner to detect origin, or set Repository '
+        + 'URL in the workspace settings.');
     }
     row = await bind(tx, { ownerId, projectId, canonicalRepoUrl: repository });
   }
@@ -591,9 +592,9 @@ export async function startProjectLine(
   if (!row && !(await coordinationRepository(tx, ownerId, projectId))) {
     if (settings.line === 'PROJECT_BRANCH' || mergeCheckCommand !== null) {
       throw repositoryUnknown('this project has no repository to integrate into, so it can have '
-        + 'neither a project branch nor a merge check: its coordination workspace names no remote. '
-        + 'Start it on main with no merge check, or open its coordinator in a workspace cloned from '
-        + 'a repository first.');
+        + 'neither a project branch nor a merge check: its coordination workspace has no recorded '
+        + 'remote. Wait for the runner to detect origin, or set Repository URL in the workspace '
+        + 'settings. A project without a repository can start on main with no merge check.');
     }
     return { line: 'MAIN', mergeCheckCommand: null, locked: false };
   }

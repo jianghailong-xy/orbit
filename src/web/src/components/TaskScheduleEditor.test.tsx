@@ -279,7 +279,7 @@ describe('the Start at editor — what reaches the wire, and what does not', () 
     expect(observer.getCurrentResult().error?.message).toBe(RUN_AT_IMPOSSIBLE);
     expect(apiMock).not.toHaveBeenCalled();
     // ...and the reader is told, through the path every other failure in the panel uses.
-    expect(message.error).toHaveBeenCalledWith(RUN_AT_IMPOSSIBLE);
+    expect(message.error).toHaveBeenCalledWith("Couldn't save the schedule", RUN_AT_IMPOSSIBLE);
   });
 
   it('refreshes the task, the task views and the task’s project once a save lands', async () => {
@@ -322,11 +322,11 @@ describe('the Start at editor — what reaches the wire, and what does not', () 
   });
 
   it.each([
-    ['a save', (qc: QueryClient, m: WriteToast) => taskScheduleMutations(qc, m, TASK_ID, PROJECT_ID).save, '2026-09-02T09:00'],
-    ['a cancel', (qc: QueryClient, m: WriteToast) => taskScheduleMutations(qc, m, TASK_ID, PROJECT_ID).cancel, undefined],
+    ['a save', (qc: QueryClient, m: WriteToast) => taskScheduleMutations(qc, m, TASK_ID, PROJECT_ID).save, '2026-09-02T09:00', "Couldn't save the schedule"],
+    ['a cancel', (qc: QueryClient, m: WriteToast) => taskScheduleMutations(qc, m, TASK_ID, PROJECT_ID).cancel, undefined, "Couldn't cancel the scheduled start"],
   ] as const)(
     'leaves every cache untouched when the server refuses %s, so nothing pretends',
-    async (_name, options, variables) => {
+    async (_name, options, variables, headline) => {
       // No optimistic write anywhere: a failed cancel must not blank a schedule the server still
       // holds and the next sweep will still act on, and a failed save must not show the new time
       // as though it had landed.
@@ -350,7 +350,7 @@ describe('the Start at editor — what reaches the wire, and what does not', () 
       expect(invalidated(['tasks', 'page', null])).toBe(false);
       expect(invalidated(['project', PROJECT_ID, 'tasks', 'root'])).toBe(false);
       // And the failure reaches the reader whole, through the existing toast path.
-      expect(message.error).toHaveBeenCalledWith('task is already running');
+      expect(message.error).toHaveBeenCalledWith(headline, 'task is already running');
       expect(message.success).not.toHaveBeenCalled();
     },
   );

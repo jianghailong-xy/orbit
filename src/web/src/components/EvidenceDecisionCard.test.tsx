@@ -33,6 +33,7 @@ import {
   SessionEvidenceDecisionCard,
   decisionClaimFold,
   decisionGapsMore,
+  evidenceDecidingSession,
   evidenceDecisionRecordedLine,
   evidenceDecisionRefusal,
   evidenceDecisionRequest,
@@ -661,6 +662,85 @@ describe('which rows get a card in this conversation', () => {
   it('draws nothing in a session that coordinates no project', () => {
     expect(sessionCards([mine], null)).toBe('');
     expect(roots(sessionCards([mine], PROJECT_ID))).toEqual([decisionRowKey(mine)]);
+  });
+});
+
+describe('a task a session dispatched outside any project: its card is where the read says', () => {
+  // The B line (apiserver tasks/evidence-review.ts): the read names the one conversation the owner's
+  // card for such a row is drawn in (`ownerCard`), and the session its decision is recorded as —
+  // the dispatching session, which did none of the work, even when the card has moved to the run.
+  const DISPATCHER_ID = '34N1DispatchingSessAa';
+  const dispatched = row({
+    taskId: '34N2TaskOutsideProjectX',
+    projectId: null,
+    claim: '项目外由派活会话审的活',
+    ownerCard: { sessionId: SESSION_ID, decidingSessionId: SESSION_ID },
+  });
+  const inTheRun = row({
+    ...dispatched,
+    ownerCard: { sessionId: SESSION_ID, decidingSessionId: DISPATCHER_ID },
+  });
+
+  it('draws its card in the conversation its ownerCard names, whether or not that one coordinates a project', () => {
+    expect(roots(sessionCards([dispatched], null))).toEqual([decisionRowKey(dispatched)]);
+    expect(roots(sessionCards([dispatched], PROJECT_ID))).toEqual([decisionRowKey(dispatched)]);
+    expect(roots(sessionCards([inTheRun], null))).toEqual([decisionRowKey(inTheRun)]);
+  });
+
+  it('draws none in any other conversation, nor for one this session may not answer', () => {
+    expect(sessionCards([row({ ...dispatched, ownerCard: { sessionId: DISPATCHER_ID, decidingSessionId: DISPATCHER_ID } })], null))
+      .toBe('');
+    expect(sessionCards([row({
+      ...dispatched,
+      independence: {
+        independent: false,
+        disqualification: 'EVIDENCE_JUDGMENT_REQUIRES_INDEPENDENT_SESSION',
+        requiredAction: 'DECIDE_FROM_A_SESSION_THAT_DID_NOT_DO_THIS_WORK',
+      },
+    })], null)).toBe('');
+    // A row in no project with no ownerCard is the population nobody dispatched: no card anywhere.
+    expect(sessionCards([row({ ...dispatched, ownerCard: null })], null)).toBe('');
+  });
+
+  it('re-derives its standing through the same filter', () => {
+    const read = queue([dispatched]);
+    expect(evidenceDecisionStanding(read, null, dispatched, SESSION_ID).state).toBe('DECIDABLE');
+    expect(evidenceDecisionStanding(read, null, dispatched, DISPATCHER_ID).state).toBe('ALREADY_DECIDED');
+  });
+
+  it('a press decides as the session the card names, which is not the run it is drawn in', async () => {
+    expect(evidenceDecidingSession(inTheRun, SESSION_ID)).toBe(DISPATCHER_ID);
+    expect(evidenceDecidingSession(dispatched, SESSION_ID)).toBe(SESSION_ID);
+    expect(evidenceDecidingSession(row(), SESSION_ID)).toBe(SESSION_ID);
+
+    const qc = newClient();
+    qc.setQueryData(pendingDecisionsQuery(SESSION_ID).queryKey, queue([inTheRun]));
+    apiMock.mockImplementation((async (_path: string, options?: { method?: string }) =>
+      options?.method === 'POST' ? receipt({ taskId: inTheRun.taskId }) : queue([])) as never);
+    const rendered = await mount(
+      <QueryClientProvider client={qc}>
+        <SessionEvidenceDecisionCard sessionId={SESSION_ID} projectId={null} onSendBack={() => {}} />
+      </QueryClientProvider>,
+    );
+    await click(press(rendered, DECISION_CONFIRM_ACTION));
+    await settle();
+    const posts = apiMock.mock.calls.filter(
+      ([, options]) => (options as { method?: string } | undefined)?.method === 'POST',
+    );
+    expect(posts).toEqual([
+      [
+        `/tasks/${inTheRun.taskId}/evidence/decision`,
+        {
+          method: 'POST',
+          body: { decidingSessionId: DISPATCHER_ID, evidenceRevision: '2', decision: 'CONFIRM' },
+        },
+      ],
+    ]);
+    // And the read it re-derives from is still this conversation's.
+    expect(
+      apiMock.mock.calls.filter(([path]) =>
+        String(path) === `/tasks/evidence-decisions/pending?decidingSessionId=${SESSION_ID}`),
+    ).toHaveLength(1);
   });
 });
 

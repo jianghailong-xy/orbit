@@ -27,7 +27,7 @@ describe('TasksSidePanel nav', () => {
     const topBlock =
       source.match(/const TOP(?:\s*:\s*TopNavItem\[\])?\s*=\s*\[([\s\S]*?)\n\];/)?.[1] ?? '';
     expect(topBlock).toMatch(
-      /\{\s*key:\s*'projects',\s*icon:\s*<ProjectOutlined\s*\/>,\s*label:\s*'Projects',\s*shortcut:\s*projectsShortcutLabel\(\)\s*,?\s*\}/,
+      /\{\s*key:\s*'projects',\s*icon:\s*<SidebarNavIcon name="projects"\s*\/>,\s*label:\s*'Projects',\s*shortcut:\s*projectsShortcutLabel\(\)\s*,?\s*\}/,
     );
   });
 
@@ -35,7 +35,7 @@ describe('TasksSidePanel nav', () => {
     const topBlock =
       source.match(/const TOP(?:\s*:\s*TopNavItem\[\])?\s*=\s*\[([\s\S]*?)\n\];/)?.[1] ?? '';
     expect(topBlock).toMatch(
-      /\{\s*key:\s*'tasks',\s*icon:\s*<CheckSquareOutlined\s*\/>,\s*label:\s*'Tasks'\s*,?\s*\}/,
+      /\{\s*key:\s*'tasks',\s*icon:\s*<SidebarNavIcon name="tasks"\s*\/>,\s*label:\s*'Tasks'\s*,?\s*\}/,
     );
   });
 
@@ -106,16 +106,12 @@ describe('TasksSidePanel nav', () => {
   });
 
   it('renders TOP-derived items in both the collapsed rail and the expanded nav', () => {
-    // Both surfaces start from one list derived from TOP — `topItems`, which is TOP less the Wiki for
-    // an account the server has not switched it on for. The rail maps it directly; the expanded
-    // section maps navItems, which starts from it — so a TOP entry reaches both surfaces without
-    // either render site needing its own list.
+    // Both surfaces map one list derived from TOP — `topItems`, which is TOP less the Wiki for an
+    // account the server has not switched it on for — so a TOP entry reaches both surfaces without
+    // either render site needing its own list. Nothing is appended for admins: Admin is a row of the
+    // account menu (TasksSidePanel.admin.test.tsx).
     expect(source).toContain("const topItems = wikiShown(wikiSpaces) ? TOP : TOP.filter((t) => t.key !== 'wiki');");
-    expect(source).toMatch(
-      /const navItems(?:\s*:\s*TopNavItem\[\])?\s*=\s*\n?\s*me\.data\?\.role === 'ADMIN'\s*\n?\s*\?\s*\[\.\.\.topItems,/,
-    );
-    expect(source).toContain('{topItems.map((t) => (');
-    expect(source).toContain('{navItems.map((t) => (');
+    expect(source.match(/\{topItems\.map\(\(t\) => \(/g)).toHaveLength(2);
   });
 
   it('makes both fixed-nav surfaces keyboard-operable links with a current-page state', () => {
@@ -602,7 +598,7 @@ describe('TasksSidePanel arranging the Workspace rows', () => {
   it('lets a row move only while arranging, and saves each drop through the reorder endpoint', () => {
     expect(source).toContain('return editingWorkspaces && runnerId ? (');
     expect(source).toContain("api<Workspace[]>('/workspaces/reorder', { method: 'POST', body: { ids } })");
-    expect(source).toContain("message.error(e.message || 'Reorder failed')");
+    expect(source).toContain(`message.error("Couldn't reorder the workspaces", e.message)`);
   });
 });
 

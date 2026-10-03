@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ExclamationCircleOutlined, RightOutlined } from '@ant-design/icons';
-import { App, Button, Card, InputNumber, Modal, Radio, Select, Switch } from 'antd';
+import { Button, Card, InputNumber, Modal, Radio, Select, Switch } from 'antd';
 import {
   WIKI_DEFAULT_MAINTENANCE_SETTINGS,
   WIKI_MAINTENANCE_DAILY_RUN_LIMIT,
@@ -12,7 +12,8 @@ import {
   type WikiReviewMode,
 } from '@orbit/shared';
 import { providersQuery, workspacesQuery } from '../lib/queries';
-import { WIKI_TITLE, wikiSpacePath, type WikiSpaceRow } from '../lib/wiki';
+import { useToast } from '../lib/toast';
+import { WIKI_SETTINGS_SAVED, WIKI_TITLE, wikiSpacePath, type WikiSpaceRow } from '../lib/wiki';
 import {
   WIKI_CANCEL,
   WIKI_DAILY_LIMIT,
@@ -81,16 +82,16 @@ import type { ConfiguredProvider } from '../lib/workspaceDefaults';
  */
 export function WikiSettingsPage({ space }: { space: WikiSpaceRow }) {
   const settings = wikiSpaceSettings(space.settings);
-  const { message } = App.useApp();
+  const toast = useToast();
   const write = useWikiWrite((body: WikiSpaceUpdate) => updateWikiSpace(space.id, body));
   const [setUp, setSetUp] = useState(false);
 
   const save = async (body: WikiSpaceUpdate) => {
     try {
       await write.mutateAsync(body);
-      message.success('Saved');
+      toast.success(WIKI_SETTINGS_SAVED);
     } catch (error) {
-      message.error(error instanceof Error ? error.message : 'The server refused it');
+      toast.error("Couldn't save the wiki settings", error instanceof Error ? error.message : undefined);
     }
   };
 
@@ -186,7 +187,7 @@ export function WikiSettingsPage({ space }: { space: WikiSpaceRow }) {
           onClose={() => setSetUp(false)}
           onSubmit={async (maintenance) => {
             await write.mutateAsync({ maintenance });
-            message.success('Saved');
+            toast.success(WIKI_SETTINGS_SAVED);
           }}
         />
       )}

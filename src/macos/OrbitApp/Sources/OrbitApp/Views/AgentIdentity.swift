@@ -351,21 +351,21 @@ struct ProviderSwitchSheet: View {
     }
 }
 
-/// Agent picker opened from the new-session hero. Lists every agent (drawer order) with its runtime,
-/// marks the current one, and reports a pick back to the caller — which switches the composing agent.
-/// A flat list (not runner-grouped) keeps it light; the caller owns the switch so this view needs no
-/// environment (which doesn't always propagate into a sheet).
-/// The workspace switcher: the workspace's name and a down chevron — the navigation bar's title
-/// slot on the new-session draft, and its leading edge on the session list (whose title slot cannot
-/// hold a custom view once the name is long: see `AgentsView`'s toolbar).
-///
-/// One definition for the two screens whose title *is* a workspace — the session list (whose content
-/// all belongs to it) and the new-session draft (which will send into it). They open the same
-/// `AgentSwitchSheet`; what a selection means differs, and only the call site knows that: the list
-/// enters the workspace (`AppModel.openAgent`), the draft composes with it.
-///
-/// Name and chevron only: the brand mark belongs to the new-session hero, and repeating it here in
-/// miniature said nothing the screen wasn't already saying.
+/// Static workspace name for the iOS session list and new-session navigation bars.
+/// `.fixedSize()` keeps iOS 26's leading toolbar slot from compressing even short names. The list
+/// also hides this item's shared background so the drawer button keeps its own glass circle.
+struct WorkspaceTitle: View {
+    let name: String
+
+    var body: some View {
+        Text(name)
+            .font(.headline).foregroundStyle(.primary).lineLimit(1).truncationMode(.tail)
+            .fixedSize()
+            .accessibilityLabel("Workspace: \(name)")
+    }
+}
+
+/// Clickable title used by the iOS task list and the macOS new-session workspace picker.
 ///
 /// `.fixedSize()` is load-bearing, not tidiness. iOS 26 hands a *custom* item in the leading slot a
 /// proposal far narrower than the item's own content: measured on an iPhone 17 Pro Max simulator
@@ -380,8 +380,8 @@ struct ProviderSwitchSheet: View {
 /// The one case this does not cover is a name wider than the bar itself, which would be clipped
 /// rather than truncated — today's longest workspace name is 125pt against ~250pt of room.
 ///
-/// Its sibling on the session list's bar is the item's *shared background*: iOS 26 would group this
-/// control with the drawer button into one glass platter, so `AgentsView` declares the item with
+/// Its sibling on the task list's bar is the item's *shared background*: iOS 26 would group this
+/// control with the drawer button into one glass platter, so `TasksListView` declares the item with
 /// `.sharedBackgroundVisibility(.hidden)` and the name draws on the bar instead. iOS 26 only, and
 /// measured on an iPhone 17 Pro Max simulator like the widths above: with the system's shared
 /// background the two share one 102pt platter, without it the name sits on the bar beside the
@@ -391,8 +391,7 @@ struct WorkspaceTitleSwitcher: View {
     /// What the name names, for VoiceOver ("Workspace: orbit. Switch").
     var subject = "Workspace"
     /// A cap on the name's width, past which it truncates rather than pushing the bar's trailing
-    /// buttons. Nil draws the whole name, as the Sessions list does for its short workspace names;
-    /// a task list's title can be a sentence.
+    /// buttons. Nil draws the whole name; a task list's title can be a sentence.
     var maxNameWidth: CGFloat?
     let action: () -> Void
 
@@ -413,6 +412,8 @@ struct WorkspaceTitleSwitcher: View {
     }
 }
 
+/// Agent picker opened from the macOS new-session hero. Lists agents in drawer order and reports
+/// the selection to the caller, which switches the composing agent.
 struct AgentSwitchSheet: View {
     let agents: [Agent]
     let currentID: String

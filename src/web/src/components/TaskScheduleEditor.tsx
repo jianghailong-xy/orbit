@@ -58,7 +58,7 @@ export function taskScheduleMutations(
       // The toast and nothing else. Refreshing here would refetch a task whose schedule never
       // moved; the schedule stays on screen, the edit stays in the box, and this button is the
       // retry. Nothing optimistic anywhere, for the same reason.
-      onError: (e: Error) => message.error(e.message),
+      onError: (e: Error) => message.error("Couldn't save the schedule", e.message),
     },
     cancel: {
       // Explicit `null`, never an omitted field: absence is "leave the schedule alone" to the
@@ -68,7 +68,7 @@ export function taskScheduleMutations(
         message.success('Scheduled start cancelled');
         return refresh();
       },
-      onError: (e: Error) => message.error(e.message),
+      onError: (e: Error) => message.error("Couldn't cancel the scheduled start", e.message),
     },
   };
 }

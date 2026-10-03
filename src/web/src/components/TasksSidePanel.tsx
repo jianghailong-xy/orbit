@@ -1,12 +1,8 @@
 import {
-  ApiOutlined,
   BgColorsOutlined,
-  BookOutlined,
   CaretDownOutlined,
   CheckOutlined,
-  CheckSquareOutlined,
   CodeOutlined,
-  DesktopOutlined,
   DisconnectOutlined,
   FolderOutlined,
   HolderOutlined,
@@ -14,7 +10,6 @@ import {
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
-  ProjectOutlined,
   SettingOutlined,
   TeamOutlined,
   UserOutlined,
@@ -37,7 +32,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { App as AntdApp, Avatar, Dropdown, Tooltip } from 'antd';
+import { Avatar, Dropdown, Tooltip } from 'antd';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useLocation, useMatch, useNavigate } from 'react-router-dom';
 import type {
@@ -61,6 +56,7 @@ import {
 } from '../lib/queries';
 import { orderWorkspaces, reorderedWorkspaceIds, workspaceRunnerId } from '../lib/workspaceOrder';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
+import { useToast } from '../lib/toast';
 import {
   projectIsWorking,
   projectNeedsYouCount,
@@ -68,6 +64,7 @@ import {
   type SidebarProject,
 } from '../lib/projectAttention';
 import { wikiProposalsToReview, wikiShown } from '../lib/wiki';
+import { SidebarNavIcon } from './SidebarNavIcon';
 
 const IS_MAC_PLATFORM =
   typeof navigator !== 'undefined' &&
@@ -122,29 +119,30 @@ interface TopNavItem {
   shortcut?: string;
 }
 
-// Fixed product destinations (Admin is appended for admins below). Individual Workspace rows are
-// primary destinations in their own right, so there is no proxy Workspaces parent here.
+// Fixed product destinations, the same for every account: Admin is a row of the account menu at the
+// panel's foot, not one of these. Individual Workspace rows are primary destinations in their own
+// right, so there is no proxy Workspaces parent here.
 const TOP: TopNavItem[] = [
   {
     key: 'projects',
-    icon: <ProjectOutlined />,
+    icon: <SidebarNavIcon name="projects" />,
     label: 'Projects',
     shortcut: projectsShortcutLabel(),
   },
   // Tasks under Projects, in the iPhone drawer's order (Projects · Tasks · Wiki). It is the way into
   // the task lists too: they are picked from the Tasks page's title, as they are on the phone.
-  { key: 'tasks', icon: <CheckSquareOutlined />, label: 'Tasks' },
+  { key: 'tasks', icon: <SidebarNavIcon name="tasks" />, label: 'Tasks' },
   // The Wiki sits under Projects because it is the other thing a codebase has: Projects is the work
   // in it, and the Wiki is what the work learned. Its amber count is the proposals waiting for the
   // owner, which is the same `needs-you` pill a workspace row shows — and the same rule applies with
   // it: a row carrying an amber number shows no shortcut.
-  { key: 'wiki', icon: <BookOutlined />, label: 'Wiki' },
+  { key: 'wiki', icon: <SidebarNavIcon name="wiki" />, label: 'Wiki' },
   // No Following here: its watches are the waits agents keep for their own sessions, already shown
   // in each session's header and Watching strip, and those are what link to /following.
-  { key: 'runners', icon: <DesktopOutlined />, label: 'Runners' },
+  { key: 'runners', icon: <SidebarNavIcon name="runners" />, label: 'Runners' },
   // Providers is for everyone: each user manages their own (BYOK) list; admins additionally
   // manage the shared ones on the same page.
-  { key: 'providers', icon: <ApiOutlined />, label: 'Providers' },
+  { key: 'providers', icon: <SidebarNavIcon name="providers" />, label: 'Providers' },
 ];
 
 // The left sidebar is user-resizable; the chosen width persists across refreshes.
@@ -310,11 +308,6 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   // No Wiki row at all for an account the server has not switched the wiki on for (WIKI_DISABLED):
   // an entry that led to a refusal would be worse than none.
   const topItems = wikiShown(wikiSpaces) ? TOP : TOP.filter((t) => t.key !== 'wiki');
-  // Admins get an extra top-nav entry: user management.
-  const navItems: TopNavItem[] =
-    me.data?.role === 'ADMIN'
-      ? [...topItems, { key: 'admin', icon: <TeamOutlined />, label: 'Admin' }]
-      : topItems;
 
   // The open workspace comes from /workspaces/<id>; behind a /sessions/<id> link, resolve
   // it from that session so its row highlights there too. The session query reuses
@@ -482,7 +475,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   // Each drop is saved at once, the Runners page's way: the rows (and their ⌘N) move immediately,
   // the server's list settles it, and a refusal puts them back.
   const qc = useQueryClient();
-  const { message } = AntdApp.useApp();
+  const message = useToast();
   const reorderWorkspaces = useMutation({
     mutationFn: (ids: string[]) =>
       api<Workspace[]>('/workspaces/reorder', { method: 'POST', body: { ids } }),
@@ -500,7 +493,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
     },
     onError: (e: Error, _ids, context) => {
       if (context?.previous) qc.setQueryData(['workspaces'], context.previous);
-      message.error(e.message || 'Reorder failed');
+      message.error("Couldn't reorder the workspaces", e.message);
     },
     onSuccess: (data) => qc.setQueryData(['workspaces'], data),
     onSettled: () => void qc.invalidateQueries({ queryKey: ['workspaces'] }),
@@ -717,9 +710,9 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
         })}
       </div>
 
-      <div className="tp-scroll">
+      <div className="tp-scroll autohide-scrollbar">
         <div className="tp-section">
-          {navItems.map((t) => (
+          {topItems.map((t) => (
             <div
               key={t.key}
               className={`tp-item ${sel === t.key ? 'active' : ''}`}
@@ -920,6 +913,19 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
                 label: 'Settings',
                 onClick: () => navigate('/settings'),
               },
+              // User management, for admins only. It opens a settings page as the row above does, so
+              // it sits in that row's group. The menu opens from the collapsed rail's avatar too, so
+              // Admin stays reachable with the panel collapsed.
+              ...(me.data?.role === 'ADMIN'
+                ? [
+                    {
+                      key: 'admin',
+                      icon: <TeamOutlined />,
+                      label: 'Admin',
+                      onClick: () => navigate('/admin'),
+                    },
+                  ]
+                : []),
               { type: 'divider' },
               {
                 key: 'logout',

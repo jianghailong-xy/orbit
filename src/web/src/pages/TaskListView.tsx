@@ -236,7 +236,7 @@ export function batchRunMutationOptions(qc: QueryClient, message: RunToast, dism
       if (!res.dispatched) return undefined;
       return refreshManyTaskScheduleViews(qc, tasks);
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => message.error("Couldn't start the tasks", e.message),
   };
 }
 
@@ -699,7 +699,7 @@ export function TaskListView() {
     } catch (e) {
       // The common cause is a list with no foreman and no workspace to fall back on, which the
       // server explains; surfacing its message beats a generic failure the user cannot act on.
-      message.error(e instanceof Error ? e.message : 'Could not open the console');
+      message.error("Couldn't open the steering session", e instanceof Error ? e.message : undefined);
       setOpeningConsole(false);
     }
   };
@@ -735,7 +735,7 @@ export function TaskListView() {
       message.success('Task deleted');
       await invalidateAfterDelete();
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => message.error("Couldn't delete the task", e.message),
   });
   // Single-task run/retry from the row's hover actions, and the bulk Run behind the modal. Both
   // are built above, where what they refresh can be asserted against a seeded cache.
@@ -759,7 +759,7 @@ export function TaskListView() {
       );
       invalidate();
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => message.error("Couldn't stop the tasks", e.message),
   });
   const batchAssign = useMutation({
     mutationFn: (body: { taskIds: string[]; assigneeId: string | null }) =>
@@ -770,7 +770,7 @@ export function TaskListView() {
       message.success(`Set assignee on ${res.updated} task(s)`);
       invalidate();
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => message.error("Couldn't set the assignee", e.message),
   });
   const batchDelete = useMutation({
     mutationFn: deleteTasks,
@@ -785,7 +785,7 @@ export function TaskListView() {
       await invalidateAfterDelete();
     },
     // Keep the selection intact on failure so the user can inspect the error and retry.
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => message.error("Couldn't delete the tasks", e.message),
   });
 
   // The rows currently shown, ordered by the selected sort field/direction. The server has

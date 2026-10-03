@@ -669,6 +669,112 @@ describe('engine stderr', () => {
     payload: { stderr },
   });
 
+  it('renders a recoverable startup diagnostic as a warning, not a failed turn', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[{
+          seq: 1,
+          type: 'system',
+          payload: {
+            stderr:
+              '2026-10-03T15:27:44.258Z ERROR codex_models_manager::manager: failed to refresh available models: 401 token_invalidated',
+            diagnostic: {
+              component: 'model_catalog',
+              phase: 'startup',
+              severity: 'ERROR',
+              impact: 'degraded',
+              recoverable: true,
+              code: 'token_invalidated',
+            },
+          },
+        }]}
+      />,
+    );
+
+    expect(html).toContain('chat-notice');
+    expect(html).toContain('data-diagnostic="true"');
+    expect(html).toContain('data-phase="startup"');
+    expect(html).toContain('Startup');
+    expect(html).toContain('token_invalidated');
+    expect(html).not.toContain('chat-error');
+  });
+
+  it('recognizes the same recoverable diagnostic in an older persisted stderr event', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[{
+          seq: 1,
+          type: 'system',
+          payload: {
+            stderr:
+              '2026-10-03T15:27:44.258Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 401 Unauthorized: token_invalidated',
+          },
+        }]}
+      />,
+    );
+
+    expect(html).toContain('chat-notice');
+    expect(html).toContain('model_catalog');
+    expect(html).not.toContain('chat-error');
+  });
+
+  it('folds repeated structured diagnostics without restoring the red error row', () => {
+    const diagnostic = {
+      component: 'mcp',
+      phase: 'startup',
+      severity: 'ERROR',
+      impact: 'recoverable',
+      recoverable: true,
+      code: 'token_invalidated',
+    };
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          {
+            seq: 1,
+            type: 'system',
+            payload: { stderr: 'model refresh 401 request id: req_first', diagnostic },
+          },
+          {
+            seq: 2,
+            type: 'system',
+            payload: { stderr: 'model refresh 401 request id: req_second', diagnostic },
+          },
+        ]}
+      />
+    );
+
+    expect(html.split('chat-diagnostic"').length - 1).toBe(1);
+    expect(html).toContain('×2');
+    expect(html).not.toContain('chat-error');
+  });
+
+  it('keeps an explicitly fatal structured diagnostic on the error path', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[{
+          seq: 1,
+          type: 'system',
+          payload: {
+            stderr: 'app-server exited before initialize',
+            diagnostic: {
+              component: 'app_server',
+              phase: 'startup',
+              severity: 'ERROR',
+              impact: 'fatal',
+              recoverable: false,
+              code: 'startup_failed',
+            },
+          },
+        }]}
+      />,
+    );
+
+    expect(html).toContain('chat-error');
+    expect(html).toContain('data-impact="fatal"');
+    expect(html).toContain('startup_failed');
+  });
+
   // Claude Code prints this whenever an auth token is in its environment — i.e. on every
   // session of every configured provider, whose API key Orbit injects that way.
   it('drops the connectors notice Orbit’s own env injection provokes', () => {
@@ -1687,6 +1793,37 @@ describe('failed tool call body', () => {
     );
 
     expect(html.indexOf('go build')).toBeLessThan(html.indexOf('compiled cleanly'));
+  });
+
+  // Stop while agy runs a command: agy never finishes that call, so the runner answers it with an
+  // error. A live session then shows it failed, not still running.
+  it('marks a call cut off by an interrupt as failed while the session stays open', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        live
+        events={[
+          {
+            seq: 1,
+            type: 'tool_use',
+            payload: { id: 'conv:2', name: 'Bash', input: { command: 'sleep 120 && echo finished-sleeping' } },
+          },
+          { seq: 2, type: 'interrupt', payload: {} },
+          {
+            seq: 3,
+            type: 'tool_result',
+            payload: {
+              toolUseId: 'conv:2',
+              content: 'Interrupted: the turn was stopped while this tool was running.',
+              isError: true,
+            },
+          },
+          { seq: 4, type: 'turn_end', payload: { subtype: 'interrupted' } },
+        ]}
+      />,
+    );
+
+    expect(html).toContain('chat-tool-status err');
+    expect(html).not.toContain('chat-tool-status running');
   });
 });
 

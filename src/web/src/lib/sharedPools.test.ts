@@ -4,8 +4,11 @@ import { encodeId } from './idCodec';
 import { availableCount, memberQuota, memberStatus, poolHeadline, poolsAsProviders } from './providerPools';
 import {
   allOutOfBudget,
+  canAddAccount,
   canAddKey,
   canRemoveKey,
+  canSignInAgain,
+  canSignOutAccount,
   formatCapReset,
   hasPeople,
   keyState,
@@ -15,6 +18,7 @@ import {
   personShare,
   poolOwner,
   sharedPoolAsProviderPool,
+  viewerId,
   type SharedPool,
   type SharedPoolKey,
   type SharedPoolPerson,
@@ -59,6 +63,7 @@ const pool = (keys: SharedPoolKey[], over: Partial<SharedPool> = {}): SharedPool
   shared: true,
   logins: [],
   membersCanAdd: true,
+  membersCanAddAccounts: true,
   ownKeyFirst: true,
   viewerRole: 'ADMIN',
   window: { start: '2026-09-01T00:00:00.000Z', end: '2026-10-01T00:00:00.000Z' },
@@ -181,6 +186,29 @@ describe("a shared pool's people and permissions", () => {
     expect(canAddKey({ ...asMember, membersCanAdd: false, viewerRole: 'ADMIN' })).toBe(true);
   });
 
+  it('lets an account go in by an admin or while the accounts’ own rule says so, and be signed in again by its own signer alone', () => {
+    const asMember = pool([], {
+      viewerRole: 'MEMBER',
+      people: [person(ANN, 'Ann', { role: 'ADMIN', creator: true }), person(MIA, 'Mia', { you: true })],
+    });
+    expect(viewerId(asMember)).toBe(MIA);
+    // Mia's own account: she may sign it in again, and take it out.
+    expect(canSignInAgain(asMember, { userId: MIA })).toBe(true);
+    expect(canSignOutAccount(asMember, { userId: MIA })).toBe(true);
+    // Ann's: neither, for a member — only the person who signed it in brings it back.
+    expect(canSignInAgain(asMember, { userId: ANN })).toBe(false);
+    expect(canSignOutAccount(asMember, { userId: ANN })).toBe(false);
+    // The owner, an admin: she takes anybody's account out, and signs in again only her own.
+    expect(canSignOutAccount(pool([]), { userId: MIA })).toBe(true);
+    expect(canSignInAgain(pool([]), { userId: MIA })).toBe(false);
+    // Adding one's own: an admin always, a member while the accounts' own rule is on — apart from the
+    // keys' rule (membersCanAdd), which says nothing about accounts (migration 0371).
+    expect(canAddAccount(asMember)).toBe(true);
+    expect(canAddAccount({ ...asMember, membersCanAddAccounts: false })).toBe(false);
+    expect(canAddAccount({ ...asMember, membersCanAddAccounts: false, membersCanAdd: true })).toBe(false);
+    expect(canAddAccount({ ...asMember, membersCanAddAccounts: false, viewerRole: 'ADMIN' })).toBe(true);
+  });
+
   it('names when a cap starts again by its date, in the month the server counts', () => {
     expect(formatCapReset('2026-10-01T00:00:00.000Z')).toBe('Oct 1');
   });
@@ -191,6 +219,8 @@ describe('a Codex pool of one’s own, its ChatGPT accounts read beside its peop
   const SOON = '2026-10-02T15:00:00.000Z';
   const LATER = '2026-10-04T09:00:00.000Z';
   const account = (email: string, fiveHour: number, over: Partial<CodexLogin> = {}): CodexLogin => ({
+    // Ann's: she is the one who signs them in again (migration 0371).
+    userId: ANN,
     state: 'ACTIVE',
     email,
     plan: 'plus',

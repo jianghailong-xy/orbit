@@ -263,7 +263,7 @@ public enum BackgroundWakeText {
 /// and folded under it a row per job or wakeup, who queued the turn, and the text the agent actually
 /// received.
 public enum BackgroundWakeCard {
-    /// How much of a failed job's output the line shows before folding the rest away.
+    /// How much of a scheduled wakeup's prompt is shown before folding the rest away.
     public static let tailLines = 8
 
     /// A job the line draws in its error tone.

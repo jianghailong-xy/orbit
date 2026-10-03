@@ -128,8 +128,12 @@ export function SessionOutputs({
   // open session changes so a switched-to session never inherits the previous one's open file.
   const [openFile, setOpenFile] = useState<string | null>(null);
   useEffect(() => setOpenFile(null), [detail?.id]);
-  const copy = (text: string) => {
-    void copyText(text).then((ok) => (ok ? message.success('Copied') : message.error('Copy failed')));
+  const copy = (text: string, what: 'branch' | 'command') => {
+    const [done, failed] =
+      what === 'branch'
+        ? ['Branch name copied', "Couldn't copy the branch name"]
+        : ['Command copied', "Couldn't copy the command"];
+    void copyText(text).then((ok) => (ok ? message.success(done) : message.error(failed)));
   };
 
   // The machine's shared checkout is wedged (half-finished merge/rebase someone left in the dir
@@ -220,7 +224,7 @@ export function SessionOutputs({
           title="Copy branch name"
           onClick={(e) => {
             e.stopPropagation();
-            copy(branch);
+            copy(branch, 'branch');
           }}
         >
           <span className="wt-branch-ico">⎇</span>
@@ -301,11 +305,11 @@ export function SessionOutputs({
                 by hand:
               </span>
               <span className="wt-merge-or">
-                <code className="wt-merge-cmd" title="Copy" onClick={() => copy(manualRebaseCmd)}>
+                <code className="wt-merge-cmd" title="Copy" onClick={() => copy(manualRebaseCmd, 'command')}>
                   {manualRebaseCmd}
                 </code>
                 <span className="wt-merge-where"> in the session’s worktree, then </span>
-                <code className="wt-merge-cmd" title="Copy" onClick={() => copy(manualFfCmd)}>
+                <code className="wt-merge-cmd" title="Copy" onClick={() => copy(manualFfCmd, 'command')}>
                   {manualFfCmd}
                 </code>
                 <span className="wt-merge-where"> in the repo</span>

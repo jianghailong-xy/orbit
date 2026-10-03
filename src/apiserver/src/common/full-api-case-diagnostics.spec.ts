@@ -77,6 +77,12 @@ interface CaseOptions {
    * is the case script's own job now; a caller that does not know to do it is the case this proves.
    */
   keepParentTestContext?: boolean;
+  /**
+   * Source of a module preloaded, through NODE_OPTIONS, into every node the case starts -- the
+   * case's runner, the spec's process under it and the receipt writer alike; the module itself
+   * picks the one it is for.
+   */
+  preload?: string;
 }
 
 /**
@@ -102,6 +108,8 @@ function runCaseIn(
   chmodSync(path.join(bin, 'docker'), 0o755);
   const spec = path.join(api, 'fake', name);
   if (source !== null) writeFileSync(spec, source);
+  const preload = path.join(root, 'preload.js');
+  if (options.preload !== undefined) writeFileSync(preload, options.preload);
 
   const env: NodeJS.ProcessEnv = { ...process.env };
   // This spec is itself run by `node --test`, and its context leaks into any nested runner as an
@@ -115,6 +123,9 @@ function runCaseIn(
     encoding: 'utf8',
     env: {
       ...env,
+      ...(options.preload === undefined ? {} : {
+        NODE_OPTIONS: `${env.NODE_OPTIONS ?? ''} --require ${JSON.stringify(preload)}`.trim(),
+      }),
       PATH: `${bin}:${env.PATH ?? ''}`,
       OUTCOME_API_CASE_CONTAINER: 'full-api-case-diagnostics',
       OUTCOME_API_CASE_ADMIN: 'pccdiag_admin',
@@ -161,11 +172,59 @@ const HANGS = `const { test } = require('node:test');
 process.stderr.write('marker: this case will outlive its wall clock\\n');
 test('outlives the case wall clock', async () => { await new Promise((resolve) => setTimeout(resolve, 30_000)); });
 `;
+/** The case's own log, as a spec run by the case script finds it: named after the case index. */
+const caseLog = (index: number) =>
+  `require('node:path').join(process.env.OUTCOME_API_CASE_DIR, '${String(index).padStart(4, '0')}.tap')`;
+// HANGS with Node's race settled each way. `timeout` sends SIGTERM to the runner and, through its
+// process group, to this file's process; the runner reports the file as `not ok ... signal:
+// 'SIGTERM'` only if it sees the file die before it exits itself, which an idle host rarely
+// arranges and a busy one often does. Left to the host, (i) sees either.
+//
+// Reported: once the marker is in the log, the file dies of SIGTERM by its own hand, and the
+// runner reports it as it reports any file that died -- the same `not ok` lines, every time. Done
+// with its one file, the runner would then exit long before the wall clock, so KEEP_RUNNER_ALIVE
+// holds it there: the case still ends TIMED_OUT.
+const hangsReported = (index: number) => `const { test } = require('node:test');
+const { readFileSync } = require('node:fs');
+process.stderr.write('marker: this case will outlive its wall clock\\n');
+test('outlives the case wall clock', async () => {
+  const log = ${caseLog(index)};
+  while (!readFileSync(log, 'utf8').includes('# marker:')) await new Promise((resolve) => setTimeout(resolve, 10));
+  process.kill(process.pid, 'SIGTERM');
+});
+`;
+// A preload for hangsReported's case: an idle timer in the case's `node --test` runner alone --
+// not in the spec's process, which node marks with NODE_TEST_CONTEXT, nor in the receipt writer.
+const KEEP_RUNNER_ALIVE = `if (!process.env.NODE_TEST_CONTEXT && process.execArgv.includes('--test')) setInterval(() => {}, 1 << 30);
+`;
+// Unreported: outlive the runner. The SIGTERM is ignored, and this process leaves only once the
+// runner has exited and so closed its stdin: the runner never sees the file end.
+const HANGS_UNREPORTED = `const { test } = require('node:test');
+process.stderr.write('marker: this case will outlive its wall clock\\n');
+process.on('SIGTERM', () => {});
+process.stdin.on('end', () => process.exit(0)).resume();
+test('outlives the case wall clock', async () => { await new Promise((resolve) => setTimeout(resolve, 30_000)); });
+`;
 // Kills the runner from inside its own bootstrap, before a single test is registered: what an
 // out-of-memory kill of a case looks like from the case script's side.
 const KILLS_ITS_RUNNER = `process.stderr.write('bootstrap: killing the test runner before any TAP\\n');
 process.kill(process.ppid, 'SIGKILL');
 process.exit(1);
+`;
+// The same kill, once a test has failed and the marker that follows it is in the log: a case with
+// TAP of its own that still ends SIGNALED.
+const failsThenKillsItsRunner = (index: number) => `const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const { readFileSync } = require('node:fs');
+test('reports a failing test the ordinary way', () => { assert.equal('observed', 'expected'); });
+test('kills the test runner', async () => {
+  process.stderr.write('marker: killing the test runner after a failure\\n');
+  const log = ${caseLog(index)};
+  const logged = () => { const tap = readFileSync(log, 'utf8'); return /^not ok /mu.test(tap) && tap.includes('# marker:'); };
+  while (!logged()) await new Promise((resolve) => setTimeout(resolve, 10));
+  process.kill(process.ppid, 'SIGKILL');
+  process.exit(1);
+});
 `;
 const FAILS = `const { test } = require('node:test');
 const assert = require('node:assert/strict');
@@ -175,32 +234,84 @@ const PASSES = `const { test } = require('node:test');
 test('reports a passing test', () => {});
 `;
 
+/**
+ * Node's report of the file as killed by SIGTERM -- what it prints for the file it was running
+ * when the wall clock's SIGTERM arrived, if it sees that file die before it exits itself: the one
+ * `not ok` a timed-out case may carry. Any other `not ok` is a failure no case here planted, and
+ * fails. Returns the report's line, or null when there is none.
+ */
+function sigtermReport(run: CaseRun): string | null {
+  const lines = run.tap.split('\n');
+  const reports = lines.flatMap((line, at) => {
+    if (!line.startsWith('not ok')) return [];
+    assert.match(line, /^not ok 1 - .+\/fake\/hangs\.spec\.js$/u,
+      `the only not ok allowed is Node's report of the file as killed by SIGTERM: ${line}`);
+    const end = lines.indexOf('  ...', at);
+    const details = lines.slice(at + 1, end);
+    assert.ok(end > at && details.includes("  signal: 'SIGTERM'") && details.includes('  exitCode: ~'),
+      `and only when it says the file died of SIGTERM:\n${lines.slice(at).join('\n')}`);
+    return [line];
+  });
+  assert.ok(reports.length <= 1, `Node reports the file once:\n${run.tap}`);
+  // Printed with the TAP and again in the end of the log; nothing else in the output says not ok.
+  assert.deepEqual([...new Set(run.output.match(/^not ok.*$/gmu))], reports);
+  return reports[0] ?? null;
+}
+
+/**
+ * What a case stopped by its own wall clock prints whichever way that race went: the FAILED line,
+ * the end of its log with the marker it left there, the line saying how it ended, and a receipt
+ * that says the same. Returns Node's report of the file, when it printed one.
+ */
+function assertTimedOut(run: CaseRun, index: number, timeout: number): string | null {
+  assert.equal(run.status, 124, 'timeout reports the wall clock it enforced as 124');
+  assert.match(run.output, new RegExp(`full-api FAILED \\[${index}/1\\]: fake/hangs\\.spec\\.js TIMED_OUT exit=124 elapsed=\\d+s timeout=${timeout}`, 'u'));
+  // The evidence a failure branch keyed on `not ok` throws away: with Node's report in the log,
+  // `sed` starts at that line, below the marker -- and a case with neither printed nothing at all.
+  const tail = run.output.indexOf(`==> full-api TIMED_OUT [${index}/1]: fake/hangs.spec.js: last 40 lines of `);
+  assert.ok(tail >= 0, `the end of the log is printed under its own header:\n${run.output}`);
+  assert.match(run.output.slice(tail), /^# marker: this case will outlive its wall clock$/mu, 'the tail of the log is printed');
+  assert.match(run.output.slice(tail), new RegExp(`^exit=124 elapsed=\\d+s timeout=${timeout} kind=TIMED_OUT$`, 'mu'));
+  const report = sigtermReport(run);
+
+  assert.ok(run.receipt, 'a timed-out case still leaves a receipt');
+  assert.equal(run.receipt.failureKind, 'TIMED_OUT');
+  assert.equal(run.receipt.exitCode, 124);
+  assert.equal(run.receipt.timeoutSeconds, timeout);
+  assert.ok(run.receipt.elapsedSeconds >= 1, `wall clock was recorded: ${run.receipt.elapsedSeconds}`);
+  assert.equal(run.receipt.outcome, 'FAILED');
+  // The one test Node counts is the file it reported; a case it did not report counted none.
+  assert.equal(run.receipt.summary.tests, report === null ? 0 : 1);
+  assert.equal(run.receipt.cleanup.resourcesRemaining, 0);
+  assert.equal(run.receipt.identity.verifiedBeforeMutation, true);
+  return report;
+}
+
 test('(i) a case killed by its own wall clock is reported as a timeout, with the log it did leave', () => {
+  // Whether Node gets to report the file as `not ok` first is left to this host here; (i-a) and
+  // (i-b) settle it each way. Asserted is only what has to be printed either way.
+  //
   // 15 seconds, not 2. The marker reaches the log only after two node boots -- the `node --test`
   // runner and the child it starts for the spec -- and on a loaded machine those take seconds: with
   // a thirteenth of a core the marker arrived 2.7-4.1s in, with a thirty-first 6.2-6.8s. Under 2s
-  // such a case was killed with an empty log, and the marker assertion below went red for the
-  // machine's load rather than for the harness. The cases that assert nothing about the log keep 2.
-  const run = runCase(1, 'hangs.spec.js', HANGS, 15);
+  // such a case was killed with an empty log, and the marker assertion went red for the machine's
+  // load rather than for the harness.
+  assertTimedOut(runCase(1, 'hangs.spec.js', HANGS, 15), 1, 15);
+});
 
-  assert.equal(run.status, 124, 'timeout reports the wall clock it enforced as 124');
-  assert.match(run.output, /full-api FAILED \[1\/1\]: fake\/hangs\.spec\.js TIMED_OUT exit=124 elapsed=\d+s timeout=15/u);
-  // The evidence the old failure branch threw away: this case never printed `not ok`, so `sed`
-  // printed nothing, and the run recorded a red with no stated reason.
-  assert.doesNotMatch(run.output, /^not ok/mu);
-  assert.match(run.output, /full-api NO TAP \[1\/1\]/u);
-  assert.match(run.output, /# marker: this case will outlive its wall clock/u, 'the tail of the log is printed');
-  assert.match(run.output, /^exit=124 elapsed=\d+s timeout=15 kind=TIMED_OUT$/mu);
+test('(i-a) a timed-out case still prints the log it left when Node reports the file as not ok', () => {
+  const run = runCase(10, 'hangs.spec.js', hangsReported(10), 2, { preload: KEEP_RUNNER_ALIVE });
 
-  assert.ok(run.receipt, 'a case that reported no TAP still leaves a receipt');
-  assert.equal(run.receipt.failureKind, 'TIMED_OUT');
-  assert.equal(run.receipt.exitCode, 124);
-  assert.equal(run.receipt.timeoutSeconds, 15);
-  assert.ok(run.receipt.elapsedSeconds >= 1, `wall clock was recorded: ${run.receipt.elapsedSeconds}`);
-  assert.equal(run.receipt.outcome, 'FAILED');
-  assert.equal(run.receipt.summary.tests, 0);
-  assert.equal(run.receipt.cleanup.resourcesRemaining, 0);
-  assert.equal(run.receipt.identity.verifiedBeforeMutation, true);
+  const report = assertTimedOut(run, 10, 2);
+  assert.ok(report, `Node reported the file as killed by SIGTERM:\n${run.tap}`);
+  // Printed as any failed case's TAP is, and the end of the log after it.
+  assert.ok(run.output.indexOf(report) < run.output.indexOf('==> full-api TIMED_OUT [10/1]'), run.output);
+});
+
+test('(i-b) a timed-out case prints the log it left when Node exits before reporting the file', () => {
+  const run = runCase(11, 'hangs.spec.js', HANGS_UNREPORTED, 2);
+
+  assert.equal(assertTimedOut(run, 11, 2), null, `Node exited without reporting the file:\n${run.tap}`);
 });
 
 test('(ii) a case that dies in bootstrap without producing TAP is reported as killed, not as a timeout', () => {
@@ -208,8 +319,9 @@ test('(ii) a case that dies in bootstrap without producing TAP is reported as ki
 
   assert.equal(run.status, 137, 'a runner killed by SIGKILL arrives as 128+9');
   assert.match(run.output, /full-api FAILED \[2\/1\]: fake\/kills-its-runner\.spec\.js SIGNALED exit=137 elapsed=\d+s timeout=120/u);
-  assert.match(run.output, /full-api NO TAP \[2\/1\]/u);
+  assert.match(run.output, /full-api SIGNALED \[2\/1\]: fake\/kills-its-runner\.spec\.js: last 40 lines of /u);
   assert.match(run.output, /^exit=137 elapsed=\d+s timeout=120 kind=SIGNALED$/mu);
+  // Not (i)'s race: SIGKILL leaves the runner no moment in which to report anything.
   assert.doesNotMatch(run.output, /^not ok/mu);
 
   assert.ok(run.receipt, 'a case killed before it wrote a TAP line still leaves a receipt');
@@ -219,6 +331,27 @@ test('(ii) a case that dies in bootstrap without producing TAP is reported as ki
   // The distinction the whole change exists to make: this case and the one above both report zero
   // tests and no `not ok`, and used to be indistinguishable.
   assert.notEqual(run.receipt.failureKind, 'TIMED_OUT');
+});
+
+test('(ii-a) a runner killed after a test failed prints its TAP and the end of its log', () => {
+  const run = runCase(12, 'fails-then-kills-its-runner.spec.js', failsThenKillsItsRunner(12), 120);
+
+  assert.equal(run.status, 137);
+  assert.match(run.output, /full-api FAILED \[12\/1\]: fake\/fails-then-kills-its-runner\.spec\.js SIGNALED exit=137 elapsed=\d+s timeout=120/u);
+  // The TAP section, as for any case with a `not ok` -- and then the end of the log, which such a
+  // case used to go without even when a signal had cut it short.
+  const failure = run.output.indexOf('not ok 1 - reports a failing test the ordinary way\n');
+  const tail = run.output.indexOf('==> full-api SIGNALED [12/1]: fake/fails-then-kills-its-runner.spec.js: last 40 lines of ');
+  assert.ok(failure >= 0 && tail > failure, `the TAP, then the end of the log:\n${run.output}`);
+  assert.match(run.output.slice(tail), /^# marker: killing the test runner after a failure$/mu);
+  assert.match(run.output.slice(tail), /^exit=137 elapsed=\d+s timeout=120 kind=SIGNALED$/mu);
+  assert.deepEqual([...new Set(run.output.match(/^not ok.*$/gmu))], ['not ok 1 - reports a failing test the ordinary way']);
+
+  assert.ok(run.receipt);
+  assert.equal(run.receipt.failureKind, 'SIGNALED');
+  assert.equal(run.receipt.exitCode, 137);
+  assert.equal(run.receipt.timeoutSeconds, 120);
+  assert.equal(run.receipt.outcome, 'FAILED');
 });
 
 test('(iii) a case that runs and fails still prints its own not ok section', () => {

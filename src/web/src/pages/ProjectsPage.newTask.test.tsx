@@ -10,6 +10,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CoordinatorStatus } from '../components/ProjectCoordinatorCard';
 import { encodeId } from '../lib/idCodec';
 import { NEW_TASK_INTENT, ProjectTasks, coordinatorIntentPath } from './ProjectsPage';
+import { ToastViewport } from '../components/ToastViewport';
+import { clearToasts } from '../lib/toastStore';
 
 /**
  * The project page's New task door: what the press costs, and which of the three answers it can
@@ -235,7 +237,10 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  await act(async () => root.unmount());
+  await act(async () => {
+    clearToasts();
+    root.unmount();
+  });
   container.remove();
   document.body.innerHTML = '';
   vi.unstubAllGlobals();
@@ -257,6 +262,7 @@ async function mount(node: ReactElement): Promise<void> {
               <Route path="*" element={node} />
             </Routes>
             <Probe />
+            <ToastViewport />
           </MemoryRouter>
         </AntApp>
       </QueryClientProvider>,

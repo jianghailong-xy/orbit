@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { App, Button, Drawer, Dropdown, Input, InputNumber, Modal, Select, Switch } from 'antd';
+import { Button, Drawer, Dropdown, Input, InputNumber, Modal, Select, Switch } from 'antd';
 import {
   BranchesOutlined,
   CheckCircleFilled,
@@ -182,6 +182,7 @@ import {
   useWikiWrite,
   wikiPlanGateErrors,
 } from '../lib/wikiWrites';
+import { useToast } from '../lib/toast';
 
 /**
  * The plan page (criterion 11's owner half, criterion 10 revised: mocks 21–22): the plan a wiki's
@@ -277,7 +278,7 @@ type PlanPage = ReturnType<typeof usePlanPage>;
 function WikiPlanPage({ page, spaceId, spaceSlug }: { page: PlanPage; spaceId: string; spaceSlug: string }) {
   const phone = useMediaQuery(MOBILE_QUERY);
   const navigate = useNavigate();
-  const { message } = App.useApp();
+  const message = useToast();
   const plan = page.plan!;
   const shown = page.shown;
   const [redrafting, setRedrafting] = useState(false);
@@ -306,7 +307,7 @@ function WikiPlanPage({ page, spaceId, spaceSlug }: { page: PlanPage; spaceId: s
       message.success(wikiPlanConfirmed(shown.version));
       navigate(wikiPlanPath(spaceSlug));
     } catch (error) {
-      message.error(error instanceof Error ? error.message : 'The server refused it');
+      message.error("Couldn't confirm the plan", error instanceof Error ? error.message : undefined);
     }
   };
   const onDraft = async () => {
@@ -314,7 +315,7 @@ function WikiPlanPage({ page, spaceId, spaceSlug }: { page: PlanPage; spaceId: s
       const answer = await draft.mutateAsync(undefined);
       message.success(answer.created ? WIKI_PLAN_REDRAFT_ASKED : WIKI_PLAN_REDRAFT_ALREADY);
     } catch (error) {
-      message.error(error instanceof Error ? error.message : 'The server refused it');
+      message.error("Couldn't draft the plan", error instanceof Error ? error.message : undefined);
     }
   };
 
@@ -627,7 +628,7 @@ function PlanChangeCard({
   onEdit: (doc: WikiPlanShownDoc) => void;
 }) {
   const navigate = useNavigate();
-  const { message } = App.useApp();
+  const message = useToast();
   const entries = useQuery(wikiEntriesQuery(spaceId));
   const [refused, setRefused] = useState<string[] | null>(null);
   const change = wikiPlanChange(proposal, base);
@@ -657,7 +658,7 @@ function PlanChangeCard({
     } catch (error) {
       const errors = wikiPlanGateErrors(error);
       if (errors) setRefused(errors.map((e) => `${e.path} ${e.message}`));
-      else message.error(error instanceof Error ? error.message : 'The server refused it');
+      else message.error(edit ? "Couldn't edit the change" : "Couldn't accept the change", error instanceof Error ? error.message : undefined);
     }
   };
   const onReject = async () => {
@@ -665,7 +666,7 @@ function PlanChangeCard({
       await reject.mutateAsync(undefined);
       message.success(WIKI_PLAN_CHANGE_REJECTED);
     } catch (error) {
-      message.error(error instanceof Error ? error.message : 'The server refused it');
+      message.error("Couldn't reject the change", error instanceof Error ? error.message : undefined);
     }
   };
 
@@ -1314,7 +1315,7 @@ function PlanRedraftModal({
   plan: WikiPlanState;
   protectedDocs: string[];
 }) {
-  const { message } = App.useApp();
+  const message = useToast();
   const [words, setWords] = useState('');
   const redraft = useWikiWrite((instructions: string) => redraftWikiPlan(spaceId, instructions));
   const newest = wikiPlanNewest(plan);
@@ -1325,7 +1326,7 @@ function PlanRedraftModal({
       setWords('');
       onClose();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : 'The server refused it');
+      message.error("Couldn't redraft the plan", error instanceof Error ? error.message : undefined);
     }
   };
   return (
@@ -1377,7 +1378,7 @@ function PlanEditDrawer({
 }) {
   const phone = useMediaQuery(MOBILE_QUERY);
   const navigate = useNavigate();
-  const { message } = App.useApp();
+  const message = useToast();
   const [form, setForm] = useState<WikiPlanDocForm>(() => wikiPlanDocForm(doc.stored!));
   const [refused, setRefused] = useState<string[] | null>(null);
   const [drag, setDrag] = useState<number | null>(null);
@@ -1405,7 +1406,7 @@ function PlanEditDrawer({
     } catch (error) {
       const errors = wikiPlanGateErrors(error);
       if (errors) setRefused(errors.map((e) => `${e.path} ${e.message}`));
-      else message.error(error instanceof Error ? error.message : 'The server refused it');
+      else message.error("Couldn't save the draft", error instanceof Error ? error.message : undefined);
     }
   };
 
@@ -1537,7 +1538,7 @@ function PlanSectionEditModal({
   index: number;
   onClose: () => void;
 }) {
-  const { message } = App.useApp();
+  const message = useToast();
   const stored = doc.stored!.sections[index];
   const [form, setForm] = useState({ title: stored.title, kind: stored.kind, covers: stored.covers, length: stored.length });
   const [refused, setRefused] = useState<string[] | null>(null);
@@ -1551,7 +1552,7 @@ function PlanSectionEditModal({
     } catch (error) {
       const errors = wikiPlanGateErrors(error);
       if (errors) setRefused(errors.map((e) => `${e.path} ${e.message}`));
-      else message.error(error instanceof Error ? error.message : 'The server refused it');
+      else message.error("Couldn't save the draft", error instanceof Error ? error.message : undefined);
     }
   };
   return (
