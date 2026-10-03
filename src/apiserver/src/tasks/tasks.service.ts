@@ -735,6 +735,8 @@ export const TASK_LIST_SELECT = {
   priority: true,
   provider: true,
   model: true,
+  modelHint: true,
+  modelHintReason: true,
   // Two enum columns and the relation they are about, in for the same reason parentTaskId is: a
   // reader looking at a project's tree needs to know which rows complete themselves, which rows
   // are checks and of what, and what those checks concluded — and the only alternative is one GET
@@ -3987,6 +3989,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       labels: dto.labels ? normalizeTaskLabels(dto.labels) : undefined,
       provider: dto.provider,
       model: dto.model,
+      modelHint: dto.modelHint,
+      modelHintReason: dto.modelHintReason,
       autoRunWhenReady: dto.autoRunWhenReady,
       // Omitted leaves the column default, MANUAL — the behaviour every task created before
       // migration 0123 has, and the one that never completes anything on its own.
@@ -5455,6 +5459,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         listId: item.listId ?? null,
         provider: item.provider ?? null,
         model: item.model ?? null,
+        modelHint: item.modelHint ?? null,
+        modelHintReason: item.modelHintReason ?? null,
         autoRunWhenReady: item.autoRunWhenReady ?? null,
         runAt: item.runAt ?? null,
         dueDate: item.dueDate ?? null,
@@ -8419,6 +8425,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // pin, null goes back to inheriting the assignee's provider/model.
       provider: dto.provider === undefined ? undefined : (dto.provider ?? null),
       model: dto.model === undefined ? undefined : (dto.model ?? null),
+      modelHint: dto.modelHint,
+      modelHintReason: dto.modelHintReason,
       acceptanceCriteria:
         dto.acceptanceCriteria === undefined ? undefined : (dto.acceptanceCriteria ?? null),
       acceptanceCommand:

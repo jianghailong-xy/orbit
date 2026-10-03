@@ -15,12 +15,14 @@ import {
   Param,
   Post,
   Query,
+  Res,
   StreamableFile,
   UploadedFile as UploadedFileParam,
   UnauthorizedException,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { PublicIdPipe } from '../common/public-id';
 import { MachineProtocol } from '../common/machine-protocol';
 import { TasksService } from '../tasks/tasks.service';
@@ -1995,7 +1997,18 @@ export class RunnerApiController {
     @CurrentRunner() runner: { id: string },
     @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
     @Headers(RUNNER_PROVIDERS_HEADER) providerHeader?: string,
+    @Res({ passthrough: true }) res?: Response,
   ): Promise<ClaimedSession | null> {
+    // The long poll outlives the request otherwise: a runner that stopped — a self-update re-exec, a
+    // restart, its own claim timeout — leaves it waiting here, and the session it claims next is
+    // answered to nobody (see claimSessionForRunner). The response closing before anything was
+    // written to it is the connection going away.
+    let hungUp: AbortSignal | undefined;
+    if (res) {
+      const hangUp = new AbortController();
+      res.once('close', () => hangUp.abort());
+      hungUp = hangUp.signal;
+    }
     const supportsTerminalHandoff = runnerSupportsCapability(capabilities, SESSION_TERMINAL_HANDOFF_V1);
     const supportsSourcePin = runnerSupportsCapability(capabilities, SESSION_SOURCE_PIN_V1);
     const supportedProviders = advertisedRunnerProviders(providerHeader);
@@ -2019,6 +2032,7 @@ export class RunnerApiController {
       supportsTerminalHandoff,
       supportsSourcePin,
       runnerSupportsCapability(capabilities, WIKI_MAINTENANCE_RUN_V1),
+      hungUp,
     );
     if (job?.allowOrchestration) {
       if (runnerSupportsCapability(capabilities, SESSION_ORCHESTRATION_CREDENTIAL_V1)) {
@@ -3780,6 +3794,7 @@ export class RunnerApiController {
           provider: true,
           poolKeyId: true,
           poolCodexAccountId: true,
+          model: true,
           // Which of the runner's Codex accounts a turn its usage limit ended ran on, and whether it
           // was picked by hand — see `codexUsageLimit` below.
           codexAccount: true,
@@ -4601,6 +4616,19 @@ export class RunnerApiController {
           costUsd: mu.costUSD ?? 0,
         }));
         if (rows.length > 0) await tx.llmUsage.createMany({ data: rows });
+      } else if (dto.usage && current.model) {
+        // Codex reports tokenUsage.last, not the resumed thread's cumulative total.
+        await tx.llmUsage.create({
+          data: {
+            sessionId,
+            model: current.model,
+            inputTokens: dto.usage.input_tokens ?? 0,
+            outputTokens: dto.usage.output_tokens ?? 0,
+            cacheCreationInputTokens: dto.usage.cache_creation_input_tokens ?? 0,
+            cacheReadInputTokens: dto.usage.cache_read_input_tokens ?? 0,
+            costUsd: 0,
+          },
+        });
       }
       if (failSession) {
         const terminalized = await terminalizePendingCurrentWorkSteers(tx, sessionId, {
