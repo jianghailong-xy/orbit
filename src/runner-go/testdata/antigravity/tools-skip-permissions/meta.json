@@ -1,0 +1,27 @@
+{
+  "agy": "1.2.15",
+  "recorded": "2026-10-03",
+  "argv": [
+    "--gemini_dir=/work/orbit-gemini",
+    "--print=",
+    "--input-format",
+    "stream-json",
+    "--output-format",
+    "stream-json",
+    "--dangerously-skip-permissions"
+  ],
+  "settings": {
+    "enableTelemetry": false
+  },
+  "exit": 0,
+  "note": "--dangerously-skip-permissions. Tool steps go ACTIVE -> DONE (tool_info.output) or ERROR (tool_info.error). tool_info.parameters is a display subset. A failing command is still DONE: no exit code is reported.",
+  "files": {
+    "ws:existing.txt": "old line\n"
+  },
+  "driver": [
+    "write stdin line 1",
+    "wait for result #1",
+    "close stdin",
+    "wait for exit"
+  ]
+}

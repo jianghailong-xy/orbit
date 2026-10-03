@@ -1,0 +1,1 @@
+{"event": "user", "message": {"content": "mcp\nmock:tool call_mcp_tool {\"ServerName\": \"orbit\", \"ToolName\": \"whoami\", \"Arguments\": {\"note\": \"hello\"}, \"toolSummary\": \"call_mcp_tool\", \"toolAction\": \"Using call_mcp_tool\"}\nmock:text mcp finished"}}
