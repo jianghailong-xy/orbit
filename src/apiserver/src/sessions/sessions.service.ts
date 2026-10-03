@@ -27,6 +27,7 @@ import { resolveLegacyArtifactPath } from './legacy-artifact-path';
 import { isOrbitAuthoredTurn } from './orbit-authored-turn';
 import { readSessionMessageCard } from './session-message';
 import {
+  closeRequestsTheRetryWillNotResend,
   isSessionReplyTurn,
   queuedRepliesContent,
   readOpenRequestPeers,
@@ -7350,6 +7351,13 @@ export class SessionsService {
       });
       await this.linkAttachments(turn.id, attachmentIds, tx);
       await opts?.onTurnWritten?.(tx, turn);
+      // This turn takes the place of the retry the failed run was waiting on, which the write below
+      // disarms: what it kept for its re-send will not get one (§8 criterion 26, session-request.ts).
+      // The sweep's own re-send, and the failure card's Retry, took their request onto this turn just
+      // above, and leave nothing for it.
+      if (current.retryAt != null || current.retryClaimedAt != null) {
+        await closeRequestsTheRetryWillNotResend(tx, id);
+      }
       // A revive may also move the session to another provider on the same runtime. Unlike a live
       // switch there is no process to reload: the row goes PENDING and the claim below resolves
       // the environment from it, which is also why a model the new provider doesn't serve is
