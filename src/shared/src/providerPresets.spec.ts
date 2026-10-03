@@ -56,6 +56,22 @@ describe('PROVIDER_PRESETS', () => {
     expect(kimi.baseUrl).toBe('https://api.moonshot.ai/v1');
   });
 
+  it('runs Gemini on the Antigravity CLI, pointed at the API that CLI speaks', () => {
+    const gemini = providerPreset('gemini')!;
+    // Codex needs the Responses API, which Google's OpenAI-compatible endpoint never served, so
+    // no session could run on the old pairing. agy speaks the Gemini API itself and appends
+    // /v1beta/models/… to the host it is given.
+    expect(gemini.runtime).toBe('antigravity');
+    expect(gemini.baseUrl).toBe('https://generativelanguage.googleapis.com');
+    expect(gemini.note).toBeUndefined();
+    // agy refuses a model it doesn't list, so the list is agy's — read from the runner, with these
+    // as the fallback: one row per model, its thinking levels folded out of the slug as the
+    // runner folds them (`gemini-3.8-flash-high` is `gemini-3.8-flash` at `high`).
+    expect(gemini.modelsFromRuntime).toBe(true);
+    expect(gemini.catalog).toBeUndefined();
+    for (const m of gemini.models) expect(m.value).not.toMatch(/-(low|medium|high)$/);
+  });
+
   it('resolves a preset only for a slug it knows', () => {
     expect(providerPreset('anthropic')?.label).toBe('Anthropic (Claude)');
     expect(providerPreset('moonshot')?.label).toBe('Kimi (Moonshot)');

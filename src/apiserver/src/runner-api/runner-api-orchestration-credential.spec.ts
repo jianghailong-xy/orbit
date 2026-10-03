@@ -25,6 +25,9 @@ function makeController(options: {
     $executeRaw: async () => 0,
   };
   const prisma = {
+    // A runner that names no runtime makes the claim/reclaim ask which providers borrow one
+    // (providerSlugsOn); none do here.
+    modelProvider: { findMany: async () => [] },
     session: {
       findMany: async ({ where }: { where: Record<string, unknown> }) => {
         reclaimLookups.push(where);

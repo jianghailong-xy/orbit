@@ -12,6 +12,10 @@ const RUNNER = {
   ownerId: '22222222-2222-4222-8222-222222222222',
 };
 
+/** Whether a session query asks for `slug`'s rows: the preflights name every slug on a runtime. */
+const asksFor = (where: Record<string, unknown>, slug: string) =>
+  (where.provider as { in?: string[] } | undefined)?.in?.includes(slug) ?? false;
+
 test('legacy claim explains the pending OpenCode stall without stranding other work', async () => {
   let claimedFor: { supportedProviders?: readonly AgentProvider[] } | undefined;
   let storedError: string | undefined;
@@ -22,12 +26,13 @@ test('legacy claim explains the pending OpenCode stall without stranding other w
       // told apart by what they ask for. Answering both with the same row would make this spec
       // agree with a claim that marked the wrong sessions.
       findMany: async ({ where }: { where: Record<string, unknown> }) =>
-        where.provider === AgentProvider.OPENCODE ? [{ id: 'session-1', error: null }] : [],
+        asksFor(where, AgentProvider.OPENCODE) ? [{ id: 'session-1', error: null }] : [],
       updateMany: async ({ data }: { data: { error: string } }) => {
         storedError = data.error;
         return { count: 1 };
       },
     },
+    modelProvider: { findMany: async () => [] },
   } as never;
   const queue = {
     claimSessionForRunner: async (runner: { supportedProviders?: readonly AgentProvider[] }) => {
@@ -58,13 +63,14 @@ test('an OpenCode-capable runner that does not name Antigravity has its Antigrav
     session: {
       findMany: async ({ where }: { where: Record<string, unknown> }) => {
         asked.push(where.provider);
-        return where.provider === AgentProvider.ANTIGRAVITY ? [{ id: 'agy-1', error: null }] : [];
+        return asksFor(where, AgentProvider.ANTIGRAVITY) ? [{ id: 'agy-1', error: null }] : [];
       },
       updateMany: async (args: { where: Record<string, unknown>; data: { error: string } }) => {
         marked.push(args);
         return { count: 1 };
       },
     },
+    modelProvider: { findMany: async () => [] },
   } as never;
   const queue = {
     claimSessionForRunner: async (runner: { supportedProviders?: readonly AgentProvider[] }) => {
@@ -80,7 +86,7 @@ test('an OpenCode-capable runner that does not name Antigravity has its Antigrav
     null,
   );
   // Only the runtime it did not name is asked about: OpenCode needs no preflight here.
-  assert.deepEqual(asked, [AgentProvider.ANTIGRAVITY]);
+  assert.deepEqual(asked, [{ in: [AgentProvider.ANTIGRAVITY] }]);
   assert.equal(marked.length, 1);
   assert.equal(marked[0].data.error, ANTIGRAVITY_RUNNER_UPGRADE_ERROR);
   // Conditional on the row still being a pending, uncancelled Antigravity row of this runner, so
@@ -89,7 +95,7 @@ test('an OpenCode-capable runner that does not name Antigravity has its Antigrav
     id: { in: ['agy-1'] },
     assignedRunnerId: RUNNER.id,
     status: 'PENDING',
-    provider: AgentProvider.ANTIGRAVITY,
+    provider: { in: [AgentProvider.ANTIGRAVITY] },
     cancelRequestedAt: null,
   });
   assert.deepEqual(published, ['agy-1']);
@@ -101,12 +107,55 @@ test('an OpenCode-capable runner that does not name Antigravity has its Antigrav
   ]);
 });
 
+test('a Gemini key borrows Antigravity, so a runner that does not name it has that row explained too', async () => {
+  // The slug is the configured row's own (`gemini`), but the job it dispatches is an `antigravity`
+  // one, which this runner would start as Claude. The claim SQL withholds it (and 0372's trigger
+  // behind it); the preflight says why, exactly as for the built-in slug.
+  const providerLookups: unknown[] = [];
+  const marked: Array<{ where: Record<string, unknown>; data: { error: string } }> = [];
+  const prisma = {
+    session: {
+      findMany: async ({ where }: { where: Record<string, unknown> }) =>
+        asksFor(where, 'gemini') ? [{ id: 'gemini-1', error: null }] : [],
+      updateMany: async (args: { where: Record<string, unknown>; data: { error: string } }) => {
+        marked.push(args);
+        return { count: 1 };
+      },
+    },
+    modelProvider: {
+      findMany: async (args: unknown) => {
+        providerLookups.push(args);
+        return [{ slug: 'gemini' }];
+      },
+    },
+  } as never;
+  const queue = { claimSessionForRunner: async () => null } as never;
+  const realtime = { publishSessionCreated: () => undefined } as never;
+  const controller = new RunnerApiController(prisma, queue, realtime, {} as never, {} as never, {} as never, { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never);
+
+  assert.equal(await controller.claim(RUNNER, SESSION_SOURCE_PIN_V1, 'claude,codex,opencode'), null);
+  // The rows dispatch would resolve: enabled, this owner's or shared, on the Antigravity runtime.
+  assert.deepEqual(providerLookups, [
+    {
+      where: {
+        runtime: AgentProvider.ANTIGRAVITY,
+        enabled: true,
+        OR: [{ ownerId: null }, { ownerId: RUNNER.ownerId }],
+      },
+      select: { slug: true },
+    },
+  ]);
+  assert.equal(marked.length, 1);
+  assert.equal(marked[0].data.error, ANTIGRAVITY_RUNNER_UPGRADE_ERROR);
+  assert.deepEqual(marked[0].where.provider, { in: [AgentProvider.ANTIGRAVITY, 'gemini'] });
+});
+
 test('a row already carrying the notice is not written again on every long poll', async () => {
   let writes = 0;
   const prisma = {
     session: {
       findMany: async ({ where }: { where: Record<string, unknown> }) =>
-        where.provider === AgentProvider.ANTIGRAVITY
+        asksFor(where, AgentProvider.ANTIGRAVITY)
           ? [{ id: 'agy-1', error: ANTIGRAVITY_RUNNER_UPGRADE_ERROR }]
           : [],
       updateMany: async () => {
@@ -114,6 +163,7 @@ test('a row already carrying the notice is not written again on every long poll'
         return { count: 1 };
       },
     },
+    modelProvider: { findMany: async () => [] },
   } as never;
   const queue = { claimSessionForRunner: async () => null } as never;
   const controller = new RunnerApiController(prisma, queue, {} as never, {} as never, {} as never, {} as never, { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never);
@@ -180,7 +230,11 @@ function reclaimRow(id: string, provider: AgentProvider, status: string) {
 
 type UpgradeMark = { where: Record<string, unknown>; data: { error: string } };
 
-function reclaimPrisma(rows: unknown[], onUpdate: (mark: UpgradeMark) => void) {
+function reclaimPrisma(
+  rows: unknown[],
+  onUpdate: (mark: UpgradeMark) => void,
+  configured: Array<{ slug: string; runtime: string }> = [],
+) {
   return {
     session: {
       findMany: async () => rows,
@@ -190,7 +244,12 @@ function reclaimPrisma(rows: unknown[], onUpdate: (mark: UpgradeMark) => void) {
       },
     },
     user: { findUnique: async () => null },
-    modelProvider: { findFirst: async () => null },
+    modelProvider: {
+      findFirst: async () => null,
+      // providerSlugsOn: the configured rows that borrow the runtime asked about.
+      findMany: async ({ where }: { where: { runtime: string } }) =>
+        configured.filter((row) => row.runtime === where.runtime).map(({ slug }) => ({ slug })),
+    },
     runEvent: { aggregate: async () => ({ _max: { seq: 0 } }) },
     $executeRaw: async () => 0,
   } as never;
@@ -264,6 +323,32 @@ test('a reclaim that does not name Antigravity omits its rows and explains the p
   assert.equal(marked[0].data.error, ANTIGRAVITY_RUNNER_UPGRADE_ERROR);
   assert.deepEqual(marked[0].where.id, { in: ['agy-pending'] });
   assert.deepEqual(published, ['agy-pending']);
+});
+
+test('a reclaim that does not name Antigravity omits a Gemini key\'s rows too', async () => {
+  const marked: UpgradeMark[] = [];
+  const geminiRow = { ...reclaimRow('gemini-pending', AgentProvider.CLAUDE, 'PENDING'), provider: 'gemini', providerBuiltin: false };
+  const prisma = reclaimPrisma(
+    [
+      geminiRow,
+      { ...reclaimRow('gemini-idle', AgentProvider.CLAUDE, 'AWAITING_INPUT'), provider: 'gemini', providerBuiltin: false },
+      reclaimRow('claude-1', AgentProvider.CLAUDE, 'AWAITING_INPUT'),
+    ],
+    (mark) => marked.push(mark),
+    [{ slug: 'gemini', runtime: AgentProvider.ANTIGRAVITY }],
+  );
+  const realtime = { publishSessionCreated: () => undefined } as never;
+  const controller = new RunnerApiController(prisma, {} as never, realtime, {} as never, {} as never, {} as never, { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never);
+
+  // Rebuilt by this runner, the Gemini session would come back as a Claude one.
+  const res = await controller.reclaim(RUNNER, undefined, 'claude,codex,opencode');
+  assert.deepEqual(
+    res.sessions.map((s) => s.sessionId),
+    ['claude-1'],
+  );
+  assert.equal(marked.length, 1);
+  assert.deepEqual(marked[0].where.id, { in: ['gemini-pending'] });
+  assert.equal(marked[0].data.error, ANTIGRAVITY_RUNNER_UPGRADE_ERROR);
 });
 
 test('a capable reclaim keeps the Antigravity row in the snapshot, on its own runtime', async () => {

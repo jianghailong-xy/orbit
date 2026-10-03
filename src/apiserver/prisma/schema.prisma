@@ -5514,8 +5514,9 @@ model ModelProvider {
   slug          String   @unique
   label         String
   // Which configurable runtime CLI drives it: "claude" (Anthropic-compatible endpoint),
-  // "codex" (OpenAI-compatible) or "kimi" (Moonshot's own API, which the Kimi CLI speaks
-  // natively). Borrowing the Kimi runtime is not the same as claiming the built-in `kimi`
+  // "codex" (OpenAI-compatible), "kimi" (Moonshot's own API, which the Kimi CLI speaks
+  // natively) or "antigravity" (Google's Gemini API, which agy speaks natively). Borrowing the
+  // Kimi or Antigravity runtime is not the same as claiming the built-in `kimi` / `antigravity`
   // slug, which stays reserved.
   runtime       String   @default("claude")
   baseUrl       String   @map("base_url")

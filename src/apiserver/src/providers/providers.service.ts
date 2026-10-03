@@ -22,6 +22,19 @@ import { withPreset } from './preset-overlay';
 import { pickFreeSlug, slugBase } from './provider-slug';
 
 /**
+ * The Gemini API model agy calls for one of its own model names, which is what the connection test
+ * has to ask for to probe the model a session runs. agy names a model by family and thinking level
+ * (`gemini-3.8-flash-high`, or the base name and `--effort`) and maps it onto an API id itself;
+ * measured on agy 1.2.16 that id is the base name for every model it lists except 3.1 Pro, which the
+ * API still serves only as a preview (docs/antigravity-runtime-contract.md §9.2). A name agy does
+ * not list is asked for as it is.
+ */
+function geminiApiModel(model: string): string {
+  const base = model.replace(/-(low|medium|high|xhigh|max)$/, '');
+  return base === 'gemini-3.1-pro' ? 'gemini-3.1-pro-preview' : base;
+}
+
+/**
  * The slugs whose `model_provider` row is a compatibility guard, not a provider: migrations 0080 and
  * 0367 parked one on `opencode` and one on `antigravity` when each became a built-in runtime, to
  * fence an older control plane through a rolling deploy (and to keep it from creating a provider
@@ -588,8 +601,10 @@ export class ProvidersService {
 
   /**
    * Probe a provider before it's saved: one minimal request on the endpoint the borrowed runtime
-   * will actually call, with the same `Bearer` auth that runtime injects — POST {baseUrl}/v1/messages
-   * for claude, POST {baseUrl}/responses for codex, POST {baseUrl}/chat/completions for kimi.
+   * will actually call, with the same auth that runtime injects — POST {baseUrl}/v1/messages for
+   * claude, POST {baseUrl}/responses for codex, POST {baseUrl}/chat/completions for kimi, each with
+   * a `Bearer` key, and POST {baseUrl}/v1beta/models/{model}:generateContent with `x-goog-api-key`
+   * for antigravity: the Gemini API's own method, whose streaming twin is what agy calls.
    * Stateless — the browser passes the freshly-typed key, nothing is persisted. Never throws on a
    * network/HTTP failure; returns a structured verdict the picker renders inline.
    */
@@ -608,28 +623,35 @@ export class ProvidersService {
     // runner configures it with wire_api="responses"), so a codex probe that asked /chat/completions
     // would pass an endpoint — Gemini's OpenAI-compatible one is exactly this — that every session
     // on it then fails against.
+    const isGemini = dto.runtime === 'antigravity';
     const isResponses = dto.runtime === 'codex';
     const isOpenAIDialect = isResponses || dto.runtime === 'kimi';
-    const endpoint = isResponses
-      ? `${base}/responses`
-      : isOpenAIDialect
-        ? `${base}/chat/completions`
-        : `${base}/v1/messages`;
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${dto.apiKey}`,
-    };
-    if (!isOpenAIDialect) headers['anthropic-version'] = '2023-06-01';
+    const isAnthropic = !isGemini && !isOpenAIDialect;
+    const endpoint = isGemini
+      ? `${base}/v1beta/models/${encodeURIComponent(geminiApiModel(model))}:generateContent`
+      : isResponses
+        ? `${base}/responses`
+        : isOpenAIDialect
+          ? `${base}/chat/completions`
+          : `${base}/v1/messages`;
+    // The Gemini API takes its key in a header of its own, which is the one agy sends.
+    const headers: Record<string, string> = isGemini
+      ? { 'Content-Type': 'application/json', 'x-goog-api-key': dto.apiKey }
+      : { 'Content-Type': 'application/json', Authorization: `Bearer ${dto.apiKey}` };
+    if (isAnthropic) headers['anthropic-version'] = '2023-06-01';
     // A subscription OAuth token (sk-ant-oat…, what `claude` stores after a browser login) is only
     // served for requests that identify as Claude Code, which the CLI does through its system
     // prompt. Without it Anthropic turns such a token away with a 429 whose message is the literal
     // string "Error" — so a key that drives sessions perfectly well failed the probe. Send what the
     // runtime sends, so the probe is no stricter than the session it is standing in for.
-    // The Responses API spells it differently and refuses a cap under 16 output tokens.
-    const body: Record<string, unknown> = isResponses
-      ? { model, input: 'ping', max_output_tokens: 16 }
-      : { model, max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] };
-    if (!isOpenAIDialect) body.system = "You are Claude Code, Anthropic's official CLI for Claude.";
+    // The Responses API spells it differently and refuses a cap under 16 output tokens; Gemini
+    // names the model in the path rather than the body.
+    const body: Record<string, unknown> = isGemini
+      ? { contents: [{ role: 'user', parts: [{ text: 'ping' }] }], generationConfig: { maxOutputTokens: 1 } }
+      : isResponses
+        ? { model, input: 'ping', max_output_tokens: 16 }
+        : { model, max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] };
+    if (isAnthropic) body.system = "You are Claude Code, Anthropic's official CLI for Claude.";
     try {
       const resp = await fetch(endpoint, {
         method: 'POST',
@@ -645,13 +667,18 @@ export class ProvidersService {
       if (resp.status === 404) {
         // For codex a 404 on /responses is usually not a typo in the URL: it is an OpenAI-compatible
         // endpoint that only serves Chat Completions, which no current Codex can use. "Check the Base
-        // URL" would send the owner looking for a mistake they did not make.
+        // URL" would send the owner looking for a mistake they did not make. Gemini's path names the
+        // model, so a 404 that comes back as Google's own error is about the model, and says which;
+        // only a bare one is a path that doesn't exist.
+        const detail = isGemini ? this.extractErr(await resp.text().catch(() => '')) : '';
         return {
           ok: false,
           status: resp.status,
           message: isResponses
             ? "Endpoint doesn't serve the OpenAI Responses API — Codex needs it, so a Chat Completions-only endpoint can't run on Codex"
-            : 'Endpoint not found — check the Base URL',
+            : detail
+              ? `HTTP ${resp.status} — ${detail}`
+              : 'Endpoint not found — check the Base URL',
         };
       }
       // Keep the status next to the vendor's own words: a body can carry a message as unhelpful as

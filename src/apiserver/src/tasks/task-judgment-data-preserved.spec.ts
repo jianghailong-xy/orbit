@@ -1793,6 +1793,19 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // (Written as 0367 on its own branch and renumbered before it landed: 0367 is the antigravity
       // runtime above, and 0369 and 0370 landed first.)
       '0371_pool_login_person',
+      // The Gemini preset's rows move onto the Antigravity runtime (0372): one UPDATE of
+      // `model_provider.runtime` and `base_url` on the rows whose `preset_slug` is `gemini`, one
+      // UPDATE that sets `session.runtime_session_id` to NULL on the sessions whose provider is one of
+      // those rows' slugs, and one CREATE OR REPLACE FUNCTION: 0367's own claim guard
+      // `guard_antigravity_runner_claim`, which now also reads `model_provider` (a plain SELECT, no
+      // lock) to tell a borrowed Antigravity slug. Read against every claim above: `session` is not a
+      // preserved relation, and no `task`, `project` or `project_acceptance_*` object is named, so
+      // the 0177 pair and every stored task and criterion row are out of its reach; no row is
+      // inserted or deleted. The function it replaces is 0367's, not the DONE writer fence, and no
+      // table, column, constraint, index, trigger or type is created, altered or dropped, so it names
+      // none of the six preserved objects. (0370 and 0371 landed first; 0373, below,
+      // landed before this did and left 0372 to it.)
+      '0372_gemini_antigravity_runtime',
       // Why only the owner can settle an agent's OWNER_CONFIRMED task (0373,
       // tasks/owner-confirmation-reason.ts): one new enum and two nullable columns on `task` with a
       // CHECK over those two columns only. Read against every claim above: no existing column of
