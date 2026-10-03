@@ -100,7 +100,7 @@ test('a fully spent pool frees up at the EARLIEST member reset; each member keep
 });
 
 test('a member that reports no quota is last in line, not idle at 0%', async () => {
-  const [pool] = await listPools([member('silent'), member('busy')], { busy: fiveHour(85) });
+  const [pool] = await listPools([member('silent'), member('busy')], { busy: fiveHour(79) });
   assert.deepEqual(next(pool), ['busy']);
   assert.deepEqual(states(pool), { silent: 'NO_QUOTA', busy: 'AVAILABLE' });
   assert.equal(pool.members[0].planUsage, null);

@@ -81,10 +81,11 @@ export function loginPoolResumesAt(accounts: readonly LoginAccount[], now: Date)
  *
  * - `stickyId`, the account the session already runs on, is kept for as long as it can run, even when
  *   another would be taken first: moving accounts mid-conversation gains nothing.
- * - Otherwise one that can run, as pool-select.ts takes an account pool's members: none nearly spent (90%)
- *   before one that is, then the one whose quota resets soonest (quotaExpiresAt) — what an account has
- *   left when its weekly window resets is lost — then the most room in its 5-hour window, an account with
- *   no reading after one with room. The rest of a tie goes to the older account.
+ * - Otherwise one that can run, as pool-select.ts takes an account pool's members: none nearly spent
+ *   (80% of a 5-hour window, 90% of a longer one) before one that is, then the one whose quota resets
+ *   soonest (quotaExpiresAt) — what an account has left when its weekly window resets is lost — then the
+ *   most room in its 5-hour window, an account with no reading after one with room. The rest of a tie
+ *   goes to the older account.
  * - When none can run, the session stays on its own account: its run meets the limit or the refusal there,
  *   and the retry it arms waits for the first account to come back (QueueService.loginPoolRetryAt), whose
  *   claim then moves it. A session on none of the pool's accounts goes to the one that comes back first,
