@@ -948,6 +948,9 @@ body {
   background: var(--border-subtle);
   margin: 8px 16px;
 }
+.tp-group + .tp-divider {
+  background: transparent;
+}
 .tp-group {
   padding: 0 8px;
 }
