@@ -1,0 +1,20 @@
+{
+  "agy_version": "1.2.16",
+  "completed_at_utc": "2026-10-03T17:55:08.832787+00:00",
+  "official_logout_valid_credential_directories": 11,
+  "official_logout_tokens_absent": true,
+  "post_logout_probe": "same directory returned authentication required / result ERROR / exit 1",
+  "invalid_placeholder_file": "authentication was already rejected; the single unusable file was removed before deleting temp directories",
+  "user_root_gemini_existed_before": false,
+  "user_root_gemini_exists_after": false,
+  "system_keyring": "never reachable: isolated nonexistent D-Bus address plus SSH file-storage branch",
+  "owned_host_process_records": 36,
+  "owned_host_pids_remaining": 0,
+  "sandbox_pid_note": "three initial socket-denied probes used sandbox namespace PIDs, excluded from host PID checks; no process was killed during cleanup",
+  "temporary_experiment_root_removed": true,
+  "empty_failed_download_root_removed": true,
+  "static_analysis_temporary_paths_removed": 19,
+  "temporary_helper_paths_removed": 10,
+  "sensitive_values_in_submitted_samples": false,
+  "original_session_privacy_gap": "one tool result retained fragmented authorization-code echo; cannot claim original conversation/log privacy criterion passed"
+}

@@ -1,0 +1,7 @@
+{
+  "agy_version": "1.2.16",
+  "pty": true,
+  "dbus": "nonexistent isolated socket",
+  "stage": "awaiting owner browser authorization",
+  "output": "\n▄▀▀▄\n▀▀▀▀▀▀\n▀▀▀▀▀▀▀▀\n  ▄▀▀    ▀▀▄\n ▄▀▀      ▀▀▄\n\n Welcome to the Antigravity CLI. You are currently not signed in.\n\n Select login method:\n > 1. Google OAuth\n2. Use a Google Cloud project\n\n↑/↓ Navigate · enter SelectOpen the URL below in your browser:\n ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n https://accounts.google.com/o/oauth2/auth?<AUTH_QUERY_REDACTED>\n ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n\n Copy and paste the URL or click on the link below:\n ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n → Click here to authenticate\n ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n\n After authenticating, copy the code displayed in the browser and paste it below:\n\n authorization code...\n\n\n  shift+up/down Navigate"
+}
