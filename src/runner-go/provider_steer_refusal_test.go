@@ -95,9 +95,10 @@ func TestRefusingASteerSettlesItInsteadOfDroppingIt(t *testing.T) {
 func TestEverySessionLoopThatCannotSteerRefusesOne(t *testing.T) {
 	loops := map[string][]string{
 		// provider → the source files its inbox dispatch lives in.
-		providerCodex:    {"codex_appserver.go"},
-		providerKimi:     {"kimi_acp.go"},
-		providerOpenCode: {"opencode.go"},
+		providerCodex:       {"codex_appserver.go"},
+		providerKimi:        {"kimi_acp.go"},
+		providerOpenCode:    {"opencode.go"},
+		providerAntigravity: {"antigravity.go"},
 	}
 
 	checked := 0

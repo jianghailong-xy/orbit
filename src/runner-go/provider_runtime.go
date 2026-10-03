@@ -19,7 +19,7 @@ const (
 	// transportStreamJSON: ONE process for the whole session, spoken to in stream-json
 	// JSONL over a stdin that stays open. A turn's `result` is a turn boundary, not an
 	// exit, so a prompt sent while the engine is mid-turn reaches the process that is
-	// already working. The prompt is never argv — it is a `user` frame (claude).
+	// already working. The prompt is never argv — it is a `user` frame (claude, antigravity).
 	transportStreamJSON providerTransport = "stream-json"
 	// transportJSONRPC: also one process for the whole session, but driven by a JSON-RPC
 	// conversation over stdio rather than by conversation frames (codex app-server, kimi ACP).
@@ -105,6 +105,17 @@ var providerRuntimes = map[string]providerRuntime{
 		transport: transportOneShot,
 		run: func(p sessionProcessArgs) (string, bool, bool) {
 			return runOpenCodeSessionProcess(p.ctx, p.shutdownCtx, p.t, p.job, p.leaseGeneration,
+				p.execDir, p.scratchDir, p.emit, p.emitFor, p.setTurn, p.firstSpawn, p.bg,
+				p.completeTurn, p.waitTurnPermit, p.onLeaseLost)
+		},
+	},
+	providerAntigravity: {
+		// One resident agy per session, a `user` line per turn over a stdin that stays open. It
+		// steers nothing: agy queues a line written mid-turn as the next turn rather than taking
+		// it into the running one (docs/antigravity-runtime-contract.md §8).
+		transport: transportStreamJSON,
+		run: func(p sessionProcessArgs) (string, bool, bool) {
+			return runAntigravitySessionProcess(p.ctx, p.shutdownCtx, p.t, p.job, p.leaseGeneration,
 				p.execDir, p.scratchDir, p.emit, p.emitFor, p.setTurn, p.firstSpawn, p.bg,
 				p.completeTurn, p.waitTurnPermit, p.onLeaseLost)
 		},
