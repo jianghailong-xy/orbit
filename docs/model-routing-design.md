@@ -214,6 +214,25 @@
 - **闸门跟着改**：sweep 的额度闸门（`tasks.service.ts` 的 `quotaGate`）今天按 Agent 的种子引擎判断，P5 改成按路由选出的
   引擎（或任务 pin）判断 —— 否则闸门挡的和实际要用的不是同一个引擎。
 
+P5 实现的口径（`model-routing.ts` 的 `chooseEngine`，读取在 `task-route-decision.ts`）：
+
+- **登录**：与 `sessions.create` 的登录预检（`signedOutEngineRefusal`）同一个判断，看这次运行会用的那个账号；runner 离线、
+  报 `unknown`、带自己的凭据都不算未登录。
+- **额度**：看这次运行会用的账号（Agent 交给 Orbit 选账号时，就是 `automaticAccount` 选出的那个）里**管整个引擎**的窗口 ——
+  Claude 的 5 小时与周窗口、Codex 的 primary / secondary —— 任一 ≥ 90% 且没过重置时间即排除。模型系自己的窗口
+  （Opus 周窗口）只按 §5 第 3 条换系，不排除整个引擎。
+- 目标 runner 没上报模型目录的其他引擎也不选：档位表映射不到具体模型。
+- 只有一个候选（没勾其他引擎，或任务 pin 了 provider）、或者没定出档位时，不看以上任何一条，理由与 P5 之前逐字相同。
+- **理由**：`Engine codex: claude is at 93% of its weekly quota` · `Engine codex: claude is signed out on this runner` ·
+  `Engine codex: the task it verifies last ran on claude`；想换却没有可换的：`Engine claude: this agent's own engine — no
+  other engine it may use is available`，后面每个被排除的引擎一行（`codex is signed out on this runner`）。
+  `features` 另记 `modelRoutingProviders`、`engineStates`、`verifiedRunEngine`。
+- **闸门**：就绪扫描与自动重跑的重试决策（`autoRunRetryDecisions`）判断的都是「这次运行会建在哪个引擎上」：Agent 开了智能
+  选择且路由生效 → 路由选出的引擎；否则任务的 provider pin；再否则 Agent 的种子引擎。只有开了开关的 Agent 才在闸门前
+  算路由，pin 与开关随扫描的同一条 SQL 读出。
+- **界面**：Engines it may use 只列有档位表的引擎（claude、codex），本 Agent 的引擎勾上且不能取消；kimi 没有档位表，勾了也
+  选不到，所以不列（效果图里的 kimi 不出现）。
+
 ## 7. 数据模型
 
 所有新列和新表由 P1 的一个迁移一次加齐，后续各期不再加迁移。
@@ -488,8 +507,10 @@ model 一律取**实际运行**的（会话上首次 claim 之后的值）：生
 
 - **账号粒度的 Opus 额度**：第一版读目标 runner 默认账号的 `planUsage.claude.sevenDayOpus`。会话最终落在哪个账号（Agent 固定
   的账号、按额度自动选的账号、账号池成员）要到 create / claim 才定，可能与读到的不是同一个账号。P5 做额度过滤时再细分。
+  P5 的引擎排除已按这次运行会用的账号读额度（§6）；Opus 换系（§5 第 3 条）仍读默认账号。
 - **闸门按引擎、不按模型系**：`planUsageBlockedUntil` 看该引擎快照里的所有窗口；Opus 周窗口用满时，路由到 Sonnet 的运行
-  也会被挡住。P5 改闸门时一并考虑要不要按模型系看窗口。
+  也会被挡住。P5 改闸门时一并考虑要不要按模型系看窗口。P5 只改了闸门判断哪个引擎，窗口口径没动：Opus 周窗口用满时，
+  路由到 Sonnet 的 claude 运行仍会被挡住，按模型系看窗口留给后续。
 - **本 Agent 的引擎会漂**：它来自 `agentProviderSeed()`（最近一次人开的会话），人临时用另一个引擎开一次会话，任务运行的
   引擎也跟着变。这是今天 LEGACY 链的行为（契约 §7.2 P5 说的"位置决定引擎"），路由不放大也不修正它；要固定就在任务上
   pin provider。
