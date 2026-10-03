@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>工作区排序 — 改动部分效果图</title>
+<style>
+  :root {
+    /* Web 侧边栏（src/web/src/index.css，浅色主题） */
+    --bg-raised: #ffffff;
+    --bg-hover: #f5f6f7;
+    --bg-hover-strong: #e3e6eb;
+    --border-subtle: #eceef1;
+    --text-1: #1f2329;
+    --text-2: #646a73;
+    --text-3: #8f959e;
+    --text-4: #a8acb3;
+    --brand: #3370ff;
+    --brand-tint: #eaf1ff;
+    --brand-border: #bcd3ff;
+    --warning: #c2710c;
+    --warning-bg: #fff4e6;
+    /* iOS 抽屉（与 ios-drawer-status-column.html 相同的实测值） */
+    --tint: #3E69F6;
+    --amber: #FF9500;
+    --label-2: rgba(0, 0, 0, .5);
+    --drawer: #F9F9F9;
+    --mark: rgba(255, 59, 48, .9);
+    --ui: -apple-system, BlinkMacSystemFont, "Inter", "PingFang SC", "Noto Sans SC", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #e4e4e9; color: #16161a; font: 15px/1.55 var(--ui); -webkit-font-smoothing: antialiased; }
+  .board { width: 960px; padding: 40px 44px 48px; background: #e4e4e9; }
+  h1 { font-size: 26px; line-height: 1.3; letter-spacing: -.02em; margin: 0 0 6px; }
+  .lede { color: #55555e; margin: 0 0 28px; font-size: 15.5px; }
+  code { font: 12.5px "DejaVu Sans Mono", ui-monospace, monospace; background: #d9d9e0; border-radius: 4px; padding: 1px 5px; }
+  .grid { display: grid; grid-template-columns: 416px 416px; column-gap: 40px; row-gap: 44px; align-items: start; }
+  figure { margin: 0; }
+  figcaption { margin-top: 16px; font-size: 14px; line-height: 1.6; color: #4a4a52; }
+  figcaption > b { color: #16161a; display: block; font-size: 15px; margin-bottom: 4px; }
+  figcaption ol { margin: 6px 0 0; padding-left: 0; list-style: none; }
+  figcaption li { margin: 5px 0; padding-left: 26px; position: relative; }
+  figcaption li .num { position: absolute; left: 0; top: 2px; }
+  figcaption p { margin: 8px 0 0; }
+  .tag { display: inline-block; font-size: 13px; font-weight: 600; border-radius: 999px; padding: 2px 10px; margin-bottom: 12px; }
+  .tag.now { background: #ffd9d4; color: #8f1d13; }
+  .tag.after { background: #d6e4ff; color: #14428f; }
+  .num { display: inline-flex; width: 19px; height: 19px; border-radius: 50%; background: var(--mark); color: #fff;
+         font-size: 11.5px; font-weight: 700; line-height: 1; align-items: center; justify-content: center; vertical-align: 1px; }
+  .frame { position: relative; }
+  .mk { position: absolute; border: 1.6px dashed var(--mark); border-radius: 8px; pointer-events: none; z-index: 9; }
+  .mk .num { position: absolute; top: -11px; right: -11px; }
+  .mk .num.l { right: auto; left: -11px; }
+  svg.i { display: block; fill: currentColor; }
+  .cursor { position: absolute; width: 14px; height: 21px; z-index: 5; overflow: visible; }
+
+  /* ── Web 侧边栏 ─────────────────────────────────────────── */
+  .nav { width: 416px; padding: 2px 0 4px; border-radius: 12px; background: var(--bg-raised);
+         box-shadow: 0 0 0 1px rgba(0,0,0,.06), 0 12px 28px rgba(0,0,0,.07); font-family: var(--ui); }
+  .tp-divider { height: 1px; background: var(--border-subtle); margin: 8px 16px; }
+  .tp-group { padding: 0 8px; }
+  /* 组标题：照 Projects 的 .tp-group-head / .tp-group-name / .tp-caret */
+  .tp-group-head { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px; }
+  .tp-group-name { font-size: 13px; font-weight: 600; color: var(--text-2); }
+  .tp-group-head .tp-count { font-size: 13px; color: var(--text-3); }
+  .tp-caret { width: 12px; height: 12px; color: var(--text-3); opacity: 0; }
+  .tp-caret.collapsed { transform: rotate(-90deg); }
+  .tp-group-head.hover .tp-caret { opacity: 1; }
+  .tp-edit { position: relative; margin-left: auto; padding: 1px 6px; border-radius: 4px; font-size: 13px; line-height: 20px;
+             color: var(--text-2); visibility: hidden; }
+  .tp-group-head.hover .tp-edit { visibility: visible; }
+  .tp-edit.on { background: var(--bg-hover-strong); color: var(--text-1); }
+  .tp-edit.done { visibility: visible; color: var(--brand); font-weight: 600; }
+  .tp-edit .cursor { left: 24px; top: 12px; }
+  .tp-item { position: relative; display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 8px;
+             border-radius: 6px; color: var(--text-1); font-size: 14px; line-height: 20px; }
+  .tp-item.active { background: var(--brand-tint); color: var(--brand); }
+  .tp-ico { position: relative; display: flex; flex: none; color: var(--text-2); }
+  .tp-item.active .tp-ico { color: var(--brand); }
+  .tp-ico > svg.i { width: 16px; height: 16px; }
+  /* 编辑态：文件夹换成 Runners 页同款的 HolderOutlined 手柄 */
+  .tp-handle { width: 16px; justify-content: center; color: var(--text-4); }
+  .tp-handle > svg.i { width: 15px; height: 15px; }
+  .tp-item.dragging { z-index: 4; background: #fff; opacity: .9; transform: translate(6px, -3px);
+                      box-shadow: 0 8px 24px rgba(31,35,41,.16), 0 0 0 1px var(--brand-border); }
+  .tp-item.dragging .tp-handle { color: var(--text-2); }
+  .tp-item .cursor { left: 236px; top: 15px; }
+  .run { position: absolute; right: -3px; bottom: -2px; width: 6px; height: 6px; border-radius: 50%;
+         background: var(--brand); box-shadow: 0 0 0 1.5px var(--bg-raised); }
+  .off { position: absolute; right: -6px; bottom: -5px; width: 12px; height: 12px; border-radius: 50%;
+         display: flex; align-items: center; justify-content: center; background: var(--bg-raised);
+         box-shadow: 0 0 0 1px var(--bg-raised); color: var(--text-3); }
+  .off svg.i { width: 9px; height: 9px; }
+  .tp-label { flex: 1; min-width: 0; display: flex; white-space: nowrap; overflow: hidden; }
+  .txt { display: inline-flex; gap: 6px; min-width: 0; }
+  .sep, .rn { color: var(--text-3); }
+  kbd.sc { flex: none; font: 12px/1 var(--ui); color: var(--text-3); }
+  .tp-item.active kbd.sc { color: var(--brand); }
+  .needs { flex: none; color: var(--warning); background: var(--warning-bg); border-radius: 999px;
+           padding: 1px 7px; font-weight: 600; font-size: 12px; line-height: 18px; }
+
+  /* ── macOS 侧边栏 ───────────────────────────────────────── */
+  .mac { width: 416px; padding: 10px 10px 12px; border-radius: 12px; background: #ebebee;
+         box-shadow: 0 0 0 1px rgba(0,0,0,.08), 0 12px 28px rgba(0,0,0,.07);
+         font: 13px/16px var(--ui); color: rgba(0,0,0,.85); }
+  .mdisc { display: flex; align-items: center; gap: 7px; height: 28px; padding: 0 10px 0 8px; }
+  .mdisc .chev { width: 10px; height: 10px; color: rgba(0,0,0,.45); }
+  .mdisc .p2 { width: 19px; height: 14px; color: var(--tint); }
+  /* 悬停组标题时右侧出现的文字按钮，同 Finder 侧边栏的 Hide / Show */
+  .medit { position: relative; margin-left: auto; font-size: 12px; color: rgba(0,0,0,.5); }
+  .medit .cursor { left: 16px; top: 9px; }
+  .mhead { display: inline-block; margin: 9px 0 3px 30px; font-size: 12px; line-height: 15px; color: rgba(0,0,0,.5); }
+  .mrow { position: relative; display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 10px 0 30px; border-radius: 6px; }
+  .mrow.sel { background: rgba(0,0,0,.09); }
+  .mtext { flex: 1; min-width: 0; }
+  .mt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mr { color: rgba(0,0,0,.5); }
+  .ms { margin-top: 3px; font-size: 10.5px; line-height: 13px; color: rgba(0,0,0,.5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .msc { flex: none; font-size: 10.5px; color: rgba(0,0,0,.3); font-variant-numeric: tabular-nums; }
+
+  /* ── iOS 抽屉（截取 Workspaces 一段） ───────────────────── */
+  .ios { width: 299px; margin: 0 auto; padding: 0 0 10px; border-radius: 22px; background: var(--drawer);
+         box-shadow: 0 0 0 1px rgba(0,0,0,.07), 0 14px 34px rgba(0,0,0,.12); font: 17px/20.33px var(--ui); color: #000; }
+  .ihair { height: 18px; border-bottom: .5px solid rgba(60,60,67,.29); margin: 0 18px 0 22px; }
+  .ihead { display: flex; align-items: flex-end; justify-content: space-between; padding: 14px 22px 4px; }
+  .ilabel { font-size: 15px; line-height: 20px; font-weight: 600; color: var(--label-2); }
+  .iedit { font-size: 15px; line-height: 20px; color: var(--tint); }
+  .iedit.done { font-weight: 600; }
+  .drow { position: relative; display: flex; align-items: center; height: 42.33px; margin: 0 10px; padding: 0 12px;
+          border-radius: 10px; white-space: nowrap; }
+  .drow.sel { background: rgba(62,105,246,.14); }
+  .drow .icon { position: relative; flex: none; width: 24px; margin-right: 12px; display: flex; justify-content: center; color: #000; }
+  .drow.sel .icon { color: var(--tint); }
+  .drow .icon > svg.i { width: 22px; height: 18px; }
+  .ioff { position: absolute; right: -3px; bottom: -4px; width: 11px; height: 11px; border-radius: 50%; display: flex;
+          align-items: center; justify-content: center; background: var(--drawer); color: #000; }
+  .ioff svg.i { width: 8px; height: 8px; }
+  .drow .title { flex: none; }
+  .drow .meta { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--label-2); }
+  .drow .sp { flex: 1 1 auto; min-width: 12px; }
+  .cap { flex: none; font-size: 11px; line-height: 13px; font-weight: 600; font-variant-numeric: tabular-nums;
+         color: var(--amber); background: rgba(255,149,0,.15); border-radius: 999px; padding: 2px 7px; }
+  .spin { flex: none; width: 15px; height: 15px; color: rgba(60,60,67,.45); }
+  .grip { flex: none; display: flex; color: rgba(60,60,67,.3); }
+  .grip svg.i { width: 18px; height: 12px; }
+  .slot { position: relative; height: 42.33px; margin: 0 10px; }
+  .slot .drow { position: absolute; inset: 0; margin: 0; z-index: 3; background: #fff; transform: translate(-3px, 8px) scale(1.03);
+                box-shadow: 0 10px 26px rgba(0,0,0,.18), 0 0 0 .5px rgba(0,0,0,.06); }
+
+  /* ── 规则表 ─────────────────────────────────────────────── */
+  .legend { margin: 44px 0 0; background: #fff; border-radius: 16px; padding: 18px 22px 14px; box-shadow: 0 0 0 1px rgba(0,0,0,.06); }
+  .legend h2 { font-size: 16px; margin: 0 0 8px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 10px; border-top: 1px solid #ececf0; vertical-align: middle; }
+  th { font-weight: 600; color: #6a6a72; font-size: 13px; border-top: none; }
+  td:first-child { width: 42%; color: #16161a; font-weight: 600; }
+  td { color: #4a4a52; }
+</style>
+
+<svg width="0" height="0" style="position:absolute">
+  <!-- @ant-design/icons-svg：FolderOutlined、DisconnectOutlined、HolderOutlined、CaretDownOutlined -->
+  <symbol id="folder" viewBox="64 64 896 896"><path d="M880 298.4H521L403.7 186.2a8.15 8.15 0 00-5.5-2.2H144c-17.7 0-32 14.3-32 32v592c0 17.7 14.3 32 32 32h736c17.7 0 32-14.3 32-32V330.4c0-17.7-14.3-32-32-32zM840 768H184V256h188.5l119.6 114.4H840V768z"/></symbol>
+  <symbol id="disc" viewBox="64 64 896 896"><path d="M832.6 191.4c-84.6-84.6-221.5-84.6-306 0l-96.9 96.9 51 51 96.9-96.9c53.8-53.8 144.6-59.5 204 0 59.5 59.5 53.8 150.2 0 204l-96.9 96.9 51.1 51.1 96.9-96.9c84.4-84.6 84.4-221.5-.1-306.1zM446.5 781.6c-53.8 53.8-144.6 59.5-204 0-59.5-59.5-53.8-150.2 0-204l96.9-96.9-51.1-51.1-96.9 96.9c-84.6 84.6-84.6 221.5 0 306s221.5 84.6 306 0l96.9-96.9-51-51-96.8 97zM260.3 209.4a8.03 8.03 0 00-11.3 0L209.4 249a8.03 8.03 0 000 11.3l554.4 554.4c3.1 3.1 8.2 3.1 11.3 0l39.6-39.6c3.1-3.1 3.1-8.2 0-11.3L260.3 209.4z"/></symbol>
+  <symbol id="holder" viewBox="64 64 896 896"><path d="M300 276.5a56 56 0 1056-97 56 56 0 00-56 97zm0 284a56 56 0 1056-97 56 56 0 00-56 97zM640 228a56 56 0 10112 0 56 56 0 00-112 0zm0 284a56 56 0 10112 0 56 56 0 00-112 0zM300 844.5a56 56 0 1056-97 56 56 0 00-56 97zM640 796a56 56 0 10112 0 56 56 0 00-112 0z"/></symbol>
+  <symbol id="caret" viewBox="0 0 1024 1024"><path d="M840.4 300H183.6c-19.7 0-30.7 20.8-18.5 35l328.4 380.8c9.4 10.9 27.5 10.9 37 0L858.9 335c12.2-14.2 1.2-35-18.5-35z"/></symbol>
+  <!-- 示意：鼠标指针、SF Symbols 的 folder / person.2 / line.3.horizontal、SpinnerGlyph、展开箭头 -->
+  <symbol id="cursor" viewBox="0 0 16 24"><path d="M1.5 1.5v17.2l4.3-4.1 3 7.1 2.9-1.2-3-7h6z" fill="#111" stroke="#fff" stroke-width="1.3" stroke-linejoin="round"/></symbol>
+  <symbol id="ifolder" viewBox="0 0 24 20"><path d="M3 5.2A2.2 2.2 0 0 1 5.2 3h4.1c.6 0 1.1.2 1.5.6l1.6 1.6h6.4A2.2 2.2 0 0 1 21 7.4v8.4a2.2 2.2 0 0 1-2.2 2.2H5.2A2.2 2.2 0 0 1 3 15.8zM3 8h18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+  <symbol id="person2" viewBox="0 0 22 16"><g fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="5" r="3"/><path d="M2.5 14.5c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6z"/><circle cx="15.5" cy="5.5" r="2.5"/><path d="M14.6 9.9c2.6-.2 4.5 1.3 5 4.1h-4.2"/></g></symbol>
+  <symbol id="grip" viewBox="0 0 18 12"><path d="M1 1h16M1 6h16M1 11h16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="spin" viewBox="0 0 16 16"><path d="M8 2a6 6 0 1 1-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="chev" viewBox="0 0 10 10"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
+<!-- ═══════════════════════ 图一：Web ═══════════════════════ -->
+<section class="board">
+  <h1>工作区排序 · Web 侧边栏（P0）</h1>
+  <p class="lede">两处改动：工作区上面加一个和 Projects 一样的 Workspaces 标题；顺序只能在编辑态改（悬停标题点 Edit，拖完点 Done），平时行拖不动。⌘1–9、⌘↑/⌘↓ 和默认打开的工作区都跟着这个顺序走。工作区行照抄你的截图；Projects 只画了折叠后的标题，数量是示意。</p>
+  <div class="grid">
+    <figure>
+      <span class="tag now">① 现在</span>
+      <div class="frame nav" id="web-now"></div>
+      <figcaption>
+        <b>顺序由系统决定，工作区也没有标题</b>
+        <ol>
+          <li><span class="num">1</span>orbit 相关的三个工作区在第 1、7、9 行：系统先按机器排，再按创建时间排。</li>
+          <li><span class="num">2</span>离线的 longdeMac-mini 占着 ⌘7。想挪走它，只能去 Runners 页把整台机器往后拖。</li>
+          <li><span class="num">3</span>下面的 Projects 有标题和数量，上面的工作区没有。</li>
+        </ol>
+      </figcaption>
+    </figure>
+    <figure>
+      <span class="tag after">② 进入编辑</span>
+      <div class="frame nav" id="web-hover"></div>
+      <figcaption>
+        <b>和 Projects 一样的标题，悬停出现 Edit</b>
+        <ol>
+          <li><span class="num">1</span>Workspaces 和数量，字号、颜色、折叠箭头都和 Projects 一样，点标题也能折叠。</li>
+          <li><span class="num">2</span>Edit 平时藏着，悬停标题才出现，和折叠箭头一样。手机网页没有悬停，Edit 一直显示（同 iOS）。</li>
+        </ol>
+        <p>不在编辑态时行拖不动，点击照常打开工作区。</p>
+      </figcaption>
+    </figure>
+    <figure>
+      <span class="tag after">③ 编辑态</span>
+      <div class="frame nav" id="web-edit"></div>
+      <figcaption>
+        <b>只有编辑态能拖，拖完点 Done</b>
+        <ol>
+          <li><span class="num">1</span>Edit 变成 Done。</li>
+          <li><span class="num">2</span>拖起的行显示松手后的 ⌘2，可以跨机器拖。</li>
+          <li><span class="num">3</span>后面每行的 ⌘N 实时顺延。第 1 行的待处理角标收起后，也露出了 ⌘1。</li>
+        </ol>
+        <p>文件夹图标换成拖动手柄（和 Runners 页同款），状态角标和选中底色先收起，点行不跳转。每次松手就保存。键盘：Tab 到手柄，空格拿起，↑↓ 移动，空格放下。</p>
+      </figcaption>
+    </figure>
+    <figure>
+      <span class="tag after">④ 结果</span>
+      <div class="frame nav" id="web-done"></div>
+      <figcaption>
+        <b>点 Done 后的顺序，三端相同</b>
+        <ol>
+          <li><span class="num">1</span>orbit-develop · HPC 紧跟在 orbit · wikova 后面，跨机器排到了一起。</li>
+          <li><span class="num">2</span>离线的这台挪到最后（⌘9），不再占着中间的快捷键。</li>
+        </ol>
+        <p>顺序存在服务端：刷新、换设备、macOS 和 iOS 都是这一份。</p>
+      </figcaption>
+    </figure>
+  </div>
+
+  <div class="legend">
+    <h2>什么时候顺序和 ⌘N 会变</h2>
+    <table>
+      <tr><th>发生了什么</th><th>顺序 / ⌘N</th></tr>
+      <tr><td>上线当天</td><td>不变：迁移时按现在显示的顺序给每个工作区写好位置</td></tr>
+      <tr><td>不在编辑态</td><td>不变：行拖不动，点击照常打开</td></tr>
+      <tr><td>在编辑态拖动</td><td>每次松手就保存，⌘N 按新顺序重排</td></tr>
+      <tr><td>新建工作区</td><td>放在最后，已有的 ⌘N 不变</td></tr>
+      <tr><td>删除工作区</td><td>后面的依次上移一位</td></tr>
+      <tr><td>机器离线、会话在跑、有事等你</td><td>位置不变，只改图标和角标</td></tr>
+      <tr><td>在 Runners 页拖机器</td><td>只改 Runners 页，不再影响侧边栏</td></tr>
+      <tr><td>保存失败</td><td>恢复原来的顺序，提示 <code>Reorder failed</code>（和 Runners 页一样）</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- ═══════════════════ 图二：macOS 和 iOS ═══════════════════ -->
+<section class="board">
+  <h1>工作区排序 · macOS 和 iOS（P1）</h1>
+  <p class="lede">原生端读同一份顺序，下面显示的都是 Web ④ 的结果；三端都只有编辑态才能移动。macOS 去掉机器小标题，悬停 Workspaces 出现 Edit；iOS 在 Workspaces 标题右边加 Edit。macOS 每行的第二行（引擎 · 目录）是示意数据。</p>
+  <div class="grid">
+    <figure>
+      <span class="tag now">macOS ① 现在</span>
+      <div class="frame mac" id="mac-now"></div>
+      <figcaption>
+        <b>机器小标题把列表切成四段</b>
+        <ol>
+          <li><span class="num">1</span>每台机器一个小标题，和 Web、iOS 的平铺列表长得不一样。</li>
+          <li><span class="num">2</span>同一台机器内按创建时间排，改不了；整段只能去 Runners 页挪。</li>
+        </ol>
+      </figcaption>
+    </figure>
+    <figure>
+      <span class="tag after">macOS ② 改后</span>
+      <div class="frame mac" id="mac-after"></div>
+      <figcaption>
+        <b>和 Web 一样平铺，悬停 Workspaces 出现 Edit</b>
+        <ol>
+          <li><span class="num">1</span>机器写在名字后面（· wikova），小标题去掉。</li>
+          <li><span class="num">2</span>悬停 Workspaces 出现 Edit，像 Finder 侧边栏的 Hide / Show。点了进入编辑态，出现拖动手柄、Edit 变成 Done，和 Web ③ 一样。右键菜单里不放移动项。</li>
+        </ol>
+      </figcaption>
+    </figure>
+    <figure>
+      <span class="tag after">iOS ① 平时</span>
+      <div class="frame ios" id="ios-normal"></div>
+      <figcaption>
+        <b>Workspaces 标题右边多一个 Edit</b>
+        <ol>
+          <li><span class="num">1</span>点 Edit 进入排序，和 Runners 列表的编辑模式一样。列表本身不变。</li>
+        </ol>
+      </figcaption>
+    </figure>
+    <figure>
+      <span class="tag after">iOS ② 编辑模式</span>
+      <div class="frame ios" id="ios-edit"></div>
+      <figcaption>
+        <b>拖右边的手柄排序，点 Done 结束</b>
+        <ol>
+          <li><span class="num">1</span>Edit 变成 Done。</li>
+          <li><span class="num">2</span>每行只有拖动手柄，没有删除。状态角标和选中底色先收起，点行也不跳转。</li>
+        </ol>
+        <p>图里正把 HPC · HPC 往上拖，下面的行让出了位置。</p>
+      </figcaption>
+    </figure>
+  </div>
+</section>
+
+<script>
+  const I = (id, cls = '') => `<svg class="i ${cls}"><use href="#${id}"/></svg>`;
+  const CURSOR = `<svg class="cursor"><use href="#cursor"/></svg>`;
+  const mk = (x, part) => (x.mk && x.mk[part] ? ` data-mk="${x.mk[part]}"` : '');
+
+  // ── Web：行照 TasksSidePanel 的 WorkspaceRow，组标题照 Projects 的 tp-group-head ──
+  function wsHead(state, marks = {}) {
+    const a = (k) => (marks[k] ? ` data-mk="${marks[k]}"` : '');
+    const edit = state === 'edit';
+    const hover = state === 'hover';
+    return `<div class="tp-group-head${hover ? ' hover' : ''}">
+      <span class="tp-group-name"${a('name')}>Workspaces</span><span class="tp-count"${a('name')}>9</span>
+      ${edit ? '' : I('caret', 'tp-caret')}
+      <span class="tp-edit${edit ? ' done' : ''}${hover ? ' on' : ''}"${a('btn')}>${edit ? 'Done' : 'Edit'}${hover ? CURSOR : ''}</span>
+    </div>`;
+  }
+  function webRow(x, i, edit) {
+    const cls = ['tp-item', !edit && x.active && 'active', x.dragging && 'dragging'].filter(Boolean).join(' ');
+    const icon = edit
+      ? `<span class="tp-ico tp-handle">${I('holder')}</span>`
+      : `<span class="tp-ico">${I('folder')}${x.off ? `<span class="off">${I('disc')}</span>` : ''}${x.run && !x.off ? '<span class="run"></span>' : ''}</span>`;
+    const trail = !edit && x.needs ? `<span class="needs">${x.needs}</span>` : `<kbd class="sc"${mk(x, 'sc')}>⌘${i + 1}</kbd>`;
+    return `<div class="${cls}"${mk(x, 'row')}>${icon}
+      <span class="tp-label"><span class="txt"${mk(x, 'name')}><span>${x.n}</span><span class="sep">·</span><span class="rn">${x.r}</span></span></span>
+      ${trail}${x.dragging ? CURSOR : ''}
+    </div>`;
+  }
+  function web(id, rows, { head = null, edit = false, marks = {}, projMark = '' } = {}) {
+    const p = projMark ? ` data-mk="${projMark}"` : '';
+    const projects = `<div class="tp-group"><div class="tp-group-head"><span class="tp-group-name"${p}>Projects</span><span class="tp-count"${p}>24</span>${I('caret', 'tp-caret collapsed')}</div></div>`;
+    document.getElementById(id).innerHTML =
+      `<div class="tp-divider"></div><div class="tp-group">${head ? wsHead(head, marks) : ''}${rows.map((x, i) => webRow(x, i, edit)).join('')}</div>` +
+      `<div class="tp-divider"></div>${projects}`;
+  }
+
+  const W = {
+    orbit: { n: 'orbit', r: 'wikova', needs: 1, run: true },
+    dev: { n: 'wikova-develop', r: 'wikova' },
+    prod: { n: 'wikova-prod', r: 'wikova' },
+    data: { n: 'wikova-data', r: 'workstation', run: true },
+    lfs: { n: 'lfs', r: 'workstation' },
+    wikids: { n: 'wikids', r: 'workstation' },
+    mini: { n: 'orbit', r: 'longdeMac-mini.local', off: true },
+    hpc: { n: 'HPC', r: 'HPC' },
+    odev: { n: 'orbit-develop', r: 'HPC', active: true, run: true },
+  };
+  const w = (key, extra = {}) => ({ ...W[key], ...extra });
+  const NOW = ['orbit', 'dev', 'prod', 'data', 'lfs', 'wikids', 'mini', 'hpc', 'odev'];
+
+  web('web-now', [
+    w('orbit', { mk: { name: 'a|1|r' } }), w('dev'), w('prod'), w('data'), w('lfs'), w('wikids'),
+    w('mini', { mk: { name: 'b|1|r', sc: 'c|2|r' } }), w('hpc'), w('odev', { mk: { name: 'd|1|r' } }),
+  ], { projMark: 'p|3|r' });
+  web('web-hover', NOW.map((k) => w(k)), { head: 'hover', marks: { name: 'h|1|r', btn: 'e|2|r' } });
+  const scMark = { mk: { sc: 'n|3|r' } };
+  web('web-edit', [
+    w('orbit'), w('odev', { dragging: true, mk: { row: 'a|2|l' } }), w('dev', scMark), w('prod', scMark), w('data', scMark),
+    w('lfs', scMark), w('wikids', scMark), w('mini', scMark), w('hpc', scMark),
+  ], { head: 'edit', edit: true, marks: { btn: 'e|1|r' } });
+  web('web-done', [
+    w('orbit', { mk: { row: 'a|1|r' } }), w('odev', { mk: { row: 'a|1|r' } }), w('dev'), w('prod'), w('data'), w('lfs'),
+    w('wikids'), w('hpc'), w('mini', { mk: { row: 'b|2|r' } }),
+  ], { head: 'plain' });
+
+  // ── macOS：AgentRowView（名字、引擎 · 目录、⌘N），小标题是 runnerLabel ──
+  const M = {
+    orbit: { n: 'orbit', r: 'wikova', sub: 'Claude · ~/orbit' },
+    dev: { n: 'wikova-develop', r: 'wikova', sub: 'Claude · ~/wikova-develop' },
+    prod: { n: 'wikova-prod', r: 'wikova', sub: 'Codex · ~/wikova-prod' },
+    data: { n: 'wikova-data', r: 'workstation', sub: 'Claude · ~/wikova-data' },
+    lfs: { n: 'lfs', r: 'workstation', sub: 'Claude · ~/lfs' },
+    wikids: { n: 'wikids', r: 'workstation', sub: 'Claude · ~/wikids' },
+    mini: { n: 'orbit', r: 'longdeMac-mini.local', sub: 'Claude · ~/orbit' },
+    hpc: { n: 'HPC', r: 'HPC', sub: 'Claude · ~/HPC' },
+    odev: { n: 'orbit-develop', r: 'HPC', sub: 'Claude · ~/orbit-develop', sel: true },
+  };
+  const m = (key, extra = {}) => ({ ...M[key], ...extra });
+  function macRow(x, i, inline) {
+    return `<div class="mrow${x.sel ? ' sel' : ''}"${mk(x, 'row')}>
+      <div class="mtext"><div class="mt"><span>${x.n}</span>${inline ? `<span class="mr"${mk(x, 'rn')}> · ${x.r}</span>` : ''}</div><div class="ms">${x.sub}</div></div>
+      <span class="msc">⌘${i + 1}</span>
+    </div>`;
+  }
+  const disc = (hover) =>
+    `<div class="mdisc">${I('chev', 'chev')}${I('person2', 'p2')}<span>Workspaces</span>${
+      hover ? `<span class="medit" data-mk="e|2|r">Edit${CURSOR}</span>` : ''
+    }</div>`;
+
+  let n = 0;
+  const groups = [
+    ['wikova', ['orbit', 'dev', 'prod']],
+    ['workstation', ['data', 'lfs', 'wikids']],
+    ['longdeMac-mini.local', ['mini']],
+    ['HPC', ['hpc', 'odev']],
+  ];
+  document.getElementById('mac-now').innerHTML =
+    disc(false) +
+    groups
+      .map(([label, keys], gi) =>
+        `<div><span class="mhead" data-mk="h${gi}|1|r">${label}</span></div>` +
+        keys.map((k) => macRow(m(k, gi === 0 ? { mk: { row: 'g|2|r' } } : {}), n++, false)).join(''),
+      )
+      .join('');
+  document.getElementById('mac-after').innerHTML =
+    disc(true) +
+    [m('orbit', { mk: { rn: 'r|1|r' } }), m('odev'), m('dev'), m('prod'), m('data'), m('lfs'), m('wikids'), m('hpc'), m('mini')]
+      .map((x, i) => macRow(x, i, true))
+      .join('');
+
+  // ── iOS：WorkspaceNavigationRow（文件夹 · 名字 · 机器，右侧一格状态） ──
+  function iosRow(x, edit) {
+    const icon = `<span class="icon">${I('ifolder')}${x.off ? `<span class="ioff">${I('disc')}</span>` : ''}</span>`;
+    let trail = '';
+    if (edit) trail = `<span class="grip" data-mk="g|2|r">${I('grip')}</span>`;
+    else if (x.needs) trail = `<span class="cap">${x.needs}</span>`;
+    else if (x.run) trail = `<svg class="i spin"><use href="#spin"/></svg>`;
+    const cls = ['drow', !edit && x.active && 'sel'].filter(Boolean).join(' ');
+    return `<div class="${cls}">${icon}<span class="title">${x.n}</span><span class="meta">&nbsp;· ${x.r}</span><span class="sp"></span>${trail}</div>`;
+  }
+  function ios(id, edit, rows) {
+    const head = `<div class="ihair"></div><div class="ihead"><span class="ilabel">Workspaces</span><span class="iedit${edit ? ' done' : ''}" data-mk="e|1|r">${edit ? 'Done' : 'Edit'}</span></div>`;
+    document.getElementById(id).innerHTML =
+      head + rows.map((x) => (x.slot ? `<div class="slot">${iosRow(x.slot, edit)}</div>` : iosRow(x, edit))).join('');
+  }
+  const DONE = ['orbit', 'odev', 'dev', 'prod', 'data', 'lfs', 'wikids', 'hpc', 'mini'];
+  ios('ios-normal', false, DONE.map((k) => W[k]));
+  ios('ios-edit', true, [W.orbit, W.odev, { slot: W.hpc }, W.dev, W.prod, W.data, W.lfs, W.wikids, W.mini]);
+
+  // ── 红框：同一个 key 的元素合成一个框，框的位置从实际布局量出来 ──
+  function drawMarks() {
+    document.querySelectorAll('.frame').forEach((frame) => {
+      frame.querySelectorAll(':scope > .mk').forEach((el) => el.remove());
+      const fr = frame.getBoundingClientRect();
+      const boxes = new Map();
+      frame.querySelectorAll('[data-mk]').forEach((el) => {
+        const [key, num, side] = el.dataset.mk.split('|');
+        const r = el.getBoundingClientRect();
+        const b = boxes.get(key);
+        if (!b) boxes.set(key, { num, side, l: r.left, t: r.top, r: r.right, b: r.bottom });
+        else Object.assign(b, { l: Math.min(b.l, r.left), t: Math.min(b.t, r.top), r: Math.max(b.r, r.right), b: Math.max(b.b, r.bottom) });
+      });
+      for (const b of boxes.values()) {
+        const pad = 4;
+        const box = document.createElement('div');
+        box.className = 'mk';
+        Object.assign(box.style, {
+          left: `${b.l - fr.left - pad}px`,
+          top: `${b.t - fr.top - pad}px`,
+          width: `${b.r - b.l + pad * 2}px`,
+          height: `${b.b - b.t + pad * 2}px`,
+        });
+        if (b.num) box.innerHTML = `<span class="num${b.side === 'l' ? ' l' : ''}">${b.num}</span>`;
+        frame.appendChild(box);
+      }
+    });
+  }
+  window.drawMarks = drawMarks;
+  document.fonts.ready.then(drawMarks);
+</script>
