@@ -93,6 +93,8 @@ test('UI list and detail payloads include the same derived capabilities', async 
     // are unaffected either way.
     project: { findMany: async () => [] },
     taskOwnerConfirmationRequest: { findMany: async () => [] },
+    // …the evidence of tasks it dispatched outside any project (`tasks/evidence-review.ts`), none…
+    task: { findMany: async () => [] },
     // …and the four owner items a project can be waiting on its owner for (§7.6 V13),
     // which these fixtures have none of either.
     sessionRequest: noSessionRequests(),

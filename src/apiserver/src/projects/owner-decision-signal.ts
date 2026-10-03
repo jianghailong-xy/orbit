@@ -1,7 +1,10 @@
 import { Prisma } from '@prisma/client';
 import type { SessionOwnerItem, SessionWaitingKind } from '@orbit/shared';
 
-import { countPendingEvidenceJudgments } from '../tasks/pending-evidence-judgments';
+import {
+  countDispatchedEvidenceJudgments,
+  countPendingEvidenceJudgments,
+} from '../tasks/pending-evidence-judgments';
 import { readWaitingOwnerConfirmations } from '../tasks/owner-confirmation-read';
 import { CRITERIA_WEAKENING_EFFECT_CLASS } from './criteria-weakening-intent';
 import { stillUnanswered } from './criteria-pending-decisions';
@@ -71,6 +74,11 @@ import {
  * waiting for its owner to confirm it done is counted on the task's OWN session, because that is
  * where its confirmation card is drawn — in any project or none. It carries its kind, so the row
  * can say "Waiting for your confirmation" instead of the word an approval gets.
+ *
+ * And an evidence revision of a task a session dispatched outside any project lands on the
+ * conversation ITS card is drawn in — the dispatching session, or the task's run once that one is
+ * in Trash — once the dispatching session has stopped holding it (`evidence-review.ts`,
+ * `countDispatchedEvidenceJudgments`). Same rule: the badge points where the card is.
  */
 /**
  * Which kind of question a signal counts. `PROJECT_DECISION` is a coordinator's: a held criteria
@@ -84,6 +92,11 @@ import {
  * coordinator is not counted at all — somebody is already on it, and a badge about it would be
  * telling the owner to go do work that is being done (owner decision 10).
  *
+ * `EVIDENCE_DECISION` is an evidence revision of a task a session dispatched outside any project,
+ * which that session did not decide in time: the owner's evidence card, in the conversation it is
+ * drawn in. Its own kind because it is no project's decision; its row says what a project's evidence
+ * card's row says ("Waiting for approval"), so it has no waiting kind of its own.
+ *
  * `START_REQUEST` is a project that has not been started and whose coordinator has asked to start
  * it (`project_request_start`): the "Start this project?" card in the coordinator conversation. Kept
  * apart from `PROJECT_DECISION` because the row says it in words of its own — "Ready to start" — and
@@ -94,6 +107,7 @@ import {
  */
 export type OwnerDecisionKind =
   | 'PROJECT_DECISION'
+  | 'EVIDENCE_DECISION'
   | 'OWNER_CONFIRMATION'
   | 'OWNER_ITEM'
   | 'START_REQUEST'
@@ -134,6 +148,7 @@ export async function readOwnerDecisionSignals(
   const confirmations = await readWaitingOwnerConfirmations(tx, ownerId, scope);
   return [
     ...(await readProjectDecisionSignals(tx, ownerId, sessionIds)),
+    ...(await readDispatchedEvidenceSignals(tx, ownerId, sessionIds)),
     ...(await readOwnerItemSignals(tx, ownerId, sessionIds)),
     ...(await readRecordAsDoneSignals(tx, ownerId, sessionIds)),
     ...confirmations.map((waiting) => ({
@@ -242,6 +257,31 @@ async function readProjectDecisionSignals(
     }
   }
   return signals;
+}
+
+/**
+ * The evidence cards of tasks sessions dispatched outside any project, on the conversation each is
+ * drawn in (`countDispatchedEvidenceJudgments`), in the Open scope only — for the reason every signal
+ * here is: a badge points somewhere, and here cannot be a conversation the owner filed away.
+ */
+async function readDispatchedEvidenceSignals(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  sessionIds: readonly string[] | undefined,
+): Promise<OwnerDecisionSignal[]> {
+  const counts = await countDispatchedEvidenceJudgments(tx, ownerId);
+  const wanted = [...counts.keys()].filter((id) => !sessionIds || sessionIds.includes(id));
+  if (wanted.length === 0) return [];
+  const open = await tx.session.findMany({
+    where: { ownerId, id: { in: wanted }, completedAt: null, archivedAt: null, deletedAt: null },
+    select: { id: true },
+  });
+  return open.map((session) => ({
+    sessionId: session.id,
+    projectId: null,
+    count: counts.get(session.id)!,
+    kind: 'EVIDENCE_DECISION' as const,
+  }));
 }
 
 /**

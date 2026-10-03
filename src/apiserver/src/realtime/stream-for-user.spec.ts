@@ -78,6 +78,9 @@ function fakePrisma(
     // still statements about the first.
     project: { findMany: async () => [] },
     taskOwnerConfirmationRequest: { findMany: async () => [] },
+    // …the evidence of tasks these conversations dispatched outside any project
+    // (`tasks/evidence-review.ts`), which none of them has…
+    task: { findMany: async () => [] },
     // …and the four owner items a project can be waiting on its owner for (§7.6 V13),
     // which these fixtures have none of either.
     sessionRequest: noSessionRequests(),

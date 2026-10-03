@@ -462,6 +462,24 @@ test('the EVIDENCE_JUDGMENT refusal no longer sends a project-less task to VERIF
     'that way out would only lead to VERIFICATION_SUBJECT_REQUIRES_PROJECT');
 });
 
+test('a task a session dispatches may declare EVIDENCE_JUDGMENT in no project; one with none may not', () => {
+  // The B line (2026-10-03): the dispatching session is handed the run's evidence to decide, so the
+  // work has a decider outside a project.
+  assert.equal(criterionNeedsProjectRefusal({
+    completionCriterion: 'EVIDENCE_JUDGMENT', projectId: null, dispatchingSessionId: 'session',
+  }), null);
+  for (const dispatchingSessionId of [null, undefined, '']) {
+    const refusal = criterionNeedsProjectRefusal({
+      completionCriterion: 'EVIDENCE_JUDGMENT', projectId: null, dispatchingSessionId,
+    });
+    assert.ok(refusal, `no dispatching session (${JSON.stringify(dispatchingSessionId)}) is still refused`);
+    assert.equal(refusal.code, 'EVIDENCE_JUDGMENT_REQUIRES_PROJECT');
+    assert.match(refusal.message, /filed from a session/u);
+  }
+  // A session is not what lets VERIFICATION through: its rule is its own.
+  assert.ok(verificationSubjectNeedsProjectRefusal({ completionCriterion: 'VERIFICATION', projectId: null }));
+});
+
 /**
  * The fourth criterion. What satisfies it is one fact — the account owner's newest decision about
  * the task is a CONFIRM — and every other shape, including the facts that satisfy its three peers,
