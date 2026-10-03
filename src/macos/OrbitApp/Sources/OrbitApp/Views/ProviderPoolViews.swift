@@ -1374,9 +1374,10 @@ struct CodexSignInSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
 
-    init(pool: ProviderPool, again: CodexLogin? = nil, actions: CodexPoolActions,
+    init(pool: ProviderPool, mine: Bool = true, again: CodexLogin? = nil, actions: CodexPoolActions,
          step: CodexSignIn.Step = .consent) {
         self.pool = pool
+        self.mine = mine
         self.again = again
         self.actions = actions
         _step = State(initialValue: step)

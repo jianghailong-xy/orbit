@@ -1,14 +1,13 @@
 import type {
   SessionReplyCard,
   SessionRequestOutcome,
-  SessionRequestPeer,
   SessionRequestState,
 } from '@orbit/shared';
 import { SESSION_REQUEST_OUTCOMES } from '@orbit/shared';
 
 /**
  * One Orbit session asking another for a reply (docs/session-request-reply-contract.md §6), as the
- * two cards and the session list draw it.
+ * two cards draw it.
  *
  * The RECIPIENT's card is the "From [session]" card its message arrived as, with the request it is
  * (`sessionMessage.requestId`) read live: a stored event never changes and the request's state does.
@@ -56,10 +55,6 @@ export const SESSION_REPLY_OPEN_REQUEST = 'Open the request ↗';
 export const SESSION_REPLY_NOT_YOU = 'Handed back by Orbit, not typed by you';
 /** What an UNDELIVERED outcome says in place of a reply. */
 export const SESSION_REPLY_NEVER_SEEN = 'The session never saw the request.';
-
-/** The session list: who a row is waiting on, and who is waiting on it. */
-export const SESSION_REQUEST_AWAITING = 'Waiting on';
-export const SESSION_REQUEST_OWES = 'Owes a reply to';
 
 /** The deadline as a card says it: the time today, otherwise the day and the time. */
 export function formatReplyBy(iso: string, now: Date = new Date()): string {
@@ -117,21 +112,6 @@ export function sessionReplySticky(cards: readonly SessionReplyCard[]): { label:
     label: `${SESSION_REPLY_FROM} ${who}${more}`,
     text: first.replyText ?? SESSION_REPLY_OUTCOME_LABEL[first.outcome],
   };
-}
-
-/** A session list row's open requests, both ways, as the row's line says them. */
-export function requestPeersLine(
-  awaiting: readonly SessionRequestPeer[] | undefined,
-  owes: readonly SessionRequestPeer[] | undefined,
-): string | null {
-  const names = (peers: readonly SessionRequestPeer[]) => {
-    const titles = peers.map((peer) => peer.title.trim() || 'Untitled session');
-    return titles.length > 2 ? `${titles.slice(0, 2).join(', ')} +${titles.length - 2}` : titles.join(', ');
-  };
-  const parts: string[] = [];
-  if (awaiting && awaiting.length > 0) parts.push(`${SESSION_REQUEST_AWAITING} ${names(awaiting)}`);
-  if (owes && owes.length > 0) parts.push(`${SESSION_REQUEST_OWES} ${names(owes)}`);
-  return parts.length > 0 ? parts.join(' · ') : null;
 }
 
 /**

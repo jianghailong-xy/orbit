@@ -316,8 +316,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// where they would say "Waiting for your confirmation", and it is not in `pendingApprovals`. Nil
     /// when there is none, from an older control plane, and for a value this build cannot read.
     public let confirmationUnderReview: ConfirmationUnderReview?
-    /// Who this conversation is waiting on for a reply, and who is waiting on it (session requests,
-    /// `SessionRequestCopy.peersLine`). Nil from an older control plane; empty when none is open.
+    /// Who this conversation is waiting on for a reply, and who is waiting on it (session requests).
+    /// Nil from an older control plane; empty when none is open.
     public let awaitingReplyFrom: [SessionRequestPeer]?
     public let owesReplyTo: [SessionRequestPeer]?
     /// The task whose run this is; nil for an ordinary conversation. It is how the console finds the

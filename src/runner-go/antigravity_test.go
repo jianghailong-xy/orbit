@@ -298,6 +298,73 @@ func TestAntigravityInterruptedFromTheRecordedSample(t *testing.T) {
 	}
 }
 
+// The command agy was running when it was interrupted never reaches DONE (§4.1): its call is
+// answered as interrupted, before the turn ends, rather than left running.
+func TestAntigravityInterruptedToolFromTheRecordedSample(t *testing.T) {
+	events, completions := agyReplay(t, "interrupt-sigint-tool", nil)
+	if len(completions) != 1 || completions[0].Status != stInterrupted {
+		t.Fatalf("completions = %+v", completions)
+	}
+	id := "5728f00b-909c-46fd-b62d-5311c5a158e1:2"
+	if uses := agyKinds(events, evToolUse); len(uses) != 1 || uses[0]["id"] != id {
+		t.Fatalf("tool uses = %v", uses)
+	}
+	want := []map[string]interface{}{{"toolUseId": id, "content": "Interrupted: the turn was stopped while this tool was running.", "isError": true}}
+	if results := agyKinds(events, evToolResult); !reflect.DeepEqual(results, want) {
+		t.Fatalf("tool results = %v, want %v", results, want)
+	}
+	if kinds := agyEventKinds(events); strings.Index(kinds, evToolResult) > strings.Index(kinds, evTurnEnd) {
+		t.Fatalf("the result came after the turn ended: %s", kinds)
+	}
+}
+
+// agy gone mid-tool: the turn fails with how it exited, and the call it was running is answered.
+func TestAntigravityToolOpenWhenAgyExitsIsAnswered(t *testing.T) {
+	var events []agyRecorded
+	var completions []TurnCompleteRequest
+	d := &agyDriver{
+		job:     &ClaimedSession{SessionID: "s", Provider: providerAntigravity},
+		emit:    func(kind string, payload map[string]interface{}) { events = append(events, agyRecorded{kind, payload}) },
+		setTurn: func(string) {},
+		completeTurn: func(req TurnCompleteRequest, _ ...context.Context) error {
+			completions = append(completions, req)
+			return nil
+		},
+		proc: &agyProcess{initialized: true},
+		turn: newAgyTurn("t1"),
+	}
+	// Numbers as JSON decodes them.
+	for _, index := range []float64{2, 3} {
+		d.handleEvent(map[string]interface{}{"event": "step_update", "step_update": map[string]interface{}{
+			"conversation_id": "c", "step_index": index, "state": "ACTIVE", "step_type": "tool",
+			"tool_info": map[string]interface{}{"name": "run_command", "parameters": map[string]interface{}{"CommandLine": "sleep 60"}},
+		}})
+	}
+	d.handleEvent(map[string]interface{}{"event": "step_update", "step_update": map[string]interface{}{
+		"conversation_id": "c", "step_index": float64(3), "state": "DONE", "step_type": "tool",
+		"tool_info": map[string]interface{}{"name": "run_command", "output": "done early"},
+	}})
+	d.processExited()
+	if len(completions) != 1 || completions[0].Status != stFailed || !strings.Contains(completions[0].Error, "before finishing the turn") {
+		t.Fatalf("completions = %+v", completions)
+	}
+	want := []map[string]interface{}{
+		{"toolUseId": "c:3", "content": "done early", "isError": false},
+		{"toolUseId": "c:2", "content": "Interrupted: the turn failed while this tool was running.", "isError": true},
+	}
+	if results := agyKinds(events, evToolResult); !reflect.DeepEqual(results, want) {
+		t.Fatalf("tool results = %v, want %v", results, want)
+	}
+}
+
+func agyEventKinds(events []agyRecorded) string {
+	kinds := make([]string, len(events))
+	for i, e := range events {
+		kinds[i] = e.kind
+	}
+	return strings.Join(kinds, " ")
+}
+
 // §4.3: --conversation naming an id agy cannot find starts a new conversation, said only on stderr.
 func TestAntigravityLostConversationIsReported(t *testing.T) {
 	var job *ClaimedSession

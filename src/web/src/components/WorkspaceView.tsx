@@ -43,7 +43,6 @@ import {
   referenceToken,
   type ReferenceMap,
 } from '../lib/composerRefs';
-import { requestPeersLine } from '../lib/sessionRequest';
 import { settleThinking } from '../lib/thinkingDraft';
 import {
   NEAR_BOTTOM,
@@ -1100,17 +1099,6 @@ export function SessionTitleRow({ session: s, hoverTipOpen = false }: { session:
       <CoordinatorBadge projectId={s.projectId} />
     </div>
   );
-}
-
-/**
- * Who this row is waiting on for a reply, and who is waiting on it (session requests, contract §6):
- * "Waiting on Worker 2 · Owes a reply to Coordinator". Read off the row's own `awaitingReplyFrom` /
- * `owesReplyTo`, which every list read and every live summary carries; nothing when neither is open.
- */
-export function SessionRequestsLine({ session: s }: { session: any }) {
-  const text = requestPeersLine(s.awaitingReplyFrom, s.owesReplyTo);
-  if (!text) return null;
-  return <div className="session-requests" title={text}>{text}</div>;
 }
 
 /** Compact tag summary for a session-list row. The first tag is the one users can scan; the
@@ -8138,7 +8126,6 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                             {line.text}
                           </div>
                         </div>
-                        <SessionRequestsLine session={s} />
                       </div>
                     </div>
                     <div className="session-right">
