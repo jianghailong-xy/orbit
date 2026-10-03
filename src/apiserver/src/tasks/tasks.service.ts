@@ -9924,15 +9924,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       ORDER BY c.created_at, c.id
       LIMIT ${INDEPENDENT_DISPATCH_MAX_PER_SWEEP}`));
     if (rows.length === 0) return;
-    // The provider is no longer a column on the workspace (migration 0088) — it is derived from the
-    // project's last interactive session. One batched lookup for the whole sweep rather than a
-    // correlated subquery per row, and going through the shared helper is what keeps this gate's
-    // notion of "which provider will this run use" identical to the one dispatch itself applies.
-    // Only the READY tasks reach here, so this stays proportional to the work, like the filter above.
-    const seeds = await lastProviderByWorkspace(
-      this.prisma,
-      rows.map((row) => row.workspaceId),
-    );
+    // The engine each run would be created on, as dispatch plans it (dispatchEngines): the quota
+    // gate below judges that engine's quota and no other. Only the READY tasks reach here, so this
+    // stays proportional to the work, like the filter above.
+    const engines = await this.dispatchEngines(rows);
     // Re-nest into the shape the quota gate and the dispatch loop below read. The join above
     // can only match (the predicate requires an assignee with a runner), so assignee is never
     // null here — unlike the Prisma `select` this replaced, which typed it as nullable.
@@ -9945,7 +9940,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       id: row.id,
       ownerId: row.ownerId,
       assignee: {
-        provider: (seeds.get(row.workspaceId) ?? DEFAULT_AGENT_PROVIDER).provider,
+        provider: engines.get(row.id)!,
         runnerId: row.runnerId,
         workspaceId: row.workspaceId,
       },
@@ -10509,10 +10504,68 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * The engine each task's next fresh run would be created on, as dispatch plans it — what the
+   * sweep's quota gate judges, so that it holds back the engine a run will spend and not another
+   * (docs/model-routing-design.md §6). The routed engine when the task's Agent has smart selection
+   * on and routing applies; otherwise the task's provider pin, else the Agent's seed (the project's
+   * last interactive session, migration 0088), which `sessions.create` falls back to.
+   *
+   * Routing is planned only for the Agents with the switch on: anywhere else a route is never
+   * applied, so it could not move the engine. A route that cannot be worked out leaves the run on
+   * the pins, exactly as dispatch does (routeFreshRun).
+   */
+  private async dispatchEngines(
+    candidates: Array<{ id: string; ownerId: string; workspaceId: string; runnerId: string | null }>,
+  ): Promise<Map<string, string>> {
+    const engines = new Map<string, string>();
+    if (candidates.length === 0) return engines;
+    const workspaceIds = [...new Set(candidates.map((c) => c.workspaceId))];
+    // One batched lookup for the whole sweep rather than one per row.
+    const seeds = await lastProviderByWorkspace(this.prisma, workspaceIds);
+    const routing = new Set(
+      (
+        await this.prisma.workspace.findMany({
+          where: { id: { in: workspaceIds }, modelRouting: true },
+          select: { id: true },
+        })
+      ).map((w) => w.id),
+    );
+    const taskIds = [...new Set(candidates.map((c) => c.id))];
+    const tasks = new Map<string, TaskRouteSubject>();
+    for (let offset = 0; offset < taskIds.length; offset += TASK_ID_QUERY_CHUNK) {
+      const chunk = await this.prisma.task.findMany({
+        where: { id: { in: taskIds.slice(offset, offset + TASK_ID_QUERY_CHUNK) } },
+        select: {
+          id: true, provider: true, model: true, modelHint: true, modelHintReason: true,
+          completionCriterion: true, acceptanceCommand: true, verifiesTaskId: true, isForeman: true,
+        },
+      });
+      for (const task of chunk) tasks.set(task.id, task);
+    }
+    // One set of route reads per account, as a bulk Run shares them (§8.2).
+    const reads = new Map<string, TaskRouteReads>();
+    for (const c of candidates) {
+      const task = tasks.get(c.id);
+      let engine = task?.provider ?? (seeds.get(c.workspaceId) ?? DEFAULT_AGENT_PROVIDER).provider;
+      if (task && c.runnerId && routing.has(c.workspaceId)) {
+        if (!reads.has(c.ownerId)) reads.set(c.ownerId, taskRouteReads(this.prisma, c.ownerId, this.now()));
+        const route = await this.routeFreshRun(
+          reads.get(c.ownerId)!, task, { id: c.workspaceId, runnerId: c.runnerId }, '',
+        );
+        if (route?.applied) engine = route.provider;
+      }
+      engines.set(c.id, engine);
+    }
+    return engines;
+  }
+
+  /**
    * Of these tasks, which have an exhausted account quota to spend right now — mapped, by task id,
    * to the moment it frees up. Dispatching against one is pointless: the run dies on arrival with
    * the provider's own "usage limit" error, so the only effect is a failed session per sweep until
    * the window resets (a weekly limit means days of them).
+   *
+   * `assignee.provider` is the engine the run would be created on (dispatchEngines).
    *
    * The quota is the one the task's run would spend: its runner's for its provider, because one
    * runner can host workspaces on several runtimes and only some of their quotas may be spent — and
@@ -10802,15 +10855,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       }
     }
     if (retryable.length === 0) return decisions;
-    const seeds = await lastProviderByWorkspace(
-      this.prisma,
-      retryable.map((moment) => moment.workspaceId),
-    );
+    const engines = await this.dispatchEngines(retryable);
     const assigned = retryable.map((moment) => ({
       id: moment.id,
       ownerId: moment.ownerId,
       assignee: {
-        provider: (seeds.get(moment.workspaceId) ?? DEFAULT_AGENT_PROVIDER).provider,
+        provider: engines.get(moment.id)!,
         runnerId: moment.runnerId,
         workspaceId: moment.workspaceId,
       },
@@ -13187,7 +13237,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // routed: that run has already started.
     const route = planned.kind === 'CREATE'
       ? await this.routeFreshRun(
-        taskRouteReads(this.prisma, ownerId),
+        taskRouteReads(this.prisma, ownerId, this.now()),
         task,
         { id: task.assignee!.id, runnerId: task.assignee!.runnerId! },
         prompt,
@@ -13717,7 +13767,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       items: [],
     };
     // One set of reads for the whole press: its tasks share a few Agents, runners and one account.
-    const routeReads = taskRouteReads(this.prisma, ownerId);
+    const routeReads = taskRouteReads(this.prisma, ownerId, this.now());
     for (const t of runnable) {
       const prompt = this.buildExecutePrompt(t);
       const workspace = { id: t.assignee!.id, runnerId: t.assignee!.runnerId! };

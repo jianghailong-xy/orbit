@@ -138,6 +138,19 @@ function spentSnapshot(
   return account === null ? undefined : codexAccountSnapshot(snapshot, account ?? CODEX_DEFAULT_ACCOUNT);
 }
 
+/**
+ * The snapshot of `provider`'s quota a run on `account` spends — the one {@link planUsageBlockedUntil}
+ * and {@link planUsageReported} judge — for a reader that weighs its windows itself. Undefined when
+ * this runner reports none for it.
+ */
+export function spentPlanUsage(
+  usage: PlanUsage | null | undefined,
+  provider: string,
+  account?: string | null,
+): PlanUsageSnapshot | undefined {
+  return usage ? spentSnapshot(usage, provider, account) : undefined;
+}
+
 /** `path` with `.`, `..`, repeated and trailing separators resolved away; null unless absolute. */
 function cleanAbsolutePath(path: string): string | null {
   if (!path.startsWith('/')) return null;
