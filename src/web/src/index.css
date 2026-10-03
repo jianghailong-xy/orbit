@@ -4987,13 +4987,6 @@ html[data-theme='dark'] .session-tag-chip {
   font-size: 12px;
   line-height: 16px;
 }
-.session-row-menu .session-menu-description {
-  display: block;
-  margin-top: 2px;
-  color: var(--text-3);
-  font-size: 12px;
-  line-height: 1.4;
-}
 .session-status {
   font-size: 12.5px;
 }

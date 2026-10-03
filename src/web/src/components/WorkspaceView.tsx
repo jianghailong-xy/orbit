@@ -8077,22 +8077,18 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   disabled: swipeButtons[action].disabled,
                   danger: action === 'delete' || action === 'purge',
                   label: action === 'complete' ? (
-                    <div>
-                      <div className="session-menu-label">
-                        <span>Complete</span>
-                        <kbd>{COMPLETE_SESSION_HINT}</kbd>
-                      </div>
-                      {(!canCompleteRow || isSessionLive(actionSession)) && (
-                        <span className="session-menu-description">
-                          {canCompleteRow ? 'Ends the run and moves to Completed' : 'Complete unavailable right now'}
-                        </span>
-                      )}
+                    <div className="session-menu-label">
+                      <span>Complete</span>
+                      <kbd>{COMPLETE_SESSION_HINT}</kbd>
                     </div>
                   ) : action === 'move' ? MOVE_COPY.action
                     : action === 'share' ? 'Share…'
                       : action === 'purge' ? 'Delete Permanently…'
                         : swipeButtons[action].label,
-                  title: action === 'restore' && !canRestoreRow ? 'Move to Open unavailable right now' : undefined,
+                  title: action === 'complete'
+                    ? !canCompleteRow ? 'Complete unavailable right now'
+                      : isSessionLive(actionSession) ? 'Ends the run and moves to Completed' : undefined
+                    : action === 'restore' && !canRestoreRow ? 'Move to Open unavailable right now' : undefined,
                 });
                 const menuItems: MenuProps['items'] = view === 'trash'
                   ? [menuItem('restore'), { type: 'divider' }, menuItem('purge')]
