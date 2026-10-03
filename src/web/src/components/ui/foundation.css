@@ -1,0 +1,46 @@
+/* Orbit control foundations. The existing index.css palette remains authoritative
+   for surfaces/text/borders. These additional roles come from P0.2 computed styles,
+   including darkAlgorithm output (not the brand seed). See this directory's README.
+   Variables only: no second reset, global control styles, or new stacking context. */
+:root {
+  --orbit-font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --orbit-font-size: 14px;
+  --orbit-line-height: 22px;
+  --orbit-control-height: 32px;
+  --orbit-control-height-sm: 24px;
+  --orbit-control-height-lg: 40px;
+  --orbit-radius: 6px;
+  --orbit-radius-sm: 4px;
+  --orbit-radius-popup: 8px;
+  --orbit-radius-dialog: 10px;
+  --orbit-control-padding-inline: 15px;
+  --orbit-control-padding-inline-sm: 7px;
+  --orbit-control-gap: 8px;
+  --orbit-control-primary: #3370ff;
+  --orbit-control-primary-hover: #5c92ff;
+  --orbit-control-on-primary: #ffffff;
+  --orbit-control-hover-bg: rgba(0, 0, 0, 0.04);
+  --orbit-control-disabled-text: rgba(0, 0, 0, 0.25);
+  --orbit-control-disabled-bg: rgba(0, 0, 0, 0.04);
+  --orbit-control-disabled-border: #d9d9d9;
+  --orbit-focus-color: #adceff;
+  --orbit-focus-width: 3px;
+  --orbit-focus-offset: 1px;
+  --orbit-bg-elevated: #ffffff;
+  --orbit-shadow-popup: 0 6px 16px 0 rgba(0, 0, 0, 0.08),
+    0 3px 6px -4px rgba(0, 0, 0, 0.12), 0 9px 28px 8px rgba(0, 0, 0, 0.05);
+}
+
+:root[data-theme='dark'] {
+  --orbit-control-primary: #2e62dc;
+  --orbit-control-primary-hover: #5585e8;
+  --orbit-control-hover-bg: rgba(255, 255, 255, 0.08);
+  --orbit-control-disabled-text: rgba(255, 255, 255, 0.25);
+  --orbit-control-disabled-bg: rgba(255, 255, 255, 0.08);
+  --orbit-control-disabled-border: #5b5b6c;
+  --orbit-focus-color: #1d305b;
+  --orbit-bg-elevated: #343437;
+  --orbit-shadow-popup: 0 6px 16px 0 rgba(255, 255, 255, 0.016),
+    0 3px 6px -4px rgba(255, 255, 255, 0.024), 0 9px 28px 8px rgba(255, 255, 255, 0.01);
+}

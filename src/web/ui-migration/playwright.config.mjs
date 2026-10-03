@@ -6,6 +6,8 @@ export default defineConfig({
   testDir: '.',
   // Deliberately outside Vitest's *.test.* / *.spec.* discovery.
   testMatch: '*.browser.mjs',
+  // The development-only foundation fixture has its own server/configuration.
+  testIgnore: 'foundation*.browser.mjs',
   fullyParallel: false,
   workers: 1,
   retries: 0,

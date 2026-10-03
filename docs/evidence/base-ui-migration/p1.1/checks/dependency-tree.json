@@ -1,0 +1,790 @@
+{
+  "version": "0.1.209",
+  "name": "orbit",
+  "dependencies": {
+    "@orbit/web": {
+      "version": "0.1.0",
+      "resolved": "file:../../src/web",
+      "overridden": false,
+      "dependencies": {
+        "@ant-design/icons": {
+          "version": "6.3.4",
+          "resolved": "https://registry.npmjs.org/@ant-design/icons/-/icons-6.3.4.tgz",
+          "overridden": false,
+          "dependencies": {
+            "@rc-component/util": {
+              "version": "1.13.0",
+              "resolved": "https://registry.npmjs.org/@rc-component/util/-/util-1.13.0.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "react-dom": {
+              "version": "19.3.0"
+            },
+            "react": {
+              "version": "19.3.0"
+            }
+          }
+        },
+        "@base-ui/react": {
+          "version": "1.8.0",
+          "resolved": "https://registry.npmjs.org/@base-ui/react/-/react-1.8.0.tgz",
+          "overridden": false,
+          "dependencies": {
+            "@base-ui/utils": {
+              "version": "0.4.0",
+              "resolved": "https://registry.npmjs.org/@base-ui/utils/-/utils-0.4.0.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@floating-ui/react-dom": {
+              "version": "2.1.9",
+              "resolved": "https://registry.npmjs.org/@floating-ui/react-dom/-/react-dom-2.1.9.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "react-dom": {
+              "version": "19.3.0"
+            },
+            "react": {
+              "version": "19.3.0"
+            },
+            "use-sync-external-store": {
+              "version": "1.6.0",
+              "resolved": "https://registry.npmjs.org/use-sync-external-store/-/use-sync-external-store-1.6.0.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            }
+          }
+        },
+        "@dnd-kit/core": {
+          "version": "6.3.1",
+          "resolved": "https://registry.npmjs.org/@dnd-kit/core/-/core-6.3.1.tgz",
+          "overridden": false,
+          "dependencies": {
+            "@dnd-kit/accessibility": {
+              "version": "3.1.1",
+              "resolved": "https://registry.npmjs.org/@dnd-kit/accessibility/-/accessibility-3.1.1.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "react-dom": {
+              "version": "19.3.0"
+            },
+            "react": {
+              "version": "19.3.0"
+            }
+          }
+        },
+        "@dnd-kit/sortable": {
+          "version": "10.0.0",
+          "resolved": "https://registry.npmjs.org/@dnd-kit/sortable/-/sortable-10.0.0.tgz",
+          "overridden": false,
+          "dependencies": {
+            "react": {
+              "version": "19.3.0"
+            }
+          }
+        },
+        "@dnd-kit/utilities": {
+          "version": "3.2.2",
+          "resolved": "https://registry.npmjs.org/@dnd-kit/utilities/-/utilities-3.2.2.tgz",
+          "overridden": false,
+          "dependencies": {
+            "react": {
+              "version": "19.3.0"
+            }
+          }
+        },
+        "@tanstack/react-query": {
+          "version": "5.103.2",
+          "resolved": "https://registry.npmjs.org/@tanstack/react-query/-/react-query-5.103.2.tgz",
+          "overridden": false,
+          "dependencies": {
+            "react": {
+              "version": "19.3.0"
+            }
+          }
+        },
+        "@xyflow/react": {
+          "version": "12.12.0",
+          "resolved": "https://registry.npmjs.org/@xyflow/react/-/react-12.12.0.tgz",
+          "overridden": false,
+          "dependencies": {
+            "react-dom": {
+              "version": "19.3.0"
+            },
+            "react": {
+              "version": "19.3.0"
+            },
+            "zustand": {
+              "version": "4.5.7",
+              "resolved": "https://registry.npmjs.org/zustand/-/zustand-4.5.7.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            }
+          }
+        },
+        "antd": {
+          "version": "6.6.5",
+          "resolved": "https://registry.npmjs.org/antd/-/antd-6.6.5.tgz",
+          "overridden": false,
+          "dependencies": {
+            "@ant-design/cssinjs-utils": {
+              "version": "2.1.2",
+              "resolved": "https://registry.npmjs.org/@ant-design/cssinjs-utils/-/cssinjs-utils-2.1.2.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@ant-design/cssinjs": {
+              "version": "2.1.2",
+              "resolved": "https://registry.npmjs.org/@ant-design/cssinjs/-/cssinjs-2.1.2.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@ant-design/icons": {
+              "version": "6.3.4"
+            },
+            "@ant-design/react-slick": {
+              "version": "2.0.0",
+              "resolved": "https://registry.npmjs.org/@ant-design/react-slick/-/react-slick-2.0.0.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/cascader": {
+              "version": "1.22.0",
+              "resolved": "https://registry.npmjs.org/@rc-component/cascader/-/cascader-1.22.0.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/checkbox": {
+              "version": "2.0.0",
+              "resolved": "https://registry.npmjs.org/@rc-component/checkbox/-/checkbox-2.0.0.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/collapse": {
+              "version": "1.2.0",
+              "resolved": "https://registry.npmjs.org/@rc-component/collapse/-/collapse-1.2.0.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/color-picker": {
+              "version": "3.1.1",
+              "resolved": "https://registry.npmjs.org/@rc-component/color-picker/-/color-picker-3.1.1.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/dialog": {
+              "version": "1.10.0",
+              "resolved": "https://registry.npmjs.org/@rc-component/dialog/-/dialog-1.10.0.tgz",
+              "overridden": false,
+              "dependencies": {
+                "@rc-component/portal": {
+                  "version": "2.2.1",
+                  "resolved": "https://registry.npmjs.org/@rc-component/portal/-/portal-2.2.1.tgz",
+                  "overridden": false,
+                  "dependencies": {
+                    "react-dom": {
+                      "version": "19.3.0"
+                    },
+                    "react": {
+                      "version": "19.3.0"
+                    }
+                  }
+                },
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/drawer": {
+              "version": "1.4.2",
+              "resolved": "https://registry.npmjs.org/@rc-component/drawer/-/drawer-1.4.2.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/dropdown": {
+              "version": "1.0.3",
+              "resolved": "https://registry.npmjs.org/@rc-component/dropdown/-/dropdown-1.0.3.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/form": {
+              "version": "1.8.6",
+              "resolved": "https://registry.npmjs.org/@rc-component/form/-/form-1.8.6.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/image": {
+              "version": "1.10.0",
+              "resolved": "https://registry.npmjs.org/@rc-component/image/-/image-1.10.0.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/input-number": {
+              "version": "1.6.2",
+              "resolved": "https://registry.npmjs.org/@rc-component/input-number/-/input-number-1.6.2.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/input": {
+              "version": "1.3.1",
+              "resolved": "https://registry.npmjs.org/@rc-component/input/-/input-1.3.1.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/listy": {
+              "version": "1.2.3",
+              "resolved": "https://registry.npmjs.org/@rc-component/listy/-/listy-1.2.3.tgz",
+              "overridden": false,
+              "dependencies": {
+                "@rc-component/virtual-list": {
+                  "version": "1.5.1",
+                  "resolved": "https://registry.npmjs.org/@rc-component/virtual-list/-/virtual-list-1.5.1.tgz",
+                  "overridden": false,
+                  "dependencies": {
+                    "react-dom": {
+                      "version": "19.3.0"
+                    },
+                    "react": {
+                      "version": "19.3.0"
+                    }
+                  }
+                },
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/mentions": {
+              "version": "1.12.0",
+              "resolved": "https://registry.npmjs.org/@rc-component/mentions/-/mentions-1.12.0.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/menu": {
+              "version": "1.5.0",
+              "resolved": "https://registry.npmjs.org/@rc-component/menu/-/menu-1.5.0.tgz",
+              "overridden": false,
+              "dependencies": {
+                "@rc-component/overflow": {
+                  "version": "1.0.1",
+                  "resolved": "https://registry.npmjs.org/@rc-component/overflow/-/overflow-1.0.1.tgz",
+                  "overridden": false,
+                  "dependencies": {
+                    "react-dom": {
+                      "version": "19.3.0"
+                    },
+                    "react": {
+                      "version": "19.3.0"
+                    }
+                  }
+                },
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/motion": {
+              "version": "1.3.3",
+              "resolved": "https://registry.npmjs.org/@rc-component/motion/-/motion-1.3.3.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/mutate-observer": {
+              "version": "2.0.1",
+              "resolved": "https://registry.npmjs.org/@rc-component/mutate-observer/-/mutate-observer-2.0.1.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/notification": {
+              "version": "2.0.8",
+              "resolved": "https://registry.npmjs.org/@rc-component/notification/-/notification-2.0.8.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/pagination": {
+              "version": "1.4.0",
+              "resolved": "https://registry.npmjs.org/@rc-component/pagination/-/pagination-1.4.0.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/picker": {
+              "version": "1.12.2",
+              "resolved": "https://registry.npmjs.org/@rc-component/picker/-/picker-1.12.2.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/progress": {
+              "version": "1.0.3",
+              "resolved": "https://registry.npmjs.org/@rc-component/progress/-/progress-1.0.3.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/qrcode": {
+              "version": "2.0.0",
+              "resolved": "https://registry.npmjs.org/@rc-component/qrcode/-/qrcode-2.0.0.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/rate": {
+              "version": "1.0.1",
+              "resolved": "https://registry.npmjs.org/@rc-component/rate/-/rate-1.0.1.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/resize-observer": {
+              "version": "1.1.2",
+              "resolved": "https://registry.npmjs.org/@rc-component/resize-observer/-/resize-observer-1.1.2.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/segmented": {
+              "version": "1.4.0",
+              "resolved": "https://registry.npmjs.org/@rc-component/segmented/-/segmented-1.4.0.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/select": {
+              "version": "1.10.1",
+              "resolved": "https://registry.npmjs.org/@rc-component/select/-/select-1.10.1.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/slider": {
+              "version": "1.1.1",
+              "resolved": "https://registry.npmjs.org/@rc-component/slider/-/slider-1.1.1.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/steps": {
+              "version": "1.2.3",
+              "resolved": "https://registry.npmjs.org/@rc-component/steps/-/steps-1.2.3.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/switch": {
+              "version": "1.0.3",
+              "resolved": "https://registry.npmjs.org/@rc-component/switch/-/switch-1.0.3.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/table": {
+              "version": "1.11.1",
+              "resolved": "https://registry.npmjs.org/@rc-component/table/-/table-1.11.1.tgz",
+              "overridden": false,
+              "dependencies": {
+                "@rc-component/context": {
+                  "version": "2.0.2",
+                  "resolved": "https://registry.npmjs.org/@rc-component/context/-/context-2.0.2.tgz",
+                  "overridden": false,
+                  "dependencies": {
+                    "react-dom": {
+                      "version": "19.3.0"
+                    },
+                    "react": {
+                      "version": "19.3.0"
+                    }
+                  }
+                },
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/tabs": {
+              "version": "1.13.0",
+              "resolved": "https://registry.npmjs.org/@rc-component/tabs/-/tabs-1.13.0.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/tooltip": {
+              "version": "1.5.2",
+              "resolved": "https://registry.npmjs.org/@rc-component/tooltip/-/tooltip-1.5.2.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/tour": {
+              "version": "2.4.0",
+              "resolved": "https://registry.npmjs.org/@rc-component/tour/-/tour-2.4.0.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/tree-select": {
+              "version": "1.16.1",
+              "resolved": "https://registry.npmjs.org/@rc-component/tree-select/-/tree-select-1.16.1.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/tree": {
+              "version": "1.4.0",
+              "resolved": "https://registry.npmjs.org/@rc-component/tree/-/tree-1.4.0.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/trigger": {
+              "version": "3.10.1",
+              "resolved": "https://registry.npmjs.org/@rc-component/trigger/-/trigger-3.10.1.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "@rc-component/upload": {
+              "version": "1.1.1",
+              "resolved": "https://registry.npmjs.org/@rc-component/upload/-/upload-1.1.1.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "react-dom": {
+              "version": "19.3.0"
+            },
+            "react": {
+              "version": "19.3.0"
+            }
+          }
+        },
+        "react-dom": {
+          "version": "19.3.0",
+          "resolved": "https://registry.npmjs.org/react-dom/-/react-dom-19.3.0.tgz",
+          "overridden": false,
+          "dependencies": {
+            "react": {
+              "version": "19.3.0"
+            }
+          }
+        },
+        "react-markdown": {
+          "version": "10.1.0",
+          "resolved": "https://registry.npmjs.org/react-markdown/-/react-markdown-10.1.0.tgz",
+          "overridden": false,
+          "dependencies": {
+            "react": {
+              "version": "19.3.0"
+            }
+          }
+        },
+        "react-router-dom": {
+          "version": "7.18.4",
+          "resolved": "https://registry.npmjs.org/react-router-dom/-/react-router-dom-7.18.4.tgz",
+          "overridden": false,
+          "dependencies": {
+            "react-dom": {
+              "version": "19.3.0"
+            },
+            "react-router": {
+              "version": "7.18.4",
+              "resolved": "https://registry.npmjs.org/react-router/-/react-router-7.18.4.tgz",
+              "overridden": false,
+              "dependencies": {
+                "react-dom": {
+                  "version": "19.3.0"
+                },
+                "react": {
+                  "version": "19.3.0"
+                }
+              }
+            },
+            "react": {
+              "version": "19.3.0"
+            }
+          }
+        },
+        "react": {
+          "version": "19.3.0",
+          "resolved": "https://registry.npmjs.org/react/-/react-19.3.0.tgz",
+          "overridden": false
+        }
+      }
+    }
+  }
+}

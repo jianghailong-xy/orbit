@@ -1,0 +1,545 @@
+{
+  "project": "chromium-dark-desktop",
+  "test": "projects loading and release",
+  "browser": "153.0.8010.12",
+  "captures": [
+    {
+      "name": "projects-loading",
+      "glyphProbe": {
+        "text": "Orbit baseline 0123 — 中文输入",
+        "font": "14px -apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+        "width": 199.1923828125
+      },
+      "viewport": {
+        "width": 1280,
+        "height": 900,
+        "dpr": 1,
+        "scale": 1,
+        "touch": 0
+      },
+      "navigation": [
+        {
+          "name": "http://127.0.0.1:4173/projects",
+          "entryType": "navigation",
+          "startTime": 0,
+          "duration": 129.5,
+          "navigationId": 5024,
+          "initiatorType": "navigation",
+          "deliveryType": "",
+          "nextHopProtocol": "http/1.1",
+          "renderBlockingStatus": "non-blocking",
+          "contentType": "text/html",
+          "contentEncoding": "gzip",
+          "workerStart": 0,
+          "workerRouterEvaluationStart": 0,
+          "workerCacheLookupStart": 0,
+          "workerMatchedSourceType": "",
+          "workerFinalSourceType": "",
+          "redirectStart": 0,
+          "redirectEnd": 0,
+          "fetchStart": 0.10000000894069672,
+          "domainLookupStart": 1.2000000029802322,
+          "domainLookupEnd": 1.2000000029802322,
+          "connectStart": 1.2000000029802322,
+          "secureConnectionStart": 0,
+          "connectEnd": 1.300000011920929,
+          "requestStart": 1.300000011920929,
+          "responseStart": 1.800000011920929,
+          "firstInterimResponseStart": 0,
+          "finalResponseHeadersStart": 1.800000011920929,
+          "responseEnd": 2.2000000029802322,
+          "transferSize": 2879,
+          "encodedBodySize": 2579,
+          "decodedBodySize": 6081,
+          "responseStatus": 200,
+          "serverTiming": [],
+          "unloadEventStart": 0,
+          "unloadEventEnd": 0,
+          "domInteractive": 31.5,
+          "domContentLoadedEventStart": 129.40000000596046,
+          "domContentLoadedEventEnd": 129.40000000596046,
+          "domComplete": 129.5,
+          "loadEventStart": 129.5,
+          "loadEventEnd": 129.5,
+          "type": "navigate",
+          "redirectCount": 0,
+          "activationStart": 0,
+          "criticalCHRestart": 0,
+          "notRestoredReasons": null,
+          "confidence": {
+            "randomizedTriggerRate": 0.4994798,
+            "value": "high"
+          }
+        }
+      ],
+      "paint": [
+        {
+          "name": "first-paint",
+          "entryType": "paint",
+          "startTime": 48,
+          "duration": 0,
+          "navigationId": 5024,
+          "paintTime": 39.400000005960464,
+          "presentationTime": 48
+        },
+        {
+          "name": "first-contentful-paint",
+          "entryType": "paint",
+          "startTime": 48,
+          "duration": 0,
+          "navigationId": 5024,
+          "paintTime": 39.400000005960464,
+          "presentationTime": 48
+        }
+      ],
+      "theme": "dark",
+      "tokens": {
+        "--bg-base": "#202023",
+        "--bg-raised": "#2b2b2e",
+        "--text-1": "#c9ced5",
+        "--text-2": "#a7adb6",
+        "--border": "#424246",
+        "--brand": "#5b8cff"
+      },
+      "documentWidth": 1280,
+      "graphGeometry": [],
+      "media": {
+        "600": false,
+        "640": false,
+        "960": false
+      },
+      "controls": [
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": "Collapse sidebar",
+          "disabled": false,
+          "focused": false,
+          "hovered": false,
+          "rect": {
+            "x": 235,
+            "y": 12,
+            "width": 28,
+            "height": 28
+          },
+          "style": {
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "15px",
+            "fontWeight": "400",
+            "lineHeight": "23.5714px",
+            "letterSpacing": "normal",
+            "color": "rgb(139, 144, 153)",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "border": "0px none rgb(139, 144, 153)",
+            "borderTop": "0px none rgb(139, 144, 153)",
+            "borderRight": "0px none rgb(139, 144, 153)",
+            "borderBottom": "0px none rgb(139, 144, 153)",
+            "borderLeft": "0px none rgb(139, 144, 153)",
+            "borderRadius": "6px",
+            "boxShadow": "none",
+            "outline": "rgb(139, 144, 153) none 3px",
+            "outlineOffset": "0px",
+            "padding": "1px 6px",
+            "gap": "normal",
+            "display": "flex",
+            "position": "static",
+            "zIndex": "auto",
+            "transitionDuration": "0s",
+            "animationDuration": "0s"
+          }
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": "Edit",
+          "disabled": false,
+          "focused": false,
+          "hovered": false,
+          "rect": {
+            "x": 228.59375,
+            "y": 254,
+            "width": 34.40625,
+            "height": 22
+          },
+          "style": {
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "13px",
+            "fontWeight": "400",
+            "lineHeight": "20px",
+            "letterSpacing": "normal",
+            "color": "rgb(139, 144, 153)",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "border": "0px none rgb(139, 144, 153)",
+            "borderTop": "0px none rgb(139, 144, 153)",
+            "borderRight": "0px none rgb(139, 144, 153)",
+            "borderBottom": "0px none rgb(139, 144, 153)",
+            "borderLeft": "0px none rgb(139, 144, 153)",
+            "borderRadius": "4px",
+            "boxShadow": "none",
+            "outline": "rgb(139, 144, 153) none 3px",
+            "outlineOffset": "0px",
+            "padding": "1px 6px",
+            "gap": "normal",
+            "display": "block",
+            "position": "static",
+            "zIndex": "auto",
+            "transitionDuration": "0.15s",
+            "animationDuration": "0s"
+          }
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": "Account menu, Baseline Reviewer",
+          "disabled": false,
+          "focused": false,
+          "hovered": false,
+          "rect": {
+            "x": 8,
+            "y": 848,
+            "width": 263,
+            "height": 44
+          },
+          "style": {
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "fontWeight": "400",
+            "lineHeight": "22px",
+            "letterSpacing": "normal",
+            "color": "rgb(201, 206, 213)",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "border": "0px none rgb(201, 206, 213)",
+            "borderTop": "0px none rgb(201, 206, 213)",
+            "borderRight": "0px none rgb(201, 206, 213)",
+            "borderBottom": "0px none rgb(201, 206, 213)",
+            "borderLeft": "0px none rgb(201, 206, 213)",
+            "borderRadius": "6px",
+            "boxShadow": "none",
+            "outline": "rgb(201, 206, 213) none 3px",
+            "outlineOffset": "0px",
+            "padding": "0px 8px",
+            "gap": "10px",
+            "display": "flex",
+            "position": "static",
+            "zIndex": "auto",
+            "transitionDuration": "0s",
+            "animationDuration": "0s"
+          }
+        },
+        {
+          "tag": "H1",
+          "role": null,
+          "label": "Projects",
+          "disabled": false,
+          "focused": false,
+          "hovered": false,
+          "rect": {
+            "x": 330,
+            "y": 24.28125,
+            "width": 680.515625,
+            "height": 31.421875
+          },
+          "style": {
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "20px",
+            "fontWeight": "600",
+            "lineHeight": "31.4286px",
+            "letterSpacing": "normal",
+            "color": "rgb(201, 206, 213)",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "border": "0px none rgb(201, 206, 213)",
+            "borderTop": "0px none rgb(201, 206, 213)",
+            "borderRight": "0px none rgb(201, 206, 213)",
+            "borderBottom": "0px none rgb(201, 206, 213)",
+            "borderLeft": "0px none rgb(201, 206, 213)",
+            "borderRadius": "0px",
+            "boxShadow": "none",
+            "outline": "rgb(201, 206, 213) none 3px",
+            "outlineOffset": "0px",
+            "padding": "0px",
+            "gap": "normal",
+            "display": "block",
+            "position": "static",
+            "zIndex": "auto",
+            "transitionDuration": "0s",
+            "animationDuration": "0s"
+          }
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": "History",
+          "disabled": false,
+          "focused": false,
+          "hovered": false,
+          "rect": {
+            "x": 1022.515625,
+            "y": 24,
+            "width": 75.5625,
+            "height": 32
+          },
+          "style": {
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "fontWeight": "400",
+            "lineHeight": "22px",
+            "letterSpacing": "normal",
+            "color": "rgb(167, 173, 182)",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "border": "1px solid rgba(0, 0, 0, 0)",
+            "borderTop": "1px solid rgba(0, 0, 0, 0)",
+            "borderRight": "1px solid rgba(0, 0, 0, 0)",
+            "borderBottom": "1px solid rgba(0, 0, 0, 0)",
+            "borderLeft": "1px solid rgba(0, 0, 0, 0)",
+            "borderRadius": "6px",
+            "boxShadow": "none",
+            "outline": "rgb(167, 173, 182) none 3px",
+            "outlineOffset": "0px",
+            "padding": "0px 15px",
+            "gap": "8px",
+            "display": "flex",
+            "position": "relative",
+            "zIndex": "auto",
+            "transitionDuration": "0s",
+            "animationDuration": "0s"
+          }
+        },
+        {
+          "tag": "BUTTON",
+          "role": null,
+          "label": "New project",
+          "disabled": false,
+          "focused": false,
+          "hovered": false,
+          "rect": {
+            "x": 1102.078125,
+            "y": 24,
+            "width": 127.921875,
+            "height": 32
+          },
+          "style": {
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "fontWeight": "400",
+            "lineHeight": "22px",
+            "letterSpacing": "normal",
+            "color": "rgb(255, 255, 255)",
+            "backgroundColor": "rgb(46, 98, 220)",
+            "border": "1px solid rgba(0, 0, 0, 0)",
+            "borderTop": "1px solid rgba(0, 0, 0, 0)",
+            "borderRight": "1px solid rgba(0, 0, 0, 0)",
+            "borderBottom": "1px solid rgba(0, 0, 0, 0)",
+            "borderLeft": "1px solid rgba(0, 0, 0, 0)",
+            "borderRadius": "6px",
+            "boxShadow": "none",
+            "outline": "rgb(255, 255, 255) none 3px",
+            "outlineOffset": "0px",
+            "padding": "0px 15px",
+            "gap": "8px",
+            "display": "flex",
+            "position": "relative",
+            "zIndex": "auto",
+            "transitionDuration": "0s",
+            "animationDuration": "0s"
+          }
+        },
+        {
+          "tag": "INPUT",
+          "role": null,
+          "label": "Search projects",
+          "disabled": false,
+          "focused": false,
+          "hovered": false,
+          "rect": {
+            "x": 360,
+            "y": 77,
+            "width": 842,
+            "height": 22
+          },
+          "style": {
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "14px",
+            "fontWeight": "400",
+            "lineHeight": "22px",
+            "letterSpacing": "normal",
+            "color": "rgb(201, 206, 213)",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "border": "0px none rgb(201, 206, 213)",
+            "borderTop": "0px none rgb(201, 206, 213)",
+            "borderRight": "0px none rgb(201, 206, 213)",
+            "borderBottom": "0px none rgb(201, 206, 213)",
+            "borderLeft": "0px none rgb(201, 206, 213)",
+            "borderRadius": "0px",
+            "boxShadow": "none",
+            "outline": "rgb(201, 206, 213) none 3px",
+            "outlineOffset": "0px",
+            "padding": "0px",
+            "gap": "normal",
+            "display": "block",
+            "position": "relative",
+            "zIndex": "auto",
+            "transitionDuration": "0.2s",
+            "animationDuration": "0s"
+          }
+        },
+        {
+          "tag": "H2",
+          "role": null,
+          "label": "Open projects",
+          "disabled": false,
+          "focused": false,
+          "hovered": false,
+          "rect": {
+            "x": 330,
+            "y": 121.78125,
+            "width": 88,
+            "height": 20.421875
+          },
+          "style": {
+            "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+            "fontSize": "13px",
+            "fontWeight": "600",
+            "lineHeight": "20.4286px",
+            "letterSpacing": "normal",
+            "color": "rgb(167, 173, 182)",
+            "backgroundColor": "rgba(0, 0, 0, 0)",
+            "border": "0px none rgb(167, 173, 182)",
+            "borderTop": "0px none rgb(167, 173, 182)",
+            "borderRight": "0px none rgb(167, 173, 182)",
+            "borderBottom": "0px none rgb(167, 173, 182)",
+            "borderLeft": "0px none rgb(167, 173, 182)",
+            "borderRadius": "0px",
+            "boxShadow": "none",
+            "outline": "rgb(167, 173, 182) none 3px",
+            "outlineOffset": "0px",
+            "padding": "0px",
+            "gap": "normal",
+            "display": "block",
+            "position": "static",
+            "zIndex": "auto",
+            "transitionDuration": "0s",
+            "animationDuration": "0s"
+          }
+        }
+      ],
+      "renderedFonts": [
+        {
+          "familyName": "Liberation Sans",
+          "postScriptName": "LiberationSans-Bold",
+          "isCustomFont": false,
+          "glyphCount": 8
+        }
+      ],
+      "selected": {
+        "loading": {
+          "width": 20,
+          "height": 20,
+          "fontFamily": "-apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+          "fontSize": "14px",
+          "fontWeight": "400",
+          "lineHeight": "22px",
+          "color": "rgb(46, 98, 220)",
+          "background": "rgba(0, 0, 0, 0)",
+          "border": "0px none rgb(46, 98, 220)",
+          "radius": "0px",
+          "shadow": "none"
+        }
+      }
+    }
+  ],
+  "timings": [],
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/api/runners",
+      "query": "",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/users/me",
+      "query": "",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/providers",
+      "query": "",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces",
+      "query": "",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/sessions",
+      "query": "runnerId=2zwQZ2hd93IvLb59t6p28&workspaceId=2zwQZ2hd93IvLb59t6p1s&view=open&limit=40",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/users/me",
+      "query": "",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/wiki/spaces",
+      "query": "",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/sidebar",
+      "query": "",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/runners",
+      "query": "",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces",
+      "query": "",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/sessions/counts",
+      "query": "",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects",
+      "query": "status=OPEN",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/sessions",
+      "query": "runnerId=2zwQZ2hd93IvLb59t6p28&workspaceId=2zwQZ2hd93IvLb59t6p1s&view=open&limit=40",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces",
+      "query": "",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/providers",
+      "query": "",
+      "body": null
+    }
+  ],
+  "unhandled": [],
+  "pageErrors": []
+}

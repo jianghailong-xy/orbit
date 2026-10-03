@@ -1,0 +1,78 @@
+[
+  {
+    "path": "package-lock.json",
+    "sha256": "64b44fb60f58f77638ff2f1b2837c3ae858e168d192de78379c7a3c825a044b6"
+  },
+  {
+    "path": "src/web/index.html",
+    "sha256": "d3ad65c050c9a7c02ae2bc6c2d6921f6810cf254aec24dd0b42673b7fe63f75a"
+  },
+  {
+    "path": "src/web/package.json",
+    "sha256": "d82e8a5dd9e815f24ea2aa9bbdce3ae71829069a0108bf494e780327cabd11f6"
+  },
+  {
+    "path": "src/web/src/components/ui/__fixtures__/FoundationFixture.css",
+    "sha256": "22915277e7a1cb46cb6a31ad15b713edf71674b95905ce9bc6e17f7b16a5307d"
+  },
+  {
+    "path": "src/web/src/components/ui/__fixtures__/FoundationFixture.tsx",
+    "sha256": "320b1f0d2df66dff9af432596e02dde3ac6ea7f6ab075f0e5e4dcaf89fbd60fa"
+  },
+  {
+    "path": "src/web/src/components/ui/boundary.test.ts",
+    "sha256": "ba8813bb8ab3ce77dce2c213c2ddb3ab91cd8243fc9ec7cc0b162107667d6d78"
+  },
+  {
+    "path": "src/web/src/components/ui/foundation.css",
+    "sha256": "11f2dcdad14ef2edc0350cfae2653c1235d58c6c456efc199ddefbd75241beea"
+  },
+  {
+    "path": "src/web/src/index.css",
+    "sha256": "12001c4a01a4f414e37f344f16717fafea4ed93111ee585388dc3f641b65adc8"
+  },
+  {
+    "path": "src/web/src/lib/theme.test.tsx",
+    "sha256": "78960aa0e0199fde1a4567b98749c3f4b78b2f592020364225bf28847c9ee9bc"
+  },
+  {
+    "path": "src/web/src/lib/theme.tsx",
+    "sha256": "26d7cfc66a639f0e520814ed1a1ca14f0bbc13525f6da553596d2b2381c0f00d"
+  },
+  {
+    "path": "src/web/src/main.tsx",
+    "sha256": "73cee7642509286f0094ea21f53e2b3795444e2838aa9714c374b10b5aea3dc6"
+  },
+  {
+    "path": "src/web/src/theme.ts",
+    "sha256": "51ef59945ff1b9f7dd3c63c22c9fa5f0a94aecf45c4d5ec1ef98b06838c233c1"
+  },
+  {
+    "path": "src/web/ui-migration/foundation-theme.browser.mjs",
+    "sha256": "4bdbe44f9530870695efd3c4924e59e42ec373c5507e92250fd80800fcbd1ba6"
+  },
+  {
+    "path": "src/web/ui-migration/foundation.browser.mjs",
+    "sha256": "2a7d595f70d9d19214ac025a1a97039127c344e19ce460eb395b4efb4e549441"
+  },
+  {
+    "path": "src/web/ui-migration/foundation.config.mjs",
+    "sha256": "d4ad9a67d1554a8f940b2e7b706d4d72d3b9e866d49dbe8166f141cc5df54a09"
+  },
+  {
+    "path": "src/web/ui-migration/foundation.html",
+    "sha256": "2c1e50a0de81852c192b2a0fcaba51ba530c1534a0fe7648341263de9771faab"
+  },
+  {
+    "path": "src/web/ui-migration/foundation.tsconfig.json",
+    "sha256": "c42b771f3b6db834996912ba4f09bd8ad89713f8a4b4f9785b433519c30cca98"
+  },
+  {
+    "path": "src/web/ui-migration/foundation.tsx",
+    "sha256": "a2d3ec8e6322c69b9df7ff1d69b8b21912dbfbcc5cb2ca9b8ec49163f4b35439"
+  },
+  {
+    "path": "src/web/ui-migration/playwright.config.mjs",
+    "sha256": "aa395d52b8a1d55dc75a0021cba30d1e13f5fe55c33a388af98fa8fd3be41a59"
+  }
+]
