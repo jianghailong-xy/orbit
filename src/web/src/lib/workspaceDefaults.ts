@@ -12,6 +12,7 @@ export const PROVIDER_OPTIONS = [
   { value: 'codex', label: 'Codex' },
   { value: 'kimi', label: 'Kimi' },
   { value: 'opencode', label: 'OpenCode' },
+  { value: 'antigravity', label: 'Antigravity' },
 ];
 
 type ModelOption = { value: string; label: string };
@@ -67,6 +68,7 @@ export const runtimeForProvider = (
   if (value === AgentProvider.CODEX) return AgentProvider.CODEX;
   if (value === AgentProvider.KIMI) return AgentProvider.KIMI;
   if (value === AgentProvider.OPENCODE) return AgentProvider.OPENCODE;
+  if (value === AgentProvider.ANTIGRAVITY) return AgentProvider.ANTIGRAVITY;
   return AgentProvider.CLAUDE;
 };
 
@@ -82,6 +84,7 @@ export const providerIdentityResolved = (
   provider === AgentProvider.CODEX ||
   provider === AgentProvider.KIMI ||
   provider === AgentProvider.OPENCODE ||
+  provider === AgentProvider.ANTIGRAVITY ||
   configuredProvidersLoaded;
 
 /** Provider dropdown options: built-in runtimes followed by the configured providers. */
@@ -110,6 +113,13 @@ export const KIMI_MODEL_OPTIONS = [
 // Concrete ids are runner-discovered because they include the underlying provider. Keep an
 // explicit empty option ahead of that catalog rather than guessing or borrowing Claude defaults.
 export const OPENCODE_MODEL_OPTIONS = [{ value: '', label: 'Managed by OpenCode' }];
+
+// Antigravity's models ship inside the agy binary and come from the runner (`agy models`, one row
+// per model with its thinking levels). Until a runner reports them, the one choice that is true on
+// every agy is passing no `--model` and letting agy pick its own. Only a fallback, unlike OpenCode's
+// sentinel: once a catalogue is reported, dispatch runs a session that names no model on its first
+// row, so offering '' beside it would name a choice nothing makes.
+export const ANTIGRAVITY_MODEL_OPTIONS = [{ value: '', label: 'Managed by Antigravity' }];
 
 // Last-resort context windows for the composer's gauge, for a runner too old to report one of its
 // own. Not the source of truth and not maintained as if it were: the window belongs to the engine
@@ -182,6 +192,7 @@ export const DEFAULT_MODEL_BY_PROVIDER: Record<string, string> = {
   codex: 'gpt-5.6-sol',
   kimi: 'kimi-code/kimi-for-coding',
   opencode: '',
+  antigravity: '',
 };
 
 export const modelOptionsForProvider = (
@@ -218,7 +229,11 @@ export const modelOptionsForProvider = (
   }
   return (
     catalogOptionsForProvider(provider, modelCatalog) ??
-    (provider === AgentProvider.KIMI ? KIMI_MODEL_OPTIONS : [])
+    (provider === AgentProvider.KIMI
+      ? KIMI_MODEL_OPTIONS
+      : provider === AgentProvider.ANTIGRAVITY
+        ? ANTIGRAVITY_MODEL_OPTIONS
+        : [])
   );
 };
 
@@ -232,6 +247,16 @@ export const defaultModelForProvider = (
   // OpenCode picks the model itself when none is passed; '' is the choice, not a missing value.
   if (!custom && provider === AgentProvider.OPENCODE) {
     return runtimeDefaultModels?.[AgentProvider.OPENCODE] ?? '';
+  }
+  // Antigravity resolves like the other built-ins — the runner's reported default, then its
+  // catalogue's first row — except that with neither the answer is agy's own pick (''), which is
+  // what dispatch sends too. The generic chain below would read '' as missing and land on Claude.
+  if (!custom && provider === AgentProvider.ANTIGRAVITY) {
+    return (
+      runtimeDefaultModels?.[AgentProvider.ANTIGRAVITY] ||
+      catalogOptionsForProvider(provider, modelCatalog)?.[0]?.value ||
+      ''
+    );
   }
   // A configured provider owns a separate model space even though it borrows a built-in runtime
   // for execution. Never let the underlying Runtime's Claude/Codex default leak into that space.
@@ -280,8 +305,10 @@ export const livePinnedModel = (
   configured?: ConfiguredProvider[] | null,
   runtimeDefaultModels?: RuntimeDefaultModels,
 ): string | null | undefined => {
-  if (!model) return model;
   const custom = configuredProvider(provider, configured);
+  // Antigravity's '' is the stand-in for a catalogue not reported yet, not a pick that outlives
+  // one: dispatch runs a model-less session on the reported default, so that is what to show.
+  if (!model) return !custom && provider === AgentProvider.ANTIGRAVITY ? undefined : model;
   if (!custom && provider === AgentProvider.OPENCODE) return model;
   if (custom && !custom.modelsFromRuntime) return model;
   const runtime = custom
@@ -370,6 +397,16 @@ export const KIMI_EFFORT_OPTIONS = [
   { value: 'max', label: 'Max' },
 ];
 
+// agy's thinking levels (`--effort`, contract §9.2). Which of them a model has is per model — Gemini
+// 3.1 Pro has Low and High only — and the runner catalog carries each model's own list, so this is
+// the fallback for a model it does not report.
+export const ANTIGRAVITY_EFFORT_OPTIONS = [
+  { value: '', label: 'Default' },
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+];
+
 // OpenCode variants are model-defined, so its picker follows the runner catalog. This generic
 // list is only the fallback for a model the runner-wide catalog does not report.
 export const OPENCODE_EFFORT_OPTIONS = [
@@ -399,7 +436,9 @@ const modelDefinedEffortRow = (
       ? AgentProvider.CODEX
       : provider === 'kimi'
         ? AgentProvider.KIMI
-        : AgentProvider.OPENCODE;
+        : provider === 'antigravity'
+          ? AgentProvider.ANTIGRAVITY
+          : AgentProvider.OPENCODE;
   return modelCatalog?.[runtime]?.find(
     (entry) => entry.value === model,
   );
@@ -411,6 +450,16 @@ const KIMI_EFFORT_ALIASES: Record<string, string> = {
   minimal: 'low',
   medium: 'high',
   xhigh: 'max',
+};
+
+// agy tops out at `high` and starts at `low`, so the levels above and below its range collapse
+// onto its ends. Mirrors normalizeEffortForProvider in apiserver common/runtime-provider.ts.
+const ANTIGRAVITY_EFFORT_ALIASES: Record<string, string> = {
+  none: 'low',
+  minimal: 'low',
+  xhigh: 'high',
+  max: 'high',
+  ultra: 'high',
 };
 
 // Claude Code's effort levels, lowest first: the scale a declared list is read against. Mirrors
@@ -459,7 +508,12 @@ export const effortOptionsForProvider = (
         value === '' || declared.includes(value) || (value === 'ultra' && declared.includes('xhigh')),
     );
   }
-  if (provider !== 'codex' && provider !== 'opencode' && provider !== 'kimi') {
+  if (
+    provider !== 'codex' &&
+    provider !== 'opencode' &&
+    provider !== 'kimi' &&
+    provider !== 'antigravity'
+  ) {
     return CLAUDE_EFFORT_OPTIONS;
   }
 
@@ -468,6 +522,7 @@ export const effortOptionsForProvider = (
   // no levels is authoritative: that model supports Default only.
   if (!exactModel) {
     if (provider === 'codex') return CODEX_EFFORT_OPTIONS;
+    if (provider === 'antigravity') return ANTIGRAVITY_EFFORT_OPTIONS;
     return provider === 'kimi' ? KIMI_EFFORT_OPTIONS : OPENCODE_EFFORT_OPTIONS;
   }
   const unique = [...new Set((exactModel.reasoningLevels ?? []).filter(Boolean))];
@@ -491,18 +546,29 @@ export const normalizeEffortForProvider = (
     const claudeEffort = CLAUDE_EFFORT_OPTIONS.some((option) => option.value === effort) ? effort : '';
     return effortWithinDeclaredLevels(claudeEffort, declared);
   }
-  // Kimi's closed vocabulary maps first; the model's own list below has the last word.
+  // Kimi's and Antigravity's closed vocabularies map first; the model's own list below has the
+  // last word.
   const normalized =
     provider === 'kimi'
       ? (KIMI_EFFORT_ALIASES[effort] ?? effort)
-      : effort;
+      : provider === 'antigravity'
+        ? (ANTIGRAVITY_EFFORT_ALIASES[effort] ?? effort)
+        : effort;
 
-  if (provider === 'codex' || provider === 'opencode' || provider === 'kimi') {
+  if (
+    provider === 'codex' ||
+    provider === 'opencode' ||
+    provider === 'kimi' ||
+    provider === 'antigravity'
+  ) {
     const exactModel = modelDefinedEffortRow(provider, model, modelCatalog);
     // The heartbeat catalog is deliberately global, so a project-only model may
     // be absent. Preserve its variant only in that case; an exact row (including one
     // with an empty variants object) is authoritative.
     if (!exactModel) {
+      if (provider === 'antigravity') {
+        return ANTIGRAVITY_EFFORT_OPTIONS.some((option) => option.value === normalized) ? normalized : '';
+      }
       if (provider !== 'codex') return normalized;
       return CODEX_EFFORT_OPTIONS.some((option) => option.value === normalized) ? normalized : '';
     }

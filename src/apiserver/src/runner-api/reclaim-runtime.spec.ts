@@ -69,6 +69,30 @@ test('opencode sessions with a runtime id reclaim that runtime session', () => {
   );
 });
 
+test('antigravity sessions without a conversation id are reclaimable using the Orbit session id', () => {
+  // agy reports its conversation id in its init event; a runner that restarts before that starts a
+  // fresh conversation rather than `--conversation` with an id agy never minted.
+  assert.deepEqual(
+    reclaimRuntimeIds({
+      provider: AgentProvider.ANTIGRAVITY,
+      sessionId: 'session-agy',
+      runtimeSessionId: null,
+    }),
+    { sessionUuid: 'session-agy', runtimeSessionId: undefined },
+  );
+});
+
+test('antigravity sessions with a conversation id reclaim that conversation', () => {
+  assert.deepEqual(
+    reclaimRuntimeIds({
+      provider: AgentProvider.ANTIGRAVITY,
+      sessionId: 'session-agy',
+      runtimeSessionId: 'agy-conversation-1',
+    }),
+    { sessionUuid: 'agy-conversation-1', runtimeSessionId: 'agy-conversation-1' },
+  );
+});
+
 test('claude sessions without a runtime id are not reclaimable', () => {
   assert.equal(
     reclaimRuntimeIds({

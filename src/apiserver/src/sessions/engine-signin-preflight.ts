@@ -122,7 +122,8 @@ function sessionAccountLogin(
  *   - the session brings its own credential (a configured provider's API key, an account pool member's,
  *     a shared pool's gateway session token, or one set on the workspace's environment) → the CLI's
  *     local login is not what will run it;
- *   - the runtime has no local sign-in at all (OpenCode resolves credentials itself);
+ *   - the runtime has no local sign-in at all (OpenCode resolves credentials itself, and
+ *     Antigravity runs on a Gemini API key from its own environment);
  *   - the runner has never reported this engine, or reports `unknown` (its probe couldn't answer —
  *     which is deliberately NOT a claim of a sign-out), or reports it as not installed (the runner
  *     installs engines on demand, so that is a normal first-session state);

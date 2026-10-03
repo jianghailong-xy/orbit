@@ -13,6 +13,12 @@ import type { ApprovalSupport, PermissionSemantics, RunnerModelCatalog } from '.
  *                       ahead of execution (the runner refuses to start rather than pretend).
  *  - OPENCODE none    — driven as a one-shot non-interactive CLI, which REJECTS an "ask"
  *                       decision; there is no channel to answer.
+ *  - ANTIGRAVITY none — headless `agy --print=` has nobody to ask: an action that needs approval
+ *                       is refused on the spot and ends the turn (docs/antigravity-runtime-
+ *                       contract.md §5.2), and a PreToolUse hook cannot overrule that refusal
+ *                       outside skip mode (§5.4). Plan and Accept Edits map to agy's own
+ *                       `--mode plan` / `--mode accept-edits` (§5.3 lists what each lets
+ *                       through); whatever they would have asked about is denied instead.
  *  - CODEX    partial — in an ask-me mode the runner starts it with approvalPolicy "untrusted",
  *                       and in Auto with "on-request"; both bridge its approval requests to the
  *                       same card. Those cover command execution and patches — its dangerous
@@ -70,7 +76,8 @@ export const AUTO_CAPABLE_CLAUDE_MODELS: ReadonlySet<string> = new Set([
  * Whether Auto — "let the model decide when to ask a human" — is a mode this runtime actually has.
  *
  * Every runtime but Claude has it runtime-wide, for any model: Codex spells it `on-request` ("the
- * model decides when to ask the user for approval"), Kimi and OpenCode expose it as a plain mode.
+ * model decides when to ask the user for approval"), Kimi and OpenCode expose it as a plain mode,
+ * and Antigravity, which can ask nobody, runs it as `--dangerously-skip-permissions`.
  * Claude alone makes it model-specific, and the assigned runner's catalogue is where that answer
  * comes from — its row lists the modes the CLI that will run the model accepts. Only a model that
  * row does not cover falls back to the static list above. A configured (BYOK) provider's model
@@ -230,7 +237,8 @@ export function derivePermissionSemantics(
 
   if (ASK_MODES.has(mode)) {
     if (approvalSupport === 'none') {
-      // OpenCode: no way to ask, so an unapproved action is refused rather than waved through.
+      // OpenCode, Antigravity: no way to ask, so an unapproved action is refused rather than
+      // waved through.
       return {
         mode,
         unapproved: 'deny',

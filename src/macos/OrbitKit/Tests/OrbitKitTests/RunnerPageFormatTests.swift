@@ -212,7 +212,14 @@ final class RunnerPageFormatTests: XCTestCase {
         XCTAssertEqual(RunnerPageFormat.engineName("claude"), "Claude Code")
         XCTAssertEqual(RunnerPageFormat.engineName("kimi"), "Kimi Code")
         XCTAssertEqual(RunnerPageFormat.engineName("opencode"), "OpenCode")
+        XCTAssertEqual(RunnerPageFormat.engineName("antigravity"), "Antigravity CLI")
         XCTAssertEqual(RunnerPageFormat.engineName("gemini"), "gemini")
+        let agy = try runner(Self.macMiniJSON, ["engines": [["engine": "gemini", "installed": true],
+                                                           ["engine": "antigravity", "installed": true],
+                                                           ["engine": "opencode", "installed": true],
+                                                           ["engine": "claude", "installed": true]]])
+        XCTAssertEqual(RunnerPageFormat.engines(agy).map(\.engine), ["claude", "opencode", "antigravity", "gemini"],
+                       "Antigravity is a known engine, listed after OpenCode")
     }
 
     func testAnEnginesVersionLosesWhatItsCLIPrintedAroundIt() {
@@ -251,6 +258,16 @@ final class RunnerPageFormatTests: XCTestCase {
         XCTAssertTrue(RunnerPageFormat.needsSignIn(oneOut))
         let unsure = RunnerEngineHealth(engine: "kimi", installed: true, auth: "unknown")
         XCTAssertNil(RunnerPageFormat.engineStatus(unsure), "a CLI that wouldn't say is neither")
+
+        // agy runs on a Gemini API key from its environment: never a sign-in row, whatever its
+        // probe says — but a missing CLI is still news.
+        let agy = RunnerEngineHealth(engine: "antigravity", installed: true, auth: "no")
+        XCTAssertNil(RunnerPageFormat.loginEngine("antigravity"))
+        XCTAssertNil(RunnerPageFormat.engineStatus(agy), "Antigravity has no sign-in to say anything about")
+        XCTAssertFalse(RunnerPageFormat.needsSignIn(agy))
+        XCTAssertEqual(RunnerPageFormat.engineStatus(RunnerEngineHealth(engine: "antigravity", installed: false,
+                                                                        auth: "unknown")),
+                       RunnerPageFormat.Status(text: "Not installed", tone: .muted))
     }
 
     func testTheRowShowsDefaultsQuotaAndEachAccountHasItsOwn() throws {

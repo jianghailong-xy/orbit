@@ -986,7 +986,8 @@ model Session {
   batchMaxConcurrent   Int?      @map("batch_max_concurrent")
   // Runtime thread/session id, always owned by the runtime named in `provider`. Claude's is
   // pre-generated at creation (--session-id on first spawn, --resume on reclaim/respawn);
-  // Codex/Kimi/OpenCode mint their own after process initialization, so it stays null then.
+  // Codex/Kimi/OpenCode/Antigravity mint their own after process initialization, so it stays
+  // null then.
   runtimeSessionId     String?   @map("runtime_session_id")
   // For a session created by importing a local Claude transcript: the transcript's original cwd
   // (CLI import) or the workspace workDir used to locate and verify the transcript against (web
@@ -4082,11 +4083,11 @@ model Task {
   /// property of the human-facing task, not of a run.
   runAt            DateTime?   @map("run_at")
   // Per-task override for the runs this task dispatches: a built-in engine slug
-  // ("claude"/"codex"/"kimi"/"opencode") or one of the owner's configured ModelProvider slugs,
-  // and a model id inside that provider's space. NULL keeps the historical behaviour — the run
-  // inherits whatever its assignee agent is set to. Pinning the provider makes the next run
-  // start a fresh session rather than continue the last one, since a session's provider is
-  // fixed for its lifetime (see TasksService.runAgentOnTask).
+  // ("claude"/"codex"/"kimi"/"opencode"/"antigravity") or one of the owner's configured
+  // ModelProvider slugs, and a model id inside that provider's space. NULL keeps the historical
+  // behaviour — the run inherits whatever its assignee agent is set to. Pinning the provider makes
+  // the next run start a fresh session rather than continue the last one, since a session's
+  // provider is fixed for its lifetime (see TasksService.runAgentOnTask).
   provider         String?
   model            String?
   // Suggested tier, separate from the model pin. The migration checks S/M/L/XL or NULL.

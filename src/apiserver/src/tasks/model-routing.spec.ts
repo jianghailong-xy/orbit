@@ -232,7 +232,7 @@ test('unavailable catalogs or both unavailable families keep the baseline with a
 });
 
 test('other runtimes and configured model spaces have no tier table', () => {
-  for (const runtime of ['kimi', 'opencode', 'vendor-runtime', 'claude', 'codex']) {
+  for (const runtime of ['kimi', 'opencode', 'antigravity', 'vendor-runtime', 'claude', 'codex']) {
     const value = input();
     value.baseline = { provider: 'vendor', model: 'vendor-model', effort: 'vendor-effort' };
     value.task.modelHint = 'XL';

@@ -18,5 +18,7 @@ test('configured providers borrow one of the three runtime CLIs', async () => {
   // reserved as a provider SLUG, which provider-slug.ts enforces separately.
   assert.equal((await validate(probe('kimi'))).length, 0);
   assert.notEqual((await validate(probe('opencode'))).length, 0);
+  // Nor can a configured (BYOK) row borrow agy yet: it reads its Gemini key from its own environment.
+  assert.notEqual((await validate(probe('antigravity'))).length, 0);
   assert.notEqual((await validate(probe('moonshot'))).length, 0);
 });

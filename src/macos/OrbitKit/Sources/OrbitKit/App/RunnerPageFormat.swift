@@ -155,7 +155,7 @@ public enum RunnerPageFormat {
 
     /// The engines a runner reports on, in the order its page lists them — runnerEngines.ts
     /// `ENGINE_CLI_NAME`'s — and any the page doesn't know yet after them, as reported.
-    public static let engineOrder = ["claude", "codex", "kimi", "opencode"]
+    public static let engineOrder = ["claude", "codex", "kimi", "opencode", "antigravity"]
 
     public static func engines(_ runner: Runner) -> [RunnerEngineHealth] {
         let reported = runner.engines ?? []
@@ -163,14 +163,17 @@ public enum RunnerPageFormat {
         return known + reported.filter { !engineOrder.contains($0.engine) }
     }
 
-    /// The CLI's own product name: `Claude Code`, `Codex`, `Kimi Code`, `OpenCode`.
+    /// The CLI's own product name: `Claude Code`, `Codex`, `Kimi Code`, `OpenCode`,
+    /// `Antigravity CLI`.
     public static func engineName(_ engine: String) -> String {
         if let login = LoginEngine(rawValue: engine) { return login.displayName }
+        if engine == "antigravity" { return "Antigravity CLI" }
         return engine == "opencode" ? "OpenCode" : engine
     }
 
     /// The engines Orbit signs in on a runner. OpenCode's sign-in belongs to whichever provider it
-    /// runs, so a runner page has nothing to say about it.
+    /// runs, and Antigravity has none — it runs on a Gemini API key from its environment — so a
+    /// runner page has nothing to say about either.
     public static func loginEngine(_ engine: String) -> LoginEngine? { LoginEngine(rawValue: engine) }
 
     /// The engines whose CLI keeps a login per directory, so one machine holds several accounts of

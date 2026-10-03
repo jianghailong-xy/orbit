@@ -11,7 +11,8 @@
 // stay, and the server serves both spellings (WorkspaceAliasInterceptor) until the field has
 // rolled over. Read `agent*` here as "workspace, under its shipped name".
 //
-// `AgentProvider` is unrelated to either — it is the runtime (claude | codex | kimi | opencode).
+// `AgentProvider` is unrelated to either — it is the runtime (claude | codex | kimi | opencode |
+// antigravity).
 import {
   AgentProvider,
   PermissionMode,
@@ -104,8 +105,8 @@ export type ApprovalSupport = 'full' | 'partial' | 'none';
  * What a session's permission mode MEANS on the runtime that actually runs it.
  *
  * A permission mode is the user's intent ("ask me before you act"), but only some runtimes can
- * honor it: Claude and Kimi can block on a human, OpenCode runs non-interactive, and Codex is
- * currently started with approvals off. Left underived, the same mode silently meant three
+ * honor it: Claude and Kimi can block on a human, OpenCode and Antigravity run non-interactive,
+ * and Codex is currently started with approvals off. Left underived, the same mode silently meant three
  * different things depending on the engine — including "you will be asked" resolving to "nothing
  * is ever asked, everything is allowed". This is the server's single answer to "what will this
  * session actually do", so clients can show it instead of implying the mode is universal.
@@ -294,7 +295,10 @@ export interface RunnerModelInfo {
   fastMode?: boolean;
 }
 
-/** Models a runner says its local runtimes can use. Keys are provider ids. */
+/** Models a runner says its local runtimes can use. Keys are provider ids. Antigravity's rows
+ *  come from `agy models`, whose slugs carry their level (`gemini-3.8-flash-high`): the runner
+ *  folds them into one row per base model (`gemini-3.8-flash`) with its levels as
+ *  `reasoningLevels`, and a session passes them back as `--model` and `--effort`. */
 export type RunnerModelCatalog = Partial<Record<AgentProvider, RunnerModelInfo[]>>;
 
 /** Effective default model reported by each built-in runtime on one runner heartbeat. This is
@@ -944,11 +948,12 @@ export type LoginEngine = 'claude' | 'codex' | 'kimi';
 
 /**
  * Every engine CLI a runner reports on, which is a wider set than the ones it can sign into:
- * OpenCode authenticates per-provider with no relayable flow, so it is never a sign-in row — but
- * it is installed on the machine, it is updated by the same periodic pass, and its version drifts
- * like any other. Which of these a given page offers to sign in is that page's question.
+ * OpenCode authenticates per-provider with no relayable flow, and Antigravity runs on a Gemini API
+ * key in its environment, so neither is ever a sign-in row — but both are installed on the
+ * machine, updated by the same periodic pass, and their versions drift like any other. Which of
+ * these a given page offers to sign in is that page's question.
  */
-export type ReportedEngine = LoginEngine | 'opencode';
+export type ReportedEngine = LoginEngine | 'opencode' | 'antigravity';
 
 /**
  * Control plane → runner: drive the interactive sign-in on the runner's own machine.
@@ -1481,7 +1486,8 @@ export interface ApprovalDecisionResponse {
 // endpoint it is leaving, and that endpoint answers for its own models and refuses the rest.
 // That PATCH queues the reload alone (SessionsService.updateConfig). Filed for the claude
 // runtime alone: the other runtimes' session loops have no arm for the kind (codex and
-// kimi are driven over ACP/JSON-RPC, opencode runs one process per turn), so one sent
+// kimi are driven over ACP/JSON-RPC, opencode runs one process per turn, antigravity's
+// stream-json input takes nothing but user messages), so one sent
 // there would be acked on delivery and applied by nobody. They keep the reload, effort
 // included.
 // 'diff' is a fire-and-forget control turn (no text, no claude): it asks the runner to

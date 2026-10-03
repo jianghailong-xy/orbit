@@ -17,14 +17,17 @@ import {
  * summary under the card — an engine spends the subscription you signed into on that machine, a
  * configured provider spends the API key you pasted.
  *
- * Engines are exactly the slugs a runner can sign into (LoginEngine in @orbit/shared). `opencode`
- * is a fourth AgentProvider but not a login engine, so it never appears as a choice — it only
- * shows up as the current pick when a workspace is already set to it.
+ * Engines are the slugs a runner can sign into (LoginEngine in @orbit/shared), plus Antigravity,
+ * which has no sign-in at all — agy runs on a Gemini API key from its environment — and so is
+ * offered whenever the machine has it installed. `opencode` is an AgentProvider that is neither,
+ * so it never appears as a choice — it only shows up as the current pick when a workspace is
+ * already set to it.
  */
 export const ENGINE_SLUGS = [
   AgentProvider.CLAUDE,
   AgentProvider.CODEX,
   AgentProvider.KIMI,
+  AgentProvider.ANTIGRAVITY,
 ] as const;
 
 export type ProviderChoiceKind = 'engine' | 'byok' | 'pool';
@@ -104,6 +107,7 @@ const ENGINE_LABELS: Record<string, string> = {
   [AgentProvider.CODEX]: 'Codex',
   [AgentProvider.KIMI]: 'Kimi',
   [AgentProvider.OPENCODE]: 'OpenCode',
+  [AgentProvider.ANTIGRAVITY]: 'Antigravity',
 };
 
 /** One line about a provider's endpoint, for the gallery card and the connect form's identity bar.
@@ -125,6 +129,15 @@ export const ENGINE_PRESET: Record<string, string> = {
   [AgentProvider.KIMI]: 'moonshot',
 };
 
+// An engine whose vendor ships no preset carrying its mark. Antigravity is Google's, but Google's
+// preset is the Gemini API reached through another CLI, and the two should not be one logo.
+const ENGINE_BRAND: Record<string, { brand: ProviderBrand; glyphKey: string }> = {
+  [AgentProvider.ANTIGRAVITY]: {
+    brand: { mono: 'A', from: '#3186ff', to: '#00b95c' },
+    glyphKey: 'antigravity',
+  },
+};
+
 const NEUTRAL_BRAND = (label: string): ProviderBrand => ({
   mono: (label.trim()[0] ?? '?').toUpperCase(),
   from: '#9aa0a8',
@@ -141,7 +154,7 @@ export function brandForProvider(
   const presetKey = presetSlug ?? ENGINE_PRESET[slug];
   const preset = presetKey ? PROVIDER_PRESETS.find((p) => p.slug === presetKey) : undefined;
   if (preset) return { brand: preset.brand, glyphKey: preset.slug };
-  return { brand: NEUTRAL_BRAND(label) };
+  return ENGINE_BRAND[slug] ?? { brand: NEUTRAL_BRAND(label) };
 }
 
 /** The label to show for a provider's resolved default model. Falls back to the raw id when the
@@ -167,7 +180,9 @@ export function defaultModelLabel(
 function engineBlocker(health?: RunnerEngineHealth): string | undefined {
   if (!health) return undefined;
   if (!health.installed) return 'Not installed';
-  if (health.auth === 'no') return 'Not signed in';
+  // Antigravity has no sign-in to be out of. Its key comes from the session's environment, which
+  // can be the workspace's own — something the runner's probe of the machine never sees.
+  if (health.auth === 'no' && health.engine !== 'antigravity') return 'Not signed in';
   return undefined;
 }
 
@@ -180,15 +195,15 @@ function byokBlocker(health?: RunnerEngineHealth): string | undefined {
 }
 
 /**
- * The picker's contents: the three engines, then the configured providers in the order the API
+ * The picker's contents: the engines, then the configured providers in the order the API
  * returned them.
  *
  * Engines carry the health the runner last reported, because an engine choice is a claim about
  * someone else's machine. Not installed there, or installed but signed out → listed with the
  * reason, pointing at the Providers page where that machine gets its install or its sign-in (see
  * `unavailable`). Hiding the row instead would leave a user who pays for Kimi with no way to find
- * out why it isn't offered. A runner that has reported nothing claims nothing, so all three stay
- * pickable — as does any engine missing from a partial report.
+ * out why it isn't offered. A runner that has reported nothing claims nothing, so every engine
+ * stays pickable — as does any engine missing from a partial report.
  *
  * A configured provider is judged the same way through the engine it borrows, since that CLI is
  * what actually runs it — a Moonshot row on a machine without the Kimi CLI reads "Not installed"

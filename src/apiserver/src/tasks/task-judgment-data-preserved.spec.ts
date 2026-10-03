@@ -1700,7 +1700,29 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // with its own indexes and foreign keys. Read against the claims above: no existing column
       // is dropped or retyped, no DML or function/trigger replacement appears, and neither the
       // 0177 pair, criterion enum nor any project_acceptance_* object is named.
-      '0364_task_model_routing'],
+      '0364_task_model_routing',
+      // `antigravity` becomes a built-in runtime keyword (0367), the way 0080 made `opencode` one:
+      // whatever configured provider or account pool held the slug is renamed to a free
+      // `antigravity-N`, every stored reference to the slug is rewritten to it, a compatibility row
+      // is inserted into `model_provider` with one CHECK, and two new functions back three new
+      // triggers (two on `model_provider`, one BEFORE UPDATE OF "status" on `session`). Read
+      // against every claim above: it is DML on two preserved relations, and only on one column
+      // of each — `session.provider` and `task.provider`, rewritten from `antigravity` to the new
+      // slug on the rows that name it, and nothing else assigned. No row is inserted into or
+      // deleted from either, so no count moves; no status, criterion, verdict or acceptance column
+      // is written, and `task.acceptance_command`, `task.acceptance_expected_exit_code`,
+      // `task_executable_acceptance_pair` and `task_completion_criterion` are not named. The
+      // triggers that UPDATE fires are the statement-level AFTER UPDATE ones on `task`, which act
+      // on run_at/status/project/list differences this write cannot produce; no row-level trigger
+      // on either table lists `provider`, so the DONE writer fence (status and
+      // completion_fence_revision only) does not fire. Its other writes land on relations this
+      // file does not preserve — `model_provider`, `provider_pool`, `task_route_decision`,
+      // `task_run_request`, `workspace`, `agent`, `user` and `wiki_space`. Its two `CREATE OR
+      // REPLACE FUNCTION`s are its own new guards, so it is not another writer of the DONE fence
+      // and names none of the six preserved objects; no table, column, type or enum is created,
+      // altered or dropped besides that CHECK, and no `project_acceptance_*` object is named.
+      // (0365 and 0366 are spelled by other branches not yet landed, so this took 0367.)
+      '0367_antigravity_runtime'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -51,6 +51,7 @@ describe('modelForProvider', () => {
     expect(modelForProvider(AgentProvider.OPENCODE, 'anthropic/claude-sonnet-5')).toBe(
       'anthropic/claude-sonnet-5',
     );
+    expect(modelForProvider(AgentProvider.ANTIGRAVITY, 'gemini-3.8-flash')).toBe('gemini-3.8-flash');
   });
 
   it('falls back to the provider default when no override is given', () => {
@@ -59,6 +60,9 @@ describe('modelForProvider', () => {
     expect(modelForProvider(AgentProvider.CLAUDE, '')).toBe('claude-opus-5');
     expect(modelForProvider(AgentProvider.KIMI, undefined)).toBe('kimi-code/kimi-for-coding');
     expect(modelForProvider(AgentProvider.OPENCODE, undefined)).toBe('');
+    // No `--model` at all: agy runs its own default.
+    expect(modelForProvider(AgentProvider.ANTIGRAVITY, undefined)).toBe('');
+    expect(modelForProvider(AgentProvider.ANTIGRAVITY, '')).toBe('');
   });
 
   it('coerces a Claude model on a Codex session to the Codex default (the reported bug)', () => {
@@ -100,6 +104,27 @@ describe('modelForProvider', () => {
     expect(modelForProvider(AgentProvider.OPENCODE, 'kimi-code/kimi-for-coding')).toBe(
       'kimi-code/kimi-for-coding',
     );
+  });
+
+  it('keeps agy model slugs on Antigravity and nothing else', () => {
+    // What `agy models` lists, folded to a base name, and the full slug it also accepts.
+    expect(modelForProvider(AgentProvider.ANTIGRAVITY, 'gemini-3.1-pro')).toBe('gemini-3.1-pro');
+    expect(modelForProvider(AgentProvider.ANTIGRAVITY, 'gemini-3.8-flash-high')).toBe(
+      'gemini-3.8-flash-high',
+    );
+    // agy refuses to start on a model it does not list, so a stale pin from another runtime is
+    // dropped and agy picks its own instead of failing the turn.
+    expect(modelForProvider(AgentProvider.ANTIGRAVITY, 'claude-opus-5')).toBe('');
+    expect(modelForProvider(AgentProvider.ANTIGRAVITY, 'gpt-5.6-sol')).toBe('');
+    expect(modelForProvider(AgentProvider.ANTIGRAVITY, 'kimi-code/kimi-for-coding')).toBe('');
+    expect(modelForProvider(AgentProvider.ANTIGRAVITY, 'google/gemini-3.1-pro')).toBe('');
+  });
+
+  it('coerces an agy model on another runtime to that runtime\'s default', () => {
+    expect(modelForProvider(AgentProvider.CLAUDE, 'gemini-3.8-flash')).toBe('claude-opus-5');
+    expect(modelForProvider(AgentProvider.CODEX, 'gemini-3.1-pro')).toBe('gpt-5.6-sol');
+    expect(modelForProvider(AgentProvider.KIMI, 'gemini-3.1-pro')).toBe('kimi-code/kimi-for-coding');
+    expect(modelForProvider(AgentProvider.OPENCODE, 'gemini-3.1-pro')).toBe('');
   });
 });
 

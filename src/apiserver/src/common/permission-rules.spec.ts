@@ -7,6 +7,7 @@ import {
   normalizePermissionRules,
   permissionRuleToken,
   ruleCoversApproval,
+  serverMatchedRuntime,
 } from './permission-rules';
 
 const BASE = ['mcp__orbit__*'];
@@ -80,7 +81,22 @@ test("a workspace's standing grants ride along with a claude dispatch", () => {
   );
 });
 
-test('only claude gets them: the other runtimes read this list as something else', () => {
+test("antigravity gets them too: the runner writes each as agy's own scoped allow rule", () => {
+  // Headless agy refuses whatever needs approval and has nobody to ask, so these are the only way
+  // a grant somebody already gave reaches it (docs/antigravity-runtime-contract.md §5.1:
+  // `Bash(npm test:*)` becomes `command(npm test)`, still scoped).
+  assert.deepEqual(
+    dispatchAllowedTools(AgentProvider.ANTIGRAVITY, BASE, [
+      { toolName: 'Bash', ruleContent: 'npm test:*' },
+      { toolName: 'Edit', ruleContent: '' },
+    ]),
+    ['mcp__orbit__*', 'Bash(npm test:*)', 'Edit'],
+  );
+  // It never asks, so nothing of its ever reaches the control plane's matcher.
+  assert.equal(serverMatchedRuntime(AgentProvider.ANTIGRAVITY), false);
+});
+
+test('no other runtime gets them: the rest read this list as something else', () => {
   // OpenCode maps an entry onto a whole-tool permission and Kimi pastes the list into its
   // prompt as "only use these tools" — handing either the same rules changes what they do
   // rather than skipping a prompt someone already answered.

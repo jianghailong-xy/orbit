@@ -12,6 +12,10 @@ export const DEFAULT_MODEL_BY_PROVIDER: Record<AgentProvider, string> = {
   // leaving selection to OpenCode (configured/default for a new session, current model
   // for an existing runtime session).
   [AgentProvider.OPENCODE]: '',
+  // Empty omits `--model`, and agy runs its own default (Gemini 3.1 Pro at Low on 1.2.15). Its
+  // models ship with the CLI and come and go with its releases (`agy models`), so naming one here
+  // could only ever go stale; the runner's catalogue supplies the concrete ids.
+  [AgentProvider.ANTIGRAVITY]: '',
 };
 
 /**
@@ -102,7 +106,7 @@ export const CODEX_FAST_SERVICE_TIER = 'priority';
  *   means no: unlike an effort level, a tier the catalogue does not advertise is not refused by
  *   codex but dropped from the request without a word, so "unknown" must not render a control
  *   whose only possible outcome is being ignored.
- * - Kimi and OpenCode have no fast lane.
+ * - Kimi, OpenCode and Antigravity have no fast lane.
  *
  * There is one thing this deliberately does NOT know: whether the account is ALLOWED the lane (an
  * organisation setting, EU data residency). The CLI decides that when it sends the request. A true
@@ -144,11 +148,17 @@ export function modelForProvider(provider: AgentProvider, override?: string | nu
   // upstream provider (`anthropic/…`, `kimi-code/…`), so the prefix guards below must not
   // police it.
   if (provider === AgentProvider.OPENCODE) return model.includes('/') ? model : fallback;
+  // agy's model space is the `gemini-…` slugs `agy models` lists (contract §9) and nothing else:
+  // it refuses to start on any other `--model`, so whatever is not one of them is dropped and agy
+  // runs its own default rather than failing the turn.
+  const isAntigravityModel = model.startsWith('gemini-');
+  if (provider === AgentProvider.ANTIGRAVITY) return isAntigravityModel ? model : fallback;
   const isClaudeModel = model.startsWith('claude-');
   const isCodexModel = model.startsWith('gpt-');
   const isKimiModel = model.startsWith('kimi-') || model.startsWith('kimi-code/');
   if (provider !== AgentProvider.CLAUDE && isClaudeModel) return fallback;
   if (provider !== AgentProvider.CODEX && isCodexModel) return fallback;
   if (provider !== AgentProvider.KIMI && isKimiModel) return fallback;
+  if (isAntigravityModel) return fallback;
   return model;
 }
