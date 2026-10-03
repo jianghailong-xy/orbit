@@ -240,10 +240,14 @@ final class SessionFolderPageWiringTests: XCTestCase {
         XCTAssertTrue(page.contains("app.startComposingSession(inFolder: address.folderID, of: address.agentID)"))
 
         let detail = code(try appSource("Views/AgentsView.swift"))
-        let draft = try slice(detail, from: "NewSessionView(agent: agent, registry: registry,", to: "app.composingFolderID))")
-        XCTAssertTrue(draft.contains("folderID: app.composingFolderID"))
-        XCTAssertTrue(draft.contains(".id(newSessionDraftIdentity(agent, folderID: app.composingFolderID))"),
+        let draft = try slice(detail, from: "NewSessionView(agent: agent, registry: registry,", to: "folderID: draftFolderID))")
+        XCTAssertTrue(draft.contains("folderID: draftFolderID,"))
+        XCTAssertTrue(draft.contains(".id(newSessionDraftIdentity(agent, folderID: draftFolderID))"),
                       "the folder is part of the draft's identity")
+        // The draft's folder is its frame's; the iPad's frameless draft beside a folder's page takes
+        // that page's (`AgentsStackWiringTests`).
+        let draftFolder = try slice(detail, from: "private var draftFolderID: String? {", to: "\n    }")
+        XCTAssertTrue(draftFolder.contains("return app.composingFolderID"))
 
         let compact = code(try appSource("Views/CompactShell.swift"))
         let composePage = try slice(compact, from: "NewSessionView(agent: agent, registry: registry,", to: "model.openCreatedAgentSession(session)")

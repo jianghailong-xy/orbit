@@ -227,8 +227,8 @@ final class AgentsStackWiringTests: XCTestCase {
         let shows = code(try slice(views, from: "private var showsDraft: Bool {", to: "\n    }"))
         let ios = try slice(shows, from: "#if os(iOS)", to: "#else")
         let mac = try slice(shows, from: "#else", to: "#endif")
-        XCTAssertTrue(ios.contains("return app.composingAgentSession || app.sectionAtRoot"),
-                      "on iOS the stack's root is the draft too")
+        XCTAssertTrue(ios.contains("return app.composingAgentSession || app.sectionAtRoot || app.folderPage != nil"),
+                      "on iOS the pane's root is the draft too — an empty stack, or only the column's folder")
         XCTAssertFalse(mac.contains("sectionAtRoot"), "macOS keeps its placeholder")
 
         let detail = code(try slice(views, from: "struct AgentConsoleDetail: View {",
@@ -254,6 +254,54 @@ final class AgentsStackWiringTests: XCTestCase {
                                      from: "private func resolveDefaultLanding() {", to: "\n    }"))
         XCTAssertFalse(landing.contains(".compose("),
                        "the launch lands on a workspace's root, not on a pushed draft")
+    }
+
+    /// A wide shell's session column draws a folder as the frame at the bottom of the stack (§3.3), so
+    /// a folder open with nothing selected is the pane's root as well. The draft there is the one the
+    /// folder page's ✎ opens — filed in that folder, under the same identity, so ✎ focuses it rather
+    /// than starting over — and the session it creates is selected as a row's is: pushed over the
+    /// folder, which stays the column's page, where replacing the top would have closed it.
+    func testAFolderWithNothingOpenIsTheWidePanesRootToo() throws {
+        let views = try appSource("Views/AgentsView.swift")
+        let folder = code(try slice(views, from: "private var draftFolderID: String? {", to: "\n    }"))
+        let ios = try slice(folder, from: "#if os(iOS)", to: "#endif")
+        XCTAssertTrue(ios.contains("if !app.composingAgentSession { return app.folderPage?.folderID }"),
+                      "the root's draft files in the folder the column shows")
+        XCTAssertTrue(folder.contains("return app.composingFolderID"),
+                      "a draft with a frame files where its frame says")
+
+        let detail = code(try slice(views, from: "struct AgentConsoleDetail: View {",
+                                    to: "struct NewSessionView: View {"))
+        XCTAssertTrue(detail.contains("folderID: draftFolderID,"))
+        XCTAssertTrue(detail.contains(".id(newSessionDraftIdentity(agent, folderID: draftFolderID))"),
+                      "the folder ✎ names is the root draft's identity too")
+
+        let created = code(try slice(try appSource("AppModel.swift"),
+                                     from: "func openCreatedAgentSession(_ session: Session) {",
+                                     to: "\n    }"))
+        let replace = try XCTUnwrap(created.range(of: "nav.replaceTop(with: .console(sessionID: session.id, origin: .list))"))
+        let select = try XCTUnwrap(created.range(of: "selectedAgentSessionID = session.id"),
+                                   "a draft without a frame selects its session")
+        let branch = try XCTUnwrap(created.range(of: "if composingAgentSession {"))
+        XCTAssertLessThan(branch.lowerBound, replace.lowerBound)
+        XCTAssertLessThan(replace.lowerBound, select.lowerBound,
+                          "the draft's own frame is replaced; only the frameless one selects")
+    }
+
+    /// The draft an iPad draws sits beside a session column that already names its workspace, so it
+    /// leaves the navigation bar's switcher to the phone's pushed draft, where it is the only one.
+    func testTheWideDraftLeavesTheWorkspaceSwitcherToTheColumn() throws {
+        let views = try appSource("Views/AgentsView.swift")
+        let detail = code(try slice(views, from: "struct AgentConsoleDetail: View {",
+                                    to: "struct NewSessionView: View {"))
+        XCTAssertTrue(detail.contains("agentSwitcherInBar: false"))
+        let draft = code(try slice(views, from: "struct NewSessionView: View {",
+                                   to: "struct AgentSessionRow: View {"))
+        XCTAssertTrue(draft.contains("agentSwitcherInBar: Bool = true,"))
+        let bar = try slice(draft, from: ".toolbar {", to: "ToolbarItem(placement: .principal) { agentSwitcher }")
+        XCTAssertTrue(bar.contains("if agentSwitcherInBar {"), "the bar's switcher is the flag's")
+        XCTAssertFalse(code(try appSource("Views/CompactShell.swift")).contains("agentSwitcherInBar:"),
+                       "the phone's draft keeps it")
     }
 
     /// The two things the compact shell used to keep *about itself*, and the tap that repaired the

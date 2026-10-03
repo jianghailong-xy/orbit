@@ -1038,17 +1038,29 @@ struct AgentConsoleDetail: View {
     #endif
 
     /// Whether the pane shows the new-session draft: the one ✎ or ⌘N put on the stack, and on iOS the
-    /// stack's root as well. An iPad's detail column is always on screen, so an empty stack would leave
-    /// half of it saying "Select a session" — web's right pane composes when nothing is selected. It is
-    /// this view's reading of the root rather than a `.compose` frame the model pushes: both shells
-    /// share the stack, and a frame pushed for this one would open the phone's on a draft instead of
-    /// its list once the window narrows. macOS keeps its placeholder.
+    /// pane's root as well. An iPad's detail column is always on screen, so an empty pane would leave
+    /// half of it saying "Select a session" — web's right pane composes when nothing is selected. The
+    /// pane is at its root with nothing on the stack, or only a folder's frame, which is the column's
+    /// page rather than the pane's (§3.3). It is this view's reading of the root rather than a
+    /// `.compose` frame the model pushes: both shells share the stack, and a frame pushed for this one
+    /// would open the phone's on a draft instead of its list once the window narrows. macOS keeps its
+    /// placeholder.
     private var showsDraft: Bool {
         #if os(iOS)
-        return app.composingAgentSession || app.sectionAtRoot
+        return app.composingAgentSession || app.sectionAtRoot || app.folderPage != nil
         #else
         return app.composingAgentSession
         #endif
+    }
+
+    /// The folder the draft files its session in: the one its frame names (✎ on a folder's page) or,
+    /// for the draft drawn at the pane's root, the folder whose page the column shows — the draft that
+    /// page's ✎ opens, so pressing it focuses this one instead of starting another.
+    private var draftFolderID: String? {
+        #if os(iOS)
+        if !app.composingAgentSession { return app.folderPage?.folderID }
+        #endif
+        return app.composingFolderID
     }
 
     var body: some View {
@@ -1068,13 +1080,15 @@ struct AgentConsoleDetail: View {
                            defaultEffort: app.user?.preferences?.defaultEffort,
                            // ✎ on a folder's page: the draft's frame names the folder, and the
                            // session it creates lands in it (§3.3).
-                           folderID: app.composingFolderID,
-                           focusesComposer: app.composingAgentSession) { session in
+                           folderID: draftFolderID,
+                           focusesComposer: app.composingAgentSession,
+                           // The session column beside this pane names the workspace already.
+                           agentSwitcherInBar: false) { session in
                 app.openCreatedAgentSession(session)
             }
             // Rebuild when settings change the selected Agent's execution identity/defaults too;
             // @State would otherwise retain the old provider after an in-place Agent edit.
-            .id(newSessionDraftIdentity(agent, folderID: app.composingFolderID))
+            .id(newSessionDraftIdentity(agent, folderID: draftFolderID))
         } else if let sid = app.selectedAgentSessionID, let registry = app.consoleRegistry {
             // No `.id(sid)`: reuse the warm cached console and swap streams via `.task(id:)`.
             // A just-created session isn't in the Open list yet, so fall back to the agent
@@ -1143,6 +1157,10 @@ struct NewSessionView: View {
     /// iPad's detail column also draws it unasked, at the root of the stack (`AgentConsoleDetail`),
     /// and ✎ then turns this on for that same view.
     let focusesComposer: Bool
+    /// Whether the navigation bar's title slot carries the workspace switcher (iOS): the phone's pushed
+    /// draft, where nothing else names the workspace. An iPad's draws beside a session column that
+    /// already does, and two switchers on one screen would read as two different choices.
+    let agentSwitcherInBar: Bool
     @State private var draft: ConsoleModel
     @Environment(AppModel.self) private var app
     @State private var showSwitcher = false
@@ -1157,6 +1175,7 @@ struct NewSessionView: View {
          defaultEffort: String? = nil,
          folderID: String? = nil,
          focusesComposer: Bool = true,
+         agentSwitcherInBar: Bool = true,
          onCreated: @escaping (Session) -> Void) {
         self.agent = agent
         self.defaultModel = defaultModel
@@ -1168,6 +1187,7 @@ struct NewSessionView: View {
         self.defaultEffort = defaultEffort
         self.folderID = folderID
         self.focusesComposer = focusesComposer
+        self.agentSwitcherInBar = agentSwitcherInBar
         _draft = State(initialValue: registry.draftModel(
             for: agent, defaultModel: defaultModel,
             configuredProviders: configuredProviders,
@@ -1287,7 +1307,9 @@ struct NewSessionView: View {
         // plain title with this button keeps the same information in the same place while making it
         // the switcher (the hero below now belongs to the provider).
         .toolbar {
-            ToolbarItem(placement: .principal) { agentSwitcher }
+            if agentSwitcherInBar {
+                ToolbarItem(placement: .principal) { agentSwitcher }
+            }
         }
         #endif
         .task { await draft.prepareDraft() }
