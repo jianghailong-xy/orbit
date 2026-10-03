@@ -431,17 +431,27 @@ func TestAntigravityContextWindowFollowsTheCatalogAndTheTable(t *testing.T) {
 // ── Permissions ─────────────────────────────────────────────────────────────────────────────────
 
 func TestAntigravityPermissionModeFlags(t *testing.T) {
-	for mode, want := range map[string][]string{
-		"":                  nil,
-		"default":           nil,
-		"dontAsk":           nil,
-		"acceptEdits":       {"--mode", "accept-edits"},
-		"plan":              {"--mode", "plan"},
-		"auto":              {"--dangerously-skip-permissions"},
-		"bypassPermissions": {"--dangerously-skip-permissions"},
+	skip := []string{"--dangerously-skip-permissions"}
+	for mode, want := range map[string][2][]string{
+		// mode: {without a confirmed approval gate, with one}
+		"":                  {nil, nil},
+		"default":           {nil, skip},
+		"dontAsk":           {nil, nil},
+		"acceptEdits":       {{"--mode", "accept-edits"}, skip},
+		"plan":              {{"--mode", "plan"}, {"--mode", "plan"}},
+		"auto":              {skip, skip},
+		"bypassPermissions": {skip, skip},
 	} {
-		if got := antigravityPermissionArgs(mode); !reflect.DeepEqual(got, want) {
-			t.Errorf("%q -> %q, want %q", mode, got, want)
+		for i, gated := range []bool{false, true} {
+			if got := antigravityPermissionArgs(mode, gated); !reflect.DeepEqual(got, want[i]) {
+				t.Errorf("%q (gated %v) -> %q, want %q", mode, gated, got, want[i])
+			}
+		}
+	}
+	// The modes that ask are the ones the gate is for; without it they keep agy's own refusal.
+	for mode, asks := range map[string]bool{"default": true, "acceptEdits": true, "": false, "dontAsk": false, "plan": false, "auto": false, "bypassPermissions": false} {
+		if got := antigravityAsksForApproval(mode); got != asks {
+			t.Errorf("antigravityAsksForApproval(%q) = %v, want %v", mode, got, asks)
 		}
 	}
 }
@@ -644,7 +654,7 @@ func TestAntigravityArgsAndEnv(t *testing.T) {
 		SessionID: "s1", RuntimeSessionID: "conv-1",
 		Agent: AgentExecConfig{Model: "gemini-3.8-flash", Effort: "low", PermissionMode: "acceptEdits", Env: map[string]string{"GEMINI_API_KEY": "k"}},
 	}
-	got := antigravityArgs(job, "/scratch/antigravity")
+	got := antigravityArgs(job, "/scratch/antigravity", false)
 	want := []string{
 		"--gemini_dir=/scratch/antigravity", "--print=", "--input-format", "stream-json", "--output-format", "stream-json",
 		"--disable-slash-commands", "--print-timeout=0s", "--conversation", "conv-1",
@@ -891,9 +901,10 @@ func TestAntigravityHoldsAMidTurnMessageUntilTheTurnEnds(t *testing.T) {
 }
 
 // A reload's model and permission mode are agy flags: the next turn runs in a new agy that has them,
-// on the same conversation.
+// on the same conversation. (Don't Ask rather than Default to start from: Default starts agy only
+// behind Orbit's approval hook, which this stand-in cannot list.)
 func TestAntigravityReloadStartsTheNextTurnWithTheNewFlags(t *testing.T) {
-	f := startFakeAgySession(t, &ClaimedSession{SessionID: "s-reload", Provider: providerAntigravity, Agent: AgentExecConfig{PermissionMode: "default"}})
+	f := startFakeAgySession(t, &ClaimedSession{SessionID: "s-reload", Provider: providerAntigravity, Agent: AgentExecConfig{PermissionMode: "dontAsk"}})
 	if err := os.WriteFile(filepath.Join(f.dir, "release"), nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
