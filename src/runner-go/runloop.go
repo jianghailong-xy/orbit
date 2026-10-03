@@ -1088,6 +1088,15 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// Heartbeat every 30s; honor server-requested cancellations.
 	hbStop := make(chan struct{})
 	hbDone := make(chan struct{})
+	// One beat right away, between ticks (runHeartbeatTicks). Buffered by one and never waited on:
+	// asking while a beat is already owed leaves exactly that one owed.
+	hbNow := make(chan struct{}, 1)
+	beatNow := func() {
+		select {
+		case hbNow <- struct{}{}:
+		default:
+		}
+	}
 	// Heartbeat-delivered work may spawn git subprocesses that outlive the heartbeat
 	// goroutine itself. Stop dispatching it as soon as drain begins and join anything
 	// already running before a self-update replaces this process image.
@@ -1120,7 +1129,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		integratingNow := map[string]bool{}
 		// The one browser-less sign-in this runner may have in flight — it writes the machine's
 		// single credentials file, so it guards itself rather than keying off a request id.
-		runHeartbeatTicks(hbStop, ticker.C, func() {
+		runHeartbeatTicks(hbStop, ticker.C, hbNow, func() {
 			draining := loopCtx.Err() != nil
 			assetMu.Lock()
 			cmds, skills := hbCommands, hbSkills
@@ -1415,9 +1424,14 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					}
 					// A sign-in that just landed changes what the engine probe would say, and
 					// the Providers page shouldn't keep calling this engine signed out for the
-					// rest of the refresh interval.
+					// rest of the refresh interval — nor for the half minute until the next
+					// heartbeat, under a card that already says this runner is ready. So
+					// re-probe, and send what it found at once.
 					if res.Status == loginDone {
-						go engineHealth.refresh()
+						go func() {
+							engineHealth.refresh()
+							beatNow()
+						}()
 					}
 				}
 				switch lr.Action {

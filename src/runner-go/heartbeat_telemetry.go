@@ -230,12 +230,16 @@ func sendHeartbeatCycle(
 
 // runHeartbeatTicks makes cadence deterministic in tests. Production passes a
 // real ticker; a tick handler must remain bounded by the heartbeat HTTP timeout.
-func runHeartbeatTicks(stop <-chan struct{}, ticks <-chan time.Time, heartbeat func()) {
+// A receive on now beats between ticks, for news that shouldn't wait up to half
+// a minute for the next one; beats still never overlap.
+func runHeartbeatTicks(stop <-chan struct{}, ticks <-chan time.Time, now <-chan struct{}, heartbeat func()) {
 	for {
 		select {
 		case <-stop:
 			return
 		case <-ticks:
+			heartbeat()
+		case <-now:
 			heartbeat()
 		}
 	}
