@@ -595,10 +595,13 @@ struct CodexPoolPageView: View {
 }
 
 /// Whose sessions an account of a shared pool runs, said on its owner's page (web's `RunsFor`): a ChatGPT
-/// account only ever its owner's, a key everybody's — a rule rather than a setting.
+/// account only ever its owner's, a key everybody's — a rule rather than a setting. The mark and its words
+/// are one unit on the line: where the line wraps, they go to the next one together.
 private func runsFor(everyone: Bool) -> Text {
-    (Text(Image(systemName: everyone ? "person.2.fill" : "lock.fill")) + Text(" ")
-        + Text(everyone ? CodexPoolPage.everyoneHere : CodexPoolPage.onlyYou))
+    let words = (everyone ? CodexPoolPage.everyoneHere : CodexPoolPage.onlyYou)
+        .replacingOccurrences(of: " ", with: "\u{00A0}")
+    return (Text(Image(systemName: everyone ? "person.2.fill" : "lock.fill")) + Text(verbatim: "\u{00A0}")
+        + Text(verbatim: words))
         .foregroundStyle(everyone ? PoolTone.color(.success) : Color.secondary)
 }
 
@@ -879,10 +882,12 @@ private struct SharePoolSheet: View {
                         WideButton(title: SharePool.addKeyFirst) { addKeyFirst() }
                             .listRowBackground(Color.clear)
                             .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                            .listRowSeparator(.hidden)
                         Button(SharePool.shareAnyway) { send() }
                             .disabled(emails.isEmpty || sending)
                             .frame(maxWidth: .infinity)
                             .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
                     }
                 } else {
                     Section {
