@@ -11,7 +11,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import type { LoginEngine } from '@orbit/shared';
+import type { InstallEngine, LoginEngine } from '@orbit/shared';
 
 export class CreateEnrollmentTokenDto {
   @IsOptional() @IsString() label?: string;
@@ -67,5 +67,5 @@ export class RenameAccountDto {
 
 /** Which CLI to install on the runner. Required — there is no historical default here. */
 export class StartInstallDto {
-  @IsIn(['claude', 'codex', 'kimi']) engine!: LoginEngine;
+  @IsIn(['claude', 'codex', 'kimi', 'antigravity']) engine!: InstallEngine;
 }

@@ -1083,6 +1083,7 @@ public final class APIClient: @unchecked Sendable {
     /// Control-plane–configured model providers (GET /api/providers): enabled only, de-sensitized
     /// (no key/baseUrl). Merged into the composer and agent Runtime picker alongside built-ins.
     public func providers() async throws -> [ConfiguredProvider] { try await get("providers") }
+    public func personalProviders() async throws -> [ConfiguredProvider] { try await get("providers/mine") }
 
     /// The caller's account pools (GET /api/providers/pools), which the catalogue above doesn't
     /// list: each with its members, their own quota and where each stands. A pool this build can't
@@ -1208,6 +1209,11 @@ public final class APIClient: @unchecked Sendable {
 
     public func startEngineUpdate(_ id: String) async throws -> RunnerInstallState {
         try await postEmpty("runners/\(id)/engine-update")
+    }
+
+    public func installAntigravity(_ runnerID: String) async throws -> RunnerInstallState {
+        struct Request: Encodable { let engine = "antigravity" }
+        return try await post("runners/\(runnerID)/install", body: Request())
     }
 
     @discardableResult

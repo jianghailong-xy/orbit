@@ -1,11 +1,12 @@
 import { useNavigate } from 'react-router-dom';
+import { useRef } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DeleteOutlined, EditOutlined } from '@ant-design/icons';
 import { Button, Popconfirm, Space, Table, Tag, type TableColumnsType } from 'antd';
 import { api } from '../api';
 import { isLoginPool } from '../lib/codexLogin';
 import { routeId } from '../lib/idCodec';
-import { providersQuery } from '../lib/queries';
+import { providersQuery, runnersQuery } from '../lib/queries';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { poolEligibleCount, poolRefusals, providerPoolsQuery } from '../lib/providerPools';
 import { ownPoolWithAccess, poolAccessQuery, sharedPoolAsProviderPool, sharedPoolsQuery } from '../lib/sharedPools';
@@ -14,6 +15,7 @@ import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
 import { RunnerEngines } from '../components/RunnerEngines';
 import { useIsMobile } from '../lib/useMediaQuery';
 import { useToast } from '../lib/toast';
+import type { Runner } from '../components/TasksSidePanel';
 
 /**
  * Where a workspace's model comes from — two kinds of identity, in the order a new user has them.
@@ -35,6 +37,11 @@ export function ProvidersPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
+  const runnerSection = useRef<HTMLDivElement>(null);
+  const runners = useQuery(runnersQuery());
+  const geminiReady = ((runners.data ?? []) as Runner[]).filter(
+    (runner) => runner.online && runner.antigravity?.supported && runner.antigravity.installed === true,
+  ).length;
   const providers = useQuery({ queryKey: PROVIDERS_LIST_KEY, queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE) });
   // Which account is busy moves with sessions, not with provider edits, so nothing pushes it: read
   // again while the page is open.
@@ -78,7 +85,25 @@ export function ProvidersPage() {
       render: (_, p) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
           <ProviderTile slug={p.presetSlug ?? p.slug} label={p.label} size={32} />
-          <div className="prov-cell-name">{p.label}</div>
+          <div style={{ minWidth: 0 }}>
+            <div className="prov-cell-name">{p.label}</div>
+            {p.runtime === 'antigravity' && (
+              <div className="prov-runtime">
+                <div>Runs on the Antigravity CLI</div>
+                <div>
+                  <span style={geminiReady === 0 ? { color: 'var(--warning)' } : undefined}>
+                    {geminiReady === 0 ? 'Not ready on any runner' : `Ready on ${geminiReady} runner${geminiReady === 1 ? '' : 's'}`}
+                  </span>{' '}
+                  <a className="re-link" href="#provider-runners" onClick={(event) => {
+                    event.preventDefault();
+                    runnerSection.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }}>
+                    See runners ↑
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
           {/* The Enabled column collapses to a dot on narrow screens — the tag's words would
               outrun a phone's width on their own. */}
           {isMobile && (
@@ -171,7 +196,7 @@ export function ProvidersPage() {
         </Button>
       </div>
 
-      <RunnerEngines />
+      <div ref={runnerSection} id="provider-runners"><RunnerEngines /></div>
 
       {/* A pool that exists is always shown, whatever its keys have since become: hiding it would
           leave sessions dispatching to something the page no longer lets you see or delete. The

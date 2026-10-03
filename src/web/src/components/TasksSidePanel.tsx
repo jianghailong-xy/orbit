@@ -37,6 +37,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { useLocation, useMatch, useNavigate } from 'react-router-dom';
 import type {
   PlanUsage,
+  RunnerAntigravityState,
   RunnerAccountRemoveState,
   RunnerEngineHealth,
   RunnerInstallState,
@@ -237,6 +238,8 @@ export interface Runner {
   // Per-engine health this runner reported (installed / version / signed in). null when it has
   // never reported — which is not the same as "nothing installed", so the two stay distinct.
   engines?: RunnerEngineHealth[] | null;
+  /** Server-computed capability and CLI readiness for Gemini sessions. */
+  antigravity?: RunnerAntigravityState;
   // The engine install this runner has in flight, if any.
   install?: RunnerInstallState | null;
   // The Codex account removal this runner has in flight, if any: which slot is going, and what the

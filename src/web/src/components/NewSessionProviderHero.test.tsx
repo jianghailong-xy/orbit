@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { NewSessionProviderHero } from './NewSessionProviderHero';
 import { providerChoices, currentProviderChoice } from '../lib/sessionProviderChoices';
 import type { ConfiguredProvider } from '../lib/workspaceDefaults';
-import type { RunnerEngineHealth } from '@orbit/shared';
+import type { RunnerAntigravityState, RunnerEngineHealth } from '@orbit/shared';
 
 const configured: ConfiguredProvider[] = [
   {
@@ -34,13 +34,14 @@ function markup(
     engines?: RunnerEngineHealth[];
     currentModelLabel?: string;
     projectIntent?: boolean;
+    antigravity?: RunnerAntigravityState;
   } = {},
 ) {
-  const choices = providerChoices(configured, catalog, undefined, opts.engines);
+  const choices = providerChoices(configured, catalog, undefined, opts.engines, [], undefined, opts.antigravity);
   return renderToStaticMarkup(
     <MemoryRouter>
       <NewSessionProviderHero
-        current={currentProviderChoice(provider, choices, catalog, configured)}
+        current={currentProviderChoice(provider, choices, catalog, configured, undefined, opts.antigravity)}
         choices={choices}
         onPick={() => {}}
         runnerId="019fc086-c7c7-7c92-8215-778ad8a6280a"
@@ -54,6 +55,22 @@ function markup(
 }
 
 describe('NewSessionProviderHero', () => {
+  it('preserves the hidden Antigravity current choice and explains its environment credential', () => {
+    const html = markup('antigravity');
+    expect(html).toContain('env key');
+    expect(html).toContain('Gemini 3.8 Flash');
+    expect(html).not.toContain('Managed by the provider');
+  });
+
+  it.each([
+    [{ supported: false, installed: true, version: '1.2.16', envKeyAvailable: false }, 'Update runner'],
+    [{ supported: true, installed: false, version: null, envKeyAvailable: false }, 'Not installed'],
+  ] as const)('links a hidden Antigravity current value to its runner installation row: %s', (state, label) => {
+    const html = markup('antigravity', { antigravity: state });
+    expect(html).toContain(label);
+    expect(html).toContain('engine=antigravity');
+  });
+
   it('uses the iOS empty-state hierarchy for an ordinary new session', () => {
     const html = markup('claude');
 

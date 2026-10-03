@@ -4,6 +4,7 @@ import { isLoginEngine, namedRunnerEngines } from '../common/runner-engines';
 import { accountDir } from '@orbit/shared';
 import { DEFAULT_ACCOUNT, accountEnvVar, accountOnRunner } from '../providers/account';
 import { SESSION_RUNNER_OFFLINE_AFTER_MS } from './session-state';
+import { hasGeminiEnvKey } from '../common/antigravity-readiness';
 
 /** Engine names as the user sees them elsewhere in Orbit (matches the web's RunnerSignIn). */
 const ENGINE_LABELS: Record<LoginEngine, string> = {
@@ -122,11 +123,11 @@ function sessionAccountLogin(
  *   - the session brings its own credential (a configured provider's API key, an account pool member's,
  *     a shared pool's gateway session token, or one set on the workspace's environment) → the CLI's
  *     local login is not what will run it;
- *   - the runtime has no local sign-in at all (OpenCode resolves credentials itself, and
- *     Antigravity runs on a Gemini API key from its own environment);
+ *   - the runtime resolves credentials itself (OpenCode);
  *   - the runner has never reported this engine, or reports `unknown` (its probe couldn't answer —
- *     which is deliberately NOT a claim of a sign-out), or reports it as not installed (the runner
- *     installs engines on demand, so that is a normal first-session state);
+ *     which is deliberately NOT a claim of a sign-out), or reports a login engine as not installed
+ *     (the runner installs engines on demand, so that is a normal first-session state). Antigravity's
+ *     explicit `auth=no` instead reports a missing Gemini key, whether or not agy is installed;
  *   - the runner is offline: its last report describes whenever it was last alive, and a session
  *     queued for a machine that is coming back is ordinary use;
  *   - a Codex session whose account the report cannot place (codexSessionLogin). Codex keeps one
@@ -171,8 +172,8 @@ export function signedOutEngineRefusal(args: {
   nowMs?: number;
 }): string | null {
   if (args.bringsOwnCredentials) return null;
-  if (!isLoginEngine(args.runtime)) return null;
-  if (bringsOwnEnvCredential(args.runtime, args.workspaceEnv)) return null;
+  if (args.runtime !== 'antigravity' && !isLoginEngine(args.runtime)) return null;
+  if (args.runtime === 'antigravity' ? hasGeminiEnvKey(args.workspaceEnv) : bringsOwnEnvCredential(args.runtime, args.workspaceEnv)) return null;
 
   const heartbeatMs = args.runner.lastHeartbeatAt?.getTime() ?? NaN;
   const online =
@@ -184,7 +185,16 @@ export function signedOutEngineRefusal(args: {
   // Named as the Providers page names them: with what each account was called in Orbit.
   const engines = namedRunnerEngines({ engines: args.runner.engines, accountNames: args.runner.accountNames });
   const health = engines?.find((e) => e.engine === args.runtime);
-  if (!engines || !health?.installed) return null;
+  if (!engines || !health) return null;
+  if (args.runtime === 'antigravity') {
+    if (health.auth !== 'no') return null;
+    const machine = args.runner.displayName || args.runner.name || 'this runner';
+    return (
+      `Antigravity needs a Gemini API key on runner "${machine}". ` +
+      'Connect Gemini in Providers (/providers/new/gemini). Orbit stores the key encrypted. Then start this session on Gemini.'
+    );
+  }
+  if (!health.installed) return null;
   // An engine that keeps one sign-in per account is judged on the account this session runs on;
   // one that keeps a single login is judged on that.
   const account = args.runtime === 'claude' ? args.accounts?.claudeAccount : args.accounts?.codexAccount;
