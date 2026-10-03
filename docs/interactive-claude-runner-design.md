@@ -395,6 +395,19 @@ body), not a stop followed by a send.
 ### Per-turn `result` = end-of-turn, not terminal
 `msg["type"]=="result"` → emit `turn_end{turnSeq,subtype,usage}`, POST `/turn-complete`, set run `AWAITING_INPUT`, park. The process dies only on EOF / idle reap / crash / cancel / **per-turn timeout**. If `result.subtype` indicates the process hit its own `--max-turns`/`--max-budget-usd`, the runner marks the **session terminal** (not `AWAITING_INPUT`) and `/complete`s, because those limits are process-wide for a long-lived process (RT: hang high).
 
+`/turn-complete` writes `modelUsage` to `usage` as one row per reported model, preserving the
+engine's token and cost breakdown. When `modelUsage` is absent and `usage` is present (Codex),
+it writes one row using the session's current model and the four reported token counters, with
+`cost_usd = 0`. A session whose model is still null keeps the legacy behavior until claim/reclaim
+materializes its model. The write shares the turn acknowledgement transaction, so replaying a
+completion cannot book its usage twice.
+
+Codex app-server's `thread/tokenUsage/updated` currently reaches `TurnCompleteRequest.usage`
+through `codexThreadLastUsage(tokenUsage.last)`. `last` is the latest model request's usage;
+`total` is cumulative across the resumed thread. The runner replaces the active turn's usage
+with `last` and sends that snapshot at completion, so this write requires no cumulative
+subtraction. This snapshot does not sum every model request in a multi-request turn.
+
 ### Deadlines & reaping (RT: hang-backpressure critical ×2, failure critical)
 - **Per-turn wall-clock deadline** (e.g. 5–10 min from stdin-feed to `result`): on expiry emit `turn_end{subtype:'timeout'}`, then escalate **EOF → SIGINT → SIGKILL**, each with a grace timer. This covers the active-but-stuck turn the idle reaper misses.
 - **Runner idle reap** (default 10 min, resets on inbox items): close stdin → if `cmd.Wait()` doesn't return within grace (10 s) → SIGKILL → `/complete SUCCEEDED`.
