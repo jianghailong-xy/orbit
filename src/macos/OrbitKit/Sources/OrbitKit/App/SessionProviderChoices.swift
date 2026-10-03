@@ -156,6 +156,17 @@ public enum SessionProviderChoices {
         health?.installed == false ? "Not installed" : nil
     }
 
+    /// Why a pool none of whose members can run is greyed out, in the server's own words — except to
+    /// somebody its owner added, who runs on its API keys alone: for them it is always the one thing, whatever
+    /// else the pool holds, while its owner's ChatGPT accounts may be running the owner's own sessions all
+    /// along (docs/mocks/account-pool-access/02, note 4). Mirrors web's `providerChoices`.
+    static func poolBlocker(_ pool: ProviderPool) -> String? {
+        guard let reason = ProviderPools.unavailableReason(pool) else { return nil }
+        return ProviderPools.readByMember(pool) ? noKeyYouCanRunOn : reason
+    }
+
+    public static let noKeyYouCanRunOn = "No key you can run on"
+
     /// The picker's contents. Engines always come first and are always all three: they are what a
     /// user with nothing configured can still run, so the list is never empty.
     ///
@@ -193,9 +204,10 @@ public enum SessionProviderChoices {
         // Like a configured provider, a pool needs the CLI it runs on and nothing signed in: each run
         // carries one of its members' credentials. A missing CLI outranks the members, because it is
         // the one of the two a runner can fix. A shared pool's CLI is Codex, whose runs carry a
-        // session token for the pool's gateway.
+        // session token for the pool's gateway — and so is a pool of one's own ChatGPT accounts', whose
+        // accounts the server holds: which engine a pool runs is its own, not whether it is shared.
         let poolChoices = pools.map { pool -> ProviderChoice in
-            let runtime = pool.shared != nil ? "codex" : "claude"
+            let runtime = ProviderPools.runsCodex(pool) ? "codex" : "claude"
             let blocker = byokBlocker(health(runtime))
             return ProviderChoice(
                 slug: pool.slug,
@@ -203,7 +215,7 @@ public enum SessionProviderChoices {
                 kind: .pool,
                 brandKey: enginePreset[runtime],
                 modelLabel: modelLabel(for: pool.slug, configured: configured, catalog: catalog),
-                unavailable: blocker ?? ProviderPools.unavailableReason(pool),
+                unavailable: blocker ?? poolBlocker(pool),
                 fixEngine: blocker == nil ? nil : runtime,
                 poolSize: pool.members.count,
                 poolUnit: pool.shared != nil ? "key" : nil,
