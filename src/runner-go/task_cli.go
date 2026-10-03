@@ -191,6 +191,11 @@ Options:
 				              OWNER_CONFIRMED is confirmed only by the account owner in the app, never by an agent
   --completion-criterion-override-reason TEXT
                               Why this task keeps a criterion after the server questions its shape
+  --owner-confirmation-reason DEPLOY|IRREVERSIBLE|OWNER_DEVICE_OR_ACCOUNT|OWNER_TRADE_OFF
+                              Why only the account owner can settle this OWNER_CONFIRMED task;
+                              required outside an Automatic project (see below)
+  --owner-confirmation-reason-note TEXT
+                              One sentence beside that reason (max 500 characters)
   --acceptance-command SHELL  EXECUTABLE's one command; requires the expected exit code
   --acceptance-expected-exit-code N
                               Exit code that derives DONE; any other exit derives FAILED
@@ -288,6 +293,17 @@ Orbit app. An agent cannot confirm an OWNER_CONFIRMED task, a coordinator includ
 can. Runner task creation never infers EVIDENCE_JUDGMENT: every task must pass the flag.
 Related verifier, executable, and completion-policy flags do not replace that declaration.
 
+Declaring OWNER_CONFIRMED on a task in no project, or in a project whose Automatic is off, also
+takes --owner-confirmation-reason: DEPLOY (a release, a deploy, a change to a live database),
+IRREVERSIBLE (a DROP, deleting data), OWNER_DEVICE_OR_ACCOUNT (the owner's own device, account or
+keys) or OWNER_TRADE_OFF (a trade-off only the owner can make), with an optional sentence in
+--owner-confirmation-reason-note. Without one the create is refused 409
+OWNER_CONFIRMATION_REASON_REQUIRED and nothing is written. Work a test or a reviewer can settle is
+EVIDENCE_JUDGMENT instead: outside a project, each evidence revision its run submits is handed to
+the session that filed the task, which decides it with 'orbit task evidence-decide', and the owner
+is asked only if that session has not decided within 30 minutes or has ended. In an Automatic
+project the criterion the task serves decides instead, and no reason is asked.
+
 --completion-policy VERIFICATION_PASSED makes this row a pure gate, and a pure gate is NOT
 dispatchable: a manual start is refused (409) and auto-dispatch passes it by, so a row that has
 work of its own passes MANUAL. Nothing on the server files the verifier for you either — the
@@ -329,7 +345,7 @@ Usage:
 JSON is an array of task objects (or {"tasks": [...]}), each taking the same fields
 as 'orbit task create': title (required), description, assigneeId, listId, projectId, handoff,
 parentTaskId, verifiesTaskId, acceptanceCriteria, codeless, completionCriterion,
-completionCriterionOverrideReason, acceptanceCommand,
+completionCriterionOverrideReason, ownerConfirmationReason, ownerConfirmationReasonNote, acceptanceCommand,
 acceptanceExpectedExitCode, dueDate, runAt, provider, model, modelHint, modelHintReason, dependsOnTaskIds, autoRunWhenReady,
 completionPolicy. Nothing is written unless every item is valid.
 
@@ -340,6 +356,11 @@ still chooses the engine. The tier meanings are as on 'orbit task create --model
 Every item must set "completionCriterion" explicitly. EVIDENCE_JUDGMENT remains available when it is
 intended, but omission never selects it on a runner write. Related verifier, executable, and
 completion-policy fields do not replace that declaration.
+
+An item declaring OWNER_CONFIRMED in no project, or in a project whose Automatic is off, carries
+"ownerConfirmationReason" (DEPLOY, IRREVERSIBLE, OWNER_DEVICE_OR_ACCOUNT or OWNER_TRADE_OFF) and
+optionally "ownerConfirmationReasonNote", as on 'orbit task create'; without it the whole batch is
+refused 409 OWNER_CONFIRMATION_REASON_REQUIRED, naming the item.
 
 An item declaring "completionPolicy": "VERIFICATION_PASSED" is a pure gate, and a pure gate is NOT
 dispatchable: a manual start is refused (409) and auto-dispatch passes it by, so an item that has
@@ -539,6 +560,14 @@ Options:
                               lands on a different criterion than the task already carries,
                               including when the change is derived rather than named. Stored
                               beside the criterion being left behind and read back by task get
+  --owner-confirmation-reason DEPLOY|IRREVERSIBLE|OWNER_DEVICE_OR_ACCOUNT|OWNER_TRADE_OFF
+                              Replace why only the account owner can settle this OWNER_CONFIRMED
+                              task; asked when the write lands it on OWNER_CONFIRMED outside an
+                              Automatic project (see 'orbit task create --help')
+  --owner-confirmation-reason-note TEXT
+                              Replace the sentence beside that reason (max 500 characters)
+  --clear-owner-confirmation-reason
+                              Clear the reason and its sentence; cannot combine with either setter
   --acceptance-command SHELL  Replace the one EXECUTABLE command
   --acceptance-expected-exit-code N
                               Replace the exit code that mechanically derives DONE
@@ -622,9 +651,9 @@ choices: EVIDENCE_JUDGMENT is not what happens when either other criterion fails
 
 No caller may write --status DONE. Satisfy the task's declared criterion instead: EXECUTABLE is
 derived from the acceptance command's exit code, VERIFICATION from an independent verifier's PASS
-verdict. EVIDENCE_JUDGMENT is still declarable and still keeps its data, but nothing satisfies it
-until the account owner rebuilds that implementation. FAILED remains writable by a run as its
-conservative self-report.
+verdict. EVIDENCE_JUDGMENT is satisfied by one CONFIRM of the task's latest evidence revision from a
+session that did not do the work ('orbit task evidence-decide'); outside a project that is the
+session that filed the task. FAILED remains writable by a run as its conservative self-report.
 
 The executable acceptance declaration is --acceptance-command and --acceptance-expected-exit-code,
 which must be set or cleared together; either flag may replace its stored half, while
@@ -1043,6 +1072,34 @@ func validateTaskCLIModelHint(hint string) error {
 	default:
 		return fmt.Errorf("--model-hint must be one of S, M, L, XL")
 	}
+}
+
+func validateTaskCLIOwnerConfirmationReason(reason string) error {
+	for _, known := range ownerConfirmationReasons {
+		if reason == known {
+			return nil
+		}
+	}
+	return fmt.Errorf("--owner-confirmation-reason must be one of %s", strings.Join(ownerConfirmationReasons, ", "))
+}
+
+// ownerConfirmationReasonBody adds the reason and its sentence a create or an update was given.
+// Both are refused locally when malformed — an unset shell variable arrives as "" — so the terminal
+// says which flag was wrong instead of returning a request the caller has to decode.
+func ownerConfirmationReasonBody(fs *flag.FlagSet, body map[string]interface{}, reason, note string) error {
+	if flagWasSet(fs, "owner-confirmation-reason") {
+		if err := validateTaskCLIOwnerConfirmationReason(reason); err != nil {
+			return err
+		}
+		body["ownerConfirmationReason"] = reason
+	}
+	if flagWasSet(fs, "owner-confirmation-reason-note") {
+		if strings.TrimSpace(note) == "" {
+			return fmt.Errorf("--owner-confirmation-reason-note cannot be blank")
+		}
+		body["ownerConfirmationReasonNote"] = strings.TrimSpace(note)
+	}
+	return nil
 }
 
 func validateTaskCLICompletionCriterion(criterion string) error {
@@ -1475,6 +1532,8 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	codeless := fs.Bool("codeless", false, "this work produces no code, so it takes no part in its criterion's landing")
 	completionCriterion := fs.String("completion-criterion", "", "completion criterion (EXECUTABLE|VERIFICATION|EVIDENCE_JUDGMENT)")
 	completionCriterionOverrideReason := fs.String("completion-criterion-override-reason", "", "why this task keeps a criterion after TASK_CRITERION_SHAPE_ADVICE")
+	ownerConfirmationReason := fs.String("owner-confirmation-reason", "", "why only the account owner can settle this OWNER_CONFIRMED task (DEPLOY|IRREVERSIBLE|OWNER_DEVICE_OR_ACCOUNT|OWNER_TRADE_OFF)")
+	ownerConfirmationReasonNote := fs.String("owner-confirmation-reason-note", "", "one sentence beside --owner-confirmation-reason")
 	acceptanceCommand := fs.String("acceptance-command", "", "the one EXECUTABLE shell acceptance command")
 	acceptanceExpectedExitCode := fs.Int("acceptance-expected-exit-code", 0, "exit code that mechanically derives DONE")
 	acceptanceTimeoutSeconds := fs.Int("acceptance-timeout-seconds", 0, "wall-clock budget for that command (default one hour)")
@@ -1669,6 +1728,9 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 			return fmt.Errorf("--completion-criterion-override-reason cannot be blank")
 		}
 		body["completionCriterionOverrideReason"] = strings.TrimSpace(*completionCriterionOverrideReason)
+	}
+	if err := ownerConfirmationReasonBody(fs, body, *ownerConfirmationReason, *ownerConfirmationReasonNote); err != nil {
+		return err
 	}
 	if commandSet {
 		body["acceptanceCommand"] = *acceptanceCommand
@@ -2017,6 +2079,9 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	codelessReason := fs.String("codeless-reason", "", "why this task produces no code (required with --codeless)")
 	completionCriterion := fs.String("completion-criterion", "", "replace the completion criterion (EXECUTABLE|VERIFICATION|EVIDENCE_JUDGMENT)")
 	completionCriterionOverrideReason := fs.String("completion-criterion-override-reason", "", "why this edit changes the completion criterion")
+	ownerConfirmationReason := fs.String("owner-confirmation-reason", "", "replace why only the account owner can settle this OWNER_CONFIRMED task (DEPLOY|IRREVERSIBLE|OWNER_DEVICE_OR_ACCOUNT|OWNER_TRADE_OFF)")
+	ownerConfirmationReasonNote := fs.String("owner-confirmation-reason-note", "", "replace the sentence beside that reason")
+	clearOwnerConfirmationReason := fs.Bool("clear-owner-confirmation-reason", false, "clear the reason together with its sentence")
 	acceptanceCommand := fs.String("acceptance-command", "", "replace the one EXECUTABLE shell acceptance command")
 	acceptanceExpectedExitCode := fs.Int("acceptance-expected-exit-code", 0, "replace the exit code that derives DONE")
 	acceptanceTimeoutSeconds := fs.Int("acceptance-timeout-seconds", 0, "replace the wall-clock budget for that command")
@@ -2323,6 +2388,15 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 			return fmt.Errorf("--completion-criterion-override-reason cannot be blank")
 		}
 		body["completionCriterionOverrideReason"] = strings.TrimSpace(*completionCriterionOverrideReason)
+	}
+	if *clearOwnerConfirmationReason {
+		if flagWasSet(fs, "owner-confirmation-reason") || flagWasSet(fs, "owner-confirmation-reason-note") {
+			return fmt.Errorf("--clear-owner-confirmation-reason cannot be used with --owner-confirmation-reason or --owner-confirmation-reason-note")
+		}
+		body["ownerConfirmationReason"] = nil
+	}
+	if err := ownerConfirmationReasonBody(fs, body, *ownerConfirmationReason, *ownerConfirmationReasonNote); err != nil {
+		return err
 	}
 	if *clearExecutableAcceptance {
 		body["acceptanceCommand"] = nil
@@ -2847,7 +2921,7 @@ var baseCLICapabilities = withTaskCompletionCapabilityArgs([]cliCapabilitySpec{
 	{Tool: "task_create", Argv: []string{"orbit", "task", "create"}, Usage: "orbit task create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--description <text> | --description-file -", "--assignee-id <id> | --unassigned", "--list-id <id>", "--project-id <id> (file the task under this project; orthogonal to --list-id, must be owned by the caller)", "--handoff-reason <text> (handoff: DECLARE that this create crosses into the project --project-id names, and why. Only meaningful beside an explicit --project-id — a crossing has to name where it is going — and it carries no authority: it makes the crossing askable, and the ACCOUNT OWNER answers. Undeclared, a write into another project is refused PROJECT_SCOPE_MISMATCH; declared, it waits as CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING, read back with `orbit project crossings`)", "--parent-task-id <id> (create it as a subtask of this existing task; must be owned by the caller and in the same project)", "--verifies-task-id <id> (file it as a verification of this existing task: what makes a check a structured relation, and the precondition for a verdict; same project, not itself, and not itself a verification)", "--supersedes-task-id <id> (record in this same write that the new task REPLACES that stopped attempt: the predecessor must be CANCELLED or FAILED, owned by you and in the same project, and must not already have been replaced)", "--acceptance-criteria <text> | --acceptance-criteria-file - (what would settle that this task is done; max 4,000 characters)", "--criterion-key <key> (criterionKey: which of the PROJECT's stated acceptance criteria this work serves, as a key from project_get; required of a project's judgment session and optional for everybody else)", "--codeless[=true|false] (codeless: this work produces no code — a rollout, a walkthrough, research — so it takes no part in its acceptance criterion's landing; no reason is needed at creation)", "--due-date <ISO date>", "--run-at <ISO 8601 date-time> (runAt: a one-time scheduled start, not a deadline — the server's once-a-minute scan starts the task once the time has come, whether or not --auto-run-when-ready is set, and only while it is OPEN, not held, with an assignee bound to a runner, its prerequisites satisfied and no session occupying it; the run it starts clears it)", "--provider <slug>", "--model <model>", "--depends-on <id[,id...]> (repeatable)", "--label <labels[,labels...]> (repeatable)", "--auto-run-when-ready[=true|false]", "--completion-policy <MANUAL|ALL_CHILDREN_DONE|VERIFICATION_PASSED> (how this task's own completion is decided once it has subtasks; MANUAL, the default, never completes it automatically)", "--json"}, Description: "Create a task. Inside a session it is attributed to this agent (ORBIT_AGENT_ID), the same as the MCP task tools; run headless with no session it is attributed to the runner owner. ORBIT_AGENT_ID is also the default assignee. This only records the task; call task_start when it should run immediately. Inside a session it first puts a confirmation card in front of the user and waits for the answer: nothing is written if they decline. Every runner task creation requires --completion-criterion explicitly; EVIDENCE_JUDGMENT remains available when intended but is never inferred from omission, and verifier, executable, or policy flags do not replace the declaration. --project-id files the task under a project you own, which is orthogonal to --list-id: the project says what the work is for, the list decides how it is dispatched. --parent-task-id makes it a subtask of an existing task, which must be in the same project as this one — pass both flags for a subtask under a project's task, since the project is not inherited from the parent. --acceptance-criteria states what would settle that this task is done — the observable, verifiable result, as opposed to --description, which says what work to perform, and to the project's own acceptance criteria, which settle the whole goal; the server accepts up to 4,000 characters. --acceptance-criteria-file reads it from stdin ('-' only) and cannot be combined with --description-file, which reads the same stream. --supersedes-task-id records, in the same transaction that creates this task, that it replaces an attempt that already stopped: the predecessor keeps the CANCELLED or FAILED it ended with and gains a pointer to this task plus terminalReason SUPERSEDED. Use it instead of creating the replacement and remembering to link it afterwards — the link is what every downstream reader actually consults, and an attempt that never got one is re-dispatched by the control loop as an ordinary unfinished failure.", Mutates: true},
 	{Tool: "task_evidence_decide", Argv: []string{"orbit", "task", "evidence-decide"}, Usage: "orbit task evidence-decide [task-id] --decision CONFIRM|SEND_BACK --evidence-revision N [--note TEXT] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--decision <CONFIRM|SEND_BACK> (required)", "--evidence-revision <N> (required, as evidence-list returns it)", "--note <text> (required for SEND_BACK, max 4000 characters)", "--json"}, Description: "Record this session's decision about ONE version of a task's completion evidence, as one row and nothing else — no task status, no session state, no comment. The revision answered must still be the task's latest, the criterion the evidence quotes must still be worded the way the project states it today, and the deciding session must not have done the work: each refusal carries its code and the action that would clear it. SEND_BACK carries a note saying what the next revision must show and leaves the task OPEN. The deciding Session is ORBIT_SESSION_ID, never a flag.", Mutates: true},
 	{Tool: "task_attribution", Argv: []string{"orbit", "task", "attribution"}, Usage: "orbit task attribution [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Description: "Read one task's attribution boundary — where this work COUNTS (the project's title, Base62 id and status: the only authoritative attribution there is), where it was NOTICED (the discovery project, trigger event, source task and source session — evidence, and labelled as evidence, because finding work somewhere grants nothing about where it may be filed), the declared cross-project crossing that touches it with the stable code and required action a writer meeting it is given, and the attribution blocker holding it up. The acceptance lane went with migration 0229, which removed the project acceptance judgment: the criteria are still stated, and nothing judges them. Every absent fact is null beside a reason, so \"nothing is holding this up\" and \"this build cannot tell you\" read differently. Read it BEFORE writing where you are not certain the work belongs: the alternative is learning it from the refusal, which is after the decision was made."},
-	{Tool: "task_create_batch", Argv: []string{"orbit", "task", "create-batch"}, Usage: "orbit task create-batch (--tasks JSON | --tasks-file -) [--json]", Arguments: []string{"--tasks <json array> | --tasks-file - (required; every item requires explicit completionCriterion, and an item that crosses into another project carries \"handoff\": {\"reason\": \"...\"} beside its own projectId)", "--dry-run (judge the plan and write nothing; report where each item would land)", "--json"}, Description: "Create several tasks in one atomic call — the batch form of task_create. JSON is an array of task objects taking the same fields as task_create, \"runAt\" (an item's one-time scheduled start, as --run-at is on task create) among them; nothing is written unless every item is valid. Every item declares completionCriterion explicitly; EVIDENCE_JUDGMENT is available but never inferred, and verifier, executable, or policy fields do not replace the declaration. An item may carry \"ref\", and a later item may list that ref in \"dependsOnRefs\" to depend on it without knowing its id yet, or name it in \"parentRef\" to be created as a subtask of it — so a plan lands as a tree in one call. The two answer different questions: dependsOnRefs is when an item may run, parentRef is what it is a part of. \"parentTaskId\" is the same link to a task that already exists (same project as the item); one item cannot carry both. Attribution matches task_create: this agent inside a session, the runner owner headless. Inside a session a real write (not --dry-run) first puts the batch on a confirmation card and waits for the user's answer; nothing is written if they decline. ORBIT_AGENT_ID is also each item's default assignee. --dry-run judges the plan and writes none of it — not one task, and not even the approval question a declared cross-project crossing would otherwise file — answering instead with where every item WOULD land (project id, title and status), every finding that refuses or warns, and how many rows the real call would add. Use it before filing a plan whose attribution you are not certain of: a refusal tells you which item is wrong, and a dry run tells you where the ones that are RIGHT would go.", Mutates: true},
+	{Tool: "task_create_batch", Argv: []string{"orbit", "task", "create-batch"}, Usage: "orbit task create-batch (--tasks JSON | --tasks-file -) [--json]", Arguments: []string{"--tasks <json array> | --tasks-file - (required; every item requires explicit completionCriterion, an item that crosses into another project carries \"handoff\": {\"reason\": \"...\"} beside its own projectId, and an OWNER_CONFIRMED item outside an Automatic project carries \"ownerConfirmationReason\")", "--dry-run (judge the plan and write nothing; report where each item would land)", "--json"}, Description: "Create several tasks in one atomic call — the batch form of task_create. JSON is an array of task objects taking the same fields as task_create, \"runAt\" (an item's one-time scheduled start, as --run-at is on task create) among them; nothing is written unless every item is valid. Every item declares completionCriterion explicitly; EVIDENCE_JUDGMENT is available but never inferred, and verifier, executable, or policy fields do not replace the declaration. An item may carry \"ref\", and a later item may list that ref in \"dependsOnRefs\" to depend on it without knowing its id yet, or name it in \"parentRef\" to be created as a subtask of it — so a plan lands as a tree in one call. The two answer different questions: dependsOnRefs is when an item may run, parentRef is what it is a part of. \"parentTaskId\" is the same link to a task that already exists (same project as the item); one item cannot carry both. Attribution matches task_create: this agent inside a session, the runner owner headless. Inside a session a real write (not --dry-run) first puts the batch on a confirmation card and waits for the user's answer; nothing is written if they decline. ORBIT_AGENT_ID is also each item's default assignee. --dry-run judges the plan and writes none of it — not one task, and not even the approval question a declared cross-project crossing would otherwise file — answering instead with where every item WOULD land (project id, title and status), every finding that refuses or warns, and how many rows the real call would add. Use it before filing a plan whose attribution you are not certain of: a refusal tells you which item is wrong, and a dry run tells you where the ones that are RIGHT would go.", Mutates: true},
 	{Tool: "task_batch_pin", Argv: []string{"orbit", "task", "batch-pin"}, Usage: "orbit task batch-pin (--task-id ID | --project ID | --list-id ID | --label L) (--provider SLUG | --clear-provider) (--model MODEL | --clear-model) [--json]", Arguments: []string{"--task-id <id[,id...]> (repeatable; narrows rather than excludes — naming it beside a filter re-pins the intersection)", "--project <id> (taskIds: re-pin every task filed under this project — the selector this command exists for, since a project of a hundred thousand tasks cannot be spelled as an id list)", "--list-id <id>", "--label <labels[,labels...]> (repeatable; matches tasks carrying ALL of them)", "--provider <slug> | --clear-provider", "--model <model> | --clear-model", "--json"}, Description: "Re-pin many tasks at once: set provider and/or model on every task a selector matches, in ONE request that writes only the rows whose pin really changes. The door for \"change the model of every task in this project\", which task_update can only spell as one call per task — a hundred thousand round trips and as many non-HOT rewrites, of the rows whose model did not change included. A row already carrying the target value is not written at all, so its updated_at is not bumped; that column's one reader is the project list's lastActivityAt, so this makes it more accurate, not less. At least one selector is required (a request naming none is refused rather than read as \"every task this owner has\"), and at least one of provider/model (naming neither writes nothing). Tasks with a run in flight are re-pinned like any other: a session already holding the task keeps the model it started on, and the disagreement is reported when the NEXT attempt starts, as TASK_RUN_PIN_CONFLICT. Prints {\"changed\": N}.", Mutates: true},
 	{Tool: "task_update", Argv: []string{"orbit", "task", "update"}, Usage: "orbit task update [task-id] [options]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--title <text>", "--description <text> | --description-file -", "--status <OPEN|IN_PROGRESS|DONE|CANCELLED|FAILED> (DONE is refused; satisfy the task's declared criterion instead)", "--assignee-id <id> | --clear-assignee", "--list-id <id> | --clear-list", "--project <id> | --no-project (projectId: which project this task is filed under — how a mis-filing is corrected once the task exists. --no-project takes it out of every project, --project files it under another one. Both are the ACCOUNT OWNER's to make: a session acting under a project scope is refused UNMAPPED_PROJECT_WORK for the first and PROJECT_SCOPE_MISMATCH for the second, and a declared crossing then waits on the owner as CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING. Read the row with `orbit project crossings`; no agent answers it)", "--handoff-reason <text> (handoff: DECLARE that this edit crosses into the project --project names, and why. Needs that --project — a crossing has to name where it is going — and carries no authority; only the ACCOUNT OWNER answers one. What it reaches today differs by door: task_create and task_create_batch file the question, while MOVING a task that already exists is refused PROJECT_SCOPE_MISMATCH declared or not, so a re-filing is the owner's own write)", "--parent-task-id <id> | --clear-parent (move this task under that task, or detach it; same project, never itself or one of its own subtasks)", "--verifies-task-id <id> | --clear-verifies (point this task at the task it verifies, or detach it; refused once this verification has concluded anything)", "--due-date <ISO date> | --clear-due-date", "--run-at <ISO 8601 date-time> | --clear-run-at (runAt: set or move this task's one-time scheduled start, or cancel it; passing neither leaves it as it is)", "--provider <slug> | --clear-provider", "--model <model> | --clear-model", "--acceptance-criteria <text> | --acceptance-criteria-file - | --clear-acceptance-criteria (replaces what would settle that this task is done; max 4,000 characters)", "--criterion-key <key> | --clear-criterion-key (criterionKey: which of the PROJECT's stated acceptance criteria this task serves, as a key from project_get; re-sending the same key re-records that criterion's CURRENT revision, which is how work declared against wording that has since moved is brought up to date, and clearing takes the declaration back without touching the task)", "--codeless[=true|false] (codeless: declare that this task produces no code, which takes it out of its acceptance criterion's landing, or take the declaration back with =false; declaring needs --codeless-reason and is refused for a task that already has commits of its own)", "--codeless-reason <text> (codelessReason: why this task produces no code; required when the call turns the task codeless, stored on the task beside the declaration)", "--depends-on <id[,id...]> (repeatable; replaces all)", "--clear-dependencies", "--label <labels[,labels...]> (repeatable; replaces all) | --clear-labels", "--auto-run-when-ready[=true|false]", "--priority <int> | --clear-priority (priority: where this task stands in its list's queue — when the list has more ready tasks than free slots, the server's automatic dispatch gives the next slot to the highest priority first; 0 is the default and equal priorities keep the order they had, a negative value goes after everything left at 0; it starts nothing and gets past no gate, and --clear-priority returns it to 0)", "--completion-policy <MANUAL|ALL_CHILDREN_DONE|VERIFICATION_PASSED> (how this task's completion is decided once it has subtasks)", "--verdict <PASS|FAIL|INCONCLUSIVE> | --clear-verdict (this VERIFICATION task's conclusion about the task it verifies; revoking a PASS reopens a subject VERIFICATION_PASSED had completed)", "--superseded-by-task-id <id> | --clear-superseded ( the later attempt that replaced this one; only a CANCELLED or FAILED task may name one, and it must be in the same project)", "--terminal-reason <SUPERSEDED|ABANDONED> | --clear-terminal-reason (terminalReason: why this task stopped, when its status alone does not say)", "--json"}, Description: "Update a task. Only the flags you pass are sent, so a partial edit never blanks the rest of the task. Direct status DONE is refused for every actor; the structured refusal names the declared EXECUTABLE, VERIFICATION, or EVIDENCE_JUDGMENT path. FAILED remains writable as a run's conservative self-report. --parent-task-id moves the task under another task you own and --clear-parent detaches it, which is how a decomposition is corrected once the tasks exist rather than by deleting and recreating them; the parent must be in the same project, and neither a task itself nor one of its own subtasks may be named (both close a loop). It is membership, not ordering — when a task runs is --depends-on. --acceptance-criteria replaces what would settle that this task is done — the observable, verifiable result, as opposed to --description, which says what work to perform, and to the project's own acceptance criteria, which settle the whole goal rather than this one task. It is a whole-field replacement: omitting it preserves the task's current criteria, text replaces them (\"\" records that there are none worth stating), and --clear-acceptance-criteria removes them, which is why clearing cannot be combined with either form. Expect to use it after creation — what proves a task done is often only clear once the work is understood. The server accepts up to 4,000 characters. --acceptance-criteria-file reads the replacement from stdin ('-' only) and cannot be combined with --description-file, which reads the same stream.", Mutates: true},
 	{Tool: "task_reopen", Argv: []string{"orbit", "task", "reopen"}, Usage: "orbit task reopen [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Description: "Take a stopped task — DONE, CANCELLED or FAILED — back to OPEN in place, so this same task carries the next attempt instead of a new one being filed. History is kept (evidence, comments, dependencies, the project it is filed under, its criterion declaration); the run's progress is not, because reopening starts a new lifecycle epoch. A SUPERSEDED/ABANDONED retirement is cleared in the same write, which is what makes a replaced attempt runnable again — Run refuses one while that record stands. Refusals are the server's own and pass through unread: a verification task carrying a verdict is told to revoke it first.", Mutates: true},
@@ -2883,6 +2957,8 @@ func withTaskCompletionCapabilityArgs(capabilities []cliCapabilitySpec) []cliCap
 				"--clear-model-hint (explicitly send null for both suggestion fields)",
 				"--completion-criterion <EXECUTABLE|VERIFICATION|EVIDENCE_JUDGMENT> (required for every runner task creation; EVIDENCE_JUDGMENT is never inferred)",
 				"--completion-criterion-override-reason <text> (non-blank audit reason for keeping a criterion after TASK_CRITERION_SHAPE_ADVICE)",
+				"--owner-confirmation-reason <DEPLOY|IRREVERSIBLE|OWNER_DEVICE_OR_ACCOUNT|OWNER_TRADE_OFF> (ownerConfirmationReason: why only the account owner can settle an OWNER_CONFIRMED task; required of a session declaring it outside an Automatic project, else 409 OWNER_CONFIRMATION_REASON_REQUIRED)",
+				"--owner-confirmation-reason-note <text> (ownerConfirmationReasonNote: one sentence beside that reason, max 500 characters)",
 				"--acceptance-command <shell> (the one EXECUTABLE command; use with --acceptance-expected-exit-code)",
 				"--acceptance-expected-exit-code <n> (exit code that derives DONE; use with --acceptance-command)",
 				"--acceptance-timeout-seconds <n> (acceptanceTimeoutSeconds: how long that command may run, 1..86400; omit for the one-hour default)",
@@ -2898,6 +2974,9 @@ func withTaskCompletionCapabilityArgs(capabilities []cliCapabilitySpec) []cliCap
 				"--clear-model-hint (send null to clear both suggestion fields)",
 				"--completion-criterion <EXECUTABLE|VERIFICATION|EVIDENCE_JUDGMENT> (replace the task's one normal completion criterion)",
 				"--completion-criterion-override-reason <text> (completionCriterionOverrideReason: non-blank reason for CHANGING the criterion, required whenever the write lands on a different one than the task carries — including a change derived from --acceptance-command rather than named; stored beside the criterion left behind)",
+				"--owner-confirmation-reason <DEPLOY|IRREVERSIBLE|OWNER_DEVICE_OR_ACCOUNT|OWNER_TRADE_OFF> (ownerConfirmationReason: replace why only the account owner can settle an OWNER_CONFIRMED task; asked when the write lands it there outside an Automatic project)",
+				"--owner-confirmation-reason-note <text> (ownerConfirmationReasonNote: replace the sentence beside that reason)",
+				"--clear-owner-confirmation-reason (send null to clear the reason and its sentence)",
 				"--acceptance-command <shell> (replace the one EXECUTABLE command)",
 				"--acceptance-expected-exit-code <n> (replace the exit code that derives DONE)",
 				"--acceptance-timeout-seconds <n> | --clear-acceptance-timeout (acceptanceTimeoutSeconds: replace that command's wall-clock budget, or return it to the one-hour default)",
