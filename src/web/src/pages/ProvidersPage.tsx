@@ -1,12 +1,14 @@
 import { useNavigate } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DeleteOutlined, EditOutlined } from '@ant-design/icons';
 import { Button, Popconfirm, Space, Table, Tag, type TableColumnsType } from 'antd';
 import { api } from '../api';
+import { isLoginPool } from '../lib/codexLogin';
+import { routeId } from '../lib/idCodec';
 import { providersQuery } from '../lib/queries';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { poolEligibleCount, poolRefusals, providerPoolsQuery } from '../lib/providerPools';
-import { sharedPoolAsProviderPool, sharedPoolsQuery } from '../lib/sharedPools';
+import { ownPoolWithAccess, poolAccessQuery, sharedPoolAsProviderPool, sharedPoolsQuery } from '../lib/sharedPools';
 import { AccountPools, PoolHint } from '../components/AccountPools';
 import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
 import { RunnerEngines } from '../components/RunnerEngines';
@@ -38,7 +40,20 @@ export function ProvidersPage() {
   // again while the page is open.
   const pools = useQuery({ ...providerPoolsQuery(), refetchInterval: 60_000 });
   const shared = useQuery({ ...sharedPoolsQuery(), refetchInterval: 60_000 });
-  const poolList = [...(shared.data ?? []).map(sharedPoolAsProviderPool), ...(pools.data ?? [])];
+  // Who can use each Codex pool of the user's own, and its API keys: read pool by pool, beside its accounts.
+  const access = useQueries({
+    queries: (pools.data ?? [])
+      .filter(isLoginPool)
+      .map((pool) => ({ ...poolAccessQuery(pool.id), refetchInterval: 60_000 })),
+  });
+  const accessOf = new Map(access.flatMap((read) => (read.data ? [[routeId(read.data.id), read.data] as const] : [])));
+  const poolList = [
+    ...(shared.data ?? []).map(sharedPoolAsProviderPool),
+    ...(pools.data ?? []).map((pool) => {
+      const view = accessOf.get(routeId(pool.id));
+      return view ? ownPoolWithAccess(pool, view) : pool;
+    }),
+  ];
   const eligible = poolEligibleCount(providers.data ?? []);
   const refusals = poolRefusals(providers.data ?? []);
 

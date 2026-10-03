@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { isLoginPool, withLogin, type CodexLogin } from './codexLogin';
 import { encodeId } from './idCodec';
 import { availableCount, memberQuota, memberStatus, poolHeadline, poolsAsProviders } from './providerPools';
 import {
@@ -6,9 +7,13 @@ import {
   canAddKey,
   canRemoveKey,
   formatCapReset,
+  hasPeople,
   keyState,
   outOfBudget,
+  ownPoolWithAccess,
+  ownsPool,
   personShare,
+  poolOwner,
   sharedPoolAsProviderPool,
   type SharedPool,
   type SharedPoolKey,
@@ -51,6 +56,8 @@ const pool = (keys: SharedPoolKey[], over: Partial<SharedPool> = {}): SharedPool
   slug: 'team-codex',
   label: 'Team Codex',
   engine: 'codex',
+  shared: true,
+  ownerHasChatGPT: false,
   membersCanAdd: true,
   ownKeyFirst: true,
   viewerRole: 'ADMIN',
@@ -176,5 +183,88 @@ describe("a shared pool's people and permissions", () => {
 
   it('names when a cap starts again by its date, in the month the server counts', () => {
     expect(formatCapReset('2026-10-01T00:00:00.000Z')).toBe('Oct 1');
+  });
+});
+
+describe('a Codex pool of one’s own, its ChatGPT accounts read beside its people and keys', () => {
+  const NOW = Date.parse('2026-10-02T12:00:00.000Z');
+  const SOON = '2026-10-02T15:00:00.000Z';
+  const LATER = '2026-10-04T09:00:00.000Z';
+  const account = (email: string, fiveHour: number, over: Partial<CodexLogin> = {}): CodexLogin => ({
+    state: 'ACTIVE',
+    email,
+    plan: 'plus',
+    fingerprint: `…${email.slice(0, 4)}`,
+    lastError: null,
+    expiresAt: LATER,
+    linkedAt: '2026-10-01T00:00:00.000Z',
+    usage: { provider: 'codex', primary: { utilization: fiveHour, resetsAt: SOON, windowDurationMins: 300 } },
+    usageUnavailable: null,
+    ...over,
+  });
+  /** The pool as the providers read it, its accounts drawn as withLogin draws them. */
+  const own = (...logins: CodexLogin[]) =>
+    withLogin(
+      { id: id(900), slug: 'my-codex', label: 'My Codex', engine: 'codex', login: logins[0] ?? null, logins, resetsAt: null, members: [] },
+      NOW,
+    );
+  /** Its people and keys, as Ann — its owner — reads them. */
+  const access = (keys: SharedPoolKey[]) => pool(keys, { shared: false, ownerHasChatGPT: true });
+
+  it('draws its accounts first and its keys after, the next session on an account while one can take it', () => {
+    const drawn = ownPoolWithAccess(
+      own(account('ann@example.com', 6), account('work@example.com', 18)),
+      access([key(1, ANN, { next: true }), key(2, MIA, { running: true })]),
+    );
+    expect(drawn.members.map((m) => [m.label, m.state, m.next])).toEqual([
+      ['ann@example.com', 'AVAILABLE', true],
+      ['work@example.com', 'AVAILABLE', false],
+      ['key-1', 'AVAILABLE', false],
+      ['key-2', 'RUNNING', false],
+    ]);
+    // Still a pool of the owner's own ChatGPT accounts, with every account and key counted as one.
+    expect(isLoginPool(drawn)).toBe(true);
+    expect(availableCount(drawn, new Map())).toBe(4);
+    expect(drawn.unavailable).toBeNull();
+    expect(drawn.resetsAt).toBeNull();
+  });
+
+  it('puts the next session on the first account that can take it, and on the claim’s key once none can', () => {
+    const firstSpent = ownPoolWithAccess(
+      own(account('ann@example.com', 100), account('work@example.com', 18)),
+      access([key(1, ANN, { next: true })]),
+    );
+    expect(firstSpent.members.map((m) => m.next)).toEqual([false, true, false]);
+    const allSpent = ownPoolWithAccess(
+      own(account('ann@example.com', 100), account('work@example.com', 100)),
+      access([key(1, ANN, { next: true })]),
+    );
+    expect(poolHeadline(allSpent)).toMatchObject({ kind: 'next', member: { label: 'key-1' } });
+    // Nothing free at all: it frees up when the first of them does.
+    const stopped = ownPoolWithAccess(own(account('ann@example.com', 100)), access([key(1, MIA, { spentUntil: LATER })]));
+    expect(stopped.resetsAt).toBe(SOON);
+  });
+
+  it('says why nothing can run when waiting brings nothing back', () => {
+    const out = ownPoolWithAccess(own(account('ann@example.com', 6, { state: 'SIGNED_OUT' })), access([key(1, ANN, { state: 'INVALID' })]));
+    expect(out.unavailable).toBe('Signed out');
+    expect(ownPoolWithAccess(own(), access([])).unavailable).toBe('Not signed in');
+    expect(ownPoolWithAccess(own(), access([key(1, ANN, { enabled: false })])).unavailable).toBe('No key can run');
+    // A working key is enough while no account is signed in.
+    expect(ownPoolWithAccess(own(), access([key(1, ANN)])).unavailable).toBeNull();
+  });
+
+  it('tells its owner from the people they added, and Just me from Me and people I add', () => {
+    const team = pool([]);
+    expect(ownsPool(team)).toBe(true);
+    expect(hasPeople(team)).toBe(true);
+    expect(poolOwner(team)?.name).toBe('Ann');
+    const asMia = pool([], {
+      viewerRole: 'MEMBER',
+      people: [person(ANN, 'Ann', { role: 'ADMIN', creator: true }), person(MIA, 'Mia', { you: true })],
+    });
+    expect(ownsPool(asMia)).toBe(false);
+    expect(poolOwner(asMia)?.name).toBe('Ann');
+    expect(hasPeople(pool([], { people: [person(ANN, 'Ann', { role: 'ADMIN', creator: true, you: true })] }))).toBe(false);
   });
 });
