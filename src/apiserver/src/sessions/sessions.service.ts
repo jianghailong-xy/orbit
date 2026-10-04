@@ -203,7 +203,7 @@ import {
   type TranscriptPage,
   type TranscriptRecordKind,
 } from './transcript-around';
-import { EngineSignedOutConflict, signedOutEngineRefusal } from './engine-signin-preflight';
+import { EngineSignedOutConflict, engineSignInAction, signedOutEngineRefusal } from './engine-signin-preflight';
 import { antigravityState, hasGeminiEnvKey } from '../common/antigravity-readiness';
 import { ACCOUNT_ID_PATTERN } from '../runners/dto';
 import {
@@ -1090,7 +1090,7 @@ export class SessionsService {
     // everything this deliberately lets through.
     const targetRunner = await this.prisma.runner.findFirst({
       where: { id: assignedRunnerId, ownerId },
-      select: { name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true, accountNames: true, accountPauses: true, planUsage: true },
+      select: { name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true, accountNames: true, accountPauses: true, planUsage: true, capabilities: true },
     });
     // The Codex or Claude account this session runs on: the one picked for it — which pins it there —
     // else, when its workspace leaves the account to Orbit, the runner's account whose quota resets
@@ -1126,8 +1126,11 @@ export class SessionsService {
       });
     // Typed, not a bare 409: this is an availability condition — the engine is signed out on a
     // machine that is up — and a caller that retries has to be able to tell it from a refusal that
-    // will never succeed. See `EngineSignedOutConflict`.
-    if (refusal) throw new EngineSignedOutConflict(runtime, refusal);
+    // will never succeed. See `EngineSignedOutConflict`. It names the runner, and the sign-in that
+    // clears it where Orbit can start one, so a client can offer that as a button.
+    if (refusal && targetRunner) {
+      throw new EngineSignedOutConflict(runtime, refusal, assignedRunnerId, engineSignInAction(runtime, targetRunner));
+    }
     // §13.8: a conversation gets no worktree. Applied after the workspace's default is read, so it
     // is a deliberate override rather than a second source of the default.
     if (opts?.noWorktree) {

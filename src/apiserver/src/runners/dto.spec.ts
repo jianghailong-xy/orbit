@@ -3,15 +3,16 @@ import { test } from 'node:test';
 import { validate } from 'class-validator';
 import { ReorderRunnersDto, StartInstallDto, StartLoginDto } from './dto';
 
-test('Antigravity can be installed but cannot be signed into', async () => {
+test('Antigravity can be installed and signed into', async () => {
   const install = Object.assign(new StartInstallDto(), { engine: 'antigravity' });
   assert.equal((await validate(install)).length, 0);
+  // Whether a given runner can relay its Google sign-in is the service's question (startLogin).
   const login = Object.assign(new StartLoginDto(), { engine: 'antigravity' });
-  assert.notEqual((await validate(login)).length, 0);
+  assert.equal((await validate(login)).length, 0);
 });
 
-test('StartLoginDto accepts every built-in login engine, including Kimi', async () => {
-  for (const engine of ['claude', 'codex', 'kimi'] as const) {
+test('StartLoginDto accepts every built-in login engine, including Kimi and Antigravity', async () => {
+  for (const engine of ['claude', 'codex', 'kimi', 'antigravity'] as const) {
     const dto = new StartLoginDto();
     dto.engine = engine;
     assert.equal((await validate(dto)).length, 0, engine);

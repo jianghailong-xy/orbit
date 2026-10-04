@@ -72,12 +72,21 @@ type agyProcess struct {
 	abandoned     chan struct{}
 	abandonedOnce sync.Once
 
+	// google is a process on the runner's Google sign-in: tokenCopy is the copy of it the process runs
+	// on, removed once it has been reaped, and logFile agy's own log (classifyAgyAuthEnd).
+	google    bool
+	tokenCopy string
+	logFile   string
+
 	writeMu sync.Mutex
 
 	mu         sync.Mutex
 	agyErr     *agyErrorReport
 	lastStderr string
-	waitErr    error
+	// authLines are the stderr lines that speak of authentication, for classifyAgyAuthEnd.
+	authLines []string
+	waitErr   error
+	exitCode  int
 
 	// Read and written by the session loop only.
 	// gate is Orbit's approval gate when this process runs behind it, nil otherwise.
@@ -96,7 +105,22 @@ func (p *agyProcess) noteError(report agyErrorReport) {
 func (p *agyProcess) noteStderr(line string) {
 	p.mu.Lock()
 	p.lastStderr = line
+	if strings.Contains(strings.ToLower(line), "authentication") && len(p.authLines) < 8 {
+		p.authLines = append(p.authLines, line)
+	}
 	p.mu.Unlock()
+}
+
+// authEnd is what this process's end says about the Google sign-in it ran on (classifyAgyAuthEnd).
+// Asked once it has been reaped; a process on an API key says nothing.
+func (p *agyProcess) authEnd() agyAuthEnd {
+	if !p.google {
+		return agyAuthEndOther
+	}
+	p.mu.Lock()
+	exitCode, stderr := p.exitCode, strings.Join(p.authLines, "\n")
+	p.mu.Unlock()
+	return classifyAgyAuthEnd(exitCode, p.initialized, stderr, readAgyLog(p.logFile))
 }
 
 func (p *agyProcess) errorReport() (*agyErrorReport, string) {
@@ -224,9 +248,11 @@ func (w *agyStderrWriter) line(raw string) {
 	}
 	w.proc.noteStderr(line)
 	// Said in the loop's own words instead: the error a turn's result also carries (§2.4), a soft
-	// denial (§5.2), and a conversation --conversation could not find (§4.3).
+	// denial (§5.2), a conversation --conversation could not find (§4.3), and a Google sign-in agy
+	// refused, whose "Run 'agy' to log in" is not the way to sign in here (§16.4).
 	if strings.HasPrefix(line, "error: ") || strings.HasPrefix(line, "jetski: no output produced") ||
-		(strings.HasPrefix(line, "warning: conversation ") && strings.HasSuffix(line, " not found")) {
+		(strings.HasPrefix(line, "warning: conversation ") && strings.HasSuffix(line, " not found")) ||
+		strings.HasPrefix(line, "Error: authentication required") {
 		logln("antigravity:", line)
 		return
 	}
@@ -280,12 +306,19 @@ func antigravityEnv(job *ClaimedSession, execDir string) []string {
 // group (configureSessionProcessTree): an interrupt signals the group, and every teardown — context
 // cancel, the reaper below — kills the group and every descendant it can still see. gate is the
 // approval gate the process runs behind, already confirmed (installAntigravityApprovalGate), or nil.
-func startAgyProcess(ctx context.Context, job *ClaimedSession, execDir, geminiDir string, gate *agyApprovalGate, emit emitFn) (*agyProcess, error) {
+// google is a process on the copy of the runner's Google sign-in already in geminiDir: it gets the
+// environment that keeps agy to it, and a log of its own (antigravityGoogleLogFile).
+func startAgyProcess(ctx context.Context, job *ClaimedSession, execDir, geminiDir string, google bool, gate *agyApprovalGate, emit emitFn) (*agyProcess, error) {
 	procCtx, cancel := context.WithCancel(ctx)
-	cmd := exec.CommandContext(procCtx, agyExecutable, antigravityArgs(job, geminiDir, gate != nil)...)
+	args, env := antigravityArgs(job, geminiDir, gate != nil), antigravityEnv(job, execDir)
+	if google {
+		args = append(args, "--log-file="+antigravityGoogleLogFile(geminiDir))
+		env = antigravityGoogleEnv(env, geminiDir)
+	}
+	cmd := exec.CommandContext(procCtx, agyExecutable, args...)
 	configureSessionProcessTree(cmd)
 	cmd.Dir = execDir
-	cmd.Env = antigravityEnv(job, execDir)
+	cmd.Env = env
 	p := &agyProcess{
 		cmd:       cmd,
 		cancel:    cancel,
@@ -294,6 +327,10 @@ func startAgyProcess(ctx context.Context, job *ClaimedSession, execDir, geminiDi
 		exited:    make(chan struct{}),
 		abandoned: make(chan struct{}),
 		gate:      gate,
+		google:    google,
+	}
+	if google {
+		p.tokenCopy, p.logFile = antigravityTokenFile(geminiDir), antigravityGoogleLogFile(geminiDir)
 	}
 	stderr := &agyStderrWriter{proc: p, emit: emit}
 	// A writer rather than a pipe, so Wait itself drains stderr to the end: the AGY_ERROR line of a
@@ -344,8 +381,19 @@ func startAgyProcess(ctx context.Context, job *ClaimedSession, execDir, geminiDi
 		// it, say (§4.1, §13).
 		waitErr := waitSessionProcessTree(cmd)
 		stderr.flush()
+		// The sign-in copy lives exactly as long as the agy that runs on it.
+		if p.tokenCopy != "" {
+			if err := os.Remove(p.tokenCopy); err != nil && !errors.Is(err, os.ErrNotExist) {
+				logln("antigravity: removing the session's Google sign-in copy failed:", err)
+			}
+		}
+		exitCode := -1
+		if cmd.ProcessState != nil {
+			exitCode = cmd.ProcessState.ExitCode()
+		}
 		p.mu.Lock()
 		p.waitErr = waitErr
+		p.exitCode = exitCode
 		p.mu.Unlock()
 	}()
 	return p, nil
@@ -635,30 +683,61 @@ type agyDriver struct {
 	// gateBroken is why the approval gate stopped holding (breakGate): the session ends once the
 	// process it broke in is gone.
 	gateBroken string
+	// signedOut is set once agy refused the runner's Google sign-in (signOut): the session ends.
+	signedOut bool
 }
 
 // spawn starts the next agy, continuing the session's conversation if it has one. In the modes that
 // ask, it does not start one until agy has confirmed Orbit's approval hook is loaded.
 func (d *agyDriver) spawn() error {
 	orbitExe := orbitCLIExecutable()
-	dir, err := prepareAntigravityGeminiDir(d.scratchDir, d.job, orbitExe)
+	auth := antigravitySessionAuth(d.job)
+	google := auth == antigravityAuthGoogle
+	logln("antigravity:", d.job.SessionID+":", "starting agy, auth source", auth)
+	dir, err := prepareAntigravityGeminiDir(d.scratchDir, d.job, orbitExe, google)
 	if err != nil {
 		return fmt.Errorf("prepare the private Gemini directory: %w", err)
 	}
+	started := false
+	defer func() {
+		// No agy runs on the copy prepare made: it goes now rather than with a process's exit.
+		if google && !started {
+			if err := removeAntigravityToken(dir); err != nil {
+				logln("antigravity: removing the session's Google sign-in copy failed:", err)
+			}
+		}
+	}()
 	var gate *agyApprovalGate
 	if antigravityAsksForApproval(d.job.Agent.PermissionMode) {
-		if gate, err = installAntigravityApprovalGate(d.ctx, d.job, d.execDir, dir, orbitExe); err != nil {
+		if gate, err = installAntigravityApprovalGate(d.ctx, d.job, d.execDir, dir, orbitExe, google); err != nil {
 			return err
 		}
 	} else if err := removeAntigravityApprovalGate(dir); err != nil {
 		return fmt.Errorf("remove the approval hook a mode that asked left behind: %w", err)
 	}
-	proc, err := startAgyProcess(d.ctx, d.job, d.execDir, dir, gate, d.emit)
+	proc, err := startAgyProcess(d.ctx, d.job, d.execDir, dir, google, gate, d.emit)
 	if err != nil {
 		return err
 	}
+	started = true
 	d.proc = proc
 	return nil
+}
+
+// signOut reports the session signed out: agy refused the runner's Google sign-in. Reported the way
+// a signed-out claude or codex is before it spawns (engineAuthPreflight): the turn — or, between
+// turns, the session — fails with an authentication failure, which the transcript answers with its
+// sign-in card, and the session ends. The runner re-probes its engines at once, so the heartbeat
+// carries the sign-out the control plane notifies on.
+func (d *agyDriver) signOut() {
+	d.signedOut = true
+	logln("antigravity:", d.job.SessionID+":", "agy refused this runner's Google sign-in; the session ends signed out")
+	if d.turn != nil {
+		d.failTurn(antigravityGoogleSignedOutMessage)
+	} else {
+		d.emit(evError, map[string]interface{}{"message": antigravityGoogleSignedOutMessage})
+	}
+	noteEngineSignedOut()
 }
 
 // breakGate stops a process whose approval gate no longer holds (agyApprovalGate.check): its turn
@@ -743,9 +822,18 @@ func (d *agyDriver) handleEvent(event map[string]interface{}) {
 			d.emit(eventType, withAntigravityContextWindow(payload, d.job))
 		}, d.turn.contextTokens, d.job)
 	case "result":
-		if d.turn != nil {
-			d.finishTurn(mapValue(event["result"]), "")
+		if d.turn == nil {
+			return
 		}
+		result := mapValue(event["result"])
+		// A Google sign-in agy could not use ends the process before any init (§16.4). Whether it was
+		// refused or the network failed is known once the process has exited, so the turn waits for
+		// that (processExited); the process gets nothing more to do.
+		if p := d.proc; p != nil && p.google && !p.initialized && firstString(result, "error") == "authentication failed or timed out" {
+			d.retire()
+			return
+		}
+		d.finishTurn(result, "")
 	default:
 		logUnhandledStreamKind("antigravity", firstString(event, "event"))
 	}
@@ -789,7 +877,13 @@ func (d *agyDriver) startTurn(resp *RunInboxResponse, pendingShellCtx []string) 
 	}
 	d.emit(evUser, userEvent)
 	if d.proc == nil {
-		if err := d.spawn(); err != nil {
+		if err := d.spawn(); errors.Is(err, errAgySignInRefused) {
+			d.signOut()
+			return
+		} else if errors.Is(err, errAgySignInUnchecked) {
+			d.failTurn(antigravityGoogleUnreachableMessage)
+			return
+		} else if err != nil {
 			d.failTurn("failed to start Antigravity: " + err.Error())
 			return
 		}
@@ -939,16 +1033,24 @@ func (d *agyDriver) finishTurn(result map[string]interface{}, failure string) {
 }
 
 // processExited handles the current process going away: its turn, if one was still running, ends
-// with it, and the next turn starts a new process.
+// with it, and the next turn starts a new process — unless agy refused the runner's Google sign-in,
+// which ends the session signed out (signOut).
 func (d *agyDriver) processExited() {
 	p := d.proc
 	if d.stopTimer != nil {
 		d.stopTimer.Stop()
 		d.stopTimer = nil
 	}
-	if d.turn != nil {
+	switch end := p.authEnd(); {
+	case end == agyAuthEndRefused:
+		d.signOut()
+	case end == agyAuthEndNetwork && d.turn != nil:
+		d.finishTurn(nil, antigravityGoogleUnreachableMessage)
+	case end == agyAuthEndNetwork:
+		logln("antigravity: agy for", d.job.SessionID, "could not check this runner's Google sign-in (a network error); the next turn tries again")
+	case d.turn != nil:
 		d.finishTurn(nil, p.exitDetail())
-	} else if !p.retiring {
+	case !p.retiring:
 		logln("antigravity: agy for", d.job.SessionID, "stopped between turns ("+p.exitDetail()+"); the next turn resumes the conversation")
 	}
 	d.proc = nil
@@ -992,7 +1094,13 @@ func runAntigravitySessionProcess(ctx context.Context, shutdownCtx context.Conte
 	}()
 	// Started before the first message so the conversation exists, and its id is known, as soon as
 	// the session runs.
-	if err := d.spawn(); err != nil {
+	if err := d.spawn(); errors.Is(err, errAgySignInRefused) {
+		d.signOut()
+		return stFailed, true, false
+	} else if errors.Is(err, errAgySignInUnchecked) {
+		// As when the session's own agy meets it (processExited): the first turn tries again.
+		logln("antigravity: agy for", job.SessionID, "could not check this runner's Google sign-in (a network error); the next turn tries again")
+	} else if err != nil {
 		emit(evError, map[string]interface{}{"message": "failed to start Antigravity: " + err.Error()})
 		return stFailed, true, false
 	}
@@ -1118,7 +1226,7 @@ func runAntigravitySessionProcess(ctx context.Context, shutdownCtx context.Conte
 		// Between turns, queued work runs once the process it would be written to — if one is on its
 		// way out — is gone: a new process must not open the conversation while the old one still has it.
 		if d.turn == nil && (d.proc == nil || !d.proc.retiring) {
-			if d.gateBroken != "" {
+			if d.gateBroken != "" || d.signedOut {
 				return stFailed, true, false
 			}
 			if endRequested {
