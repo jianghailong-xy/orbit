@@ -101,7 +101,7 @@ final class TypingFoldWiringTests: XCTestCase {
         XCTAssertTrue(inset.contains(".background(.bar, ignoresSafeAreaEdges: .top)"),
                       "without the nav bar's backdrop the transcript scrolls under the clock")
 
-        XCTAssertTrue(view.contains("TranscriptView(console: console, hidesStickyQuestion: foldsChrome(console))"))
+        XCTAssertTrue(view.contains("TranscriptView(console: console, hidesStickyQuestion: foldsChrome(console),"))
         XCTAssertTrue(view.contains("if #available(iOS 18, macOS 15, *), !hidesStickyQuestion, let q = stuckBubble {"))
     }
 

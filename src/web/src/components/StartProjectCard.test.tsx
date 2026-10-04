@@ -711,11 +711,12 @@ describe('the compact project preview', () => {
     await until(() => node.querySelector('.review-card-preview') !== null, 'the preview');
     const preview = node.querySelector<HTMLElement>('#settlement-preview')!;
     preview.scrollIntoView = vi.fn();
-    expect(revealSettlementCard()).toBe(true);
-    expect(preview.scrollIntoView).toHaveBeenCalled();
     await key();
     expect(bodies).toEqual([]);
-    await act(async () => { node.querySelector<HTMLButtonElement>('.review-card-preview')!.click(); });
+    await act(async () => { expect(revealSettlementCard()).toBe(true); });
+    expect(preview.scrollIntoView).toHaveBeenCalledWith({ block: 'center', behavior: 'instant' });
+    expect(document.querySelector('.review-card-dialog[data-open]')).not.toBeNull();
+    expect(bodies).toEqual([]);
     const field = () => settingRow(cardIn(node)!, 'Merge check').querySelector<HTMLInputElement>('input')!;
     await type(field(), 'npm run my-check');
     await act(async () => { document.querySelector<HTMLButtonElement>('.review-card-dialog [aria-label="Close"]')!.click(); });
