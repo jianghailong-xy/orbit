@@ -132,6 +132,20 @@ test('every named implemented MCP door exists in runner-go/mcp.go', () => {
   assert.deepEqual([...missing].sort(), []);
 });
 
+test('every fixable item offers task_create as an item-linked repair door to its current assignee', () => {
+  const fixable = OPEN_ITEM_DOOR_TABLE.filter((cell) =>
+    cell.todoType === 'TASK_FAILED' || cell.todoType.startsWith('INTEGRATION_'));
+  assert.ok(fixable.length > 0);
+  for (const cell of fixable) {
+    const repair = cell.doors.find((door) => door.id === 'task-create-fix');
+    assert.ok(repair, `no concrete fix door for ${JSON.stringify(cell)}`);
+    assert.equal(repair.holder, cell.assignee);
+    assert.equal(repair.mcp, 'task_create');
+    assert.equal(repair.capability, 'REPAIR');
+    assert.equal(repair.resolving, false, 'filing work is progress, not a fabricated resolution');
+  }
+});
+
 test('every named implemented route exists in controller metadata', () => {
   const routes = allRouteMetadata();
   const missing = new Set<string>();

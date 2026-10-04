@@ -1883,7 +1883,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // Open-item hand-over history (0378): three nullable columns and two checks on
       // project_open_item only. No existing rows are rewritten, and the session id deliberately
       // has no foreign key so purging a conversation cannot erase the owner's explanation.
-      '0378_open_item_hand_over'],
+      '0378_open_item_hand_over',
+      // A task's concrete fix for an exception item (0379): one nullable task FK to
+      // project_open_item, SET NULL on item deletion and an index for the read/escalation paths.
+      // No existing row is backfilled, and no preserved completion/fence object is touched.
+      '0379_open_item_fix_link'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

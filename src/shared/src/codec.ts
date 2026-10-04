@@ -123,6 +123,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'assignedRunnerId',
   'targetRunnerId',
   'taskId',
+  // A concrete repair task's exception item (migration 0379), an address the task/open-item
+  // readers hand back to the task or project routes.
+  'fixesOpenItemId',
   'dependsOnTaskId',
   // The dependency graph's computed fields. They name tasks exactly as `taskId` does, but they are
   // not columns, so `public-id-coverage.spec.ts` — which walks the schema — never asked about

@@ -455,6 +455,8 @@ export interface ProjectOpenItemRow<Instant = string> {
   escalateAt: Instant | null;
   escalatedAt: Instant | null;
   taskId: string | null;
+  /** Tasks filed as concrete fixes for this item, newest task state included. */
+  handledBy?: Array<{ taskId: string; title: string; state: string }>;
   /** The attempt this item is about, when there is one: the run whose failure opened it. */
   sessionId: string | null;
   promotionId: string | null;
@@ -814,7 +816,8 @@ export interface ProjectListCoordinatorItems<Instant = string> {
   count: number;
   leadKind: CoordinatorLeadKind;
   oldestWaitingSince: Instant;
-  nextEscalationAt: Instant;
+  /** Null when every held item is currently making progress (there is no expiry to count down to). */
+  nextEscalationAt: Instant | null;
 }
 
 /**

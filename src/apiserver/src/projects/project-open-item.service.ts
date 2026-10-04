@@ -176,6 +176,8 @@ export interface OpenItemRow {
   escalatedAt: Date | null;
   handoverNote: string | null;
   taskId: string | null;
+  /** Every task filed as a concrete fix for this item (one item may have several). */
+  handledBy: Array<{ taskId: string; title: string; state: string }>;
   /** The attempt this item is about, when one is recorded: the run whose failure opened it. It is
    *  what the card's "Open task session" reaches, and a task can have had several. */
   sessionId: string | null;
@@ -1947,9 +1949,9 @@ export class ProjectOpenItemService {
     // conversation still carrying one moves that moment on, so it is read here rather than taken
     // from the column the item was opened with — which would have the card say "due" about an item
     // that is not coming.
-    const goesAt = new Map<string, Date>();
+    const goesAt = new Map<string, Date | null>();
     if (rows.some((row) => row.assignee === 'COORDINATOR')) {
-      const due = await this.prisma.$queryRaw<Array<{ id: string; at: Date }>>(Prisma.sql`
+      const due = await this.prisma.$queryRaw<Array<{ id: string; at: Date | null }>>(Prisma.sql`
         SELECT item."id", ${escalatesAt('item')} AS "at"
           FROM "project_open_item" item
          WHERE item."project_id" = ${projectId}::uuid
@@ -1967,6 +1969,20 @@ export class ProjectOpenItemService {
         })
       : [];
     const titles = new Map(tasks.map((task) => [task.id, task.title]));
+    const handledTasks = [...rows, ...closed].length > 0
+      ? await this.prisma.task.findMany({
+          where: { fixesOpenItemId: { in: unique([...rows, ...closed].map((row) => row.id)) } },
+          select: { id: true, title: true, status: true, fixesOpenItemId: true },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        })
+      : [];
+    const handledBy = new Map<string, Array<{ taskId: string; title: string; state: string }>>();
+    for (const task of handledTasks) {
+      if (!task.fixesOpenItemId) continue;
+      const list = handledBy.get(task.fixesOpenItemId) ?? [];
+      list.push({ taskId: task.id, title: task.title, state: task.status });
+      handledBy.set(task.fixesOpenItemId, list);
+    }
     const turns = keys.length > 0
       ? await this.prisma.conversationTurn.findMany({
           where: {
@@ -2013,10 +2029,14 @@ export class ProjectOpenItemService {
         assignee: row.assignee as OpenItemAssignee,
         assigneeReason: row.assigneeReason as OpenItemAssigneeReason,
         waitingSince: row.waitingSince,
-        escalateAt: goesAt.get(row.id) ?? row.escalateAt,
+        // A live fix/handling session deliberately returns NULL from escalatesAt. Preserve that
+        // NULL instead of falling back to the frozen column, so list readers and min() agree with
+        // the sweep about an in-flight item.
+        escalateAt: goesAt.has(row.id) ? goesAt.get(row.id)! : row.escalateAt,
         escalatedAt: row.escalatedAt,
         handoverNote: row.handoverNote,
         taskId: row.taskId,
+        handledBy: handledBy.get(row.id) ?? [],
         sessionId: row.sessionId,
         promotionId: row.promotionId,
         fuseEpisodeId: row.fuseEpisodeId,
@@ -2068,6 +2088,7 @@ export class ProjectOpenItemService {
         escalatedAt: row.escalatedAt,
         handoverNote: row.handoverNote,
         taskId: row.taskId,
+        handledBy: handledBy.get(row.id) ?? [],
         sessionId: row.sessionId,
         promotionId: row.promotionId,
         fuseEpisodeId: row.fuseEpisodeId,

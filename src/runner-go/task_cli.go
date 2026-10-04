@@ -165,6 +165,7 @@ Options:
   --unassigned                Explicitly leave the task unassigned
   --list-id ID
   --project-id ID             File the task under this project, orthogonal to --list-id
+  --fixes-open-item-id ID     Attach it as a concrete fix for an OPEN integration/TASK_FAILED item
   --handoff-reason TEXT       Declare that this create crosses into the --project-id it names, and
                               say why. Passing it IS the declaration; it needs a --project-id
   --parent-task-id TASK_ID    Create it as a subtask of this existing task
@@ -345,7 +346,7 @@ Usage:
   orbit task create-batch (--tasks JSON | --tasks-file -) [--dry-run] [--json]
 
 JSON is an array of task objects (or {"tasks": [...]}), each taking the same fields
-as 'orbit task create': title (required), description, assigneeId, listId, projectId, handoff,
+as 'orbit task create': title (required), description, assigneeId, listId, projectId, fixesOpenItemId, handoff,
 parentTaskId, verifiesTaskId, acceptanceCriteria, codeless, completionCriterion,
 completionCriterionOverrideReason, ownerConfirmationReason, ownerConfirmationReasonNote, acceptanceCommand,
 acceptanceExpectedExitCode, dueDate, runAt, provider, model, modelHint, modelHintReason, dependsOnTaskIds, attachmentIds, autoRunWhenReady,
@@ -530,6 +531,10 @@ Options:
                               reaches TODAY: the create doors file the question, while MOVING a task
                               that already exists is refused PROJECT_SCOPE_MISMATCH declared or not,
                               so a re-filing is the owner's to make directly
+  --fixes-open-item-id ITEM_ID | --clear-fixes-open-item
+                              Attach/detach the concrete fix link. The item must be OPEN, be an
+                              integration/TASK_FAILED item in this task's project, and be assigned
+                              to this owner or its coordinating session
   --parent-task-id TASK_ID | --clear-parent
                               Move this task under that task, or detach it
   --verifies-task-id TASK_ID | --clear-verifies
@@ -1524,6 +1529,7 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	unassigned := fs.Bool("unassigned", false, "leave task unassigned")
 	listID := fs.String("list-id", "", "task list id")
 	projectID := fs.String("project-id", "", "file the task under this project, orthogonal to --list-id")
+	fixesOpenItemID := fs.String("fixes-open-item-id", "", "attach this task as a concrete fix for an OPEN integration or TASK_FAILED item")
 	handoffReason := fs.String("handoff-reason", "", "declare that this create crosses into the --project-id it names, and say why")
 	parentTaskID := fs.String("parent-task-id", "", "make the new task a subtask of this existing task")
 	verifiesTaskID := fs.String("verifies-task-id", "", "file the new task as a verification of this existing task")
@@ -1652,6 +1658,12 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 			return fmt.Errorf("--project-id cannot be empty")
 		}
 		body["projectId"] = *projectID
+	}
+	if flagWasSet(fs, "fixes-open-item-id") {
+		if strings.TrimSpace(*fixesOpenItemID) == "" {
+			return fmt.Errorf("--fixes-open-item-id cannot be empty")
+		}
+		body["fixesOpenItemId"] = *fixesOpenItemID
 	}
 	// Passing this IS the declaration — there is no --handoff switch to forget beside it, because a
 	// crossing declared without a word about why is a question a person is asked to answer with
@@ -2064,6 +2076,8 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	clearList := fs.Bool("clear-list", false, "clear task list")
 	projectID := fs.String("project", "", "re-file this task under that project (the account owner's to make; a session acting under a project scope is refused)")
 	noProject := fs.Bool("no-project", false, "take this task out of every project (the account owner's to make)")
+	fixesOpenItemID := fs.String("fixes-open-item-id", "", "attach this task as a concrete fix for an OPEN integration or TASK_FAILED item")
+	clearFixesOpenItem := fs.Bool("clear-fixes-open-item", false, "detach this task from its exception item")
 	handoffReason := fs.String("handoff-reason", "", "declare that this edit crosses into the --project it names, and say why")
 	parentTaskID := fs.String("parent-task-id", "", "make this task a subtask of that task")
 	clearParent := fs.Bool("clear-parent", false, "detach this task from its parent task")
@@ -2135,6 +2149,9 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	}
 	if *noProject && flagWasSet(fs, "project") {
 		return fmt.Errorf("--no-project and --project cannot be used together")
+	}
+	if *clearFixesOpenItem && flagWasSet(fs, "fixes-open-item-id") {
+		return fmt.Errorf("--clear-fixes-open-item and --fixes-open-item-id cannot be used together")
 	}
 	if *clearParent && flagWasSet(fs, "parent-task-id") {
 		return fmt.Errorf("--clear-parent and --parent-task-id cannot be used together")
@@ -2278,6 +2295,14 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 			return fmt.Errorf("--project cannot be empty; use --no-project")
 		}
 		body["projectId"] = *projectID
+	}
+	if *clearFixesOpenItem {
+		body["fixesOpenItemId"] = nil
+	} else if flagWasSet(fs, "fixes-open-item-id") {
+		if strings.TrimSpace(*fixesOpenItemID) == "" {
+			return fmt.Errorf("--fixes-open-item-id cannot be empty; use --clear-fixes-open-item")
+		}
+		body["fixesOpenItemId"] = *fixesOpenItemID
 	}
 	// Same spelling as `orbit task create`: passing it declares the crossing and says why. Sent as
 	// given — what the server does with a declared MOVE today is the server's answer to state, not
@@ -2962,6 +2987,7 @@ func withTaskCompletionCapabilityArgs(capabilities []cliCapabilitySpec) []cliCap
 		case "task_create":
 			capabilities[i].Arguments = append(
 				capabilities[i].Arguments,
+				"--fixes-open-item-id <id> (fixesOpenItemId: attach to an OPEN integration/TASK_FAILED item)",
 				"--model-hint <S|M|L|XL> (modelHint: suggested difficulty, distinct from the model hard pin)",
 				"--model-hint-reason <text> (modelHintReason: one sentence, max 500 characters)",
 				"--clear-model-hint (explicitly send null for both suggestion fields)",
@@ -2979,6 +3005,7 @@ func withTaskCompletionCapabilityArgs(capabilities []cliCapabilitySpec) []cliCap
 		case "task_update":
 			capabilities[i].Arguments = append(
 				capabilities[i].Arguments,
+				"--fixes-open-item-id <id> | --clear-fixes-open-item (fixesOpenItemId: attach or detach a concrete exception fix)",
 				"--model-hint <S|M|L|XL> (modelHint: replace the difficulty suggestion; omit to preserve)",
 				"--model-hint-reason <text> (modelHintReason: replace its reason verbatim, max 500 characters)",
 				"--clear-model-hint (send null to clear both suggestion fields)",

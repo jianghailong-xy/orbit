@@ -62,6 +62,7 @@ export type OpenItemDoorCapability =
   | 'DECIDE'
   | 'HANDOFF'
   | 'LOOKUP'
+  | 'REPAIR'
   | 'RESOLVE'
   | 'RERUN'
   | 'RESUME';
@@ -175,6 +176,22 @@ const handOver = (holder: OpenItemDoorAssignee): OpenItemDoor => door(
     mcp: 'open_item_hand_over',
     route: '/runner/projects/:id/open-items/:itemId/hand-over',
     implemented: true,
+    resolving: false,
+  },
+);
+
+/** File concrete repair work against this item. The item deliberately stays open: linking the
+ * task is progress, while the task's result (or another item-specific door) decides its ending. */
+const createFixTask = (holder: OpenItemDoorAssignee): OpenItemDoor => door(
+  holder,
+  'task-create-fix',
+  'task_create',
+  'MCP',
+  'REPAIR',
+  [],
+  {
+    mcp: 'task_create',
+    route: '/runner/tasks',
     resolving: false,
   },
 );
@@ -370,7 +387,7 @@ export function doorsForCell(cell: Pick<OpenItemDoorCell,
   if (todoType === 'TASK_FAILED') {
     if (assignee === 'COORDINATOR') doors.push(openCoordinator(assignee));
     if (assignee === 'OWNER') doors.push(askAgain(assignee));
-    doors.push(openTaskSession(assignee), ...taskFailureDoors(assignee),
+    doors.push(openTaskSession(assignee), createFixTask(assignee), ...taskFailureDoors(assignee),
       handClose(assignee), handOver(assignee));
     return doors;
   }
@@ -382,7 +399,7 @@ export function doorsForCell(cell: Pick<OpenItemDoorCell,
     doors.push(...retryPromotion(assignee, false));
     doors.push(review(assignee, false));
     if (assignee === 'OWNER') doors.push(askAgain(assignee));
-    doors.push(handClose(assignee), handOver(assignee));
+    doors.push(createFixTask(assignee), handClose(assignee), handOver(assignee));
     return doors;
   }
 
@@ -408,7 +425,7 @@ export function doorsForCell(cell: Pick<OpenItemDoorCell,
       cancelTask(assignee, sourceJob !== 'LAND_TASK'));
     // The third known gap is the missing owner rerun, not the existing way back to a coordinator.
   }
-  doors.push(handClose(assignee), handOver(assignee));
+  doors.push(createFixTask(assignee), handClose(assignee), handOver(assignee));
   return doors;
 }
 

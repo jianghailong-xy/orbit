@@ -67,8 +67,9 @@ import { WakeDispositionService } from './wake-disposition.service';
  *      the task or the candidate the item was always about;
  *  H3  the rerun failing again marks them SUPERSEDED / RETRIED, pointing at the new item the failure
  *      opened, which is open in front of somebody — no real failure is closed quietly;
- *  H4  an item the clock hands to the owner while its rerun runs is the owner's: never marked handled
- *      in the coordinator's name, and the failure it repeats stays the owner's too;
+ *  H4  an in-flight rerun is progress: its item has no escalation deadline while the job is QUEUED or
+ *      RUNNING; after the job ends, one full frozen window with no new progress may hand it to the owner
+ *      (and it is never marked handled in the coordinator's name merely because the clock ran);
  *  H5  the read model says all of it — `handling` while it runs, `settled` with each `outcome` after.
  * And the owner-only edges around it: an escalated item refuses the coordinator's rerun and close, a
  * project that is not Automatic keeps its failures the owner's until the owner hands one back, and the
@@ -531,11 +532,15 @@ async function denied(run: () => Promise<unknown>): Promise<{ status: number; co
 }
 
 /** The one clock (§4.6), made due for this item and run: it becomes the owner's. */
-async function escalate(stack: Stack, itemId: string): Promise<void> {
+async function makeDue(stack: Stack, itemId: string): Promise<void> {
   await stack.db.$executeRaw(
     Prisma.sql`UPDATE "project_open_item" SET "escalate_at" = now() - interval '1 minute'
                 WHERE "id" = ${itemId}::uuid`,
   );
+}
+
+async function escalate(stack: Stack, itemId: string): Promise<void> {
+  await makeDue(stack, itemId);
   const swept = await stack.escalation.sweep();
   assert.ok(swept.some((row) => row.itemId === itemId), 'the clock handed the item to the owner');
 }
@@ -865,109 +870,91 @@ test('the coordinator closing a merge-into-main item with its reason: HANDLED, i
 
 // ── in flight, escalated, and the owner's ─────────────────────────────────────────────────────
 
-test('escalated while its rerun ran: never HANDLED in the coordinator\'s name — the landing answers it as LANDED by the platform — and the coordinator\'s close is refused',
+test('a task rerun queued or running is progress: it has no deadline, then its landing answers it as HANDLED',
   { skip, timeout: 240_000 }, async () => {
     const stack = await connect();
     try {
-      const w = await world(stack, 'land-escalated');
-      const red = await failedLanding(stack, w, 'land-escalated');
-      await retryTask(stack, w, red.taskId);
-      await escalate(stack, red.itemId);
+      const w = await world(stack, 'land-in-flight');
+      const red = await failedLanding(stack, w, 'land-in-flight');
+      const retried = await retryTask(stack, w, red.taskId);
+      await makeDue(stack, red.itemId);
 
-      const escalated = await item(stack.db, red.itemId);
-      assertStillOpen(escalated, 'the escalated item');
-      assert.equal(escalated.assignee, 'OWNER');
-      assert.equal(escalated.assigneeReason, 'ESCALATED');
-      const read = await stack.openItems.list(w.ownerId, w.projectId);
-      const mine = read.needsYou.find((r) => r.itemId === red.itemId);
-      assert.equal(mine?.handling?.state, 'QUEUED', 'the owner sees the rerun still in flight');
-      assert.equal(mine?.outcome, null);
+      assert.deepEqual(await stack.escalation.sweep(), [], 'a queued rerun has no escalation deadline');
+      let held = await item(stack.db, red.itemId);
+      assertStillOpen(held, 'the item whose rerun is queued');
+      assert.equal(held.assignee, 'COORDINATOR');
+      let read = await stack.openItems.list(w.ownerId, w.projectId);
+      const queued = read.withCoordinator.find((row) => row.itemId === red.itemId);
+      assert.equal(queued?.handling?.state, 'QUEUED');
+      assert.equal(queued?.escalateAt, null, 'readers expose that there is no in-flight deadline');
 
-      // The owner's now: the coordinator may not close it, nor queue anything beside the rerun.
-      const close = await denied(() => stack.openItems.resolveOpenItem(w.ownerId, w.projectId, red.itemId,
-        { note: 'it is landing' }, { kind: 'SESSION', sessionId: w.coordinatorSessionId }));
-      assert.equal(close.code, 'OPEN_ITEM_NOT_COORDINATOR_ITEM');
       const again = await denied(() => retryTask(stack, w, red.taskId));
       assert.equal(again.code, 'INTEGRATION_RETRY_IN_FLIGHT');
 
       const rerun = await onlyClaim(stack, w, 'LAND_TASK');
+      assert.deepEqual(await stack.escalation.sweep(), [], 'a running rerun has no escalation deadline either');
+      read = await stack.openItems.list(w.ownerId, w.projectId);
+      assert.equal(read.withCoordinator.find((row) => row.itemId === red.itemId)?.handling?.state, 'RUNNING');
+      assert.equal(read.withCoordinator.find((row) => row.itemId === red.itemId)?.escalateAt, null);
+
       await report(stack, w, rerun, landed(LINE_BEFORE, LINE_FIRST, LINE_FIRST_TREE));
       const row = await item(stack.db, red.itemId);
       assert.equal(row.state, 'RESOLVED');
-      assert.equal(row.resolution, 'LANDED', 'answered by the landing, the fact every item about a task is answered by');
-      assert.equal(row.resolvedBy, 'PLATFORM', 'not by the coordinator: it was the owner\'s by then');
-      assert.equal(row.resolvedBySessionId, null);
-      assert.equal(row.resolvedByJobId, null);
-      assert.equal((await stack.openItems.list(w.ownerId, w.projectId)).settled.length, 0,
-        'nothing the coordinator handled');
+      assert.equal(row.resolution, 'HANDLED');
+      assert.equal(row.resolvedBy, 'COORDINATOR');
+      assert.equal(row.resolvedBySessionId, w.coordinatorSessionId);
+      assert.equal(row.resolvedByJobId, retried.jobId);
     } finally {
       await stack.db.$disconnect();
     }
   });
 
-test('escalated while its re-check ran: a passing check leaves the owner\'s item open and the merge waiting on the owner\'s card; a failing one hands the new failure to the owner',
+test('a promotion re-check queued or running is progress: it cannot escalate before either result is recorded',
   { skip, timeout: 300_000 }, async () => {
     const stack = await connect();
     try {
       // Passing.
-      const w = await world(stack, 'promo-escalated-pass');
+      const w = await world(stack, 'promo-in-flight-pass');
       const blocked = await blockedCandidate(stack, w);
-      await retryCandidate(stack, w, blocked.promotionId);
-      await escalate(stack, blocked.itemId);
+      const retried = await retryCandidate(stack, w, blocked.promotionId);
+      await makeDue(stack, blocked.itemId);
+      assert.deepEqual(await stack.escalation.sweep(), [], 'a queued re-check has no deadline');
+      let read = await stack.openItems.list(w.ownerId, w.projectId);
+      const queued = read.withCoordinator.find((row) => row.itemId === blocked.itemId);
+      assert.equal(queued?.handling?.state, 'QUEUED');
+      assert.equal(queued?.escalateAt, null);
       const recheck = await onlyClaim(stack, w, 'CHECK_PROMOTION');
-      const checked = await report(stack, w, recheck, cleanCheck(LINE_FIRST));
-      const held = await item(stack.db, blocked.itemId);
-      assertStillOpen(held, 'the owner\'s item, whose re-check passed');
-      assert.equal(held.assignee, 'OWNER');
+      assert.deepEqual(await stack.escalation.sweep(), [], 'a running re-check has no deadline either');
+      await report(stack, w, recheck, cleanCheck(LINE_FIRST));
+      const handled = await item(stack.db, blocked.itemId);
+      assert.equal(handled.state, 'RESOLVED');
+      assert.equal(handled.resolution, 'HANDLED');
+      assert.equal(handled.resolvedBy, 'COORDINATOR');
+      assert.equal(handled.resolvedByJobId, retried.jobId);
       const candidate = await stack.db.projectPromotion.findUniqueOrThrow({
         where: { id: blocked.promotionId },
-        select: { state: true, confirmedAutomatically: true, openItemId: true },
+        select: { state: true, confirmedAutomatically: true },
       });
-      assert.equal(candidate.state, 'READY', 'not merged by Automatic: an item about it is the owner\'s');
-      assert.equal(candidate.confirmedAutomatically, false);
-      assert.ok(candidate.openItemId, 'the owner\'s merge card is opened');
-      assert.equal(checked.openItemId, candidate.openItemId);
-      const card = await stack.db.projectOpenItem.findUniqueOrThrow({
-        where: { id: candidate.openItemId! },
-        select: { kind: true, assignee: true, state: true },
-      });
-      assert.deepEqual(card, { kind: 'PROMOTION_APPROVAL', assignee: 'OWNER', state: 'OPEN' });
-      // A candidate waiting on the owner's Merge is not the coordinator's to check again or to close.
-      const recheckAgain = await denied(() => retryCandidate(stack, w, blocked.promotionId));
-      assert.equal(recheckAgain.code, 'INTEGRATION_RETRY_NOT_APPLICABLE');
-      assert.match(recheckAgain.message, /Merge to main/);
-      const closeCard = await denied(() => stack.openItems.resolveOpenItem(w.ownerId, w.projectId,
-        candidate.openItemId!, { note: 'merging' }, { kind: 'SESSION', sessionId: w.coordinatorSessionId }));
-      assert.equal(closeCard.code, 'OPEN_ITEM_HAS_ITS_OWN_DOOR');
-      const confirm = await denied(() => stack.promotions.confirm(
-        { userId: w.ownerId, actingSessionId: w.coordinatorSessionId }, w.projectId, blocked.promotionId, LINE_FIRST));
-      assert.equal(confirm.status, 403);
-      assert.equal(confirm.code, 'PROMOTION_OWNER_ONLY', 'merging into main is the owner\'s press');
+      assert.deepEqual(candidate, { state: 'CONFIRMED', confirmedAutomatically: true });
 
       // Failing.
-      const v = await world(stack, 'promo-escalated-fail');
+      const v = await world(stack, 'promo-in-flight-fail');
       const again = await blockedCandidate(stack, v);
-      const retried = await retryCandidate(stack, v, again.promotionId);
-      await escalate(stack, again.itemId);
-      const ownersHold = await item(stack.db, again.itemId);
+      const secondRetry = await retryCandidate(stack, v, again.promotionId);
+      await makeDue(stack, again.itemId);
+      assert.deepEqual(await stack.escalation.sweep(), [], 'the queued failing re-check is still progress');
       const red = await onlyClaim(stack, v, 'CHECK_PROMOTION');
+      assert.deepEqual(await stack.escalation.sweep(), [], 'the running failing re-check is still progress');
       const failed = await report(stack, v, red, redCheck(LINE_FIRST));
       const [first, second] = await itemsWhere(stack.db, { promotionId: again.promotionId });
       assert.equal(first!.state, 'SUPERSEDED');
       assert.equal(first!.resolution, 'RETRIED');
-      assert.equal(first!.resolvedByJobId, retried.jobId);
+      assert.equal(first!.resolvedByJobId, secondRetry.jobId);
       assert.equal(first!.supersededByItemId, second!.id);
       assert.equal(failed.openItemId, second!.id);
       assertStillOpen(await item(stack.db, second!.id), 'the new failure');
-      assert.equal(second!.assignee, 'OWNER', 'the owner held the failure, and still does');
-      assert.equal(second!.assigneeReason, 'ESCALATED');
-      assert.deepEqual(second!.escalatedAt, ownersHold.escalatedAt);
-      assert.deepEqual(second!.waitingSince, ownersHold.waitingSince, 'the owner\'s wait goes on');
-      const refused = await denied(() => retryCandidate(stack, v, again.promotionId));
-      assert.equal(refused.code, 'INTEGRATION_RETRY_OWNER_ITEM');
-      assert.match(refused.message, /ESCALATED/);
-      assert.equal(await stack.db.projectOpenItemDelivery.count({ where: { itemId: second!.id } }), 0,
-        'nothing about it is handed back to the coordinator');
+      assert.equal(second!.assignee, 'COORDINATOR');
+      assert.equal(second!.assigneeReason, 'DEFAULT');
     } finally {
       await stack.db.$disconnect();
     }
