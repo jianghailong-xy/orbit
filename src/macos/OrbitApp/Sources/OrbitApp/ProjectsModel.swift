@@ -5,8 +5,8 @@ import OrbitKit
 /// The account's projects, behind the Projects section and the drawer's project rows. Owned by
 /// `AppModel` and rebuilt per instance, like the other section stores.
 ///
-/// The control plane has no project event, so the list is refetched: when the section or the
-/// drawer appears, on pull-to-refresh, on a short coalesced nudge after a task moved (a task write
+/// The list is refetched: when the section or the drawer appears, on pull-to-refresh, on a short
+/// coalesced nudge after a project changed or a member session or task moved (a task write
 /// is what moves a project's lanes), after every write this client makes, and every 15 seconds
 /// while loaded: integration jobs can move without changing a task or session.
 @MainActor
@@ -14,6 +14,8 @@ import OrbitKit
 final class ProjectsModel {
     /// Every project, open and closed, as `GET /projects` answered — newest first.
     private(set) var projects: [ProjectSummary] = []
+    /// The slimmer open-project summaries, including the session list's stored task progress.
+    private(set) var sidebarProjects: [ProjectSummary] = []
     private(set) var loadState = ListLoadState()
 
     private let api: APIClient
@@ -43,6 +45,7 @@ final class ProjectsModel {
 
     func load() async {
         loadState.begin()
+        async let sidebarRead = api.sidebarProjects()
         do {
             let list = try await api.projects()
             if list != projects { projects = list }
@@ -50,6 +53,7 @@ final class ProjectsModel {
         } catch {
             loadState.fail()
         }
+        if let list = try? await sidebarRead, list != sidebarProjects { sidebarProjects = list }
     }
 
     /// Called by the app's existing polling task, which stops on sign-out.
@@ -60,7 +64,7 @@ final class ProjectsModel {
         for detail in details.values where detail.isVisible { await detail.load(refreshGraph: false) }
     }
 
-    /// A task moved, and a project's lanes with it maybe: refetch shortly, once for a burst.
+    /// A project or its member changed: refetch shortly, once for a burst.
     func nudge() {
         guard nudgeTask == nil, loadState.hasLoaded else { return }
         nudgeTask = Task { @MainActor [weak self] in

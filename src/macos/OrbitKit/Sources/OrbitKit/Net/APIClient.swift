@@ -668,6 +668,11 @@ public final class APIClient: @unchecked Sendable {
         try await get("projects", query: status.map { [URLQueryItem(name: "status", value: $0.rawValue)] } ?? [])
     }
 
+    /// `GET /projects/sidebar`: open projects with the session list's activity and task progress.
+    public func sidebarProjects() async throws -> [ProjectSummary] {
+        try await get("projects/sidebar")
+    }
+
     /// `GET /projects/:id`: the project's own record — goal, criteria and what the read says about
     /// their work, the integration settings, the Automatic switch.
     public func project(_ projectID: String) async throws -> ProjectDocument {

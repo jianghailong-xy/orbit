@@ -972,7 +972,7 @@ final class AppModel {
             break
         }
         // A project's lanes move when one of its tasks does, and an owner item rides the approval
-        // count; no event names projects, so a loaded index refetches shortly after either.
+        // count, so a loaded index refetches shortly after either.
         switch ev.type {
         case .taskChanged, .taskListChanged, .approvalRequested, .approvalResolved:
             projects?.nudge()
@@ -1014,6 +1014,9 @@ final class AppModel {
                 scheduleLibraryRefresh(.tasks)
                 scheduleControlRefresh()
             }
+        // A project changed — including its title or progress — so refresh its summaries.
+        case .projectChanged:
+            projects?.nudge()
         // A wiki space changed — a proposal filed, ops decided, a binding moved. The event names the
         // space and nothing else, so the loaded Wiki re-reads what it shows (the drawer's number
         // included). It moves no session row: falling through to the snapshot below would be the web's
@@ -1040,6 +1043,12 @@ final class AppModel {
             }
         case .sessionCreated, .sessionUpdated:
             if let summary = ev.payload(ControlSessionSummary.self) {
+                // Progress comes from the sidebar read rather than the session summary. Include
+                // a former member too, so removing its relation refreshes that project at once.
+                if summary.projectMembership.flatMap({ $0 }) != nil
+                    || sessions.contains(where: { $0.id == summary.id && $0.projectMembership != nil }) {
+                    projects?.nudge()
+                }
                 // Session state is the authority for a task row's running/queued overlays. The
                 // summary names that task on current servers, so starting, claiming and settling a
                 // run update one lightweight row instead of waiting for the minute reconciliation.
@@ -1121,7 +1130,7 @@ final class AppModel {
     /// every loaded copy before the ordinary Open-only summary gate, using the payload's
     /// absent/null/value distinction so an older server preserves rather than clears the relation.
     private func patchSessionProjectRelation(_ summary: ControlSessionSummary) {
-        guard summary.projectId != nil || summary.projectTitle != nil else { return }
+        guard summary.projectId != nil || summary.projectTitle != nil || summary.projectMembership != nil else { return }
         if let index = sessions.firstIndex(where: { $0.id == summary.id }) {
             let merged = sessions[index].applyingProjectRelation(summary)
             if merged != sessions[index] {
