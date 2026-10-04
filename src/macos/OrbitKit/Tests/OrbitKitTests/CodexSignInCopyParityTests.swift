@@ -242,8 +242,8 @@ final class CodexSignInCopyParityTests: XCTestCase {
         XCTAssertTrue(CodexLoginPool.signOutNote(pool("${pool.label}", accounts: 2)).hasSuffix("its other account."))
         let several = CodexLoginPool.signOutNote(pool("${pool.label}", accounts: 3))
         assertSays(row, "? `" + asWeb(several, "accounts.", "account${others === 1 ? '' : 's'}.") + "`", in: Self.accountPools)
-        // NEXT only where there is something to choose between.
-        assertSays(row, "{member.next && pool.members.length > 1 && <span className=\"re-chip\">\(SharedPoolPage.nextChip)</span>}",
+        // NEXT only where there is something to choose between, and never for a paused account.
+        assertSays(row, "{member.next && !accountIsPaused(member.pausedUntil, now) && pool.members.length > 1 && <span className=\"re-chip\">\(SharedPoolPage.nextChip)</span>}",
                    in: Self.accountPools)
 
         let lib = try web(Self.codexLogin)
