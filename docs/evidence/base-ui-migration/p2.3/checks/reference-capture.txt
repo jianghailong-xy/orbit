@@ -1,0 +1,47 @@
+[WebServer] (node:1945355) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 24 tests using 1 worker
+
+(node:1945837) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium-light-desktop] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/reference.browser.mjs:42:57 › reference Dialog (3.0s)
+  ✓   2 [chromium-light-desktop] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/reference.browser.mjs:42:57 › reference Drawer (1.6s)
+  ✓   3 [chromium-light-desktop] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/reference.browser.mjs:42:57 › reference Bottom drawer (1.2s)
+(node:1946568) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   4 [chromium-light-phone] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/reference.browser.mjs:42:57 › reference Dialog (1.2s)
+  ✓   5 [chromium-light-phone] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/reference.browser.mjs:42:57 › reference Drawer (1.7s)
+  ✓   6 [chromium-light-phone] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/reference.browser.mjs:42:57 › reference Bottom drawer (1.1s)
+(node:1947427) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   7 [chromium-dark-desktop] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/reference.browser.mjs:42:57 › reference Dialog (1.1s)
+  ✓   8 [chromium-dark-desktop] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/reference.browser.mjs:42:57 › reference Drawer (1.0s)
+  ✓   9 [chromium-dark-desktop] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/reference.browser.mjs:42:57 › reference Bottom drawer (929ms)
+(node:1947749) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  10 [chromium-dark-phone] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/reference.browser.mjs:42:57 › reference Dialog (1.3s)
+  ✓  11 [chromium-dark-phone] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/reference.browser.mjs:42:57 › reference Drawer (1.0s)
+  ✓  12 [chromium-dark-phone] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/reference.browser.mjs:42:57 › reference Bottom drawer (1.0s)
+(node:1948232) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  13 [webkit-light-desktop] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/reference.browser.mjs:42:57 › reference Dialog (979ms)
+  ✓  14 [webkit-light-desktop] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/reference.browser.mjs:42:57 › reference Drawer (838ms)
+  ✓  15 [webkit-light-desktop] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/reference.browser.mjs:42:57 › reference Bottom drawer (847ms)
+(node:1948747) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  16 [webkit-light-phone] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/reference.browser.mjs:42:57 › reference Dialog (832ms)
+  ✓  17 [webkit-light-phone] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/reference.browser.mjs:42:57 › reference Drawer (855ms)
+  ✓  18 [webkit-light-phone] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/reference.browser.mjs:42:57 › reference Bottom drawer (867ms)
+(node:1949172) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  19 [webkit-dark-desktop] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/reference.browser.mjs:42:57 › reference Dialog (873ms)
+  ✓  20 [webkit-dark-desktop] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/reference.browser.mjs:42:57 › reference Drawer (845ms)
+  ✓  21 [webkit-dark-desktop] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/reference.browser.mjs:42:57 › reference Bottom drawer (835ms)
+(node:1949508) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  22 [webkit-dark-phone] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/reference.browser.mjs:42:57 › reference Dialog (867ms)
+  ✓  23 [webkit-dark-phone] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/reference.browser.mjs:42:57 › reference Drawer (819ms)
+  ✓  24 [webkit-dark-phone] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/reference.browser.mjs:42:57 › reference Bottom drawer (805ms)
+
+  24 passed (31.4s)
