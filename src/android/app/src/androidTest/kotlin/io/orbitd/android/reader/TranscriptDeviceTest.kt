@@ -42,6 +42,8 @@ class TranscriptDeviceTest {
         compose.onNodeWithText("Long conversation").performClick()
         awaitText("Latest answer 9999", substring = true)
         capture("latest")
+        compose.runOnIdle { (app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
+            .setPrimaryClip(android.content.ClipData.newPlainText("A06 selection control", "a06-before-selection")) }
         // Native long press must produce a selectable substring, not only a whole-message button.
         val prose = compose.onNodeWithText("Latest answer 9999", substring = true)
         longPress(prose)
@@ -122,6 +124,9 @@ class TranscriptDeviceTest {
         awaitText("Latest answer 9999", true)
         scrollHistory()
         compose.onNodeWithTag("transcript-list").performScrollToNode(hasTestTag("event:9982"))
+        compose.onNode(hasText("Copy message") and hasAnyAncestor(hasTestTag("event:9982"))).performClick()
+        val directCopy = app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        compose.waitUntil(10_000) { directCopy.primaryClip?.getItemAt(0)?.text?.count { it == '\n' } == 161 }
         compose.onNode(hasText("Show input and output") and hasAnyAncestor(hasTestTag("event:9982"))).performClick()
         compose.waitUntil(10_000) { compose.onAllNodesWithText("Loading messages…").fetchSemanticsNodes().isEmpty() }
         compose.onNodeWithTag("transcript-list").performScrollToNode(hasText("View all 162 lines"))
@@ -154,6 +159,7 @@ class TranscriptDeviceTest {
         login(); openSession(); awaitText("Latest answer 9999", true)
         openRecord("01a0cca7-8609-70ed-a0e2-d4b55b832b65")
         awaitText("H0")
+        compose.onNodeWithTag("transcript-list").performScrollToNode(hasText("H0") and hasAnyAncestor(hasTestTag("event:418")))
         val table = compose.onNode(hasTestTag("markdown-table") and hasAnyAncestor(hasTestTag("event:418")))
         repeat(6) { table.performTouchInput { swipeLeft() } }
         compose.onNode(hasText("H7") and hasAnyAncestor(hasTestTag("event:418"))).assertIsDisplayed()
@@ -218,6 +224,16 @@ class TranscriptDeviceTest {
         control("{\"reset\":true,\"mode\":\"DS4\"}")
         openSession(); awaitText("Message 99999", true)
         scrollHistory()
+        compose.onNodeWithTag("transcript-list").performScrollToNode(hasTestTag("event:99982"))
+        compose.onNode(hasText("Show input and output") and hasAnyAncestor(hasTestTag("event:99982"))).performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("View full output").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("transcript-list").performScrollToNode(hasText("View full output"))
+        compose.onNodeWithText("View full output").performClick()
+        compose.onNodeWithText("Select a portion to copy, or save the complete text.").assertIsDisplayed()
+        compose.onNode(hasText("Save text") and hasAnyAncestor(isDialog())).assertIsDisplayed()
+        compose.onNodeWithTag("long-output").performTouchInput { swipeUp() }
+        capture("output-512KiB")
+        compose.onNodeWithText("Close output").performClick()
         val measurements = mutableListOf<String>()
         repeat(20) { page ->
             compose.onNodeWithTag("transcript-list").performScrollToNode(hasText("Load earlier messages"))
@@ -303,6 +319,7 @@ class TranscriptDeviceTest {
         }
     }
     private fun capture(name: String) {
+        SystemClock.sleep(300) // Let platform window/toolbar animations settle outside the Compose clock.
         val bitmap = instrument.uiAutomation.takeScreenshot()
         File(evidence, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }; bitmap.recycle()
     }

@@ -1,5 +1,7 @@
 package io.orbitd.android.text
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -11,6 +13,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -30,10 +33,13 @@ import org.commonmark.ext.autolink.AutolinkExtension
 import org.commonmark.ext.gfm.strikethrough.*
 import org.commonmark.ext.gfm.tables.*
 import org.commonmark.ext.task.list.items.*
+import kotlinx.coroutines.*
 
 internal val markdownParser: Parser = Parser.builder().extensions(listOf(TablesExtension.create(),
     StrikethroughExtension.create(), TaskListItemsExtension.create(), AutolinkExtension.create())).build()
 internal fun Node.children(): List<Node> = generateSequence(firstChild) { it.next }.toList()
+// Keep clipboard parcels comfortably below Android's transaction limit (UTF-16 plus metadata).
+internal const val COPY_TEXT_LIMIT = 200_000
 
 /** Native text/links shared by the transcript and Wiki/details. Raw HTML remains literal text. */
 @Composable
@@ -176,13 +182,15 @@ fun CodeText(source: String, language: String = "", preview: Boolean = true) {
     Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant).padding(10.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(language.ifBlank { "Text" }, style = MaterialTheme.typography.labelMedium)
-            TextButton(onClick = { clipboard.setText(AnnotatedString(source)) }) { Text("Copy") }
+            TextButton(onClick = { if (source.length > COPY_TEXT_LIMIT) full = true else clipboard.setText(AnnotatedString(source)) }) {
+                Text(if (source.length > COPY_TEXT_LIMIT) "Save text" else "Copy")
+            }
         }
         SelectionContainer {
             Text(codeSpans(if (clipped) lines.take(24).joinToString("\n").take(4_000) else source, language),
                 Modifier.horizontalScroll(rememberScrollState()), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodyMedium, softWrap = false)
         }
-        if (clipped) TextButton(onClick = { full = true }) { Text("View all ${lines.size} lines") }
+        if (clipped) TextButton(onClick = { full = true }) { Text(if (lines.size == 1) "View full output" else "View all ${lines.size} lines") }
     }
     if (full) LongTextDialog(source, language) { full = false }
 }
@@ -207,14 +215,28 @@ private fun codeSpans(source: String, language: String): AnnotatedString {
 @Composable
 fun LongTextDialog(source: String, language: String = "", close: () -> Unit) {
     val clipboard = LocalClipboardManager.current
-    val chunks = remember(source) { source.lines().chunked(32).map { it.joinToString("\n") } }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var saveError by remember { mutableStateOf(false) }
+    val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+        if (uri != null) scope.launch {
+            saveError = false
+            try { withContext(Dispatchers.IO) { context.contentResolver.openOutputStream(uri)?.use { it.write(source.toByteArray()) } ?: error("Unavailable destination") } }
+            catch (cancel: CancellationException) { throw cancel }
+            catch (_: Exception) { saveError = true }
+        }
+    }
+    val chunks = remember(source) { outputChunks(source) }
     Dialog(close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize().safeDrawingPadding()) {
             Column(Modifier.padding(12.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     TextButton(onClick = close) { Text("Close output") }
-                    TextButton(onClick = { clipboard.setText(AnnotatedString(source)) }) { Text("Copy all") }
+                    if (source.length <= COPY_TEXT_LIMIT) TextButton(onClick = { clipboard.setText(AnnotatedString(source)) }) { Text("Copy all") }
+                    TextButton(onClick = { save.launch("orbit-output.txt") }) { Text("Save text") }
                 }
+                if (source.length > COPY_TEXT_LIMIT) Text("Select a portion to copy, or save the complete text.", style = MaterialTheme.typography.bodySmall)
+                if (saveError) Text("Couldn't save text. Try another destination.")
                 SelectionContainer { LazyColumn(Modifier.fillMaxSize().testTag("long-output")) {
                     itemsIndexed(chunks, key = { index, _ -> index }) { _, chunk ->
                         Text(codeSpans(chunk, language), Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 2.dp),
@@ -225,3 +247,16 @@ fun LongTextDialog(source: String, language: String = "", close: () -> Unit) {
         }
     }
 }
+
+/** Bound paragraph width even for a 512 KiB single line. Continuations only affect display;
+ * Copy all and Save text always use the original source. Do not split a surrogate pair. */
+internal fun outputChunks(source: String): List<String> = source.lines().flatMap { line ->
+    if (line.length <= 2_048) listOf(line) else buildList {
+        var start = 0
+        while (start < line.length) {
+            var end = minOf(start + 2_048, line.length)
+            if (end < line.length && line[end - 1].isHighSurrogate()) end--
+            add(line.substring(start, end)); start = end
+        }
+    }
+}.chunked(32).map { it.joinToString("\n") }

@@ -30,17 +30,23 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
     var fullResult by remember(row.result) { mutableStateOf<RunEvent?>(null) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf(false) }
+    var copyOverflow by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val shown = fullEvent ?: event
     val result = fullResult ?: row.result
     val tool = event.type in setOf("tool_use", "tool_result")
-    fun loadFull() { scope.launch {
+    fun loadFull(copy: Boolean = false) { scope.launch {
         loading = true; error = false
         try {
-            if (event.truncated) fullEvent = model.full(event.seq)
-            if (row.result?.truncated == true) fullResult = model.full(row.result.seq)
+            if (fullEvent == null && event.truncated) fullEvent = model.full(event.seq)
+            if (fullResult == null && row.result?.truncated == true) fullResult = model.full(row.result.seq)
+            if (copy) {
+                val source = if (tool) fullResult ?: row.result ?: fullEvent ?: event else fullEvent ?: event
+                val value = source.body().ifBlank { source.fields["input"]?.toString() ?: source.payload.toString() }
+                if (value.length > COPY_TEXT_LIMIT) copyOverflow = value else clipboard.setText(AnnotatedString(value))
+            }
         } catch (cancel: CancellationException) { throw cancel }
-        catch (_: Exception) { error = true }
+        catch (_: Exception) { error = true; expanded = true }
         finally { loading = false }
     } }
     val title = when (event.type) {
@@ -61,7 +67,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
     Column(Modifier.fillMaxWidth().background(bg).padding(10.dp).testTag(row.key), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(title, Modifier.weight(1f), style = MaterialTheme.typography.labelMedium)
-            TextButton(onClick = { clipboard.setText(AnnotatedString(if (tool) contentText(result?.fields?.get("content")) ?: shown.body() else shown.body())) }) { Text("Copy message") }
+            TextButton(enabled = !loading, onClick = { loadFull(copy = true) }) { Text("Copy message") }
         }
         if (tool) {
             val isError = result?.fields?.string("isError") == "true" || result?.fields?.string("is_error") == "true"
@@ -79,7 +85,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
                 output?.let { Text("Output", style = MaterialTheme.typography.labelMedium); CodeText(it) }
                 contentImages((result ?: shown).fields["content"]).forEach { TranscriptImage(it, "Tool result image", open) }
                 if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-                if (error) TextButton(onClick = ::loadFull) { Text("Couldn't load full output · Retry") }
+                if (error) TextButton(onClick = { loadFull() }) { Text("Couldn't load full output · Retry") }
                 if (row.children.isNotEmpty()) {
                     Text("${row.children.size} subagent records", style = MaterialTheme.typography.labelMedium)
                     row.children.take(4).forEach { child -> TranscriptRowView(child, model, live, open) }
@@ -101,9 +107,10 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
                 Text("Sent by another Orbit session, not by you", style = MaterialTheme.typography.bodySmall)
                 sender.string("fromSessionId")?.let { id -> TextButton(onClick = { open("orbit-session:$id") }) { Text("Open sender session") } }
             }
-            if (shown.truncated) TextButton(enabled = !loading, onClick = ::loadFull) { Text(if (error) "Couldn't load full message · Retry" else "Read full message") }
+            if (shown.truncated) TextButton(enabled = !loading, onClick = { loadFull() }) { Text(if (error) "Couldn't load full message · Retry" else "Read full message") }
         }
     }
+    copyOverflow?.let { LongTextDialog(it) { copyOverflow = null } }
     if (childrenOpen) Dialog({ childrenOpen = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize().safeDrawingPadding()) { Column {
             TextButton(onClick = { childrenOpen = false }) { Text("Close subagent transcript") }

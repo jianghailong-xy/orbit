@@ -106,8 +106,9 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
         LoadingMessage("Opening Orbit…")
         return
     }
-    key(signedIn.handle) {
-        val api = remember { DirectoryApi(app.session, signedIn.handle) }
+    // Saved UI keys must survive a process restart; request ownership still uses the live handle.
+    key(accountKey) {
+        val api = remember(signedIn.handle) { DirectoryApi(app.session, signedIn.handle) }
         val data by rememberDirectoryData(app, signedIn.handle)
         val live by remember(app) { app.realtime.state.map { it.handle to it.invalidationRevision }.distinctUntilChanged() }
             .collectAsState(null to 0L)

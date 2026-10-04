@@ -57,6 +57,10 @@ session and directory state and the captured auth handle. No auth rotation logic
   32-line chunks, horizontal scrolling and Copy all. Tool payloads marked truncated are fetched
   from the existing full-event endpoint when expanded. Text/thinking drafts stay separate from
   durable rows; completed Markdown blocks remain parsed while the unfinished suffix streams.
+  Single lines split into bounded display continuations without splitting surrogate pairs.
+  Copy/Save always use the original text; beyond 200,000 UTF-16 units the UI offers partial
+  selection or Save text rather than sending an oversized clipboard transaction. Copy message
+  fetches truncated payloads first, so a collapsed preview is not silently copied as full output.
 - Tool inputs/results, error status, live snapshots, subagent records and background jobs remain
   readable. Background REST fields are `toolUseId`, `shellId` and `latestOutput`, with live whole
   snapshots overlaid. Session details include branch/base/worktree state, changed files, diff,

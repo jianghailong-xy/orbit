@@ -11,6 +11,12 @@ import org.commonmark.node.*
 import org.commonmark.ext.gfm.tables.*
 
 class TranscriptRenderingTest {
+    @Test fun giantSingleLineOutputHasBoundedSurrogateSafeDisplayChunks() {
+        val source = "😀x".repeat(180_000)
+        val chunks = io.orbitd.android.text.outputChunks(source)
+        assertEquals(source, chunks.joinToString("").replace("\n", ""))
+        assertTrue(chunks.all { it.lines().size <= 32 && it.lines().all { line -> line.length <= 2_048 && !line.last().isHighSurrogate() } })
+    }
     private fun event(seq: Long, type: String, payload: String) = RunEvent(type, seq, Wire.json.parseToJsonElement(payload))
     @Test fun childToolResultSurvivesWhenParentIsOutsideThePage() {
         val rows = transcriptRows(listOf(event(10, "tool_use", """{"id":"child","parentToolUseId":"outside"}"""),
