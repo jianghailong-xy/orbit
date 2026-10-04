@@ -182,8 +182,11 @@ class DirectoryDeviceTest {
         }
         val x = location[0] + bounds.center.x; val y = location[1] + bounds.center.y
         val time = SystemClock.uptimeMillis()
+        val pointer = MotionEvent.PointerProperties().apply { id = 0; toolType = MotionEvent.TOOL_TYPE_FINGER }
+        val coordinates = MotionEvent.PointerCoords().apply { this.x = x; this.y = y; pressure = 1f; size = 1f }
         listOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP).forEach { action ->
-            val event = MotionEvent.obtain(time, SystemClock.uptimeMillis(), action, x, y, 0)
+            val event = MotionEvent.obtain(time, SystemClock.uptimeMillis(), action, 1, arrayOf(pointer), arrayOf(coordinates),
+                0, 0, 1f, 1f, 0, 0, android.view.InputDevice.SOURCE_TOUCHSCREEN, 0)
             assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true)); event.recycle()
         }
         compose.waitForIdle()
