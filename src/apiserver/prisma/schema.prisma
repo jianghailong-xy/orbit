@@ -4361,6 +4361,9 @@ model Task {
   /// Structured progress and the lifecycle epoch it belongs to (0271). Absent until the task first
   /// reports progress or is reopened.
   progress           TaskProgress?
+  /// A dedicated task_reopen door stays recorded until the next DONE queues its new landing
+  /// generation. This is an intent fence, not another task lifecycle or completion state.
+  reopenIntent       TaskReopenIntent?
   /// Verification conditions this task takes part in (§13.2): the ones it CONCLUDED as a verifier,
   /// the ones recorded ABOUT it as a subject, and the one it was filed to fix as a defect.
   verdictFailuresRaised   TaskVerificationFailure[] @relation("VerificationFailureVerifier")
@@ -4486,6 +4489,16 @@ model Task {
   /// 0120 used for (decision, project).
   @@unique([id, ownerId], map: "task_id_owner_id_key")
   @@map("task")
+}
+
+/// The explicit task_reopen door, consumed by the next DONE that queues a LAND_TASK. A side row
+/// keeps the marker out of Task's wide row and its status-trigger/foreign-key fan-out.
+model TaskReopenIntent {
+  taskId    String   @id @map("task_id") @db.Uuid
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("task_reopen_intent")
 }
 
 /// One routing decision per run request, including shadow and unrouted decisions.

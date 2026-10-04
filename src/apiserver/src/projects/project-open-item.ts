@@ -476,6 +476,9 @@ export const INTEGRATION_ITEM_KINDS: readonly OpenItemKind[] = [
  *    the two facts `resolveByFact` answers it with. A task that LANDED is deliberately not among
  *    them: the item is about landing on this project's line, and that the work reached some other
  *    branch instead is in no row, so such an item stays owed and the backstop only reports it;
+ *    `handling_job_id` does not change this answer while H1 is in flight. H2/H3 are the terminal
+ *    edges for a handled item; until one commits, M-T11 and the readers that use this predicate
+ *    still count the OPEN item, including an owner-held item under H4;
  *  - anything else — a task's failure, a question, a pause, a request — while it is open: what
  *    answers those is a person, or a fact this predicate has no row for.
  *
@@ -908,13 +911,12 @@ export async function markOpenItemsHandling(
  * or a blocked candidate's check came back READY — so the items it was handling are HANDLED, in the
  * transaction that wrote the job's terminal state.
  *
- * Every column of the ending is a fact somebody can check: the coordinator (`resolved_by`), the
- * conversation that asked for the rerun, the reason it gave, and the job that answered it — beside the
- * task or the candidate the item was always about. Only the items still the coordinator's: one the
- * clock handed to the account owner while the rerun ran is theirs (§4.6), and nothing closes it in the
- * coordinator's name after that — a landing answers it as it answers every item about the task
- * (LANDED, by the platform, J-T5), and a candidate's passing check leaves it to the owner, whose card
- * the merge then waits on (M-T11 counts it).
+ * Every column of the ending is a fact somebody can check: the coordinator or owner (`resolved_by`),
+ * the conversation or account that asked for the rerun, the reason it gave, and the job that answered
+ * it — beside the task or the candidate the item was always about. Only the items still the
+ * coordinator's, plus an item explicitly handled by its owner, are closed as HANDLED. One the clock
+ * handed to the account owner while a coordinator rerun ran is left to the owner (§4.6), and a task
+ * landing answers it as LANDED by the platform instead.
  *
  * Returns the items it closed.
  */
@@ -927,9 +929,11 @@ export async function resolveHandledItems(
        SET "state" = 'RESOLVED',
            "resolution" = 'HANDLED',
            "resolved_at" = now(),
-           "resolved_by" = CASE WHEN job."retry_requested_by_user_id" IS NOT NULL THEN 'USER' ELSE 'COORDINATOR' END,
-           "resolved_by_user_id" = job."retry_requested_by_user_id",
-           "resolved_by_session_id" = job."retry_requested_by_session_id",
+           "resolved_by" = CASE
+             WHEN item."handling_user_id" IS NOT NULL THEN 'USER'
+             ELSE 'COORDINATOR' END,
+           "resolved_by_user_id" = item."handling_user_id",
+           "resolved_by_session_id" = item."handling_session_id",
            "resolution_note" = "handling_reason",
            "resolved_by_job_id" = "handling_job_id",
            "updated_at" = now()
@@ -938,7 +942,7 @@ export async function resolveHandledItems(
        AND item."handling_job_id" = job."id"
        AND item."state" = 'OPEN'
        AND (item."assignee" = 'COORDINATOR'
-         OR (item."assignee" = 'OWNER' AND job."retry_requested_by_user_id" IS NOT NULL))
+         OR (item."assignee" = 'OWNER' AND item."handling_user_id" IS NOT NULL))
     RETURNING item."id"`);
   return rows.map((row) => row.id);
 }
@@ -987,9 +991,11 @@ export async function supersedeHandledItems(
        SET "state" = 'SUPERSEDED',
            "resolution" = 'RETRIED',
            "resolved_at" = now(),
-           "resolved_by" = CASE WHEN job."retry_requested_by_user_id" IS NOT NULL THEN 'USER' ELSE 'COORDINATOR' END,
-           "resolved_by_user_id" = job."retry_requested_by_user_id",
-           "resolved_by_session_id" = job."retry_requested_by_session_id",
+           "resolved_by" = CASE
+             WHEN item."handling_user_id" IS NOT NULL THEN 'USER'
+             ELSE 'COORDINATOR' END,
+           "resolved_by_user_id" = item."handling_user_id",
+           "resolved_by_session_id" = item."handling_session_id",
            "resolution_note" = "handling_reason",
            "resolved_by_job_id" = "handling_job_id",
            "superseded_by_item_id" = ${byItemId}::uuid,

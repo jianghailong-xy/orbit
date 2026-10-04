@@ -474,10 +474,21 @@ export class ProjectOpenItemService {
         promotionId: true,
         projectId: true,
         ownerId: true,
+        handlingJobId: true,
         project: { select: { coordinatorEnabled: true, coordinatorSessionId: true } },
       },
     });
     if (!item || item.state !== 'OPEN' || item.assignee !== 'COORDINATOR') return;
+    // H1 is a live hand-off, not a second delivery. A terminal handling job deliberately falls
+    // through (the item may need a fresh decision), but QUEUED/RUNNING rows stay out of every
+    // coordinator delivery entry point, including an owner's explicit "ask again" press.
+    if (item.handlingJobId) {
+      const handling = await this.prisma.projectIntegrationJob.findUnique({
+        where: { id: item.handlingJobId },
+        select: { state: true },
+      });
+      if (handling && (handling.state === 'QUEUED' || handling.state === 'RUNNING')) return;
+    }
     // THE SWITCH DECIDES AUTOMATIC HAND-OVERS, AND ONLY THOSE. `coordinatorEnabled` is the owner
     // saying the coordinator may not act on its own, and an item handed over by the platform is
     // exactly that. The owner's own press is not: it is that same person saying "put this one in
@@ -2189,15 +2200,20 @@ export class ProjectOpenItemService {
     if (sessionHasEnded(session)) {
       throw new SessionNotSendable('the coordinator conversation has ended');
     }
-    const owed = await tx.projectOpenItem.count({
-      where: {
-        id: delivery.itemId,
-        state: 'OPEN',
-        assignee: 'COORDINATOR',
-        assignedAt: delivery.assignedAt,
-      },
-    });
-    if (owed === 0) throw new OpenItemNoLongerOwed();
+    const [owed] = await tx.$queryRaw<Array<{ count: number }>>(Prisma.sql`
+      SELECT count(*)::int AS "count"
+        FROM "project_open_item" item
+       WHERE item."id" = ${delivery.itemId}::uuid
+         AND item."state" = 'OPEN'
+         AND item."assignee" = 'COORDINATOR'
+         AND item."assigned_at" = ${delivery.assignedAt.toISOString()}::timestamptz
+         AND NOT EXISTS (
+           SELECT 1
+             FROM "project_integration_job" handling
+            WHERE handling."id" = item."handling_job_id"
+              AND handling."state" IN ('QUEUED', 'RUNNING')
+         )`);
+    if ((owed?.count ?? 0) === 0) throw new OpenItemNoLongerOwed();
     // One row per item per conversation. A row that was taken back unrun is re-armed rather than
     // duplicated: the item is owed again, and this is the delivery that answers it.
     await tx.projectOpenItemDelivery.upsert({

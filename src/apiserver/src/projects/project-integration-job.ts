@@ -2,6 +2,11 @@ import { Prisma, TaskStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { LANDING_SESSION_CANDIDATES, LANDING_WORK_SESSION_SELECT, landingWorkSession } from './landing-source-branch';
 import { startOnFirstIntegration } from './project-integration-line';
+import {
+  INTEGRATION_ITEM_KINDS,
+  markOpenItemsHandling,
+  type OpenItemHandlingStart,
+} from './project-open-item';
 // Type-only, so the two modules do not import each other at run time: this one needs the two closed
 // sets a candidate is written with, and `project-promotion.ts` needs the shape a check reports.
 import type { PromotionSourceKind, PromotionState } from './project-promotion';
@@ -692,6 +697,14 @@ export type EnqueueOutcome =
       projectId: string | null;
     };
 
+/** Who caused this DONE, for the handling attribution of an older integration item. */
+export type DoneTaskSource =
+  | { sessionId: string; userId?: never }
+  | { userId: string; sessionId?: never };
+
+/** H1's reason for the generation queued after a task was reopened for delivery work. */
+export const REOPEN_LANDING_HANDLING_REASON = '退回返工后的新一代落地';
+
 /** The columns a landing needs from the task's own work session. */
 const WORK_SESSION_SELECT = LANDING_WORK_SESSION_SELECT;
 
@@ -773,6 +786,7 @@ export async function enqueueForDoneTask(
   tx: Prisma.TransactionClient,
   ownerId: string,
   taskId: string,
+  doneSource?: DoneTaskSource | null,
 ): Promise<EnqueueOutcome> {
   const landing = await doneTaskLandingWork(tx, ownerId, taskId);
   if (!landing.work) {
@@ -801,7 +815,29 @@ export async function enqueueForDoneTask(
   const queued = await queueLandingForWork(tx, {
     ownerId, projectId, taskId, codebase, session, line: first.line,
   });
-  if (queued === null) return { enqueued: false, reason: 'ALREADY_QUEUED', projectId };
+  if (queued === null) {
+    // The explicit reopen was already answered by an existing generation; do not let its marker
+    // leak into a later, unrelated DONE.
+    await tx.taskReopenIntent.deleteMany({ where: { taskId } });
+    return { enqueued: false, reason: 'ALREADY_QUEUED', projectId };
+  }
+
+  // A task_reopen followed by DONE is a new landing generation, not a retry of the failed row.
+  // Still, the older task landing cards are the same H1 items: keep them OPEN, point them at this
+  // generation, and retain the actor that wrote this DONE in the same transaction as the queue.
+  const reopenIntent = await tx.taskReopenIntent.findUnique({ where: { taskId } });
+  if (reopenIntent) {
+    if (queued.kind === 'LAND_TASK' && doneSource) {
+      await markEarlierLandingItemsHandling(tx, {
+        taskId,
+        jobId: queued.jobId,
+        source: doneSource,
+      });
+    }
+    // This marker describes one explicit reopen, not a standing task property. Consume it even
+    // when this DONE took the MAIN-line promotion route or had no actor to attribute.
+    await tx.taskReopenIntent.delete({ where: { taskId } });
+  }
 
   const alsoQueuedTaskIds = onTheStartingBeat
     ? await backfillFinishedCodeTasks(tx, {
@@ -818,6 +854,41 @@ export async function enqueueForDoneTask(
       alsoQueuedTaskIds,
     }
     : { enqueued: true, kind: 'LAND_TASK', jobId: queued.jobId, projectId, alsoQueuedTaskIds };
+}
+
+/** Mark the OPEN integration cards for an earlier LAND_TASK generation as H1 handling. */
+async function markEarlierLandingItemsHandling(
+  tx: Prisma.TransactionClient,
+  input: { taskId: string; jobId: string; source: DoneTaskSource },
+): Promise<void> {
+  const job = await tx.projectIntegrationJob.findUnique({
+    where: { id: input.jobId },
+    select: { generation: true },
+  });
+  if (!job) return;
+
+  const rows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT item."id"
+      FROM "project_open_item" item
+      JOIN "project_integration_job" failed
+        ON failed."id" = item."integration_job_id"
+     WHERE item."task_id" = ${input.taskId}::uuid
+       AND item."state" = 'OPEN'
+       AND item."kind" IN (${Prisma.join(INTEGRATION_ITEM_KINDS.map((kind) => Prisma.sql`${kind}`))})
+       AND item."assignee" = ${'userId' in input.source ? 'OWNER' : 'COORDINATOR'}
+       AND failed."kind" = 'LAND_TASK'
+       AND failed."task_id" = ${input.taskId}::uuid
+       AND failed."generation" < ${job.generation}
+     ORDER BY item."created_at", item."id"`);
+  if (rows.length === 0) return;
+
+  const handling: OpenItemHandlingStart = {
+    jobId: input.jobId,
+    sessionId: 'sessionId' in input.source ? input.source.sessionId : null,
+    userId: 'userId' in input.source ? input.source.userId : null,
+    reason: REOPEN_LANDING_HANDLING_REASON,
+  };
+  await markOpenItemsHandling(tx, rows.map((row) => row.id), handling);
 }
 
 interface CodebaseForJob {
