@@ -20,7 +20,7 @@ tasks. The iOS installed version is still being established by A01; no repositor
 
 | Component | Pin | Reason |
 | --- | --- | --- |
-| JDK running Gradle/tests | 21 (CI Temurin 21.0.12.1+1) | Matches the project merge gate; Java/Kotlin output targets 17. |
+| JDK running Gradle/tests | 21 (CI Temurin 21.0.9+10; local merge gate Debian OpenJDK 21.0.12.1) | Both run Java 21; the CI pin is a verified Temurin release in setup-java's supported version syntax. Java/Kotlin output targets 17. |
 | Gradle | 8.13 | AGP's required version; standard committed Wrapper with official distribution SHA256. |
 | Android Gradle plugin | 8.11.1 | Supports API36 and is within Kotlin 2.2.21's fully supported AGP range. |
 | Kotlin / Compose compiler plugin | 2.2.21 / 2.2.21 | Matched compiler versions; supports Gradle 8.13 and AGP 8.11.1. |
