@@ -153,8 +153,9 @@ class ComposerDeviceTest {
         login()
         val bytes="中文附件与真实URI权限\n".repeat(100).toByteArray()
         val resolver=app.contentResolver
+        val fileName="a07-中文附件-${java.util.UUID.randomUUID()}.txt"
         val uri=resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,ContentValues().apply {
-            put(MediaStore.Downloads.DISPLAY_NAME,"a07-中文附件.txt"); put(MediaStore.Downloads.MIME_TYPE,"text/plain")
+            put(MediaStore.Downloads.DISPLAY_NAME,fileName); put(MediaStore.Downloads.MIME_TYPE,"text/plain")
             put(MediaStore.Downloads.RELATIVE_PATH,"Download")
         })!!
         resolver.openOutputStream(uri)!!.use { it.write(bytes) }
@@ -162,9 +163,9 @@ class ComposerDeviceTest {
             control("""{"uploadFailures":1,"uploadDelay":0.3}""")
             compose.onNodeWithText("+").performClick(); compose.onNodeWithText("File",useUnmergedTree=true).performClick()
             selectFilesRoot("Downloads")
-            compose.waitUntil(10000) { systemNode("a07-中文附件.txt") != null }
+            compose.waitUntil(10000) { systemNode(fileName) != null }
             capture("system-files")
-            val bounds=android.graphics.Rect();systemNode("a07-中文附件.txt")!!.getBoundsInScreen(bounds)
+            val bounds=android.graphics.Rect();systemNode(fileName)!!.getBoundsInScreen(bounds)
             shellBytes("input swipe ${bounds.centerX()} ${bounds.centerY()} ${bounds.centerX()} ${bounds.centerY()} 700")
             capture("system-file-selected")
             systemClick(if (systemNode("Select") != null) "Select" else "Open")
