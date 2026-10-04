@@ -368,12 +368,13 @@ final class ConsoleModel {
     }
 
     /// Whether the usage sheet should reserve room for the reset card. Unsupported/auth-unknown
-    /// answers stay hidden just like the web card; CREDITS_UNAVAILABLE remains visible with a reason.
+    /// answers and zero credits stay hidden; CREDITS_UNAVAILABLE remains visible with a reason.
     var codexResetCardVisible: Bool {
         guard let block = codexResetBlock,
               Self.isCodexResetBlockValid(block),
               let fingerprint = block.accountFingerprint,
-              Self.isCodexResetFingerprint(fingerprint) else { return false }
+              Self.isCodexResetFingerprint(fingerprint),
+              block.rateLimitResetCredits?.availableCount != 0 else { return false }
         return block.support == "SUPPORTED" || block.support == "CREDITS_UNAVAILABLE"
     }
 
