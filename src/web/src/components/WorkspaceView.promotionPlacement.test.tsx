@@ -126,7 +126,7 @@ function merged(over: Partial<ProjectPromotionView> = {}): ProjectPromotionView 
     recheckedAt: null,
     recheck: null,
     decidedAt: MERGED_AT,
-    merged: { sha: MERGED_SHA, byUserId: 'user-1', at: MERGED_AT },
+    merged: { sha: MERGED_SHA, byUserId: 'user-1', at: MERGED_AT, automatic: false, revert: null },
     ...over,
   };
 }
@@ -219,12 +219,18 @@ const mounted = (): HTMLDivElement => {
 const count = (selector: string): number => mounted().querySelectorAll(selector).length;
 const record = (): HTMLElement | null =>
   mounted().querySelector<HTMLElement>('.project-promotion-receipt');
-/** The blocked card, wherever it was drawn — the transcript's, or the strip's. */
-const blockedCard = (): HTMLElement | null =>
-  mounted().querySelector<HTMLElement>('.project-promotion[data-state="BLOCKED"]');
-/** Every promotion card drawn anywhere, by state: the strip's question and the transcript's record. */
+/** Count the previews in the conversation, rather than their retained portal contents. */
+const previewsOfState = (state: string): HTMLButtonElement[] =>
+  [...mounted().querySelectorAll<HTMLButtonElement>('.review-card[id^="promotion-"] > .review-card-preview')]
+    .filter((preview) => preview.querySelector('.review-card-meta')?.textContent ===
+      (state === 'READY' ? 'Ready to merge · review checks and included work' : state.toLowerCase()));
+/** The blocked preview's wrapper is what occupies a moment in the conversation's flow. */
+const blockedCard = (): HTMLElement | null => previewsOfState('BLOCKED')[0]?.parentElement ?? null;
+/** Questions and blocked candidates are previews; a merged record stays inline in full. */
 const cardsOfState = (state: string): number =>
-  mounted().querySelectorAll(`.project-promotion[data-state="${state}"]`).length;
+  state === 'MERGED'
+    ? mounted().querySelectorAll('.project-promotion[data-state="MERGED"]').length
+    : previewsOfState(state).length;
 
 const waitForUi = async (assertion: () => void): Promise<void> => {
   // The act environment is off while the window is waited out, as RTL's own asyncWrapper
@@ -469,7 +475,7 @@ describe('the record a merge leaves, in the conversation it happened in', { time
   });
 
   it('leads at the head of a conversation whose window begins after the merge', async () => {
-    mergesOnRecord = [merged({ merged: { sha: MERGED_SHA, byUserId: 'user-1', at: '2026-09-11T02:00:00Z' } })];
+    mergesOnRecord = [merged({ merged: { sha: MERGED_SHA, byUserId: 'user-1', at: '2026-09-11T02:00:00Z', automatic: false, revert: null } })];
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
     await waitForUi(() => {
       expect(mounted().textContent).toContain(`${NOTE[COORDINATOR_PUBLIC]}, opening`);
@@ -541,7 +547,19 @@ describe('the card a blocked candidate leaves, in the conversation it happened i
     // is resolving the candidate, which is nowhere on the candidate itself. The press says it now,
     // with how long they have had it — and the wait is the row's to know.
     await waitForUi(() => {
-      expect(blockedCard()?.textContent).toContain(`${RESOLVING} · `);
+      expect(cardsOfState('BLOCKED')).toBe(1);
+    });
+    const preview = previewsOfState('BLOCKED')[0]!;
+    expect(preview.textContent).toContain('orbit/runner-web-714027 can’t merge into main yet');
+    expect(preview.getAttribute('aria-expanded')).toBe('false');
+    expect(mounted().querySelector('.project-promotion[data-state="BLOCKED"]')).toBeNull();
+    await act(async () => preview.click());
+    await waitForUi(() => {
+      const dialog = document.querySelector<HTMLElement>('.review-card-dialog[data-open]');
+      expect(dialog).not.toBeNull();
+      expect(mounted().contains(dialog)).toBe(false);
+      expect(dialog?.querySelector('.project-promotion[data-state="BLOCKED"]')?.textContent)
+        .toContain(`${RESOLVING} · `);
     });
   });
 

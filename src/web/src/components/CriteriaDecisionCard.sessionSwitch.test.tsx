@@ -199,16 +199,23 @@ function cardOf(intentId: string): string {
   return `criteria-decision-${intentId}`;
 }
 
-/** Every card on screen, by address, in render order. */
+/** Every preview in the conversation, by address, in render order. */
 function drawn(node: HTMLElement): string[] {
-  return [...node.querySelectorAll('.criteria-decision')].map((card) => card.id);
+  return [...node.querySelectorAll('.review-card[id^="criteria-decision-"] > .review-card-preview')]
+    .map((preview) => preview.parentElement!.id);
 }
 
 /** What one card's heading says: the question, or that it is no longer the reader's to answer. */
 function headingOf(node: HTMLElement, intentId: string): string | null {
   return (
-    node.querySelector(`[id="${cardOf(intentId)}"] .criteria-decision-heading`)?.textContent ?? null
+    node.querySelector(`[id="${cardOf(intentId)}"] .review-card-title`)?.textContent ?? null
   );
+}
+
+function previewOf(node: HTMLElement, intentId: string): HTMLButtonElement {
+  const preview = node.querySelector<HTMLButtonElement>(`[id="${cardOf(intentId)}"] > .review-card-preview`);
+  expect(preview, `no preview for ${intentId}`).not.toBeNull();
+  return preview!;
 }
 
 /**
@@ -238,6 +245,12 @@ describe('the criteria card when the view moves from one project’s conversatio
     const view = workspace();
     await view.open(P1_COORDINATOR);
     await until(() => drawn(view.node).includes(cardOf(I1)), 'P1’s proposal in P1’s conversation');
+    expect(view.node.querySelector('.criteria-decision')).toBeNull();
+    await act(async () => previewOf(view.node, I1).click());
+    const oldDialog = document.querySelector<HTMLElement>('.review-card-dialog[data-open]');
+    expect(oldDialog).not.toBeNull();
+    expect(view.node.contains(oldDialog)).toBe(false);
+    expect(oldDialog?.textContent).toContain('the merge boundary may be called green without running it');
 
     await view.open(P2_SESSION);
     // P2's own card is the proof that P2's read came back and the pane drew from it, so what is
@@ -246,6 +259,20 @@ describe('the criteria card when the view moves from one project’s conversatio
     expect(drawn(view.node), 'a proposal of P1’s is drawn in P2’s conversation')
       .toEqual([cardOf(I2)]);
     expect(view.node.textContent).not.toContain(CRITERIA_DECISION_STALE_HEADING);
+    expect(oldDialog?.isConnected, 'P1’s open review followed the session switch').toBe(false);
+    expect(document.querySelector('.review-card-dialog[data-open]')).toBeNull();
+    const nextPreview = previewOf(view.node, I2);
+    expect(nextPreview.getAttribute('aria-expanded')).toBe('false');
+    expect(headingOf(view.node, I2)).toBe(CRITERIA_DECISION_HEADING);
+    await act(async () => nextPreview.click());
+    const nextDialog = document.querySelector<HTMLElement>('.review-card-dialog[data-open]');
+    expect(nextDialog).not.toBeNull();
+    expect(view.node.contains(nextDialog)).toBe(false);
+    expect(nextDialog?.textContent).toContain('the pg spec may be skipped');
+    expect(nextDialog?.textContent).not.toContain('the merge boundary may be called green without running it');
+    await act(async () => nextDialog!.querySelector<HTMLButtonElement>('[aria-label="Close"]')!.click());
+    expect(document.querySelector('.review-card-dialog[data-open]')).toBeNull();
+    expect(nextPreview.getAttribute('aria-expanded')).toBe('false');
   });
 
   it('is keyed by the session on screen, on the element WorkspaceView mounts it with', () => {
