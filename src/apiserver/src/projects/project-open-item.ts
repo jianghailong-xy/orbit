@@ -860,8 +860,10 @@ export async function recordDeliveryReview(
 export interface OpenItemHandlingStart {
   /** The job the rerun queued: the task's next LAND_TASK, or the candidate's next CHECK_PROMOTION. */
   jobId: string;
-  /** The coordinator conversation that asked for it. */
-  sessionId: string;
+  /** The coordinator conversation that asked for it, or null for an owner press. */
+  sessionId?: string | null;
+  /** The account owner that asked for it, or null for a coordinator press. */
+  userId?: string | null;
   reason: string;
 }
 
@@ -884,11 +886,17 @@ export async function markOpenItemsHandling(
   handling: OpenItemHandlingStart,
 ): Promise<void> {
   if (itemIds.length === 0) return;
+  const owner = handling.userId != null;
   await tx.projectOpenItem.updateMany({
-    where: { id: { in: [...itemIds] }, state: 'OPEN', assignee: 'COORDINATOR' },
+    where: {
+      id: { in: [...itemIds] },
+      state: 'OPEN',
+      assignee: owner ? 'OWNER' : 'COORDINATOR',
+    },
     data: {
       handlingJobId: handling.jobId,
-      handlingSessionId: handling.sessionId,
+      handlingSessionId: owner ? null : (handling.sessionId ?? null),
+      handlingUserId: owner ? handling.userId : null,
       handlingReason: handling.reason,
       handlingStartedAt: new Date(),
     },
@@ -915,19 +923,23 @@ export async function resolveHandledItems(
   jobId: string,
 ): Promise<string[]> {
   const rows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-    UPDATE "project_open_item"
+    UPDATE "project_open_item" item
        SET "state" = 'RESOLVED',
            "resolution" = 'HANDLED',
            "resolved_at" = now(),
-           "resolved_by" = 'COORDINATOR',
-           "resolved_by_session_id" = "handling_session_id",
+           "resolved_by" = CASE WHEN job."retry_requested_by_user_id" IS NOT NULL THEN 'USER' ELSE 'COORDINATOR' END,
+           "resolved_by_user_id" = job."retry_requested_by_user_id",
+           "resolved_by_session_id" = job."retry_requested_by_session_id",
            "resolution_note" = "handling_reason",
            "resolved_by_job_id" = "handling_job_id",
            "updated_at" = now()
-     WHERE "handling_job_id" = ${jobId}::uuid
-       AND "state" = 'OPEN'
-       AND "assignee" = 'COORDINATOR'
-    RETURNING "id"`);
+      FROM "project_integration_job" job
+     WHERE item."handling_job_id" = ${jobId}::uuid
+       AND item."handling_job_id" = job."id"
+       AND item."state" = 'OPEN'
+       AND (item."assignee" = 'COORDINATOR'
+         OR (item."assignee" = 'OWNER' AND job."retry_requested_by_user_id" IS NOT NULL))
+    RETURNING item."id"`);
   return rows.map((row) => row.id);
 }
 
@@ -971,20 +983,23 @@ export async function supersedeHandledItems(
   byItemId: string,
 ): Promise<string[]> {
   const rows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-    UPDATE "project_open_item"
+    UPDATE "project_open_item" item
        SET "state" = 'SUPERSEDED',
            "resolution" = 'RETRIED',
            "resolved_at" = now(),
-           "resolved_by" = 'COORDINATOR',
-           "resolved_by_session_id" = "handling_session_id",
+           "resolved_by" = CASE WHEN job."retry_requested_by_user_id" IS NOT NULL THEN 'USER' ELSE 'COORDINATOR' END,
+           "resolved_by_user_id" = job."retry_requested_by_user_id",
+           "resolved_by_session_id" = job."retry_requested_by_session_id",
            "resolution_note" = "handling_reason",
            "resolved_by_job_id" = "handling_job_id",
            "superseded_by_item_id" = ${byItemId}::uuid,
            "updated_at" = now()
-     WHERE "handling_job_id" = ${jobId}::uuid
-       AND "state" = 'OPEN'
-       AND "id" <> ${byItemId}::uuid
-    RETURNING "id"`);
+      FROM "project_integration_job" job
+     WHERE item."handling_job_id" = ${jobId}::uuid
+       AND item."handling_job_id" = job."id"
+       AND item."state" = 'OPEN'
+       AND item."id" <> ${byItemId}::uuid
+    RETURNING item."id"`);
   return rows.map((row) => row.id);
 }
 
@@ -1167,6 +1182,8 @@ interface IntegrationItemPayload {
     retryOfJobId?: string;
     failureClass?: string | null;
     reason?: string | null;
+    requestedBySessionId?: string | null;
+    requestedByUserId?: string | null;
   } | null;
 }
 

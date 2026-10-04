@@ -1887,7 +1887,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // A task's concrete fix for an exception item (0379): one nullable task FK to
       // project_open_item, SET NULL on item deletion and an index for the read/escalation paths.
       // No existing row is backfilled, and no preserved completion/fence object is touched.
-      '0379_open_item_fix_link'],
+      '0379_open_item_fix_link',
+      // Owner integration retry attribution (0380): one nullable requester column on
+      // project_integration_job and one nullable owner-attribution column on project_open_item;
+      // the two existing all-or-none CHECKs are replaced with XOR checks. Existing coordinator
+      // retries satisfy the widened constraints, and no task, project, acceptance, DONE fence,
+      // trigger or function is rewritten; nothing is backfilled.
+      '0380_owner_integration_retry'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

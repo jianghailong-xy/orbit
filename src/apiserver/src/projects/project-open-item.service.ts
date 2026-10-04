@@ -1415,6 +1415,7 @@ export class ProjectOpenItemService {
     taskId: string,
     given: { reason?: string },
     actingSessionId: string | undefined,
+    requester?: { userId: string },
   ): Promise<IntegrationRetried> {
     const reason = rerunReason(given);
     const project = await this.prisma.project.findFirst({
@@ -1423,7 +1424,10 @@ export class ProjectOpenItemService {
     });
     if (!project) throw new NotFoundException('project not found');
     const asking = actingSessionId?.trim();
-    if (!asking || asking !== project.coordinatorSessionId) throw rerunCoordinatorOnly();
+    const ownerRequester = requester?.userId ?? null;
+    if (!ownerRequester && (!asking || asking !== project.coordinatorSessionId)) {
+      throw rerunCoordinatorOnly();
+    }
     const task = await this.prisma.task.findFirst({
       where: { id: taskId, ownerId },
       select: { projectId: true },
@@ -1451,7 +1455,7 @@ export class ProjectOpenItemService {
         where: { id: projectId },
         select: { coordinatorEnabled: true, coordinatorSessionId: true },
       });
-      if (current.coordinatorSessionId !== asking) throw rerunCoordinatorOnly();
+      if (!ownerRequester && current.coordinatorSessionId !== asking) throw rerunCoordinatorOnly();
       const newestLanding = await tx.projectIntegrationJob.findFirst({
         where: { taskId, kind: 'LAND_TASK' },
         orderBy: [{ generation: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
@@ -1467,6 +1471,7 @@ export class ProjectOpenItemService {
         select: { id: true, kind: true },
       });
       const decision = decideIntegrationRetry({
+        requester: ownerRequester ? 'OWNER' : 'COORDINATOR',
         coordinatorEnabled: current.coordinatorEnabled,
         taskStatus: locked.status,
         newestLanding,
@@ -1483,7 +1488,8 @@ export class ProjectOpenItemService {
           ofJobId: decision.retryOfJobId,
           failureClass: decision.failureClass,
           reason,
-          requestedBySessionId: asking,
+          requestedBySessionId: ownerRequester ? undefined : asking!,
+          requestedByUserId: ownerRequester ?? undefined,
         },
       });
       if (!queued) {
@@ -1494,7 +1500,12 @@ export class ProjectOpenItemService {
             + 'project no longer integrates on a branch of its own.',
         });
       }
-      await markOpenItemsHandling(tx, decision.handle, { jobId: queued.jobId, sessionId: asking, reason });
+      await markOpenItemsHandling(tx, decision.handle, {
+        jobId: queued.jobId,
+        sessionId: ownerRequester ? null : asking!,
+        userId: ownerRequester,
+        reason,
+      });
       return {
         taskId,
         jobId: queued.jobId,
@@ -1506,6 +1517,16 @@ export class ProjectOpenItemService {
         handlingItemIds: decision.handle,
       };
     }, loggedRetry(this.logger, 'projectOpenItem.retryIntegration'));
+  }
+
+  /** The account owner's user-channel door for a failed task landing. */
+  async retryIntegrationAsOwner(
+    ownerId: string,
+    projectId: string,
+    taskId: string,
+    given: { reason?: string },
+  ): Promise<IntegrationRetried> {
+    return this.retryIntegration(ownerId, projectId, taskId, given, undefined, { userId: ownerId });
   }
 
   /**
@@ -1535,6 +1556,7 @@ export class ProjectOpenItemService {
     promotionId: string,
     given: { reason?: string },
     actingSessionId: string | undefined,
+    requester?: { userId: string },
   ): Promise<PromotionCheckRetried> {
     const reason = rerunReason(given);
     const project = await this.prisma.project.findFirst({
@@ -1543,7 +1565,10 @@ export class ProjectOpenItemService {
     });
     if (!project) throw new NotFoundException('project not found');
     const asking = actingSessionId?.trim();
-    if (!asking || asking !== project.coordinatorSessionId) throw rerunCoordinatorOnly();
+    const ownerRequester = requester?.userId ?? null;
+    if (!ownerRequester && (!asking || asking !== project.coordinatorSessionId)) {
+      throw rerunCoordinatorOnly();
+    }
 
     return withTransactionRetry(this.prisma, async (tx) => {
       const [locked] = await tx.$queryRaw<Array<{ state: string }>>(Prisma.sql`
@@ -1558,7 +1583,7 @@ export class ProjectOpenItemService {
         where: { id: projectId },
         select: { coordinatorEnabled: true, coordinatorSessionId: true },
       });
-      if (current.coordinatorSessionId !== asking) throw rerunCoordinatorOnly();
+      if (!ownerRequester && current.coordinatorSessionId !== asking) throw rerunCoordinatorOnly();
       const newestJob = await tx.projectIntegrationJob.findFirst({
         where: { promotionId },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -1570,6 +1595,7 @@ export class ProjectOpenItemService {
         orderBy: [{ waitingSince: 'asc' }, { id: 'asc' }],
       });
       const decision = decidePromotionRetry({
+        requester: ownerRequester ? 'OWNER' : 'COORDINATOR',
         coordinatorEnabled: current.coordinatorEnabled,
         promotionState: locked.state,
         newestJob,
@@ -1583,7 +1609,8 @@ export class ProjectOpenItemService {
           ofJobId: decision.retryOfJobId,
           failureClass: decision.failureClass,
           reason,
-          requestedBySessionId: asking,
+          requestedBySessionId: ownerRequester ? undefined : asking!,
+          requestedByUserId: ownerRequester ?? undefined,
         },
       });
       if (!queued) {
@@ -1593,7 +1620,12 @@ export class ProjectOpenItemService {
             + 'candidate was made in.',
         });
       }
-      await markOpenItemsHandling(tx, decision.handle, { jobId: queued.jobId, sessionId: asking, reason });
+      await markOpenItemsHandling(tx, decision.handle, {
+        jobId: queued.jobId,
+        sessionId: ownerRequester ? null : asking!,
+        userId: ownerRequester,
+        reason,
+      });
       return {
         promotionId,
         jobId: queued.jobId,
@@ -1604,6 +1636,16 @@ export class ProjectOpenItemService {
         handlingItemIds: decision.handle,
       };
     }, loggedRetry(this.logger, 'projectOpenItem.retryPromotionCheck'));
+  }
+
+  /** The account owner's user-channel door for a blocked promotion check. */
+  async retryPromotionCheckAsOwner(
+    ownerId: string,
+    projectId: string,
+    promotionId: string,
+    given: { reason?: string },
+  ): Promise<PromotionCheckRetried> {
+    return this.retryPromotionCheck(ownerId, projectId, promotionId, given, undefined, { userId: ownerId });
   }
 
   /**
@@ -1903,7 +1945,7 @@ export class ProjectOpenItemService {
       where: {
         projectId,
         kind: { in: [...COORDINATOR_LEAD_KINDS] },
-        resolvedBy: 'COORDINATOR',
+        resolvedBy: { in: ['COORDINATOR', 'USER'] },
         resolvedAt: { gte: new Date(Date.now() - SETTLED_WITHIN_MS) },
         OR: [
           { state: 'RESOLVED', resolution: 'HANDLED' },
@@ -1929,6 +1971,8 @@ export class ProjectOpenItemService {
         state: true,
         resolution: true,
         resolvedAt: true,
+        resolvedBy: true,
+        resolvedByUserId: true,
         resolvedBySessionId: true,
         resolvedByJobId: true,
         resolutionNote: true,
@@ -2100,7 +2144,8 @@ export class ProjectOpenItemService {
         outcome: {
           state: row.state as OpenItemOutcome['state'],
           resolution: row.resolution as OpenItemOutcome['resolution'],
-          resolvedBy: 'COORDINATOR',
+          resolvedBy: row.resolvedBy as OpenItemOutcome['resolvedBy'],
+          resolvedByUserId: row.resolvedByUserId,
           resolvedBySessionId: row.resolvedBySessionId,
           resolvedAt: row.resolvedAt!,
           note: row.resolutionNote,
@@ -2245,6 +2290,7 @@ export class ProjectOpenItemService {
 const HANDLING_SELECT = {
   handlingJobId: true,
   handlingSessionId: true,
+  handlingUserId: true,
   handlingReason: true,
   handlingStartedAt: true,
 } as const;
@@ -2258,15 +2304,17 @@ function handlingOf(
   row: {
     handlingJobId: string | null;
     handlingSessionId: string | null;
+    handlingUserId: string | null;
     handlingReason: string | null;
     handlingStartedAt: Date | null;
   },
   inFlight: ReadonlyMap<string, { kind: string; generation: number; state: string }>,
 ): OpenItemHandling<Date> | null {
   const job = row.handlingJobId ? inFlight.get(row.handlingJobId) : undefined;
-  if (!job || !row.handlingJobId || !row.handlingSessionId || !row.handlingStartedAt) return null;
+  if (!job || !row.handlingJobId || !row.handlingStartedAt) return null;
   return {
     sessionId: row.handlingSessionId,
+    userId: row.handlingUserId,
     reason: row.handlingReason ?? '',
     startedAt: row.handlingStartedAt,
     jobId: row.handlingJobId,
