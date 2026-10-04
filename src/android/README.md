@@ -159,6 +159,15 @@ The route Back callback is not gated on Compose IME visibility; Android retains 
 Drawer gestures also remain enabled. Material 3 is pinned to the stable
 [1.4.0 release](https://developer.android.com/jetpack/androidx/releases/compose-material3#1.4.0)
 for slow-drag settling; this does not opt into expressive or predictive-animation features.
+Its NavigationDrawer uses Foundation's anchored-drag implementation; Material 3's internal
+copy still has the old negative-anchor threshold formula. The 1.3.2 regression crosses the
+midpoint then returns Closed, while the same slow input opens on 1.4.0; input below the
+midpoint stays Closed on both. Debug runtime and unit-test runtime resolution comparisons
+keep BOM 2025.08.01 and Foundation/layout, UI, runtime, animation and ripple at 1.9.0.
+Material3/material3-android resolve from 1.3.2 to 1.4.0, while material-icons-core and its
+Android artifact at 1.7.8 leave the graph; no new external module is added. The evidence
+retains both full graphs, selection reasons and artifact hashes, rather than inferring
+binary scope from the one version declaration.
 Directory filters scroll with rows so landscape/large text retains usable space.
 Content adapts to the current window and has a maximum reading width; this does not add an
 unapproved tablet/foldable multicolumn commitment to S1.
@@ -197,11 +206,12 @@ then Back leaves the Activity. Android may stop rather than destroy a root Activ
 `A05_BACK_INPUT=key` (default) sends KEYCODE_BACK. `A05_BACK_INPUT=gesture` instead injects
 an actual right-edge touchscreen swipe and requires the device's navigation mode to be
 gestural. Each input and its coordinates are recorded separately; these runs do not assert
-predictive animation. The drawer swipe starts inside the system gesture region's boundary
+predictive animation. The drawer swipe starts beyond the system gesture inset, in app content,
 to avoid confusing Android edge Back with an app drawer gesture.
 It uses recorded native finger DOWN/MOVE/UP events and advances the Compose test clock
-between them; a midpoint capture leaves the release slow enough to check settling without
-relying on fling velocity. `DrawerGestureTest` independently protects that threshold.
+between them; a midpoint capture pauses before release to exercise slow settling.
+The device's internal release velocity is not directly recorded. `DrawerGestureTest`
+independently protects both sides of the threshold using a delayed move and held release.
 ActivityScenario filters lifecycle callbacks by its launch Intent; tests restore that monitor
 identity after receiving a new Intent, without changing Orbit's received route or saved stack.
 See [AndroidX ActivityScenario](https://github.com/android/android-test/blob/main/core/java/androidx/test/core/app/ActivityScenario.java).
