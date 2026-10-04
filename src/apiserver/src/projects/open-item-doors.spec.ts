@@ -35,7 +35,6 @@ const EXPECTED_GAPS = [
   'PROMOTION_ITEMS_BOTH_ASSIGNEES',
   'MAIN_SYNC_CONFLICT_COORDINATOR',
   'OWNER_LAND_TASK_RERUN',
-  'HANDOVER_DOOR',
 ] as const;
 
 function mcpNames(source: string): Set<string> {
@@ -76,9 +75,9 @@ function allRouteMetadata(): Set<string> {
   return routes;
 }
 
-test('the matrix has one resolving door per applicable cell, with only the four declared gaps', () => {
+test('the matrix has one resolving door per applicable cell, with only the three declared gaps', () => {
   assert.deepEqual([...KNOWN_GAPS], [...EXPECTED_GAPS]);
-  assert.equal(KNOWN_GAPS.length, 4);
+  assert.equal(KNOWN_GAPS.length, 3);
   assert.ok(OPEN_ITEM_DOOR_TABLE.length > 0);
 
   for (const cell of OPEN_ITEM_DOOR_TABLE) {
@@ -96,7 +95,7 @@ test('the matrix has one resolving door per applicable cell, with only the four 
   }
 });
 
-test('the four gaps describe distinct capability holes, including the not-yet-built handover door', () => {
+test('the three gaps describe distinct capability holes and handover is implemented', () => {
   const promotion = OPEN_ITEM_DOOR_TABLE.filter((cell) =>
     cell.sourceJob === 'CHECK_PROMOTION' || cell.sourceJob === 'LAND_PROMOTION');
   assert.ok(promotion.length > 0);
@@ -115,9 +114,9 @@ test('the four gaps describe distinct capability holes, including the not-yet-bu
 
   const handover = OPEN_ITEM_DOOR_TABLE.flatMap((cell) => cell.doors)
     .filter((door) => door.name === 'open_item_hand_over');
-  assert.ok(handover.length > 0, 'the missing handover capability must remain named in the table');
-  assert.ok(handover.every((door) => !door.implemented && !door.resolving));
-  assert.equal(KNOWN_GAPS.filter((gap) => gap === 'HANDOVER_DOOR').length, 1);
+  assert.ok(handover.length > 0, 'the implemented handover capability must remain named in the table');
+  assert.ok(handover.every((door) => door.implemented && !door.resolving));
+  assert.equal((KNOWN_GAPS as readonly string[]).includes('HANDOVER_DOOR'), false);
 });
 
 test('every named implemented MCP door exists in runner-go/mcp.go', () => {

@@ -1879,7 +1879,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // device_token only. No existing token, user FK, task, project, acceptance row, fence,
       // function or trigger is changed, and there is no DML or preserved object in its scope.
       // Renumbered before landing because the delivery-review migration already occupies 0375.
-      '0376_android_push_installation'],
+      '0376_android_push_installation',
+      // Open-item hand-over history (0378): three nullable columns and two checks on
+      // project_open_item only. No existing rows are rewritten, and the session id deliberately
+      // has no foreign key so purging a conversation cannot erase the owner's explanation.
+      '0378_open_item_hand_over'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -730,6 +730,25 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult("The item is closed, with your reason on it.\n"+prettyJSON(raw), false)
 
+	case "open_item_hand_over":
+		id := getString(args, "projectId")
+		itemID := getString(args, "itemId")
+		if id == "" || itemID == "" {
+			return toolResult("projectId and itemId are required", true)
+		}
+		note := strings.TrimSpace(getString(args, "note"))
+		if note == "" {
+			return toolResult("note is required: explain why the coordinator is handing this item to the account owner", true)
+		}
+		// The acting session IS the authority: the server checks it against the project's coordinator
+		// pointer and refuses an item that is already the owner's or a caller from another session.
+		raw, err := s.t.handOverOpenItem(s.sessionID, id, itemID, note)
+		if err != nil {
+			return toolResult("hand over open item failed: "+err.Error(), true)
+		}
+		return toolResult("The item is now with the account owner, with your explanation on it.\n"+
+			prettyJSON(raw), false)
+
 	case "integration_retry":
 		id := getString(args, "projectId")
 		taskID := getString(args, "taskId")
@@ -3135,6 +3154,29 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"type": "string",
 					"description": "Why this no longer needs anybody. Up to 2000 characters, and it " +
 						"stays on the row as the reason the item was closed by hand.",
+				},
+			}, "projectId", "itemId", "note"),
+		},
+		{
+			"name": "open_item_hand_over",
+			"description": "Hand one of this project's open coordinator items to the account owner, and " +
+				"say why. This is a deliberate decision, not the escalation clock: the item becomes OWNER " +
+				"/ HANDED_OVER, the explanation and this coordinator session stay on the row, and the owner " +
+				"is notified after the compare-and-set commits. Only the conversation coordinating this " +
+				"project may call it; an item that is already closed, already the owner's, or has another " +
+				"door is refused. The note is required and is limited to 2000 characters.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project you coordinate, as shown in its web UI URL (/projects/<id>).",
+				},
+				"itemId": map[string]interface{}{
+					"type":        "string",
+					"description": "The open item to hand to the owner, as project_get or the open-items list spells it.",
+				},
+				"note": map[string]interface{}{
+					"type":        "string",
+					"description": "Why the coordinator cannot settle it. Required, up to 2000 characters, and kept on the item.",
 				},
 			}, "projectId", "itemId", "note"),
 		},

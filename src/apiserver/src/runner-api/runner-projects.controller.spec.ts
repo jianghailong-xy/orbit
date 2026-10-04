@@ -739,6 +739,7 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     // confirmation card — that press is not here, and its absence is the assertion below.
     'ensureCoordinator',
     'getProject',
+    'handOverOpenItem',
     // Unit L7's one, and it is a GET on purpose. §7 RB2 puts the ANSWER to a cross-project
     // crossing with the user, so this door carries the question and not the write: an agent that
     // could sign a crossing for another goal is the incident this whole unit exists for wearing a
@@ -805,6 +806,7 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     requestStart: RequestMethod.POST,
     resolveBlocker: RequestMethod.POST,
     resolveOpenItem: RequestMethod.POST,
+    handOverOpenItem: RequestMethod.POST,
     retryIntegration: RequestMethod.POST,
     retryPromotionCheck: RequestMethod.POST,
     // POST: it writes a turn, and a rotation is a side effect it may have. Both are the send the
