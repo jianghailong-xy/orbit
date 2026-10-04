@@ -380,4 +380,15 @@ final class ProjectsWiringTests: XCTestCase {
         XCTAssertTrue(focus.lowerBound < back.lowerBound && back.lowerBound < show.lowerBound,
                       "focus the card, go back if the conversation is right there, open it otherwise")
     }
+
+    /// iOS 27 can abort while the concurrency runtime tears down several sibling async-let result
+    /// buffers. Project pages keep their reads concurrent with explicit task handles instead.
+    func testProjectDetailLoadAvoidsAsyncLets() throws {
+        let model = code(try appSource("ProjectsModel.swift"))
+        let load = try slice(model, from: "func load(refreshGraph:",
+                            to: "private func refreshedTaskWindow")
+        XCTAssertFalse(load.contains("async let"), "project detail reads must avoid async-let teardown")
+        XCTAssertTrue(load.contains("let documentRead = Task"),
+                      "project detail reads remain concurrent")
+    }
 }

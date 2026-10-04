@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { expectExpired } from './toasts-checks.mjs';
 
 const button = (page, name) => page.getByRole('button', { name, exact: true });
 const region = (page) => page.getByRole('region', { name: 'Notifications', exact: true });
@@ -71,7 +72,7 @@ test('stationary arrival stays paused across modal owners and clearing then repl
     await expect(undo(page)).toBeVisible();
   }
   await keyActivate(page, 'Clear notifications');
-  await expect(region(page)).toHaveCount(0);
+  await expectExpired(page);
   await page.evaluate(() => { window.hoverEvents = []; });
   await keyActivate(page, 'Complete session');
   await page.clock.runFor(50);
@@ -82,7 +83,7 @@ test('stationary arrival stays paused across modal owners and clearing then repl
   await page.clock.runFor(5999);
   await expect(undo(page)).toBeVisible();
   await page.clock.runFor(1);
-  await expect(region(page)).toHaveCount(0);
+  await expectExpired(page);
   await attach(info, 'stationary-replacement', { pausedAcrossFourTransfersMs: 40800, replacedFeedPausedMs: 10000, visibleAfterReleaseMs: 5999, expiredAfterReleaseMs: 6000 });
 });
 
@@ -102,7 +103,8 @@ test('layout moving a result under and away from a stationary pointer pauses and
   await page.evaluate(() => { window.hoverEvents = []; });
   await region(page).getByRole('button', { name: 'Dismiss', exact: true }).focus();
   await page.keyboard.press('Enter');
-  await page.clock.runFor(50);
+  // The pinned card occupies its slot until its 250ms visual exit finishes.
+  await page.clock.runFor(300);
   await expect.poll(() => page.evaluate(() => window.hoverEvents.some((e) => e.type === 'mouseover' && !e.inResult))).toBe(true);
   const left = await page.evaluate(() => window.hoverEvents);
   expect(left.filter((e) => e.type === 'mousemove')).toEqual([]);
@@ -110,6 +112,6 @@ test('layout moving a result under and away from a stationary pointer pauses and
   await page.clock.runFor(releaseAt + 5999 - await page.evaluate(() => Date.now()));
   await expect(undo(page)).toBeVisible();
   await page.clock.runFor(1);
-  await expect(region(page)).toHaveCount(0);
+  await expectExpired(page);
   await attach(info, 'stationary-layout', { entered, left, releaseAt, visibleAfterReleaseMs: 5999, expiredAfterReleaseMs: 6000 });
 });
