@@ -102,14 +102,37 @@ class DirectoryDeviceTest {
                 key(KeyEvent.KEYCODE_BACK)
                 compose.onNodeWithText("Research").assertIsDisplayed()
                 val width = compose.activity.window.decorView.width
-                val y = compose.activity.window.decorView.height * 3 / 4
+                val touchY = compose.activity.window.decorView.height * 3 / 4
                 val density = compose.activity.resources.displayMetrics.density
                 val edge = ViewCompat.getRootWindowInsets(compose.activity.window.decorView)!!.getInsets(WindowInsetsCompat.Type.systemGestures()).left
                 val start = maxOf((64 * density).toInt(), edge + (32 * density).toInt())
-                File(File(app.filesDir, "a05-directory"), "back-trace.txt").appendText("drawer-swipe system_edge=$edge from=$start,$y to=${width * 3 / 4},$y\n")
-                instrumentation.uiAutomation.executeShellCommand("input touchscreen swipe $start $y ${width * 3 / 4} $y 400").use {
-                    android.os.ParcelFileDescriptor.AutoCloseInputStream(it).readBytes()
+                val end = width * 9 / 10
+                val trace = File(File(app.filesDir, "a05-directory"), "back-trace.txt")
+                trace.appendText("drawer-swipe system_edge=$edge from=$start,$touchY to=$end,$touchY\n")
+                val downTime = SystemClock.uptimeMillis()
+                val pointer = MotionEvent.PointerProperties().apply { id = 0; toolType = MotionEvent.TOOL_TYPE_FINGER }
+                // Native MOVE events must allow the Compose test clock to process each frame.
+                // A blocking shell swipe leaves that clock paused for the whole gesture.
+                for (step in 0..20) {
+                    val action = when (step) { 0 -> MotionEvent.ACTION_DOWN; 20 -> MotionEvent.ACTION_UP; else -> MotionEvent.ACTION_MOVE }
+                    val coordinates = MotionEvent.PointerCoords().apply {
+                        this.x = start + (end - start) * step / 20f
+                        y = touchY.toFloat(); pressure = 1f; size = 1f
+                    }
+                    trace.appendText("drawer-event step=$step x=${coordinates.x} y=${coordinates.y}\n")
+                    val event = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), action, 1, arrayOf(pointer), arrayOf(coordinates),
+                        0, 0, 1f, 1f, 0, 0, android.view.InputDevice.SOURCE_TOUCHSCREEN, 0)
+                    assertTrue("Drawer event $step must reach the system input dispatcher", instrumentation.uiAutomation.injectInputEvent(event, true))
+                    event.recycle()
+                    compose.mainClock.advanceTimeByFrame()
+                    instrumentation.waitForIdleSync()
+                    SystemClock.sleep(20)
+                    if (step == 19) {
+                        capture("drawer-drag")
+                        File(File(app.filesDir, "a05-directory"), "drawer-drag.txt").writeText(compose.onRoot(useUnmergedTree = true).printToString())
+                    }
                 }
+                compose.waitForIdle()
                 instrumentation.uiAutomation.waitForIdle(500, 5_000)
                 compose.onNodeWithText("Settings").performScrollTo().assertIsDisplayed()
                 capture("drawer-swipe")

@@ -28,6 +28,7 @@ The iOS installed version is still being established by A01; no repository revis
 | Kotlin / Compose compiler plugin | 2.2.21 / 2.2.21 | Matched compiler versions; supports Gradle 8.13 and AGP 8.11.1. |
 | Android SDK / Build Tools | platform 36 / 36.0.0 | Covers the S1 upper API and reuses the prepared host SDK. |
 | Compose BOM | 2025.08.01 | Fixed stable UI family; no dynamic versions or automatic "latest" upgrades. |
+| Material 3 | 1.4.0 | Explicit stable override: 1.3.2's internal negative-anchor threshold closes a slowly dragged drawer even after its midpoint. The 1.4 drawer uses Foundation; the same slow-drag regression fails on 1.3.2 and passes on 1.4.0. |
 | Activity / Navigation Compose | 1.10.1 / 2.9.3 | Small stable activity and back-stack shell, compatible with this SDK/compiler. |
 | JUnit / Robolectric | 4.13.2 / 4.16.1 | Real JVM assertions and local execution of the Compose activity. |
 | Coroutines / serialization | 1.10.2 / 1.9.0 | Session-owned cancellation and JSON with the existing Kotlin 2.2.21 compiler. |
@@ -154,6 +155,10 @@ not only in color. Small action icons are original vectors; the launcher vector 
 from the repository's existing `src/web/public/favicon.svg`, with no SF Symbols assets.
 System/IME insets are consumed once; login scrolls and offers Next/Done IME actions. System
 Back first belongs to Android's IME/dialog, then the drawer/route, then the hosting Activity.
+The route Back callback is not gated on Compose IME visibility; Android retains IME priority.
+Drawer gestures also remain enabled. Material 3 is pinned to the stable
+[1.4.0 release](https://developer.android.com/jetpack/androidx/releases/compose-material3#1.4.0)
+for slow-drag settling; this does not opt into expressive or predictive-animation features.
 Directory filters scroll with rows so landscape/large text retains usable space.
 Content adapts to the current window and has a maximum reading width; this does not add an
 unapproved tablet/foldable multicolumn commitment to S1.
@@ -194,6 +199,9 @@ an actual right-edge touchscreen swipe and requires the device's navigation mode
 gestural. Each input and its coordinates are recorded separately; these runs do not assert
 predictive animation. The drawer swipe starts inside the system gesture region's boundary
 to avoid confusing Android edge Back with an app drawer gesture.
+It uses recorded native finger DOWN/MOVE/UP events and advances the Compose test clock
+between them; a midpoint capture leaves the release slow enough to check settling without
+relying on fling velocity. `DrawerGestureTest` independently protects that threshold.
 ActivityScenario filters lifecycle callbacks by its launch Intent; tests restore that monitor
 identity after receiving a new Intent, without changing Orbit's received route or saved stack.
 See [AndroidX ActivityScenario](https://github.com/android/android-test/blob/main/core/java/androidx/test/core/app/ActivityScenario.java).
