@@ -148,6 +148,9 @@ class CardsDeviceTest {
     @Test fun coldRestoreFence() = journey("cold-restore") {
         instrument.sendStatus(0, Bundle().apply { putString("a08_pid", Process.myPid().toString()) })
         compose.waitUntil(15_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.session?.fresh == true }
+        // force-stop + launcher is a new navigation task. Re-enter the conversation normally.
+        compose.onNodeWithTag("workspace:01a0cca7-8609-70ed-a0e2-d4b55b832b61").performClick()
+        compose.onNodeWithText("Card verification").performClick()
         await("The request may have reached the server")
         compose.onNodeWithTag("approval:a1:ALLOW").performScrollTo().assertIsNotEnabled()
         val before = Wire.json.parseToJsonElement(File(output,"cold-before.json").readText()).jsonObject

@@ -47,6 +47,15 @@ cleanup() {
       "$adb" -s "$serial" shell settings put secure stylus_handwriting_enabled "$old_handwriting" >/dev/null || true
     fi
   fi
+  if [[ -n "${old_font:-}" ]]; then
+    actual_font="$("$adb" -s "$serial" shell settings get system font_scale | tr -d '\r')"
+    actual_size="$("$adb" -s "$serial" shell wm size | sed -n 's/Override size: //p' | tr -d '\r')"
+    actual_density="$("$adb" -s "$serial" shell wm density | sed -n 's/Override density: //p' | tr -d '\r')"
+    actual_night="$("$adb" -s "$serial" shell cmd uimode night | awk '{print $NF}' | tr -d '\r')"
+    printf 'font=%s expected=%s\nsize=%s expected=%s\ndensity=%s expected=%s\nnight=%s expected=%s\n' \
+      "$actual_font" "$old_font" "$actual_size" "$old_size" "$actual_density" "$old_density" "$actual_night" "$old_night" > "$output/restored-settings.txt"
+    [[ "$actual_font" == "$old_font" && "$actual_size" == "$old_size" && "$actual_density" == "$old_density" && "$actual_night" == "$old_night" ]] || result=1
+  fi
   if [[ -n "$emulator_pid" ]]; then
     kill "$emulator_pid" 2>/dev/null || true
     wait "$emulator_pid" 2>/dev/null || true
