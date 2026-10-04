@@ -58,6 +58,12 @@ const platforms = ['both', 'macos', 'ios', 'android', 'unknown', '', 'MACOS'];
 const dmg = predicate(apple, 'dmg');
 const testflight = predicate(apple, 'testflight');
 const apk = predicate(android, 'apk');
+test('omitted dispatch platform resolves to the workflow default before job selection', () => {
+  const defaultPlatform = apple.match(/^        default: (\w+)$/m)?.[1];
+  assert.equal(defaultPlatform, 'both');
+  assert.equal(evaluate(dmg, 'workflow_dispatch', 'refs/heads/main', defaultPlatform), true);
+  assert.equal(evaluate(testflight, 'workflow_dispatch', 'refs/heads/main', defaultPlatform), true);
+});
 for (const [event, ref] of scenarios) {
   for (const platform of platforms) {
     test(`${event} ${ref} platform=${platform || '(missing)'}`, () => {

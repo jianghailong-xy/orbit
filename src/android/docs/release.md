@@ -16,6 +16,8 @@ every delivered replacement must have a strictly larger code, including retries
 whose APK bytes changed. It is deliberately **not** a branch commit count or a
 workflow run number: neither establishes ordering across independent histories/workflows.
 The release owner checks the previous artifact manifest before approving a build.
+Use a distinct `versionName` for every candidate that must be distinguishable in
+backend telemetry; increasing only `versionCode` leaves the reported header unchanged.
 
 Keep the same approved application ID and signing certificate across upgrades.
 `io.orbitd.android` is the existing development default, not confirmation of the

@@ -11,7 +11,8 @@ choices; `both` means macOS and iOS.
 | Dispatch `release.yml`, `both` | Build | Build and upload | No |
 | Dispatch `release.yml`, `macos` | Build | No | No |
 | Dispatch `release.yml`, `ios` | No | Build and upload | No |
-| Dispatch `release.yml`, invalid/missing platform | No | No | No |
+| Dispatch `release.yml`, input omitted (default `both`) | Build | Build and upload | No |
+| Dispatch `release.yml`, effective invalid/empty platform | No | No | No |
 | Dispatch `android-release.yml` | No | No | Build artifact |
 | Pull request | No release job | No release job | Debug CI only; no release secrets |
 | Branch push / non-`v*` tag | No release job | No release job | No release job |
