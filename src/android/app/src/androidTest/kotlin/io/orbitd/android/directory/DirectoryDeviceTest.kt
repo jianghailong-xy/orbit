@@ -101,9 +101,31 @@ class DirectoryDeviceTest {
                 capture("completed")
                 key(KeyEvent.KEYCODE_BACK)
                 compose.onNodeWithText("Research").assertIsDisplayed()
+                val width = compose.activity.window.decorView.width
+                val y = compose.activity.window.decorView.height * 3 / 4
+                val density = compose.activity.resources.displayMetrics.density
+                val edge = ViewCompat.getRootWindowInsets(compose.activity.window.decorView)!!.getInsets(WindowInsetsCompat.Type.systemGestures()).left
+                val start = maxOf((64 * density).toInt(), edge + (32 * density).toInt())
+                File(File(app.filesDir, "a05-directory"), "back-trace.txt").appendText("drawer-swipe system_edge=$edge from=$start,$y to=${width * 3 / 4},$y\n")
+                instrumentation.uiAutomation.executeShellCommand("input touchscreen swipe $start $y ${width * 3 / 4} $y 400").use {
+                    android.os.ParcelFileDescriptor.AutoCloseInputStream(it).readBytes()
+                }
+                instrumentation.uiAutomation.waitForIdle(500, 5_000)
+                compose.onNodeWithText("Settings").performScrollTo().assertIsDisplayed()
+                capture("drawer-swipe")
+                key(KeyEvent.KEYCODE_BACK)
+                compose.onNodeWithText("Settings").assertIsNotDisplayed()
+                compose.onNodeWithText("Research").assertIsDisplayed()
+                compose.onNodeWithContentDescription("Back").assertDoesNotExist()
                 compose.onNodeWithContentDescription("Open navigation").performClick()
                 compose.onNodeWithText("Settings").performScrollTo().performClick()
                 compose.onNodeWithText("Signed in").assertIsDisplayed()
+                compose.onNodeWithText("Build information").performScrollTo().performClick()
+                compose.onNodeWithText("Source SHA").performScrollTo().assertIsDisplayed()
+                capture("build")
+                key(KeyEvent.KEYCODE_BACK)
+                compose.onNodeWithText("Signed in").assertIsDisplayed()
+                compose.onNodeWithContentDescription("Back").assertIsDisplayed()
                 key(KeyEvent.KEYCODE_BACK)
                 compose.onNodeWithText("Research").assertIsDisplayed()
                 assertTrue(apiCalls.contains("POST /api/sessions/$sessionId/complete"))
@@ -124,6 +146,22 @@ class DirectoryDeviceTest {
                 instrumentation.uiAutomation.waitForIdle(500, 5_000)
                 directoryScrollTo("Research")
                 capture("landscape")
+                compose.activityRule.scenario.onActivity { it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT }
+                compose.waitUntil(5_000) { compose.activity.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT }
+                tap(compose.onNode(hasSetTextAction()), false)
+                awaitIme(true)
+                compose.onNodeWithText("Search sessions").performTextInput("Review")
+                capture("root-ime")
+                key(KeyEvent.KEYCODE_BACK)
+                awaitIme(false)
+                compose.onNodeWithText("Review").assertIsDisplayed()
+                compose.onNodeWithContentDescription("Back").assertDoesNotExist()
+                capture("root-ime-hidden")
+                key(KeyEvent.KEYCODE_BACK)
+                val deadline = SystemClock.uptimeMillis() + 5_000
+                while (compose.activityRule.scenario.state.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED) && SystemClock.uptimeMillis() < deadline) SystemClock.sleep(50)
+                assertFalse("Root Back must leave the Activity after the IME was dismissed", compose.activityRule.scenario.state.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED))
+                File(File(app.filesDir, "a05-directory"), "back-trace.txt").appendText("root-afterBack=${compose.activityRule.scenario.state}\n")
             } catch (failure: Throwable) {
                 File(File(app.filesDir, "a05-directory"), "failure.txt").writeText(failure.stackTraceToString())
                 runCatching { capture("failure") }
@@ -220,7 +258,8 @@ class DirectoryDeviceTest {
             detail += " activity=${it.lifecycle.currentState} focus=${it.window.decorView.hasWindowFocus()} callbacks=${it.onBackPressedDispatcher.hasEnabledCallbacks()} ime=${ViewCompat.getRootWindowInsets(it.window.decorView)?.isVisible(WindowInsetsCompat.Type.ime())}"
         }
         File(File(app.filesDir, "a05-directory"), "back-trace.txt").appendText(detail + "\n")
-        instrumentation.sendKeyDownUpSync(code)
+        if (code == KeyEvent.KEYCODE_BACK) sendBackInput(compose.activity, File(File(app.filesDir, "a05-directory"), "back-trace.txt"))
+        else instrumentation.sendKeyDownUpSync(code)
         compose.waitForIdle()
     }
     private fun capture(name: String) {

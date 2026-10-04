@@ -52,7 +52,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pair<Long, String>?) {
     val authState by auth.state.collectAsState()
@@ -66,7 +66,6 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
     val scope = rememberCoroutineScope()
     val focus = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
-    val imeVisible = WindowInsets.isImeVisible
     LaunchedEffect(authState) {
         if (authState != AuthState.Restoring) {
             navigation = navigation.bindAccount(accountKey)
@@ -116,7 +115,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
         LaunchedEffect(route, signedIn.handle, live.handle) {
             if (live.handle === signedIn.handle) app.realtime.selectSession(if (route.destination == Destination.SESSION) route.id else null)
         }
-        ModalNavigationDrawer(drawerState = drawer, gesturesEnabled = !imeVisible,
+        ModalNavigationDrawer(drawerState = drawer,
             drawerContent = {
                 ModalDrawerSheet(drawerContainerColor = LocalOrbitColors.current.drawer) {
                     Column(Modifier.fillMaxHeight().widthIn(max = 360.dp).verticalScroll(rememberScrollState()).imePadding().padding(12.dp)) {

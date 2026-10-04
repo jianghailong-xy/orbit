@@ -116,6 +116,8 @@ fi
 {
   printf 'input_scope=phone touchscreen keyboard; stylus handwriting not tested\noriginal_stylus_handwriting_enabled=%s\n' "${old_handwriting:-unchanged}"
   printf 'cold_link_kind=%s\n' "${A05_COLD_LINK:-session}"
+  printf 'back_input=%s\n' "${A05_BACK_INPUT:-key}"
+  "$adb" -s "$serial" shell settings get secure navigation_mode
   "$adb" -s "$serial" shell wm size
   "$adb" -s "$serial" shell wm density
   "$adb" -s "$serial" shell settings get system font_scale
@@ -127,7 +129,7 @@ fi
 } > "$output/conditions.txt"
 "$adb" -s "$serial" shell am force-stop "$package"
 start="$("$adb" -s "$serial" shell date +%s | tr -d '\r').000"
-"$adb" -s "$serial" shell am instrument -w -r -e a05_cold_kind "${A05_COLD_LINK:-session}" -e class io.orbitd.android.directory.DirectoryDeviceTest,io.orbitd.android.directory.LinkDeviceTest "$runner" > "$output/instrumentation.txt" 2>&1
+"$adb" -s "$serial" shell am instrument -w -r -e a05_back_input "${A05_BACK_INPUT:-key}" -e a05_cold_kind "${A05_COLD_LINK:-session}" -e class io.orbitd.android.directory.DirectoryDeviceTest,io.orbitd.android.directory.LinkDeviceTest "$runner" > "$output/instrumentation.txt" 2>&1
 pid="$(sed -n 's/.*a05_pid=\([0-9]*\).*/\1/p' "$output/instrumentation.txt" | head -1)"
 [[ -n "$pid" ]]
 "$adb" -s "$serial" logcat -d -v threadtime --pid="$pid" -T "$start" > "$output/logcat.txt"

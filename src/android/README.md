@@ -137,8 +137,10 @@ object routing. Only the iOS-defined `orbit://` hosts are accepted; project/wiki
 `ObjectDestination` resolves real object overviews and related links as the attachment point
 for A06/A11/A12/A13. It is not their full detail implementation.
 On a subsequent authoritative 403/404, the overview removes old content, links and actions.
-Transient failures retain explicitly marked stale content with links/actions disabled until
-a successful read. Focused rendering regressions cover both cases and subsequent recovery.
+Transient failures retain explicitly marked stale content with overview links and server
+mutations disabled until a successful read. An already-open Share dialog can still share
+an existing public link; it does not change server access. Focused rendering regressions
+cover both failure cases and subsequent recovery.
 The draft route retains
 workspace/folder context for A07; it never creates an empty server session. A06 must consume
 `recordId`, implement transcript positioning and missing-record feedback. A07 supplies the
@@ -184,6 +186,14 @@ The real MainActivity is also tested with a rapid A → B account change, explic
 selection and socket-failure/recovery. These are production-entry tests, separate from A04's
 debug probe. Back diagnostics retain lifecycle, focus, IME and callback state, and assert
 that the old detail disappears. Failures are saved before cleanup to preserve their cause.
+The directory case also checks drawer swipe/open/close, Build → Settings → directory one
+level at a time, and root search: first Back dismisses the keyboard and retains the query,
+then Back leaves the Activity. Android may stop rather than destroy a root Activity.
+`A05_BACK_INPUT=key` (default) sends KEYCODE_BACK. `A05_BACK_INPUT=gesture` instead injects
+an actual right-edge touchscreen swipe and requires the device's navigation mode to be
+gestural. Each input and its coordinates are recorded separately; these runs do not assert
+predictive animation. The drawer swipe starts inside the system gesture region's boundary
+to avoid confusing Android edge Back with an app drawer gesture.
 ActivityScenario filters lifecycle callbacks by its launch Intent; tests restore that monitor
 identity after receiving a new Intent, without changing Orbit's received route or saved stack.
 See [AndroidX ActivityScenario](https://github.com/android/android-test/blob/main/core/java/androidx/test/core/app/ActivityScenario.java).

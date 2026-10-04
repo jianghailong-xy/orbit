@@ -3,7 +3,6 @@ package io.orbitd.android.directory
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
-import android.view.KeyEvent
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
@@ -94,7 +93,9 @@ class LinkDeviceTest {
                         compose.waitForIdle()
                         instrumentation.waitForIdleSync()
                         instrumentation.uiAutomation.waitForIdle(500, 5_000)
-                        instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+                        lateinit var activity: MainActivity
+                        scenario.onActivity { activity = it }
+                        sendBackInput(activity, File(evidence, "back-trace.txt"))
                         compose.waitForIdle()
                     }
                     compose.onNodeWithContentDescription("Back").assertIsDisplayed()
