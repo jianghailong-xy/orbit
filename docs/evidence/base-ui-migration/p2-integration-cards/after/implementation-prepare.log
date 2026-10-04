@@ -1,0 +1,20 @@
+==> reusing this worktree's lockfile-compatible installation
+==> tsc /root/.orbit/worktrees/6e5b03a4-fb73-56d2-925b-24e5ae3694ed/node_modules/.bin/tsc (Version 7.0.2)
+==> generating this branch's Prisma client
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma/schema.prisma.
+┌─────────────────────────────────────────────────────────┐
+│  Update available 7.10.0 -> 8.0.0-rc.19                 │
+│                                                         │
+│  This is a major update - please follow the guide at    │
+│  https://pris.ly/d/major-version-upgrade                │
+│                                                         │
+│  Run the following to update                            │
+│    npm i --save-dev prisma@latest                       │
+│    npm i @prisma/client@latest                          │
+└─────────────────────────────────────────────────────────┘
+==> building @orbit/shared
+==> require.resolve('@orbit/shared') from src/apiserver = /root/.orbit/worktrees/6e5b03a4-fb73-56d2-925b-24e5ae3694ed/src/shared/dist/index.js
+==> require.resolve('@orbit/shared') from src/web = /root/.orbit/worktrees/6e5b03a4-fb73-56d2-925b-24e5ae3694ed/src/shared/dist/index.js
+==> OK: /root/.orbit/worktrees/6e5b03a4-fb73-56d2-925b-24e5ae3694ed is ready to build and test
