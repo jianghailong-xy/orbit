@@ -861,7 +861,17 @@ CLI 不打印设备码；**授权码由 owner 在浏览器登录后取得**。UR
 
 通知已送达；owner 把返回码写入 0600 私有文件，在本会话仅回复“已写入”。驱动读后清空文件，写入 PTY，再发送 Enter，成功保存凭据。**TUI 会分段、带退格回显输入**，应在写码前停录该输入区间，不能只对完整字符串作替换。本次原执行记录的脱敏缺口已在开头披露。
 
-拒码文案、Google 授权码有效期、agy 整体登录超时【未确立】。本驱动等待 10 分钟后收尾，不是 agy 的已验证超时。菜单、首次主题/数据选项/目录信任可能挡在正常 prompt 前；仅有 OAuth token 不代表 TUI 已进入可输入 slash 的状态。
+**拒码文案已实测（2026-10-04，Linux，官方 agy 1.2.16）**：在隔离 PTY 中选 Google OAuth，提交一个故意错误的占位码，不使用 Google 账号。固定错误为：
+
+```text
+oauth2: "invalid_grant" "Malformed auth code."
+```
+
+拒码后进程仍存活。runner 识别该固定标记，恢复 `awaiting_code` 并保留原授权链接，让用户重新粘贴；错误响应和输入渲染都不透传。夹具见 [`google-auth-invalid-code.json`](../src/runner-go/testdata/antigravity/google-auth-invalid-code.json)，整个授权输入渲染区间已删除，只保留固定拒码错误。Google 授权码有效期、agy 整体登录超时仍【未确立】；runner 使用自己的 `loginRelayTimeout`（10 分钟），不将其描述为 agy 的超时。
+
+菜单、首次主题/数据选项/目录信任可能挡在正常 prompt 前，也可能在 OAuth 保存 token 后出现（现有登录完成录制即为后一种）。runner 在私有 Linux PTY 中设非空 `SSH_CONNECTION`、`TERM=xterm-256color`、4096 列，取 OSC 8 的完整目标（支持 BEL 和 ST 终止），等授权码提示后才上报链接。主题按 Enter；Terms 页仅在 `[x]` 时取消勾选，再 Tab、Tab、Enter 选 Done；信任的仅为空私有 cwd。写码前永久关闭这次 PTY 的公开输出，拒码重试也不重新打开；只在私有内存中识别固定页面/拒码标记。
+
+当前 runner 的成功条件是：本次 token 文件出现、完成首次设置并看到普通输入框、独立 `--print=/usage --output-format stream-json` 返回 `result.status=SUCCESS`。退出 0 不算成功。换号时旧 token 暂存在同目录的 0600 私有备份，失败或取消恢复，确认成功后删除；新尝试等待旧尝试清理完毕再启动。取消仅 SIGKILL 本次记录 PID 的进程组，不搜索其他 agy 进程。非 Linux 直接返回「Antigravity 的 Google 登录暂时只支持 Linux runner」。
 现有 `login.go` 的 pipe relay 不能原样复用；需要 PTY、菜单/提示符识别、ANSI/OSC 8 解析、受保护回填、取消及成功后独立 probe。退出 0 不能当登录成功。与[官方 headless 说明](https://antigravity.google/docs/cli/headless/)要求先交互登录再使用缓存凭据一致。
 
 ### 16.2 凭据存储与隔离
@@ -904,6 +914,10 @@ stderr 为 `Error: authentication required. Run 'agy' to log in, then retry.`，
 
 **没有专门的已验证账号/邮箱子命令；独立 `--print=/usage` 可验证同一隔离凭据能读取账号额度。**【实测，1.2.16】[`--help`](./evidence/antigravity-cli-1.2.16/google-auth-help.txt) 不列 login/status/logout/auth。`agy models` 未登录退出 1，登录后成功。`--print=/usage --output-format stream-json` 返回 `command_result` 和 `result SUCCESS`（`num_turns=0`），没有模型推理，也不返回邮箱；网络失败仍需与认证失败区分。不能用 API 模式 `models` 成功当 Google 已登录。
 
+补测（2026-10-04，无凭据）：`exec.Cmd.Stdin=nil` 使用 `/dev/null` 字符设备，agy 会显示授权链接并等待认证；`--print-timeout` 不能使它立即返回上述错误。真正的 stdin 管道（保持开启或立即 EOF）则在约 0.4–0.5 秒内返回认证错误 / 退出 1，未给授权链接、未写 token。因此独立 `/usage` 探测明确使用管道 EOF。真实未登录契约测试驱动官方 agy 的该探测，断言 `no`；另断言无 token、无环境 key 的正常健康检查为 `no`。有 token 时 `result SUCCESS` 为 `yes`；退出 1、无 `init`、stderr 同时有 `authentication required` 和 `authentication failed or timed out` 为 `no`；其他错误/网络/超时为 `unknown`。无 token 时正常健康检查沿用 `GEMINI_API_KEY` 的有/无判定，不启动 `/usage`。
+
+runner 登录、探测及后续 Google 模型目录共用 `antigravityGoogleCommand`，`--gemini_dir=<machineHome>/antigravity/google/`（已存在也校正 0700），token 校正 0600；独立空 cwd、HOME/XDG 用临时私有目录，不继承 API key/OAuth 环境变量、关闭自升级和日志，D-Bus 指向不存在的私有 socket，Google settings 不设 `modelProvider`、`useG1Credits=false`。额度随现有五分钟引擎健康缓存刷新，`loginDone` 沿已有路径立即刷新并发送 heartbeat。
+
 【二进制推断】隐藏 `AGY_CLI_CDE_AUTH_ACTION=check|login` 仅无任何 argv 参数时生效，传 `--gemini_dir` 即不走该分支；其默认文件 `$HOME/.gemini/jetski-standalone-oauth-token` 与普通 CLI 不同，不能直接用于 doctor。本任务未绕过隔离参数运行该入口。正常文件的 ID token 可提供账号 claims，但解码本地缓存不是有效登录的证明，邮箱也不应进入 heartbeat/日志。
 
 [官方认证文档](https://antigravity.google/docs/cli/install/)的登出是正常 CLI prompt 中 `/logout`。【实测】`--print=/logout --output-format stream-json` **拒绝执行，退出 2**：`/logout is not available in print mode (it clears stored credentials, an effect that outlives the run)`，见[print 拒绝](./evidence/antigravity-cli-1.2.16/google-auth-print-logout.json)。加 `--disable-slash-commands` 会把它作为字面提示词交给模型，不能用于登出。
@@ -917,6 +931,20 @@ PTY 必须先完成首次主题设置/数据选项/空目录信任，看到普�
 `agy --gemini_dir=<gd> --print=/usage --output-format stream-json` 返回 `command_result.command` 和 `result.command`，`command.name=usage`；`data.groups[].buckets[]` 含 `id`、`window`、`remaining_fraction`、`reset_time`。Gemini 和 Claude/GPT 各有 weekly、5h bucket；`result.num_turns=0`、usage 全零、退出 0，见[查询](./evidence/antigravity-cli-1.2.16/google-auth-print-usage.json)。三会话九轮及续期实验后 Gemini weekly 约剩 99.39%、5h 约 98.90%，见[实验后](./evidence/antigravity-cli-1.2.16/google-auth-usage-after-concurrency.json)。比例不能反推出绝对请求/token 上限。
 
 `--print=/credits` 同样返回结构化 `remaining_credits=0` 和升级链接，见[credits](./evidence/antigravity-cli-1.2.16/google-auth-print-credits.json)。所有推理设 `useG1Credits=false`。九轮无 429/重试提示，没有为了取得错误而耗尽近乎全部账号额度，因此真正限流时的错误内容、事件、退出码和自动重试仍【未确立】。API key 429 mock 不能替代此证据。
+
+runner 健康上报字段（第一版，每台 Linux runner 一个账号，不进入账号池）：
+
+| 字段 | 含义 |
+| --- | --- |
+| `engines[].auth` | `yes` / `no` / `unknown`，来源选择后对应的认证状态。 |
+| `engines[].authSource` | `google`：存在 Google token，优先于环境 key；`env_key`：无 token 且 runner 有 `GEMINI_API_KEY`；均无则省略。Google 认证失败不回退到 key。 |
+| `engines[].planUsage` | 仅成功 Google `/usage` 探测的额度快照，复用 `PlanUsage`；未知或未登录时省略。 |
+| `planUsage.provider` / `planUsage.fetchedAt` | `antigravity` / 这次探测完成时间（UTC RFC3339）。 |
+| `planUsage.buckets[].id` / `.window` | CLI bucket 标识 / `weekly`、`5h` 等窗口；扁平汇总 `data.groups[].buckets[]`，不上传分组描述。 |
+| `planUsage.buckets[].remainingFraction` | `remaining_fraction` 的原始剩余比例（0–1），不是已使用百分比，不推算绝对额度。零值保留。 |
+| `planUsage.buckets[].resetTime` | `reset_time`，UTC RFC3339；CLI 未提供则省略。 |
+
+只上传上述白名单字段，不包含 token、邮箱、ID token claims、原始 PTY/CLI 文本或额度描述。此额度挂在 Antigravity 的引擎健康行，heartbeat 顶层 Claude/Codex `planUsage` 的兼容结构保持不变。能力名为 `antigravity-google-login/v1`；登录取消命令 `action=cancel` 使用同一 `engine` / `attempt`，旧 attempt 的取消与授权码忽略。
 
 【官方文档，2026-10-04】[Plans](https://antigravity.google/docs/plans)说明 Free 每周刷新，Pro/Ultra 每五小时刷新且有周限制，额度随计划/工作量/容量变化；没有固定并发保证。Pro/Ultra 可启用 AI credits 超额消耗，因此“账号模式绝不另收费”不成立。[`/usage` / `/quota`](https://antigravity.google/docs/cli/commands/usage/)和[`/credits`](https://antigravity.google/docs/cli/commands/credits/)有交互面板，独立 print 查询亦受[headless 文档](https://antigravity.google/docs/cli/headless/)支持；不能把 slash 命令塞进禁用 slash 的常驻会话查询。超额开关见[`useG1Credits`](https://antigravity.google/docs/cli/credits/)。
 
