@@ -36,6 +36,12 @@ function Samples() {
   const legacy = params.get('system') === 'antd';
   const kind = params.get('sample') ?? 'attachment';
   const state = params.get('state') ?? 'default';
+  const side = params.get('side') === 'top' ? 'top' : 'bottom';
+  const align = params.get('align') === 'end' ? 'end' : params.get('align') === 'center' ? 'center' : 'start';
+  const placement = side === 'top' ? 'topLeft' : 'bottomLeft';
+  const calloutPlacement = side === 'top' ? align === 'center' ? 'top' : align === 'end' ? 'topRight' : 'topLeft'
+    : align === 'center' ? 'bottom' : align === 'end' ? 'bottomRight' : 'bottomLeft';
+  const anchor = params.get('anchor');
   const [value, setValue] = useState<string | null>(kind === 'account' ? '' : 'never');
   const [open, setOpen] = useState(false);
   const [many, setMany] = useState(kind === 'tags' ? ['a@b.test', 'c@d.test'] : ['bug', 'docs', 'ops']);
@@ -44,36 +50,39 @@ function Samples() {
     { key: 'private', label: <div>Only you<div className="fixture-detail">Turns the link off.</div></div>, icon: <LockOutlined />, selected: true },
     { key: 'public', label: <div>Anyone with the link<div className="fixture-detail">No sign-in needed to view.</div></div>, icon: <GlobalOutlined /> },
   ];
-  const items = kind === 'access' ? accessItems : attachmentItems;
-  const menuClass = kind === 'access' ? 'fixture-access-menu share-access-menu' : 'composer-attach-menu';
+  const submenuItems = [{ key: 'provider', label: 'Provider', popupClassName: 'sample-submenu', children: [{ key: 'codex', label: 'Codex' }, { key: 'claude', label: 'Claude' }] }];
+  const items = kind === 'access' ? accessItems : kind === 'submenu' ? submenuItems : attachmentItems;
+  const menuClass = kind === 'access' ? 'fixture-access-menu share-access-menu' : kind === 'attachment' ? 'composer-attach-menu' : '';
   const trigger = <Button disabled={disabled}>{kind === 'access' ? 'Access' : 'Add attachment'}</Button>;
-  return <section className="choices-sample" aria-label="Appearance sample">
-    <div tabIndex={-1} data-testid="neutral">{kind === 'attachment' || kind === 'access' ? legacy
-      ? <Dropdown open={open} onOpenChange={setOpen} trigger={['click']} disabled={disabled} menu={{ className: `sample-surface ${menuClass}`, selectedKeys: kind === 'access' ? ['private'] : [], items: items.map((entry) => entry.type === 'separator' ? { key: entry.key, type: 'divider' } : entry.type === 'group' ? null : { key: entry.key, label: entry.label, icon: entry.icon, disabled: entry.disabled }) }}>{trigger}</Dropdown>
-      : <Menu open={open} onOpenChange={setOpen} trigger={trigger} disabled={disabled} items={items} variant={kind === 'attachment' ? 'attachment' : 'default'} popupClassName={`sample-surface ${menuClass}`} />
+  return <section className="choices-sample" aria-label="Appearance sample" style={anchor ? { position: 'fixed', padding: 0,
+    top: anchor !== 'bottom' ? 12 : undefined, bottom: anchor === 'bottom' ? 12 : undefined,
+    left: anchor === 'right' ? undefined : anchor === 'center' ? '45%' : 24, right: anchor === 'right' ? 12 : undefined } : undefined}>
+    <div tabIndex={-1} data-testid="neutral">{['attachment', 'access', 'submenu'].includes(kind) ? legacy
+      ? <Dropdown open={open} onOpenChange={setOpen} placement={calloutPlacement} trigger={['click']} disabled={disabled} menu={{ className: `sample-surface ${menuClass}`, selectedKeys: kind === 'access' ? ['private'] : [], items: kind === 'submenu' ? submenuItems : (items as MenuItem[]).map((entry) => entry.type === 'separator' ? { key: entry.key, type: 'divider' } : entry.type === 'group' ? null : { key: entry.key, label: entry.label, icon: entry.icon, disabled: entry.disabled }) }}>{trigger}</Dropdown>
+      : <Menu open={open} onOpenChange={setOpen} side={side} align={align} trigger={trigger} disabled={disabled} items={items} variant={kind === 'attachment' ? 'attachment' : 'default'} popupClassName={`sample-surface ${menuClass}`} />
       : kind === 'popover' ? legacy
-        ? <AntPopover title="Context" content={<div>12,800 of 128,000 tokens</div>} trigger="click" placement="bottomLeft" classNames={{ root: 'sample-floating-root', arrow: 'sample-arrow', container: 'sample-surface', title: 'sample-title' }}><Button>Context</Button></AntPopover>
-        : <Popover trigger={<Button>Context</Button>} title="Context" side="bottom" align="start" popupClassName="sample-surface"><div>12,800 of 128,000 tokens</div></Popover>
+        ? <AntPopover title="Context" content={<div>12,800 of 128,000 tokens</div>} trigger="click" placement={calloutPlacement} classNames={{ root: 'sample-floating-root', arrow: 'sample-arrow', container: 'sample-surface', title: 'sample-title' }}><Button>Context</Button></AntPopover>
+        : <Popover trigger={<Button>Context</Button>} title="Context" side={side} align={align} popupClassName="sample-surface"><div>12,800 of 128,000 tokens</div></Popover>
       : kind === 'tooltip' ? legacy
-        ? <AntTooltip title="Usage from this account" placement="bottomLeft" classNames={{ root: 'sample-floating-root', arrow: 'sample-arrow', container: 'sample-surface' }}><Button>Usage</Button></AntTooltip>
-        : <Tooltip content="Usage from this account" side="bottom" align="start" popupClassName="sample-surface"><Button>Usage</Button></Tooltip>
+        ? <AntTooltip title="Usage from this account" placement={calloutPlacement} classNames={{ root: 'sample-floating-root', arrow: 'sample-arrow', container: 'sample-surface' }}><Button>Usage</Button></AntTooltip>
+        : <Tooltip content="Usage from this account" side={side} align={align} popupClassName="sample-surface"><Button>Usage</Button></Tooltip>
       : ['multiple', 'tags'].includes(kind) ? legacy
         ? <AntSelect aria-label="Sample choice" className="sample-choice" classNames={{ item: 'sample-chip', popup: { root: 'sample-surface' } }}
-          mode={kind === 'tags' ? 'tags' : 'multiple'} size={kind === 'multiple' ? 'small' : 'middle'} value={many} onChange={setMany}
+          placement={placement} mode={kind === 'tags' ? 'tags' : 'multiple'} size={kind === 'multiple' ? 'small' : 'middle'} value={many} onChange={setMany}
           options={kind === 'tags' ? [] : labels} maxTagCount={kind === 'multiple' ? 2 : undefined} disabled={disabled} allowClear showSearch optionFilterProp="label" virtual={false}
           open={kind === 'tags' ? false : undefined} tokenSeparators={[',', ' ']} />
         : <MultiSelect aria-label="Sample choice" className="sample-choice" popupClassName="sample-surface"
-          mode={kind === 'tags' ? 'tags' : 'multiple'} size={kind === 'multiple' ? 'small' : 'middle'} value={many} onValueChange={setMany}
+          side={side} mode={kind === 'tags' ? 'tags' : 'multiple'} size={kind === 'multiple' ? 'small' : 'middle'} value={many} onValueChange={setMany}
           options={kind === 'tags' ? [] : labels} maxTagCount={kind === 'multiple' ? 2 : undefined} disabled={disabled} clearable
           open={kind === 'tags' ? false : undefined} tokenSeparators={[',', ' ']} />
       : legacy
-        ? <AntSelect aria-label="Sample choice" value={value} onChange={setValue} size={kind === 'expiry' ? 'small' : 'middle'}
+        ? <AntSelect placement={placement} aria-label="Sample choice" value={value} onChange={setValue} size={kind === 'expiry' ? 'small' : 'middle'}
           className="sample-choice" disabled={disabled} allowClear={kind === 'search'} showSearch={kind === 'search'} optionFilterProp="label" virtual={false}
           classNames={{ popup: { root: 'sample-surface' } }} options={state === 'empty' ? [] : kind === 'account' ? accounts : expiry}
           optionRender={kind === 'account' ? (option) => accountDetail(option.data) : undefined} />
         : kind === 'search'
-          ? <Combobox aria-label="Sample choice" options={state === 'empty' ? [] : expiry} value={value} onValueChange={setValue} className="sample-choice" popupClassName="sample-surface" clearable disabled={disabled} />
-          : <Select aria-label="Sample choice" options={state === 'empty' ? [] : kind === 'account' ? accounts : expiry} value={value} onValueChange={setValue}
+          ? <Combobox side={side} aria-label="Sample choice" options={state === 'empty' ? [] : expiry} value={value} onValueChange={setValue} className="sample-choice" popupClassName="sample-surface" clearable disabled={disabled} />
+          : <Select side={side} aria-label="Sample choice" options={state === 'empty' ? [] : kind === 'account' ? accounts : expiry} value={value} onValueChange={setValue}
             size={kind === 'expiry' ? 'small' : 'middle'} className="sample-choice" popupClassName="sample-surface" disabled={disabled} renderOption={kind === 'account' ? accountDetail : undefined} />}
     </div>
   </section>;

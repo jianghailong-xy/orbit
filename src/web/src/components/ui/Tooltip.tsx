@@ -16,7 +16,7 @@ export function Tooltip({ children, content, disabled, side = 'top', align = 'ce
   return <BaseTooltip.Root open={layer.open} onOpenChange={layer.setOpen} disabled={disabled || content == null || content === ''}>
     <BaseTooltip.Trigger render={children} aria-describedby={describedBy} delay={100} closeDelay={100} />
     <BaseTooltip.Portal container={layer.container()}>
-      <BaseTooltip.Positioner side={side} align={align} sideOffset={12} collisionPadding={8} className="orbit-floating-positioner orbit-callout-positioner" style={{ zIndex: layer.zIndex + 70 }}>
+      <BaseTooltip.Positioner side={side} align={align} sideOffset={12} collisionPadding={8} className="orbit-floating-positioner" style={{ zIndex: layer.zIndex + 70 }}>
         <BaseTooltip.Popup role="tooltip" id={id} className={`orbit-tooltip${popupClassName ? ` ${popupClassName}` : ''}`} style={popupStyle}>
           <BaseTooltip.Arrow className="orbit-floating-arrow" style={calloutArrowStyle} />{content}
         </BaseTooltip.Popup>

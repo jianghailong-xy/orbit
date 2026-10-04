@@ -18,7 +18,7 @@ function visit(suite) {
     const name = `${test.projectName}--${spec.title}`.replace(/[^a-zA-Z0-9.-]+/g, '-');
     const artifacts = [];
     for (const attachment of test.results.flatMap((result) => result.attachments)) {
-      const extension = { 'application/json': 'json', 'image/png': 'png', 'text/markdown': 'md' }[attachment.contentType];
+      const extension = { 'application/json': 'json', 'image/png': 'png', 'text/markdown': 'md', 'application/zip': 'zip' }[attachment.contentType];
       if (!extension) continue;
       const file = `${name}--${attachment.name.replace(/[^a-zA-Z0-9.-]+/g, '-')}.${extension}`;
       const content = attachment.path ? readFileSync(attachment.path) : Buffer.from(attachment.body, 'base64');

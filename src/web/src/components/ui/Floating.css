@@ -24,14 +24,15 @@
 .orbit-menu-item[data-danger] { color: var(--orbit-control-error); }
 .orbit-menu-item[data-danger][data-highlighted] { color: white; background: var(--orbit-control-error); }
 .orbit-menu-item[data-disabled] { color: var(--orbit-control-disabled-text); cursor: not-allowed; background: transparent; }
-.orbit-menu-separator { height: 1px; margin: 4px 0; background: var(--orbit-border-split); }
+.orbit-menu-separator { height: 1px; margin: 4px 0; line-height: 0; background: var(--orbit-border-split); }
 .orbit-menu-group-label { padding: 5px 12px; color: var(--text-3); }
 .orbit-menu-check { display: inline-flex; width: 14px; }
 .orbit-menu-check:not([data-checked]) { visibility: hidden; }
 .orbit-popover { --orbit-callout-bg: var(--orbit-bg-elevated); position: relative; padding: 12px; max-width: min(100vw - 16px, var(--available-width)); }
 .orbit-popover-title { min-width: 177px; margin: 0 0 8px; font: inherit; font-weight: 600; }
-.orbit-callout-positioner { filter: var(--orbit-filter-popover); }
-.orbit-popover, .orbit-tooltip { box-shadow: none; }
+/* Filter belongs to the animated surface: opacity must composite its shadow
+   together with the surface, rather than cast a shadow through fading content. */
+.orbit-popover, .orbit-tooltip { box-shadow: none; filter: var(--orbit-filter-popover); }
 .orbit-tooltip { --orbit-callout-bg: var(--orbit-tooltip-bg); position: relative; max-width: 250px; min-height: 32px; padding: 6px 8px; color: #fff; background: var(--orbit-tooltip-bg); border-radius: 6px; overflow-wrap: break-word; }
 /* Retains Ant Design's rounded arrow geometry (MIT; ./antd-empty.LICENSE). */
 .orbit-floating-arrow { position: absolute; width: 16px; height: 16px; overflow: hidden; pointer-events: none; }
@@ -40,14 +41,68 @@
 .orbit-floating-arrow[data-side='bottom'] { top: 0; transform: translateY(-100%); }
 .orbit-floating-arrow[data-side='left'] { right: 0; transform: translateX(100%) rotate(90deg); }
 .orbit-floating-arrow[data-side='right'] { left: 0; transform: translateX(-100%) rotate(-90deg); }
+@keyframes orbit-slide-up-in {
+  from { opacity: 0; transform: scaleY(.8); transform-origin: 0% 0%; }
+  to { opacity: 1; transform: scaleY(1); transform-origin: 0% 0%; }
+}
+@keyframes orbit-slide-up-out {
+  from { opacity: 1; transform: scaleY(1); transform-origin: 0% 0%; }
+  to { opacity: 0; transform: scaleY(.8); transform-origin: 0% 0%; }
+}
+@keyframes orbit-slide-down-in {
+  from { opacity: 0; transform: scaleY(.8); transform-origin: 100% 100%; }
+  to { opacity: 1; transform: scaleY(1); transform-origin: 100% 100%; }
+}
+@keyframes orbit-slide-down-out {
+  from { opacity: 1; transform: scaleY(1); transform-origin: 100% 100%; }
+  to { opacity: 0; transform: scaleY(.8); transform-origin: 100% 100%; }
+}
+@keyframes orbit-zoom-in { from { opacity: 0; transform: scale(.8); } to { opacity: 1; transform: scale(1); } }
+@keyframes orbit-zoom-out { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(.8); } }
+@media (prefers-reduced-motion: no-preference) {
+  .orbit-menu, .orbit-select-popup, .orbit-popover, .orbit-tooltip {
+    --orbit-popup-duration: .2s;
+    --orbit-popup-enter: orbit-slide-up-in;
+    --orbit-popup-exit: orbit-slide-up-out;
+    --orbit-popup-ease-in: cubic-bezier(.23, 1, .32, 1);
+    --orbit-popup-ease-out: cubic-bezier(.755, .05, .855, .06);
+  }
+  .orbit-menu[data-side='top'], .orbit-select-popup[data-side='top'] {
+    --orbit-popup-enter: orbit-slide-down-in;
+    --orbit-popup-exit: orbit-slide-down-out;
+  }
+  .orbit-menu[data-nested], .orbit-popover, .orbit-tooltip {
+    --orbit-popup-enter: orbit-zoom-in;
+    --orbit-popup-exit: orbit-zoom-out;
+    --orbit-popup-ease-in: cubic-bezier(.08, .82, .17, 1);
+    --orbit-popup-ease-out: cubic-bezier(.78, .14, .15, .86);
+  }
+  .orbit-menu[data-nested] { transform-origin: 0 0; }
+  .orbit-popover, .orbit-tooltip { --orbit-callout-origin: 50%; }
+  .orbit-popover[data-align='start'], .orbit-tooltip[data-align='start'] { --orbit-callout-origin: 12px; }
+  .orbit-popover[data-align='end'], .orbit-tooltip[data-align='end'] { --orbit-callout-origin: calc(100% - 12px); }
+  .orbit-popover[data-side='bottom'], .orbit-tooltip[data-side='bottom'] { transform-origin: var(--orbit-callout-origin) -6px; }
+  .orbit-popover[data-side='top'], .orbit-tooltip[data-side='top'] { transform-origin: var(--orbit-callout-origin) calc(100% + 6px); }
+  .orbit-popover[data-side='right'], .orbit-tooltip[data-side='right'] { transform-origin: -6px var(--orbit-callout-origin); }
+  .orbit-popover[data-side='left'], .orbit-tooltip[data-side='left'] { transform-origin: calc(100% + 6px) var(--orbit-callout-origin); }
+  .orbit-tooltip { --orbit-popup-duration: .1s; }
+  /* Entrance stops applying transform after finishing, as the old motion class
+     did, so the popup does not retain a containing block for nested portals. */
+  :is(.orbit-menu, .orbit-select-popup, .orbit-popover, .orbit-tooltip)[data-open] {
+    animation: var(--orbit-popup-enter) var(--orbit-popup-duration) var(--orbit-popup-ease-in) backwards;
+  }
+  :is(.orbit-menu, .orbit-select-popup, .orbit-popover, .orbit-tooltip)[data-closed] {
+    animation: var(--orbit-popup-exit) var(--orbit-popup-duration) var(--orbit-popup-ease-out) both;
+    pointer-events: none;
+  }
+}
 @media (max-width: 600px) {
   .orbit-menu[data-variant='attachment'] {
     min-width: 250px; width: max-content; max-width: calc(100vw - 44px);
     padding: 10px 0; border-radius: 26px;
     box-shadow: 0 18px 44px rgba(0, 0, 0, .17), 0 2px 8px rgba(0, 0, 0, .06);
   }
-  .orbit-menu[data-variant='attachment'] .orbit-menu-item { height: 42.4px; padding: 0 0 0 31px; border-radius: 0; font-size: 17px; gap: 16px; }
+  .orbit-menu[data-variant='attachment'] .orbit-menu-item { height: 42.4px; font-size: 17px; gap: 24px; }
   .orbit-menu[data-variant='attachment'] .orbit-menu-icon { min-width: 19px; font-size: 19px; }
   .orbit-menu[data-variant='attachment'] .orbit-menu-item:not([data-disabled]) .orbit-menu-icon { color: #8a8a8e; }
-  .orbit-menu[data-variant='attachment'] .orbit-menu-separator { margin: 9.5px 24px; background: #eaeaea; }
 }

@@ -108,6 +108,8 @@ P2.2 提供 `Menu`、`Popover`、`Tooltip`、`Select`、`Combobox` 和 `MultiSel
 
 `MultiSelect` 使用字符串数组 value/onValueChange；搜索选项后保持列表打开，支持逐项移除、全清、分组和 maxTagCount。`mode="tags"`、`open={false}`、`searchValue/onSearch`、`tokenSeparators={[',', ' ']}` 对应现有邮件输入：Enter 或失焦提交尾项，输入法组合期间不提交，值去重；格式校验和分享请求仍由业务负责。Backspace 删除数组末项，即使它在折叠计数内。
 
+正常动效沿用旧实测：根菜单/选择列表200ms纵向展开，子菜单/Popover 200ms缩放，Tooltip 100ms缩放；入场/退场缓动与方向原点分别匹配旧组件。通过 Base UI 公开 data-open/data-closed/data-side/data-align/data-nested 设置 CSS 动画，由其生命周期等待退场完成，退场面不接收指针。入场结束不保留 transform，避免改变嵌套 portal 的定位参照。减少动态效果时与 P2.1 一样禁用缩放/渐隐。手机附件菜单除任务指定字号外保持旧实测布局：5px/12px行padding、4px行圆角、原分隔线、图标x=12px、总高240.953125px（本例5行）。
+
 样式只使用 Orbit 类名、自己的属性与 Base UI 公开的 data-selected/data-highlighted/data-disabled 等状态；不查询或覆盖 AntD DOM。箭头与空态 SVG 沿用原 MIT 许可图形，保留许可。详见 [P2.2 证据](../../../../../docs/evidence/base-ui-migration/p2.2/README.md)，其中明示原手机14px覆盖缺陷与任务要求17px的差异，以及旧 Modal 最后一次 Tab 的宿主缺陷。
 
 ## 验证入口

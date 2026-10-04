@@ -54,7 +54,8 @@ async function measure(locator, contents = false) {
       }
       return node.getBoundingClientRect().width > 0;
     };
-    const result = { surface: metrics(el), rows: [...el.querySelectorAll('[role="menuitem"], [role="option"]')].map((row) => ({ label: row.textContent, ...metrics(row) })) };
+    const result = { surface: metrics(el), rows: [...el.querySelectorAll('[role="menuitem"], [role="option"]')].map((row) => ({ label: row.textContent, ...metrics(row) })),
+      separators: [...el.querySelectorAll('[role="separator"]')].map(metrics) };
     if (contents) {
       result.origin = { x: root.x, y: root.y };
       result.chips = [...el.querySelectorAll('.sample-chip, .orbit-multi-chip')].filter(visible).map(metrics);
@@ -104,6 +105,13 @@ for (const kind of ['attachment', 'access', 'expiry', 'account', 'search', 'popo
       if (kind !== 'tooltip') await page.mouse.move(0, 0);
       await settle(surface);
       measurements[system] = { ...measurements[system], popup: await measure(surface) };
+      if (kind === 'attachment') {
+        measurements[system].labelStarts = [];
+        for (const label of ['File', 'Image', 'Shell', 'Skill', 'Command']) {
+          measurements[system].labelStarts.push(await surface.getByText(label, { exact: true }).evaluate((el) =>
+            el.getBoundingClientRect().x - el.closest('.sample-surface').getBoundingClientRect().x));
+        }
+      }
       await shot(info, `${system}-${kind}-open`, surface);
       if (['attachment', 'access'].includes(kind)) {
         glyphs[system] = await surface.evaluate((el) => {
@@ -113,9 +121,6 @@ for (const kind of ['attachment', 'access', 'expiry', 'account', 'search', 'popo
             return { kind: icon.tagName, x: r.x - root.x, y: r.y - root.y, width: r.width, height: r.height, color: getComputedStyle(icon).color, paths: [...icon.querySelectorAll('path')].map((path) => path.getAttribute('d')) };
           });
         });
-        if (kind === 'attachment' && system === 'orbit' && info.project.use.hasTouch) {
-          expect(await surface.locator('.orbit-menu-label').first().evaluate((el) => el.getBoundingClientRect().x - el.closest('.orbit-menu').getBoundingClientRect().x)).toBe(66);
-        }
       }
       if (['popover', 'tooltip'].includes(kind)) {
         const arrow = page.locator(system === 'antd' ? '.sample-arrow:visible' : '.orbit-floating-arrow:visible');
@@ -126,7 +131,7 @@ for (const kind of ['attachment', 'access', 'expiry', 'account', 'search', 'popo
           triggerOffset: { x: box.x - triggerBox.x, y: box.y - triggerBox.y - triggerBox.height },
           arrow: { x: arrowBox.x - box.x, y: arrowBox.y - box.y, width: arrowBox.width, height: arrowBox.height },
           shape: await arrow.evaluate((el) => ({ fill: getComputedStyle(el, '::before').backgroundColor, clipPath: getComputedStyle(el, '::before').clipPath })),
-          filter: await page.locator(system === 'antd' ? '.sample-floating-root:visible' : '.orbit-callout-positioner:visible').evaluate((el) => getComputedStyle(el).filter),
+          filter: await page.locator(system === 'antd' ? '.sample-floating-root:visible' : '.sample-surface:visible').evaluate((el) => getComputedStyle(el).filter),
         };
         const x = Math.max(0, box.x - 40), y = Math.max(0, box.y - 40);
         await info.attach(`${system}-${kind}-context`, { body: await page.screenshot({ animations: 'disabled', clip: { x, y, width: Math.min(box.width + 80, info.project.use.viewport.width - x), height: box.height + 80 } }), contentType: 'image/png' });
@@ -135,22 +140,15 @@ for (const kind of ['attachment', 'access', 'expiry', 'account', 'search', 'popo
     await attach(info, 'appearance', measurements);
     if (Object.keys(glyphs).length) {
       await attach(info, 'menu-glyphs', glyphs);
-      if (kind === 'attachment' && info.project.use.hasTouch) {
-        expect(glyphs.orbit.filter(({ kind }) => kind === 'svg').map(({ x, width, height }) => ({ x, width, height }))).toEqual(Array(4).fill({ x: 31, width: 19, height: 19 }));
-        expect(glyphs.orbit.find(({ kind }) => kind === 'SPAN')).toMatchObject({ x: 31, width: 19 });
-      } else expect(glyphs.orbit).toEqual(glyphs.antd);
+      expect(glyphs.orbit).toEqual(glyphs.antd);
     }
     if (kind === 'attachment' && info.project.use.hasTouch) {
-      // P0's original phone sample also measured 14px items: AntD's generated
-      // selector overrides the existing 17px rule. The task explicitly requires
-      // the confirmed 17px/42.4px/26px design. Retain both raw samples; assert the
-      // requested differences exactly, and every other measured property unchanged.
+      // Only the task's explicit 17px text differs from the measured 14px.
+      // Padding, row radii, separators, icon geometry and total height stay equal.
       const expected = structuredClone(measurements.antd);
-      expected.popup.surface.height = 40 + 5 * 42.390625;
-      expected.popup.rows.forEach((row, i) => Object.assign(row, {
-        fontSize: '17px', borderRadius: '0px', padding: '0px 0px 0px 31px',
+      expected.popup.rows.forEach((row) => Object.assign(row, {
+        fontSize: '17px',
         lineHeight: info.project.use.browserName === 'webkit' ? '26.714285px' : '26.7143px',
-        y: 10 + i * 42.390625 + (i >= 2 ? 20 : 0),
       }));
       expect(measurements.orbit).toEqual(expected);
     } else expect(measurements.orbit).toEqual(measurements.antd);
