@@ -209,6 +209,52 @@ test('requestStart files the request in the runner owner scope, as the acting se
   assert.deepEqual(filed, { itemId: 'item-1', state: 'OPEN', warnings: [] });
 });
 
+test('requestDone is exposed as POST projects/:id/done-requests', () => {
+  const handler = RunnerProjectsController.prototype.requestDone;
+  assert.equal(Reflect.getMetadata(PATH_METADATA, handler), 'projects/:id/done-requests');
+  assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.POST);
+});
+
+/** A done request is filed the same way: in the runner owner's scope, as the acting session. */
+test('requestDone files the request in the runner owner scope, as the acting session', async () => {
+  const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, 'requestDone') as
+    | Record<string, { data?: unknown }>
+    | undefined;
+  const headers = Object.values(args ?? {})
+    .map((arg) => arg.data)
+    .filter((data) => typeof data === 'string' && data.includes('-'));
+  assert.deepEqual(headers, ['x-orbit-session-id']);
+
+  const seen: unknown[] = [];
+  const openItems = {
+    requestDone: async (...call: unknown[]) => {
+      seen.push(call);
+      return { itemId: 'item-2', state: 'OPEN', warnings: [] };
+    },
+  } as never;
+  const controller = new RunnerProjectsController(
+    {} as never,
+    acceptanceDouble(),
+    {} as never,
+    orchestrationDouble(),
+    openItems,
+  );
+  const body = {
+    judgment: 'Every criterion is met and on main; the go-live made no commits, and I checked it.',
+    gaps: [{
+      criterionKey: 'criterion-7',
+      whyNotProven: 'its task made no commits, so there is no merge to hold a receipt for',
+      coordinatorChecked: 'the live web bundle has the new strings',
+      evidenceRefs: ['task 34Y4xlxE comment'],
+    }],
+  };
+
+  const filed = await controller.requestDone(RUNNER, ` ${SESSION_ID} `, 'project-1', body);
+
+  assert.deepEqual(seen, [['owner-1', 'project-1', SESSION_ID, body]]);
+  assert.deepEqual(filed, { itemId: 'item-2', state: 'OPEN', warnings: [] });
+});
+
 test('retryIntegration is exposed as POST projects/:id/tasks/:taskId/integration/retry', () => {
   const handler = RunnerProjectsController.prototype.retryIntegration;
   assert.equal(
@@ -701,6 +747,10 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     'listProjectHandoffs',
     'recordMergeEvidence',
     'removeProject',
+    // The coordinator asking the owner to record the project done (`project_request_done`). It is
+    // the counterpart of requestStart: the service checks readiness and files a card; only the
+    // owner's press records DONE.
+    'requestDone',
     // The coordinator asking the owner to START the project (`project_request_start`). Beside the
     // question and for the same reasons: only the conversation the project is coordinated from may
     // ask, and asking starts nothing — the owner's press on the start card does — so the acting
@@ -751,6 +801,7 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     listProjectHandoffs: RequestMethod.GET,
     recordMergeEvidence: RequestMethod.POST,
     removeProject: RequestMethod.DELETE,
+    requestDone: RequestMethod.POST,
     requestStart: RequestMethod.POST,
     resolveBlocker: RequestMethod.POST,
     resolveOpenItem: RequestMethod.POST,

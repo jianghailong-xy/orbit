@@ -164,7 +164,7 @@ func TestProjectCLIHelpAndUnknownCommand(t *testing.T) {
 	// family does not route to is text nobody can read.
 	for _, action := range []string{
 		"get", "create", "update", "delete",
-		"crossings", "merge-evidence", "resolve-blocker", "request-start",
+		"crossings", "merge-evidence", "resolve-blocker", "request-start", "request-done",
 	} {
 		out.Reset()
 		if err := cmdProjectCLI([]string{action, "--help"}, strings.NewReader(""), &out); err != nil {
@@ -210,7 +210,9 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	// under the same grant, so it is the one other entry a caller without orchestration cannot see.
 	// The tenth is `request-start`, the coordinator asking the owner to start the project: it writes
 	// a request and starts nothing, so it needs no grant beyond being the project's coordinator.
-	if len(specs) != 10 {
+	// The eleventh is `request-done`, the same coordinator asking the owner to record the project
+	// done: a request again, which records nothing, for the same reason.
+	if len(specs) != 11 {
 		t.Fatalf("project capabilities = %#v", projectCLICapabilities)
 	}
 	spec, ok := specs["project_get"]
@@ -241,7 +243,7 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	for _, tool := range []string{
 		"project_create", "project_update", "project_delete",
 		"project_merge_evidence", "project_ensure_coordinator", "project_send",
-		"project_request_start",
+		"project_request_start", "project_request_done",
 	} {
 		write, ok := specs[tool]
 		if !ok {
@@ -332,7 +334,7 @@ func TestProjectCommandsArePreApprovedForAgents(t *testing.T) {
 	// readers can see them.
 	// TestEveryAdvertisedCapabilityIsPreApproved walks the specs themselves and reddens the moment
 	// this list and that one fall out of step, which is how the three came to be added here.
-	for _, action := range []string{"get", "create", "update", "delete", "crossings", "resolve-blocker", "merge-evidence", "request-start"} {
+	for _, action := range []string{"get", "create", "update", "delete", "crossings", "resolve-blocker", "merge-evidence", "request-start", "request-done"} {
 		if !strings.Contains(rules, "Bash(/usr/local/bin/orbit project "+action+" *)") {
 			t.Fatalf("project %s is not pre-approved: %q", action, rules)
 		}

@@ -1,11 +1,17 @@
 # Antigravity Google 登录：web 与 macOS/iOS 客户端证据
 
 任务 `34ZogkzPnQ44ODj72jrYb`，对应项目验收条目 2（`4q7GDYg6GzChkJE0bfhFGV`）。
-本轮分支：`orbit/web-macos-ios-antigravity-google-284433`。
-重放基线：`bd688174c2eba84fc0922118172eafc1c50fe222`，父提交为 `ec23262944e9e353099940770c0881433e90c4a1`。
+当前分支：`orbit/web-macos-ios-antigravity-google-747820`。
+当前同步基线：upstream main `d22b276cccbac66b672e25944be0317d6df420eb`，项目 tip `80e7ad8fd8ee581f5c2f66490f1966f487ad3fb6`。
 控制面契约来自第 3 步提交 `7cd0d809be5052ef1eadd2738a2217403767eeb9`，已以 `8725dd57d` 落地。
 
-## 最新 main 上的冲突处理
+## 当前基线同步
+
+按任务最新评论，本次只同步基线，不重做客户端功能。先纳入上一轮已通过验证的合并提交 `a2afeeacffbf8ab4cfaf96aadc83bc53468ddfb5`，再真实合并上述 upstream main，保留项目 tip、全部客户端修复和 main 测试修复的祖先历史；Git 自动合并没有遗留冲突。曾冲突的 `SessionProviderChoices.swift`、`RunnerEngines.tsx` 保留客户端行为，`AccountPauseAPIClientTests.swift`、`CodexSignInCopyParityTests.swift`、`SharedPoolCopyParityTests.swift` 与当前 main 逐字一致。
+
+合并后的 web 全量、OrbitKit 全量、生产构建、1280px / 443px 截图和本分支 client CI 必须重新验证。本次工具行、确切 HEAD、CI 链接和 Orbit 附件回执以本任务会话提交的新证据信封为准。下方旧工具行及 main 既有失败对照仅保留作历史记录，不代替本次验证。
+
+## 历史 main 上的冲突处理
 
 只重放客户端实现及取证文件，保留最新 main 的控制面和 runner 改动。
 
@@ -15,7 +21,7 @@
 
 未登录的 Linux runner 提供 Google 登录及条款提示；已登录时显示 Google 账号、每周 / 5 小时剩余额度与重置时间。macOS 和旧 runner 显示限制，env key 路径保留。选择器、未登录错误卡和共享原生源码同步这些状态；未知认证不显示成已登录，缺 CLI 优先显示未安装。
 
-## 本轮测试
+## 历史测试（分支 `orbit/web-macos-ios-antigravity-google-284433`）
 
 | 检查 | 本任务会话的 Orbit 后台工具行 | 结果 |
 | --- | --- | --- |

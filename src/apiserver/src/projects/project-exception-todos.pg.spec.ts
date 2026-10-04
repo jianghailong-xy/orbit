@@ -2453,6 +2453,57 @@ test('the owner closes what is theirs, and the two kinds that have a press of th
     }
   });
 
+/**
+ * An exception that became the owner's is one of the things a project is not recorded done over
+ * (`project_request_done`, `project-done-request.ts`): the coordinator's request names it among its
+ * refusals and files nothing. While the coordinator still carries it, it is the coordinator's work
+ * and not an owner item; once the owner has closed it, it holds nothing back.
+ */
+test('an exception that escalated to the owner holds the coordinator\'s request to record the project done',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'done-held', 'PARKED');
+      const a = await attempt(stack, w, 'done-held', { taskStatus: TaskStatus.IN_PROGRESS });
+      await failTurn(stack, w, a);
+      const ownerItems = async () => {
+        const thrown = await stack.openItems.requestDone(w.ownerId, w.projectId, w.coordinatorSessionId!, {
+          judgment: 'Everything that can be done is done.',
+          gaps: [],
+        }).then(() => null, (error: unknown) => error);
+        assert.ok(thrown instanceof HttpException, 'a project with a failed task cannot be asked done');
+        assert.equal(thrown.getStatus(), 409);
+        const body = thrown.getResponse() as {
+          code: string;
+          written: number;
+          findings: Array<{ code: string; items: Array<{ itemId: string; kind: string }> }>;
+        };
+        assert.equal(body.code, 'DONE_REQUEST_NOT_READY');
+        assert.equal(body.written, 0);
+        return body.findings.find((finding) => finding.code === 'DONE_OWNER_ITEMS_OPEN')?.items ?? [];
+      };
+
+      // With the coordinator, the failure is its work: not an item waiting on the owner.
+      const opened = await onlyItemFor(stack.db, w, a.taskId, 'the failure opened one item');
+      assert.equal(opened.assignee, 'COORDINATOR');
+      assert.deepEqual(await ownerItems(), []);
+
+      // The clock hands it to the owner, and the request names it.
+      const owned = await escalate(stack, w, a);
+      assert.deepEqual(await ownerItems(), [{ itemId: owned.id, kind: 'TASK_FAILED', title: owned.title }]);
+
+      // The owner closes it: it waits on nobody, and holds nothing back.
+      await door(stack)(w, owned.id, { kind: 'OWNER' }, '看过了：环境问题，这条不再需要处理');
+      assert.deepEqual(await ownerItems(), []);
+      const filed = await stack.db.projectOpenItem.count({
+        where: { projectId: w.projectId, kind: 'DONE_REQUEST' },
+      });
+      assert.equal(filed, 0, 'and none of the refused requests was filed');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
 test('hands it back with the window restarted, and queues it on the coordinator afresh',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
