@@ -7,6 +7,8 @@ import { App as AntApp } from 'antd';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WikiChangeset, WikiChangesetOp } from '@orbit/shared';
 import { WikiReviewPage } from './WikiReviewPage';
+import { ToastViewport } from './ToastViewport';
+import { clearToasts } from '../lib/toastStore';
 
 /**
  * Review's Edit, driven in a document: the button opens a form on the proposal's own title and one
@@ -162,7 +164,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  act(() => root.unmount());
+  act(() => {
+    clearToasts();
+    root.unmount();
+  });
   container.remove();
   vi.unstubAllGlobals();
 });
@@ -187,6 +192,7 @@ async function mount(changesets: WikiChangeset[], ready: string): Promise<void> 
           <AntApp>
             <WikiReviewPage spaceSlug={null} />
           </AntApp>
+          <ToastViewport />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -271,6 +277,15 @@ describe("Review's Edit", () => {
       ],
     });
     expect('summary' in (decides[0].body.decisions[0].edited as object)).toBe(false);
+    // The toast says what was decided, about the entry by the title the owner gave it — not a bare
+    // "Decided" that names neither.
+    await vi.waitFor(
+      () => expect(document.body.querySelector('.toast-viewport')?.textContent).toContain('Accepted with your edits'),
+      { timeout: 10_000 },
+    );
+    expect(document.body.querySelector('.toast-viewport .toast-sub')?.textContent).toBe(
+      'Secret redaction misses keys joined by an underscore',
+    );
     // Accepted, like Accept: the form closes and the decided card leaves the queue.
     await vi.waitFor(() => expect(form()).toBeNull(), { timeout: 10_000 });
     await vi.waitFor(() => expect(container.textContent).toContain('Nothing is waiting for you.'), { timeout: 10_000 });

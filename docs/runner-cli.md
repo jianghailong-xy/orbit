@@ -23,6 +23,17 @@ orbit task delete <task-id> --json
 orbit task-list create --title "Release" --json
 ```
 
+To create a task with existing uploaded Orbit attachments, pass their IDs:
+
+```bash
+orbit task create --title "Review screenshots" --completion-criterion EVIDENCE_JUDGMENT \
+  --attachment-id '<attachment-id>,<attachment-id>' --json
+```
+
+`--attachment-id` is optional and repeatable. Attachments must belong to your account; they are copied
+into the new task's inputs, preserving the originals. Batch task JSON and the MCP tools `task_create`
+and `task_create_batch` accept the optional `attachmentIds` array on each task.
+
 Inside a task-backed Orbit session, task commands may omit the task ID and use `ORBIT_TASK_ID`. In-session
 CLI mutations are attributed to the current agent and session. Headless mutations that use only a runner
 credential fall back to the runner owner.

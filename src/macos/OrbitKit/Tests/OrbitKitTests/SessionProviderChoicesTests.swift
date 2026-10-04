@@ -162,8 +162,8 @@ final class SessionProviderChoicesTests: XCTestCase {
         XCTAssertEqual(choices.map(\.slug), ["opencode"])
     }
 
-    /// Antigravity is its own runtime too, and no configured provider borrows it, so a session on
-    /// it has nowhere to move — and none of the Claude or Kimi rows may be offered as if it did.
+    /// Antigravity is its own runtime too: with no Gemini key connected, a session on it has nowhere
+    /// to move — and none of the Claude or Kimi rows may be offered as if it did.
     func testSameRuntimeLeavesAntigravityAlone() {
         let configured = [anthropic, anthropic2, moonshot]
         let choices = SessionProviderChoices.sameRuntime(
@@ -172,6 +172,25 @@ final class SessionProviderChoicesTests: XCTestCase {
         XCTAssertEqual(choices.map(\.slug), ["antigravity"])
         XCTAssertEqual(SessionProviderChoices.executingRuntime("antigravity", configured: configured),
                        "antigravity")
+    }
+
+    /// A Gemini key borrows Antigravity, so it and the engine are the same CLI with different keys:
+    /// each is offered to the other, and to nobody else. Mirrors web's sameRuntimeChoices case.
+    func testAGeminiKeySharesTheAntigravityRuntime() {
+        let gemini = ConfiguredProvider(slug: "gemini", label: "Gemini", runtime: "antigravity",
+                                        models: [ConfiguredProviderModel(value: "gemini-3.8-flash",
+                                                                         label: "Gemini 3.8 Flash")],
+                                        defaultModel: "gemini-3.8-flash", presetSlug: "gemini",
+                                        modelsFromRuntime: true)
+        let configured = [anthropic, moonshot, gemini]
+        let choices = SessionProviderChoices.choices(configured: configured)
+        XCTAssertEqual(SessionProviderChoices.executingRuntime("gemini", configured: configured), "antigravity")
+        for from in ["antigravity", "gemini"] {
+            XCTAssertEqual(SessionProviderChoices.sameRuntime(from, in: choices, configured: configured)
+                .map(\.slug), ["antigravity", "gemini"])
+        }
+        XCTAssertFalse(SessionProviderChoices.sameRuntime("anthropic", in: choices, configured: configured)
+            .map(\.slug).contains("gemini"))
     }
 
     func testSameRuntimeLeavesALoneProviderAloneSoTheMenuCanBeHidden() {

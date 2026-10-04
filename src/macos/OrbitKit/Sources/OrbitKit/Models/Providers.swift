@@ -28,8 +28,9 @@ public struct ConfiguredProviderModel: Codable, Equatable, Sendable, Identifiabl
 public struct ConfiguredProvider: Codable, Equatable, Sendable, Identifiable {
     public let slug: String
     public let label: String
-    /// The built-in runtime the provider borrows ("claude" in Phase 1). Optional so a future
-    /// server shape still decodes; nothing client-side branches on it yet.
+    /// The built-in runtime the provider borrows: "claude", "codex", "kimi" or "antigravity".
+    /// Optional so a future server shape still decodes; anything else reads as "claude", as on the
+    /// server (`AgentDefaults.runtime(for:configured:)`).
     public let runtime: String?
     public let models: [ConfiguredProviderModel]
     public let defaultModel: String?
@@ -38,9 +39,9 @@ public struct ConfiguredProvider: Codable, Equatable, Sendable, Identifiable {
     /// back to the neutral glyph). Optional so an older server's payload still decodes.
     public let presetSlug: String?
     /// True when this vendor's endpoint is the runtime CLI's own (Anthropic for claude, OpenAI for
-    /// codex): the runner's live catalogue describes it, so `models` is only a fallback and the
-    /// pickers follow the borrowed runtime's catalog instead. Optional so an older server's payload
-    /// still decodes. Mirrors web's `ConfiguredProvider.modelsFromRuntime`.
+    /// codex, Gemini for antigravity): the runner's live catalogue describes it, so `models` is only
+    /// a fallback and the pickers follow the borrowed runtime's catalog instead. Optional so an
+    /// older server's payload still decodes. Mirrors web's `ConfiguredProvider.modelsFromRuntime`.
     public let modelsFromRuntime: Bool?
     /// Subscription quota for *this row's credential*, when it has one to report (an Anthropic
     /// endpoint reached with a subscription token). Nil for a metered API key or a third-party

@@ -14,6 +14,11 @@ import {
   OWNER_CONFIRMATION_ANSWERS_TURN_KEY_PREFIX,
   OWNER_CONFIRMATION_REVIEW_TURN_KEY_PREFIX,
 } from '../sessions/watch-turn-key';
+import {
+  appendEvidenceReviewContext,
+  evidenceReviewRetryTurnId,
+  isEvidenceReviewTurn,
+} from './evidence-review';
 import { latestOwnerConfirmationRequest, ownerConfirmationReport } from './owner-confirmation-read';
 
 /**
@@ -34,6 +39,11 @@ import { latestOwnerConfirmationRequest, ownerConfirmationReport } from './owner
  * Every key is derived from the row it carries, which is what makes each delivery happen once. A
  * failed review turn is re-sent as itself (auto-retry.service.ts), under the same prefix and review
  * with a `:retry:` suffix, so its block is rendered again rather than an older message being re-sent.
+ *
+ * The B line's evidence review (`evidence-review.ts`, `evidence-review:v1:<evidenceId>`) is a turn of
+ * the first two's kind — nobody's words, rendered at hand-out, re-sent as itself — so the three
+ * helpers below that every platform-turn door asks (`isConfirmationReviewContentTurn`,
+ * `confirmationReviewRetryTurnId`, `queuedConfirmationReviewContent`) answer for it too.
  */
 
 const UUID_AT_START = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?::|$)/i;
@@ -65,7 +75,7 @@ export function confirmationReviewRetryTurnId(clientTurnId: string | null | unde
   if (reviewId) return `${ownerConfirmationReviewTurnId(reviewId)}:retry:${nonce}`;
   const recordId = returnRecordIdOfTurn(clientTurnId);
   if (recordId) return `${confirmationReturnTurnId(recordId)}:retry:${nonce}`;
-  return null;
+  return evidenceReviewRetryTurnId(clientTurnId, nonce);
 }
 
 export function confirmationReturnTurnId(recordId: string): string {
@@ -85,9 +95,11 @@ export function ownerConfirmationAnswersTurnId(decisionId: string): string {
   return `${OWNER_CONFIRMATION_ANSWERS_TURN_KEY_PREFIX}${decisionId}`;
 }
 
-/** The two turns whose words are rendered at delivery rather than stored (see the header). */
+/** The turns whose words are rendered at delivery rather than stored (see the header). */
 export function isConfirmationReviewContentTurn(clientTurnId: string | null | undefined): boolean {
-  return isOwnerConfirmationReviewTurn(clientTurnId) || isConfirmationReturnTurn(clientTurnId);
+  return isOwnerConfirmationReviewTurn(clientTurnId)
+    || isConfirmationReturnTurn(clientTurnId)
+    || isEvidenceReviewTurn(clientTurnId);
 }
 
 function clip(text: string, max: number): string {
@@ -336,13 +348,16 @@ export async function readConfirmationReturnCard(
   };
 }
 
-/** What the queued row of either content turn shows before it is handed out: the block itself. */
+/** What the queued row of any content turn shows before it is handed out: the block itself. */
 export async function queuedConfirmationReviewContent(db: Db, clientTurnId: string): Promise<string> {
   if (isOwnerConfirmationReviewTurn(clientTurnId)) {
     return (await appendOwnerConfirmationReviewContext(db, clientTurnId, '')) ?? '';
   }
   if (isConfirmationReturnTurn(clientTurnId)) {
     return (await appendConfirmationReturnContext(db, clientTurnId, '')) ?? '';
+  }
+  if (isEvidenceReviewTurn(clientTurnId)) {
+    return (await appendEvidenceReviewContext(db, clientTurnId, '')) ?? '';
   }
   return '';
 }

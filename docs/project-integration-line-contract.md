@@ -60,13 +60,14 @@
 | `owner-confirmation-review:v1:<reviewId>` | 确认请求的审查方会话 | `docs/owner-confirmation-review-contract.md` D2 |
 | `confirmation-return:v1:<recordId>` | 执行会话（由 Orbit 转交审查方的话） | 同上 B3 |
 | `owner-confirmation-answers:v1:<decisionId>` | 确认请求的审查方会话 | 同上 Q5 |
+| `evidence-review:v1:<evidenceId>` | 项目外任务的派活会话（它按证据结案） | `docs/task-completion-criteria.md`「Outside a project, the dispatching session settles the evidence」 |
 
 **G7（轮次来源）**：`conversation_turn` 没有来源列。保险丝（§6.1，以保险丝计数任务的定义为准）用「这一轮有没有 `conversation_turn`」来区分：Orbit 投递的轮次都有一行，runner 把该轮的事件记在它名下；engine 自己起的轮次没有，它的 `run_event.type = 'turn_end'` 不挂 `turn_id`。
 
 | 来源 | 判据 | 类别 |
 |---|---|---|
 | owner 消息、另一会话的 `session_send`、auto-retry 重发 | 有 `conversation_turn`，`clientTurnId` 随机或由客户端给出 | 外部 |
-| 平台投递 | 有 `conversation_turn`，`clientTurnId` 为上表前缀（含确认审查的三个）、`coordinator-wake-delivery:v1:` 派生 uuid、`task-comment-mention:`、`system:task-acceptance:v1:` 或 `initial-<sessionId>` | 外部 |
+| 平台投递 | 有 `conversation_turn`，`clientTurnId` 为上表前缀（含确认审查的三个与项目外证据的一个）、`coordinator-wake-delivery:v1:` 派生 uuid、`task-comment-mention:`、`system:task-acceptance:v1:` 或 `initial-<sessionId>` | 外部 |
 | Watch 投递（匹配与到期）、会话定时唤醒 | 有 `conversation_turn`，`watch:<id>:…` 或定时唤醒的前缀 | 外部（已知边界：agent 自己约定的定时唤醒不计入自发，见附录 A-Q11） |
 | engine 自己起的轮次（后台任务通知、ScheduleWakeup、Monitor） | 没有 `conversation_turn`；`run_event.type = 'turn_end'` 且 `turn_id IS NULL` | 自发 |
 
@@ -185,6 +186,8 @@ interface UpdateProjectIntegrationDto {
 ```
 
 没有代码库行时创建：`canonical_repo_url` 取项目协调工作区的 `repo_url`，缺失则 409 `INTEGRATION_REPOSITORY_UNKNOWN`。写 `project.exception_escalation_seconds` 的方法里不得出现 `status:` 键（`project-status-write-sites.spec.ts` 按「同一方法内有 `.project.update` 且有 `status:`」认写入方）。
+
+`workspace.repo_url` 可手动填写，也由 runner 的目录探测自动补空：读取工作目录的 `origin`，去掉 URL 中的凭据后随下一次心跳上报；服务端仅在 workspace 的 runner、原始 `workDir` 仍匹配且 `repo_url` 为 NULL 或空字符串时回填。新建和既有工作区都走这条路径；旧 runner 未上报、目录不存在或没有 origin 时不写，不覆盖已有地址，也不改变已建立的项目代码库绑定。检测是异步的，尚无地址时应提示等待 runner 检测或在工作区设置填写 Repository URL。
 
 **L6（upstream 不探测）**：apiserver 没有仓库可问。`upstream_ref` 默认 `refs/heads/main`，owner 可在锁定前改。runner 在作业里发现它不存在时，作业以 `ERROR / BASE_REF_NOT_FOUND` 结束并生成待办（§2.6），**不回退到 master**：产品与仓库无关（owner 决定 3），猜分支名就是在为仓库约定做特判。
 
@@ -412,7 +415,7 @@ interface IntegrationJobCommand {
 | **J-S1 FETCH** | `git fetch <remote> <target_ref> <upstream_ref>`；T0 = 远端目标 tip（`PROJECT_BRANCH` 线目标不存在时 T0 = U）；U = 远端 upstream tip；S = `git rev-parse refs/heads/<源分支>` → `source_sha` | fetch 失败 → `ERROR / FETCH_FAILED`；源分支不存在 → `ERROR / SOURCE_BRANCH_MISSING`；upstream 不存在 → `ERROR / BASE_REF_NOT_FOUND` |
 | **J-S2 MAIN_SYNC**（仅 `PROJECT_BRANCH`） | U 不是 T0 的祖先时：S 同时包含 U 与 T0、且 S ≠ U，说明源分支已经自己做过这次吸收（§3.1 M3），这里不再合，base = T0，J-S4 走 MERGE 模式；否则在 T0 上 `git merge --no-ff -m "Merge <upstream> into <target>" U` → M = `main_sync_sha`，base = M。U 是 T0 的祖先时 base = T0 | 冲突 → `CONFLICT`（`phase = MAIN_SYNC`，冲突路径来自 `git diff --name-only --diff-filter=U`）。源分支缺了本次 J-S1 取到的任一 tip（没吸收过，或吸收之后 upstream、项目分支又前进了），照旧在 T0 上合，冲突照旧报。S = U 不算吸收：它没有自己的东西，照旧合，由 J-S3 答 |
 | **J-S3 已包含** | S 是 base 的祖先：S **等于会话记录的 base**（分支停在 fork 点，自己没有提交）→ `NOTHING_TO_LAND`（0300），并实测 S 是否 U 的祖先，报为 `sourceOnUpstream`（0346）；否则 → `ALREADY_LANDED`。两者都不推送，丢弃 M | |
-| **J-S4 REBASE / MERGE** | fork = `git merge-base S base`；`git rev-list --merges fork..S` 非空，或 J-S2 判定源分支已吸收 upstream → **MERGE 模式** `git merge --no-ff S`（保住合并提交里的冲突解法；后一种 T0 是 S 的祖先，合出来的树就是 S 的树）；否则 `git rebase --onto base <fork 或 sessionBaseSha> S`。结果 C = `tested_sha` | 冲突 → `CONFLICT`（`phase = REBASE` 或 `MERGE`） |
+| **J-S4 REBASE / MERGE** | fork = `git merge-base S base`；`git rev-list --merges fork..S` 非空，或 J-S2 判定源分支已吸收 upstream → **MERGE 模式** `git merge --no-ff S`（保住合并提交里的冲突解法；后一种 T0 是 S 的祖先，合出来的树就是 S 的树）；否则 `git rebase --onto base anchor S`：anchor 默认取 fork，仅 `sessionBaseSha` 非空、是 S 的祖先且不是 fork 的祖先时取 `sessionBaseSha`（会话 base 早于或等于 fork 时用 fork，避免重放 base 已有的提交）。结果 C = `tested_sha` | 冲突 → `CONFLICT`（`phase = REBASE` 或 `MERGE`） |
 | **J-S5 CHECK** | 组合树自带 `scripts/worktree-overlay.sh` 时先运行它（见下方「检查前的铺环境」），再在 C 上依次跑任务验收命令（有 `acceptance_command` 时）与合并检查命令（有配置时），逐条比对退出码 | 铺环境失败或超时 → `ERROR / CHECK_TREE_UNPREPARED`；任一退出码不一致 → `CHECK_FAILED`（什么都不推送） |
 | **J-S6a 落地前核对** | `tested_tree_sha = git rev-parse C^{tree}`；要求 `HEAD = C` 且 `git status --porcelain --untracked-files=no` 为空（检查不得改动或提交已跟踪文件） | → `ERROR / CHECK_MUTATED_TREE` |
 | **J-S6 PUSH** | REMOTE：`git push <remote> C:<target_ref>`（不带 force，只能 fast-forward）；RUNNER_LOCAL：`git update-ref <target_ref> C T0`。随后在 workDir 前移本地目标 ref（同 `rebaseFastForward`：目标在根 checkout 上时 `merge --ff-only`，否则 `branch -f`） | 非 fast-forward 被拒 → 回 J-S1，至多 2 轮 → `ERROR / TARGET_MOVED`；其他 → `ERROR / PUSH_REJECTED` |

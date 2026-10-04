@@ -34,13 +34,17 @@ public enum SharedPools {
             resetsAt: free || stops.isEmpty ? nil : SharedPoolPage.earliest(stops),
             // Why nothing can run, in the words the owner's own pool page uses (web's `keysPool`):
             // 'Signed out' while the pool holds accounts and OpenAI refused every one, else the keys' own
-            // answer. A shared pool holds no account: its keys are the whole answer, as before.
+            // answer. A pool holding no account — a shared pool (0321) among them, which migration 0371
+            // lets one hold — is its keys' own answer alone.
             unavailable: revives ? nil
                 : !pool.logins.isEmpty ? CodexLoginPool.signedOutWords
                 : pool.keys.isEmpty ? (pool.shared ? "No keys" : CodexLoginPool.notSignedIn)
                 : "No key can run",
             members: members,
-            shared: pool)
+            shared: pool,
+            // What the pool runs on, from its own view: a member's page drawn from this needs it to know
+            // the pool can hold ChatGPT accounts.
+            engine: pool.engine)
     }
 
     /// The pool's ChatGPT accounts as its members, before its keys: every session of the pool starts on

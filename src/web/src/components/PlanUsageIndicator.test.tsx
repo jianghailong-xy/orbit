@@ -27,6 +27,8 @@ import {
   resetRunner,
 } from '../lib/codexResetCredit.fixtures';
 import { PlanUsageIndicator, type PlanUsageAccount } from './PlanUsageIndicator';
+import { ToastViewport } from './ToastViewport';
+import { clearToasts } from '../lib/toastStore';
 
 /**
  * The Plan usage pill and its Codex reset credit, pressed in a real DOM: the popover's keyboard path,
@@ -164,6 +166,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  await act(async () => clearToasts());
   await unmount();
   document.body.innerHTML = '';
   Object.assign(CODEX_RESET_CLIENT_TIMING, TIMING);
@@ -187,6 +190,7 @@ async function mount(runner: CodexResetRunner, reset = true, account?: PlanUsage
                 reset={reset ? { runner, workspaceId: 'Workspace1' } : undefined}
                 account={account}
               />
+              <ToastViewport />
             </MemoryRouter>
           </AntApp>
         </ConfigProvider>
@@ -234,7 +238,7 @@ const button = (name: string) =>
   Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((each) => each.textContent?.trim() === name) ??
   null;
 const toastText = () =>
-  Array.from(document.querySelectorAll('.ant-message'))
+  Array.from(document.querySelectorAll('.toast-viewport'))
     .map((each) => each.textContent)
     .join(' ');
 

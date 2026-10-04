@@ -267,6 +267,47 @@ test('the app ValidationPipe keeps every batch field it is meant to forward', as
   });
 });
 
+test('the app ValidationPipe keeps the owner-confirmation reason at the three doors, and refuses others', async () => {
+  // `owner-confirmation-reason.ts`: the field a session's OWNER_CONFIRMED declaration needs outside an
+  // Automatic project. Stripped here, every such declaration from MCP or the CLI would be refused.
+  const pipe = new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false });
+  const reason = { ownerConfirmationReason: 'DEPLOY', ownerConfirmationReasonNote: 'ships 1.4' };
+  const created = (await pipe.transform(
+    { title: 'ship', completionCriterion: 'OWNER_CONFIRMED', ...reason },
+    { type: 'body', metatype: CreateTaskDto },
+  )) as CreateTaskDto;
+  assert.equal(created.ownerConfirmationReason, 'DEPLOY');
+  assert.equal(created.ownerConfirmationReasonNote, 'ships 1.4');
+  const batch = (await pipe.transform(
+    { tasks: [{ title: 'ship', completionCriterion: 'OWNER_CONFIRMED', ...reason }] },
+    { type: 'body', metatype: CreateTasksBatchDto },
+  )) as CreateTasksBatchDto;
+  assert.equal(batch.tasks[0].ownerConfirmationReason, 'DEPLOY');
+  assert.equal(batch.tasks[0].ownerConfirmationReasonNote, 'ships 1.4');
+  const updated = (await pipe.transform(
+    { ownerConfirmationReason: null, ownerConfirmationReasonNote: null },
+    { type: 'body', metatype: UpdateTaskDto },
+  )) as UpdateTaskDto;
+  assert.equal(updated.ownerConfirmationReason, null, 'null takes the reason back on the edit door');
+  assert.equal(updated.ownerConfirmationReasonNote, null);
+
+  // Four reasons and no fifth; a sentence, not an essay.
+  for (const ownerConfirmationReason of ['DEPLOY', 'IRREVERSIBLE', 'OWNER_DEVICE_OR_ACCOUNT', 'OWNER_TRADE_OFF']) {
+    assert.equal((await validate(plainToInstance(CreateTaskDto, {
+      title: 'x', ownerConfirmationReason,
+    }))).length, 0, ownerConfirmationReason);
+  }
+  assert.notEqual((await validate(plainToInstance(CreateTaskDto, {
+    title: 'x', ownerConfirmationReason: 'BECAUSE_I_SAID_SO',
+  }))).length, 0);
+  assert.notEqual((await validate(plainToInstance(UpdateTaskDto, {
+    ownerConfirmationReason: 'deploy',
+  }))).length, 0);
+  assert.notEqual((await validate(plainToInstance(CreateTaskDto, {
+    title: 'x', ownerConfirmationReason: 'DEPLOY', ownerConfirmationReasonNote: 'x'.repeat(501),
+  }))).length, 0);
+});
+
 test('the app ValidationPipe keeps the codeless declaration and its reason on the edit door', async () => {
   // Same pipe: `codeless` and `codelessReason` reach TasksService.update rather than being stripped
   // as undecorated keys, which is how a declaration sent by MCP or the CLI would vanish silently.

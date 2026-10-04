@@ -159,11 +159,15 @@ final class OwnerConfirmationDoorTests: XCTestCase {
         let sent = try XCTUnwrap(recorder.sent.first)
         XCTAssertEqual(sent.method, "POST")
         XCTAssertEqual(sent.path, "/api/tasks/34LMiluvx0jK63cj8arWl/owner-confirmation")
-        XCTAssertEqual(Set(sent.body.keys), ["decision", "requestId"],
-                       "a confirm carries the decision and the report it answers, and no reason")
+        XCTAssertEqual(Set(sent.body.keys), ["decision", "requestId", "reviewRecordId"],
+                       "a confirm carries the decision, the report it answers and the review it was "
+                           + "drawn with, and no reason")
         XCTAssertEqual(sent.body["decision"] as? String, "CONFIRM")
         XCTAssertEqual(sent.body["requestId"] as? String, Self.request,
                        "the requestId read from the card, which the door compares with what waits now")
+        // A card with no review still says so: the key present and null is how the door knows this
+        // client knows about reviews (contract §7 Q3).
+        XCTAssertTrue(sent.body["reviewRecordId"] is NSNull)
 
         XCTAssertEqual(result.decision, .confirm)
         XCTAssertEqual(result.completed, true)
@@ -185,9 +189,11 @@ final class OwnerConfirmationDoorTests: XCTestCase {
 
         let sent = try XCTUnwrap(recorder.sent.first)
         XCTAssertEqual(sent.path, "/api/tasks/34LMiluvx0jK63cj8arWl/owner-confirmation")
-        XCTAssertEqual(Set(sent.body.keys), ["decision", "requestId"])
+        XCTAssertEqual(Set(sent.body.keys), ["decision", "requestId", "reviewRecordId"])
         XCTAssertTrue(sent.body["requestId"] is NSNull,
                       "the key is present and null, so the door is told which question this answers")
+        XCTAssertTrue(sent.body["reviewRecordId"] is NSNull,
+                      "a panel confirmation answers no review, and says so")
     }
 
     /// A send-back sends the same two bindings with the reason beside them, trimmed.
@@ -508,12 +514,14 @@ final class OwnerConfirmationDoorTests: XCTestCase {
     }
 
     /// The refusal a press met is said as staleness when that is what the door's code means. Each of
-    /// the door's three "this card is out of date" codes is spelled here, because a client that
+    /// the door's "this card is out of date" codes is spelled here — the three it always had and the
+    /// two a review adds (docs/owner-confirmation-review-contract.md §7 Q3) — because a client that
     /// re-spells one is a client that stops recognising it.
     func testTheStaleRefusalCodesAreTheDoorsOwn() {
         XCTAssertEqual(OwnerConfirmations.staleCodes,
                        ["OWNER_CONFIRMATION_STALE", "OWNER_CONFIRMATION_NOTHING_TO_SEND_BACK",
-                        "OWNER_CONFIRMATION_TASK_SETTLED"])
+                        "OWNER_CONFIRMATION_TASK_SETTLED", "OWNER_CONFIRMATION_REVIEW_STALE",
+                        "OWNER_CONFIRMATION_ANSWERS_REQUIRED"])
         for code in OwnerConfirmations.staleCodes {
             XCTAssertEqual(OwnerConfirmations.refusalTitle(code: code),
                            "Not recorded: this card is out of date")

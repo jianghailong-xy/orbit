@@ -308,7 +308,6 @@
       ],
       "projections": [
         "task.dispatchAttempt",
-        "task.dispatchAuthority",
         "project runtime lease",
         "session lease owner"
       ],

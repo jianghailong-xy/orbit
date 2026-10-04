@@ -75,6 +75,7 @@ function team(viewer: string, over: Partial<SharedPool> = {}): SharedPool {
     // A pool made on the shared pools page: API keys alone, no ChatGPT account of anybody's.
     logins: [],
     membersCanAdd: true,
+    membersCanAddAccounts: true,
     ownKeyFirst: true,
     viewerRole: viewer === WIKOVA ? 'ADMIN' : 'MEMBER',
     window: { start: '2026-09-01T00:00:00.000Z', end: '2026-10-01T00:00:00.000Z' },
@@ -196,6 +197,15 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
     const dialogs = document.body.querySelectorAll<HTMLElement>('.ant-modal');
     return dialogs[dialogs.length - 1] ?? null;
   };
+  /** "Add account", then the key kind on the choice it opens: how a key goes in on a pool whose people
+   *  may sign accounts of their own in too (migration 0371). */
+  const addKeyPress = async () => {
+    await click(button('Add account'));
+    const choose = dialog()!;
+    await click(choose.querySelector('input[type="radio"][value="key"]'));
+    await click(button('Continue', choose));
+  };
+
   const click = async (el: Element | null | undefined) => {
     if (!el) throw new Error('nothing to click');
     await act(async () => {
@@ -413,7 +423,9 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
     expect(container.querySelector('.pool-sub')?.textContent).toBe(
       'Codex pool · Me and 3 people · 2 of 5 accounts available · each session starts on the key with the most room, and stays on it until that one runs out.',
     );
-    expect(button('Add a key')).not.toBeNull();
+    // The press asks which kind first, accounts and keys alike (migration 0371 lets a shared pool hold
+    // both).
+    expect(button('Add account')).not.toBeNull();
     expect(container.querySelector('.pool-detail .re-runner')?.textContent).toBe('Accounts5');
     expect(container.querySelectorAll('[aria-label^="Remove "]')).toHaveLength(5);
     expect(container.querySelectorAll('[aria-label^="Disable "]')).toHaveLength(2);
@@ -479,8 +491,8 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
     expect(who.querySelector('.ant-segmented')).toBeNull();
     expect(who.querySelectorAll('button.ant-switch')).toHaveLength(0);
 
-    // Members may add while the pool lets them.
-    expect(button('Add a key')).not.toBeNull();
+    // Members may add while the pool's rules let them — the same press, and accounts too since 0371.
+    expect(button('Add account')).not.toBeNull();
     expect(button('Delete pool')).toBeNull();
     expect(container.querySelector('.pool-danger-note')?.textContent).toBe('Your keys leave with you.');
     await click(button('Leave pool'));
@@ -489,10 +501,18 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
     expect(path).toBe('/providers');
   });
 
-  it('takes Add a key away from a member once only admins may put keys in', async () => {
-    shared = [team(LIN, { membersCanAdd: false })];
+  it('takes the press away from a member once neither rule lets them put anything in', async () => {
+    shared = [team(LIN, { membersCanAdd: false, membersCanAddAccounts: false })];
     await mount(`/providers/pools/${POOL_ID}`);
+    expect(button('Add account')).toBeNull();
     expect(button('Add a key')).toBeNull();
+  });
+
+  it('offers a member only keys once the accounts’ own rule is off, though members may still put keys in', async () => {
+    shared = [team(LIN, { membersCanAddAccounts: false })];
+    await mount(`/providers/pools/${POOL_ID}`);
+    expect(button('Add account')).toBeNull();
+    expect(button('Add a key')).not.toBeNull();
   });
 
   it('puts a key in: what it means, then its name, the key and the cap — and after, only its fingerprint', async () => {
@@ -512,7 +532,7 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
         ],
       });
     await mount(`/providers/pools/${POOL_ID}`);
-    await click(button('Add a key'));
+    await addKeyPress();
     let modal = dialog()!;
     expect(modal.querySelector('.ant-modal-title')?.textContent).toBe('Add a key to Team Codex');
     expect(modal.textContent).toContain('Paste an OpenAI API key to put in this pool.');
@@ -557,7 +577,7 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
       });
     };
     await mount(`/providers/pools/${POOL_ID}`);
-    await click(button('Add a key'));
+    await addKeyPress();
     await click(button('Continue', dialog()!));
     await type(fieldInput('Name', dialog()!), 'lin-org-1');
     await type(dialog()!.querySelector<HTMLInputElement>('input[aria-label="Key"]'), NEW_KEY);
@@ -580,7 +600,7 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
       throw new ApiError("That isn't an OpenAI API key — paste an organization or project key (sk-…)", 400, 'POOL_KEY_FORMAT');
     };
     await mount(`/providers/pools/${POOL_ID}`);
-    await click(button('Add a key'));
+    await addKeyPress();
     await click(button('Continue', dialog()!));
     await type(fieldInput('Name', dialog()!), 'mine');
     await type(dialog()!.querySelector<HTMLInputElement>('input[aria-label="Key"]'), 'sk-ant-api03-nope');

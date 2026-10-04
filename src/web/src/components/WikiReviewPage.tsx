@@ -9,7 +9,7 @@ import {
   LeftOutlined,
   RightOutlined,
 } from '@ant-design/icons';
-import { Alert, App, Button, Dropdown, Modal } from 'antd';
+import { Alert, Button, Dropdown, Modal } from 'antd';
 import type { WikiEntryChanges } from '@orbit/shared';
 import { relTime } from './Transcript';
 import { WikiCard, WikiEmpty } from './WikiCards';
@@ -27,6 +27,7 @@ import {
   WIKI_AUTO_ACCEPT_HINT,
   WIKI_CHALLENGE,
   WIKI_CHALLENGE_NOTE,
+  WIKI_DECIDE_FAILED,
   WIKI_NEXT,
   WIKI_NO_REVIEW,
   WIKI_PREVIOUS,
@@ -59,11 +60,13 @@ import {
   wikiTabOf,
   wikiWebDerivedWarning,
   wikiChangesDiff,
+  wikiDecidedToast,
   type WikiChangeset,
   type WikiAnchor,
   type WikiChangesetOp,
   type WikiSource,
 } from '../lib/wiki';
+import { useToast } from '../lib/toast';
 import { decideWikiChangeset, useWikiWrite, wikiEditedChanges, type WikiDecision } from '../lib/wikiWrites';
 import {
   WIKI_AMEND,
@@ -271,14 +274,19 @@ function ReviewCard({
   const kindWord = kind ? wikiKindWord(kind) : WIKI_ENTRY_WORD;
 
   const write = useWikiWrite((decisions: WikiDecision[]) => decideWikiChangeset(changeset.id, decisions));
-  const { message } = App.useApp();
+  const toast = useToast();
 
+  // The outcome in the answer's own words, and the entry it was about on the line under it: by the
+  // time the toast lands the pager has moved on to the next card. An edit names the entry by the
+  // title the owner gave it.
+  const decided = (action: WikiDecision['action'], about: string | null | undefined = title) =>
+    toast.success(wikiDecidedToast(op.op, action), about ?? undefined);
   const decide = async (decision: WikiDecision) => {
     try {
       await write.mutateAsync([decision]);
-      message.success(decision.action === 'reject' ? 'Rejected' : 'Decided');
+      decided(decision.action);
     } catch (error) {
-      message.error(error instanceof Error ? error.message : 'The server refused it');
+      toast.error(WIKI_DECIDE_FAILED, error instanceof Error ? error.message : undefined);
     }
   };
 
@@ -291,7 +299,7 @@ function ReviewCard({
   // here: the reason is about what the owner typed, and the form keeps that open beside it.
   const acceptEdited = async (edited: WikiEntryChanges) => {
     await write.mutateAsync([{ opId: op.id, action: 'edit', edited }]);
-    message.success('Decided');
+    decided('edit', edited.title ?? title);
   };
 
   const sources = sourcesOf(op);
@@ -506,7 +514,7 @@ function ReviewCard({
           proposed={{ title: target.data.title, summary: target.data.summary }}
           onAccept={async (edited) => {
             await write.mutateAsync([{ opId: op.id, action: 'amend', edited }]);
-            message.success('Decided');
+            decided('amend', edited.title ?? title);
           }}
           onClose={() => setAmending(false)}
           okText={WIKI_AMEND}

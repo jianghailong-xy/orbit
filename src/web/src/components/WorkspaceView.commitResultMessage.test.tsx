@@ -6,6 +6,8 @@ import { App as AntApp } from 'antd';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
+import { ToastViewport } from './ToastViewport';
+import { clearToasts } from '../lib/toastStore';
 
 vi.mock('../api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api')>();
@@ -148,9 +150,10 @@ const waitForUi = async (assertion: () => void): Promise<void> => {
 
 /** The card the user reads, as rendered — not the payload it was built from. */
 const toastStatus = (): string | null =>
-  document.body.querySelector('.session-lifecycle-toast-status')?.textContent ?? null;
+  document.body.querySelector('.toast-viewport .toast-head')?.textContent ?? null;
+// A result card's diagnostic line, or a failure's block of the runner's words.
 const toastDetail = (): string | null =>
-  document.body.querySelector('.session-lifecycle-toast-detail')?.textContent ?? null;
+  document.body.querySelector('.toast-viewport .toast-detail, .toast-viewport .toast-reason')?.textContent ?? null;
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -199,7 +202,7 @@ beforeEach(() => {
       return reply([]);
     }
     if (path.startsWith('/sessions')) return reply([sessionRow()]);
-    if (path === '/providers' || path === '/providers/pools' || path === '/session-tags' || path === '/runners' || path === '/task-lists') {
+    if (path === '/providers' || path === '/providers/pools' || path === '/session-tags' || path === '/session-folders' || path === '/runners' || path === '/task-lists') {
       return reply([]);
     }
     // The decision strip renders from this queue and has nothing to draw here; it must still be a
@@ -249,6 +252,7 @@ afterEach(async () => {
   client = null;
   container = null;
   try {
+    await act(async () => clearToasts());
     if (mountedRoot) await act(async () => mountedRoot.unmount());
   } finally {
     try {
@@ -294,6 +298,7 @@ async function commitAndAwaitOutcome(outcome: {
           <AntApp>
             <WorkspaceView runner={RUNNER} />
           </AntApp>
+          <ToastViewport />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -349,7 +354,7 @@ describe('a finished commit reports the runner line', () => {
       error: 'error: Your local changes to the following files would be overwritten by merge',
     });
 
-    expect(toastStatus()).toBe('Commit failed');
+    expect(toastStatus()).toBe("Couldn't commit");
     expect(toastDetail()).toBe(
       'error: Your local changes to the following files would be overwritten by merge',
     );
@@ -366,7 +371,7 @@ describe('a finished commit reports the runner line', () => {
       error: "fatal: Unable to create '/work/.git/index.lock': File exists.",
     });
 
-    expect(toastStatus()).toBe('Commit failed');
+    expect(toastStatus()).toBe("Couldn't commit");
     expect(toastDetail()).toBe(plain);
   });
 });

@@ -71,6 +71,7 @@ import {
   refreshOwnerConfirmationViews,
   sendOwnerDecision,
 } from './OwnerConfirmationCard';
+import { UNDER_REVIEW } from './OwnerConfirmationReview';
 
 // Graph rendering pulls in React Flow + dagre. Keep that weight out of the initial task-list
 // bundle; it is fetched only when someone opens a task with dependencies and selects Graph.
@@ -826,7 +827,7 @@ export function TaskDetailPanel({
       qc.invalidateQueries({ queryKey: ['task', taskId] });
       qc.invalidateQueries({ queryKey: ['tasks'] });
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => message.error("Couldn't change the assignee", e.message),
   });
 
   // Pin (or clear, when null) the provider/model this task's runs use instead of the assignee
@@ -839,7 +840,9 @@ export function TaskDetailPanel({
       qc.invalidateQueries({ queryKey: ['task', taskId] });
       qc.invalidateQueries({ queryKey: ['tasks'] });
     },
-    onError: (e: Error) => message.error(e.message),
+    // Only the Provider field's write carries `provider`; the Model field's carries `model` alone.
+    onError: (e: Error, body) =>
+      message.error('provider' in body ? "Couldn't change the provider" : "Couldn't change the model", e.message),
   });
 
   // The tier this task's runs are routed at (model routing §3.1). A pick here is the person's own,
@@ -852,7 +855,7 @@ export function TaskDetailPanel({
       qc.invalidateQueries({ queryKey: ['task', taskId] });
       qc.invalidateQueries({ queryKey: ['tasks'] });
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => message.error("Couldn't change the suggested tier", e.message),
   });
 
   // Take a stopped task back to Open, in place (see REOPENABLE_STATUSES). Nothing is toasted on a
@@ -872,7 +875,7 @@ export function TaskDetailPanel({
       qc.invalidateQueries({ queryKey: ['tasks'] });
       qc.invalidateQueries({ queryKey: ['task-lists'] });
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => message.error("Couldn't change the task's list", e.message),
   });
 
   const execute = useMutation(runNowMutationOptions(qc, message, taskId, q.data?.projectId));
@@ -900,14 +903,14 @@ export function TaskDetailPanel({
     mutationFn: (dependsOnTaskId: string) =>
       api(`/tasks/${taskId}/dependencies`, { method: 'POST', body: { dependsOnTaskId } }),
     onSuccess: refreshTaskViews,
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => message.error("Couldn't add the prerequisite", e.message),
   });
 
   const removeDependency = useMutation({
     mutationFn: (dependsOnTaskId: string) =>
       api(`/tasks/${taskId}/dependencies/${dependsOnTaskId}`, { method: 'DELETE' }),
     onSuccess: refreshTaskViews,
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => message.error("Couldn't remove the prerequisite", e.message),
   });
 
   const expandDependencyBranch = useMutation({
@@ -965,14 +968,15 @@ export function TaskDetailPanel({
         };
       });
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => message.error("Couldn't expand the dependency branch", e.message),
   });
 
   const setAutoRun = useMutation({
     mutationFn: (autoRunWhenReady: boolean) =>
       api(`/tasks/${taskId}`, { method: 'PATCH', body: { autoRunWhenReady } }),
     onSuccess: refreshTaskViews,
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error, autoRunWhenReady) =>
+      message.error(autoRunWhenReady ? "Couldn't turn on auto-run" : "Couldn't turn off auto-run", e.message),
   });
 
   const addComment = useMutation({
@@ -984,7 +988,7 @@ export function TaskDetailPanel({
       qc.invalidateQueries({ queryKey: ['task', taskId] });
       notifyMentions(vars.mentions);
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => message.error("Couldn't send the comment", e.message),
   });
 
   // A workspace is mentioned when `@<name>` appears as a standalone token in the body.
@@ -1163,7 +1167,7 @@ export function TaskDetailPanel({
       message.success('Confirmed done');
       return refreshOwnerConfirmationViews(qc, taskId);
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => message.error("Couldn't confirm the task", e.message),
   });
 
   // Drag the panel's left edge to resize; it sits on the right, so dragging left widens it.
@@ -1245,13 +1249,15 @@ export function TaskDetailPanel({
         <div className="tdp-head-actions">
           {ownerWaiting ? (
             // A run is waiting on the owner: its card in that session is where this is answered,
-            // so the panel only takes the reader there.
+            // so the panel only takes the reader there. While its report is still with its reviewer
+            // the pointer says so, in the quieter tone, as the session's row does (contract §5 N3).
             <Link
-              className="tdp-owner-confirmation-pointer"
+              className={`tdp-owner-confirmation-pointer${
+                ownerWaiting.review?.state === 'UNDER_REVIEW' ? ' is-under-review' : ''}`}
               to={`/sessions/${encodeId(ownerWaiting.sessionId)}`}
               state={{ revealOwnerConfirmation: true }}
             >
-              {WAITING_FOR_CONFIRMATION}
+              {ownerWaiting.review?.state === 'UNDER_REVIEW' ? UNDER_REVIEW : WAITING_FOR_CONFIRMATION}
             </Link>
           ) : confirmHere ? (
             <Button loading={confirmDone.isPending} onClick={() => confirmDone.mutate()}>
@@ -1329,7 +1335,7 @@ export function TaskDetailPanel({
                 onClick: () => {
                   setMenuOpen(false);
                   void copyText(taskAppUrl(taskId)).then((ok) =>
-                    ok ? message.success('Link copied') : message.error('Could not copy'),
+                    ok ? message.success('Link copied') : message.error("Couldn't copy the link"),
                   );
                 },
               },
@@ -1357,7 +1363,7 @@ export function TaskDetailPanel({
                   setMenuOpen(false);
                   if (!q.data) return;
                   void copyText(taskMarkdown(q.data, taskAppUrl(taskId))).then((ok) =>
-                    ok ? message.success('Markdown copied') : message.error('Could not copy'),
+                    ok ? message.success('Markdown copied') : message.error("Couldn't copy the Markdown"),
                   );
                 },
               },

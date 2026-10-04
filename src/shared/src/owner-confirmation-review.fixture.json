@@ -1,0 +1,1232 @@
+{
+  "about": [
+    "The owner-confirmation card's review bar (docs/owner-confirmation-review-contract.md §6–§9), as one set",
+    "of cases both clients are proved against: the web reads this file in `OwnerConfirmationReview.test.tsx`",
+    "(`reviewBar`, `reviewWindowWords`, `reviewAnswered`, `ownerAnswerLines`, `reviewCameInAfter`), the native",
+    "client in `OwnerConfirmationReviewTests` (the `OwnerConfirmations` functions of the same names), so the",
+    "browser, the Mac and the phone say one thing about one review, line for line.",
+    "",
+    "`bars`: a review as `GET /tasks/:taskId/owner-confirmation` publishes it, and where it is drawn (`CARD`: on",
+    "the card that asks; `RECEIPT`: under the receipt a decision left) → what the bar draws. `reviewer` and",
+    "`time` make the heading `REVIEW · <reviewer> · <time>`; `sha` sits at its right, struck through when",
+    "`shaStruck`. `lines` are drawn in order: STATUS (an icon and a state word), NOTE (the quieter sentence",
+    "under it), HEADLINE (Orbit's first line), ANSWERS (where the card draws its needsYou answer blocks), ROW",
+    "(Checked / Not checked / Left open / Problem, with the keys of the lines it opens to), QUOTE (the reviewer's",
+    "own words) and FOOTER. `folded` are",
+    "the lines behind `Show the old review`. `reopen` says the bar offers Reopen task once the task has",
+    "settled. Times are written by the test's clock: the ISO instant's UTC hours and minutes.",
+    "",
+    "`windows`: a review window in seconds → the words `No answer within <window>.` uses.",
+    "",
+    "`requests`: what one press of the card sends to `POST /tasks/:taskId/owner-confirmation` for the review",
+    "the card drew and the answers chosen on it (`choices`: an option's index, or `{ \"other\": words }`); a",
+    "question with no choice keeps its recommended option. `complete` false: an Other with no words yet, so",
+    "Confirm done is disabled (§6 H4).",
+    "",
+    "`answers`: a recorded decision → the `Your answers` lines its receipt draws, and whether the receipt",
+    "says `Before the review came in`."
+  ],
+  "bars": [
+    {
+      "case": "under review on the card (phone ③)",
+      "place": "CARD",
+      "review": {
+        "reviewId": "rv1",
+        "state": "UNDER_REVIEW",
+        "notReviewedReason": null,
+        "outdated": null,
+        "reviewer": { "kind": "TASK_CREATOR", "sessionId": "s-reviewer", "title": "会话间消息参数与回复设计" },
+        "since": "2026-10-02T14:55:00.000Z",
+        "dueAt": "2026-10-02T15:25:00.000Z",
+        "windowSeconds": 1800,
+        "headline": null,
+        "review": null,
+        "returned": null,
+        "problems": null
+      },
+      "bar": {
+        "reviewer": "会话间消息参数与回复设计",
+        "time": null,
+        "sha": null,
+        "shaStruck": false,
+        "lines": [
+          { "kind": "STATUS", "icon": "CLOCK", "text": "Reviewing since 14:55", "warn": false },
+          { "kind": "NOTE", "text": "Orbit will ask you once the review is in. You can still confirm now." }
+        ],
+        "folded": [],
+        "reopen": false
+      }
+    },
+    {
+      "case": "under review under a receipt: the decision is made, so nobody will be asked",
+      "place": "RECEIPT",
+      "review": {
+        "reviewId": "rv1",
+        "state": "UNDER_REVIEW",
+        "notReviewedReason": null,
+        "outdated": null,
+        "reviewer": { "kind": "PROJECT_COORDINATOR", "sessionId": "s-coordinator", "title": "确认卡：审查意见" },
+        "since": "2026-10-02T14:55:00.000Z",
+        "dueAt": "2026-10-02T16:55:00.000Z",
+        "windowSeconds": 7200,
+        "headline": null,
+        "review": null,
+        "returned": null,
+        "problems": null
+      },
+      "bar": {
+        "reviewer": "确认卡：审查意见",
+        "time": null,
+        "sha": null,
+        "shaStruck": false,
+        "lines": [
+          { "kind": "STATUS", "icon": "CLOCK", "text": "Reviewing since 14:55", "warn": false },
+          { "kind": "NOTE", "text": "It will show here when it comes in." }
+        ],
+        "folded": [],
+        "reopen": false
+      }
+    },
+    {
+      "case": "a reviewer whose title cannot be read is named Reviewer",
+      "place": "CARD",
+      "review": {
+        "reviewId": "rv1",
+        "state": "UNDER_REVIEW",
+        "notReviewedReason": null,
+        "outdated": null,
+        "reviewer": { "kind": "TASK_CREATOR", "sessionId": null, "title": null },
+        "since": "2026-10-02T09:05:00.000Z",
+        "dueAt": "2026-10-02T09:35:00.000Z",
+        "windowSeconds": 1800,
+        "headline": null,
+        "review": null,
+        "returned": null,
+        "problems": null
+      },
+      "bar": {
+        "reviewer": "Reviewer",
+        "time": null,
+        "sha": null,
+        "shaStruck": false,
+        "lines": [
+          { "kind": "STATUS", "icon": "CLOCK", "text": "Reviewing since 09:05", "warn": false },
+          { "kind": "NOTE", "text": "Orbit will ask you once the review is in. You can still confirm now." }
+        ],
+        "folded": [],
+        "reopen": false
+      }
+    },
+    {
+      "case": "reviewed, nothing needs you (phone ④, option B)",
+      "place": "CARD",
+      "review": {
+        "reviewId": "rv1",
+        "state": "REVIEWED",
+        "notReviewedReason": null,
+        "outdated": null,
+        "reviewer": { "kind": "TASK_CREATOR", "sessionId": "s-reviewer", "title": "会话间消息参数与回复设计" },
+        "since": "2026-10-02T14:55:00.000Z",
+        "dueAt": "2026-10-02T15:25:00.000Z",
+        "windowSeconds": 1800,
+        "headline": { "kind": "NOTHING_NEEDS_YOU", "notChecked": 1 },
+        "review": {
+          "recordId": "rec1",
+          "recordedAt": "2026-10-02T15:12:00.000Z",
+          "reviewedSha": "59d98153ef85c565646fede291f66f61940573c7",
+          "judgment": "OK to confirm. Merge after JS runs on CI.",
+          "checked": [
+            { "key": "c1", "text": "Criteria 1–6", "evidenceRefs": ["git show 59d9815 --stat"] },
+            { "key": "c2", "text": "PG 2298/2298", "evidenceRefs": ["https://github.com/o/r/actions/runs/36973057413"] }
+          ],
+          "notChecked": [
+            { "key": "x1", "text": "JS tests never ran on CI", "whyNotProven": "The CI run predates the web change.", "coordinatorChecked": "Ran the card's own test file locally." }
+          ],
+          "needsYou": [],
+          "leftOpen": [
+            { "key": "o1", "text": "4 optional review items" }
+          ]
+        },
+        "returned": null,
+        "problems": null
+      },
+      "bar": {
+        "reviewer": "会话间消息参数与回复设计",
+        "time": "15:12",
+        "sha": "59d9815",
+        "shaStruck": false,
+        "lines": [
+          { "kind": "HEADLINE", "text": "1 not checked · nothing needs you", "warn": false },
+          { "kind": "ROW", "row": "CHECKED", "label": "Checked", "text": "Criteria 1–6 · PG 2298/2298", "keys": ["c1", "c2"] },
+          { "kind": "ROW", "row": "NOT_CHECKED", "label": "Not checked", "text": "JS tests never ran on CI", "keys": ["x1"] },
+          { "kind": "ROW", "row": "LEFT_OPEN", "label": "Left open", "text": "4 optional review items", "keys": ["o1"] },
+          { "kind": "QUOTE", "text": "OK to confirm. Merge after JS runs on CI." }
+        ],
+        "folded": [],
+        "reopen": false
+      }
+    },
+    {
+      "case": "reviewed with nothing left out: zero not checked, and a category with no lines draws no row",
+      "place": "CARD",
+      "review": {
+        "reviewId": "rv1",
+        "state": "REVIEWED",
+        "notReviewedReason": null,
+        "outdated": null,
+        "reviewer": { "kind": "TASK_CREATOR", "sessionId": "s-reviewer", "title": "Fix the login redirect" },
+        "since": "2026-10-02T14:55:00.000Z",
+        "dueAt": "2026-10-02T15:25:00.000Z",
+        "windowSeconds": 1800,
+        "headline": { "kind": "NOTHING_NEEDS_YOU", "notChecked": 0 },
+        "review": {
+          "recordId": "rec1",
+          "recordedAt": "2026-10-02T15:02:00.000Z",
+          "reviewedSha": null,
+          "judgment": "Everything asked for is there.",
+          "checked": [
+            { "key": "c1", "text": "The redirect keeps ?next" },
+            { "key": "c2", "text": "web vitest 2,211 passed" },
+            { "key": "c3", "text": "swift test 2,629 passed" }
+          ],
+          "notChecked": [],
+          "needsYou": [],
+          "leftOpen": []
+        },
+        "returned": null,
+        "problems": null
+      },
+      "bar": {
+        "reviewer": "Fix the login redirect",
+        "time": "15:02",
+        "sha": null,
+        "shaStruck": false,
+        "lines": [
+          { "kind": "HEADLINE", "text": "0 not checked · nothing needs you", "warn": false },
+          { "kind": "ROW", "row": "CHECKED", "label": "Checked", "text": "The redirect keeps ?next · web vitest 2,211 passed · swift test 2,629 passed", "keys": ["c1", "c2", "c3"] },
+          { "kind": "QUOTE", "text": "Everything asked for is there." }
+        ],
+        "folded": [],
+        "reopen": false
+      }
+    },
+    {
+      "case": "reviewed with questions for the owner, on the card: the first question is the first line and its answers follow",
+      "place": "CARD",
+      "review": {
+        "reviewId": "rv1",
+        "state": "REVIEWED",
+        "notReviewedReason": null,
+        "outdated": null,
+        "reviewer": { "kind": "TASK_CREATOR", "sessionId": "s-reviewer", "title": "会话间消息参数与回复设计" },
+        "since": "2026-10-02T14:55:00.000Z",
+        "dueAt": "2026-10-02T15:25:00.000Z",
+        "windowSeconds": 1800,
+        "headline": { "kind": "NEEDS_YOU", "text": "the 50/hour cap can overshoot — ship as is?", "more": 1 },
+        "review": {
+          "recordId": "rec1",
+          "recordedAt": "2026-10-02T15:12:00.000Z",
+          "reviewedSha": "59d98153ef85c565646fede291f66f61940573c7",
+          "judgment": "Everything asked for is there. The cap is a trade-off, so it’s yours.",
+          "checked": [
+            { "key": "c1", "text": "Criteria 1–6 · PG 2298/2298" }
+          ],
+          "notChecked": [
+            { "key": "x1", "text": "JS tests never ran on CI" }
+          ],
+          "needsYou": [
+            {
+              "key": "n1",
+              "text": "the 50/hour cap can overshoot — ship as is?",
+              "evidenceRefs": ["session-message.ts#chargeSessionMessage"],
+              "options": [
+                { "label": "Ship as is", "description": "Overshoot is bounded by one burst." },
+                { "label": "Hold the cap exactly", "description": "Costs a row lock per message." }
+              ],
+              "recommendedOption": 0
+            },
+            {
+              "key": "n2",
+              "text": "Rename P1’s field now or later?",
+              "options": [
+                { "label": "Now" },
+                { "label": "Later" }
+              ],
+              "recommendedOption": 1
+            }
+          ],
+          "leftOpen": [
+            { "key": "o1", "text": "3 more optional review items" }
+          ]
+        },
+        "returned": null,
+        "problems": null
+      },
+      "bar": {
+        "reviewer": "会话间消息参数与回复设计",
+        "time": "15:12",
+        "sha": "59d9815",
+        "shaStruck": false,
+        "lines": [
+          { "kind": "HEADLINE", "text": "Needs you: the 50/hour cap can overshoot — ship as is? (+1 more)", "warn": true },
+          { "kind": "ANSWERS", "text": "" },
+          { "kind": "ROW", "row": "CHECKED", "label": "Checked", "text": "Criteria 1–6 · PG 2298/2298", "keys": ["c1"] },
+          { "kind": "ROW", "row": "NOT_CHECKED", "label": "Not checked", "text": "JS tests never ran on CI", "keys": ["x1"] },
+          { "kind": "ROW", "row": "LEFT_OPEN", "label": "Left open", "text": "3 more optional review items", "keys": ["o1"] },
+          { "kind": "QUOTE", "text": "Everything asked for is there. The cap is a trade-off, so it’s yours." }
+        ],
+        "folded": [],
+        "reopen": false
+      }
+    },
+    {
+      "case": "one question and nothing more: no (+0 more)",
+      "place": "CARD",
+      "review": {
+        "reviewId": "rv1",
+        "state": "REVIEWED",
+        "notReviewedReason": null,
+        "outdated": null,
+        "reviewer": { "kind": "TASK_CREATOR", "sessionId": "s-reviewer", "title": "Reviewer of record" },
+        "since": "2026-10-02T14:55:00.000Z",
+        "dueAt": "2026-10-02T15:25:00.000Z",
+        "windowSeconds": 1800,
+        "headline": { "kind": "NEEDS_YOU", "text": "Keep the old column?", "more": 0 },
+        "review": {
+          "recordId": "rec1",
+          "recordedAt": "2026-10-02T15:12:00.000Z",
+          "reviewedSha": null,
+          "judgment": "One call is yours.",
+          "checked": [],
+          "notChecked": [],
+          "needsYou": [
+            {
+              "key": "n1",
+              "text": "Keep the old column?",
+              "options": [{ "label": "Keep it" }, { "label": "Drop it" }],
+              "recommendedOption": 0
+            }
+          ],
+          "leftOpen": []
+        },
+        "returned": null,
+        "problems": null
+      },
+      "bar": {
+        "reviewer": "Reviewer of record",
+        "time": "15:12",
+        "sha": null,
+        "shaStruck": false,
+        "lines": [
+          { "kind": "HEADLINE", "text": "Needs you: Keep the old column?", "warn": true },
+          { "kind": "ANSWERS", "text": "" },
+          { "kind": "QUOTE", "text": "One call is yours." }
+        ],
+        "folded": [],
+        "reopen": false
+      }
+    },
+    {
+      "case": "the same review under its receipt: no answer controls there",
+      "place": "RECEIPT",
+      "review": {
+        "reviewId": "rv1",
+        "state": "REVIEWED",
+        "notReviewedReason": null,
+        "outdated": null,
+        "reviewer": { "kind": "TASK_CREATOR", "sessionId": "s-reviewer", "title": "Reviewer of record" },
+        "since": "2026-10-02T14:55:00.000Z",
+        "dueAt": "2026-10-02T15:25:00.000Z",
+        "windowSeconds": 1800,
+        "headline": { "kind": "NEEDS_YOU", "text": "Keep the old column?", "more": 0 },
+        "review": {
+          "recordId": "rec1",
+          "recordedAt": "2026-10-02T15:12:00.000Z",
+          "reviewedSha": null,
+          "judgment": "One call is yours.",
+          "checked": [],
+          "notChecked": [],
+          "needsYou": [
+            {
+              "key": "n1",
+              "text": "Keep the old column?",
+              "options": [{ "label": "Keep it" }, { "label": "Drop it" }],
+              "recommendedOption": 0
+            }
+          ],
+          "leftOpen": []
+        },
+        "returned": null,
+        "problems": null
+      },
+      "bar": {
+        "reviewer": "Reviewer of record",
+        "time": "15:12",
+        "sha": null,
+        "shaStruck": false,
+        "lines": [
+          { "kind": "HEADLINE", "text": "Needs you: Keep the old column?", "warn": true },
+          { "kind": "QUOTE", "text": "One call is yours." }
+        ],
+        "folded": [],
+        "reopen": false
+      }
+    },
+    {
+      "case": "not reviewed: the window ran out (second row, REVIEW TIMED OUT)",
+      "place": "CARD",
+      "review": {
+        "reviewId": "rv1",
+        "state": "NOT_REVIEWED",
+        "notReviewedReason": "TIMED_OUT",
+        "outdated": null,
+        "reviewer": { "kind": "TASK_CREATOR", "sessionId": "s-reviewer", "title": "会话间消息参数与回复设计" },
+        "since": "2026-10-02T14:55:00.000Z",
+        "dueAt": "2026-10-02T15:25:00.000Z",
+        "windowSeconds": 1800,
+        "headline": null,
+        "review": null,
+        "returned": null,
+        "problems": null
+      },
+      "bar": {
+        "reviewer": "会话间消息参数与回复设计",
+        "time": null,
+        "sha": null,
+        "shaStruck": false,
+        "lines": [
+          { "kind": "STATUS", "icon": "DASH", "text": "Not reviewed", "warn": false },
+          { "kind": "NOTE", "text": "No answer within 30 min. Only the agent that did the work has checked this." }
+        ],
+        "folded": [],
+        "reopen": false
+      }
+    },
+    {
+      "case": "not reviewed: a project's two-hour window",
+      "place": "CARD",
+      "review": {
+        "reviewId": "rv1",
+        "state": "NOT_REVIEWED",
+        "notReviewedReason": "TIMED_OUT",
+        "outdated": null,
+        "reviewer": { "kind": "PROJECT_COORDINATOR", "sessionId": "s-coordinator", "title": "确认卡：审查意见" },
+        "since": "2026-10-02T14:55:00.000Z",
+        "dueAt": "2026-10-02T16:55:00.000Z",
+        "windowSeconds": 7200,
+        "headline": null,
+        "review": null,
+        "returned": null,
+        "problems": null
+      },
+      "bar": {
+        "reviewer": "确认卡：审查意见",
+        "time": null,
+        "sha": null,
+        "shaStruck": false,
+        "lines": [
+          { "kind": "STATUS", "icon": "DASH", "text": "Not reviewed", "warn": false },
+          { "kind": "NOTE", "text": "No answer within 2 h. Only the agent that did the work has checked this." }
+        ],
+        "folded": [],
+        "reopen": false
+      }
+    },
+    {
+      "case": "not reviewed: the reviewer's session ended",
+      "place": "CARD",
+      "review": {
+        "reviewId": "rv1",
+        "state": "NOT_REVIEWED",
+        "notReviewedReason": "REVIEWER_ENDED",
+        "outdated": null,
+        "reviewer": { "kind": "TASK_CREATOR", "sessionId": "s-reviewer", "title": "Plan the release" },
+        "since": "2026-10-02T14:55:00.000Z",
+        "dueAt": "2026-10-02T15:25:00.000Z",
+        "windowSeconds": 1800,
+        "headline": null,
+        "review": null,
+        "returned": null,
+        "problems": null
+      },
+      "bar": {
+        "reviewer": "Plan the release",
+        "time": null,
+        "sha": null,
+        "shaStruck": false,
+        "lines": [
+          { "kind": "STATUS", "icon": "DASH", "text": "Not reviewed", "warn": false },
+          { "kind": "NOTE", "text": "The reviewer’s session ended before it answered. Only the agent that did the work has checked this." }
+        ],
+        "folded": [],
+        "reopen": false
+      }
+    },
+    {
+      "case": "not reviewed: the reviewer stopped without answering",
+      "place": "CARD",
+      "review": {
+        "reviewId": "rv1",
+        "state": "NOT_REVIEWED",
+        "notReviewedReason": "REVIEWER_STOPPED",
+        "outdated": null,
+        "reviewer": { "kind": "TASK_CREATOR", "sessionId": "s-reviewer", "title": "Plan the release" },
+        "since": "2026-10-02T14:55:00.000Z",
+        "dueAt": "2026-10-02T15:25:00.000Z",
+        "windowSeconds": 1800,
+        "headline": null,
+        "review": null,
+        "returned": null,
+        "problems": null
+      },
+      "bar": {
+        "reviewer": "Plan the release",
+        "time": null,
+        "sha": null,
+        "shaStruck": false,
+        "lines": [
+          { "kind": "STATUS", "icon": "DASH", "text": "Not reviewed", "warn": false },
+          { "kind": "NOTE", "text": "The reviewer stopped without answering. Only the agent that did the work has checked this." }
+        ],
+        "folded": [],
+        "reopen": false
+      }
+    },
+    {
+      "case": "not reviewed: the project's coordinator is paused",
+      "place": "CARD",
+      "review": {
+        "reviewId": "rv1",
+        "state": "NOT_REVIEWED",
+        "notReviewedReason": "COORDINATOR_PAUSED",
+        "outdated": null,
+        "reviewer": { "kind": "PROJECT_COORDINATOR", "sessionId": "s-coordinator", "title": "确认卡：审查意见" },
+        "since": "2026-10-02T14:55:00.000Z",
+        "dueAt": "2026-10-02T16:55:00.000Z",
+        "windowSeconds": 7200,
+        "headline": null,
+        "review": null,
+        "returned": null,
+        "problems": null
+      },
+      "bar": {
+        "reviewer": "确认卡：审查意见",
+        "time": null,
+        "sha": null,
+        "shaStruck": false,
+        "lines": [
+          { "kind": "STATUS", "icon": "DASH", "text": "Not reviewed", "warn": false },
+          { "kind": "NOTE", "text": "This project’s coordinator is paused. Only the agent that did the work has checked this." }
+        ],
+        "folded": [],
+        "reopen": false
+      }
+    },
+    {
+      "case": "not reviewed: Automatic was switched off",
+      "place": "CARD",
+      "review": {
+        "reviewId": "rv1",
+        "state": "NOT_REVIEWED",
+        "notReviewedReason": "AUTOMATIC_OFF",
+        "outdated": null,
+        "reviewer": { "kind": "PROJECT_COORDINATOR", "sessionId": "s-coordinator", "title": "确认卡：审查意见" },
+        "since": "2026-10-02T14:55:00.000Z",
+        "dueAt": "2026-10-02T16:55:00.000Z",
+        "windowSeconds": 7200,
+        "headline": null,
+        "review": null,
+        "returned": null,
+        "problems": null
+      },
+      "bar": {
+        "reviewer": "确认卡：审查意见",
+        "time": null,
+        "sha": null,
+        "shaStruck": false,
+        "lines": [
+          { "kind": "STATUS", "icon": "DASH", "text": "Not reviewed", "warn": false },
+          { "kind": "NOTE", "text": "Automatic was switched off for this project. Only the agent that did the work has checked this." }
+        ],
+        "folded": [],
+        "reopen": false
+      }
+    },
+    {
+      "case": "not reviewed: an Automatic project with no coordinator conversation",
+      "place": "CARD",
+      "review": {
+        "reviewId": "rv1",
+        "state": "NOT_REVIEWED",
+        "notReviewedReason": "NO_COORDINATOR",
+        "outdated": null,
+        "reviewer": { "kind": "PROJECT_COORDINATOR", "sessionId": null, "title": null },
+        "since": "2026-10-02T14:55:00.000Z",
+        "dueAt": "2026-10-02T16:55:00.000Z",
+        "windowSeconds": 7200,
+        "headline": null,
+        "review": null,
+        "returned": null,
+        "problems": null
+      },
+      "bar": {
+        "reviewer": "Reviewer",
+        "time": null,
+        "sha": null,
+        "shaStruck": false,
+        "lines": [
+          { "kind": "STATUS", "icon": "DASH", "text": "Not reviewed", "warn": false },
+          { "kind": "NOTE", "text": "This project has no coordinator conversation. Only the agent that did the work has checked this." }
+        ],
+        "folded": [],
+        "reopen": false
+      }
+    },
+    {
+      "case": "not reviewed: the reviewer could not be reached",
+      "place": "CARD",
+      "review": {
+        "reviewId": "rv1",
+        "state": "NOT_REVIEWED",
+        "notReviewedReason": "UNREACHABLE",
+        "outdated": null,
+        "reviewer": { "kind": "TASK_CREATOR", "sessionId": "s-reviewer", "title": "Plan the release" },
+        "since": "2026-10-02T14:55:00.000Z",
+        "dueAt": "2026-10-02T15:25:00.000Z",
+        "windowSeconds": 1800,
+        "headline": null,
+        "review": null,
+        "returned": null,
+        "problems": null
+      },
+      "bar": {
+        "reviewer": "Plan the release",
+        "time": null,
+        "sha": null,
+        "shaStruck": false,
+        "lines": [
+          { "kind": "STATUS", "icon": "DASH", "text": "Not reviewed", "warn": false },
+          { "kind": "NOTE", "text": "The reviewer could not be reached. Only the agent that did the work has checked this." }
+        ],
+        "folded": [],
+        "reopen": false
+      }
+    },
+    {
+      "case": "outdated: the branch moved after the review (second row); the old review folds away",
+      "place": "CARD",
+      "review": {
+        "reviewId": "rv1",
+        "state": "OUTDATED",
+        "notReviewedReason": null,
+        "outdated": { "cause": "BRANCH_MOVED", "branchSha": "7c1e2a0b9f3d4e5a6b7c8d9e0f1a2b3c4d5e6f70" },
+        "reviewer": { "kind": "TASK_CREATOR", "sessionId": "s-reviewer", "title": "会话间消息参数与回复设计" },
+        "since": "2026-10-02T14:55:00.000Z",
+        "dueAt": "2026-10-02T15:25:00.000Z",
+        "windowSeconds": 1800,
+        "headline": { "kind": "NOTHING_NEEDS_YOU", "notChecked": 1 },
+        "review": {
+          "recordId": "rec1",
+          "recordedAt": "2026-10-02T15:12:00.000Z",
+          "reviewedSha": "59d98153ef85c565646fede291f66f61940573c7",
+          "judgment": "OK to confirm. Merge after JS runs on CI.",
+          "checked": [{ "key": "c1", "text": "Criteria 1–6 · PG 2298/2298" }],
+          "notChecked": [{ "key": "x1", "text": "JS tests never ran on CI" }],
+          "needsYou": [],
+          "leftOpen": []
+        },
+        "returned": null,
+        "problems": null
+      },
+      "bar": {
+        "reviewer": "会话间消息参数与回复设计",
+        "time": "15:12",
+        "sha": "59d9815",
+        "shaStruck": true,
+        "lines": [
+          { "kind": "STATUS", "text": "Outdated", "warn": true },
+          { "kind": "NOTE", "text": "Written for 59d9815. The branch is at 7c1e2a0 now, so this says nothing about the last commit." }
+        ],
+        "folded": [
+          { "kind": "HEADLINE", "text": "1 not checked · nothing needs you", "warn": false },
+          { "kind": "ROW", "row": "CHECKED", "label": "Checked", "text": "Criteria 1–6 · PG 2298/2298", "keys": ["c1"] },
+          { "kind": "ROW", "row": "NOT_CHECKED", "label": "Not checked", "text": "JS tests never ran on CI", "keys": ["x1"] },
+          { "kind": "QUOTE", "text": "OK to confirm. Merge after JS runs on CI." }
+        ],
+        "reopen": false
+      }
+    },
+    {
+      "case": "outdated: a newer report replaced the one reviewed; old questions are not answerable",
+      "place": "CARD",
+      "review": {
+        "reviewId": "rv1",
+        "state": "OUTDATED",
+        "notReviewedReason": null,
+        "outdated": { "cause": "NEWER_REPORT", "branchSha": null },
+        "reviewer": { "kind": "TASK_CREATOR", "sessionId": "s-reviewer", "title": "Reviewer of record" },
+        "since": "2026-10-02T14:55:00.000Z",
+        "dueAt": "2026-10-02T15:25:00.000Z",
+        "windowSeconds": 1800,
+        "headline": { "kind": "NEEDS_YOU", "text": "Keep the old column?", "more": 0 },
+        "review": {
+          "recordId": "rec1",
+          "recordedAt": "2026-10-02T15:12:00.000Z",
+          "reviewedSha": null,
+          "judgment": "One call is yours.",
+          "checked": [],
+          "notChecked": [],
+          "needsYou": [
+            {
+              "key": "n1",
+              "text": "Keep the old column?",
+              "options": [{ "label": "Keep it" }, { "label": "Drop it" }],
+              "recommendedOption": 0
+            }
+          ],
+          "leftOpen": []
+        },
+        "returned": null,
+        "problems": null
+      },
+      "bar": {
+        "reviewer": "Reviewer of record",
+        "time": "15:12",
+        "sha": null,
+        "shaStruck": true,
+        "lines": [
+          { "kind": "STATUS", "text": "Outdated", "warn": true },
+          { "kind": "NOTE", "text": "Written for an earlier report." }
+        ],
+        "folded": [
+          { "kind": "HEADLINE", "text": "Needs you: Keep the old column?", "warn": true },
+          { "kind": "QUOTE", "text": "One call is yours." }
+        ],
+        "reopen": false
+      }
+    },
+    {
+      "case": "returned by the reviewer: the card is a record now",
+      "place": "CARD",
+      "review": {
+        "reviewId": "rv1",
+        "state": "RETURNED",
+        "notReviewedReason": null,
+        "outdated": null,
+        "reviewer": { "kind": "TASK_CREATOR", "sessionId": "s-reviewer", "title": "会话间消息参数与回复设计" },
+        "since": "2026-10-02T14:55:00.000Z",
+        "dueAt": "2026-10-02T15:25:00.000Z",
+        "windowSeconds": 1800,
+        "headline": null,
+        "review": null,
+        "returned": {
+          "recordId": "ret1",
+          "recordedAt": "2026-10-02T15:08:00.000Z",
+          "reviewedSha": "59d98153ef85c565646fede291f66f61940573c7",
+          "reason": "Two of the six findings are not fixed on the branch.",
+          "problems": [
+            { "key": "p1", "text": "P1-3 still sends the reply twice", "evidenceRefs": ["SessionReplyCard.test.tsx:88"] },
+            { "key": "p2", "text": "P1-5 has no test" }
+          ]
+        },
+        "problems": null
+      },
+      "bar": {
+        "reviewer": "会话间消息参数与回复设计",
+        "time": "15:08",
+        "sha": "59d9815",
+        "shaStruck": false,
+        "lines": [
+          { "kind": "STATUS", "text": "Returned to the agent", "warn": false },
+          { "kind": "QUOTE", "text": "Two of the six findings are not fixed on the branch." },
+          { "kind": "ROW", "row": "PROBLEM", "label": "Problem", "text": "P1-3 still sends the reply twice", "keys": ["p1"] },
+          { "kind": "ROW", "row": "PROBLEM", "label": "Problem", "text": "P1-5 has no test", "keys": ["p2"] },
+          { "kind": "FOOTER", "text": "The agent got this as its next message. You were not asked." }
+        ],
+        "folded": [],
+        "reopen": false
+      }
+    },
+    {
+      "case": "you confirmed first, the review came later and found a problem (second row)",
+      "place": "RECEIPT",
+      "review": {
+        "reviewId": "rv1",
+        "state": "NOT_REVIEWED",
+        "notReviewedReason": "TIMED_OUT",
+        "outdated": null,
+        "reviewer": { "kind": "TASK_CREATOR", "sessionId": "s-reviewer", "title": "会话间消息参数与回复设计" },
+        "since": "2026-10-02T14:55:00.000Z",
+        "dueAt": "2026-10-02T15:25:00.000Z",
+        "windowSeconds": 1800,
+        "headline": { "kind": "PROBLEMS_AFTER_CONFIRM", "problems": 1 },
+        "review": null,
+        "returned": null,
+        "problems": {
+          "recordId": "pr1",
+          "recordedAt": "2026-10-02T15:12:00.000Z",
+          "reviewedSha": "59d98153ef85c565646fede291f66f61940573c7",
+          "reason": "The web tests fail on CI.",
+          "problems": [
+            { "key": "p1", "text": "JS tests fail on CI: SessionReplyCard.test.tsx", "evidenceRefs": ["https://github.com/o/r/actions/runs/36990000001"] }
+          ]
+        }
+      },
+      "bar": {
+        "reviewer": "会话间消息参数与回复设计",
+        "time": "15:12",
+        "sha": "59d9815",
+        "shaStruck": false,
+        "lines": [
+          { "kind": "HEADLINE", "text": "1 problem found after you confirmed", "warn": true },
+          { "kind": "ROW", "row": "PROBLEM", "label": "Problem", "text": "JS tests fail on CI: SessionReplyCard.test.tsx", "keys": ["p1"] }
+        ],
+        "folded": [],
+        "reopen": true
+      }
+    },
+    {
+      "case": "problems outrank a review that came in before them, and count in the plural",
+      "place": "RECEIPT",
+      "review": {
+        "reviewId": "rv1",
+        "state": "REVIEWED",
+        "notReviewedReason": null,
+        "outdated": null,
+        "reviewer": { "kind": "PROJECT_COORDINATOR", "sessionId": "s-coordinator", "title": "确认卡：审查意见" },
+        "since": "2026-10-02T14:55:00.000Z",
+        "dueAt": "2026-10-02T16:55:00.000Z",
+        "windowSeconds": 7200,
+        "headline": { "kind": "PROBLEMS_AFTER_CONFIRM", "problems": 2 },
+        "review": {
+          "recordId": "rec1",
+          "recordedAt": "2026-10-02T15:12:00.000Z",
+          "reviewedSha": null,
+          "judgment": "Looks done.",
+          "checked": [{ "key": "c1", "text": "Criteria 1–6" }],
+          "notChecked": [],
+          "needsYou": [],
+          "leftOpen": []
+        },
+        "returned": null,
+        "problems": {
+          "recordId": "pr1",
+          "recordedAt": "2026-10-02T16:40:00.000Z",
+          "reviewedSha": null,
+          "reason": "Two regressions showed up on main.",
+          "problems": [
+            { "key": "p1", "text": "The list no longer sorts by recency" },
+            { "key": "p2", "text": "Dark mode lost the card's border" }
+          ]
+        }
+      },
+      "bar": {
+        "reviewer": "确认卡：审查意见",
+        "time": "16:40",
+        "sha": null,
+        "shaStruck": false,
+        "lines": [
+          { "kind": "HEADLINE", "text": "2 problems found after you confirmed", "warn": true },
+          { "kind": "ROW", "row": "PROBLEM", "label": "Problem", "text": "The list no longer sorts by recency", "keys": ["p1"] },
+          { "kind": "ROW", "row": "PROBLEM", "label": "Problem", "text": "Dark mode lost the card's border", "keys": ["p2"] }
+        ],
+        "folded": [],
+        "reopen": true
+      }
+    }
+  ],
+  "windows": [
+    { "seconds": 1800, "words": "30 min" },
+    { "seconds": 7200, "words": "2 h" },
+    { "seconds": 5400, "words": "1 h 30 min" },
+    { "seconds": 600, "words": "10 min" },
+    { "seconds": 60, "words": "1 min" },
+    { "seconds": 90, "words": "2 min" },
+    { "seconds": 20, "words": "1 min" },
+    { "seconds": 86400, "words": "24 h" }
+  ],
+  "requests": [
+    {
+      "case": "no review on the card: the key is still sent, as null",
+      "decision": "CONFIRM",
+      "requestId": "req-1",
+      "review": null,
+      "choices": {},
+      "body": { "decision": "CONFIRM", "requestId": "req-1", "reviewRecordId": null },
+      "complete": true
+    },
+    {
+      "case": "under review: nothing to answer and no record to name",
+      "decision": "CONFIRM",
+      "requestId": "req-1",
+      "review": {
+        "reviewId": "rv1",
+        "state": "UNDER_REVIEW",
+        "notReviewedReason": null,
+        "outdated": null,
+        "reviewer": { "kind": "TASK_CREATOR", "sessionId": "s-reviewer", "title": "R" },
+        "since": "2026-10-02T14:55:00.000Z",
+        "dueAt": "2026-10-02T15:25:00.000Z",
+        "windowSeconds": 1800,
+        "headline": null,
+        "review": null,
+        "returned": null,
+        "problems": null
+      },
+      "choices": {},
+      "body": { "decision": "CONFIRM", "requestId": "req-1", "reviewRecordId": null },
+      "complete": true
+    },
+    {
+      "case": "reviewed with nothing to answer: the record the card drew",
+      "decision": "CONFIRM",
+      "requestId": "req-1",
+      "review": {
+        "reviewId": "rv1",
+        "state": "REVIEWED",
+        "notReviewedReason": null,
+        "outdated": null,
+        "reviewer": { "kind": "TASK_CREATOR", "sessionId": "s-reviewer", "title": "R" },
+        "since": "2026-10-02T14:55:00.000Z",
+        "dueAt": "2026-10-02T15:25:00.000Z",
+        "windowSeconds": 1800,
+        "headline": { "kind": "NOTHING_NEEDS_YOU", "notChecked": 0 },
+        "review": {
+          "recordId": "rec-9",
+          "recordedAt": "2026-10-02T15:12:00.000Z",
+          "reviewedSha": null,
+          "judgment": "Done.",
+          "checked": [],
+          "notChecked": [],
+          "needsYou": [],
+          "leftOpen": []
+        },
+        "returned": null,
+        "problems": null
+      },
+      "choices": {},
+      "body": { "decision": "CONFIRM", "requestId": "req-1", "reviewRecordId": "rec-9" },
+      "complete": true
+    },
+    {
+      "case": "questions left at their recommendations, one picked, one in the owner's own words",
+      "decision": "CONFIRM",
+      "requestId": "req-1",
+      "review": {
+        "reviewId": "rv1",
+        "state": "REVIEWED",
+        "notReviewedReason": null,
+        "outdated": null,
+        "reviewer": { "kind": "TASK_CREATOR", "sessionId": "s-reviewer", "title": "R" },
+        "since": "2026-10-02T14:55:00.000Z",
+        "dueAt": "2026-10-02T15:25:00.000Z",
+        "windowSeconds": 1800,
+        "headline": { "kind": "NEEDS_YOU", "text": "Q1", "more": 2 },
+        "review": {
+          "recordId": "rec-9",
+          "recordedAt": "2026-10-02T15:12:00.000Z",
+          "reviewedSha": null,
+          "judgment": "Three calls are yours.",
+          "checked": [],
+          "notChecked": [],
+          "needsYou": [
+            { "key": "n1", "text": "Q1", "options": [{ "label": "A" }, { "label": "B" }], "recommendedOption": 1 },
+            { "key": "n2", "text": "Q2", "options": [{ "label": "A" }, { "label": "B" }, { "label": "C" }], "recommendedOption": 0 },
+            { "key": "n3", "text": "Q3", "options": [{ "label": "A" }, { "label": "B" }], "recommendedOption": 0 }
+          ],
+          "leftOpen": []
+        },
+        "returned": null,
+        "problems": null
+      },
+      "choices": { "n2": 2, "n3": { "other": "  Neither: ask me again next week.  " } },
+      "body": {
+        "decision": "CONFIRM",
+        "requestId": "req-1",
+        "reviewRecordId": "rec-9",
+        "answers": [
+          { "key": "n1", "option": 1 },
+          { "key": "n2", "option": 2 },
+          { "key": "n3", "text": "Neither: ask me again next week." }
+        ]
+      },
+      "complete": true
+    },
+    {
+      "case": "Other chosen with no words yet: not sendable",
+      "decision": "CONFIRM",
+      "requestId": "req-1",
+      "review": {
+        "reviewId": "rv1",
+        "state": "REVIEWED",
+        "notReviewedReason": null,
+        "outdated": null,
+        "reviewer": { "kind": "TASK_CREATOR", "sessionId": "s-reviewer", "title": "R" },
+        "since": "2026-10-02T14:55:00.000Z",
+        "dueAt": "2026-10-02T15:25:00.000Z",
+        "windowSeconds": 1800,
+        "headline": { "kind": "NEEDS_YOU", "text": "Q1", "more": 0 },
+        "review": {
+          "recordId": "rec-9",
+          "recordedAt": "2026-10-02T15:12:00.000Z",
+          "reviewedSha": null,
+          "judgment": "One call is yours.",
+          "checked": [],
+          "notChecked": [],
+          "needsYou": [
+            { "key": "n1", "text": "Q1", "options": [{ "label": "A" }, { "label": "B" }], "recommendedOption": 0 }
+          ],
+          "leftOpen": []
+        },
+        "returned": null,
+        "problems": null
+      },
+      "choices": { "n1": { "other": "   " } },
+      "body": {
+        "decision": "CONFIRM",
+        "requestId": "req-1",
+        "reviewRecordId": "rec-9",
+        "answers": [{ "key": "n1", "text": "" }]
+      },
+      "complete": false
+    },
+    {
+      "case": "outdated: the old record the card folded away, and no answers",
+      "decision": "CONFIRM",
+      "requestId": "req-1",
+      "review": {
+        "reviewId": "rv1",
+        "state": "OUTDATED",
+        "notReviewedReason": null,
+        "outdated": { "cause": "NEWER_REPORT", "branchSha": null },
+        "reviewer": { "kind": "TASK_CREATOR", "sessionId": "s-reviewer", "title": "R" },
+        "since": "2026-10-02T14:55:00.000Z",
+        "dueAt": "2026-10-02T15:25:00.000Z",
+        "windowSeconds": 1800,
+        "headline": { "kind": "NEEDS_YOU", "text": "Q1", "more": 0 },
+        "review": {
+          "recordId": "rec-9",
+          "recordedAt": "2026-10-02T15:12:00.000Z",
+          "reviewedSha": null,
+          "judgment": "One call is yours.",
+          "checked": [],
+          "notChecked": [],
+          "needsYou": [
+            { "key": "n1", "text": "Q1", "options": [{ "label": "A" }, { "label": "B" }], "recommendedOption": 0 }
+          ],
+          "leftOpen": []
+        },
+        "returned": null,
+        "problems": null
+      },
+      "choices": { "n1": 1 },
+      "body": { "decision": "CONFIRM", "requestId": "req-1", "reviewRecordId": "rec-9" },
+      "complete": true
+    },
+    {
+      "case": "a send-back carries no review key and no answers",
+      "decision": "SEND_BACK",
+      "requestId": "req-1",
+      "note": "  The P1-3 fix is missing.  ",
+      "review": {
+        "reviewId": "rv1",
+        "state": "REVIEWED",
+        "notReviewedReason": null,
+        "outdated": null,
+        "reviewer": { "kind": "TASK_CREATOR", "sessionId": "s-reviewer", "title": "R" },
+        "since": "2026-10-02T14:55:00.000Z",
+        "dueAt": "2026-10-02T15:25:00.000Z",
+        "windowSeconds": 1800,
+        "headline": { "kind": "NEEDS_YOU", "text": "Q1", "more": 0 },
+        "review": {
+          "recordId": "rec-9",
+          "recordedAt": "2026-10-02T15:12:00.000Z",
+          "reviewedSha": null,
+          "judgment": "One call is yours.",
+          "checked": [],
+          "notChecked": [],
+          "needsYou": [
+            { "key": "n1", "text": "Q1", "options": [{ "label": "A" }, { "label": "B" }], "recommendedOption": 0 }
+          ],
+          "leftOpen": []
+        },
+        "returned": null,
+        "problems": null
+      },
+      "choices": { "n1": 1 },
+      "body": { "decision": "SEND_BACK", "requestId": "req-1", "note": "The P1-3 fix is missing." },
+      "complete": true
+    }
+  ],
+  "answers": [
+    {
+      "case": "the owner's own answers, after a review that came in first",
+      "decided": {
+        "id": "d1",
+        "decision": "CONFIRM",
+        "note": null,
+        "decidedAt": "2026-10-02T15:20:00.000Z",
+        "decidedByType": "USER",
+        "requestId": "req-1",
+        "sessionId": "s-run",
+        "report": null,
+        "review": {
+          "reviewId": "rv1",
+          "state": "REVIEWED",
+          "notReviewedReason": null,
+          "outdated": null,
+          "reviewer": { "kind": "TASK_CREATOR", "sessionId": "s-reviewer", "title": "R" },
+          "since": "2026-10-02T14:55:00.000Z",
+          "dueAt": "2026-10-02T15:25:00.000Z",
+          "windowSeconds": 1800,
+          "headline": { "kind": "NEEDS_YOU", "text": "the 50/hour cap can overshoot — ship as is?", "more": 1 },
+          "review": {
+            "recordId": "rec1",
+            "recordedAt": "2026-10-02T15:12:00.000Z",
+            "reviewedSha": null,
+            "judgment": "Two calls are yours.",
+            "checked": [],
+            "notChecked": [],
+            "needsYou": [
+              {
+                "key": "n1",
+                "text": "the 50/hour cap can overshoot — ship as is?",
+                "options": [{ "label": "Ship as is" }, { "label": "Hold the cap exactly" }],
+                "recommendedOption": 0
+              },
+              {
+                "key": "n2",
+                "text": "Rename P1’s field now or later?",
+                "options": [{ "label": "Now" }, { "label": "Later" }],
+                "recommendedOption": 1
+              }
+            ],
+            "leftOpen": []
+          },
+          "returned": null,
+          "problems": null
+        },
+        "reviewStateAtDecision": "REVIEWED",
+        "reviewRecordId": "rec1",
+        "answers": [
+          { "key": "n1", "option": 1, "text": null, "source": "OWNER" },
+          { "key": "n2", "option": null, "text": "Now, with a note in the changelog.", "source": "OWNER" }
+        ]
+      },
+      "lines": [
+        { "text": "the 50/hour cap can overshoot — ship as is? — Hold the cap exactly", "notShown": false },
+        { "text": "Rename P1’s field now or later? — Now, with a note in the changelog.", "notShown": false }
+      ],
+      "before": false
+    },
+    {
+      "case": "an older app recorded the recommendations for the owner, who was not shown them",
+      "decided": {
+        "id": "d1",
+        "decision": "CONFIRM",
+        "note": null,
+        "decidedAt": "2026-10-02T15:20:00.000Z",
+        "decidedByType": "USER",
+        "requestId": "req-1",
+        "sessionId": "s-run",
+        "report": null,
+        "review": {
+          "reviewId": "rv1",
+          "state": "REVIEWED",
+          "notReviewedReason": null,
+          "outdated": null,
+          "reviewer": { "kind": "TASK_CREATOR", "sessionId": "s-reviewer", "title": "R" },
+          "since": "2026-10-02T14:55:00.000Z",
+          "dueAt": "2026-10-02T15:25:00.000Z",
+          "windowSeconds": 1800,
+          "headline": { "kind": "NEEDS_YOU", "text": "Keep the old column?", "more": 0 },
+          "review": {
+            "recordId": "rec1",
+            "recordedAt": "2026-10-02T15:12:00.000Z",
+            "reviewedSha": null,
+            "judgment": "One call is yours.",
+            "checked": [],
+            "notChecked": [],
+            "needsYou": [
+              {
+                "key": "n1",
+                "text": "Keep the old column?",
+                "options": [{ "label": "Keep it" }, { "label": "Drop it" }],
+                "recommendedOption": 0
+              }
+            ],
+            "leftOpen": []
+          },
+          "returned": null,
+          "problems": null
+        },
+        "reviewStateAtDecision": "REVIEWED",
+        "reviewRecordId": "rec1",
+        "answers": [
+          { "key": "n1", "option": 0, "text": null, "source": "NOT_SHOWN" }
+        ]
+      },
+      "lines": [
+        { "text": "Keep the old column? — Keep it", "notShown": true }
+      ],
+      "before": false
+    },
+    {
+      "case": "confirmed while it was under review: the problems came in after the decision",
+      "decided": {
+        "id": "d1",
+        "decision": "CONFIRM",
+        "note": null,
+        "decidedAt": "2026-10-02T15:00:49.000Z",
+        "decidedByType": "USER",
+        "requestId": "req-1",
+        "sessionId": "s-run",
+        "report": null,
+        "review": {
+          "reviewId": "rv1",
+          "state": "UNDER_REVIEW",
+          "notReviewedReason": null,
+          "outdated": null,
+          "reviewer": { "kind": "TASK_CREATOR", "sessionId": "s-reviewer", "title": "R" },
+          "since": "2026-10-02T14:55:00.000Z",
+          "dueAt": "2026-10-02T15:25:00.000Z",
+          "windowSeconds": 1800,
+          "headline": { "kind": "PROBLEMS_AFTER_CONFIRM", "problems": 1 },
+          "review": null,
+          "returned": null,
+          "problems": {
+            "recordId": "pr1",
+            "recordedAt": "2026-10-02T15:12:00.000Z",
+            "reviewedSha": null,
+            "reason": "The web tests fail on CI.",
+            "problems": [{ "key": "p1", "text": "JS tests fail on CI" }]
+          }
+        },
+        "reviewStateAtDecision": "UNDER_REVIEW",
+        "reviewRecordId": null,
+        "answers": []
+      },
+      "lines": [],
+      "before": true
+    },
+    {
+      "case": "a decision with no review at all",
+      "decided": {
+        "id": "d1",
+        "decision": "CONFIRM",
+        "note": null,
+        "decidedAt": "2026-10-02T15:00:49.000Z",
+        "decidedByType": "USER",
+        "requestId": "req-1",
+        "sessionId": "s-run",
+        "report": null,
+        "review": null,
+        "reviewStateAtDecision": "NONE",
+        "reviewRecordId": null,
+        "answers": []
+      },
+      "lines": [],
+      "before": false
+    }
+  ]
+}

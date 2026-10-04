@@ -67,12 +67,12 @@ export function TaskInputs({ taskId, inputs }: { taskId: string; inputs: TaskInp
   const upload = useMutation({
     mutationFn: (file: File) => uploadAttachment(file, undefined, taskId),
     onSuccess: invalidate,
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error("Couldn't upload the file", e.message),
   });
   const remove = useMutation({
     mutationFn: (id: string) => deleteAttachment(id),
     onSuccess: invalidate,
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error("Couldn't remove the input", e.message),
   });
 
   return (

@@ -298,6 +298,73 @@ func TestAntigravityInterruptedFromTheRecordedSample(t *testing.T) {
 	}
 }
 
+// The command agy was running when it was interrupted never reaches DONE (§4.1): its call is
+// answered as interrupted, before the turn ends, rather than left running.
+func TestAntigravityInterruptedToolFromTheRecordedSample(t *testing.T) {
+	events, completions := agyReplay(t, "interrupt-sigint-tool", nil)
+	if len(completions) != 1 || completions[0].Status != stInterrupted {
+		t.Fatalf("completions = %+v", completions)
+	}
+	id := "5728f00b-909c-46fd-b62d-5311c5a158e1:2"
+	if uses := agyKinds(events, evToolUse); len(uses) != 1 || uses[0]["id"] != id {
+		t.Fatalf("tool uses = %v", uses)
+	}
+	want := []map[string]interface{}{{"toolUseId": id, "content": "Interrupted: the turn was stopped while this tool was running.", "isError": true}}
+	if results := agyKinds(events, evToolResult); !reflect.DeepEqual(results, want) {
+		t.Fatalf("tool results = %v, want %v", results, want)
+	}
+	if kinds := agyEventKinds(events); strings.Index(kinds, evToolResult) > strings.Index(kinds, evTurnEnd) {
+		t.Fatalf("the result came after the turn ended: %s", kinds)
+	}
+}
+
+// agy gone mid-tool: the turn fails with how it exited, and the call it was running is answered.
+func TestAntigravityToolOpenWhenAgyExitsIsAnswered(t *testing.T) {
+	var events []agyRecorded
+	var completions []TurnCompleteRequest
+	d := &agyDriver{
+		job:     &ClaimedSession{SessionID: "s", Provider: providerAntigravity},
+		emit:    func(kind string, payload map[string]interface{}) { events = append(events, agyRecorded{kind, payload}) },
+		setTurn: func(string) {},
+		completeTurn: func(req TurnCompleteRequest, _ ...context.Context) error {
+			completions = append(completions, req)
+			return nil
+		},
+		proc: &agyProcess{initialized: true},
+		turn: newAgyTurn("t1"),
+	}
+	// Numbers as JSON decodes them.
+	for _, index := range []float64{2, 3} {
+		d.handleEvent(map[string]interface{}{"event": "step_update", "step_update": map[string]interface{}{
+			"conversation_id": "c", "step_index": index, "state": "ACTIVE", "step_type": "tool",
+			"tool_info": map[string]interface{}{"name": "run_command", "parameters": map[string]interface{}{"CommandLine": "sleep 60"}},
+		}})
+	}
+	d.handleEvent(map[string]interface{}{"event": "step_update", "step_update": map[string]interface{}{
+		"conversation_id": "c", "step_index": float64(3), "state": "DONE", "step_type": "tool",
+		"tool_info": map[string]interface{}{"name": "run_command", "output": "done early"},
+	}})
+	d.processExited()
+	if len(completions) != 1 || completions[0].Status != stFailed || !strings.Contains(completions[0].Error, "before finishing the turn") {
+		t.Fatalf("completions = %+v", completions)
+	}
+	want := []map[string]interface{}{
+		{"toolUseId": "c:3", "content": "done early", "isError": false},
+		{"toolUseId": "c:2", "content": "Interrupted: the turn failed while this tool was running.", "isError": true},
+	}
+	if results := agyKinds(events, evToolResult); !reflect.DeepEqual(results, want) {
+		t.Fatalf("tool results = %v, want %v", results, want)
+	}
+}
+
+func agyEventKinds(events []agyRecorded) string {
+	kinds := make([]string, len(events))
+	for i, e := range events {
+		kinds[i] = e.kind
+	}
+	return strings.Join(kinds, " ")
+}
+
 // §4.3: --conversation naming an id agy cannot find starts a new conversation, said only on stderr.
 func TestAntigravityLostConversationIsReported(t *testing.T) {
 	var job *ClaimedSession
@@ -431,17 +498,27 @@ func TestAntigravityContextWindowFollowsTheCatalogAndTheTable(t *testing.T) {
 // ── Permissions ─────────────────────────────────────────────────────────────────────────────────
 
 func TestAntigravityPermissionModeFlags(t *testing.T) {
-	for mode, want := range map[string][]string{
-		"":                  nil,
-		"default":           nil,
-		"dontAsk":           nil,
-		"acceptEdits":       {"--mode", "accept-edits"},
-		"plan":              {"--mode", "plan"},
-		"auto":              {"--dangerously-skip-permissions"},
-		"bypassPermissions": {"--dangerously-skip-permissions"},
+	skip := []string{"--dangerously-skip-permissions"}
+	for mode, want := range map[string][2][]string{
+		// mode: {without a confirmed approval gate, with one}
+		"":                  {nil, nil},
+		"default":           {nil, skip},
+		"dontAsk":           {nil, nil},
+		"acceptEdits":       {{"--mode", "accept-edits"}, skip},
+		"plan":              {{"--mode", "plan"}, {"--mode", "plan"}},
+		"auto":              {skip, skip},
+		"bypassPermissions": {skip, skip},
 	} {
-		if got := antigravityPermissionArgs(mode); !reflect.DeepEqual(got, want) {
-			t.Errorf("%q -> %q, want %q", mode, got, want)
+		for i, gated := range []bool{false, true} {
+			if got := antigravityPermissionArgs(mode, gated); !reflect.DeepEqual(got, want[i]) {
+				t.Errorf("%q (gated %v) -> %q, want %q", mode, gated, got, want[i])
+			}
+		}
+	}
+	// The modes that ask are the ones the gate is for; without it they keep agy's own refusal.
+	for mode, asks := range map[string]bool{"default": true, "acceptEdits": true, "": false, "dontAsk": false, "plan": false, "auto": false, "bypassPermissions": false} {
+		if got := antigravityAsksForApproval(mode); got != asks {
+			t.Errorf("antigravityAsksForApproval(%q) = %v, want %v", mode, got, asks)
 		}
 	}
 }
@@ -644,7 +721,7 @@ func TestAntigravityArgsAndEnv(t *testing.T) {
 		SessionID: "s1", RuntimeSessionID: "conv-1",
 		Agent: AgentExecConfig{Model: "gemini-3.8-flash", Effort: "low", PermissionMode: "acceptEdits", Env: map[string]string{"GEMINI_API_KEY": "k"}},
 	}
-	got := antigravityArgs(job, "/scratch/antigravity")
+	got := antigravityArgs(job, "/scratch/antigravity", false)
 	want := []string{
 		"--gemini_dir=/scratch/antigravity", "--print=", "--input-format", "stream-json", "--output-format", "stream-json",
 		"--disable-slash-commands", "--print-timeout=0s", "--conversation", "conv-1",
@@ -891,9 +968,10 @@ func TestAntigravityHoldsAMidTurnMessageUntilTheTurnEnds(t *testing.T) {
 }
 
 // A reload's model and permission mode are agy flags: the next turn runs in a new agy that has them,
-// on the same conversation.
+// on the same conversation. (Don't Ask rather than Default to start from: Default starts agy only
+// behind Orbit's approval hook, which this stand-in cannot list.)
 func TestAntigravityReloadStartsTheNextTurnWithTheNewFlags(t *testing.T) {
-	f := startFakeAgySession(t, &ClaimedSession{SessionID: "s-reload", Provider: providerAntigravity, Agent: AgentExecConfig{PermissionMode: "default"}})
+	f := startFakeAgySession(t, &ClaimedSession{SessionID: "s-reload", Provider: providerAntigravity, Agent: AgentExecConfig{PermissionMode: "dontAsk"}})
 	if err := os.WriteFile(filepath.Join(f.dir, "release"), nil, 0o644); err != nil {
 		t.Fatal(err)
 	}

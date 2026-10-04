@@ -29,8 +29,11 @@ import type { ProviderRow } from '../lib/providerAdmin';
 import { compactWindowLabel } from '../lib/sessionProviderChoices';
 import {
   allOutOfBudget,
+  canAddAccount,
   canRemoveKey,
   canReplaceKey,
+  canSignInAgain,
+  canSignOutAccount,
   formatCapReset,
   hasPeople,
   ownsPool,
@@ -368,33 +371,41 @@ function KeyRow({
 }
 
 /** What can be done to a Codex pool's ChatGPT account where it is shown: sign it in again once OpenAI
- *  signed it out, and sign it out. Only the pool's owner is offered either — the accounts run everyone's
- *  sessions (2026-10-03), but signing one in or out stays theirs alone (CodexLoginService) — and both are
- *  about that one account. */
+ *  signed it out, and sign it out. Who is offered which is the row's own to say (migration 0371): the
+ *  person who signed the account in is the only one who can sign it in again — nobody, an admin
+ *  included, has a credential for it — and taking it out is theirs and the pool's admins'.
+ *  `canSignInAgain`/`canSignOut` say what this reader may do to THIS account. */
 export interface LoginActions {
   onSignIn?: (login: CodexLogin) => void;
   onSignOut?: (login: CodexLogin) => void;
+  canSignInAgain?: (login: CodexLogin) => boolean;
+  canSignOut?: (login: CodexLogin) => boolean;
 }
 
-/** The ChatGPT account a Codex pool of one's own runs on: its email and plan, where it stands, each of
- *  its windows with when it resets — and, once OpenAI signed it out, why and the way back. `tagged` says
- *  it runs its owner's sessions alone. */
+/** The ChatGPT account a Codex pool runs on: whose it is and its plan, where it stands, each of its
+ *  windows with when it resets — and, once OpenAI signed it out, why and the way back. `tagged` says it
+ *  runs everyone's sessions here. */
 function LoginRow({
   pool,
   member,
   actions,
   tagged = false,
+  contributor,
 }: {
   pool: ProviderPool;
   member: PoolMember;
   actions: LoginActions;
   tagged?: boolean;
+  /** The person who signed it in, when the pool's people are read — named on the row like a key's own. */
+  contributor?: { name: string; you: boolean };
 }) {
   const login = member.login!;
   const status = memberStatus(member);
   const windows = login.usage ? planUsageRows(login.usage) : [];
   const signedOut = member.state === 'SIGNED_OUT';
-  const { onSignIn, onSignOut } = actions;
+  const { onSignIn, onSignOut, canSignInAgain, canSignOut } = actions;
+  const signInAgain = signedOut && onSignIn && (canSignInAgain?.(login) ?? true);
+  const signOut = onSignOut && (canSignOut?.(login) ?? true);
   // One account the pool: signing it out leaves nothing running on the pool. Holding others, it keeps
   // running on them, and the confirmation says so in the plural when more than one stays.
   const others = pool.members.length - 1;
@@ -409,6 +420,7 @@ function LoginRow({
             {member.next && pool.members.length > 1 && <span className="re-chip">NEXT</span>}
           </div>
           <div className="pool-key-mask">
+            {contributor && `${contributor.name} · `}
             {loginLine(login)}
             {tagged && (
               <>
@@ -446,12 +458,12 @@ function LoginRow({
         )}
       </div>
       <div className="re-act">
-        {signedOut && onSignIn && (
-          <Button size="small" type="primary" onClick={() => onSignIn(login)}>
+        {signInAgain && (
+          <Button size="small" type="primary" onClick={() => onSignIn!(login)}>
             Sign in again
           </Button>
         )}
-        {onSignOut && (
+        {signOut && (
           <Popconfirm
             title={`Sign out ${member.label}?`}
             description={
@@ -461,7 +473,7 @@ function LoginRow({
             }
             okText="Sign out"
             okButtonProps={{ danger: true }}
-            onConfirm={() => onSignOut(login)}
+            onConfirm={() => onSignOut!(login)}
           >
             <Button
               size="small"
@@ -476,20 +488,20 @@ function LoginRow({
       </div>
       {signedOut && (
         <div className="pool-why">
-          {onSignIn
+          {signInAgain
             ? 'OpenAI signed this account out — sign in again to put it back in the pool.'
-            : 'OpenAI signed this account out — only its owner can sign it in again.'}
+            : `OpenAI signed this account out — only ${contributor ? contributor.name : 'the person who signed it in'} can sign it in again.`}
         </div>
       )}
     </div>
   );
 }
 
-/** A pool's members, with what a pool of fewer than two accounts is worth saying about itself. A shared
- *  pool's members are its keys (KeyRow), and `keyActions` what can be done to them here; a Codex pool
- *  of one's own has its ChatGPT accounts (LoginRow), and `loginActions` what can be done to them — which
- *  only its owner is offered. Once its owner shares it, each says whose sessions it runs, and the people
- *  they added read the accounts as the owner does: their sessions run on them too (2026-10-03). */
+/** A pool's members, with what a pool of fewer than two accounts is worth saying about itself. A pool's
+ *  keys are KeyRow, with `keyActions` what can be done to them here; its ChatGPT accounts are LoginRow,
+ *  with `loginActions` the presses the page offers and — where the pool's people are read — what THIS
+ *  reader may do to each account (migration 0371: the person who signed it in signs it in again, and with
+ *  the pool's admins takes it out), and whose account each row is. */
 export function PoolMembers({
   pool,
   refusals,
@@ -507,6 +519,21 @@ export function PoolMembers({
   const { shared } = pool;
   const login = isLoginPool(pool);
   const tagged = !!shared && ownsPool(shared) && hasPeople(shared);
+  // Whose account a row is and what this reader may do to it: the pool's people carry both (their `you`
+  // row is the reader). Without them — an own pool whose access is not read yet — the page's own presses
+  // stand as they did.
+  const actionsFor = (account: CodexLogin): LoginActions =>
+    shared
+      ? {
+          ...loginActions,
+          canSignInAgain: (row) => canSignInAgain(shared, row),
+          canSignOut: (row) => canSignOutAccount(shared, row),
+        }
+      : (loginActions ?? {});
+  const contributorOf = (account: CodexLogin) => {
+    const person = shared?.people.find((row) => row.userId === account.userId);
+    return person ? { name: person.name, you: person.you } : undefined;
+  };
   return (
     <>
       {/* Every door that takes a provider refuses a pool with nothing in it (the server's
@@ -515,7 +542,7 @@ export function PoolMembers({
         (login ? (
           <div className="pool-note">
             No account yet — no session can start on this pool until{' '}
-            {readByMember(pool) ? 'its owner signs in' : 'you sign in'} with ChatGPT.
+            {!shared || canAddAccount(shared) ? 'you sign in' : 'its owner signs in'} with ChatGPT.
           </div>
         ) : (
           <div className="pool-note">
@@ -534,7 +561,14 @@ export function PoolMembers({
         shared && member.key ? (
           <KeyRow key={member.id} pool={shared} member={member} actions={keyActions ?? {}} tagged={tagged} />
         ) : member.login ? (
-          <LoginRow key={member.id} pool={pool} member={member} actions={loginActions ?? {}} tagged={tagged} />
+          <LoginRow
+            key={member.id}
+            pool={pool}
+            member={member}
+            actions={actionsFor(member.login)}
+            tagged={tagged}
+            contributor={contributorOf(member.login)}
+          />
         ) : (
           <MemberRow
             key={member.id}
@@ -729,7 +763,7 @@ export function PoolAccountsModal({
     onError: (e: Error) => {
       // A partial add still changed the pool.
       void qc.invalidateQueries({ queryKey: ['providers'] });
-      message.error(e.message || 'Failed');
+      message.error(pool ? "Couldn't add the account" : "Couldn't create the pool", e.message);
     },
   });
 
@@ -863,7 +897,7 @@ export function NewPoolModal({ rows, onClose }: { rows: ProviderRow[]; onClose: 
     },
     onError: (e: Error) => {
       void qc.invalidateQueries({ queryKey: ['providers'] });
-      message.error(e.message || 'Failed');
+      message.error("Couldn't create the pool", e.message);
     },
   });
 

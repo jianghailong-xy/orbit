@@ -18,6 +18,7 @@ import {
   getSessionDiff,
   getSessionRequest,
   listShareLinks,
+  type SessionFolder,
   type SessionListItem,
   type WorkspacePermissionRuleInfo,
 } from '../api';
@@ -351,6 +352,18 @@ export const sessionTagsQuery = () =>
   queryOptions({
     queryKey: ['session-tags'] as const,
     queryFn: () => api<SessionTagRef[]>('/session-tags'),
+    staleTime: 5 * 60_000,
+  });
+
+/**
+ * Every session folder the owner has, in every workspace (docs/session-folders-move-design.md §3):
+ * a workspace's list is the ones whose `workspaceId` is its id. Changes arrive as `folder.changed`
+ * (useControlPlane) and from this tab's own create/rename/delete, so nothing polls it.
+ */
+export const sessionFoldersQuery = () =>
+  queryOptions({
+    queryKey: ['session-folders'] as const,
+    queryFn: () => api<SessionFolder[]>('/session-folders'),
     staleTime: 5 * 60_000,
   });
 

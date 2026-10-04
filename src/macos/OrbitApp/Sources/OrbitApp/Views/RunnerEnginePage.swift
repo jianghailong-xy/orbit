@@ -85,8 +85,6 @@ private struct RunnerEngineContent: View {
             Button("Save") { rename(line) }
                 .keyboardShortcut(.defaultAction)
             Button("Cancel", role: .cancel) {}
-        } message: { _ in
-            Text("Only a label in Orbit — nothing on \(RunnerPageFormat.displayName(runner)) changes.")
         }
         .runnerNotice(notice)
         // A sign-in lands on the machine's next check-in: read it again while the page is up.

@@ -1040,7 +1040,7 @@ export function ProjectDetailPage() {
   const reviewStart = useMutation({
     mutationFn: () => openProjectCoordinator(id!),
     onSuccess: (result) => navigate(coordinatorIntentPath(result.sessionId, START_PROJECT_INTENT)),
-    onError: (error) => toast.error(error.message),
+    onError: (error) => toast.error("Couldn't open the coordinator conversation", error.message),
   });
   // "Start…" while nobody has asked: the same card, over this page.
   const [starting, setStarting] = useState(false);

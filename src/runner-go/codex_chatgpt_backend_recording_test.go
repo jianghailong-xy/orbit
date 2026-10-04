@@ -321,6 +321,7 @@ func runChatGPTScenario(t *testing.T, exe string, server *httptest.Server, caFil
 	)
 	cmd := exec.Command(exe, args...)
 	cmd.Env = env
+	configureCodexProbeProcess(cmd)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		t.Fatal(err)
@@ -332,7 +333,11 @@ func runChatGPTScenario(t *testing.T, exe string, server *httptest.Server, caFil
 	if err := cmd.Start(); err != nil {
 		t.Skipf("cannot run %s app-server: %v", exe, err)
 	}
-	defer func() { stdin.Close(); _ = cmd.Process.Kill(); _ = cmd.Wait() }()
+	defer func() {
+		if err := stopCodexProbeProcess(cmd, stdin); err != nil {
+			t.Errorf("app-server cleanup: %v", err)
+		}
+	}()
 	out := bufio.NewReaderSize(stdout, 1<<20)
 	next := 0
 	send := func(msg map[string]interface{}) {

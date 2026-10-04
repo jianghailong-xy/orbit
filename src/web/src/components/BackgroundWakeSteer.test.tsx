@@ -360,7 +360,7 @@ describe('a wake written into the running turn, once the runner has written it',
     expect(line().querySelector('.bgwake-steer')?.textContent).toBe('Delivering…');
 
     await mount([...RUNNING_TURN, steeredEcho('enqueued'), delivered(5, 'written'), delivered(6, 'acknowledged')]);
-    expect(line().querySelector('.bgwake-steer')?.textContent).toBe('Sent into this turn');
+    expect(line().querySelector('.bgwake-steer')?.textContent).toBe('已送达当前轮次');
     expect(container.querySelectorAll('.chat-user')).toHaveLength(1);
   });
 

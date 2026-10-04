@@ -87,7 +87,8 @@ enum AgentBrand {
 
     /// Resolve from a preset key or provider slug. Engine slugs map to the preset they run
     /// (`claude` → Anthropic, `codex` → OpenAI), mirroring web's `ENGINE_PRESET`; `antigravity` is
-    /// its own mark, not Gemini's — that preset is the Gemini API reached through another CLI.
+    /// its own mark, not Gemini's — the Gemini preset runs on it, but is named for the models a key
+    /// buys, and the engine is the CLI.
     static func from(_ provider: String?) -> AgentBrand {
         switch provider?.lowercased() {
         case "codex", "openai":            return .codex

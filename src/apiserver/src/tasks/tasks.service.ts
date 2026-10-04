@@ -291,6 +291,12 @@ import {
   criterionAsksForOwnerConfirmation,
   ownerConfirmationNotDelegatedBody,
 } from './owner-confirmed-automatic-delegation';
+import {
+  normaliseOwnerConfirmationReasonNote,
+  ownerConfirmationReasonRequiredBody,
+  ownerConfirmationReasonShapeError,
+  type OwnerConfirmationReasonValue,
+} from './owner-confirmation-reason';
 
 /** A polymorphic actor (user or workspace) that authored a task or comment. */
 export type Creator = { type: CreatorType; id: string };
@@ -978,17 +984,17 @@ const DEPENDENCY_TOKEN_TASK_SQL = Prisma.sql`
  * prerequisites instead it seeks the few hundred finished tasks through
  * `task_dependency_depends_on_task_id_idx`: 264ms -> 32ms.
  *
- * `dispatch_authority` is deliberately NOT read here, nor in SCHEDULED_DUE_SQL, nor at execute()'s
+ * `dispatch_authority` was deliberately NOT read here, nor in SCHEDULED_DUE_SQL, nor at execute()'s
  * automatic door. It named the Coordinator's dispatch pass as the starter for a coordinated
  * Project's tasks, and that pass was removed with the control loop — so the column stopped naming a
  * second starter and started naming none at all: every task in a `coordinator_enabled` Project
- * (0122's `task_dispatch_authority_derive` gives them COORDINATOR at birth) fell out of this
+ * (0122's `task_dispatch_authority_derive` gave them COORDINATOR at birth) fell out of this
  * candidate set and never ran, with nothing else scanning for it. Whether a task runs by itself is
  * now answered by the task's own auto-run opt-in and its prerequisites — and, for a task filed under
  * a project, by whether that project moves (started and not paused: project-pause-dispatch.ts),
- * which is not the Automatic switch either. The column and 0122's
- * triggers that derive it are left standing — no reader of them is left in this service, but
- * removing them is its own change.
+ * which is not the Automatic switch either. The column, the enum and the trigger that derived it
+ * were then dropped — 0290 took the fanout, 0329 the rest — so there is no column here to read even
+ * by mistake.
  */
 const AUTO_RUN_READY_SQL = Prisma.sql`
   t.status = 'OPEN'::task_status
@@ -3498,14 +3504,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * one — `requireExplicitCompletionCriterion` refuses an omission at both HTTP doors — so the
    * fallback is reachable only by code constructing this service directly, and judging it here
    * would make this gate an opinion about the omission rather than about the declaration.
+   *
+   * `dispatchingSessionId` is the session the task is filed from as the write leaves it — the one a
+   * create is made in, or the one an existing row names — because outside a project that session is
+   * what gives EVIDENCE_JUDGMENT a decider (`criterionNeedsProjectRefusal`).
    */
   private assertCriterionHasAProject(
     completionCriterion: TaskCompletionCriterionValue | null | undefined,
     verifiesTaskId: string | null | undefined,
     projectId: string | null | undefined,
+    dispatchingSessionId: string | null | undefined,
     itemIndex?: number,
   ): void {
-    const declaration = { completionCriterion, verifiesTaskId, projectId };
+    const declaration = { completionCriterion, verifiesTaskId, projectId, dispatchingSessionId };
     const refusal = criterionNeedsProjectRefusal(declaration)
       ?? verificationSubjectNeedsProjectRefusal(declaration);
     if (refusal) throw new BadRequestException({ ...refusal, itemIndex: itemIndex ?? null });
@@ -3567,6 +3578,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       );
     }
     const completionCriterion = this.assertCompletionDeclaration(dto);
+    this.assertOwnerConfirmationReasonShape({
+      completionCriterion,
+      reason: dto.ownerConfirmationReason,
+      note: dto.ownerConfirmationReasonNote,
+    });
     await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
     await this.assertOwnedList(ownerId, dto.listId);
     await this.assertOwnedProject(ownerId, dto.projectId);
@@ -3623,6 +3639,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       this.auditReplayedProject(winner, dto.projectId);
       return winner;
     }
+    await this.assertOwnedAttachments(ownerId, dto.attachmentIds);
     // Unit L3 §4: which project this create actually lands in. Decided by the server from the
     // session's coordination scope, not from whatever the caller named — and decided before the
     // transaction, so a refusal is deterministic and leaves nothing behind (AC1).
@@ -3665,7 +3682,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // request on the DTO's empty `projectId` would be a refusal of a task that lands in a project.
     // The shape advice reads the same project, so it is asked here too, still ahead of the gate.
     this.assertCriterionShape(dto, completionCriterion, scopedProjectId != null);
-    this.assertCriterionHasAProject(dto.completionCriterion, dto.verifiesTaskId, scopedProjectId);
+    this.assertCriterionHasAProject(
+      dto.completionCriterion, dto.verifiesTaskId, scopedProjectId, sessionId,
+    );
     // The pairing rule, asked of this call's own items — a single create is a plan of one, and
     // nothing in it points at this row. Answered before the transaction, like every other refusal
     // on this path, so a subject filed without its check leaves no row and takes no lock (AC1).
@@ -3690,12 +3709,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     )).get(0) ?? null;
     // Against the same project and the criterion that declaration resolved to, still before the
     // transaction: an agent cannot hand this task to the owner in an Automatic project unless that
-    // criterion asks for them.
+    // criterion asks for them, nor anywhere else without saying why only the owner can settle it.
     await this.assertOwnerConfirmationDelegated(ownerId, creatorSessionId, [{
       itemIndex: null,
       completionCriterion: dto.completionCriterion,
       projectId: scopedProjectId,
       criterionDefinitionId: criterionDeclaration?.criterionDefinitionId,
+      ownerConfirmationReason: dto.ownerConfirmationReason ?? null,
     }]);
     // Validate prerequisites up front so we never create a task and then reject its deps.
     // No cycle check needed: a brand-new task has no dependents, so it can't close a loop.
@@ -3849,6 +3869,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             tx, ownerId, dependencyCrossings.edges, now,
           );
           const created = await tx.task.create({ data });
+          await this.copyAttachmentsToTask(tx, ownerId, created.id, dto.attachmentIds);
           // Unit L4's `APPLY`: the yes is spent on this task, in the transaction that wrote it. A
           // second application updates no row, throws, and takes this task with it — which is what
           // makes "one approval, one task" a property of the row rather than of the call order.
@@ -4053,6 +4074,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       completionFenceRevision: TASK_COMPLETION_FENCE_REVISION,
       completionCriterionOverrideReason:
         normaliseTaskCriterionOverrideReason(dto.completionCriterionOverrideReason),
+      // Migration 0373: why only the owner can settle it, when the declaration said
+      // (`owner-confirmation-reason.ts`). Both already checked to belong to an OWNER_CONFIRMED
+      // declaration; undefined leaves them out of the INSERT, as every task before them.
+      ownerConfirmationReason: dto.ownerConfirmationReason ?? undefined,
+      ownerConfirmationReasonNote:
+        normaliseOwnerConfirmationReasonNote(dto.ownerConfirmationReasonNote) ?? undefined,
       // Migration 0232: WHICH stated criterion this work says it serves, as the criterion's stable
       // id plus the revision it carried at this moment. Both or neither — a revision without an id
       // is what a DELETED criterion leaves behind, and writing that pair here would forge it.
@@ -4108,12 +4135,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (items.length > TASK_BATCH_CREATE_MAX)
       throw new BadRequestException(`at most ${TASK_BATCH_CREATE_MAX} tasks per batch`);
 
-    for (const item of items) {
-      this.assertCompletionDeclaration({
+    items.forEach((item, index) => {
+      const completionCriterion = this.assertCompletionDeclaration({
         ...item,
         verifiesTaskId: item.verifiesTaskId ?? item.verifiesRef ?? null,
       });
-    }
+      this.assertOwnerConfirmationReasonShape({
+        completionCriterion,
+        reason: item.ownerConfirmationReason,
+        note: item.ownerConfirmationReasonNote,
+      }, index);
+    });
 
     const positionByRef = new Map<string, number>();
     items.forEach((item, index) => {
@@ -4289,6 +4321,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    */
   async previewCreateMany(ownerId: string, dto: CreateTasksBatchDto) {
     const items = await this.assertBatchValid(ownerId, dto);
+    await this.assertOwnedAttachments(ownerId, items.flatMap((item) => item.attachmentIds ?? []));
     // By the project each item NAMES: this preview cannot see the project a coordinator's unnamed
     // item would be filed under. That can only make it quieter than the write, never louder — a
     // card is not refused over VERIFICATION advice the write would withhold.
@@ -4545,6 +4578,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const write = batchWriteOf(item);
       return write ? await this.idempotencyWinner(this.prisma, ownerId, write) : null;
     }));
+    await this.assertOwnedAttachments(
+      ownerId,
+      validated.flatMap((item, index) => replayed[index] ? [] : (item.attachmentIds ?? [])),
+    );
     // Unit L3 §4, once for the whole batch and BEFORE the transaction: every item that is not a
     // replay is admitted and bound, or none is written. An item refused mid-transaction would be a
     // batch that took the owner lock and rolled back; admitted here, a refusal costs no row and no
@@ -4609,7 +4646,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (frozen.has(index)) return;
       this.assertCriterionHasAProject(
         item.completionCriterion, item.verifiesTaskId ?? item.verifiesRef ?? null, item.projectId,
-        index,
+        sessionId, index,
       );
     });
     // Unit T6, over the items this call would WRITE: a replay is frozen and is not re-charged to
@@ -4641,6 +4678,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         completionCriterion: item.completionCriterion,
         projectId: item.projectId,
         criterionDefinitionId: criterionDeclarations.get(index)?.criterionDefinitionId,
+        ownerConfirmationReason: item.ownerConfirmationReason ?? null,
       }])),
     );
     // Unit L4: the plan, judged whole and before the transaction. Every dimension, every item, all
@@ -4820,6 +4858,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
               criterionDeclarations.get(index) ?? null,
             ),
           }));
+        if (!existing) await this.copyAttachmentsToTask(tx, ownerId, task.id, item.attachmentIds);
         // Unit L4's `APPLY`, for an item this call actually created: a replay found the row the
         // first run wrote, and that run already spent the approval on it.
         const spend = spends.get(index);
@@ -5433,16 +5472,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * `owner-confirmed-automatic-delegation.ts`, over the rows these writes would leave: a session
-   * does not declare OWNER_CONFIRMED on work in an Automatic project unless the criterion that work
-   * serves asks for the owner.
+   * `owner-confirmed-automatic-delegation.ts` and `owner-confirmation-reason.ts`, over the rows
+   * these writes would leave: a session does not declare OWNER_CONFIRMED on work in an Automatic
+   * project unless the criterion that work serves asks for the owner, nor on work anywhere else
+   * without naming why only the owner can settle it.
    *
    * Asked by all three write doors after every declaration check and before the transaction, so a
    * refused write leaves no row and a refused batch none of its items. `criterionDefinitionId` is
    * the criterion each item serves once written — what `resolveCriterionDeclarations` resolved, or
    * on an update the one the row keeps — and a criterion of any other project than the one the
-   * item lands in is none of that project's. A write with no session, or with no OWNER_CONFIRMED
-   * item filed in a project, reads nothing.
+   * item lands in is none of that project's. `ownerConfirmationReason` is the reason the row would
+   * carry. Items are asked in order and the first that fails answers, whichever rule it fails. A
+   * write with no session, or with no OWNER_CONFIRMED item, reads nothing.
    */
   private async assertOwnerConfirmationDelegated(
     ownerId: string,
@@ -5452,24 +5493,24 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       completionCriterion: TaskCompletionCriterionValue | null | undefined;
       projectId: string | null | undefined;
       criterionDefinitionId: string | null | undefined;
+      ownerConfirmationReason: OwnerConfirmationReasonValue | null;
     }>,
   ): Promise<void> {
     if (!actingSessionId) return;
-    const declared = items.filter((item) =>
-      item.completionCriterion === 'OWNER_CONFIRMED' && item.projectId);
+    const declared = items.filter((item) => item.completionCriterion === 'OWNER_CONFIRMED');
     if (declared.length === 0) return;
-    const automatic = await this.prisma.project.findMany({
-      where: {
-        id: { in: [...new Set(declared.map((item) => item.projectId!))] },
-        ownerId,
-        coordinatorEnabled: true,
-      },
+    const filedIn = [...new Set(declared
+      .map((item) => item.projectId)
+      .filter((id): id is string => !!id))];
+    const automatic = filedIn.length === 0 ? [] : await this.prisma.project.findMany({
+      where: { id: { in: filedIn }, ownerId, coordinatorEnabled: true },
       select: { id: true },
     });
     const automaticIds = automatic.map((project) => project.id);
-    const governed = declared.filter((item) => automaticIds.includes(item.projectId!));
-    if (governed.length === 0) return;
-    const definitionIds = [...new Set(governed
+    const isGoverned = (item: { projectId: string | null | undefined }) =>
+      !!item.projectId && automaticIds.includes(item.projectId);
+    const definitionIds = [...new Set(declared
+      .filter(isGoverned)
       .map((item) => item.criterionDefinitionId)
       .filter((id): id is string => !!id))];
     const served = definitionIds.length === 0 ? [] : await this.prisma
@@ -5477,13 +5518,42 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         where: { id: { in: definitionIds }, projectId: { in: automaticIds } },
         select: { id: true, projectId: true, verificationMethod: true },
       });
-    for (const item of governed) {
+    for (const item of declared) {
+      if (!isGoverned(item)) {
+        // In no project, or in one whose Automatic is off: the agent names the owner's reason.
+        if (item.ownerConfirmationReason !== null) continue;
+        throw new ConflictException(
+          ownerConfirmationReasonRequiredBody(item.itemIndex, !!item.projectId),
+        );
+      }
       const criterion = served.find((definition) =>
         definition.id === item.criterionDefinitionId && definition.projectId === item.projectId);
       if (criterion && criterionAsksForOwnerConfirmation(criterion.verificationMethod)) continue;
       throw new ConflictException(ownerConfirmationNotDelegatedBody(
         criterion ? criterionKeyOf(criterion.id) : null, item.itemIndex,
       ));
+    }
+  }
+
+  /**
+   * `owner-confirmation-reason.ts`'s shape rule as a 400: a reason only beside OWNER_CONFIRMED, its
+   * sentence only beside a reason. Whoever writes — it is about the request, not the caller.
+   */
+  private assertOwnerConfirmationReasonShape(
+    declaration: {
+      completionCriterion: TaskCompletionCriterionValue;
+      reason: OwnerConfirmationReasonValue | null | undefined;
+      note: string | null | undefined;
+    },
+    itemIndex?: number,
+  ): void {
+    const error = ownerConfirmationReasonShapeError({
+      completionCriterion: declaration.completionCriterion,
+      reason: declaration.reason ?? null,
+      note: normaliseOwnerConfirmationReasonNote(declaration.note),
+    });
+    if (error) {
+      throw new BadRequestException(itemIndex === undefined ? error : `tasks[${itemIndex}]: ${error}`);
     }
   }
 
@@ -5532,6 +5602,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       plan: {
         title: item.title,
         description: item.description ?? null,
+        attachmentIds: item.attachmentIds,
         acceptanceCriteria: item.acceptanceCriteria ?? null,
         acceptanceCommand: item.acceptanceCommand ?? null,
         acceptanceExpectedExitCode: item.acceptanceExpectedExitCode ?? null,
@@ -8350,13 +8421,47 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         completionCriterion,
         verifiesTaskIdAfter,
         dto.projectId === undefined ? before.projectId : (dto.projectId ?? null),
+        before.creatorSessionId,
       );
     } else if (dto.projectId === null && completionCriterion === 'VERIFICATION') {
       // Taking the task out of its project touches no declaration, which is why EVIDENCE_JUDGMENT
       // is not asked about it: a row of that kind in no project still settles against its own
       // acceptanceCriteria. A verification subject settles nowhere outside a project — nobody there
       // files the verification it waits for — so unfiling one is refused as declaring one there is.
-      this.assertCriterionHasAProject(completionCriterion, verifiesTaskIdAfter, null);
+      this.assertCriterionHasAProject(
+        completionCriterion, verifiesTaskIdAfter, null, before.creatorSessionId,
+      );
+    }
+    // Migration 0373's reason and its sentence, as this write leaves them (`owner-confirmation-reason.ts`).
+    // They explain OWNER_CONFIRMED and nothing else, so a write that lands on another criterion
+    // clears both, and refuses only what it SENT: a reason or a sentence beside that criterion. On
+    // OWNER_CONFIRMED the stored ones stand unless replaced, and null takes both back.
+    let ownerConfirmationReasonAfter: OwnerConfirmationReasonValue | null = null;
+    let ownerConfirmationReasonNoteAfter: string | null = null;
+    if (completionCriterion !== 'OWNER_CONFIRMED') {
+      this.assertOwnerConfirmationReasonShape({
+        completionCriterion,
+        reason: dto.ownerConfirmationReason,
+        note: dto.ownerConfirmationReasonNote,
+      });
+    } else {
+      ownerConfirmationReasonAfter = dto.ownerConfirmationReason === undefined
+        ? (before.ownerConfirmationReason ?? null)
+        : dto.ownerConfirmationReason;
+      if (dto.ownerConfirmationReason === null) {
+        this.assertOwnerConfirmationReasonShape({
+          completionCriterion, reason: null, note: dto.ownerConfirmationReasonNote,
+        });
+      } else {
+        ownerConfirmationReasonNoteAfter = dto.ownerConfirmationReasonNote === undefined
+          ? (before.ownerConfirmationReasonNote ?? null)
+          : normaliseOwnerConfirmationReasonNote(dto.ownerConfirmationReasonNote);
+      }
+      this.assertOwnerConfirmationReasonShape({
+        completionCriterion,
+        reason: ownerConfirmationReasonAfter,
+        note: ownerConfirmationReasonNoteAfter,
+      });
     }
     // The independence door, and the third question on this path that turns on WHO is writing.
     //
@@ -8510,6 +8615,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         || criterionDefinitionId !== before.criterionDefinitionId) {
         await this.assertOwnerConfirmationDelegated(ownerId, actingSessionId, [{
           itemIndex: null, completionCriterion, projectId, criterionDefinitionId,
+          ownerConfirmationReason: ownerConfirmationReasonAfter,
         }]);
       }
     }
@@ -8581,6 +8687,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // licence to erase how this task came to carry the criterion it has.
       completionCriterionOverrideReason:
         criterionChangeRecord ?? (clearsStaleOverrideReason ? null : undefined),
+      // Written only when the write moves them, so an edit that says nothing about them — the
+      // common case — leaves the columns out of the UPDATE.
+      ownerConfirmationReason:
+        ownerConfirmationReasonAfter !== (before.ownerConfirmationReason ?? null)
+          ? ownerConfirmationReasonAfter
+          : undefined,
+      ownerConfirmationReasonNote:
+        ownerConfirmationReasonNoteAfter !== (before.ownerConfirmationReasonNote ?? null)
+          ? ownerConfirmationReasonNoteAfter
+          : undefined,
       // The declaration and its reason move together: written with the reason the door above
       // asked for, and taken back with it — a reason left on a task that lands again would be
       // explaining a declaration it no longer makes.
@@ -11629,6 +11745,44 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // its own copies from the request that made it — so leaving them would add a set of the
       // task's design mocks per losing delivery, attached to nothing and deleted by nothing.
       if (!landed) await this.discardTaskAttachmentCopies(copies);
+    }
+  }
+
+  private async assertOwnedAttachments(ownerId: string, attachmentIds?: string[]): Promise<void> {
+    const ids = [...new Set(attachmentIds ?? [])];
+    if (!ids.length) return;
+    const count = await this.prisma.attachment.count({ where: { ownerId, id: { in: ids } } });
+    if (count !== ids.length) throw new NotFoundException('attachment not found');
+  }
+
+  /** Copy, never move, so a task can reuse conversation or task inputs without changing history. */
+  private async copyAttachmentsToTask(
+    tx: Prisma.TransactionClient,
+    ownerId: string,
+    taskId: string,
+    attachmentIds?: string[],
+  ): Promise<void> {
+    const ids = [...new Set(attachmentIds ?? [])];
+    if (!ids.length) return;
+    const sources = await tx.attachment.findMany({
+      where: { ownerId, id: { in: ids } },
+      select: { id: true, mimeType: true, sizeBytes: true, fileName: true, data: true },
+    });
+    // Rechecked in the task's transaction: deletion after preflight must roll back the task too.
+    if (sources.length !== ids.length) throw new NotFoundException('attachment not found');
+    const byId = new Map(sources.map((source) => [source.id, source]));
+    for (const id of ids) {
+      const source = byId.get(id)!;
+      await tx.attachment.create({
+        data: {
+          ownerId, taskId,
+          mimeType: source.mimeType,
+          sizeBytes: source.sizeBytes,
+          fileName: source.fileName,
+          data: source.data,
+        },
+        select: { id: true },
+      });
     }
   }
 

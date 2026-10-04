@@ -158,10 +158,8 @@ test('an agent no project coordinates with is deleted as before', async () => {
 });
 
 /**
- * The remote is RECORDED, never derived — it is the only source `project-integration-line.ts` has
- * for the repository a project's codebase binding is built from, and the column's comment in
- * schema.prisma says why a runner-reported `origin` must not stand in for it. It is stored exactly
- * as the person typed it: the one reader normalizes it itself (`canonicalRepoUrl`).
+ * An explicit URL is stored exactly as the person typed it; project integration normalizes it
+ * when binding. Runner detection only fills an empty URL and must leave this choice alone.
  */
 test('a repository URL stated on the workspace is stored as stated', async () => {
   const writes: Record<string, unknown>[] = [];

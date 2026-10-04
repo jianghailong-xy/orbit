@@ -274,7 +274,7 @@ suite('SOURCE freeze and pin, on real PostgreSQL', async (t) => {
       queue,
       { publishSessionCreated: () => {} } as unknown as RealtimeService,
       {} as never, {} as never, {} as never, {} as never,
-    ).claim({ id: w.runnerId }, 'gpu');
+    ).claim({ id: w.runnerId, ownerId: w.ownerId }, 'gpu');
     const stalled = await db.session.findUniqueOrThrow({
       where: { id: sessionId },
       select: { status: true, sourceState: true, sourceRefusalCode: true, error: true },

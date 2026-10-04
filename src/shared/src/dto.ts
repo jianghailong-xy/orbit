@@ -496,11 +496,17 @@ export interface RunnerHeartbeatRequest {
  *  can it be worktree-isolated as-is? */
 export interface AgentDirProbe {
   agentId: string;
+  /** Original target workDir, before expanding ~ or normalizing paths. Allows the server to
+   *  reject a stale repository probe after the agent's working directory changes. */
+  workDir?: string;
   /** The path resolves to a directory on the runner. */
   exists: boolean;
   /** That directory is inside a git work tree — the precondition for worktree isolation.
    *  Only meaningful when `exists`. */
   isGitRepo: boolean;
+  /** Local origin clone URL with credentials removed. Omitted if origin is absent or cannot
+   *  be read; the server may use it to fill an empty repo_url, never overwrite one. */
+  repoUrl?: string;
   /** Free bytes on the filesystem holding this directory, as available to an unprivileged
    *  writer. Reported per working directory rather than per machine because one runner's
    *  agents can sit on different mounts, and the only number that can gate a run is the one

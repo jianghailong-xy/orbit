@@ -19,14 +19,16 @@ enum PoolAccessBoards {
     static let inAnHour = iso.string(from: Date().addingTimeInterval(60 * 60))
     static let inThreeDays = iso.string(from: Date().addingTimeInterval(3 * 24 * 60 * 60))
 
-    /// One of jianghailong's ChatGPT accounts, as GET /providers/pools serves it to him.
+    /// One of jianghailong's ChatGPT accounts, as GET /providers/pools serves it to him — the row names him
+    /// as the one who signed it in (migration 0371).
     static func account(_ email: String, plan: String, fingerprint: String, fiveHour: Double, weekly: Double) -> CodexLogin {
         CodexLogin(state: "ACTIVE", email: email, plan: plan, fingerprint: fingerprint, expiresAt: inThreeDays,
                    linkedAt: "2026-09-28T10:00:00.000Z",
                    usage: PlanUsageSnapshot(
                        provider: "codex",
                        primary: PlanUsageWindow(utilization: fiveHour, resetsAt: inAnHour, windowDurationMins: 300),
-                       secondary: PlanUsageWindow(utilization: weekly, resetsAt: inThreeDays, windowDurationMins: 10080)))
+                       secondary: PlanUsageWindow(utilization: weekly, resetsAt: inThreeDays, windowDurationMins: 10080)),
+                   userId: jiang)
     }
 
     static let accounts = [
@@ -46,9 +48,13 @@ enum PoolAccessBoards {
     /// `viewer` reads them — the accounts are everybody's to read and to run on since 2026-10-03, so the
     /// same two go to the owner and to the people they added. `people` are the ones in it besides its
     /// owner; `labels` the keys in it.
+    /// `keyNext` states the server's mark for a key where the caller knows it — none of the pool's accounts
+    /// can run, so the next session starts on one; left out, it is the fixture's own rule: a key is marked
+    /// only in a pool holding no account at all.
     static func access(_ viewer: String, people: [String] = [zhang, lin],
                        keys labels: [String] = ["orbit-org-1", "zm-proj"],
-                       label: String = "Codex Pool", shared: Bool = false) -> SharedPool {
+                       label: String = "Codex Pool", shared: Bool = false,
+                       keyNext: Bool? = nil) -> SharedPool {
         let usage = [jiang: 2.0, zhang: 5.5, lin: 2.5]
         let sessions = [jiang: 23, zhang: 19, lin: 6]
         func contributor(_ userId: String) -> PoolKeyContributor {
@@ -65,7 +71,7 @@ enum PoolAccessBoards {
         // The server marks the ONE credential the viewer's next session would run on: the account it sorts
         // first (the one with the most room in its week, 97% being "near limit"), while any account can
         // run; a key only once no account can.
-        let keyNext = logins.isEmpty
+        let keyNext = keyNext ?? logins.isEmpty
         let keys = everyKey.map { $0.marked(next: keyNext && $0.contributor.you) }
         let drawnLogins = logins.enumerated().map { index, login in
             login.marked(next: index == 1 || logins.count == 1)
@@ -107,7 +113,7 @@ private extension CodexLogin {
     func marked(next: Bool) -> CodexLogin {
         CodexLogin(state: state, email: email, plan: plan, fingerprint: fingerprint, lastError: lastError,
                    expiresAt: expiresAt, linkedAt: linkedAt, usage: usage, usageUnavailable: usageUnavailable,
-                   next: next)
+                   next: next, userId: userId)
     }
 }
 

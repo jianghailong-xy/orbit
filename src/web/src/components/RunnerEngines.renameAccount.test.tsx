@@ -211,7 +211,7 @@ describe('renaming an account on a runner', () => {
     const [named] = accountsOf(page);
     expect(editorOf(named)).toBeNull();
     expect(chipsOf(named)).toContain('DEFAULT');
-    expect(named.querySelector('.re-chip')?.getAttribute('title')).toContain('~/.claude');
+    expect(named.querySelector('.re-chip')?.getAttribute('title')).toBeNull();
   });
 
   it('renames an added account, and a double-click on its name opens the same editor', async () => {
@@ -424,6 +424,7 @@ describe('naming an account while + Account adds it', () => {
     await type(input, 'Work');
     await press(input, 'Enter');
     await vi.waitFor(() => expect(document.body.textContent).toContain('Could not reach the server'));
+    expect(document.body.textContent).toContain("Couldn't rename the account");
     await settle();
     // The account is signed in and reported, but not under the name in the field: still open.
     expect(panelOf(page)).not.toBeNull();

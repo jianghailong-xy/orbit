@@ -187,8 +187,14 @@ func cmdHook(args []string) {
 	switch name {
 	case "bg-guard":
 		cmdHookBgGuard(os.Stdin, os.Stdout)
+	// Antigravity's approval gate (antigravity_approval.go). Unlike bg-guard these fail CLOSED: agy
+	// refuses a tool call whose hook exits non-zero.
+	case "antigravity-approval":
+		os.Exit(cmdHookAntigravityApproval(args[1:], os.Stdin, os.Stdout))
+	case "antigravity-heartbeat":
+		os.Exit(cmdHookAntigravityHeartbeat(args[1:], os.Stdin, os.Stdout))
 	default:
-		fmt.Fprintf(os.Stderr, "unknown hook: %q (known: bg-guard)\n", name)
+		fmt.Fprintf(os.Stderr, "unknown hook: %q (known: bg-guard, antigravity-approval, antigravity-heartbeat)\n", name)
 		os.Exit(1)
 	}
 }

@@ -51,13 +51,14 @@ export interface EvidenceEnvelope {
   /**
    * The stated standard this evidence is measured against, quoted by key AND by text.
    *
-   * `key` says WHICH standard and `text` says what it said, and only the text is ever checked
-   * (`evidenceCriterionMatch`). For a task filed under a project the key is one of the keys
-   * `project_get` prints beside that project's criteria. For a task in NO project there is nothing
-   * to select — such a task has exactly one standard, its own `acceptanceCriteria` — so the
-   * convention is the task's own public id, which is what submitters already write, and no key
-   * resolves to anything either way. The field is required in both cases because the envelope has
-   * no optional halves; what changes is only whether anything looks the key up.
+   * `key` says WHICH standard and `text` says what it said (`evidenceCriterionMatch`). For a task
+   * that declares one of its project's criteria the key is the one `project_get` prints beside THAT
+   * criterion — it has to name the declared one, not any of the project's — and the text has to be
+   * its current wording. For any other task — in NO project, or filed under one without declaring a
+   * criterion — there is nothing to select: such a task has exactly one standard, its own
+   * `acceptanceCriteria`, so the convention is the task's own public id, which is what submitters
+   * already write, and only the text is checked. The field is required in both cases because the
+   * envelope has no optional halves; what changes is only whether anything reads the key.
    */
   criterion: { key: string; text: string };
   checks: EvidenceCheck[];
@@ -82,13 +83,43 @@ export interface EvidenceCriterionMatch {
   matchesLive: boolean;
 }
 
-/** What the criterion lane reads off the task: where this task's stated standard lives. A task in
- * a project quotes one of the project's criteria; a task in no project has its own
+/** What the criterion lane reads off the task: where this task's stated standard lives. A task
+ * that declares one of its project's criteria (`criterionDefinitionId`) is held to that criterion;
+ * any other task — in no project, or in one without a declaration — has its own
  * `acceptanceCriteria` and nothing else. Passed in rather than read here because both callers hold
  * the row already, under the Task mutex in the two that write. */
 export interface CriterionStandingTask {
   projectId: string | null;
+  /** `Task.criterionDefinitionId`: the project criterion this task declares it serves, or null. */
+  criterionDefinitionId: string | null;
+  /** `Task.criterionRevision`: that criterion's revision when it was declared. Deleting the
+   * criterion nulls only the id (0232's ON DELETE SET NULL), so this is what still says the task
+   * declared one; clearing `criterionKey` empties both. */
+  criterionRevision: number | null;
   acceptanceCriteria: string | null;
+}
+
+/** Whether the live standard is a project criterion rather than the task's own criteria. The one
+ * branch the match and the refusal's wording both take, so the two cannot answer differently.
+ *
+ * A declaration whose criterion was deleted is still a declaration — 0232 reads
+ * `criterion_definition_id IS NULL AND criterion_revision IS NOT NULL` as exactly that — so it
+ * stays on the project lane, where it has no live text at all (`liveCriterionText`). On the task's
+ * own lane, criteria repeating the deleted wording would pass a quote of a standard the project no
+ * longer states. */
+export function heldToProjectCriterion(
+  task: CriterionStandingTask,
+): task is CriterionStandingTask & { projectId: string } {
+  return task.projectId !== null
+    && (task.criterionDefinitionId !== null || task.criterionRevision !== null);
+}
+
+/** Whether `key` names the project criterion this task declares — the one criterion of its project
+ * it is held to. Another criterion of the project is not its standard, however live. */
+export function quotesDeclaredCriterion(task: CriterionStandingTask, key: string): boolean {
+  const definitionId = definitionIdFromKey(key);
+  return definitionId !== null && task.criterionDefinitionId !== null
+    && definitionId.toLowerCase() === task.criterionDefinitionId.toLowerCase();
 }
 
 const MAX_CLAIM = 2_000;
@@ -446,7 +477,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 
 /** The stated criterion a key names, as `project_get` spells it: the Base62 public id of the
  * definition row (`criterionKeyOf`). A raw UUID is accepted for the same row. */
-function definitionIdFromKey(key: string): string | null {
+export function definitionIdFromKey(key: string): string | null {
   if (UUID_RE.test(key)) return key;
   try {
     const id = base62ToUuid(key);
@@ -474,26 +505,40 @@ function comparableCriterionText(text: string): string {
  * for a task with no project, so the live text was unconditionally null and every such quote was
  * reported as not matching. Downstream that false was spent as "the standard moved", which is a
  * different sentence from "nothing was ever consulted" and the only one of the two that was true.
+ *
+ * WHICH OF THE TWO IS DECIDED BY THE DECLARATION, NOT BY THE FILING
+ * -----------------------------------------------------------------
+ * Being filed under a project does not make one of its criteria this task's standard; declaring it
+ * does (`criterionKey`, stored as `criterionDefinitionId`). A project task that declares none states
+ * exactly one standard, its own `acceptanceCriteria`, the same as a task in no project. Branching on
+ * the filing instead held such a task to a table of criteria it never chose: quoting its own
+ * criteria was refused as moved at every revision, and the only quote that passed was some other
+ * criterion of the project's, borrowed as a wrapper. A declared task is held to the criterion it
+ * declares: the key has to name that criterion (`quotesDeclaredCriterion`) and the quote is held
+ * to its current wording. Resolving whatever key the quote carried instead let any other live
+ * criterion of the project stand in for the declared one — the same wrapper, borrowed by a task
+ * that did declare. One whose declared criterion has since been deleted stays declared
+ * (`heldToProjectCriterion`) and has no live text: the standard it declared is gone, and neither
+ * its own column nor another criterion of the project is that standard.
  */
 async function liveCriterionText(
   tx: Prisma.TransactionClient,
   task: CriterionStandingTask,
   key: string,
 ): Promise<string | null> {
-  if (task.projectId) {
-    const definitionId = definitionIdFromKey(key);
-    const live = definitionId
-      ? await tx.projectAcceptanceCriterionDefinition.findFirst({
-          where: { id: definitionId, projectId: task.projectId },
-          select: { text: true },
-        })
-      : null;
+  if (heldToProjectCriterion(task)) {
+    if (task.criterionDefinitionId === null || !quotesDeclaredCriterion(task, key)) return null;
+    const live = await tx.projectAcceptanceCriterionDefinition.findFirst({
+      where: { id: task.criterionDefinitionId, projectId: task.projectId },
+      select: { text: true },
+    });
     return live ? live.text : null;
   }
-  // The key is not resolved here, and deliberately: a task in no project has one standard rather
-  // than a table of them, so there is nothing for a key to select. What submitters write today is
-  // the task's own public id (`evidence.criterion.key` may not be blank), and that keeps working
-  // because nothing reads it — this lane binds to the TEXT, exactly as the project lane does.
+  // The key is not resolved here, and deliberately: a task that declares no project criterion has
+  // one standard rather than a table of them, so there is nothing for a key to select. What
+  // submitters write today is the task's own public id (`evidence.criterion.key` may not be
+  // blank), and that keeps working because nothing reads it — this lane binds to the TEXT, exactly
+  // as the project lane does.
   const stated = task.acceptanceCriteria;
   return stated && comparableCriterionText(stated) !== '' ? stated : null;
 }

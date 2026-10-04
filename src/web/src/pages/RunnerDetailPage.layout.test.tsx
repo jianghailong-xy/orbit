@@ -11,6 +11,8 @@ import type { Runner } from '../components/TasksSidePanel';
 import type { RunnerAttentionInput } from '../lib/runnerAttention';
 import cases from '../lib/runnerAttention.cases.json';
 import { RunnerDetailPage } from './RunnerDetailPage';
+import { ToastViewport } from '../components/ToastViewport';
+import { clearToasts } from '../lib/toastStore';
 
 /**
  * A runner's page as web.png lays it out: the header, Needs Attention across the top, then the
@@ -117,7 +119,10 @@ afterAll(() => {
   vi.unstubAllGlobals();
 });
 afterEach(() => {
-  act(() => root?.unmount());
+  act(() => {
+    clearToasts();
+    root?.unmount();
+  });
   host?.remove();
   root = host = null;
   apiMock.mockReset();
@@ -168,6 +173,7 @@ async function mount(m: Machine, counts: Array<{ workspaceId: string; running: n
               <Route path="/runners/:id" element={<RunnerDetailPage />} />
               <Route path="/providers" element={<Arrived />} />
             </Routes>
+            <ToastViewport />
           </MemoryRouter>
         </QueryClientProvider>
       </AntdApp>,
@@ -334,7 +340,7 @@ describe('a runner’s page, laid out as web.png', () => {
     // Copy Command: the command, on the clipboard.
     await click(button('Copy Command'));
     expect(copyText).toHaveBeenCalledWith('sudo orbit upgrade');
-    expect(document.body.textContent).toContain('Copied');
+    expect(document.body.textContent).toContain('Command copied');
 
     // Set a Reserve…: Capacity comes into view with Keep Free focused.
     await click(button('Set a Reserve…'));

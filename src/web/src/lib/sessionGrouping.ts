@@ -28,13 +28,13 @@ export interface SessionTimeSection<T> {
 
 // Fixed bucket order; the titles double as the rendered section headers. Kept verbatim in sync
 // with the Swift `SessionTimeGrouping.titles`.
-const TIME_TITLES = ['Today', 'Yesterday', 'Previous 7 Days', 'Previous 30 Days', 'Older'];
+const TIME_TITLES = ['Today', 'Yesterday', '2–7 days ago', '8–30 days ago', 'Older'];
 
 /** Local-midnight of `d`, matching Swift's `Calendar.current.startOfDay` (also local). */
 const startOfDay = (d: Date): number => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 
 /**
- * 0 Today · 1 Yesterday · 2 Previous 7 Days · 3 Previous 30 Days · 4 Older, by the *calendar day*
+ * 0 Today · 1 Yesterday · 2 2–7 days ago · 3 8–30 days ago · 4 Older, by the *calendar day*
  * of `lastTurnAt ?? createdAt`. A future timestamp (clock skew) reads as Today; a missing or
  * unparseable one falls to Older. Rounding the day delta absorbs the ±1h a DST change puts into
  * the midnight-to-midnight span, so the bucket stays a true calendar-day count.

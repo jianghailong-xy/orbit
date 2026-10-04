@@ -32,6 +32,9 @@ import {
   resolveEvidenceCitations,
 } from './task-evidence-envelope';
 import { TasksService } from './tasks.service';
+import { EvidenceReviewService } from './evidence-review.service';
+import { ownerDecidesInTheRun, ownerEvidenceCard } from './evidence-review';
+import { ownerConfirmationPrincipalRefusal, type OwnerConfirmationPrincipal } from './task-owner-confirmation';
 import { CompletionInputRouter } from '../projects/completion-input-router.service';
 import { completionEvidenceRevisedFact } from '../projects/completion-input';
 import { enqueueForDoneTask } from '../projects/project-integration-job';
@@ -74,18 +77,27 @@ export interface CompletionCriterionSnapshotInput {
 
 interface LockedCriterionTask extends CompletionCriterionSnapshotInput {}
 
+/** What `submit` reads off the locked Task: the snapshot it digests, and the criterion declaration
+ * that says which standard the receipt's `criterionMatch` compares the quote against. */
+interface LockedSubmissionTask extends LockedCriterionTask {
+  criterionDefinitionId: string | null;
+  criterionRevision: number | null;
+}
+
 /**
- * What `decide` has to read off the locked Task: the project it quotes, its own criterion, and the
- * acceptance criteria it states for itself.
+ * What `decide` has to read off the locked Task: the project it quotes, its own criterion, the
+ * project criterion it declares, and the acceptance criteria it states for itself.
  *
- * The third is here because check 2 holds the evidence against a LIVE stated standard, and a task
- * in no project has one of those without having a project criterion: its own `acceptanceCriteria`.
- * Selecting it here rather than reading it inside the check keeps that read under the Task mutex
- * this transaction already holds.
+ * The last two are here because check 2 holds the evidence against a LIVE stated standard, and a
+ * task that declares no project criterion has one of those all the same: its own
+ * `acceptanceCriteria`. Selecting them here rather than reading them inside the check keeps that
+ * read under the Task mutex this transaction already holds.
  */
 interface LockedDecisionTask {
   projectId: string | null;
   completionCriterion: TaskCompletionCriterionValue;
+  criterionDefinitionId: string | null;
+  criterionRevision: number | null;
   acceptanceCriteria: string | null;
 }
 
@@ -244,6 +256,7 @@ export class TaskCompletionEvidenceService {
     @Optional() private readonly tasks?: TasksService,
     @Optional() private readonly completionInputs?: CompletionInputRouter,
     @Optional() private readonly realtime?: RealtimeService,
+    @Optional() private readonly evidenceReviews?: EvidenceReviewService,
   ) {}
 
   async submit(ownerId: string, taskId: string, actor: CompletionEvidenceActor, input: SubmitCompletionEvidence) {
@@ -268,14 +281,16 @@ export class TaskCompletionEvidenceService {
 
     const committed = await withTransactionRetry(this.prisma, async (tx) => {
       // One Task mutex serialises revision allocation, stable-fact dedupe and retry-key binding.
-      const [task] = await tx.$queryRaw<LockedCriterionTask[]>(Prisma.sql`
+      const [task] = await tx.$queryRaw<LockedSubmissionTask[]>(Prisma.sql`
         SELECT "title", "project_id" AS "projectId", "status",
                "completion_criterion"::text AS "completionCriterion",
                "acceptance_criteria" AS "acceptanceCriteria",
                "acceptance_command" AS "acceptanceCommand",
                "acceptance_expected_exit_code" AS "acceptanceExpectedExitCode",
                "completion_policy"::text AS "completionPolicy",
-               "verifies_task_id" AS "verifiesTaskId"
+               "verifies_task_id" AS "verifiesTaskId",
+               "criterion_definition_id" AS "criterionDefinitionId",
+               "criterion_revision" AS "criterionRevision"
           FROM "task"
          WHERE "id" = ${taskId}::uuid AND "owner_id" = ${ownerId}::uuid
          FOR UPDATE
@@ -383,12 +398,13 @@ export class TaskCompletionEvidenceService {
       // AWAITING_INPUT and sibling Tasks may still be OPEN: none of those lifecycle/collection
       // facts appears in this route or its key.
       //
-      // A task in NO project does not go down here, and nothing is lost by that: a wake row names a
-      // project, and this work is filed under none. Such a row is settled the way every revision is
-      // — it stays a question on the derived read (`pending` below), held against its OWN
-      // `acceptanceCriteria`, until a session that took no part in the work answers it. Pinned by
-      // `coordinator-evidence-no-addressee.pg.spec.ts`, which covers the population that already
-      // exists: the write doors no longer let one be declared.
+      // A task in NO project does not go down the wake route: a wake row names a project, and this
+      // work is filed under none. Such a row stays a question on the derived read (`pending` below),
+      // held against its OWN `acceptanceCriteria`, until a session that took no part in the work
+      // answers it. When a session dispatched the task, that session is handed the revision to
+      // decide (`evidence-review.ts`); when none did, nobody is — the population
+      // `coordinator-evidence-no-addressee.pg.spec.ts` covers, which the write doors no longer let be
+      // declared.
       if (committed.projectId && this.completionInputs) {
         // In an Automatic project, handed to its coordinator to decide; otherwise recorded against
         // the consumer these rows have always named and told to nobody, the question being the
@@ -402,6 +418,12 @@ export class TaskCompletionEvidenceService {
             evidenceDigest: committed.evidenceRow.evidenceDigest,
           }),
         );
+      } else if (!committed.projectId) {
+        // A delivery that does not happen leaves the revision in front of the owner instead, so a
+        // fault in it is logged and never reported as a failed submission: the revision committed.
+        await this.evidenceReviews?.deliver(ownerId, taskId, committed.evidenceRow.id)
+          .catch((error) => this.logger.warn(`evidence of task ${taskId} was not handed to its `
+            + `dispatching session: ${error instanceof Error ? error.message : error}`));
       }
     } finally {
       // A new revision changes what the pending-decisions read answers, and so does handing it to
@@ -648,6 +670,11 @@ export class TaskCompletionEvidenceService {
     taskId: string,
     actor: CompletionEvidenceActor,
     input: DecideCompletionEvidence,
+    /** Who is asking, as the app's door sees it. Read for one thing only: whether this is the account
+     *  owner in the app, which is who may decide the owner card of a task in no project that has no
+     *  dispatching session from the run it is drawn in (`ownerDecidesInTheRun`). Absent on the
+     *  runner's door, which is never the owner in the app. */
+    principal?: OwnerConfirmationPrincipal,
   ) {
     if (!UUID_RE.test(actor.id) || !Object.values(CreatorType).includes(actor.type)) {
       throw new BadRequestException('evidence actor is invalid');
@@ -670,6 +697,8 @@ export class TaskCompletionEvidenceService {
       const [task] = await tx.$queryRaw<LockedDecisionTask[]>(Prisma.sql`
         SELECT "project_id" AS "projectId",
                "completion_criterion"::text AS "completionCriterion",
+               "criterion_definition_id" AS "criterionDefinitionId",
+               "criterion_revision" AS "criterionRevision",
                "acceptance_criteria" AS "acceptanceCriteria"
           FROM "task"
          WHERE "id" = ${taskId}::uuid AND "owner_id" = ${ownerId}::uuid
@@ -682,7 +711,15 @@ export class TaskCompletionEvidenceService {
         select: { id: true, taskId: true },
       });
       if (!decidingSession) throw new NotFoundException('deciding session not found');
-      await assertIndependentDecidingSession(tx, { ownerId, taskId }, decidingSession);
+      // The independence rule, with the one press it does not refuse: the account owner in the app
+      // deciding the owner card of a task in no project that has no dispatching session, in the run
+      // that card is drawn in — the only conversation left to draw it in. The owner decides there,
+      // not the run; every other session that did the work is refused exactly as before.
+      const ownerInTheApp = principal !== undefined
+        && ownerConfirmationPrincipalRefusal(ownerId, principal) === null;
+      if (!(await ownerDecidesInTheRun(tx, { ownerId, taskId }, decidingSession.id, ownerInTheApp))) {
+        await assertIndependentDecidingSession(tx, { ownerId, taskId }, decidingSession);
+      }
 
       const latest = await tx.taskCompletionEvidence.findFirst({
         where: { taskId },
@@ -799,16 +836,32 @@ export class TaskCompletionEvidenceService {
    * the revisions waiting on its evidence card (`owner-decision-signal.ts`), and `task.changed`
    * refreshes no session row, so without this a coordinator lit, or went dark, only on its next
    * unrelated update. After the commit, and never a reason to report a recorded write as failed.
+   *
+   * For a task in a project that conversation is the project's coordinator. For one a session
+   * dispatched outside any project it is the dispatching session, or — once that one is in Trash —
+   * the run that submitted the revision (`ownerEvidenceCard`).
    */
   private async nudgeCoordinatorRow(ownerId: string, taskId: string): Promise<void> {
     if (!this.realtime) return;
     try {
       const task = await this.prisma.task.findFirst({
         where: { id: taskId, ownerId },
-        select: { project: { select: { coordinatorSessionId: true } } },
+        select: {
+          project: { select: { coordinatorSessionId: true } },
+          creatorSession: { select: { id: true, deletedAt: true } },
+          completionEvidence: {
+            orderBy: { revision: 'desc' },
+            take: 1,
+            select: { sourceSessionId: true },
+          },
+        },
       });
-      const coordinatorSessionId = task?.project?.coordinatorSessionId;
-      if (coordinatorSessionId) this.realtime.publishSessionUpdated(coordinatorSessionId);
+      const run = task?.completionEvidence[0]?.sourceSessionId;
+      const rowSessionId = task?.project
+        ? task.project.coordinatorSessionId
+        : ownerEvidenceCard(task?.creatorSession ?? null, run ? { id: run, deletedAt: null } : null)
+          ?.sessionId;
+      if (rowSessionId) this.realtime.publishSessionUpdated(rowSessionId);
     } catch (error) {
       this.logger.warn(`coordinator row refresh after evidence on ${taskId} failed: `
         + `${error instanceof Error ? error.message : error}`);

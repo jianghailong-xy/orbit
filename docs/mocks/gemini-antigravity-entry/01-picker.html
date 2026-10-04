@@ -1,0 +1,113 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>board</title>
+<link rel="stylesheet" href="board.css"><script src="glyphs.js"></script><script src="board.js"></script></head>
+<body>
+<h1>新建会话的选择器：用 Gemini 只有一个入口</h1>
+<p class="lede">内置项代表 CLI 自己的登录（订阅额度），provider 代表 API key。Antigravity 在 Orbit 里没有自己的登录方式，只认 Gemini API key，所以默认不单独列出：<b>Gemini provider 就是在 Antigravity CLI 上跑 Gemini 的入口</b>。只有环境里已经放了 <code>GEMINI_API_KEY</code>，内置 Antigravity 才出现。runner 跑不了时，在选择器里就直接说明原因。</p>
+
+<div class="row">
+  <!-- ① today -->
+  <div class="col">
+    <div class="cap"><span class="tag n">现状</span>两个入口，一个总显示可用</div>
+    <div class="hero"><i class="tile" data-b="openai"></i><span class="pill">Codex ▾</span></div>
+    <div class="pop">
+      <div class="pr"><i class="tile" data-b="anthropic"></i><span class="lbl">Claude</span><span class="mdl">Opus 5.5</span></div>
+      <div class="pr sel"><i class="tile" data-b="openai"></i><span class="lbl">Codex</span><span class="mdl">GPT-5.6-Sol</span></div>
+      <div class="pr"><i class="tile" data-b="kimi"></i><span class="lbl">Kimi</span><span class="mdl">K2.7 Coding</span></div>
+      <div class="pr mt mark"><span class="ml">① 没 key 也显示可用</span><i class="tile" data-b="antigravity"></i><span class="lbl">Antigravity</span><span class="mdl">Managed by the provider</span></div>
+      <div class="pr"><i class="tile" data-b="openai" data-badge="2"></i><span class="lbl">Codex Pool</span><span class="mdl">GPT-5.6-Sol</span></div>
+      <div class="pr"><i class="tile" data-b="kimi"></i><span class="lbl">Kimi (Moonshot)</span><span class="mdl">Kimi K3</span></div>
+      <div class="pr"><i class="tile" data-b="deepseek"></i><span class="lbl">DeepSeek</span><span class="mdl">DeepSeek V4.1 Flash</span></div>
+      <div class="pr mt mark"><span class="ml">② 同一种 key 的第二个入口</span><i class="tile" data-b="gemini"></i><span class="lbl">Gemini</span><span class="mdl">Gemini 3.8 Flash</span></div>
+      <div class="sep"></div>
+      <div class="pr connect"><span class="plus">+</span><span class="lbl">Connect a provider…</span></div>
+    </div>
+    <ul class="notes">
+      <li>①② 用的都是 Gemini API key，区别只在 key 放在哪：环境变量里（明文）还是 Orbit 里（加密）。</li>
+      <li>① 没有 key、runner 没装 agy 也显示可用，选了要到会话里才失败。</li>
+      <li>「Managed by the provider」只说明还没有 runner 上报 agy 的模型列表，读起来却像是归 Gemini provider 管。</li>
+    </ul>
+  </div>
+
+  <!-- ② default after -->
+  <div class="col">
+    <div class="cap"><span class="tag new">改后</span>默认：只有 Gemini</div>
+    <div class="hero"><i class="tile" data-b="openai"></i><span class="pill">Codex ▾</span></div>
+    <div class="pop">
+      <div class="pr"><i class="tile" data-b="anthropic"></i><span class="lbl">Claude</span><span class="mdl">Opus 5.5</span></div>
+      <div class="pr sel"><i class="tile" data-b="openai"></i><span class="lbl">Codex</span><span class="mdl">GPT-5.6-Sol</span></div>
+      <div class="pr"><i class="tile" data-b="kimi"></i><span class="lbl">Kimi</span><span class="mdl">K2.7 Coding</span></div>
+      <div class="pr gone">内置 Antigravity 不再列出</div>
+      <div class="pr"><i class="tile" data-b="openai" data-badge="2"></i><span class="lbl">Codex Pool</span><span class="mdl">GPT-5.6-Sol</span></div>
+      <div class="pr"><i class="tile" data-b="kimi"></i><span class="lbl">Kimi (Moonshot)</span><span class="mdl">Kimi K3</span></div>
+      <div class="pr"><i class="tile" data-b="deepseek"></i><span class="lbl">DeepSeek</span><span class="mdl">DeepSeek V4.1 Flash</span></div>
+      <div class="pr mt mark-g"><span class="ml g">唯一入口</span><i class="tile" data-b="gemini"></i><span class="lbl">Gemini<small>Antigravity CLI</small></span><span class="mdl">Gemini 3.8 Flash</span></div>
+      <div class="sep"></div>
+      <div class="pr connect"><span class="plus">+</span><span class="lbl">Connect a provider…</span></div>
+    </div>
+    <ul class="notes">
+      <li>环境里没有 <code>GEMINI_API_KEY</code> 时（绝大多数情况），只有 Gemini 这一项，用的是 Providers 里加密保存的 key。</li>
+      <li>标签后的小字写明它跑在哪个 CLI 上，和「Kimi (Moonshot)」是同一个意思。</li>
+      <li>右边是 runner 上报的 agy 默认模型；还没上报时显示预设的默认模型，不再出现「Managed by the provider」。</li>
+    </ul>
+  </div>
+
+  <!-- ③ cannot run yet -->
+  <div class="col">
+    <div class="cap"><span class="tag warn">改后</span>runner 跑不了：在选择器里说明</div>
+    <div class="hero"><i class="tile" data-b="openai"></i><span class="pill">Codex ▾</span></div>
+    <div class="pop">
+      <div class="pr"><i class="tile" data-b="anthropic"></i><span class="lbl">Claude</span><span class="mdl">Opus 5.5</span></div>
+      <div class="pr sel"><i class="tile" data-b="openai"></i><span class="lbl">Codex</span><span class="mdl">GPT-5.6-Sol</span></div>
+      <div class="pr"><i class="tile" data-b="kimi"></i><span class="lbl">Kimi</span><span class="mdl">K2.7 Coding</span></div>
+      <div class="pr"><i class="tile" data-b="openai" data-badge="2"></i><span class="lbl">Codex Pool</span><span class="mdl">GPT-5.6-Sol</span></div>
+      <div class="pr"><i class="tile" data-b="kimi"></i><span class="lbl">Kimi (Moonshot)</span><span class="mdl">Kimi K3</span></div>
+      <div class="pr"><i class="tile" data-b="deepseek"></i><span class="lbl">DeepSeek</span><span class="mdl">DeepSeek V4.1 Flash</span></div>
+      <div class="pr off mark"><i class="tile" data-b="gemini"></i><span class="lbl">Gemini<small>Antigravity CLI</small></span><span class="why o">Update runner</span></div>
+      <div class="tip"><b>HPC</b> runs Orbit runner 0.1.208. Antigravity needs 0.1.209 or newer — the runner updates itself when no session is running on it. <a>Open in Providers ›</a></div>
+      <div class="sep"></div>
+      <div class="pr connect"><span class="plus">+</span><span class="lbl">Connect a provider…</span></div>
+    </div>
+    <ul class="notes">
+      <li>runner 版本低于 0.1.209：标「<b>Update runner</b>」。服务端认领会话时已经在用这个信息，现在只是提前到选择器里说。</li>
+      <li>runner 上没装 agy：标「<b>Not installed</b>」。</li>
+      <li>两种情况点开，都落到 Providers 页那台 runner 卡片里新增的 Antigravity CLI 一行（现在跳过去找不到这一行）。</li>
+    </ul>
+  </div>
+
+  <!-- ④ key in the environment -->
+  <div class="col">
+    <div class="cap"><span class="tag new">改后</span>环境里有 key：内置项才出现</div>
+    <div class="hero"><i class="tile" data-b="openai"></i><span class="pill">Codex ▾</span></div>
+    <div class="pop">
+      <div class="pr"><i class="tile" data-b="anthropic"></i><span class="lbl">Claude</span><span class="mdl">Opus 5.5</span></div>
+      <div class="pr sel"><i class="tile" data-b="openai"></i><span class="lbl">Codex</span><span class="mdl">GPT-5.6-Sol</span></div>
+      <div class="pr"><i class="tile" data-b="kimi"></i><span class="lbl">Kimi</span><span class="mdl">K2.7 Coding</span></div>
+      <div class="pr mt mark-g"><span class="ml g">环境里有 key 才出现</span><i class="tile" data-b="antigravity"></i><span class="lbl">Antigravity<small>env key</small></span><span class="mdl">Gemini 3.8 Flash</span></div>
+      <div class="pr"><i class="tile" data-b="openai" data-badge="2"></i><span class="lbl">Codex Pool</span><span class="mdl">GPT-5.6-Sol</span></div>
+      <div class="pr"><i class="tile" data-b="kimi"></i><span class="lbl">Kimi (Moonshot)</span><span class="mdl">Kimi K3</span></div>
+      <div class="pr"><i class="tile" data-b="deepseek"></i><span class="lbl">DeepSeek</span><span class="mdl">DeepSeek V4.1 Flash</span></div>
+      <div class="pr"><i class="tile" data-b="gemini"></i><span class="lbl">Gemini<small>Antigravity CLI</small></span><span class="mdl">Gemini 3.8 Flash</span></div>
+      <div class="sep"></div>
+      <div class="pr connect"><span class="plus">+</span><span class="lbl">Connect a provider…</span></div>
+    </div>
+    <ul class="notes">
+      <li>runner 上报它的环境里有 <code>GEMINI_API_KEY</code>，或这个 workspace 的环境变量里有，内置 Antigravity 才出现。由服务端判断，web 和 macOS/iOS 用同一个结果。</li>
+      <li>小字写明 key 来自环境，和 Gemini（key 由 Orbit 加密保存）分开。</li>
+      <li>以后 Orbit 支持 Google 账号登录时，内置 Antigravity 改为代表订阅登录，和 Claude、Codex、Kimi 一样一直显示。</li>
+    </ul>
+  </div>
+</div>
+
+<div class="box">
+  <h2>什么情况下出现哪一项</h2>
+  <table>
+    <tr><th style="width:360px">情况</th><th style="width:330px">选择器里</th><th>说明</th></tr>
+    <tr><td>默认：环境里没有 <code>GEMINI_API_KEY</code></td><td>只有 Gemini</td><td>key 只在 Providers 里填，加密保存</td></tr>
+    <tr><td>runner 环境或 workspace 环境变量里有 key</td><td>Gemini，加上 Antigravity（标 env key）</td><td>照顾已经把 key 放在环境里的用法</td></tr>
+    <tr><td>runner 低于 0.1.209</td><td>两项都标 Update runner</td><td>点开去 Providers 页，看这台 runner 的状态</td></tr>
+    <tr><td>runner 上没装 agy</td><td>两项都标 Not installed</td><td>点开去 Providers 页，一键安装</td></tr>
+    <tr><td>以后支持 Google 账号登录</td><td>Antigravity 一直显示</td><td>代表 Google 账号的订阅额度，和 Claude、Codex、Kimi 一致</td></tr>
+  </table>
+</div>
+</body></html>

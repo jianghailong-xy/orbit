@@ -27,11 +27,11 @@ test('an ask-me mode is honored only where the runtime can reach a human', () =>
     const opencode = derivePermissionSemantics(AgentProvider.OPENCODE, mode);
     assert.equal(opencode.unapproved, 'deny');
     assert.equal(opencode.honored, false);
-    // Nor can headless agy: whatever needs approval is refused and ends the turn (contract §5.2).
+    // agy asks through Orbit's approval hook, which every call that acts reaches (contract §14).
     const antigravity = derivePermissionSemantics(AgentProvider.ANTIGRAVITY, mode);
-    assert.equal(antigravity.unapproved, 'deny');
-    assert.equal(antigravity.honored, false);
-    assert.ok(antigravity.note, 'the refusal must be stated, not implied');
+    assert.equal(antigravity.unapproved, 'ask');
+    assert.equal(antigravity.honored, true);
+    assert.equal(antigravity.note, undefined);
     // Codex now bridges its approval requests to the same card, so an ask-me mode means it.
     const codex = derivePermissionSemantics(AgentProvider.CODEX, mode);
     assert.equal(codex.unapproved, 'ask');
@@ -121,7 +121,8 @@ test('approval support is reported per runtime', () => {
   assert.equal(runtimeApprovalSupport(AgentProvider.CLAUDE), 'full');
   assert.equal(runtimeApprovalSupport(AgentProvider.KIMI), 'partial');
   assert.equal(runtimeApprovalSupport(AgentProvider.OPENCODE), 'none');
-  assert.equal(runtimeApprovalSupport(AgentProvider.ANTIGRAVITY), 'none');
+  // Through Orbit's PreToolUse hook; subagents, whose calls the hook never sees, are refused.
+  assert.equal(runtimeApprovalSupport(AgentProvider.ANTIGRAVITY), 'full');
   // Codex gates its dangerous primitives (commands, patches) but not every tool.
   assert.equal(runtimeApprovalSupport(AgentProvider.CODEX), 'partial');
 });
@@ -166,15 +167,23 @@ test('a row with no provider information still derives lifecycle capabilities', 
 });
 
 test('an Antigravity session payload says what its mode means on agy, not on Claude', () => {
-  // Resolved as the built-in runtime it is. Read as Claude — the fallback for a slug the server
-  // did not know — it would promise an approval card agy has no way to raise.
+  // Resolved as the built-in runtime it is: Default asks through Orbit's approval hook, and Don't
+  // Ask keeps agy's own refusal.
   const agy = withSessionCapabilities({
     ...ROW,
     provider: 'antigravity',
     providerBuiltin: true,
     permissionMode: PermissionMode.DEFAULT,
   });
-  assert.equal(agy.permissionSemantics?.approvalSupport, 'none');
-  assert.equal(agy.permissionSemantics?.unapproved, 'deny');
-  assert.equal(agy.permissionSemantics?.honored, false);
+  assert.equal(agy.permissionSemantics?.approvalSupport, 'full');
+  assert.equal(agy.permissionSemantics?.unapproved, 'ask');
+  assert.equal(agy.permissionSemantics?.honored, true);
+  const dontAsk = withSessionCapabilities({
+    ...ROW,
+    provider: 'antigravity',
+    providerBuiltin: true,
+    permissionMode: PermissionMode.DONT_ASK,
+  });
+  assert.equal(dontAsk.permissionSemantics?.unapproved, 'deny');
+  assert.equal(dontAsk.permissionSemantics?.honored, true);
 });

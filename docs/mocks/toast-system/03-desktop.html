@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Toast 通知系统 · ③ 桌面端</title>
+<link rel="stylesheet" href="toast.css">
+<style>
+  /* web console, drawn after the real one (sidebar / session list / transcript, docs/mocks/session-move-web) */
+  .win { position: relative; width: 1312px; height: 760px; border-radius: 14px; overflow: hidden; background: #fff;
+         box-shadow: 0 0 0 1px rgba(0,0,0,.08), 0 22px 60px rgba(0,0,0,.16); font-family: "Inter", "PingFang SC", "Noto Sans SC", sans-serif; color: #1f2329; }
+  .chrome { height: 40px; background: #f3f4f6; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; gap: 8px; padding: 0 14px; }
+  .chrome i { width: 12px; height: 12px; border-radius: 6px; display: inline-block; }
+  .chrome .url { margin-left: 60px; flex: 0 0 520px; height: 26px; border-radius: 8px; background: #fff; border: 1px solid #e5e7eb; font-size: 12.5px; color: #6b7280;
+                 display: flex; align-items: center; padding: 0 10px; }
+  .body { position: absolute; left: 0; right: 0; top: 41px; bottom: 0; display: flex; }
+  .side { flex: 0 0 232px; border-right: 1px solid #eef0f3; padding: 16px 12px; background: #fff; }
+  .side .logo { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 700; padding: 0 8px 14px; }
+  .side .logo span { width: 24px; height: 24px; border-radius: 7px; background: linear-gradient(135deg, #4f7cff, #2346d8); }
+  .side .nav { display: flex; align-items: center; gap: 12px; height: 36px; padding: 0 10px; font-size: 14.5px; color: #374151; border-radius: 8px; }
+  .side .nav s { text-decoration: none; margin-left: auto; font-size: 12px; color: #9ca3af; }
+  .side .ic { width: 16px; height: 16px; border: 1.5px solid #6b7280; border-radius: 3px; }
+  .side .hr { height: 1px; background: #eef0f3; margin: 10px 6px 12px; }
+  .side .ws { font-size: 13px; font-weight: 600; color: #6b7280; padding: 0 10px 8px; }
+  .side .wsr { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 10px; font-size: 14px; border-radius: 8px; color: #374151; }
+  .side .wsr em { font-style: normal; color: #9ca3af; }
+  .side .wsr.on { background: #eaf1ff; color: #1d5bd6; }
+  .list { flex: 0 0 300px; border-right: 1px solid #eef0f3; padding: 16px 14px; }
+  .list .hd { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 700; padding: 0 4px 12px; }
+  .list .hd i { width: 9px; height: 9px; border-radius: 5px; background: #22a34a; }
+  .list .hd em { margin-left: auto; font-style: normal; font-size: 13px; font-weight: 500; color: #9ca3af; }
+  .list .new { height: 36px; border-radius: 9px; border: 1px solid #b9cdfb; background: #eef3ff; color: #1d5bd6; font-size: 14px; font-weight: 600;
+               display: flex; align-items: center; gap: 8px; padding: 0 12px; margin-bottom: 10px; }
+  .list .srch { height: 34px; border-radius: 9px; background: #f5f6f8; color: #9ca3af; font-size: 13.5px; display: flex; align-items: center; padding: 0 12px; margin-bottom: 14px; }
+  .list .sec { font-size: 12px; font-weight: 600; color: #9ca3af; padding: 6px 6px; }
+  .list .row { padding: 9px 8px; border-radius: 9px; }
+  .list .row.on { background: #eef3ff; }
+  .list .row b { display: flex; font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; }
+  .list .row b span { flex: 1; overflow: hidden; text-overflow: ellipsis; } .list .row b em { flex: none; font-style: normal; font-weight: 400; font-size: 12px; color: #9ca3af; margin-left: 8px; }
+  .list .row div { margin-top: 3px; font-size: 13px; color: #8a8f98; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .main { position: relative; flex: 1; padding: 20px 28px; }
+  .main h3 { margin: 0; font-size: 21px; font-weight: 700; display: flex; align-items: center; gap: 12px; }
+  .main h3 span { font-size: 12.5px; font-weight: 600; padding: 3px 10px; border-radius: 12px; border: 1px solid #d1d5db; color: #374151; }
+  .main .subt { margin-top: 6px; font-size: 13.5px; color: #9ca3af; padding-bottom: 16px; border-bottom: 1px solid #eef0f3; }
+  .main .msg { margin-top: 20px; font-size: 15px; line-height: 1.8; color: #1f2329; max-width: 640px; }
+  .main .msg code { font-size: 13px; }
+  .main .bubble { margin: 18px 0 0 auto; width: fit-content; max-width: 420px; padding: 10px 14px; border-radius: 14px; background: #eef3ff; font-size: 14.5px; }
+  .main .wt { position: absolute; left: 28px; right: 28px; bottom: 116px; height: 34px; border-radius: 9px; border: 1px solid #e5e7eb; background: #fafafa;
+              display: flex; align-items: center; gap: 10px; padding: 0 12px; font-size: 12.5px; font-family: var(--mono); color: #6b7280; }
+  .main .wt b { margin-left: auto; font-family: "Inter", sans-serif; font-size: 13px; color: #d4380d; }
+  .main .comp { position: absolute; left: 28px; right: 28px; bottom: 20px; height: 84px; border-radius: 16px; border: 1px solid #e5e7eb; box-shadow: 0 4px 14px rgba(0,0,0,.05);
+                padding: 14px 16px; font-size: 15px; color: #b0b5bd; }
+
+  /* web toasts v2 — the web's own surface language (raised card, 1px border), same levels as the phone */
+  .wstack { position: absolute; right: 16px; top: 16px; z-index: 30; width: 360px; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+  .wc { width: 360px; display: flex; gap: 12px; align-items: center; padding: 12px 12px 12px 14px; border-radius: 12px; background: #fff;
+        border: 1px solid rgba(15,23,42,.09); box-shadow: 0 10px 28px rgba(15,23,42,.12); font-size: 14px; }
+  .wc .ico { width: 22px; height: 22px; }
+  .wc .t { flex: 1; min-width: 0; } .wc .t b { display: block; font-weight: 600; }
+  .wc .t small { display: block; margin-top: 2px; font-size: 12.5px; color: #8a8f98; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wb { flex: none; height: 28px; padding: 0 12px; border-radius: 7px; display: inline-flex; align-items: center; font-size: 13px; font-weight: 600;
+        background: #eef3ff; color: #1d5bd6; }
+  .wb.pri { background: #1d5bd6; color: #fff; } .wb.sec { background: #fff; color: #374151; box-shadow: inset 0 0 0 1px #d1d5db; }
+  .wx { flex: none; width: 22px; height: 22px; color: #9ca3af; display: flex; align-items: center; justify-content: center; }
+  .wc.attn { flex-direction: column; align-items: stretch; gap: 9px; background: #fff6f5; border-color: #ffd0ca; box-shadow: 0 10px 28px rgba(200,40,30,.12); }
+  .wc.attn .head { display: flex; gap: 12px; align-items: flex-start; }
+  .wc.attn .detail { margin-left: 34px; padding: 7px 10px; border-radius: 8px; background: #fff; border: 1px solid #ffe1dc; font-family: var(--mono); font-size: 11.5px;
+                     line-height: 1.55; color: #4b5563; user-select: text; }
+  .wc.attn .acts { margin-left: 34px; display: flex; gap: 8px; }
+  .wp { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 16px 0 10px; border-radius: 18px; background: #fff;
+        border: 1px solid rgba(15,23,42,.09); box-shadow: 0 8px 22px rgba(15,23,42,.11); font-size: 14px; font-weight: 600; }
+  .wp .ico { width: 20px; height: 20px; }
+  .more { align-self: stretch; margin-top: -4px; height: 28px; border-radius: 0 0 12px 12px; background: #ffe9e6; border: 1px solid #ffd0ca; border-top: 0;
+          margin-left: 10px; margin-right: 10px; font-size: 12.5px; font-weight: 600; color: #b42318; display: block; line-height: 28px; padding: 0 12px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .notes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 36px; margin-top: 18px; font-size: 14px; line-height: 1.7; color: var(--ink2); }
+  .notes div { display: flex; gap: 8px; } .notes .anum { flex: none; margin-top: 3px; }
+  .sub2 { display: grid; grid-template-columns: 560px 1fr; gap: 28px; margin-top: 10px; align-items: start; }
+  .crop { position: relative; height: 330px; border-radius: 14px; overflow: hidden; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.08), 0 14px 40px rgba(0,0,0,.12); }
+  .crop .bg { position: absolute; inset: 0; background-image: repeating-linear-gradient(180deg, transparent 0 22px, #f1f2f4 22px 32px, transparent 32px 48px); }
+  .mac { position: relative; height: 330px; border-radius: 14px; overflow: hidden; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.1), 0 14px 40px rgba(0,0,0,.14); }
+  .mac .tb { height: 52px; background: rgba(246,246,248,.96); border-bottom: 1px solid #e3e3e6; display: flex; align-items: center; gap: 8px; padding: 0 16px; }
+  .mac .tb i { width: 12px; height: 12px; border-radius: 6px; display: inline-block; }
+  .mac .tb b { margin-left: 120px; font: 600 14px "Inter", "Noto Sans SC", sans-serif; }
+  .mac .cbg { position: absolute; left: 0; right: 0; top: 53px; bottom: 0; padding: 22px 28px; font: 15px/1.8 "Inter", "Noto Sans SC", sans-serif; color: #1f2329; }
+  .mac .side2 { position: absolute; left: 0; top: 53px; bottom: 0; width: 210px; background: #f4f4f6; border-right: 1px solid #e5e5e8; }
+  .mac .side2 div { height: 26px; margin: 10px 14px 0; border-radius: 6px; background: #e7e7ea; }
+  .mac .side2 div.on { background: #d9e5ff; }
+  .mac .stack { position: absolute; right: 16px; top: 66px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+  .lbl2 { font-size: 14px; font-weight: 800; margin: 0 0 10px; }
+  .lbl2 span { margin-left: 6px; font-size: 12.5px; font-weight: 500; color: var(--ink3); }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <h1>Toast 通知系统 · ③ 桌面端（web · macOS · iPad）</h1>
+  <p class="lede">大屏放<b>右上角竖排</b>（web 今天就在右上角，位置不动）。分级和 iPhone 一样：胶囊靠右对齐、宽度随内容；卡片 360px。<b>需要处理的钉在最上面</b>，临时的排在它下面；最多 3 张，更多时折成「+N more」。鼠标悬停暂停计时。大屏不把 ③ 缩成胶囊：地方够，原因留在那里方便复制。web 今天的两层（Message 和会话卡）合成<b>一个队列</b>，不再各叠各的。</p>
+
+  <h2><span class="n">1</span>web 控制台<small>样式沿用 web 自己的语言（白底卡片 + 1px 边），不照搬玻璃</small></h2>
+  <div class="win">
+    <div class="chrome"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><div class="url">orbitd.io/sessions/7f3k2…</div></div>
+    <div class="body">
+      <div class="side">
+        <div class="logo"><span></span>Orbit</div>
+        <div class="nav"><i class="ic"></i>Projects<s>Ctrl P</s></div>
+        <div class="nav"><i class="ic"></i>Tasks</div>
+        <div class="nav"><i class="ic"></i>Wiki</div>
+        <div class="nav"><i class="ic"></i>Runners</div>
+        <div class="nav"><i class="ic"></i>Providers</div>
+        <div class="hr"></div>
+        <div class="ws">Workspaces 7</div>
+        <div class="wsr on">orbit <em>· wikova</em></div>
+        <div class="wsr">wikova-develop <em>· wikova</em></div>
+        <div class="wsr">wikova-prod <em>· wikova</em></div>
+        <div class="wsr">wikova-data <em>· workstation</em></div>
+        <div class="wsr">HPC <em>· HPC</em></div>
+        <div class="wsr">orbit-develop <em>· HPC</em></div>
+      </div>
+      <div class="list">
+        <div class="hd"><i></i>orbit<em>Open ⌄</em></div>
+        <div class="new">＋ New session</div>
+        <div class="srch">Search sessions</div>
+        <div class="sec">Today</div>
+        <div class="row"><b><span>侧栏工作区排序</span><em>42m ago</em></b><div>收到，做 B。先摸清现有代码…</div></div>
+        <div class="row on"><b><span>审查导入逻辑避免侵入用户身份</span><em>13h ago</em></b><div>已记住：后续默认直接合入…</div></div>
+        <div class="sec">Yesterday</div>
+        <div class="row"><b><span>部署 0.1.205</span><em>10/2</em></b><div>已部署：apiserver 迁移已应用…</div></div>
+        <div class="sec">Previous 7 Days</div>
+        <div class="row"><b><span>会话重命名入口</span><em>9/28</em></b><div>点标题改名，行菜单也能改。</div></div>
+        <div class="row"><b><span>Codex 账号池配额</span><em>9/27</em></b><div>两个窗口都显示了，卡住的那一…</div></div>
+      </div>
+      <div class="main">
+        <h3>审查导入逻辑避免侵入用户身份 <span>Follow</span></h3>
+        <div class="subt">Waiting for your reply · Open · 13h ago</div>
+        <div class="bubble">导入会话会不会把作者改成我？</div>
+        <div class="msg">看了 <code>importSession</code>：会话的作者取的是原始记录里的 owner，没有用当前登录的人，这是对的。<br>结论：不会侵入用户身份。我补了一条测试把这个行为锁住。</div>
+        <div class="msg">已记住：后续默认直接合入 main。</div>
+        <div class="wt">⎇ orbit…a71f2 <span style="color:#16a34a">+12</span> <span style="color:#dc2626">−3</span> · 1 file<b>Conflict</b></div>
+        <div class="comp">Reply…</div>
+
+        <div class="wstack">
+          <div class="wc attn">
+            <div class="head"><svg class="ico"><use href="#err"/></svg><span class="t"><b>Couldn't merge into main</b><small>orbit…a71f2 → main · 1 file</small></span><span class="wx"><svg width="14" height="14"><use href="#xm"/></svg></span></div>
+            <div class="detail">CONFLICT (content): Merge conflict in src/web/src/lib/toast.tsx<br>Merge aborted; your branch is unchanged.</div>
+            <div class="acts"><span class="wb pri">Resolve in session</span><span class="wb sec">Copy error</span></div>
+          </div>
+          <div class="wc"><svg class="ico"><use href="#ok"/></svg><span class="t"><b>Session completed</b><small>侧栏工作区排序</small></span><span class="wb">Undo</span></div>
+          <div class="wp"><svg class="ico"><use href="#ok"/></svg>Link copied</div>
+        </div>
+        <div class="mark" style="right:386px;top:70px">1</div>
+        <div class="mark" style="right:386px;top:239px">2</div>
+        <div class="mark" style="right:160px;top:299px">3</div>
+      </div>
+    </div>
+  </div>
+  <div class="notes">
+    <div><span class="anum">1</span><span><b>③ 钉在最上面。</b>后来的 toast 排在它下面，不会把它顶走；红底 + 原因块，原因可以选中复制；✕ 或处理掉才消失。在别处解决了（另一台设备、会话自己修好）自动收走。</span></div>
+    <div><span class="anum">2</span><span><b>② 结果卡</b> 360px，按钮在右；6 秒，悬停暂停；点卡片打开那个会话（今天的 sessionNotice 行为不变）。</span></div>
+    <div><span class="anum">3</span><span><b>① 确认胶囊</b>靠右对齐，宽度随内容；3 秒；不拦点击（今天的 Message 已经是 click-through）。</span></div>
+    <div><span class="anum">4</span><span><b>新的在下面。</b>临时 toast 按到达顺序往下排，旧的先走；同一个操作（进行中 → 结果）原地更新，不重新入场。</span></div>
+  </div>
+
+  <h2><span class="n">2</span>挤满了怎么办 · macOS / iPad</h2>
+  <div class="sub2">
+    <div>
+      <div class="lbl2">同时超过 3 张<span>web / macOS / iPad 一样</span></div>
+      <div class="crop"><div class="bg"></div>
+        <div class="wstack" style="top:20px;right:20px">
+          <div style="width:360px;display:flex;flex-direction:column">
+            <div class="wc attn">
+              <div class="head"><svg class="ico"><use href="#err"/></svg><span class="t"><b>Couldn't save the schedule</b><small>Nightly wiki maintenance</small></span><span class="wx"><svg width="14" height="14"><use href="#xm"/></svg></span></div>
+              <div class="detail">revision 12 is stale — reload and try again</div>
+              <div class="acts"><span class="wb pri">Retry</span><span class="wb sec">Copy error</span></div>
+            </div>
+            <div class="more">+2 more · Couldn't merge into main · Couldn't copy…</div>
+          </div>
+          <div class="wc"><svg class="ico"><use href="#trash"/></svg><span class="t"><b>Moved to Trash</b><small>部署 0.1.204</small></span><span class="wb">Undo</span></div>
+          <div class="wp"><svg class="ico"><use href="#ok"/></svg>Markdown copied</div>
+        </div>
+      </div>
+      <p class="ann">多条 ③ 叠成一摞，最新的在前，下面一条「+N more」写出另外几条的标题，点它展开。临时的只排最新的两条，更早的提前离开（它们本来就只停 3–6 秒）。</p>
+    </div>
+    <div>
+      <div class="lbl2">macOS · iPad 常规宽度<span>原生玻璃，位置换到右上角</span></div>
+      <div class="mac">
+        <div class="tb"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><b>审查导入逻辑避免侵入用户身份</b></div>
+        <div class="side2"><div></div><div class="on"></div><div></div><div></div><div></div><div></div></div>
+        <div class="cbg" style="left:210px">看了 <code>importSession</code>：会话的作者取的是原始记录里的 owner，没有用当前登录的人，这是对的。结论：不会侵入用户身份。我补了一条测试把这个行为锁住。<br>已记住：后续默认直接合入 main。</div>
+        <div class="stack">
+          <div class="card attn glass red">
+            <div class="head"><svg class="ico"><use href="#err"/></svg><span class="t"><b>Couldn't merge into main</b><small>orbit…a71f2 → main · 1 file</small></span><span class="xbtn"><svg width="13" height="13"><use href="#xm"/></svg></span></div>
+            <div class="detail">CONFLICT (content): Merge conflict in<br>src/web/src/lib/toast.tsx</div>
+            <div class="acts"><span class="btn pri">Resolve in session</span><span class="btn sec">Copy error</span></div>
+          </div>
+          <div class="pill glass"><svg class="ico"><use href="#ok"/></svg>Link copied</div>
+        </div>
+      </div>
+      <p class="ann">今天 macOS 是顶部居中、最宽 560。改成和 web 一样的右上角竖排，卡片 360；组件和 iPhone 同一套（<code>ToastHost</code> 按 size class 换布局）。iPad 分屏到窄宽度时回到 iPhone 的居中样式。</p>
+    </div>
+  </div>
+</div>
+<script src="toast.js"></script>
+</body>
+</html>

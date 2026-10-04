@@ -1000,6 +1000,13 @@ struct TaskRowView: View {
                 .font(.orbitListSubtitle.weight(.medium))
                 .foregroundStyle(.orange)
                 .lineLimit(1)
+        case .underReview?:
+            // Its report is still with its reviewer: in the same place, in the quiet tone.
+            HStack(spacing: 4) {
+                Image(systemName: "clock").font(.orbitMeta)
+                Text(OwnerConfirmations.underReview).font(.orbitListSubtitle).lineLimit(1)
+            }
+            .foregroundStyle(.secondary)
         case .prerequisiteCancelled?:
             HStack(spacing: 4) {
                 Image(systemName: "lock.fill").font(.orbitMeta)
@@ -1113,6 +1120,8 @@ private struct TaskDetailContent: View {
     @State private var prerequisiteToRemove: TaskDependencyListRow?
     /// The reader's Graph/List choice; nil follows the component (`TaskDetailLogic.prefersGraph`).
     @State private var dependencyView: DependencyView?
+    /// The run whose Why is open: the decision smart selection made for it.
+    @State private var routeWhy: TaskRouteWhy?
 
     private enum DependencyView: Hashable { case graph, list }
 
@@ -1252,6 +1261,9 @@ private struct TaskDetailContent: View {
                     model.showToast(TaskDetailLogic.followedToast(watch))
                 }
             }
+        }
+        .sheet(item: $routeWhy) { why in
+            TaskRouteWhySheet(why: why)
         }
         .fileImporter(isPresented: $importingInput, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             guard case .success(let urls) = result else { return }
@@ -1543,6 +1555,16 @@ private struct TaskDetailContent: View {
             .buttonStyle(.borderedProminent)
             .tint(.orange)
             .controlSize(.large)
+        case .underReview(let sessionID):
+            // The same way to the card while its report is still with its reviewer — not orange:
+            // nobody is asking the owner yet (contract §5 N3).
+            Button { model.route(to: .session(sessionID)) } label: {
+                Label(OwnerConfirmations.underReview, systemImage: "clock")
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
         case .confirmDone:
             Button { Task { _ = await tasks.confirmOwner(task.id) } } label: {
                 Label(OwnerConfirmations.confirmAction, systemImage: "checkmark.seal")
@@ -1665,6 +1687,7 @@ private struct TaskDetailContent: View {
     private func detailsSection(_ task: TaskItem) -> some View {
         Section {
             assigneePicker(task)
+            suggestedPicker(task)
             providerPicker(task)
             modelPicker(task)
             listPicker(task)
@@ -1682,11 +1705,17 @@ private struct TaskDetailContent: View {
         } header: {
             sectionHeader(TaskDetailCopy.detailsHeading)
         } footer: {
-            if let footnote = TaskDetailLogic.createdFootnote(
-                creatorName: TaskDetailLogic.creatorName(task, agents: model.agents?.items ?? [])
-                    ?? tasks.item(task.id)?.creatorName,
-                createdAt: task.createdAt) {
-                Text(footnote)
+            VStack(alignment: .leading, spacing: 4) {
+                // The coordinator's reason for the suggested tier, in grey under the card.
+                if let note = TaskDetailLogic.modelHintNote(task) {
+                    Text(note)
+                }
+                if let footnote = TaskDetailLogic.createdFootnote(
+                    creatorName: TaskDetailLogic.creatorName(task, agents: model.agents?.items ?? [])
+                        ?? tasks.item(task.id)?.creatorName,
+                    createdAt: task.createdAt) {
+                    Text(footnote)
+                }
             }
         }
     }
@@ -1725,6 +1754,58 @@ private struct TaskDetailContent: View {
             }
         }
         .pickerStyle(.menu)
+        .disabled(tasks.isMutating(task.id))
+    }
+
+    /// The tier suggested for the task (docs/model-routing-design.md §3.1): No suggestion, or S / M /
+    /// L / XL with the model and effort the server resolved each to for this task (`modelHintOptions`)
+    /// and the work it is for. A suggestion, not a pin: a failed run still moves the next one up, and
+    /// a model picked below wins over both.
+    private func suggestedPicker(_ task: TaskItem) -> some View {
+        let picks = TaskDetailLogic.modelHintPicks(task.modelHintOptions)
+        let current = picks.first { $0.value == task.modelHint }?.label ?? task.modelHint ?? TaskDetailCopy.noSuggestion
+        return LabeledContent(TaskDetailCopy.suggestedLabel) {
+            Menu {
+                // A Toggle rather than a Picker row: a menu item's second Text is its subtitle only in
+                // this shape (as `lineRow` in ApprovalCards draws it), so each tier says the work it is
+                // for, and the tick is drawn for the one that is on.
+                ForEach(picks) { pick in
+                    Toggle(isOn: Binding(
+                        get: { pick.value == task.modelHint },
+                        set: { on in
+                            guard on, pick.value != task.modelHint else { return }
+                            Task { await tasks.setModelHint(task.id, pick.value) }
+                        }
+                    )) {
+                        // A tier's name breaks only after a dot, so a wrapped one never splits its
+                        // model's name ("M ·" over "Sonnet 5.5 · medium").
+                        Text(TaskDetailLogic.menuTitle(pick.label))
+                        Text(pick.detail)
+                    }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Text(current)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    // macOS draws its own disclosure mark beside a borderless menu's title.
+                    #if os(iOS)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.orbitLabel.weight(.semibold))
+                    #endif
+                }
+                // The tint the menu pickers around it draw their value in, on iOS.
+                #if os(iOS)
+                .foregroundStyle(Color.accentColor)
+                #else
+                .foregroundStyle(Color.secondary)
+                #endif
+            }
+            .borderlessMenuStyle()
+            #if os(macOS)
+            .fixedSize()
+            #endif
+        }
         .disabled(tasks.isMutating(task.id))
     }
 
@@ -1768,11 +1849,14 @@ private struct TaskDetailContent: View {
             for: provider,
             catalog: model.agents?.modelCatalog(for: assigneeAgent(task)?.runnerId),
             configured: model.agents?.configuredProviders)
+        // Unpinned on an assignee with smart selection on, each run's model is picked for it.
+        let unpinned = assigneeAgent(task)?.modelRouting == true
+            ? TaskDetailCopy.smartSelectionPlaceholder : "Provider default"
         return Picker(TaskDetailCopy.modelLabel, selection: Binding(
             get: { task.model },
             set: { id in Task { await tasks.setModel(task.id, id) } }
         )) {
-            Text("Provider default").tag(String?.none)
+            Text(unpinned).tag(String?.none)
             ForEach(options) { option in
                 Text(option.name).tag(Optional(option.id))
             }
@@ -2112,8 +2196,36 @@ private struct TaskDetailContent: View {
                 Text(TaskDetailCopy.noRuns).foregroundStyle(.secondary)
             }
             ForEach(sessions) { session in
-                Button { model.route(to: .session(session.id)) } label: { runRow(session) }
+                // The row is the way into the run; ⓘ beside a routed one answers why instead.
+                HStack(spacing: 8) {
+                    Button { model.route(to: .session(session.id)) } label: { runRow(session, task) }
+                        .buttonStyle(.plain)
+                    if let route = TaskDetailLogic.runRoute(session) {
+                        let pick = TaskDetailLogic.routePick(route) { runModelName($0, task) }
+                        Button {
+                            routeWhy = TaskRouteWhy(id: session.id, title: TaskDetailCopy.why(pick),
+                                                    reasons: route.reasons,
+                                                    footer: TaskDetailLogic.routeWhyFooter(route))
+                        } label: {
+                            Image(systemName: "info.circle")
+                                .font(.orbitControl)
+                                .frame(minWidth: 32, minHeight: 44)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel(TaskDetailCopy.why(pick))
+                    }
+                    // The way in too, beside ⓘ rather than under it: the row's own press, again.
+                    Button { model.route(to: .session(session.id)) } label: {
+                        Image(systemName: "chevron.right")
+                            .font(.orbitLabel.weight(.semibold))
+                            .foregroundStyle(Color.secondary.opacity(0.7))
+                            .frame(minHeight: 44)
+                            .contentShape(Rectangle())
+                    }
                     .buttonStyle(.plain)
+                    .accessibilityHidden(true)
+                }
             }
         } header: {
             sectionHeader(TaskDetailCopy.runsHeading, detail: "\(sessions.count)")
@@ -2121,9 +2233,13 @@ private struct TaskDetailContent: View {
     }
 
     /// The session list's rhythm: who ran it and when on the first line, where it stands on the
-    /// second; a spinner while it runs.
-    private func runRow(_ session: SessionRef) -> some View {
-        HStack(spacing: 10) {
+    /// second with what it ran on (model routing §9) — `Succeeded · Sonnet 5.5 · medium` and, on a
+    /// run smart selection put on its pick, the tier it was routed at; a spinner while it runs. A run
+    /// on an Agent without smart selection says in purple what it would have picked.
+    private func runRow(_ session: SessionRef, _ task: TaskItem) -> some View {
+        let route = TaskDetailLogic.runRoute(session)
+        let name: (String) -> String = { runModelName($0, task) }
+        return HStack(spacing: 10) {
             Group {
                 if session.resolvedRunState == .running {
                     ProgressView().controlSize(.small)
@@ -2142,15 +2258,55 @@ private struct TaskDetailContent: View {
                         Text(when).font(.orbitSubtext).foregroundStyle(Color.secondary)
                     }
                 }
-                Text(sessionLabel(session))
-                    .font(.orbitSubtext)
-                    .foregroundStyle(session.resolvedRunState == .running ? Color.accentColor : sessionColor(session))
+                HStack(spacing: 6) {
+                    // One run of text, so the dot sits evenly between where it stands and what it ran on.
+                    let status = Text(sessionLabel(session))
+                        .foregroundStyle(session.resolvedRunState == .running ? Color.accentColor : sessionColor(session))
+                    if let ranOn = TaskDetailLogic.runModelLine(session, modelLabel: name) {
+                        (status + Text(" · \(ranOn)").foregroundStyle(Color.secondary))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    } else {
+                        status
+                    }
+                    if let route, route.applied {
+                        routeTierTag(route)
+                    }
+                }
+                .font(.orbitSubtext)
+                if let route, !route.applied {
+                    Text(TaskDetailCopy.wouldHavePicked(TaskDetailLogic.routePick(route, modelLabel: name),
+                                                        level: route.level ?? ""))
+                        .font(.orbitSubtext)
+                        .foregroundStyle(Color.purple)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
-            Image(systemName: "chevron.right")
-                .font(.orbitLabel.weight(.semibold))
-                .foregroundStyle(Color.secondary.opacity(0.7))
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .contentShape(Rectangle())
+    }
+
+    /// `✦ M` on a light blue ground; amber, `✦ L ↑`, when a failed run moved this one up a tier.
+    private func routeTierTag(_ route: TaskRunRoute) -> some View {
+        let tint = route.escalated ? Color.orange : Color.blue
+        return Text(TaskDetailLogic.routeTierTag(route))
+            .font(.orbitLabel.weight(.semibold))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+            .fixedSize()
+    }
+
+    /// A run's model by the name the catalogues give it — the Suggested picker's own tiers first, then
+    /// the assignee's runner, then any runner's (a run outlives its assignee).
+    private func runModelName(_ id: String, _ task: TaskItem) -> String {
+        let own = model.agents?.modelCatalog(for: assigneeAgent(task)?.runnerId)
+        let every = Array((model.agents?.runnerModelCatalog ?? [:]).values)
+        return TaskDetailLogic.modelLabel(id, options: task.modelHintOptions,
+                                          catalogs: (own.map { [$0] } ?? []) + every,
+                                          configured: model.agents?.configuredProviders)
     }
 
     /// How long a run has been going while it goes; when it started, once it has stopped.

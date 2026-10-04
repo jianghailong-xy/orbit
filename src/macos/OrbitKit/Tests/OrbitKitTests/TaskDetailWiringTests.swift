@@ -105,9 +105,11 @@ final class TaskDetailWiringTests: XCTestCase {
         XCTAssertFalse(presses.contains("Mark done"), "a second `done` beside Confirm done read as the same press")
         XCTAssertTrue(presses.contains("if row.stacked {"), "the long pointer stacks rather than wraps")
         XCTAssertTrue(presses.contains("HStack(spacing: 10) {"))
-        XCTAssertEqual(presses.components(separatedBy: ".frame(maxWidth: .infinity)").count - 1, 6,
-                       "every label fills its half: three leading presses and three trailing ones")
-        XCTAssertEqual(presses.components(separatedBy: ".lineLimit(1)").count - 1, 6, "and none of them wraps")
+        // Four leading presses since a run's report can be with its reviewer: the pointer to the card
+        // says Under review then (docs/owner-confirmation-review-contract.md §5 N3).
+        XCTAssertEqual(presses.components(separatedBy: ".frame(maxWidth: .infinity)").count - 1, 7,
+                       "every label fills its half: four leading presses and three trailing ones")
+        XCTAssertEqual(presses.components(separatedBy: ".lineLimit(1)").count - 1, 7, "and none of them wraps")
         XCTAssertTrue(presses.contains("TaskDetailCopy.runNow"), "the detail's first run says what the browser's does")
 
         let menu = try section(view, from: "ToolbarItem(placement: .primaryAction) {\n                    Menu {",
@@ -132,8 +134,9 @@ final class TaskDetailWiringTests: XCTestCase {
         let view = try source(Self.tasksView)
         let details = try section(view, from: "private func detailsSection(_ task: TaskItem) -> some View {",
                                   to: "private func detailRow(")
-        let order = try positions(["assigneePicker(task)", "providerPicker(task)", "modelPicker(task)",
-                                   "listPicker(task)", "TaskDetailCopy.startAtLabel", "TaskDetailCopy.createdFromLabel"],
+        let order = try positions(["assigneePicker(task)", "suggestedPicker(task)", "providerPicker(task)",
+                                   "modelPicker(task)", "listPicker(task)", "TaskDetailCopy.startAtLabel",
+                                   "TaskDetailCopy.createdFromLabel"],
                                   in: details)
         XCTAssertEqual(order, order.sorted(), "the browser's field order")
         XCTAssertTrue(details.contains("editingSchedule = true"), "Start at opens its sheet")
@@ -143,6 +146,91 @@ final class TaskDetailWiringTests: XCTestCase {
                                   to: "// MARK: dependencies")
         XCTAssertEqual(pickers.components(separatedBy: ".pickerStyle(.menu)").count - 1, 4,
                        "Assignee, Provider, Model and List are the platform's menu pickers")
+    }
+
+    // MARK: smart model selection (docs/model-routing-design.md §9)
+
+    func testSuggestedReadsTheServersTiersAndWritesThroughTheModel() throws {
+        let view = try source(Self.tasksView)
+        let picker = try section(view, from: "private func suggestedPicker(_ task: TaskItem) -> some View {",
+                                 to: "private func assigneeAgent(")
+        XCTAssertTrue(picker.contains("LabeledContent(TaskDetailCopy.suggestedLabel)"))
+        XCTAssertTrue(picker.contains("TaskDetailLogic.modelHintPicks(task.modelHintOptions)"),
+                      "each tier as the server resolved it — no tier table on this side")
+        // A Toggle per tier: the only menu item shape whose second Text is drawn as its subtitle.
+        XCTAssertTrue(picker.contains("Toggle(isOn: Binding("))
+        XCTAssertTrue(picker.contains("Text(TaskDetailLogic.menuTitle(pick.label))"))
+        XCTAssertTrue(picker.contains("Text(pick.detail)"))
+        XCTAssertTrue(picker.contains("await tasks.setModelHint(task.id, pick.value)"))
+        XCTAssertTrue(picker.contains("guard on, pick.value != task.modelHint else { return }"),
+                      "re-picking the tier writes nothing")
+        let details = try section(view, from: "private func detailsSection(_ task: TaskItem) -> some View {",
+                                  to: "private func detailRow(")
+        XCTAssertTrue(details.contains("TaskDetailLogic.modelHintNote(task)"), "the coordinator's reason under the card")
+        let model = try section(view, from: "private func modelPicker(_ task: TaskItem) -> some View {",
+                                to: "private func listPicker(")
+        XCTAssertTrue(model.contains("assigneeAgent(task)?.modelRouting == true"))
+        XCTAssertTrue(model.contains("TaskDetailCopy.smartSelectionPlaceholder : \"Provider default\""))
+    }
+
+    func testARoutedRunSaysWhatItRanOnAndOpensItsWhy() throws {
+        let view = try source(Self.tasksView)
+        let runs = try section(view, from: "private func runsSection(_ task: TaskItem) -> some View {",
+                               to: "private func runTime(")
+        XCTAssertTrue(runs.contains("Button { model.route(to: .session(session.id)) } label: { runRow(session, task) }"),
+                      "the row is still the way into the run")
+        XCTAssertTrue(runs.contains("if let route = TaskDetailLogic.runRoute(session) {"))
+        XCTAssertTrue(runs.contains("routeWhy = TaskRouteWhy(id: session.id, title: TaskDetailCopy.why(pick),"))
+        XCTAssertTrue(runs.contains("footer: TaskDetailLogic.routeWhyFooter(route))"))
+        XCTAssertTrue(runs.contains("TaskDetailLogic.runModelLine(session, modelLabel: name)"))
+        XCTAssertTrue(runs.contains("if let route, route.applied {"), "the tier tag, on a run on the pick")
+        XCTAssertTrue(runs.contains("TaskDetailCopy.wouldHavePicked("), "the purple line, on a shadow run")
+        XCTAssertTrue(runs.contains("options: task.modelHintOptions,"), "a model named by the picker's tiers first")
+        XCTAssertTrue(view.contains(".sheet(item: $routeWhy) {"))
+        let parts = try source(Self.parts)
+        let why = try section(parts, from: "struct TaskRouteWhySheet: View {", to: "#if os(iOS)")
+        XCTAssertTrue(why.contains("ForEach(Array(why.reasons.enumerated())"), "the reasons as the router wrote them")
+        XCTAssertTrue(why.contains("Text(why.footer)"))
+        XCTAssertTrue(why.contains(".navigationTitle(why.title)"))
+        XCTAssertTrue(why.contains("Text(why.title).font(.headline)"), "a Mac sheet draws no navigation title")
+    }
+
+    func testTheAgentFormHasTheSwitchAndTheComposerItsMark() throws {
+        let agents = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/AgentsView.swift")
+        let form = try section(agents, from: "struct AgentFormContent: View {", to: "private func prefill()")
+        XCTAssertTrue(form.contains("Section(\"Task runs\") {"))
+        XCTAssertTrue(form.contains("Toggle(isOn: $modelRouting) {"))
+        XCTAssertTrue(form.contains("Text(TaskDetailCopy.smartSelectionSwitch)"))
+        XCTAssertTrue(form.contains("Text(TaskDetailCopy.smartSelectionSwitchDetail)"))
+        let save = try section(agents, from: "private func prefill()", to: "Task { await agents.save(agent.id, req) }")
+        XCTAssertTrue(save.contains("modelRouting = agent.modelRouting ?? false"))
+        XCTAssertTrue(save.contains("|| modelRouting != (agent.modelRouting ?? false)"), "a moved switch is a change")
+        XCTAssertTrue(save.contains("modelRouting: modelRouting != (agent.modelRouting ?? false) ? modelRouting : nil"))
+
+        let composer = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/ComposerView.swift")
+        let menu = try section(composer, from: "private var modelMenu: some View {", to: "private var modelDisplayName")
+        XCTAssertTrue(menu.contains("ComposerLogic.smartRoute(taskID: console.taskID, route: console.worktree.detail?.route,"))
+        let order = try positions(["if let route = smartRoute {", "TaskDetailCopy.pickedBySmartSelection(tier:",
+                                   "route.reasons.first", "TaskDetailCopy.modelChangeAppliesToThisRun",
+                                   "ForEach(modelMenuItems)", "Button(TaskDetailCopy.openTask) {"],
+                                  in: menu)
+        XCTAssertEqual(order, order.sorted(), "why first, the models, then Open task last — the web menu's order")
+        XCTAssertTrue(menu.contains("ComposerLogic.menuLines("), "a Mac menu item does not wrap")
+        XCTAssertTrue(menu.contains("ComposerLogic.sentences(TaskDetailCopy.modelChangeAppliesToThisRun)"),
+                      "an iOS menu item stops at three lines")
+        // On the phone the task opens over the conversation, so back returns to the run.
+        XCTAssertTrue(menu.contains("app.openFromConversation(.task(taskID), overConsole: opensPagesOverConsole)"))
+        XCTAssertTrue(menu.contains(".accessibilityLabel(chipAccessibilityLabel)"))
+        XCTAssertTrue(menu.contains("TaskDetailCopy.chipPickedBySmartSelection"))
+        let chip = try section(composer, from: "private var modelChipLabel: some View {", to: "private var chipEffortLabel")
+        XCTAssertTrue(chip.contains("let smart = smartRoute != nil"))
+        let phone = try section(chip, from: "#if os(iOS)", to: "#else")
+        XCTAssertTrue(phone.contains("Text(\"✦\")"))
+        XCTAssertTrue(phone.contains("Color.accentColor.opacity(0.12)"), "the light blue ground, on the label")
+        XCTAssertTrue(chip.contains("Text(smart ? \"✦ \" : \"\")"), "the Mac's title carries the ✦")
+        // A Mac borderless menu drops its label's ground: there it is painted on the control.
+        let mac = try section(menu, from: ".footerMenuChrome()\n        #if os(macOS)", to: "#endif")
+        XCTAssertTrue(mac.contains("Color.accentColor.opacity(0.12)"))
     }
 
     func testTheNewBlocksReadAndWriteThroughTheModel() throws {

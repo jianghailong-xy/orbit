@@ -54,6 +54,7 @@ var cliParityExemptTools = map[string]string{
 var cliParityParamAlias = map[string]string{
 	"dependsOnTaskId":  "--depends-on",
 	"dependsOnTaskIds": "--depends-on",
+	"attachmentIds":    "--attachment-id",
 	// Singular at a terminal, like --depends-on above: one flag carries one label and repeats,
 	// which is also what makes a label containing a comma expressible.
 	"labels": "--label",

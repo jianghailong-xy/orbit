@@ -95,7 +95,14 @@ final class CodexSignInCopyParityTests: XCTestCase {
         for fact in CodexSignIn.facts(pool("{pool.label}")) {
             assertSays(source, "<b>\(fact.lead)</b>\(fact.rest)", in: Self.dialog)
         }
-        assertSays(source, "<b>\(CodexSignIn.risk.lead)</b>\(CodexSignIn.risk.rest)", in: Self.dialog)
+        // The same notice read by one of the people the pool lets sign an account of their own in
+        // (migration 0371): whose it is for the whole pool, and the warning in their own words.
+        for fact in CodexSignIn.facts(pool("{pool.label}"), mine: false) {
+            assertSays(source, "<b>\(fact.lead)</b>\(fact.rest)", in: Self.dialog)
+        }
+        let mineRisk = CodexSignIn.risk(mine: true)
+        assertSays(source, "<b>{mine ? '\(mineRisk.lead)' : '\(CodexSignIn.risk(mine: false).lead)'}</b>\(mineRisk.rest)",
+                   in: Self.dialog)
         assertSays(source, "<Button onClick={close}>\(CodexSignIn.cancel)</Button>", in: Self.dialog)
         // The press gets the one-time code: the sign-in itself finishes on OpenAI's page.
         assertSays(source, "onClick={() => void start()}> \(CodexSignIn.start) </Button>", in: Self.dialog)
@@ -119,6 +126,9 @@ final class CodexSignInCopyParityTests: XCTestCase {
         let lead = CodexSignIn.anotherLeadPrefix + "<b>{pool.label}</b>" + CodexSignIn.anotherLeadSuffix(two)
         assertSays(source, asWeb(lead, "2 accounts", "{accounts} account{accounts === 1 ? '' : 's'}"), in: Self.dialog)
         for fact in CodexSignIn.anotherFacts(two) {
+            assertSays(source, "<b>\(fact.lead)</b>\(fact.rest)", in: Self.dialog)
+        }
+        for fact in CodexSignIn.anotherFacts(two, mine: false) {
             assertSays(source, "<b>\(fact.lead)</b>\(fact.rest)", in: Self.dialog)
         }
         assertSays(source, "<b>\(CodexSignIn.anotherRisk.lead)</b>\(CodexSignIn.anotherRisk.rest)", in: Self.dialog)
@@ -203,15 +213,22 @@ final class CodexSignInCopyParityTests: XCTestCase {
     /// NEXT mark only among several, and what signing it out leaves running.
     func testTheAccountsRowSaysWhatTheWebRowSays() throws {
         let row = try web(Self.accountPools)
-        assertSays(row, "<div className=\"pool-note\"> \(CodexLoginPool.noAccount) </div>", in: Self.accountPools)
+        // No account yet: one sentence whose last words are the pool's answer to who may sign one in —
+        // "you sign in" for whoever the pool admits (its owner, or a member its rule lets, 0371).
+        assertSays(row, "<div className=\"pool-note\"> No account yet — no session can start on this pool until {!shared || canAddAccount(shared) ? 'you sign in' : 'its owner signs in'} with ChatGPT. </div>",
+                   in: Self.accountPools)
+        XCTAssertEqual(CodexLoginPool.noAccount,
+                       "No account yet — no session can start on this pool until you sign in with ChatGPT.")
+        XCTAssertEqual(CodexLoginPool.noAccountOwner,
+                       "No account yet — no session can start on this pool until its owner signs in with ChatGPT.")
         assertSays(row, "<span className=\"re-summary\">\(CodexPoolPage.justMe) · {availabilityOf(pool, refusals)}</span>",
                    in: Self.accountPools)
         XCTAssertEqual(ProvidersOverview.codexPoolLine(pool("P", accounts: 2)), "Just me · 2 of 2 accounts available")
         assertSays(row, "<span className=\"re-quota-none\">\(CodexLoginPool.noQuota)</span>", in: Self.accountPools)
         assertSays(row, "resets {formatResetTime(row.window.resetsAt)}", in: Self.accountPools)
-        // Why it is out, and the way back — to the pool's owner, whose the sign-in is; one of the people
-        // they added reads that only its owner can.
-        assertSays(row, "<div className=\"pool-why\"> {onSignIn ? '\(CodexLoginPool.signedOutReason)' : '\(CodexLoginPool.signedOutReasonMember)'} </div>",
+        // Why it is out, and the way back — to the person who signed it in (migration 0371), whose the
+        // sign-in again is; anybody else reads that only they can, named where the pool's people are read.
+        assertSays(row, "<div className=\"pool-why\"> {signInAgain ? '\(CodexLoginPool.signedOutReason)' : `\(CodexLoginPool.signedOutReasonNotYours("${contributor ? contributor.name : 'the person who signed it in'}"))`} </div>",
                    in: Self.accountPools)
         assertSays(row, "> \(CodexLoginPool.signInAgain) </Button>", in: Self.accountPools)
         let signingOut = account(email: "${member.label}")
