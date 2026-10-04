@@ -207,6 +207,8 @@ class ComposerDeviceTest {
                     }
                 }
             }
+            instrument.uiAutomation.waitForIdle(1000,10000)
+            capture("system-share-expanded")
             systemClick("A07 receiver")
             systemClick("Received file")
             assertEquals(sha(bytes),systemNode("Received file")!!.contentDescription.toString())
