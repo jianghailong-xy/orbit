@@ -51,7 +51,6 @@ struct SessionProjectRowView: View {
                 .foregroundStyle(.blue)
                 .accessibilityHidden(true)
             Text(row.title)
-                .bold()
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .layoutPriority(1)

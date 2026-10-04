@@ -65,11 +65,11 @@
 
 和会话行**一样高**：Web 64px，iPhone 75pt（`compactRow`），都是两行。iPad 用 `regularIOSRow` 的版式，同样两行。
 
-- **第 1 行**：四宫格图标（Web 侧栏 Projects 的 `square.grid.2x2`，品牌蓝；iOS 是标题前的小图标）、**加粗**的项目名、状态点、时间。
+- **第 1 行**：四宫格图标（Web 侧栏 Projects 的 `square.grid.2x2`，品牌蓝；iOS 是标题前的小图标）、项目名（和会话行同一字重，不加粗：owner 10-04 的决定，效果图里的粗体以此为准）、状态点、时间。
   - 时间：组里成员会话最新的 `lastTurnAt ?? createdAt`。
   - 不再画 `Coordinator` 标：图标已经说明这是项目。
 - **第 2 行**：开头是**进度小标签**，放在会话行放标签的位置（现在 coordinator 行放 `Coordinator` 标的位置）：迷你进度条（绿 done、蓝 running、红 failed、灰其余）加 `done/total`。项目 DONE 时小标签变绿。后面是“第 2 行的话”（§4.2）。
-- **状态点**：组里任一会话的状态是“等你” → 琥珀；否则任一在跑 → Web 图标右下角蓝点、iOS 灰色转圈；否则只剩后台作业 → 呼吸。读法和会话行、文件夹行同一套（Web `statusGlyphMotion` / `sessionNeedsYou`，iOS `SessionLiveIndicator`）。
+- **状态点**：组里任一会话的状态是“等你” → 琥珀；否则任一在跑 → 图标位置和会话行一样转圈（Web 蓝色转圈代替四宫格，iOS 灰色转圈：owner 10-04 的决定，效果图里的运行状态以此为准）；否则只剩后台作业 → 呼吸。读法和会话行、文件夹行同一套（Web `statusGlyphMotion` / `sessionNeedsYou`，iOS `SessionLiveIndicator`）。
 - 条目上**没有琥珀计数**，也**没有子行**：列表里不展开。
 
 ### 4.2 第 2 行的话
