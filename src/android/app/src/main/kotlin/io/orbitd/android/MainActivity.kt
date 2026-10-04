@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -198,7 +199,7 @@ private fun WorkspaceHome(data: DirectoryData, open: (DirectoryWorkspace) -> Uni
         if (data.ready && data.workspaces.isEmpty()) item { StatusMessage("No workspaces", "Add a workspace to start a session.") }
         items(data.workspaces.size) { index ->
             val w = data.workspaces[index]
-            TextButton(onClick = { open(w) }, modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp)) { Text(w.name) }
+            TextButton(onClick = { open(w) }, modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).testTag("workspace:${w.id}")) { Text(w.name) }
         }
     }
 }

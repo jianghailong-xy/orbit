@@ -33,13 +33,15 @@ class DirectoryDeviceTest {
     private val sessionId = "34TcwNgAIo6tGUiIKjqnQ"
     private val workspaceId = "34Tcl0kralZrY8opuLJU4"
     private val folderId = "347en66xizlGSG9a6Nej5"
-    private var completed = false
+    @Volatile private var completed = false
+    @Volatile private var forbiddenDirectory = false
 
     @Test fun keyboardDirectoryFoldersSearchAndSystemBack() {
         val report = android.os.Bundle().apply { putString("a05_pid", android.os.Process.myPid().toString()) }
         instrumentation.sendStatus(0, report)
         compose.waitUntil(10_000) { app.session.state.value !is AuthState.Restoring }
         assertTrue("Requires a dedicated signed-out debug installation", app.session.state.value is AuthState.SignedOut)
+        compose.activity.getExternalFilesDir("a05-directory")!!.apply { mkdirs(); listFiles()?.forEach { it.delete() } }
         MockWebServer().use { server ->
             server.dispatcher = fixtureDispatcher()
             try {
@@ -53,31 +55,37 @@ class DirectoryDeviceTest {
                 capture("login-ime")
                 tap(signIn, requireAboveIme = true)
                 compose.waitUntil(15_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
-                compose.onNodeWithText("Field notes").performClick()
-                compose.onNodeWithText("Research").assertIsDisplayed()
+                compose.onNodeWithTag("workspace:$workspaceId").performClick()
+                directoryScrollTo("Research")
                 compose.onNodeWithText("Review navigation").assertDoesNotExist() // filed only once, inside its folder
                 compose.onNodeWithText("Research").performClick()
-                compose.onNodeWithText("Review navigation").assertIsDisplayed()
+                directoryScrollTo("Review navigation")
                 capture("folder")
                 compose.activityRule.scenario.recreate()
+                compose.waitUntil(5_000) { compose.activity.window.decorView.hasWindowFocus() }
+                instrumentation.waitForIdleSync()
+                instrumentation.uiAutomation.waitForIdle(500, 5_000)
                 compose.onNodeWithText("Review navigation").assertIsDisplayed()
-                compose.onNodeWithText("Search sessions").performTextInput("Review")
                 tap(compose.onNodeWithText("Search sessions"), false)
                 awaitIme(true)
+                compose.onNodeWithText("Search sessions").performTextInput("Review")
                 compose.waitUntil(10_000) { compose.onAllNodesWithText("Same dataset across light and dark").fetchSemanticsNodes().isNotEmpty() }
                 val hit = compose.onNodeWithText("Review navigation")
                 hit.performScrollTo()
                 capture("directory-ime")
                 tap(hit, true)
                 compose.waitUntil(10_000) { compose.onAllNodesWithText("Session options").fetchSemanticsNodes().isNotEmpty() }
+                awaitIme(false)
                 key(KeyEvent.KEYCODE_BACK)
+                compose.waitUntil(5_000) { compose.onAllNodesWithText("Review").fetchSemanticsNodes().isNotEmpty() }
                 compose.onNodeWithText("Review").assertIsDisplayed() // search and folder source survived
                 compose.onNodeWithText("Clear").performClick()
                 compose.onNodeWithContentDescription("Options for Review navigation").performScrollTo().performClick()
                 compose.onNodeWithText("Complete", useUnmergedTree = true).performScrollTo().performClick()
                 compose.waitUntil(10_000) { completed && !app.realtime.state.value.directoryRefreshing }
+                directoryScrollTo("Completed")
                 compose.onNodeWithText("Completed").performClick()
-                compose.onNodeWithText("Review navigation").assertIsDisplayed()
+                directoryScrollTo("Review navigation")
                 capture("completed")
                 key(KeyEvent.KEYCODE_BACK)
                 compose.onNodeWithText("Research").assertIsDisplayed()
@@ -89,6 +97,24 @@ class DirectoryDeviceTest {
                 assertTrue(apiCalls.contains("POST /api/sessions/$sessionId/complete"))
                 assertTrue(apiCalls.any { it.contains("/api/sessions/search?") && it.contains("q=Review") })
                 capture("directory")
+                forbiddenDirectory = true
+                compose.onNodeWithContentDescription("Refresh directory").performClick()
+                compose.waitUntil(10_000) { app.realtime.state.value.directoryError?.httpStatus == 403 }
+                directoryScrollTo("You don't have permission to load this directory.")
+                capture("permission")
+                directoryScrollTo("New folder")
+                compose.onNode(hasText("New folder") and hasAnyAncestor(hasTestTag("directory-list"))).assertIsNotEnabled()
+                forbiddenDirectory = false
+                compose.onNodeWithContentDescription("Refresh directory").performClick()
+                compose.waitUntil(10_000) { app.realtime.state.value.directoryFresh }
+                compose.activityRule.scenario.onActivity { it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
+                compose.waitUntil(5_000) { compose.activity.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE }
+                instrumentation.uiAutomation.waitForIdle(500, 5_000)
+                directoryScrollTo("Research")
+                capture("landscape")
+            } catch (failure: Throwable) {
+                capture("failure")
+                throw failure
             } finally {
                 runBlocking { app.session.logout() }
                 app.realtime.selectSession(null)
@@ -102,6 +128,7 @@ class DirectoryDeviceTest {
             val path = request.requestUrl!!.encodedPath
             apiCalls += "${request.method} ${request.path}"
             if (path !in listOf("/api/auth/login", "/api/auth/logout")) assertEquals("Bearer a05-fixture-access", request.getHeader("Authorization"))
+            if (path == "/api/workspaces" && forbiddenDirectory) return MockResponse().setResponseCode(403).setBody("{}")
             val session = """{"id":"$sessionId","title":"Review navigation","status":"ENDED","runState":"SUCCEEDED","lifecycleState":"${if (completed) "COMPLETED" else "OPEN"}","agent":{"id":"$workspaceId","name":"Field notes"},"folderId":"$folderId","createdAt":"2026-10-01T08:00:00Z","capabilities":{"canComplete":${!completed},"canRestore":$completed},"tags":[],"pendingApprovals":0,"lastAssistantText":"Same dataset across light and dark"}"""
             val body = when (path) {
                 "/api/auth/login" -> """{"accessToken":"a05-fixture-access","refreshToken":"a05-fixture-refresh","user":{"id":"fixture-user","email":"a05@example.test","name":"Directory fixture"}}"""
@@ -123,6 +150,11 @@ class DirectoryDeviceTest {
             }
             return MockResponse().setHeader("Content-Type", "application/json").setBody(body)
         }
+    }
+
+    private fun directoryScrollTo(text: String) {
+        compose.onNodeWithTag("directory-list").performScrollToNode(hasText(text))
+        compose.onNode(hasText(text) and hasAnyAncestor(hasTestTag("directory-list"))).assertIsDisplayed()
     }
 
     private fun awaitIme(visible: Boolean) = compose.waitUntil(8_000) {
@@ -150,8 +182,10 @@ class DirectoryDeviceTest {
         compose.waitForIdle()
     }
     private fun key(code: Int) {
-        instrumentation.uiAutomation.injectInputEvent(KeyEvent(KeyEvent.ACTION_DOWN, code), true)
-        instrumentation.uiAutomation.injectInputEvent(KeyEvent(KeyEvent.ACTION_UP, code), true)
+        compose.waitForIdle()
+        instrumentation.waitForIdleSync()
+        instrumentation.uiAutomation.waitForIdle(500, 5_000)
+        instrumentation.sendKeyDownUpSync(code)
         compose.waitForIdle()
     }
     private fun capture(name: String) {

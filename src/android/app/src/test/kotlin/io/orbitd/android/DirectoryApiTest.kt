@@ -23,7 +23,7 @@ class DirectoryApiTest {
         api.createFolder("w", " Folder "); api.renameFolder("f", "Renamed"); api.deleteFolder("f")
         api.move("s", null, null); api.move("s", "w2", "f2"); api.setTags("s", setOf("tag")); api.createTag("Focus")
         val mutations = calls.drop(1)
-        assertTrue(mutations.all { it.accessToken == "fixture-access" && it.server.value == "https://one.example" })
+        assertTrue(mutations.all { it.accessToken == "fixture-access" && it.server == ServerAddress.parse("https://one.example") })
         assertEquals(listOf(HttpMethod.PATCH, HttpMethod.POST, HttpMethod.DELETE, HttpMethod.POST,
             HttpMethod.POST, HttpMethod.DELETE, HttpMethod.DELETE, HttpMethod.POST, HttpMethod.PATCH,
             HttpMethod.DELETE, HttpMethod.POST, HttpMethod.POST, HttpMethod.PUT, HttpMethod.POST), mutations.map { it.api.method })

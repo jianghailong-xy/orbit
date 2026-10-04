@@ -69,5 +69,5 @@ data class DirectoryData(
     val workspaces: List<DirectoryWorkspace> = emptyList(), val runners: List<DirectoryRunner> = emptyList(),
     val sessions: Map<String, List<DirectorySession>> = emptyMap(), val folders: List<Folder> = emptyList(),
     val tags: List<Tag> = emptyList(), val ready: Boolean = false, val fresh: Boolean = false, val refreshing: Boolean = false,
-    val error: String? = null,
+    val error: String? = null, val waitingForConnection: Boolean = false,
 )

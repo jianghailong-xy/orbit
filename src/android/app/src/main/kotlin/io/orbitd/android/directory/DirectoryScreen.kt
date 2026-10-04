@@ -11,6 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.unit.dp
@@ -40,20 +41,6 @@ fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: DirectoryApi,
         if (query.isNotBlank()) {
             SearchResultsList(query, api, open)
         } else {
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SessionView.entries.forEach { option ->
-                    FilterChip(selected = view == option, onClick = { view = option }, label = { Text(option.label) })
-                }
-            }
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = { grouping = if (grouping == Grouping.RECENCY) Grouping.TAG else Grouping.RECENCY }) {
-                    Text(if (grouping == Grouping.RECENCY) "By time" else "By tag")
-                }
-                FilterChip(tag == null, { tag = null }, label = { Text("All tags") })
-                data.tags.forEach { t -> FilterChip(ObjectId.same(tag, t.id), { tag = t.id }, label = { Text(t.name) }) }
-            }
             val sessions = data.sessions[view.query].orEmpty()
             val groups = directoryGroups(visibleSessions(sessions, data.folders, workspace,
                 if (isFolder) route.id else null, view, tag, grouping == Grouping.TAG), view, grouping)
@@ -61,7 +48,25 @@ fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: DirectoryApi,
                 ObjectId.same(f.workspaceId, workspace) && (view == SessionView.OPEN && tag == null ||
                     sessions.any { ObjectId.same(it.folderId, f.id) && (tag == null || it.tags.any { t -> ObjectId.same(t.id, tag) }) })
             }.sortedBy { it.name.lowercase() }
-            LazyColumn(Modifier.fillMaxSize(), state = rememberLazyListState(), contentPadding = PaddingValues(bottom = 24.dp)) {
+            LazyColumn(Modifier.fillMaxSize().testTag("directory-list"), state = rememberLazyListState(), contentPadding = PaddingValues(bottom = 24.dp)) {
+                item {
+                    Column {
+                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            SessionView.entries.forEach { option ->
+                                FilterChip(selected = view == option, onClick = { view = option }, label = { Text(option.label) })
+                            }
+                        }
+                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = { grouping = if (grouping == Grouping.RECENCY) Grouping.TAG else Grouping.RECENCY }) {
+                                Text(if (grouping == Grouping.RECENCY) "By time" else "By tag")
+                            }
+                            FilterChip(tag == null, { tag = null }, label = { Text("All tags") })
+                            data.tags.forEach { t -> FilterChip(ObjectId.same(tag, t.id), { tag = t.id }, label = { Text(t.name) }) }
+                        }
+                    }
+                }
                 item { DirectoryStatus(data, refresh) }
                 if (data.ready && isFolder && folder == null) {
                     item { StatusMessage("Folder unavailable", "It may have been deleted or moved.", refresh) }
@@ -161,7 +166,8 @@ fun SessionRow(session: DirectorySession, onOpen: () -> Unit, onOptions: () -> U
 
 @Composable
 fun DirectoryStatus(data: DirectoryData, refresh: () -> Unit) {
-    if (data.refreshing || !data.ready && data.error == null) LoadingMessage("Loading workspaces and sessions…")
+    if (data.waitingForConnection) StatusMessage("Waiting for connection", "Connect to the network to load your workspaces.", refresh)
+    if (data.refreshing || !data.ready && data.error == null && !data.waitingForConnection) LoadingMessage("Loading workspaces and sessions…")
     data.error?.let { StatusMessage("Couldn't load workspaces", it, refresh) }
     if (data.ready && !data.fresh && data.error == null) Text("Showing saved sessions. Connecting to Orbit…", Modifier.padding(16.dp), style = MaterialTheme.typography.bodySmall)
 }

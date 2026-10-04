@@ -31,7 +31,8 @@ fun ObjectDestination(route: OrbitRoute, api: DirectoryApi, data: DirectoryData,
         Destination.WATCH -> listOf("watches", route.id!!)
         Destination.RUNNER -> listOf("runners", route.id!!)
         Destination.PROJECTS -> listOf("projects")
-        Destination.TASKS, Destination.LIST -> listOf("tasks")
+        Destination.TASKS -> listOf("tasks")
+        Destination.LIST -> listOf("task-lists", route.id!!)
         Destination.WIKI -> if (route.id == null) listOf("wiki", "spaces") else listOf("wiki", "spaces", route.id, "entries")
         else -> emptyList()
     }
@@ -39,7 +40,7 @@ fun ObjectDestination(route: OrbitRoute, api: DirectoryApi, data: DirectoryData,
         if (path.isEmpty()) { loading = false; return@LaunchedEffect }
         loading = true; error = null
         try { content = api.read(path, JsonElement.serializer(),
-            if (route.destination == Destination.LIST) listOf("listId" to route.id!!) else emptyList()) }
+            if (route.destination == Destination.LIST) listOf("tasks" to "none") else emptyList()) }
         catch (cancel: CancellationException) { throw cancel }
         catch (failure: Exception) { error = directoryError(failure) }
         finally { loading = false }

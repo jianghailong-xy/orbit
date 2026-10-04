@@ -31,6 +31,7 @@ class DirectoryGroupingTest {
         assertEquals(listOf("b", "c"), visibleSessions(sessions, folders, "w", null, SessionView.OPEN, null).map { it.id })
         assertEquals(listOf("a"), visibleSessions(sessions, folders, "w", "f", SessionView.OPEN, null).map { it.id })
         assertEquals(3, visibleSessions(sessions, folders, "w", null, SessionView.TRASH, null).size)
+        assertEquals(3, visibleSessions(sessions, folders, "w", null, SessionView.OPEN, null, byTag = true).size)
     }
 
     @Test fun tagGroupingUsesOnePrimaryTagPerSessionAndKeepsUntagged() {

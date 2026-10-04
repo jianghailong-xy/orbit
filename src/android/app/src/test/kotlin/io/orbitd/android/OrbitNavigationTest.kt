@@ -35,7 +35,8 @@ class OrbitNavigationTest {
             .push(OrbitRoute(Destination.WATCH, uuid, origin = Origin.LINK))
         val original = nav
         nav = nav.select("Tasks", OrbitRoute(Destination.TASKS)).select("w1", OrbitRoute(Destination.WORKSPACE, "w1"))
-        assertEquals(original, nav)
+        assertEquals(original.frames, nav.frames)
+        assertEquals(original.section, nav.section)
         repeat(5) { nav = nav.back() }
         assertEquals(search, nav.current)
         assertEquals(folder, nav.back().current)
@@ -81,6 +82,7 @@ class OrbitNavigationTest {
                 checked++
             }
         }
-        assertTrue("Shared fixture must actually run", checked >= 20)
+        assertEquals("Every golden card target must be consumed", root.getValue("cases").jsonArray.sumOf { c -> c.jsonObject.getValue("blocks").jsonArray.count { it.jsonObject.containsKey("card") } }, checked)
+        assertTrue(checked > 0)
     }
 }

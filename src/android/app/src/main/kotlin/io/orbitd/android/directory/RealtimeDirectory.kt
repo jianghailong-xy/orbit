@@ -4,6 +4,7 @@ import androidx.compose.runtime.*
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.protocol.Wire
+import io.orbitd.android.core.realtime.ConnectionState
 import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.json.JsonObject
 
@@ -20,6 +21,7 @@ fun rememberDirectoryData(app: OrbitApplication, handle: SessionHandle): State<D
                     runners = decode(snapshot?.runners.orEmpty(), DirectoryRunner.serializer()),
                     sessions = snapshot?.sessions.orEmpty().mapValues { decode(it.value, DirectorySession.serializer()) },
                     folders = decode(snapshot?.folders.orEmpty(), Folder.serializer()), tags = decode(snapshot?.tags.orEmpty(), Tag.serializer()),
+                    waitingForConnection = snapshot == null && !live.directoryRefreshing && live.controlConnection == ConnectionState.STOPPED && live.directoryError == null,
                     ready = snapshot != null, fresh = live.directoryFresh, refreshing = live.directoryRefreshing,
                     error = live.directoryError?.let { when (it.httpStatus) {
                         403 -> "You don't have permission to load this directory."

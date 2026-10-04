@@ -98,11 +98,13 @@ fi
   "$adb" -s "$serial" shell cmd uimode night
   "$adb" -s "$serial" shell ime list -s
   "$adb" -s "$serial" shell settings get secure enabled_accessibility_services
+  "$adb" -s "$serial" shell pm list packages --show-versioncode com.google.android.marvin.talkback
 } > "$output/conditions.txt"
 "$adb" -s "$serial" shell am force-stop "$package"
 start="$("$adb" -s "$serial" shell date +%s | tr -d '\r').000"
-"$adb" -s "$serial" shell am instrument -w -r -e class io.orbitd.android.directory.DirectoryDeviceTest "$runner" > "$output/instrumentation.txt" 2>&1
+"$adb" -s "$serial" shell am instrument -w -r -e class io.orbitd.android.directory.DirectoryDeviceTest,io.orbitd.android.directory.LinkDeviceTest "$runner" > "$output/instrumentation.txt" 2>&1
 "$adb" -s "$serial" pull "/sdcard/Android/data/$package/files/a05-directory" "$output/screenshots" > "$output/pull.txt" 2>&1 || true
+"$adb" -s "$serial" pull "/sdcard/Android/data/$package/files/a05-links" "$output/links" > "$output/pull-links.txt" 2>&1 || true
 pid="$(sed -n 's/.*a05_pid=\([0-9]*\).*/\1/p' "$output/instrumentation.txt" | head -1)"
 [[ -n "$pid" ]]
 "$adb" -s "$serial" logcat -d -v threadtime --pid="$pid" -T "$start" > "$output/logcat.txt"
@@ -111,7 +113,7 @@ if rg 'a05-fixture-(password|access|refresh)' "$output/logcat.txt"; then
   echo 'Fixture credential marker found in logcat' >&2
   exit 1
 fi
-rg -F 'OK (1 test)' "$output/instrumentation.txt" >/dev/null
+rg -F 'OK (2 tests)' "$output/instrumentation.txt" >/dev/null
 if rg 'FAILURES!!!|INSTRUMENTATION_FAILED|Process crashed|INSTRUMENTATION_STATUS_CODE: -[234]' "$output/instrumentation.txt"; then
   exit 1
 fi
