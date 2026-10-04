@@ -243,6 +243,10 @@ test('legacy AntApp confirmation still works with the same notification service'
   await button(page, 'Legacy confirm').click();
   const legacy = page.getByRole('dialog', { name: 'Legacy confirmation', exact: true });
   await expect(legacy).toBeVisible();
+  // AntApp's entrance can briefly have a stable hit box at opacity 0 / scale(.2).
+  // Wait for its painted, settled state before the real pointer click.
+  await expect(legacy).toHaveCSS('opacity', '1');
+  await expect(legacy).toHaveCSS('transform', 'none');
   await legacy.getByRole('button', { name: 'OK', exact: true }).click();
   await expect(legacy).not.toBeVisible();
   await expect(notices(page).getByText('Legacy confirmed', { exact: true })).toBeVisible();
