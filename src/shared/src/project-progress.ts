@@ -11,7 +11,7 @@
  * as `Date`, everything downstream of JSON holds them as ISO strings. Parameterising it is what
  * lets both sides name the same interface instead of keeping two that drift.
  */
-import type { IntegrationCheckResult, IntegrationJobKind, IntegrationJobPhase } from './dto';
+import type { IntegrationCheckResult, IntegrationJobKind, IntegrationJobPhase, IntegrationJobState } from './dto';
 import type { ProjectStartRequest, ProjectStartSettingKey, ProjectStartSettings } from './project-start';
 
 /** Where this project's finished tasks land: straight onto main, or onto a branch of its own. */
@@ -84,6 +84,21 @@ export interface ProjectIntegrationView<Instant = string> extends ProjectIntegra
    * Within that state the oldest job keeps the clock from resetting when another job starts.
    */
   inFlight: ProjectIntegrationInFlight<Instant> | null;
+  /**
+   * The project's current `LAND_TASK`s (§2.7a), each through the same read model the task's own
+   * page reads: every task's newest generation that is queued or running, every done task whose
+   * newest generation stopped at a conflict, a failed check or an error nothing has landed since,
+   * and the one that landed last. Running first, then the queue in claim order, then the stops,
+   * then the last landing. Absent on servers that predate it.
+   */
+  landTasks?: ProjectLandTask<Instant>[];
+}
+
+/** One task's current `LAND_TASK` on the project's integration view (§2.7a). */
+export interface ProjectLandTask<Instant = string> {
+  taskId: string;
+  taskTitle: string;
+  integration: TaskIntegrationView<Instant>;
 }
 
 /**
@@ -126,6 +141,61 @@ export type TaskIntegrationState =
 /** Who is expected to act on this task's integration, while somebody has to (§4.2). */
 export type TaskIntegrationHandler = 'COORDINATOR' | 'OWNER';
 
+/**
+ * Why a task's current `LAND_TASK` is waiting, or why it stopped (§2.7a). The server reads it from
+ * the same conditions the claim reads, in the claim's order; a client renders it and never derives
+ * one from the task's status or from whether an exception card exists.
+ *
+ *  - `CANCELLING`: a cancel was asked for; the claim skips it.
+ *  - `WAITING_TASK_WORK`: the task's work session has not finished, so its branch can still move.
+ *  - `WAITING_MAIN_SYNC`: another task's landing could not absorb upstream into this target, and
+ *    its item is still open (M2) — the project line has to be synced first.
+ *  - `WAITING_SERIAL_SLOT`: another job is running on the same repository and target branch.
+ *  - `WAITING_RUNNER`: the runner of the work's workspace is offline, silent, draining, has no
+ *    heartbeat lease or does not take integration jobs.
+ *  - `WAITING_DISPATCH`: nothing holds it; the next heartbeat of that runner claims it.
+ *  - `CONFLICT` / `CHECK_FAILED` / `ERROR`: where a finished attempt stopped.
+ */
+export type LandTaskBlockingReasonCode =
+  | 'CANCELLING' | 'WAITING_TASK_WORK' | 'WAITING_MAIN_SYNC' | 'WAITING_SERIAL_SLOT'
+  | 'WAITING_RUNNER' | 'WAITING_DISPATCH' | 'CONFLICT' | 'CHECK_FAILED' | 'ERROR';
+
+/**
+ * A task's newest `LAND_TASK` generation, as its own job row says it (§2.7a). Kept apart from the
+ * receipt-first `TaskIntegrationView.state`: a receipt still says where the work IS, and this says
+ * what the platform is doing with the newest attempt — which is how a task can read "on main" and
+ * "generation 3 queued" at once without either overwriting the other.
+ */
+export interface LandTaskIntegrationView<Instant = string> {
+  jobId: string;
+  state: IntegrationJobState;
+  /** The runner's step, or the one the attempt stopped at; null before its first report. */
+  phase: IntegrationJobPhase | null;
+  /** A decimal string, as every 64-bit counter crosses this API. */
+  generation: string;
+  /** Enqueue, first claim, the claimer's latest heartbeat, and the terminal write. */
+  queuedAt: Instant;
+  startedAt: Instant | null;
+  heartbeatAt: Instant | null;
+  finishedAt: Instant | null;
+  /** The full ref the job froze at enqueue, e.g. `refs/heads/project/<id>`. */
+  targetRef: string;
+  /** Time in the queue: up to the first claim, or to the terminal write of one never claimed;
+   *  still counting while it is queued. */
+  waitMs: number;
+  blockingReason: LandTaskBlockingReason | null;
+}
+
+export interface LandTaskBlockingReason {
+  code: LandTaskBlockingReasonCode;
+  /** One sentence a page prints as it is. */
+  summary: string;
+  /** The job holding it: the running one for a serial wait, the conflicted one for a sync wait. */
+  jobId?: string;
+  /** The open MAIN_SYNC conflict item a sync wait is waiting on. */
+  openItemId?: string;
+}
+
 /** One task's integration, as the project page's task rows read it (§2.7, §7.3 V10). */
 export interface TaskIntegrationView<Instant = string> {
   state: TaskIntegrationState;
@@ -136,6 +206,8 @@ export interface TaskIntegrationView<Instant = string> {
   jobId: string | null;
   /** Elapsed job time while it is in CHECK; not the duration of the check phase itself. */
   checksRunningForMs: number | null;
+  /** Null when no LAND_TASK exists; absent only on servers predating the unified read model. */
+  landTask?: LandTaskIntegrationView<Instant> | null;
 }
 
 /**

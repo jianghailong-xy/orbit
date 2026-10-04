@@ -15828,6 +15828,66 @@ button.chat-jump-start:hover {
   color: var(--text-1);
   font-weight: 600;
 }
+/* The current landings under the line (§2.7a): one compact block per task, in the task page's words. */
+.project-land-task {
+  border-top: 1px solid var(--border-subtle);
+  padding: 8px 10px;
+}
+.project-land-task-title {
+  display: inline-block;
+  margin-bottom: 4px;
+  font-weight: 600;
+  font-size: 12.5px;
+  color: var(--text-1);
+}
+.project-land-task-title:hover {
+  color: var(--brand);
+}
+/* A task's newest landing attempt: the task's status and the landing's apart, the reason, the facts. */
+.land-task-status {
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.land-task-status-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.land-task-task-state {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.land-task-generation,
+.land-task-step {
+  color: var(--text-3);
+}
+.land-task-reason {
+  margin-top: 5px;
+  color: var(--text-1);
+}
+.land-task-receipt {
+  margin-top: 5px;
+  color: var(--text-3);
+}
+.land-task-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 6px 0 0;
+}
+.land-task-facts > div {
+  display: flex;
+  gap: 5px;
+  min-width: 0;
+}
+.land-task-facts dt {
+  color: var(--text-3);
+}
+.land-task-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
 /* A project nobody has started: one sentence beside the mark, wrapping under itself on a phone. */
 .project-integration-undecided {
   display: flex;
