@@ -30,6 +30,9 @@ class LinkDeviceTest {
 
     @Test fun coldPendingLinkRecreationLoginWarmLinkAndSystemBack() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val coldKind = InstrumentationRegistry.getArguments().getString("a05_cold_kind") ?: "session"
+        require(coldKind in setOf("session", "task"))
+        val coldTitle = if (coldKind == "task") "Linked task" else "Linked session"
         val app = instrumentation.targetContext.applicationContext as OrbitApplication
         compose.waitUntil(10_000) { app.session.state.value !is AuthState.Restoring }
         assertTrue("Requires a dedicated signed-out debug installation", app.session.state.value is AuthState.SignedOut)
@@ -64,7 +67,7 @@ class LinkDeviceTest {
                     return MockResponse().setHeader("Content-Type", "application/json").setBody(body)
                 }
             }
-            val launchIntent = intent("orbit-session:34TcwNgAIo6tGUiIKjqnQ")
+            val launchIntent = intent("orbit-$coldKind:34TcwNgAIo6tGUiIKjqnQ")
             ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->
                 try {
                     compose.onNodeWithText("Email").assertIsDisplayed()
@@ -73,9 +76,9 @@ class LinkDeviceTest {
                     compose.onNodeWithText("Email").performTextInput("a05@example.test")
                     compose.onNodeWithText("Password").performTextInput("a05-fixture-password")
                     compose.onAllNodesWithText("Sign in")[1].performScrollTo().performClick()
-                    compose.waitUntil(10_000) { compose.onAllNodesWithText("Linked session").fetchSemanticsNodes().isNotEmpty() }
-                    compose.onNodeWithText("Linked session").assertIsDisplayed()
-                    compose.waitUntil(10_000) { app.realtime.state.value.session?.id == firstId }
+                    compose.waitUntil(10_000) { compose.onAllNodesWithText(coldTitle).fetchSemanticsNodes().isNotEmpty() }
+                    compose.onNodeWithText(coldTitle).assertIsDisplayed()
+                    if (coldKind == "session") compose.waitUntil(10_000) { app.realtime.state.value.session?.id == firstId }
                     fun back() {
                         var focused = false
                         compose.waitUntil(5_000) {
@@ -96,7 +99,7 @@ class LinkDeviceTest {
                     }
                     compose.onNodeWithContentDescription("Back").assertIsDisplayed()
                     back()
-                    compose.onNodeWithText("Linked session").assertDoesNotExist()
+                    compose.onNodeWithText(coldTitle).assertDoesNotExist()
                     compose.onNodeWithContentDescription("Back").assertDoesNotExist()
                     compose.onNodeWithContentDescription("Open navigation").assertIsDisplayed()
                     app.startActivity(intent("orbit-wiki:34TcwNgAIo6tGUiIKjqnQ"))
@@ -133,7 +136,7 @@ class LinkDeviceTest {
                     compose.waitUntil(10_000) { app.realtime.state.value.directoryFresh }
                     compose.onNodeWithContentDescription("Open navigation").assertIsDisplayed()
                     File(evidence, "requests.txt").writeText(requests.joinToString("\n") { (token, path) -> "${if (token?.endsWith("-2") == true) "B" else "A"} $path" })
-                    File(evidence, "result.txt").writeText("Cold session ACTION_VIEW → unsigned recreation → login → selected session → system Back; warm wiki → system Back; rapid A → B resets route/selection and explicit B link wins; socket outage → directory NETWORK/stale → refresh recovery: PASS\nControlled HTTP fixture, not a physical/deployed-account or transport-switch result.\n")
+                    File(evidence, "result.txt").writeText("Cold $coldKind ACTION_VIEW → unsigned recreation → login → $coldTitle → system Back; warm wiki → system Back; rapid A → B resets route/selection and explicit B link wins; socket outage → directory NETWORK/stale → refresh recovery: PASS\nControlled HTTP fixture, not a physical/deployed-account or transport-switch result.\n")
                 } catch (failure: Throwable) {
                     val screenshot = instrumentation.uiAutomation.takeScreenshot()
                     File(evidence, "failure.png").outputStream().use { screenshot.compress(Bitmap.CompressFormat.PNG, 100, it) }

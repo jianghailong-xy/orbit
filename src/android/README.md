@@ -178,6 +178,8 @@ env A05_FONT_SCALE=2.0 A05_NIGHT=no bash src/android/scripts/directory-device-te
 
 The two device cases cover directory/search/folders/lifecycle/403/IME/rotation and cold
 ACTION_VIEW → unsigned recreation → login → selected session, plus warm links and system Back.
+Set `A05_COLD_LINK=task` for the original cold-task/first-Back regression; the default is
+`session`, which also checks that the explicit session wins over cache restoration.
 The real MainActivity is also tested with a rapid A → B account change, explicit B session
 selection and socket-failure/recovery. These are production-entry tests, separate from A04's
 debug probe. Back diagnostics retain lifecycle, focus, IME and callback state, and assert

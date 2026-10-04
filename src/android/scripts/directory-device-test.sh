@@ -104,6 +104,7 @@ if [[ "$("$adb" -s "$serial" shell getprop ro.kernel.qemu | tr -d '\r')" == 1 ]]
 fi
 {
   printf 'input_scope=phone touchscreen keyboard; stylus handwriting not tested\noriginal_stylus_handwriting_enabled=%s\n' "${old_handwriting:-unchanged}"
+  printf 'cold_link_kind=%s\n' "${A05_COLD_LINK:-session}"
   "$adb" -s "$serial" shell wm size
   "$adb" -s "$serial" shell wm density
   "$adb" -s "$serial" shell settings get system font_scale
@@ -115,7 +116,7 @@ fi
 } > "$output/conditions.txt"
 "$adb" -s "$serial" shell am force-stop "$package"
 start="$("$adb" -s "$serial" shell date +%s | tr -d '\r').000"
-"$adb" -s "$serial" shell am instrument -w -r -e class io.orbitd.android.directory.DirectoryDeviceTest,io.orbitd.android.directory.LinkDeviceTest "$runner" > "$output/instrumentation.txt" 2>&1
+"$adb" -s "$serial" shell am instrument -w -r -e a05_cold_kind "${A05_COLD_LINK:-session}" -e class io.orbitd.android.directory.DirectoryDeviceTest,io.orbitd.android.directory.LinkDeviceTest "$runner" > "$output/instrumentation.txt" 2>&1
 "$adb" -s "$serial" exec-out run-as "$package" tar -c -C files a05-directory a05-links > "$output/captures.tar"
 tar --no-same-owner -xf "$output/captures.tar" -C "$output"
 mv "$output/a05-directory" "$output/screenshots"
