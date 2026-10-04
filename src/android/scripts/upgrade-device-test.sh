@@ -34,12 +34,13 @@ root, package = pathlib.Path(sys.argv[1]), sys.argv[2]
 identities = {}
 for name in ('old', 'new', 'test'):
     badging = (root / f'{name}-badging.txt').read_text()
-    fields = re.search(r"package: name='([^']+)' versionCode='(\d+)' versionName='([^']+)'", badging)
+    fields = re.search(r"package: name='([^']+)' versionCode='(\d*)' versionName='([^']*)'", badging)
     assert fields, f'Missing package identity: {name}'
     certs = re.findall(r'^Signer #\d+ certificate SHA-256 digest: (\w+)$', (root / f'{name}-signature.txt').read_text(), re.M)
     assert len(certs) == 1, 'Exactly one signer is required for this fixture'
-    identities[name] = dict(package=fields[1], versionCode=int(fields[2]), versionName=fields[3], certificateSHA256=certs[0])
+    identities[name] = dict(package=fields[1], versionCode=int(fields[2]) if fields[2] else None, versionName=fields[3], certificateSHA256=certs[0])
     if name != 'test':
+        assert fields[2] and fields[3], 'Target APK must declare both version fields'
         assert 'application-debuggable' not in badging, 'Target must be a non-debuggable release APK'
         assert "sdkVersion:'29'" in badging, 'Expected minSdk29'
 old, new, test = (identities[k] for k in ('old', 'new', 'test'))
@@ -108,11 +109,12 @@ root = pathlib.Path(sys.argv[1])
 def installed(name):
     text = (root / f'package-{name}-upgrade.txt').read_text()
     return {key: re.search(pattern, text)[1].strip() for key, pattern in {
-        'uid': r'\buserId=(\d+)', 'firstInstallTime': r'firstInstallTime=([^\r\n]+)',
+        'uidOrAppId': r'\b(?:userId|appId)=(\d+)', 'firstInstallTime': r'firstInstallTime=([^\r\n]+)',
+        'lastUpdateTime': r'lastUpdateTime=([^\r\n]+)',
         'versionCode': r'\bversionCode=(\d+)', 'versionName': r'\bversionName=([^\r\n]+)',
     }.items()}
 before, after = installed('before'), installed('after')
-assert before['uid'] == after['uid'], 'UID must survive replacement'
+assert before['uidOrAppId'] == after['uidOrAppId'], 'Application UID/ID must survive replacement'
 assert before['firstInstallTime'] == after['firstInstallTime'], 'First install time must survive replacement'
 identities = json.loads((root / 'identities.json').read_text())
 for phase, which, actual in [('seed', 'old', before), ('verify', 'new', after)]:
@@ -123,6 +125,7 @@ for phase, which, actual in [('seed', 'old', before), ('verify', 'new', after)]:
     assert actual['versionName'] == artifact['versionName'] == runtime['a14_version_name']
     assert runtime['a14_client_version'] == artifact['versionName']
     assert re.fullmatch(r'[0-9a-f]{40}', runtime['a14_source'])
+    assert runtime['a14_source_dirty'] == 'false'
     artifact['runtime'] = runtime
 for name in ('install-old.txt', 'install-tests.txt', 'install-upgrade.txt'):
     assert re.search(r'^Success\s*$', (root / name).read_text(), re.M), f'Installation failed: {name}'
@@ -136,7 +139,7 @@ for log in root.glob('*.txt'):
     scope='Temporary test signature and local synthetic auth fixture; no production backend or real-device claim',
     install='Fresh install followed by adb install -r; no uninstall or data clear',
     before=before, after=after,
-    checks=['same signer', 'increased versionCode', 'non-debuggable release', 'same UID and firstInstallTime',
+    checks=['same signer', 'increased versionCode', 'non-debuggable release', 'same application ID and firstInstallTime',
             'real production Application login restored', 'Keystore credential survived',
             'four account/server data namespaces survived without crossing', 'logout cleared credentials and data',
             'runtime BuildConfig matches package version and AuthSession clientVersion'],
