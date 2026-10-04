@@ -1,0 +1,53 @@
+.orbit-overlay-backdrop { position: fixed; inset: 0; width: 100vw; background: rgba(0, 0, 0, .45); }
+.orbit-overlay[hidden], .orbit-overlay-viewport[hidden], .orbit-overlay-backdrop[hidden] { display: none; }
+.orbit-overlay-viewport { position: fixed; inset: 0; width: 100vw; overflow: auto; overscroll-behavior: contain; }
+.orbit-dialog-viewport, .orbit-confirm-viewport { padding: 100px 16px 24px; }
+.orbit-overlay {
+  position: relative; box-sizing: border-box; margin: 0 auto;
+  max-width: 100%; color: var(--text-1); background: var(--orbit-bg-elevated);
+  font-family: var(--orbit-font-family); font-size: var(--orbit-font-size); line-height: var(--orbit-line-height);
+  box-shadow: var(--orbit-shadow-popup); outline: none; overflow-wrap: break-word;
+}
+.orbit-dialog, .orbit-confirm { padding: 20px 24px; border-radius: var(--orbit-radius-dialog); }
+.orbit-overlay-header { margin-bottom: 8px; }
+.orbit-overlay-title { margin: 0; color: var(--text-1); font-size: 16px; font-weight: 600; line-height: 24px; }
+.orbit-overlay-description { margin: 0; }
+.orbit-overlay-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.orbit-overlay-close {
+  display: inline-flex; align-items: center; justify-content: center; position: absolute;
+  top: 12px; right: 12px; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 4px;
+  color: var(--text-3); background: transparent; font-size: 16px; line-height: 1; cursor: pointer;
+}
+.orbit-overlay-close:hover:not(:disabled) { color: var(--text-1); background: var(--orbit-control-hover-bg); }
+.orbit-overlay-close:active:not(:disabled) { background: var(--orbit-control-active-bg); }
+.orbit-overlay-close:focus-visible { outline: var(--orbit-focus-width) solid var(--orbit-focus-color); outline-offset: var(--orbit-focus-offset); }
+.orbit-overlay-close:disabled { cursor: default; }
+.orbit-dialog > .orbit-overlay-header > .orbit-overlay-title { padding-right: 24px; }
+.orbit-drawer-viewport { overflow: hidden; }
+.orbit-drawer {
+  position: absolute; display: flex; flex-direction: column; max-height: 100%; margin: 0;
+  box-shadow: var(--orbit-shadow-drawer-right); line-height: 1.15;
+}
+.orbit-drawer[data-placement='right'] { right: 0; top: 0; }
+.orbit-drawer[data-placement='bottom'] { bottom: 0; left: 0; box-shadow: var(--orbit-shadow-drawer-bottom); }
+.orbit-drawer > .orbit-overlay-header { display: flex; align-items: center; flex: none; padding: 16px 24px; margin: 0; border-bottom: 1px solid var(--border-subtle); }
+.orbit-drawer > .orbit-overlay-header > .orbit-overlay-title { flex: 1; min-width: 0; }
+.orbit-drawer > .orbit-overlay-header > .orbit-overlay-close { position: static; flex: none; width: 24px; height: 24px; margin-right: 8px; }
+.orbit-drawer > .orbit-overlay-body { flex: 1; min-height: 0; padding: 24px; overflow: auto; overscroll-behavior: contain; }
+.orbit-drawer > .orbit-overlay-footer { display: block; flex: none; margin: 0; padding: 8px 16px; border-top: 1px solid var(--border-subtle); }
+.orbit-confirm > .orbit-overlay-header, .orbit-confirm > .orbit-overlay-body { padding-left: 34px; }
+.orbit-confirm-icon { position: absolute; left: 24px; top: 21px; font-size: 22px; color: var(--orbit-badge-warning); }
+.orbit-confirm-error { margin-top: 8px; color: var(--error); }
+@media (max-width: 767px) {
+  .orbit-dialog-viewport, .orbit-confirm-viewport { padding: 108px 8px 32px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .orbit-overlay-backdrop { transition: opacity .2s; }
+  .orbit-overlay-backdrop[data-starting-style], .orbit-overlay-backdrop[data-ending-style] { opacity: 0; }
+  .orbit-dialog, .orbit-confirm { transition: opacity .2s, scale .2s; }
+  .orbit-dialog[data-starting-style], .orbit-confirm[data-starting-style],
+  .orbit-dialog[data-ending-style], .orbit-confirm[data-ending-style] { opacity: 0; scale: .9; }
+  .orbit-drawer { transition: translate .3s; }
+  .orbit-drawer[data-placement='right'][data-starting-style], .orbit-drawer[data-placement='right'][data-ending-style] { translate: 100% 0; }
+  .orbit-drawer[data-placement='bottom'][data-starting-style], .orbit-drawer[data-placement='bottom'][data-ending-style] { translate: 0 100%; }
+}
