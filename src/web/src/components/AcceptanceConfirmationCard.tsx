@@ -809,9 +809,12 @@ export function SessionCriteriaConfirmationCard({
   });
 
   if (!shown || answeredHere) return null;
+  // The preview is what stays in place, so it says why the card went stale — as the start card's
+  // does — rather than leaving that reason to a review nobody has cause to open.
   return (
     <ReviewCard id="settlement-preview" title={ACCEPTANCE_CONFIRMATION_TITLE} summary={title}
-      meta={`${criteria?.length ?? 0} criteria`} open={reviewOpen} onOpenChange={setReviewOpen}>
+      meta={acceptanceConfirmationStaleExplanation(standing) ?? `${criteria?.length ?? 0} criteria`}
+      open={reviewOpen} onOpenChange={setReviewOpen}>
     <AcceptanceConfirmationCard
       ref={anchor}
       standing={standing}
