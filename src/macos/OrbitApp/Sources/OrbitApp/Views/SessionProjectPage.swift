@@ -279,7 +279,7 @@ struct SessionProjectPage: View {
         sessions.first { $0.projectMembership?.role == .coordinator }
     }
     private var availableCoordinator: Session? {
-        coordinator ?? app.sessions.first {
+        coordinator ?? (app.sessions + (app.agents?.allSessions ?? [])).first {
             $0.projectMembership?.projectId == address.projectID && $0.projectMembership?.role == .coordinator
         }
     }

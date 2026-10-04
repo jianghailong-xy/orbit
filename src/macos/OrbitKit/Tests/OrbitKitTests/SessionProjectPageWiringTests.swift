@@ -186,6 +186,9 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let menu = try slice(page, from: "private var projectMenu: some View {", to: "\n    }")
         XCTAssertTrue(menu.contains("SessionProjectCopy.openProject"))
         XCTAssertTrue(menu.contains("SessionProjectCopy.openCoordinator"))
+        let coordinatorLookup = try slice(page, from: "private var availableCoordinator: Session? {", to: "\n    }")
+        XCTAssertTrue(coordinatorLookup.contains("coordinator ?? (app.sessions + (app.agents?.allSessions ?? [])).first"),
+                      "Open Coordinator can use the cross-workspace Completed cache as well as the Open snapshot")
         XCTAssertFalse(menu.contains("New session"))
         XCTAssertFalse(page.contains("startComposingSession"))
     }
