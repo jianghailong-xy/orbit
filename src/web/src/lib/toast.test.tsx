@@ -22,6 +22,8 @@ let root: Root;
 
 beforeEach(async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  // Layout is covered in real browsers; jsdom has no ResizeObserver.
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -45,6 +47,7 @@ afterEach(async () => {
   });
   container.remove();
   vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
 const viewport = (): HTMLElement | null => document.querySelector('.toast-viewport');

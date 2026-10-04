@@ -35,11 +35,53 @@ import { useFeedbackPortal } from './ui/feedbackPortal';
 export function ToastViewport() {
   const feed = useToastFeed();
   const portal = useFeedbackPortal();
+  // A stable React portal keeps notification DOM and hover state across modal
+  // ownership changes. The manual popover paints outside ancestor transforms.
+  const [host] = useState(() => {
+    const element = document.createElement('div');
+    element.className = 'toast-layer';
+    element.popover = 'manual';
+    return element;
+  });
+  useLayoutEffect(() => {
+    // Reparenting restarts CSS animations even when React keeps the same DOM.
+    // Carry each notification's original animation time into its new parent.
+    for (const toast of host.querySelectorAll<HTMLElement>('[data-toast-enter-start]')) {
+      toast.style.animationDelay = `${Number(toast.dataset.toastEnterStart) - Number(document.timeline.currentTime)}ms`;
+    }
+    (portal ?? document.body).appendChild(host);
+    host.showPopover?.();
+    return () => { host.remove(); };
+  }, [host, portal]);
+  useLayoutEffect(() => {
+    let held = false;
+    const release = () => {
+      if (!held) return;
+      held = false;
+      releaseToasts();
+    };
+    // WebKit can omit mouseleave when a hovered node changes modal owners.
+    // Actual pointer movement remains reliable; changing owners alone must not
+    // resume a stationary hover or restart an unpaused notification's deadline.
+    const move = (event: MouseEvent) => {
+      const target = event.target;
+      const next = target instanceof Element && host.contains(target) && !!target.closest('[data-toast-dwell]');
+      if (next === held) return;
+      if (next) { held = true; holdToasts(); }
+      else release();
+    };
+    document.addEventListener('mousemove', move, true);
+    document.addEventListener('mouseleave', release);
+    return () => {
+      document.removeEventListener('mousemove', move, true);
+      document.removeEventListener('mouseleave', release);
+      release();
+    };
+  }, [host]);
   const [viewportWidth, setViewportWidth] = useState<number>();
   useLayoutEffect(() => {
-    if (!portal) return;
-    // WebKit sizes fixed descendants of an absolute drawer against its wider
-    // scroll viewport. Keep the same layout width as a body-mounted notification.
+    // WebKit top-layer descendants can retain a wider scroll viewport during
+    // modal transitions. Match a body-mounted notification even while closing.
     const probe = document.createElement('div');
     probe.style.cssText = 'position:fixed;inset:0;visibility:hidden;pointer-events:none';
     probe.setAttribute('aria-hidden', 'true');
@@ -49,7 +91,7 @@ export function ToastViewport() {
     const observer = new ResizeObserver(measure);
     observer.observe(probe);
     return () => { observer.disconnect(); probe.remove(); };
-  }, [portal]);
+  }, []);
   const narrow = useMediaQuery(PHONE_QUERY);
   const navigate = useNavigate();
   const [allPinned, setAllPinned] = useState(false);
@@ -69,7 +111,13 @@ export function ToastViewport() {
 
   return createPortal(
     <section className={narrow ? 'toast-viewport toast-viewport--narrow' : 'toast-viewport'} aria-label="Notifications"
-      style={portal && viewportWidth ? narrow
+      onAnimationStart={(event) => {
+        const toast = event.target;
+        if (!(toast instanceof HTMLElement) || !event.animationName.startsWith('orbit-toast-') || toast.dataset.toastEnterStart) return;
+        const animation = toast.getAnimations().find((a) => a instanceof CSSAnimation && a.animationName === event.animationName);
+        if (animation) toast.dataset.toastEnterStart = String(Number(document.timeline.currentTime) - Number(animation.currentTime));
+      }}
+      style={viewportWidth ? narrow
         ? { width: `calc(${viewportWidth}px - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px))` }
         : { left: `calc(${viewportWidth}px - max(16px, env(safe-area-inset-right, 0px)) - 360px)`, right: 'auto' }
         : undefined}>
@@ -93,7 +141,7 @@ export function ToastViewport() {
         ),
       )}
     </section>,
-    portal ?? document.body,
+    host,
   );
 }
 
@@ -155,8 +203,7 @@ function Pill({ toast, behind = 0, onClick }: { toast: ToastItem; behind?: numbe
       type="button"
       className={`toast toast--pill toast--live${tinted}`}
       onClick={onClick}
-      onMouseEnter={holdToasts}
-      onMouseLeave={releaseToasts}
+      data-toast-dwell=""
     >
       {body}
     </button>
@@ -168,7 +215,7 @@ function Pill({ toast, behind = 0, onClick }: { toast: ToastItem; behind?: numbe
 function ResultCard({ toast, onOpen }: { toast: ToastItem; onOpen: (toast: ToastItem) => void }) {
   const action = toast.action;
   return (
-    <div className="toast toast--card toast--live" onMouseEnter={holdToasts} onMouseLeave={releaseToasts}>
+    <div className="toast toast--card toast--live" data-toast-dwell="">
       <Glyph toast={toast} />
       {toast.sessionId ? (
         <button

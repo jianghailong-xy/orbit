@@ -1,6 +1,6 @@
 {
   "extends": "../tsconfig.json",
   "compilerOptions": { "types": ["vite/client", "node"] },
-  "include": ["../src/lib/toast.test.tsx", "../src/lib/toastFeed.test.ts"],
+  "include": ["../src/lib/toast.test.tsx", "../src/lib/toastFeed.test.ts", "../src/pages/ProjectsPage.newTask.test.tsx"],
   "exclude": []
 }
