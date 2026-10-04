@@ -5,8 +5,8 @@
 // Two of those services also carried a production hazard this file fences off: postgres bind-mounts
 // a RELATIVE ./data/postgres path and gateway a relative ./gateway/nginx.conf, so an edit to either
 // block — or a Compose run from a worktree — has already once replaced the live database with an
-// empty one. Both blocks are therefore compared byte-for-byte against the commit this removal was
-// based on, not merely inspected for shape.
+// empty one. Both blocks are therefore compared byte-for-byte against fixed historical commits,
+// not merely inspected for shape. The removal proof and later approved configuration stay separate.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -17,10 +17,21 @@ import { fileURLToPath } from 'node:url';
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const COMPOSE = 'docker-compose.yml';
 
-// The commit the sidecar removal was based on: nine services, all four sidecars present. Comparing
-// against a fixed commit rather than a fixture means postgres/gateway cannot drift silently, and a
-// deliberate future change to either has to move this pin on purpose.
+// The commit the sidecar removal was based on: nine services, all four sidecars present. Keep this
+// pin: it proves the removal and still fences gateway, whose definition has not changed.
 const BASELINE_SHA = 'ac1b16e752fb11c7230052e5c7ffbbc0096e3e22';
+
+// Fixed configuration after the approved PG timeout change landed on main, not HEAD or the file
+// being tested. The complete Compose history from BASELINE_SHA accounts for these later changes:
+// 7334a09c: obsolete apiserver env removed; 5969060e: web comment only.
+// ef932ff2: Watch env; edc0bba9: Wiki env; 1c241c89: both read the host's *_MODE names.
+// fea8580c: apiserver PUBLIC_ORIGIN forwarding.
+// c8ba68cd: pg_stat_statements preload/max/track and log_temp_files=1024.
+// 4d443784: logging (already normalized below).
+// 030ca7f9, merged by this pin: statement_timeout=300s, lock_timeout=30s and
+// idle_in_transaction_session_timeout=300s. docs/postgres-runtime-settings.md records approval;
+// work_mem and shared_buffers were NOT changed. New settings still require an explicit review.
+const CONFIGURATION_SHA = '0022dd5f9f8c6b3dae4f0a625509e2b48ef24c37';
 
 const EXPECTED_SERVICES = ['postgres', 'pgbackup', 'apiserver', 'web', 'gateway'];
 const REMOVED_SERVICES = [
@@ -33,6 +44,7 @@ function git(...args) {
 
 const current = readFileSync(path.join(repo, COMPOSE), 'utf8');
 const baseline = git('show', `${BASELINE_SHA}:${COMPOSE}`);
+const configuration = git('show', `${CONFIGURATION_SHA}:${COMPOSE}`);
 
 /**
  * Split a Compose document into its top-level `services:` blocks, in file order. Blank lines and
@@ -63,7 +75,7 @@ function services(source) {
   return blocks;
 }
 
-// Log rotation is the one line every service gained after the baseline, on purpose: an uncapped
+// Log rotation is the one line every service gained in 4d443784, on purpose: an uncapped
 // json-file log is how orbit-gateway's access log reached 1GB. It sets a driver option, not a mount
 // or a process, so it is set aside before any comparison below rather than moving the pin.
 const LOGGING = '    logging: *logging';
@@ -72,10 +84,16 @@ const withoutLogging = (block) => block.split('\n').filter((line) => line !== LO
 const currentServices = new Map(
   [...services(current)].map(([name, block]) => [name, withoutLogging(block)]));
 const baselineServices = services(baseline);
+const configurationServices = new Map(
+  [...services(configuration)].map(([name, block]) => [name, withoutLogging(block)]));
 
 test('the baseline commit really is the nine-service stack this change removes from', () => {
   assert.deepEqual([...baselineServices.keys()],
     [...EXPECTED_SERVICES.slice(0, 3), ...REMOVED_SERVICES, ...EXPECTED_SERVICES.slice(3)]);
+});
+
+test('the approved configuration commit still has exactly the five surviving services', () => {
+  assert.deepEqual([...configurationServices.keys()], EXPECTED_SERVICES);
 });
 
 test('(a) Compose declares exactly the five surviving services', () => {
@@ -109,8 +127,8 @@ test('(c) nothing was added back: no new service, no new always-on process, no i
   assert.doesNotMatch(current, /\bexecutable-acceptance-dead-man\b/);
 });
 
-test('(i) the postgres service definition is unchanged, byte for byte', () => {
-  assert.equal(currentServices.get('postgres'), baselineServices.get('postgres'));
+test('(i) the postgres service definition matches the approved configuration, byte for byte', () => {
+  assert.equal(currentServices.get('postgres'), configurationServices.get('postgres'));
   // The bind mount whose relative path once served production an empty database.
   assert.match(currentServices.get('postgres'), /- \.\/data\/postgres:\/var\/lib\/postgresql\/data/);
 });
@@ -146,7 +164,8 @@ function directivesNotInBaseline(block, baselineBlock) {
 }
 
 // Unlike postgres and gateway, these three carry no relative bind mount to fence off, so the
-// guarantee here is one-directional on purpose: nothing may be added to a surviving service, while
+// guarantee here is one-directional on purpose: nothing beyond the fixed configuration may be
+// added to a surviving service, while
 // a directive the repository has genuinely stopped needing is free to leave and the prose around
 // it is free to be rewritten. Byte equality made both of those look like the thing this file exists
 // to catch, and left this test red on main: 7334a09c dropped a rollout-gate env the apiserver had
@@ -158,10 +177,10 @@ function directivesNotInBaseline(block, baselineBlock) {
 // repository holds no mention of that identifier outside the migration that dropped it, and it
 // cannot tell a READER of the flag from prose about its removal — which is exactly why it carves
 // out the migration's own comment. Naming it here put main's only red on the board.
-test('nothing was added to pgbackup, apiserver or web: their definitions only lost lines', () => {
+test('nothing beyond the approved configuration was added to pgbackup, apiserver or web', () => {
   for (const name of ['pgbackup', 'apiserver', 'web']) {
     assert.deepEqual(
-      directivesNotInBaseline(currentServices.get(name), baselineServices.get(name)), [],
+      directivesNotInBaseline(currentServices.get(name), configurationServices.get(name)), [],
       `${name} declares something the baseline did not: adding to a surviving service is forbidden`);
   }
 });
