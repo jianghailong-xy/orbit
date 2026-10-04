@@ -637,56 +637,7 @@ struct TranscriptView: View {
         // recycling List: a single one-shot scroll per change, not the per-frame *animated* scroll
         // that froze the old LazyVStack build.
         ScrollViewReader { proxy in
-            // ONE flat `ForEach` over pre-assembled rows — never nested `ForEach`es or an inline
-            // `if` inside a row loop. Those let a single `ForEach` element yield 0, 1 or N rows,
-            // and a count that moves while other rows are inserted in the same update is what made
-            // SwiftUI's UICollectionView-backed List abort a batch update
-            // (NSInternalInconsistencyException, "invalid number of items in section" — the two
-            // 0.1.2 (1299) TestFlight crashes). `TranscriptRows.build` is the single, unit-tested
-            // place that decides row order and identity; keep the view a pure switch over it.
-            List {
-                ForEach(rows) { row in
-                    transcriptRow(row)
-                        // Row-level preferences must sit OUT here, not inside `transcriptRow`'s
-                        // switch (or inside `AnchorRow`'s `if #available`): `listRow*` set inside a
-                        // `_ConditionalContent` branch aren't hoisted to the List on iOS — the
-                        // separators leaked back in. On the outermost row view they propagate
-                        // reliably (a chat flow, no hairlines).
-                        .listRowInsets(rowInsets(row))
-                        .listRowSeparator(.hidden)
-                        // The record a link opened (`SessionRecordLink`), marked for a moment.
-                        .listRowBackground(row.id == console.highlightedRowID
-                                           ? Color.accentColor.opacity(0.14) : Color.clear)
-                }
-            }
-            .listStyle(.plain)
-            // A transcript row is content, not a table cell, so drop the 44pt floor a List applies
-            // by default. That floor is why a folded tool card appeared to jump upward on the tap
-            // that opened it: folded, the card is ~32pt and the List padded the cell to 44 and
-            // centred it, sitting the header ~6pt low; expanded, the row is far past the floor, so
-            // the header snapped back to where it always belonged. Nothing above it moved, which is
-            // what ruled out a scroll. Every short row in the transcript was paying the same 12pt —
-            // including the 1pt scroll-anchor row at the tail.
-            .environment(\.defaultMinListRowHeight, 0)
-            .scrollContentBackground(.hidden)   // show the window background, not the List's own
-            #if os(iOS)
-            // Turn OFF the scroll view's touch delay so an in-list control (the jump-to-latest disc, the
-            // sticky header) registers a tap even while the list is still coasting. With the default
-            // (`delaysContentTouches == true`) the scroll view delays and consumes that first touch to
-            // halt deceleration, so the control only fired once the list settled. No public SwiftUI API.
-            .background { ScrollTouchConfigurator(scroll: transcriptScroll) }
-            #endif
-            .scrollDismissesKeyboard(.interactively)   // iOS: swipe the transcript to lower the keyboard
-            .defaultScrollAnchor(.bottom)
-            .modifier(tracker(ruler: ruler))
-            // The transcript viewport's top edge in global space — the line `AnchorRow` tests each row
-            // against to find the one under the top. Stable during a scroll (only shifts on layout, e.g.
-            // the keyboard), so reading it here doesn't churn.
-            .background {
-                GeometryReader { g in
-                    Color.clear.onChange(of: g.frame(in: .global).minY, initial: true) { _, y in ruler.viewportTop = y }
-                }
-            }
+            transcriptList
             // Follow new/streaming content only while pinned at the bottom (web's smart auto-scroll):
             // if the user has scrolled up to read, don't drag them back. A session switch always
             // re-pins. One-shot, non-animated scrollTo — never the per-frame animated scroll that froze
@@ -846,6 +797,60 @@ struct TranscriptView: View {
         #if os(macOS)
         .safeAreaInset(edge: .top, spacing: 0) { statusBar }
         #endif
+    }
+
+    // Keep the list type separate from its scroll callbacks for the iOS compiler.
+    private var transcriptList: some View {
+        // ONE flat `ForEach` over pre-assembled rows — never nested `ForEach`es or an inline
+        // `if` inside a row loop. Those let a single `ForEach` element yield 0, 1 or N rows,
+        // and a count that moves while other rows are inserted in the same update is what made
+        // SwiftUI's UICollectionView-backed List abort a batch update
+        // (NSInternalInconsistencyException, "invalid number of items in section" — the two
+        // 0.1.2 (1299) TestFlight crashes). `TranscriptRows.build` is the single, unit-tested
+        // place that decides row order and identity; keep the view a pure switch over it.
+        List {
+            ForEach(rows) { row in
+                transcriptRow(row)
+                    // Row-level preferences must sit OUT here, not inside `transcriptRow`'s
+                    // switch (or inside `AnchorRow`'s `if #available`): `listRow*` set inside a
+                    // `_ConditionalContent` branch aren't hoisted to the List on iOS — the
+                    // separators leaked back in. On the outermost row view they propagate
+                    // reliably (a chat flow, no hairlines).
+                    .listRowInsets(rowInsets(row))
+                    .listRowSeparator(.hidden)
+                    // The record a link opened (`SessionRecordLink`), marked for a moment.
+                    .listRowBackground(row.id == console.highlightedRowID
+                                       ? Color.accentColor.opacity(0.14) : Color.clear)
+            }
+        }
+        .listStyle(.plain)
+        // A transcript row is content, not a table cell, so drop the 44pt floor a List applies
+        // by default. That floor is why a folded tool card appeared to jump upward on the tap
+        // that opened it: folded, the card is ~32pt and the List padded the cell to 44 and
+        // centred it, sitting the header ~6pt low; expanded, the row is far past the floor, so
+        // the header snapped back to where it always belonged. Nothing above it moved, which is
+        // what ruled out a scroll. Every short row in the transcript was paying the same 12pt —
+        // including the 1pt scroll-anchor row at the tail.
+        .environment(\.defaultMinListRowHeight, 0)
+        .scrollContentBackground(.hidden)   // show the window background, not the List's own
+        #if os(iOS)
+        // Turn OFF the scroll view's touch delay so an in-list control (the jump-to-latest disc, the
+        // sticky header) registers a tap even while the list is still coasting. With the default
+        // (`delaysContentTouches == true`) the scroll view delays and consumes that first touch to
+        // halt deceleration, so the control only fired once the list settled. No public SwiftUI API.
+        .background { ScrollTouchConfigurator(scroll: transcriptScroll) }
+        #endif
+        .scrollDismissesKeyboard(.interactively)   // iOS: swipe the transcript to lower the keyboard
+        .defaultScrollAnchor(.bottom)
+        .modifier(tracker(ruler: ruler))
+        // The transcript viewport's top edge in global space — the line `AnchorRow` tests each row
+        // against to find the one under the top. Stable during a scroll (only shifts on layout, e.g.
+        // the keyboard), so reading it here doesn't churn.
+        .background {
+            GeometryReader { g in
+                Color.clear.onChange(of: g.frame(in: .global).minY, initial: true) { _, y in ruler.viewportTop = y }
+            }
+        }
     }
 
     // Which question is "stuck" to the top = the last user turn that sits ABOVE the item currently under
