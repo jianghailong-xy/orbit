@@ -41,7 +41,7 @@ async function arm(page, selector = surface, midpoint = false) {
           side: node.getAttribute('data-side'), opacity: style.opacity, samples: [] });
       }
       for (const [index, animation] of [...state.animations].entries()) {
-        if (animation.playState === 'finished') continue;
+        if (animation.playState === 'finished' || animation.playState === 'idle') continue;
         const node = animation.effect.target;
         const box = node.getBoundingClientRect();
         state.records[index].samples.push({ time: animation.currentTime, opacity: getComputedStyle(node).opacity,
@@ -68,11 +68,15 @@ async function resumeAfterShot(page, info, name) {
 
 async function capture(page) {
   await page.waitForFunction(() => window.choiceMotion.records.length > 0);
-  return page.evaluate(async () => {
+  // Unmount can cancel a CSSAnimation. Reading its newly replaced `finished`
+  // promise afterward can wait indefinitely; observe its terminal state instead.
+  await page.waitForFunction(() => [...window.choiceMotion.animations].every((animation) =>
+    animation.playState === 'finished' || animation.playState === 'idle'));
+  return page.evaluate(() => {
     const state = window.choiceMotion;
-    await Promise.all([...state.animations].map((animation) => animation.finished.catch(() => {})));
     state.active = false;
     document.removeEventListener('animationstart', state.started, true);
+    [...state.animations].forEach((animation, index) => { state.records[index].endState = animation.playState; });
     return state.records;
   });
 }
@@ -108,6 +112,7 @@ for (const kind of ['attachment', 'expiry', 'search', 'multiple', 'popover', 'to
       await expect(page.locator(`${surface}:visible`)).toBeVisible();
       if (direction.name === 'bottom') await resumeAfterShot(page, info, `${system}-enter-midpoint`);
       samples[system] = { enter: await capture(page) };
+      await expect(page.locator(`${surface}:visible`)).toBeVisible();
       if (system === 'orbit') await expect(page.locator(surface)).toHaveAttribute('data-side', direction.side);
       await arm(page, surface, direction.name === 'bottom');
       if (kind === 'tooltip') await page.mouse.move(0, 0);
