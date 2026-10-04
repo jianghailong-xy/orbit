@@ -997,9 +997,12 @@ export class RunnerApiController {
     // Latest provider plan-usage snapshot; older runners omit it (leave as-is). Written on its own by
     // compare-and-set, so the Codex reset block in it only moves forwards: a block relayed by another
     // process, an older read, an old process or a late heartbeat never takes a newer one back.
+    let planUsageStored = true;
     if (dto?.planUsage != null) {
+      planUsageStored = false;
       try {
-        if (!(await storeHeartbeatPlanUsage(this.prisma, runner.id, dto.planUsage, heartbeatLeaseOwner))) {
+        planUsageStored = await storeHeartbeatPlanUsage(this.prisma, runner.id, dto.planUsage, heartbeatLeaseOwner);
+        if (!planUsageStored) {
           this.logger.warn(`runner ${runner.id}: planUsage not stored after ${PLAN_USAGE_CAS_ATTEMPTS} compare-and-set attempts; the next heartbeat reports it again`);
         }
       } catch (error) {
@@ -1010,17 +1013,20 @@ export class RunnerApiController {
     // Codex rate-limit reset (docs/codex-rate-limit-reset-contract.md §6.2, §6.5): this runner's active
     // operations expired, settled, claimed or redelivered for the process THIS heartbeat speaks for —
     // its leaseOwner, its draining flag and the capabilities its own header declared — against the block
-    // the compare-and-set above left stored. Every heartbeat runs it, an old runner's too, because the
-    // deadlines settle there. On its own try, so a failure here costs only the reset step, which the
-    // next heartbeat hands over again from the row.
+    // the compare-and-set above left stored. A renewed claim also acknowledges the usage report to a
+    // reset waiting to finish its refresh, so a failed store must wait for the next heartbeat. Old
+    // runners without usage still run it, so their deadlines settle. On its own try, so a failure here
+    // costs only the reset step, which the next heartbeat hands over again from the row.
     let codexRateLimitResetRequest: RunnerHeartbeatResponse['codexRateLimitResetRequest'];
     try {
-      codexRateLimitResetRequest = await dispatchCodexResetCommand(this.prisma, {
-        runnerId: runner.id,
-        leaseOwner: heartbeatLeaseOwner,
-        draining: dto?.draining === true,
-        capabilities: reportedCapabilities,
-      });
+      if (planUsageStored) {
+        codexRateLimitResetRequest = await dispatchCodexResetCommand(this.prisma, {
+          runnerId: runner.id,
+          leaseOwner: heartbeatLeaseOwner,
+          draining: dto?.draining === true,
+          capabilities: reportedCapabilities,
+        });
+      }
     } catch (error) {
       this.logger.warn(`runner ${runner.id}: codex reset relay skipped this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
     }
