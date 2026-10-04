@@ -70,7 +70,7 @@ class ComposerDeviceTest {
         compose.activityRule.scenario.recreate()
         compose.onNodeWithTag("composer-input").assertTextContains(long)
         ready()
-        compose.onNodeWithTag("composer-send").performClick()
+        clickSendWhenEnabled()
         compose.waitUntil(10000) { !model.state.value.busy && model.state.value.draft.pending == null && model.state.value.draft.text.isEmpty() }
         assertEquals(1, stats()["uniqueTurns"]!!.jsonPrimitive.int)
         capture("long-sent")
@@ -113,7 +113,7 @@ class ComposerDeviceTest {
         control("""{"status":"RUNNING"}"""); compose.runOnIdle { app.realtime.refreshSession() }; awaitText("Stop")
         clickSendWhenEnabled(); awaitText("Stop requested.")
         compose.onNodeWithTag("composer-input").performTextInput("queued message")
-        compose.onNodeWithTag("composer-send").performClick()
+        clickSendWhenEnabled()
         compose.waitUntil(10000) { model.state.value.draft.pending==null && !model.state.value.busy && !model.state.value.waiting }
         compose.onNodeWithText("+").performClick(); awaitText("Queued messages (1)")
         compose.onNodeWithText("Queued messages (1)").performClick(); compose.onNodeWithText("Withdraw").performClick()
@@ -121,7 +121,7 @@ class ComposerDeviceTest {
         compose.onNodeWithText("Close").performClick()
         control("""{"expired":true}""")
         compose.onNodeWithTag("composer-input").performTextInput("after refresh")
-        compose.onNodeWithTag("composer-send").performClick()
+        clickSendWhenEnabled()
         compose.waitUntil(10000) { stats()["rotations"]!!.jsonPrimitive.int>0 && !model.state.value.busy }
         control("""{"denial":403}"""); compose.runOnIdle { app.realtime.refreshSession() }
         awaitText("Session unavailable"); compose.onNodeWithTag("composer-input").assertDoesNotExist()
@@ -161,6 +161,7 @@ class ComposerDeviceTest {
         try {
             control("""{"uploadFailures":1,"uploadDelay":0.3}""")
             compose.onNodeWithText("+").performClick(); compose.onNodeWithText("File",useUnmergedTree=true).performClick()
+            selectFilesRoot("Downloads")
             compose.waitUntil(10000) { systemNode("a07-中文附件.txt") != null }
             capture("system-files")
             val bounds=android.graphics.Rect();systemNode("a07-中文附件.txt")!!.getBoundsInScreen(bounds)
@@ -181,26 +182,27 @@ class ComposerDeviceTest {
             capture("attachment-only-sent")
             compose.onNodeWithText(staged.name).performClick()
             val oldClip = app.getSystemService(ClipboardManager::class.java).primaryClip?.getItemAt(0)?.uri
-            compose.onNodeWithText("Copy",useUnmergedTree=true).performClick()
+            systemClick("Copy")
             compose.waitUntil(5000) { app.getSystemService(ClipboardManager::class.java).primaryClip?.getItemAt(0)?.uri?.let { it != oldClip } == true }
             val clip=app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).uri!!
             assertArrayEquals(bytes,resolver.openInputStream(clip)!!.use { it.readBytes() })
             compose.waitUntil(5000) { compose.onNodeWithText("Share",useUnmergedTree=true).fetchSemanticsNode().config.getOrNull(SemanticsProperties.Disabled)==null }
-            compose.onNodeWithText("Share",useUnmergedTree=true).performClick()
+            systemClick("Share")
             capture("system-share")
             systemClick("A07 receiver")
             systemClick("Received file")
             assertEquals(sha(bytes),systemNode("Received file")!!.contentDescription.toString())
             capture("share-recipient-read")
-            instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
-            compose.onNodeWithText("Open",useUnmergedTree=true).performClick()
+            shellBytes("input keyevent KEYCODE_BACK")
+            systemClick("Open")
             systemClick("A07 receiver")
             if (systemNode("Just once") != null) systemClick("Just once")
             compose.waitUntil(5000) { systemNode("Received file") != null }
             assertEquals(sha(bytes),systemNode("Received file")!!.contentDescription.toString())
             capture("open-recipient-read")
-            instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
-            compose.onNodeWithText("Download",useUnmergedTree=true).performClick()
+            shellBytes("input keyevent KEYCODE_BACK")
+            systemClick("Download")
+            selectFilesRoot("Downloads")
             var filename:AccessibilityNodeInfo?=null
             compose.waitUntil(5000) { filename=systemFind { it.isEditable };filename!=null }
             filename!!.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,"a07-export.txt") })
@@ -210,7 +212,7 @@ class ComposerDeviceTest {
             shellBytes("rm /sdcard/Download/a07-export.txt")
             // A real external process reads the temporary grant and publishes its digest in the UI.
             File(evidence,"attachment-digest.txt").writeText(sha(bytes)+"\n")
-            compose.onNodeWithText("Close attachment").performClick()
+            systemClick("Close attachment")
             val att=stats()["attachments"]!!.jsonObject.values.single().jsonObject
             assertEquals(sha(bytes),att["sha256"]!!.jsonPrimitive.content)
             assertEquals(1,att["references"]!!.jsonArray.size)
@@ -221,24 +223,35 @@ class ComposerDeviceTest {
     @Test fun nativePhotoPickerPngPreviewSaveAndPaste() = journey("photo-picker") {
         login()
         val resolver=app.contentResolver
+        val photoName="a07-picker-${java.util.UUID.randomUUID()}.png"
         val uri=resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,ContentValues().apply {
-            put(MediaStore.Images.Media.DISPLAY_NAME,"a07-picker.png");put(MediaStore.Images.Media.MIME_TYPE,"image/png")
+            put(MediaStore.Images.Media.DISPLAY_NAME,photoName);put(MediaStore.Images.Media.MIME_TYPE,"image/png")
             put(MediaStore.Images.Media.RELATIVE_PATH,"Pictures");put(MediaStore.Images.Media.IS_PENDING,1)
+            put(MediaStore.Images.Media.DATE_TAKEN,System.currentTimeMillis())
         })!!
         val bitmap=Bitmap.createBitmap(128,96,Bitmap.Config.ARGB_8888).apply { eraseColor(android.graphics.Color.rgb(18,130,220)) }
         resolver.openOutputStream(uri)!!.use { bitmap.compress(Bitmap.CompressFormat.PNG,100,it) };bitmap.recycle()
         resolver.update(uri,ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING,0) },null,null)
+        // API29 DocumentsUI obtains image metadata from the media scan, unlike the new picker.
+        val path=resolver.query(uri,arrayOf(MediaStore.Images.Media.DATA),null,null,null)!!.use { it.moveToFirst();it.getString(0) }
+        val scanned=java.util.concurrent.CountDownLatch(1)
+        android.media.MediaScannerConnection.scanFile(app,arrayOf(path),arrayOf("image/png")) { _,_ -> scanned.countDown() }
+        assertTrue(scanned.await(10,java.util.concurrent.TimeUnit.SECONDS))
         try {
             compose.onNodeWithText("+").performClick();compose.onNodeWithText("Image",useUnmergedTree=true).performClick()
+            if (Build.VERSION.SDK_INT < 33) {
+                selectFilesRoot("Images")
+                systemClick("Pictures")
+            }
             var tile:AccessibilityNodeInfo?=null
-            compose.waitUntil(10000) { tile=systemFind { it.contentDescription?.toString()?.startsWith("Photo taken") == true || it.text?.toString()=="a07-picker.png" };tile!=null }
+            compose.waitUntil(10000) { tile=systemFind { it.contentDescription?.toString()?.let { label -> label.startsWith("Photo taken") || label.startsWith(photoName) } == true || it.text?.toString()==photoName };tile!=null }
             capture("native-photo-picker")
-            if (tile!!.text?.toString() == "a07-picker.png") {
+            if (Build.VERSION.SDK_INT < 33) {
                 val bounds=android.graphics.Rect();tile!!.getBoundsInScreen(bounds)
                 shellBytes("input swipe ${bounds.centerX()} ${bounds.centerY()} ${bounds.centerX()} ${bounds.centerY()} 700")
             } else clickNode(tile!!)
             var add:AccessibilityNodeInfo?=null
-            compose.waitUntil(5000) { add=systemFind { it.text?.toString()?.let { text -> text.startsWith("Add") || text == "Done" || text.equals("Open",true) || text == "Select" } == true };add!=null || model.state.value.draft.attachments.isNotEmpty() }
+            compose.waitUntil(5000) { add=systemFind { it.text?.toString()?.let { text -> text.startsWith("Add",true) || text.equals("Done",true) || text.equals("Open",true) || text.equals("Select",true) } == true };add!=null || model.state.value.draft.attachments.isNotEmpty() }
             add?.let(::clickNode)
             compose.waitUntil(10000) { model.state.value.draft.attachments.singleOrNull()?.remoteId!=null }
             val photo=model.state.value.draft.attachments.single()
@@ -247,7 +260,7 @@ class ComposerDeviceTest {
             compose.onNodeWithText("${photo.name} · ${photo.size/1024} KB").performClick()
             compose.waitUntil(5000) { compose.onAllNodesWithContentDescription("photo.png").fetchSemanticsNodes().isNotEmpty() }
             capture("photo-preview")
-            compose.onNodeWithText("Save image",useUnmergedTree=true).performClick()
+            systemClick("Save image")
             var saved:Uri?=null
             compose.waitUntil(5000) {
                 resolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,arrayOf("_id"),"_display_name=? AND relative_path=?",arrayOf("photo.png","Pictures/Orbit/"),null)?.use { c->
@@ -256,19 +269,19 @@ class ComposerDeviceTest {
             }
             assertArrayEquals(bytes,resolver.openInputStream(saved!!)!!.use { it.readBytes() });resolver.delete(saved!!,null,null)
             File(evidence,"photo-save-sha256.txt").writeText(sha(bytes))
-            compose.onNodeWithText("Close attachment").performClick()
+            systemClick("Close attachment")
             app.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newUri(resolver,"test photo",uri))
             compose.onNodeWithText("+").performClick();compose.onNodeWithText("Paste image",useUnmergedTree=true).performClick()
             compose.waitUntil(10000) { model.state.value.draft.attachments.size==2 && model.state.value.draft.attachments.all { it.remoteId!=null } }
             assertTrue(model.state.value.draft.attachments.any { it.source=="paste" })
             compose.onNodeWithText("${photo.name} · ${photo.size/1024} KB").performClick()
-            compose.onNodeWithText("Next image").performClick()
+            systemClick("Next image")
             compose.waitUntil(5000) { compose.onAllNodesWithContentDescription("pasted.png").fetchSemanticsNodes().isNotEmpty() }
             capture("gallery-next")
-            compose.onNodeWithText("Previous image").performClick()
+            systemClick("Previous image")
             compose.waitUntil(5000) { compose.onAllNodesWithContentDescription("photo.png").fetchSemanticsNodes().isNotEmpty() }
-            compose.onNodeWithText("Close attachment").performClick()
-            ready();compose.onNodeWithTag("composer-send").performClick()
+            systemClick("Close attachment")
+            ready();clickSendWhenEnabled()
             compose.waitUntil(10000) { !model.state.value.busy && model.state.value.draft.pending==null && model.state.value.draft.attachments.isEmpty() }
             assertEquals(2,stats()["attachments"]!!.jsonObject.size)
         } finally { resolver.delete(uri,null,null) }
@@ -283,6 +296,7 @@ class ComposerDeviceTest {
         compose.onAllNodesWithText("Sign in")[1].performScrollTo().performClick()
         compose.waitUntil(15000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
         compose.onNodeWithTag("workspace:$workspace").performClick()
+        awaitText("Composer conversation")
         compose.onNodeWithText("Composer conversation").performClick()
         compose.waitUntil(10000) { app.realtime.state.value.session?.fresh==true && model.state.value.loaded }
         awaitText("No messages yet")
@@ -295,7 +309,7 @@ class ComposerDeviceTest {
         compose.activityRule.scenario.recreate()
         compose.onNodeWithTag("composer-input").assertTextContains("新会话的首条消息")
         compose.waitUntil(10000) { compose.onNodeWithTag("composer-send").fetchSemanticsNode().config.getOrNull(SemanticsProperties.Disabled)==null }
-        compose.onNodeWithTag("composer-send").performClick()
+        clickSendWhenEnabled()
         awaitText("Created conversation")
         val request=stats()["creations"]!!.jsonArray.single().jsonObject
         assertEquals(workspace,request["workspaceId"]!!.jsonPrimitive.content)
@@ -305,8 +319,7 @@ class ComposerDeviceTest {
     }
     private fun clickSendWhenEnabled() {
         compose.waitUntil(10000) { compose.onNodeWithTag("composer-send").fetchSemanticsNode().config.getOrNull(SemanticsProperties.Disabled)==null }
-        // Use screen coordinates from the platform node after DocumentsUI/dialog transitions.
-        // Compose's injected touch can retain the previous window offset at the bottom edge.
+        // Query platform screen coordinates after picker/dialog and busy/notice layout changes.
         var node:AccessibilityNodeInfo?=null
         compose.waitUntil(5000) { node=systemNode("Send") ?: systemNode("Stop"); node!=null }
         val bounds=android.graphics.Rect();node!!.getBoundsInScreen(bounds)
@@ -331,6 +344,16 @@ class ComposerDeviceTest {
         }
         return find(instrument.uiAutomation.rootInActiveWindow)
     }
+    private fun selectFilesRoot(name:String) {
+        systemClick("Show roots")
+        var root:AccessibilityNodeInfo?=null
+        compose.waitUntil(5000) {
+            root=systemFind { node -> node.text?.toString()?.equals(name,true)==true &&
+                generateSequence(node.parent) { it.parent }.any { it.viewIdResourceName?.endsWith(":id/roots_list")==true } }
+            root!=null
+        }
+        clickNode(root!!)
+    }
     private fun systemClick(text:String) {
         var found:AccessibilityNodeInfo?=null
         compose.waitUntil(10000) { found=systemNode(text); found!=null }
@@ -342,7 +365,11 @@ class ComposerDeviceTest {
     private fun clickNode(node:AccessibilityNodeInfo) {
         var n=node
         while(!n.isClickable && n.parent!=null)n=n.parent
-        assertTrue(n.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+        if (n.isClickable) assertTrue(n.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+        else {
+            val bounds=android.graphics.Rect();node.getBoundsInScreen(bounds)
+            shellBytes("input tap ${bounds.centerX()} ${bounds.centerY()}")
+        }
         SystemClock.sleep(300)
     }
     private fun shellBytes(command:String)=ParcelFileDescriptor.AutoCloseInputStream(instrument.uiAutomation.executeShellCommand(command)).use { it.readBytes() }
