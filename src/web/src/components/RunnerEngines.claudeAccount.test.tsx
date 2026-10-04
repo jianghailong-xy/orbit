@@ -7,6 +7,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import type { PlanUsage, RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
 import { formatResetTime } from '../lib/providerPools';
 import { RunnerEngines, summaryOf } from './RunnerEngines';
+import { clickRunnerMenuItem, openRunnerMenu } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
 /**
@@ -184,14 +185,14 @@ describe('a runner with two Claude accounts', () => {
     expect(accounts[1].querySelector('.re-quota')?.textContent).toBe('Sign in to see quota');
   });
 
-  it('offers + Account on the Claude row, and starts signing a new one in as a Claude account', async () => {
+  it('offers Add account on the Claude row, and starts signing a new one in as a Claude account', async () => {
     const page = mount([runner({ accounts: [DEFAULT, WORK] })]);
     const head = rows(page, '.re-grp')[0];
     const open = vi.spyOn(window, 'open');
-    await click(button(head, '+ Account'));
+    await click(button(head, 'Add account'));
     expect(page.querySelector<HTMLInputElement>('.re-add input')?.value).toBe('Account 3');
     expect(loginPosts()).toEqual([{ engine: 'claude', accountName: 'Account 3' }]);
-    // No tab parked for the sign-in page: the press was on + Account, not on this card, so the page
+    // No tab parked for the sign-in page: the press was on Add account, not on this card, so the page
     // opens from the card's own link once the runner prints it.
     expect(open).not.toHaveBeenCalled();
     open.mockRestore();
@@ -209,11 +210,12 @@ describe('a runner with two Claude accounts', () => {
     const page = mount([runner({ accounts: [DEFAULT, WORK] })]);
     const [defaultRow, workRow] = rows(page, '.re-acct');
     // Default can be renamed like any other account, but never removed: it is the machine's own login.
-    expect(rows(defaultRow, 'button').map(labelOf)).toEqual(['Rename', 'Pause…', 'Re-sign in']);
+    expect(rows(defaultRow, 'button').map(labelOf)).toEqual(['More actions']);
+    expect((await openRunnerMenu(defaultRow)).textContent).not.toContain('Remove account');
 
     // The press asks first: the slot's sign-in is deleted from the machine, and nothing is sent until
     // the question is answered.
-    await click(button(workRow, 'Remove'));
+    await clickRunnerMenuItem(workRow, 'Remove account');
     const ok = await confirmation();
     expect(document.querySelector('.ant-popconfirm')?.textContent).toContain('Remove Work?');
     expect(deleteCalls()).toEqual([]);
@@ -251,17 +253,18 @@ describe('a runner with two Claude accounts', () => {
     const box = runner({ accounts: [DEFAULT, WORK] });
     expect(summaryOf(box)).toBe('2 of 3 signed in');
     const page = mount([box]);
-    // Kimi keeps one login for the machine: no group, no rows, and no + Account anywhere near it.
+    // Kimi keeps one login for the machine: no group, no rows, and no Add account anywhere near it.
     const kimiRow = rows(page, '.re-row').find(
       (el) => el.querySelector('.re-name')?.textContent === 'Kimi Code',
     )!;
     expect(kimiRow.className).not.toContain('re-grp');
-    expect(rows(kimiRow, 'button').map((b) => b.textContent?.trim())).not.toContain('+ Account');
+    expect(rows(kimiRow, 'button').map((b) => b.textContent?.trim())).not.toContain('Add account');
   });
 });
 
 describe("three Claude accounts, one of them out for the week (wikova, 2026-10-02)", () => {
-  const at = (hours: number) => new Date(Date.now() + hours * 3600_000).toISOString();
+  const fixtureTime = Date.now();
+  const at = (hours: number) => new Date(fixtureTime + hours * 3600_000).toISOString();
   const RD: RunnerEngineAccount = {
     id: 'fad98727',
     name: 'jianghailong.rd',

@@ -632,3 +632,23 @@ test('an escalated item says which way it became yours', async () => {
     assert.equal(JSON.parse(sent[0].body).aps.alert.title, title, reason);
   }
 });
+
+test('an Antigravity sign-out is announced under the name the Providers page gives it', async () => {
+  const prisma = {
+    runner: { findUnique: async () => ({ name: 'hpc-01', displayName: 'HPC', ownerId: 'owner-1' }) },
+    deviceToken: { findMany: async () => [{ token: 'device-1', userId: 'owner-1' }] },
+  };
+  const service = new PushService(prisma as any, enabledConfig());
+  (service as any).authToken = () => 'auth-token';
+  const sent: any[] = [];
+  (service as any).deliver = async (_tokens: unknown, body: string) => {
+    sent.push(JSON.parse(body));
+  };
+
+  await service.notifyEngineSignedOut('runner-1', 'antigravity');
+
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].aps.alert.title, 'HPC');
+  assert.match(sent[0].aps.alert.body, /^Antigravity signed out — sessions on this runner won't start until you sign in again\.$/);
+  assert.deepEqual([sent[0].engine, sent[0].kind, sent[0].runnerID], ['antigravity', 'engine-signed-out', 'runner-1']);
+});

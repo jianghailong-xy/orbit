@@ -1,12 +1,11 @@
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { PROVIDER_PRESETS, type ProviderBrand, type RunnerEngineHealth } from '@orbit/shared';
+import { PROVIDER_PRESETS, type RunnerEngineHealth } from '@orbit/shared';
 import { api } from '../api';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
-import antigravityLogo from '../assets/antigravity-color.svg';
 import { runnersQuery } from '../lib/queries';
-import { ENGINE_PRESET, providerDisplayLabel, runtimeSummary } from '../lib/sessionProviderChoices';
+import { brandForProvider, ENGINE_PRESET, providerDisplayLabel, runtimeSummary } from '../lib/sessionProviderChoices';
 
 /** Just the part of a runner this gallery reads: which engines it is signed into, and its name. */
 interface SignedInRunner {
@@ -15,16 +14,7 @@ interface SignedInRunner {
   engines?: RunnerEngineHealth[] | null;
 }
 
-// The brand for a provider: presets ship one; a custom provider falls back to a neutral monogram
-// derived from its label.
-export function brandFor(slug: string, label: string): ProviderBrand {
-  const preset = PROVIDER_PRESETS.find((p) => p.slug === slug);
-  if (preset) return preset.brand;
-  return { mono: (label.trim()[0] ?? '?').toUpperCase(), from: '#9aa0a8', to: '#6b7178' };
-}
-
-// Antigravity uses its official full-color artwork; other vendors use a white glyph over their
-// brand gradient, or a monogram when no glyph is known.
+// Match the iOS provider tile: a white glyph over the brand gradient, or a monogram when unknown.
 export function ProviderTile({
   slug,
   label,
@@ -55,9 +45,8 @@ export function ProviderTile({
       </div>
     );
   }
-  const brand = brandFor(slug, label);
-  const glyph = PROVIDER_GLYPHS[slug];
-  const fullColor = slug === 'antigravity' || slug === 'gemini';
+  const { brand, glyphKey } = brandForProvider(slug, label, slug);
+  const glyph = PROVIDER_GLYPHS[glyphKey ?? slug];
   return (
     <div
       className="provider-tile"
@@ -65,13 +54,11 @@ export function ProviderTile({
         width: size,
         height: size,
         borderRadius: radius,
-        background: fullColor ? '#fff' : `linear-gradient(135deg, ${brand.from}, ${brand.to})`,
-        border: fullColor ? '1px solid #e5e7eb' : undefined,
+        background: `linear-gradient(135deg, ${brand.from}, ${brand.to})`,
+        border: glyphKey === 'antigravity' ? '1px solid rgba(255,255,255,0.16)' : undefined,
       }}
     >
-      {fullColor ? (
-        <img src={antigravityLogo} alt="" width={Math.round(size * 0.75)} height={Math.round(size * 0.75)} />
-      ) : glyph ? (
+      {glyph ? (
         <svg
           viewBox="0 0 24 24"
           width={Math.round(size * 0.56)}

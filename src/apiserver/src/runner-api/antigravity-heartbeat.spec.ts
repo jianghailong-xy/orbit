@@ -18,11 +18,22 @@ function fixture() {
   };
   const api = new RunnerApiController(prisma as never, {} as never, realtime as never, {} as never, {} as never, {} as never,
     { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never);
-  const beat = (providers?: string, capabilities?: string) => api.heartbeat(
-    { id: 'runner-1', version: null }, { status: RunnerStatus.ONLINE, idleCapacity: 1 }, capabilities, providers,
+  const beat = (providers?: string, capabilities?: string, os?: string) => api.heartbeat(
+    { id: 'runner-1', version: null }, { status: RunnerStatus.ONLINE, idleCapacity: 1 }, capabilities, providers, os,
   );
   return { writes, beat, setInstall: (value: Record<string, unknown>) => { install = value; } };
 }
+
+test('heartbeat keeps the OS the runner names beside its declarations, replaced every beat', async () => {
+  const h = fixture();
+  await h.beat('antigravity', 'antigravity-google-login/v1', 'darwin');
+  assert.deepEqual(h.writes[0].capabilities, ['antigravity-google-login/v1', 'provider:antigravity', 'os:darwin']);
+  await h.beat('antigravity', 'antigravity-google-login/v1', 'linux');
+  assert.deepEqual(h.writes[1].capabilities, ['antigravity-google-login/v1', 'provider:antigravity', 'os:linux']);
+  // A process that names none — older than the header — leaves no OS standing.
+  await h.beat('antigravity', 'antigravity-google-login/v1');
+  assert.deepEqual(h.writes[2].capabilities, ['antigravity-google-login/v1', 'provider:antigravity']);
+});
 
 test('heartbeat replaces the provider declaration and retains protocol capabilities', async () => {
   const h = fixture();
