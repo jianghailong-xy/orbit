@@ -12,6 +12,7 @@ import {
   knownGapsForCell,
   openItemActionsFromDoors,
 } from './open-item-doors';
+import { OPEN_ITEM_KINDS } from './project-open-item';
 
 /**
  * A capability census, rather than a test of one particular open item.
@@ -90,6 +91,14 @@ test('the matrix has one resolving door per applicable cell and no unresolved co
       `no resolving door and no declared gap for ${cell.todoType}/${cell.sourceJob}/${cell.failureClass}/${cell.assignee}`,
     );
   }
+});
+
+test('the door census explicitly registers every OpenItemKind, including newly added kinds', () => {
+  const registered = [...new Set(OPEN_ITEM_DOOR_TABLE.map((cell) => cell.todoType))].sort();
+  const kinds = [...OPEN_ITEM_KINDS].sort();
+  assert.deepEqual(registered, kinds,
+    'adding an OpenItemKind without registering its doors must fail the census');
+  assert.deepEqual([...KNOWN_GAPS], [], 'the complete matrix has no white-listed gaps');
 });
 
 test('conflicts name their branch-changing repair doors, and owner landings have a retry door', () => {
@@ -217,6 +226,7 @@ test('open-item assignment paths never offer a door to somebody who does not hol
     { kind: 'INTEGRATION_CHECK_FAILED', assignee: 'COORDINATOR', taskId: 'task', promotionId: null, fuseEpisodeId: null, askable: true },
     { kind: 'INTEGRATION_CHECK_FAILED', assignee: 'OWNER', taskId: 'task', promotionId: null, fuseEpisodeId: null, askable: true },
     { kind: 'TASK_FAILED', assignee: 'COORDINATOR', taskId: 'task', promotionId: null, fuseEpisodeId: null, askable: false },
+    { kind: 'DELIVERY_REVIEW', assignee: 'COORDINATOR', taskId: 'task', promotionId: null, fuseEpisodeId: null, askable: false },
     { kind: 'PROMOTION_APPROVAL', assignee: 'OWNER', taskId: null, promotionId: 'promotion', fuseEpisodeId: null, askable: false },
   ] as const;
   for (const sample of samples) {
