@@ -59,7 +59,7 @@ export function Select<Value extends string = string>({ options, value, onValueC
   </BaseSelect.Item>;
   return <BaseSelect.Root value={value} onValueChange={onValueChange} items={flat} name={name} disabled={disabled}
     open={layer.open} onOpenChange={layer.setOpen} modal={false}>
-    <span ref={anchor} className={`orbit-choice${className ? ` ${className}` : ''}`} data-size={size} data-variant={variant} data-empty={value === null || undefined} data-disabled={disabled || undefined} style={style}>
+    <span ref={anchor} className={`orbit-choice${className ? ` ${className}` : ''}`} data-size={size} data-variant={variant} data-open={layer.open || undefined} data-empty={value === null || undefined} data-disabled={disabled || undefined} style={style}>
       <BaseSelect.Trigger {...aria} id={id} ref={(node) => {
         trigger.current = node;
         if (typeof ref === 'function') return ref(node);
