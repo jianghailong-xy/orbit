@@ -104,7 +104,7 @@ class ComposerDeviceTest {
         compose.onNodeWithText("Context: 0 tokens · Usage").performClick()
         awaitText("Primary: 23%");compose.onNodeWithText("Close").performClick()
         appClick("fixture-model")
-        awaitText("Fixture Two"); compose.onNodeWithText("Fixture Two").performClick()
+        awaitText("Fixture Two"); appClick("Fixture Two")
         compose.waitUntil(5000) { stats()["config"]!!.jsonObject["model"]?.jsonPrimitive?.content == "fixture-model-2" }
         ready()
         compose.onNodeWithText("Second account").performScrollTo().performClick()
