@@ -27,7 +27,7 @@ jobs:
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
-          java-version: '21.0.9+10'
+          java-version: '21.0.9+10.0.LTS'
       # ubuntu-24.04 supplies sdkmanager and accepted SDK licenses. Install the
       # pinned tools explicitly; a missing SDK package is a failure, never a skip.
       - name: Install Android SDK packages
