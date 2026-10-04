@@ -938,20 +938,30 @@ export class SessionsService {
       // otherwise. This test has to match the one the seed carries forward, or a session started
       // from a `kimi` predecessor would land with a different providerBuiltin than it had.
       providerBuiltin = Object.values(AgentProvider).includes(dto.provider as AgentProvider);
-      if (!providerBuiltin) {
+      // dsh is a new reserved engine name. A reachable provider or pool that already held it
+      // remains configured, fenced by the existing discriminator rather than renamed.
+      if (!providerBuiltin || provider === AgentProvider.DSH) {
         const configured = await this.prisma.modelProvider.findFirst({
-          where: { slug: dto.provider, enabled: true, OR: [{ ownerId: null }, { ownerId }] },
-          select: { runtime: true },
+          where: {
+            slug: dto.provider,
+            ...(provider === AgentProvider.DSH ? {} : { enabled: true }),
+            OR: [{ ownerId: null }, { ownerId }],
+          },
+          select: { runtime: true, enabled: true },
         });
+        if (configured?.enabled === false) {
+          throw new BadRequestException(`provider not available: "${dto.provider}"`);
+        }
         // …or one of the caller's own account pools, which the claim resolves to a member.
         borrowedRuntime = configured
           ? configured.runtime
           : await accountPoolRuntime(this.prisma, ownerId, dto.provider);
+        if (configured || borrowedRuntime) providerBuiltin = false;
         // The slug is named: a command-line caller typed it, and no picker checked it first.
-        if (!configured && !borrowedRuntime) {
+        if (!providerBuiltin && !configured && !borrowedRuntime) {
           throw new BadRequestException(`provider not available: "${dto.provider}"`);
         }
-        if (!configured) await this.assertUsablePool(ownerId, dto.provider);
+        if (!configured && borrowedRuntime) await this.assertUsablePool(ownerId, dto.provider);
       }
     } else if (!providerBuiltin) {
       // Inherited from the workspace, so it hasn't been looked up yet. A row that has since been
@@ -1084,6 +1094,15 @@ export class SessionsService {
     const runtime = borrowedRuntime
       ? normalizeRuntimeProvider(borrowedRuntime)
       : normalizeRuntimeProvider(provider, providerBuiltin);
+    // P4 has not yet verified an Orbit permission policy for Harness. Refuse account/code
+    // defaults as well as explicit picks, before writing a runnable session or a fabricated id.
+    if (runtime === AgentProvider.DSH) {
+      normalizeBuiltinPermissionMode(
+        runtime,
+        dto.model ?? '',
+        resolvePermissionMode(dto.permissionMode ?? accountPermissionMode, null),
+      );
+    }
     // Refuse now if the machine this is bound for cannot start it at all, rather than creating a
     // session (and, on the runner, a git checkout) that dies a second later with the same message.
     // Only for a runtime signed out on an online runner — see signedOutEngineRefusal for
@@ -7351,6 +7370,21 @@ export class SessionsService {
         dto.attachmentIds,
         tx,
       );
+      // A revive keeps its runtime and durable id. Resolve that boundary and the still-unverified
+      // Harness permission policy before accepting the next turn.
+      const next = await this.resolveProviderSwitch(tx, current, dto.provider);
+      const resumeRuntime = execRuntime({
+        declaredProvider: next.provider,
+        declaredProviderBuiltin: next.providerBuiltin,
+        customRow: next.customRow,
+      });
+      if (resumeRuntime === AgentProvider.DSH) {
+        normalizeBuiltinPermissionMode(
+          resumeRuntime,
+          dto.model ?? current.model ?? '',
+          resolvePermissionMode(dto.permissionMode ?? current.permissionMode, null),
+        );
+      }
       // The orchestration charge, in the same place createTurn puts it: past idempotency and
       // every refusal above, before the row it is paying for. A revive that is refused after
       // this — or a transaction retried whole — rolls the charge back with the turn.
@@ -7379,7 +7413,6 @@ export class SessionsService {
       // switch there is no process to reload: the row goes PENDING and the claim below resolves
       // the environment from it, which is also why a model the new provider doesn't serve is
       // simply cleared — claim re-resolves an unset model against the provider it is claiming for.
-      const next = await this.resolveProviderSwitch(tx, current, dto.provider);
       // …and onto one of the runner's accounts when it moves onto the built-in Codex or Claude engine,
       // as a live switch does (updateConfig). The claim that picks the revive up carries the
       // conversation there.
@@ -7387,7 +7420,9 @@ export class SessionsService {
       const normalizedEffort =
         dto.effort !== undefined
           ? normalizeEffortForProvider(
-              normalizeRuntimeProvider(next.provider, next.providerBuiltin),
+              resumeRuntime === AgentProvider.DSH
+                ? resumeRuntime
+                : normalizeRuntimeProvider(next.provider, next.providerBuiltin),
               dto.effort,
             )
           : undefined;
@@ -7729,20 +7764,24 @@ export class SessionsService {
     }
     // Mirrors create(): membership of the enum, deliberately not isBuiltinProvider(), so a
     // session moved onto the built-in `kimi` slug keeps the discriminator that slug means.
-    const providerBuiltin = Object.values(AgentProvider).includes(requested as AgentProvider);
-    const targetRow = providerBuiltin
+    let providerBuiltin = Object.values(AgentProvider).includes(requested as AgentProvider);
+    const targetRow = providerBuiltin && requested !== AgentProvider.DSH
       ? null
       : await tx.modelProvider.findFirst({
           where: {
             slug: requested,
-            enabled: true,
+            ...(requested === AgentProvider.DSH ? {} : { enabled: true }),
             OR: [{ ownerId: null }, { ownerId: session.ownerId }],
           },
         });
+    if (targetRow?.enabled === false) throw new BadRequestException('provider not available');
     // One of the owner's own account pools has no row: the claim and the reload resolve it to the
     // member they choose, whose model space is Claude's own.
     const poolRuntime =
-      providerBuiltin || targetRow ? null : await accountPoolRuntime(tx, session.ownerId, requested);
+      targetRow || (providerBuiltin && requested !== AgentProvider.DSH)
+        ? null
+        : await accountPoolRuntime(tx, session.ownerId, requested);
+    if (targetRow || poolRuntime) providerBuiltin = false;
     if (!providerBuiltin && !targetRow && !poolRuntime) {
       throw new BadRequestException('provider not available');
     }

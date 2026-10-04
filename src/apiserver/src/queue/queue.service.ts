@@ -808,7 +808,9 @@ export class QueueService {
   async accountPoolPausedUntil(
     ownerId: string, slug: string, now: Date, db: Prisma.TransactionClient | PrismaService = this.prisma,
   ): Promise<Date | null> {
-    if (isBuiltinProvider(slug)) return null;
+    // This caller has only a slug. A pre-existing dsh pool keeps that identity; a native dsh
+    // selection simply finds no pool. Other built-ins remain unambiguous.
+    if (slug !== AgentProvider.DSH && isBuiltinProvider(slug)) return null;
     const own = await this.accountPool(ownerId, slug, db);
     if (own && own.engine !== AgentProvider.CODEX) {
       const paused = own.candidates.filter((candidate) => candidate.pausedUntil && candidate.pausedUntil > now);
@@ -831,11 +833,11 @@ export class QueueService {
   async pausedPoolMemberUntil(
     ownerId: string,
     slug: string,
-    session: { poolMemberProviderId: string | null; poolCodexAccountId: string | null; poolKeyId: string | null },
+    session: { providerBuiltin?: boolean; poolMemberProviderId: string | null; poolCodexAccountId: string | null; poolKeyId: string | null },
     now: Date,
     db: Prisma.TransactionClient | PrismaService = this.prisma,
   ): Promise<Date | null> {
-    if (isBuiltinProvider(slug)) return null;
+    if (isBuiltinProvider(slug, session.providerBuiltin ?? (slug !== AgentProvider.DSH))) return null;
     const pool = await db.providerPool.findFirst({
       where: { slug, OR: [{ ownerId, shared: false }, { engine: AgentProvider.CODEX, people: { some: { userId: ownerId } } }] },
       select: { id: true, engine: true },
@@ -884,7 +886,7 @@ export class QueueService {
    */
   async accountPoolResumesAt(ownerId: string, slug: string, now: Date): Promise<Date | null> {
     // A built-in engine is never a pool.
-    if (isBuiltinProvider(slug)) return null;
+    if (slug !== AgentProvider.DSH && isBuiltinProvider(slug)) return null;
     // With no quota cache there is nothing to judge an account pool by.
     const pool = this.planUsage ? await this.accountPool(ownerId, slug) : null;
     // A Codex pool of one's own is judged by its ChatGPT accounts (migration 0324) and its keys (0358), not by
@@ -922,12 +924,15 @@ export class QueueService {
     session: {
       ownerId: string;
       provider: string | null;
+      providerBuiltin?: boolean;
       poolKeyId: string | null;
       poolCodexAccountId: string | null;
     },
     now: Date,
   ): Promise<Date | null> {
-    if (!session.provider || isBuiltinProvider(session.provider)) return null;
+    if (!session.provider || isBuiltinProvider(
+      session.provider, session.providerBuiltin ?? (session.provider !== AgentProvider.DSH),
+    )) return null;
     const pool = await this.sharedPoolOf(db, session.ownerId, session.provider);
     if (!pool) return null;
     const keys = await sharedPoolKeyCandidates(db, pool.id, now);
@@ -961,10 +966,12 @@ export class QueueService {
    */
   async loginPoolRetryAt(
     db: Prisma.TransactionClient | PrismaService,
-    session: { ownerId: string; provider: string | null; poolCodexAccountId: string | null; poolKeyId?: string | null },
+    session: { ownerId: string; provider: string | null; providerBuiltin?: boolean; poolCodexAccountId: string | null; poolKeyId?: string | null },
     now: Date,
   ): Promise<Date | null> {
-    if (!session.provider || isBuiltinProvider(session.provider)) return null;
+    if (!session.provider || isBuiltinProvider(
+      session.provider, session.providerBuiltin ?? (session.provider !== AgentProvider.DSH),
+    )) return null;
     const pool = await this.accountPool(session.ownerId, session.provider, db);
     if (pool?.engine !== AgentProvider.CODEX) return null;
     const keys = await sharedPoolKeyCandidates(db, pool.id, now);

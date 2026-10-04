@@ -4015,6 +4015,7 @@ export class RunnerApiController {
           // Which shared pool's key, or login pool's account, a failed turn may have ended on — see
           // `keyRetryAt` below.
           provider: true,
+          providerBuiltin: true,
           poolKeyId: true,
           poolCodexAccountId: true,
           model: true,
@@ -4366,7 +4367,7 @@ export class RunnerApiController {
         && completedTurn?.kind === 'message'
         && current.retryAt == null
         // Only a configured provider's slug can name a pool, as in quotaRetryAt.
-        && !isBuiltinProvider(current.provider)
+        && !isBuiltinProvider(current.provider, current.providerBuiltin)
           ? ((await this.queue.sharedPoolRetryAt(tx, current, new Date()))
             ?? (await this.queue.loginPoolRetryAt(tx, current, new Date())))
           : null;
@@ -5979,7 +5980,7 @@ export class RunnerApiController {
         effectiveStatus === RunStatus.FAILED
         && current.retryAt == null
         && !quotaSpent
-        && !isBuiltinProvider(current.provider)
+        && !isBuiltinProvider(current.provider, current.providerBuiltin)
           ? ((await this.queue.sharedPoolRetryAt(tx, current, new Date()))
             ?? (await this.queue.loginPoolRetryAt(tx, current, new Date())))
           : null;
@@ -7008,7 +7009,7 @@ export class RunnerApiController {
   private async quotaRetryAt(
     tx: QuotaRetryTransaction,
     runnerId: string,
-    session: { ownerId: string; provider: string; codexAccount: string | null; claudeAccount?: string | null },
+    session: { ownerId: string; provider: string; providerBuiltin?: boolean; codexAccount: string | null; claudeAccount?: string | null },
     text: string,
     workspace: { env: unknown; codexAccount: string | null; claudeAccount: string | null } | null | undefined,
   ): Promise<Date | null> {
@@ -7018,7 +7019,9 @@ export class RunnerApiController {
       select: { planUsage: true, engines: true },
     });
     // Only a configured provider's slug can name a pool.
-    const pool = isBuiltinProvider(session.provider)
+    const pool = isBuiltinProvider(
+      session.provider, session.providerBuiltin ?? (session.provider !== AgentProvider.DSH),
+    )
       ? null
       : await this.queue.accountPoolResumesAt(session.ownerId, session.provider, now);
     const at =

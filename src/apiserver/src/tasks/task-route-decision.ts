@@ -87,23 +87,29 @@ async function routeEngine(
   provider: string,
   providerBuiltin: boolean,
 ): Promise<{ runtime: string; hasOwnModelSpace: boolean }> {
-  if (providerBuiltin) {
+  if (providerBuiltin && provider !== AgentProvider.DSH) {
     return { runtime: normalizeRuntimeProvider(provider, true), hasOwnModelSpace: false };
   }
   const configured = await prisma.modelProvider.findFirst({
-    where: { slug: provider, enabled: true, OR: [{ ownerId: null }, { ownerId }] },
-    select: { runtime: true, presetSlug: true, followsPreset: true, models: true, defaultModel: true },
+    where: { slug: provider, ...(provider === AgentProvider.DSH ? {} : { enabled: true }), OR: [{ ownerId: null }, { ownerId }] },
+    select: { runtime: true, enabled: true, presetSlug: true, followsPreset: true, models: true, defaultModel: true },
   });
+  // A disabled pre-existing dsh row is still a configured identity, never the new runtime.
+  if (configured && provider === AgentProvider.DSH && configured.enabled === false) {
+    return { runtime: AgentProvider.CLAUDE, hasOwnModelSpace: true };
+  }
   if (configured) {
     return {
       runtime: normalizeRuntimeProvider(configured.runtime),
-      hasOwnModelSpace: !followsRuntimeCatalog(configured),
+      hasOwnModelSpace: configured.runtime !== AgentProvider.DSH && !followsRuntimeCatalog(configured),
     };
   }
   // An account pool runs on the accounts of one runtime, in that runtime's model space.
   const pooled = await accountPoolRuntime(prisma, ownerId, provider);
   return pooled
     ? { runtime: pooled, hasOwnModelSpace: false }
+    : provider === AgentProvider.DSH
+      ? { runtime: normalizeRuntimeProvider(provider, providerBuiltin), hasOwnModelSpace: false }
     : { runtime: provider, hasOwnModelSpace: true };
 }
 

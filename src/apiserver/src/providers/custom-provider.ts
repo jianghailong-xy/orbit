@@ -6,6 +6,7 @@ import {
   providerPreset,
 } from '@orbit/shared';
 import { Prisma } from '@prisma/client';
+import { BadRequestException } from '@nestjs/common';
 import { accountDir } from '@orbit/shared';
 import { accountEnvVar, accountOnRunner } from './account';
 import { catalogModels } from './model-catalog';
@@ -20,14 +21,14 @@ import {
 // Built-in, first-class providers ship their own runtime CLI. Any other `provider` value is
 // a control-plane-configured ModelProvider that borrows one of these runtimes.
 /** True for a built-in provider (or an unset one) — i.e. NOT a configured ModelProvider slug.
- * `providerBuiltin` is persisted only to fence the former custom `kimi` slug during rolling
+ * `providerBuiltin` fences configured `kimi` / `dsh` slugs during rolling
  * deployment; Claude/Codex predate the discriminator, and migrations 0080 and 0367 move any
  * pre-existing custom `opencode` / `antigravity` row (0367: or account pool) aside, so all four
  * remain unambiguous. */
 export function isBuiltinProvider(slug?: string | null, providerBuiltin = true): boolean {
   if (!slug || slug === AgentProvider.CLAUDE || slug === AgentProvider.CODEX) return true;
   if (slug === AgentProvider.OPENCODE || slug === AgentProvider.ANTIGRAVITY) return true;
-  if (slug === AgentProvider.KIMI) return providerBuiltin;
+  if (slug === AgentProvider.KIMI || slug === AgentProvider.DSH) return providerBuiltin;
   return false;
 }
 
@@ -92,6 +93,7 @@ function runtimeOf(row: ModelProviderRow): AgentProvider {
   if (row.runtime === AgentProvider.CODEX) return AgentProvider.CODEX;
   if (row.runtime === AgentProvider.KIMI) return AgentProvider.KIMI;
   if (row.runtime === AgentProvider.ANTIGRAVITY) return AgentProvider.ANTIGRAVITY;
+  if (row.runtime === AgentProvider.DSH) return AgentProvider.DSH;
   return AgentProvider.CLAUDE;
 }
 
@@ -107,12 +109,21 @@ export function execRuntime(args: {
   declaredProviderBuiltin?: boolean;
   customRow: ModelProviderRow | null;
 }): AgentProvider {
+  if (args.customRow && !args.customRow.enabled && (
+    args.customRow.runtime === AgentProvider.DSH ||
+    (args.declaredProvider === AgentProvider.DSH && args.customRow.runtime !== AgentProvider.CLAUDE)
+  )) {
+    throw new BadRequestException('DeepSeek Harness provider is disabled');
+  }
   if (args.customRow && args.customRow.enabled) return runtimeOf(args.customRow);
   if (args.declaredProvider === AgentProvider.CODEX) return AgentProvider.CODEX;
   if (args.declaredProvider === AgentProvider.OPENCODE) return AgentProvider.OPENCODE;
   if (args.declaredProvider === AgentProvider.ANTIGRAVITY) return AgentProvider.ANTIGRAVITY;
   if (args.declaredProvider === AgentProvider.KIMI && args.declaredProviderBuiltin !== false) {
     return AgentProvider.KIMI;
+  }
+  if (args.declaredProvider === AgentProvider.DSH && args.declaredProviderBuiltin !== false) {
+    return AgentProvider.DSH;
   }
   return AgentProvider.CLAUDE;
 }
@@ -205,6 +216,11 @@ export async function accountPoolRuntime(
 // GOOGLE_GEMINI_BASE_URL.
 function injectedEnv(row: ModelProviderRow, model: string): Record<string, string> {
   const apiKey = row.sessionToken ?? decryptSecret(row.apiKeyEnc);
+  if (runtimeOf(row) === AgentProvider.DSH) {
+    // P2 fixes these in the session overlay, including apiKeyEnv=ORBIT_DSH_API_KEY. A Harness
+    // provider never falls through to Claude credentials or the project's ambient DeepSeek key.
+    return { ORBIT_DSH_API_KEY: apiKey, ORBIT_DSH_BASE_URL: row.baseUrl };
+  }
   if (runtimeOf(row) === AgentProvider.CODEX) {
     return { OPENAI_BASE_URL: row.baseUrl, OPENAI_API_KEY: apiKey };
   }
@@ -290,7 +306,7 @@ function injectedEnv(row: ModelProviderRow, model: string): Record<string, strin
  */
 export function resolveProviderExec(args: {
   declaredProvider?: string | null;
-  /** False only for a stale/pre-0077 custom-provider identity that happens to say `kimi`. */
+  /** False for a configured identity that collides with a discriminator-aware runtime keyword. */
   declaredProviderBuiltin?: boolean;
   customRow: ModelProviderRow | null;
   sessionModel?: string | null;
@@ -337,16 +353,16 @@ export function resolveProviderExec(args: {
   const legacyInheritance = args.usesRuntimeDefaultModel === false;
   if (customRow && customRow.enabled) {
     const runtime = execRuntime(args);
-    const pin = firstNonBlank(sessionModel);
+    const pin = nonBlankModel(runtime, sessionModel);
     const retired = retiredPin(customRow, runtime, args, pin);
     // A custom provider's model space is its own; never coerce it through the claude/gpt
     // prefix guard. Workspace.model is only a rolling-deploy bridge for model-less sessions made
     // by old replicas; current clients put their choice directly on Session.model.
     const model =
       (retired ? undefined : pin) ||
-      firstNonBlank(legacyInheritance ? workspaceModel : undefined) ||
+      firstNonBlank(legacyInheritance && runtime !== AgentProvider.DSH ? workspaceModel : undefined) ||
       runtimeCatalogDefault(customRow, runtime, args) ||
-      presetDefaultModel(customRow) ||
+      (runtime !== AgentProvider.DSH ? presetDefaultModel(customRow) : undefined) ||
       DEFAULT_MODEL_BY_PROVIDER[runtime];
     const reasoningLevels = declaredReasoningLevels(customRow, model);
     return {
@@ -376,7 +392,7 @@ export function resolveProviderExec(args: {
     account && dirVar
       ? { ...(workspaceEnv ?? {}), [dirVar]: accountDir(account) }
       : (workspaceEnv ?? undefined);
-  const pin = firstNonBlank(sessionModel);
+  const pin = nonBlankModel(provider, sessionModel);
   const retired = retiredPin(null, provider, args, pin);
   const explicitSessionModel = retired ? undefined : pin;
   // An explicit per-session selection retains the historical safety behavior: a clearly
@@ -384,8 +400,9 @@ export function resolveProviderExec(args: {
   // deployment, old replicas can still create a model-less Session that expects Workspace.model;
   // preserve that one-time inheritance ahead of new Runtime defaults. Queue claim snapshots it
   // onto Session.model, and current Workspace create/update paths never write a new pin.
-  const legacyWorkspaceModel = legacyInheritance ? firstNonBlank(workspaceModel) : undefined;
-  const inheritedModel = legacyInheritance
+  const inheritsWorkspace = legacyInheritance && provider !== AgentProvider.DSH;
+  const legacyWorkspaceModel = inheritsWorkspace ? firstNonBlank(workspaceModel) : undefined;
+  const inheritedModel = inheritsWorkspace
     ? modelForProvider(provider, legacyWorkspaceModel)
     : firstCompatibleModel(
         provider,
@@ -418,7 +435,11 @@ function runtimeCatalogDefault(
   runtime: AgentProvider,
   args: { runtimeDefaultModels?: unknown; modelCatalog?: unknown },
 ): string | undefined {
-  if (!followsRuntimeCatalog(row)) return undefined;
+  if (runtime !== AgentProvider.DSH && !followsRuntimeCatalog(row)) return undefined;
+  if (runtime === AgentProvider.DSH) {
+    return savedRuntimeDefaultModel(args.runtimeDefaultModels, runtime) ??
+      firstRuntimeCatalogModel(args.modelCatalog, runtime);
+  }
   return firstNonBlank(
     savedRuntimeDefaultModel(args.runtimeDefaultModels, runtime),
     firstRuntimeCatalogModel(args.modelCatalog, runtime),
@@ -450,7 +471,12 @@ function retiredPin(
 ): boolean {
   if (!model) return false;
   if (runtime === AgentProvider.OPENCODE) return false;
-  if (row && !followsRuntimeCatalog(row)) return false;
+  if (row && runtime !== AgentProvider.DSH && !followsRuntimeCatalog(row)) return false;
+  if (runtime === AgentProvider.DSH) {
+    const offered = runtimeCatalogModels(args.modelCatalog, runtime);
+    return !!offered?.length && model !== savedRuntimeDefaultModel(args.runtimeDefaultModels, runtime)
+      && !offered.some((entry) => entry.value === model);
+  }
   return isRetiredModel(
     model,
     runtimeCatalogModels(args.modelCatalog, runtime),
@@ -465,12 +491,17 @@ function firstNonBlank(...values: Array<string | null | undefined>): string | un
   return undefined;
 }
 
+function nonBlankModel(runtime: AgentProvider, value?: string | null): string | undefined {
+  if (runtime === AgentProvider.DSH) return typeof value === 'string' && value.trim() ? value : undefined;
+  return firstNonBlank(value);
+}
+
 function firstCompatibleModel(
   provider: AgentProvider,
   ...values: Array<string | null | undefined>
 ): string | undefined {
   for (const value of values) {
-    const model = firstNonBlank(value);
+    const model = nonBlankModel(provider, value);
     if (model && modelForProvider(provider, model) === model) return model;
   }
   return undefined;
