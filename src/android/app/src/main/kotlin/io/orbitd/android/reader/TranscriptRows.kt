@@ -37,13 +37,14 @@ internal data class TranscriptRow(val event: RunEvent, val result: RunEvent? = n
 /** Project only durable changes. Live text and tool snapshots are passed to their own row. */
 internal fun transcriptRows(events: List<RunEvent>): List<TranscriptRow> {
     // Project an unexplained end as a readable error with the original anchor. A bounded page
-    // starting mid-turn cannot prove there was no earlier reply, so wait for a user or boundary.
+    // starting mid-turn cannot prove there was no earlier reply, so wait for an ordinary user or boundary.
+    // A steer joins the current turn; it cannot establish the start of a truncated one.
     var knownTurn = false
     var accountedFor = false
     val unexplained = mutableSetOf<Long>()
     events.forEach { event ->
         when (event.type) {
-            "user" -> knownTurn = true
+            "user" -> if (event.fields["steer"] != JsonPrimitive(true)) knownTurn = true
             "assistant", "error", "auth_error", "auto_retry", "interrupt" -> accountedFor = true
             "turn_end" -> {
                 val subtype = event.fields.string("subtype").orEmpty()

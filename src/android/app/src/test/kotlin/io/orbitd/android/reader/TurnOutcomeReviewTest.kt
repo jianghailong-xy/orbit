@@ -8,6 +8,32 @@ import org.junit.Test
 class TurnOutcomeReviewTest {
     private val notice = "This turn ended without a reply — send the message again to retry."
     private fun event(seq: Long, type: String, payload: String = "{}") = RunEvent(type, seq, Wire.json.parseToJsonElement(payload))
+    private fun steeredTurn() = listOf(event(1, "user", """{"text":"开始任务"}"""),
+        event(2, "assistant", """{"text":"已完成第一部分"}"""),
+        event(3, "user", """{"text":"顺便检查测试","steer":true}"""),
+        event(4, "turn_end", """{"subtype":"failed"}"""))
+    @Test fun aSteerInAnExplainedTurnDoesNotInventAnotherFailure() {
+        val rows = transcriptRows(steeredTurn())
+        assertEquals(listOf("开始任务", "已完成第一部分", "顺便检查测试"), rows.map { it.event.body() })
+        assertEquals(listOf("event:1", "event:2", "event:3"), rows.map { it.key })
+    }
+    @Test fun aPageStartingAtASteerDoesNotChangeItsOutcomeWhenHistoryIsPrepended() {
+        val events = steeredTurn()
+        val page = transcriptRows(events.drop(2))
+        assertEquals(listOf("顺便检查测试"), page.map { it.event.body() })
+        val restored = transcriptRows(events.take(2) + events.drop(2))
+        assertEquals(page, restored.filter { it.event.seq >= 3 })
+        assertEquals("event:3", anchorRow(restored, 3)!!.key)
+    }
+    @Test fun aSteerKeepsAnAlreadyKnownTurnAndItsFailureAnchor() {
+        for (start in listOf(event(1, "user"), event(1, "user", """{"steer":false}"""),
+            event(1, "turn_end", """{"subtype":"completed"}"""))) {
+            val rows = transcriptRows(listOf(start, event(2, "user", """{"steer":true}"""),
+                event(3, "turn_end", """{"subtype":"failed"}""")))
+            assertEquals(listOf(3L), rows.filter { it.event.body() == notice }.map { it.event.seq })
+            assertEquals("event:3", anchorRow(rows, 3)!!.key)
+        }
+    }
     @Test fun failedTurnWithoutReplyProducesReadableAnchoredExplanation() {
         val rows = transcriptRows(listOf(event(1, "user", """{"text":"Help"}"""),
             event(2, "turn_end", """{"subtype":"error_during_execution"}""")))
