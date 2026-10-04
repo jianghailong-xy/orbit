@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { armScrollUnlock, readScrollUnlock, scrollPage } from './choices-scroll-observation.mjs';
 
 const fixture = '/ui-migration/choices.html';
 const errors = new WeakMap();
@@ -88,10 +89,24 @@ for (const motion of ['no-preference', 'reduce']) test(`${motion} Dialog Popover
   await expect(context).toBeFocused();
   await expect(dialog).toBeVisible();
   expect(await page.evaluate(() => [document.body, document.documentElement].some((node) => /hidden|clip/.test(getComputedStyle(node).overflowY)))).toBe(true);
+  await armScrollUnlock(page);
   await page.keyboard.press('Escape');
   await expect(dialog).not.toBeVisible();
   await expect(trigger).toBeFocused();
-  expect(await page.evaluate(() => [document.body, document.documentElement].some((node) => /hidden|clip/.test(getComputedStyle(node).overflowY)))).toBe(false);
+  const unlock = await readScrollUnlock(page);
+  await info.attach('scroll-unlock', { body: JSON.stringify(unlock, null, 2), contentType: 'application/json' });
+  expect(unlock.unlockedAfterMs).not.toBeNull();
+  expect(unlock.unlockedAfterMs).toBeLessThanOrEqual(unlock.limitMs);
+  expect(unlock.finalRead.locked).toBe(false);
+  const scroll = await scrollPage(page, info);
+  await info.attach('page-scroll', { body: JSON.stringify(scroll, null, 2), contentType: 'application/json' });
+  expect(scroll.scrollHeight).toBeGreaterThan(scroll.viewportHeight);
+  expect(scroll.input?.trusted).toBe(true);
+  expect(scroll.input?.kind).toBe(info.project.use.isMobile ? 'PageDown' : 'wheel');
+  expect(scroll.movedAfterMs).not.toBeNull();
+  expect(scroll.movedAfterMs).toBeLessThanOrEqual(scroll.limitMs);
+  expect(scroll.after).toBeGreaterThan(scroll.before);
+  await expect(trigger).toBeFocused();
   await info.attach('nested-lifecycle', { body: JSON.stringify({ motion, geometry, selectExit, popoverExit, focusReturned: true, scrollUnlocked: true }, null, 2), contentType: 'application/json' });
 });
 
