@@ -164,16 +164,13 @@ public enum RunnerPageFormat {
     }
 
     /// The CLI's own product name: `Claude Code`, `Codex`, `Kimi Code`, `OpenCode`,
-    /// `Antigravity CLI`.
+    /// `Antigravity`.
     public static func engineName(_ engine: String) -> String {
         if let login = LoginEngine(rawValue: engine) { return login.displayName }
-        if engine == "antigravity" { return "Antigravity CLI" }
         return engine == "opencode" ? "OpenCode" : engine
     }
 
-    /// The engines Orbit signs in on a runner. OpenCode's sign-in belongs to whichever provider it
-    /// runs, and Antigravity has none — it runs on a Gemini API key from its environment — so a
-    /// runner page has nothing to say about either.
+    /// OpenCode's sign-in belongs to whichever provider it runs.
     public static func loginEngine(_ engine: String) -> LoginEngine? { LoginEngine(rawValue: engine) }
 
     /// The engines whose CLI keeps a login per directory, so one machine holds several accounts of
@@ -227,11 +224,18 @@ public enum RunnerPageFormat {
     /// Where an engine's sign-ins stand, after its version on the Engines row. An engine with several
     /// accounts is signed in only when every one of them is (web `signedIn`): a row that called the
     /// machine signed in over a signed-out account would hide the one thing it is there to say.
-    public static func engineStatus(_ health: RunnerEngineHealth) -> Status? {
+    public static func engineStatus(_ health: RunnerEngineHealth, runner: Runner? = nil) -> Status? {
         guard health.installed == true else {
             return Status(text: RunnerPageCopy.RUNNER_ENGINE_NOT_INSTALLED, tone: .muted)
         }
         guard loginEngine(health.engine) != nil else { return nil }
+        if health.engine == "antigravity" {
+            if health.auth == "yes" { return Status(text: health.authSource == "google" ? "Google account" : "env key", tone: .ok) }
+            if let runner, let hint = EngineAuth.antigravityLoginHint(runner.antigravity?.googleLogin) {
+                return Status(text: hint, tone: .muted)
+            }
+            return authStatus(health.auth)
+        }
         let accounts = health.accounts ?? []
         guard accounts.count >= 2 else { return authStatus(health.auth) }
         if accounts.allSatisfy({ $0.auth == "yes" }) {
@@ -245,6 +249,11 @@ public enum RunnerPageFormat {
     public static func needsSignIn(_ health: RunnerEngineHealth) -> Bool {
         guard health.installed == true, loginEngine(health.engine) != nil else { return false }
         return health.auth == "no" || (health.accounts ?? []).contains { $0.auth == "no" }
+    }
+
+    public static func antigravityCanSignIn(_ runner: Runner) -> Bool {
+        runner.antigravity?.googleLogin == .available
+            && runner.engines?.first(where: { $0.engine == "antigravity" })?.installed == true
     }
 
     /// `Update to 2.1.270 failed Sep 13` — only for a failure that has become the row's problem
@@ -286,7 +295,12 @@ public enum RunnerPageFormat {
     /// One account's own windows: Default's are the engine snapshot's, another's its entry under
     /// `accounts` (`CodexAccounts.snapshot`, web `codexAccountSnapshot`).
     public static func accountWindows(_ runner: Runner, engine: String, account: String) -> [PlanUsageRow] {
-        CodexAccounts.snapshot(runner.planUsage?.snapshot(for: engine), account: account)?.rows ?? []
+        if engine == "antigravity" {
+            guard let health = runner.engines?.first(where: { $0.engine == engine }),
+                  health.auth == "yes", health.authSource == "google" else { return [] }
+            return health.planUsage?.currentRows() ?? []
+        }
+        return CodexAccounts.snapshot(runner.planUsage?.snapshot(for: engine), account: account)?.rows ?? []
     }
 
     /// The engines whose quota a runner reads: the ones Orbit signs in.

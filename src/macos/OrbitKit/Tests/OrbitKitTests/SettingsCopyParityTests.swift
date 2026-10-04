@@ -136,7 +136,7 @@ final class SettingsCopyParityTests: XCTestCase {
         assertSays(engines, "<h3>\(ProvidersOverview.onYourRunners)</h3>", in: Self.engines)
         assertSays(engines, "re-sec-sub\"> \(ProvidersOverview.onYourRunnersDetail)", in: Self.engines)
         assertSays(engines, "return '\(ProvidersOverview.runnerSummary(try runner(engines: nil)))'", in: Self.engines)
-        assertSays(engines, "'All signed in' : `${ready} of ${ENGINES.length} signed in`", in: Self.engines)
+        assertSays(engines, "'All signed in' : `${ready} of ${engines.length} signed in`", in: Self.engines)
 
         let pools = try web(Self.pools)
         assertSays(pools, "<h3>\(ProvidersOverview.accountPools)</h3>", in: Self.pools)
