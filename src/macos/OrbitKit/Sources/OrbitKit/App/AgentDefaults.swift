@@ -137,9 +137,10 @@ public enum AgentDefaults {
     /// own. Unlike OpenCode's sentinel this row is only the fallback, like Kimi's managed default:
     /// once there is a catalogue, dispatch runs a model-less session on the reported default (the
     /// Runtime's own, else the catalogue's first row), so the row would offer a choice dispatch no
-    /// longer makes. Mirrors web's ANTIGRAVITY_MODEL_OPTIONS.
+    /// longer makes. The fallback names Gemini's preset default without changing the empty
+    /// dispatch value. Mirrors web's ANTIGRAVITY_MODEL_OPTIONS.
     public static let antigravityModels: [ModelOption] = [
-        ModelOption(id: "", name: "Managed by Antigravity"),
+        ModelOption(id: "", name: "Gemini 3.8 Flash"),
     ]
 
     public static let defaultModelID = "claude-opus-5"

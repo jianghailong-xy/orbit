@@ -7,6 +7,7 @@ import { WorkspacesService } from './workspaces.service';
 /** Records what reached the database; `$queryRaw` stands in for the derived-provider lookup. */
 function prismaStub(writes: Record<string, unknown>[]) {
   return {
+    runner: { findMany: async () => [] },
     workspace: {
       create: async (args: { data: Record<string, unknown> }) => {
         writes.push(args.data);
@@ -94,6 +95,7 @@ test('the repair queue matches a runner that has never been asked', async () => 
       }),
     },
     runner: {
+      findMany: async () => [],
       updateMany: async (args: { where: Record<string, unknown> }) => {
         where = args.where;
         return { count: 1 };
@@ -120,6 +122,7 @@ test('the repair queue matches a runner that has never been asked', async () => 
 function deleteStub(coordinating: number, locked = true) {
   const deleted: Record<string, unknown>[] = [];
   const prisma = {
+    runner: { findMany: async () => [] },
     workspace: {
       findFirst: async () => ({ id: 'workspace-1' }),
       update: async (args: { data: Record<string, unknown> }) => {

@@ -1,0 +1,898 @@
+{
+  "project": "chromium-light-desktop",
+  "browser": "153.0.8010.12",
+  "node": "v26.10.0",
+  "fixedDate": "2026-09-28T12:00:00.000Z",
+  "observedAt": "2026-10-03T19:40:58.333Z",
+  "platform": "linux 6.12.107+deb13-amd64 x64",
+  "hostStart": {
+    "loadAverage": [
+      10.69,
+      10.35,
+      9.81
+    ],
+    "freeMemoryBytes": 6893113344,
+    "cpuCount": 24
+  },
+  "methodology": {
+    "loads": "Five fresh browser contexts per route; routing disables HTTP cache. Browser process, OS file cache and local preview server are shared. Ready means visible route content, fonts ready and two animation frames.",
+    "operations": "Ten sequential samples per operation after session ready. Browser and host intervals include Playwright command transport, actionability checks, menu ancestors reaching opacity 1, and two animation frames; these are observed end-to-end intervals, not isolated React render times.",
+    "clock": "Date is fixed with page.clock.setFixedTime; performance.now, navigation timing and animation frames remain real.",
+    "percentile": "p95 is nearest rank; median averages the middle pair for even sample counts.",
+    "scope": "Local production preview with deterministic REST/SSE fixtures; no backend/network latency, CPU throttling or pass/fail performance threshold."
+  },
+  "loads": {
+    "task": {
+      "path": "/tasks/2zwQZ2hd93IvLb59t6p5V",
+      "samples": [
+        {
+          "iteration": 1,
+          "hostBefore": {
+            "loadAverage": [
+              10.69,
+              10.35,
+              9.81
+            ],
+            "freeMemoryBytes": 6880620544,
+            "cpuCount": 24
+          },
+          "hostReadyMs": 464.7846790000003,
+          "browserReadyMs": 469,
+          "navigation": [],
+          "paint": [],
+          "viewport": {
+            "width": 1280,
+            "height": 900,
+            "dpr": 1,
+            "scale": 1
+          }
+        },
+        {
+          "iteration": 2,
+          "hostBefore": {
+            "loadAverage": [
+              10.69,
+              10.35,
+              9.81
+            ],
+            "freeMemoryBytes": 6874972160,
+            "cpuCount": 24
+          },
+          "hostReadyMs": 417.18578100000013,
+          "browserReadyMs": 420,
+          "navigation": [],
+          "paint": [],
+          "viewport": {
+            "width": 1280,
+            "height": 900,
+            "dpr": 1,
+            "scale": 1
+          }
+        },
+        {
+          "iteration": 3,
+          "hostBefore": {
+            "loadAverage": [
+              10.69,
+              10.35,
+              9.81
+            ],
+            "freeMemoryBytes": 6822981632,
+            "cpuCount": 24
+          },
+          "hostReadyMs": 470.3876500000006,
+          "browserReadyMs": 476,
+          "navigation": [],
+          "paint": [],
+          "viewport": {
+            "width": 1280,
+            "height": 900,
+            "dpr": 1,
+            "scale": 1
+          }
+        },
+        {
+          "iteration": 4,
+          "hostBefore": {
+            "loadAverage": [
+              10.69,
+              10.35,
+              9.81
+            ],
+            "freeMemoryBytes": 6834864128,
+            "cpuCount": 24
+          },
+          "hostReadyMs": 487.1779749999987,
+          "browserReadyMs": 491,
+          "navigation": [],
+          "paint": [],
+          "viewport": {
+            "width": 1280,
+            "height": 900,
+            "dpr": 1,
+            "scale": 1
+          }
+        },
+        {
+          "iteration": 5,
+          "hostBefore": {
+            "loadAverage": [
+              10.69,
+              10.35,
+              9.81
+            ],
+            "freeMemoryBytes": 6831120384,
+            "cpuCount": 24
+          },
+          "hostReadyMs": 472.90987600000153,
+          "browserReadyMs": 477,
+          "navigation": [],
+          "paint": [],
+          "viewport": {
+            "width": 1280,
+            "height": 900,
+            "dpr": 1,
+            "scale": 1
+          }
+        }
+      ],
+      "hostReadyMs": {
+        "count": 5,
+        "min": 417.18578100000013,
+        "max": 487.1779749999987,
+        "median": 470.3876500000006,
+        "p95": 487.1779749999987
+      },
+      "browserReadyMs": {
+        "count": 5,
+        "min": 420,
+        "max": 491,
+        "median": 476,
+        "p95": 491
+      }
+    },
+    "project": {
+      "path": "/projects/2zwQZ2hd93IvLb59t6p9d",
+      "samples": [
+        {
+          "iteration": 1,
+          "hostBefore": {
+            "loadAverage": [
+              10.69,
+              10.35,
+              9.81
+            ],
+            "freeMemoryBytes": 6792155136,
+            "cpuCount": 24
+          },
+          "hostReadyMs": 735.489705,
+          "browserReadyMs": 739,
+          "navigation": [],
+          "paint": [],
+          "viewport": {
+            "width": 1280,
+            "height": 900,
+            "dpr": 1,
+            "scale": 1
+          }
+        },
+        {
+          "iteration": 2,
+          "hostBefore": {
+            "loadAverage": [
+              10.69,
+              10.35,
+              9.81
+            ],
+            "freeMemoryBytes": 6793256960,
+            "cpuCount": 24
+          },
+          "hostReadyMs": 704.6858249999968,
+          "browserReadyMs": 709,
+          "navigation": [],
+          "paint": [],
+          "viewport": {
+            "width": 1280,
+            "height": 900,
+            "dpr": 1,
+            "scale": 1
+          }
+        },
+        {
+          "iteration": 3,
+          "hostBefore": {
+            "loadAverage": [
+              10.69,
+              10.35,
+              9.81
+            ],
+            "freeMemoryBytes": 6833143808,
+            "cpuCount": 24
+          },
+          "hostReadyMs": 702.716719,
+          "browserReadyMs": 706,
+          "navigation": [],
+          "paint": [],
+          "viewport": {
+            "width": 1280,
+            "height": 900,
+            "dpr": 1,
+            "scale": 1
+          }
+        },
+        {
+          "iteration": 4,
+          "hostBefore": {
+            "loadAverage": [
+              11.04,
+              10.43,
+              9.84
+            ],
+            "freeMemoryBytes": 6889553920,
+            "cpuCount": 24
+          },
+          "hostReadyMs": 703.1073099999994,
+          "browserReadyMs": 706,
+          "navigation": [],
+          "paint": [],
+          "viewport": {
+            "width": 1280,
+            "height": 900,
+            "dpr": 1,
+            "scale": 1
+          }
+        },
+        {
+          "iteration": 5,
+          "hostBefore": {
+            "loadAverage": [
+              11.04,
+              10.43,
+              9.84
+            ],
+            "freeMemoryBytes": 6859640832,
+            "cpuCount": 24
+          },
+          "hostReadyMs": 702.3285249999972,
+          "browserReadyMs": 706,
+          "navigation": [],
+          "paint": [],
+          "viewport": {
+            "width": 1280,
+            "height": 900,
+            "dpr": 1,
+            "scale": 1
+          }
+        }
+      ],
+      "hostReadyMs": {
+        "count": 5,
+        "min": 702.3285249999972,
+        "max": 735.489705,
+        "median": 703.1073099999994,
+        "p95": 735.489705
+      },
+      "browserReadyMs": {
+        "count": 5,
+        "min": 706,
+        "max": 739,
+        "median": 706,
+        "p95": 739
+      }
+    },
+    "session": {
+      "path": "/sessions/2zwQZ2hd93IvLb59t6p1c",
+      "samples": [
+        {
+          "iteration": 1,
+          "hostBefore": {
+            "loadAverage": [
+              11.04,
+              10.43,
+              9.84
+            ],
+            "freeMemoryBytes": 6860922880,
+            "cpuCount": 24
+          },
+          "hostReadyMs": 409.4598240000014,
+          "browserReadyMs": 413,
+          "navigation": [],
+          "paint": [],
+          "viewport": {
+            "width": 1280,
+            "height": 900,
+            "dpr": 1,
+            "scale": 1
+          }
+        },
+        {
+          "iteration": 2,
+          "hostBefore": {
+            "loadAverage": [
+              11.04,
+              10.43,
+              9.84
+            ],
+            "freeMemoryBytes": 6874779648,
+            "cpuCount": 24
+          },
+          "hostReadyMs": 415.60774799999854,
+          "browserReadyMs": 419,
+          "navigation": [],
+          "paint": [],
+          "viewport": {
+            "width": 1280,
+            "height": 900,
+            "dpr": 1,
+            "scale": 1
+          }
+        },
+        {
+          "iteration": 3,
+          "hostBefore": {
+            "loadAverage": [
+              11.04,
+              10.43,
+              9.84
+            ],
+            "freeMemoryBytes": 6859345920,
+            "cpuCount": 24
+          },
+          "hostReadyMs": 407.8289049999985,
+          "browserReadyMs": 411,
+          "navigation": [],
+          "paint": [],
+          "viewport": {
+            "width": 1280,
+            "height": 900,
+            "dpr": 1,
+            "scale": 1
+          }
+        },
+        {
+          "iteration": 4,
+          "hostBefore": {
+            "loadAverage": [
+              11.04,
+              10.43,
+              9.84
+            ],
+            "freeMemoryBytes": 6852165632,
+            "cpuCount": 24
+          },
+          "hostReadyMs": 386.8744880000013,
+          "browserReadyMs": 390,
+          "navigation": [],
+          "paint": [],
+          "viewport": {
+            "width": 1280,
+            "height": 900,
+            "dpr": 1,
+            "scale": 1
+          }
+        },
+        {
+          "iteration": 5,
+          "hostBefore": {
+            "loadAverage": [
+              11.04,
+              10.43,
+              9.84
+            ],
+            "freeMemoryBytes": 6815318016,
+            "cpuCount": 24
+          },
+          "hostReadyMs": 403.48769499999617,
+          "browserReadyMs": 407,
+          "navigation": [],
+          "paint": [],
+          "viewport": {
+            "width": 1280,
+            "height": 900,
+            "dpr": 1,
+            "scale": 1
+          }
+        }
+      ],
+      "hostReadyMs": {
+        "count": 5,
+        "min": 386.8744880000013,
+        "max": 415.60774799999854,
+        "median": 407.8289049999985,
+        "p95": 415.60774799999854
+      },
+      "browserReadyMs": {
+        "count": 5,
+        "min": 390,
+        "max": 419,
+        "median": 411,
+        "p95": 419
+      }
+    }
+  },
+  "operations": {
+    "composer-fill": {
+      "samples": [
+        {
+          "iteration": 1,
+          "browserMs": 55,
+          "hostMs": 54.265886000001046,
+          "hostBefore": {
+            "loadAverage": [
+              11.04,
+              10.43,
+              9.84
+            ],
+            "freeMemoryBytes": 6748389376,
+            "cpuCount": 24
+          }
+        },
+        {
+          "iteration": 2,
+          "browserMs": 39,
+          "hostMs": 38.5762739999991,
+          "hostBefore": {
+            "loadAverage": [
+              11.03,
+              10.44,
+              9.85
+            ],
+            "freeMemoryBytes": 6778699776,
+            "cpuCount": 24
+          }
+        },
+        {
+          "iteration": 3,
+          "browserMs": 45,
+          "hostMs": 44.57359999999608,
+          "hostBefore": {
+            "loadAverage": [
+              11.03,
+              10.44,
+              9.85
+            ],
+            "freeMemoryBytes": 6766526464,
+            "cpuCount": 24
+          }
+        },
+        {
+          "iteration": 4,
+          "browserMs": 43,
+          "hostMs": 43.17482600000221,
+          "hostBefore": {
+            "loadAverage": [
+              11.03,
+              10.44,
+              9.85
+            ],
+            "freeMemoryBytes": 6762381312,
+            "cpuCount": 24
+          }
+        },
+        {
+          "iteration": 5,
+          "browserMs": 48,
+          "hostMs": 47.504186000005575,
+          "hostBefore": {
+            "loadAverage": [
+              11.03,
+              10.44,
+              9.85
+            ],
+            "freeMemoryBytes": 6780317696,
+            "cpuCount": 24
+          }
+        },
+        {
+          "iteration": 6,
+          "browserMs": 41,
+          "hostMs": 40.78111400000489,
+          "hostBefore": {
+            "loadAverage": [
+              11.03,
+              10.44,
+              9.85
+            ],
+            "freeMemoryBytes": 6783459328,
+            "cpuCount": 24
+          }
+        },
+        {
+          "iteration": 7,
+          "browserMs": 40,
+          "hostMs": 40.20758200000273,
+          "hostBefore": {
+            "loadAverage": [
+              11.03,
+              10.44,
+              9.85
+            ],
+            "freeMemoryBytes": 6783713280,
+            "cpuCount": 24
+          }
+        },
+        {
+          "iteration": 8,
+          "browserMs": 44,
+          "hostMs": 43.87932599999476,
+          "hostBefore": {
+            "loadAverage": [
+              11.03,
+              10.45,
+              9.85
+            ],
+            "freeMemoryBytes": 6778187776,
+            "cpuCount": 24
+          }
+        },
+        {
+          "iteration": 9,
+          "browserMs": 43,
+          "hostMs": 42.58717400000023,
+          "hostBefore": {
+            "loadAverage": [
+              11.03,
+              10.45,
+              9.85
+            ],
+            "freeMemoryBytes": 6743941120,
+            "cpuCount": 24
+          }
+        },
+        {
+          "iteration": 10,
+          "browserMs": 43,
+          "hostMs": 42.31478200000129,
+          "hostBefore": {
+            "loadAverage": [
+              11.03,
+              10.45,
+              9.85
+            ],
+            "freeMemoryBytes": 6764199936,
+            "cpuCount": 24
+          }
+        }
+      ],
+      "browserMs": {
+        "count": 10,
+        "min": 39,
+        "max": 55,
+        "median": 43,
+        "p95": 55
+      },
+      "hostMs": {
+        "count": 10,
+        "min": 38.5762739999991,
+        "max": 54.265886000001046,
+        "median": 42.88100000000122,
+        "p95": 54.265886000001046
+      }
+    },
+    "attachment-menu-open": {
+      "samples": [
+        {
+          "iteration": 1,
+          "browserMs": 463,
+          "hostMs": 462.3043900000048,
+          "hostBefore": {
+            "loadAverage": [
+              11.04,
+              10.43,
+              9.84
+            ],
+            "freeMemoryBytes": 6754422784,
+            "cpuCount": 24
+          }
+        },
+        {
+          "iteration": 2,
+          "browserMs": 418,
+          "hostMs": 418.53537900000083,
+          "hostBefore": {
+            "loadAverage": [
+              11.03,
+              10.44,
+              9.85
+            ],
+            "freeMemoryBytes": 6777077760,
+            "cpuCount": 24
+          }
+        },
+        {
+          "iteration": 3,
+          "browserMs": 418,
+          "hostMs": 418.70039800000086,
+          "hostBefore": {
+            "loadAverage": [
+              11.03,
+              10.44,
+              9.85
+            ],
+            "freeMemoryBytes": 6764933120,
+            "cpuCount": 24
+          }
+        },
+        {
+          "iteration": 4,
+          "browserMs": 467,
+          "hostMs": 468.1483169999992,
+          "hostBefore": {
+            "loadAverage": [
+              11.03,
+              10.44,
+              9.85
+            ],
+            "freeMemoryBytes": 6760337408,
+            "cpuCount": 24
+          }
+        },
+        {
+          "iteration": 5,
+          "browserMs": 430,
+          "hostMs": 430.0398750000022,
+          "hostBefore": {
+            "loadAverage": [
+              11.03,
+              10.44,
+              9.85
+            ],
+            "freeMemoryBytes": 6781321216,
+            "cpuCount": 24
+          }
+        },
+        {
+          "iteration": 6,
+          "browserMs": 419,
+          "hostMs": 419.1611219999977,
+          "hostBefore": {
+            "loadAverage": [
+              11.03,
+              10.44,
+              9.85
+            ],
+            "freeMemoryBytes": 6783770624,
+            "cpuCount": 24
+          }
+        },
+        {
+          "iteration": 7,
+          "browserMs": 417,
+          "hostMs": 417.5886249999967,
+          "hostBefore": {
+            "loadAverage": [
+              11.03,
+              10.44,
+              9.85
+            ],
+            "freeMemoryBytes": 6784356352,
+            "cpuCount": 24
+          }
+        },
+        {
+          "iteration": 8,
+          "browserMs": 415,
+          "hostMs": 416.1249779999998,
+          "hostBefore": {
+            "loadAverage": [
+              11.03,
+              10.45,
+              9.85
+            ],
+            "freeMemoryBytes": 6756544512,
+            "cpuCount": 24
+          }
+        },
+        {
+          "iteration": 9,
+          "browserMs": 416,
+          "hostMs": 416.6286720000062,
+          "hostBefore": {
+            "loadAverage": [
+              11.03,
+              10.45,
+              9.85
+            ],
+            "freeMemoryBytes": 6745546752,
+            "cpuCount": 24
+          }
+        },
+        {
+          "iteration": 10,
+          "browserMs": 414,
+          "hostMs": 414.3453270000027,
+          "hostBefore": {
+            "loadAverage": [
+              11.03,
+              10.45,
+              9.85
+            ],
+            "freeMemoryBytes": 6761414656,
+            "cpuCount": 24
+          }
+        }
+      ],
+      "browserMs": {
+        "count": 10,
+        "min": 414,
+        "max": 467,
+        "median": 418,
+        "p95": 467
+      },
+      "hostMs": {
+        "count": 10,
+        "min": 414.3453270000027,
+        "max": 468.1483169999992,
+        "median": 418.61788850000084,
+        "p95": 468.1483169999992
+      }
+    },
+    "attachment-menu-close": {
+      "samples": [
+        {
+          "iteration": 1,
+          "browserMs": 340,
+          "hostMs": 340.6943670000037,
+          "hostBefore": {
+            "loadAverage": [
+              11.03,
+              10.44,
+              9.85
+            ],
+            "freeMemoryBytes": 6783217664,
+            "cpuCount": 24
+          }
+        },
+        {
+          "iteration": 2,
+          "browserMs": 330,
+          "hostMs": 330.4223750000019,
+          "hostBefore": {
+            "loadAverage": [
+              11.03,
+              10.44,
+              9.85
+            ],
+            "freeMemoryBytes": 6783537152,
+            "cpuCount": 24
+          }
+        },
+        {
+          "iteration": 3,
+          "browserMs": 348,
+          "hostMs": 348.3399050000007,
+          "hostBefore": {
+            "loadAverage": [
+              11.03,
+              10.44,
+              9.85
+            ],
+            "freeMemoryBytes": 6763671552,
+            "cpuCount": 24
+          }
+        },
+        {
+          "iteration": 4,
+          "browserMs": 343,
+          "hostMs": 342.0539570000037,
+          "hostBefore": {
+            "loadAverage": [
+              11.03,
+              10.44,
+              9.85
+            ],
+            "freeMemoryBytes": 6766981120,
+            "cpuCount": 24
+          }
+        },
+        {
+          "iteration": 5,
+          "browserMs": 336,
+          "hostMs": 336.34454600000026,
+          "hostBefore": {
+            "loadAverage": [
+              11.03,
+              10.44,
+              9.85
+            ],
+            "freeMemoryBytes": 6777647104,
+            "cpuCount": 24
+          }
+        },
+        {
+          "iteration": 6,
+          "browserMs": 347,
+          "hostMs": 348.69805199999973,
+          "hostBefore": {
+            "loadAverage": [
+              11.03,
+              10.44,
+              9.85
+            ],
+            "freeMemoryBytes": 6789668864,
+            "cpuCount": 24
+          }
+        },
+        {
+          "iteration": 7,
+          "browserMs": 333,
+          "hostMs": 333.448758999999,
+          "hostBefore": {
+            "loadAverage": [
+              11.03,
+              10.45,
+              9.85
+            ],
+            "freeMemoryBytes": 6787399680,
+            "cpuCount": 24
+          }
+        },
+        {
+          "iteration": 8,
+          "browserMs": 332,
+          "hostMs": 332.95155800000066,
+          "hostBefore": {
+            "loadAverage": [
+              11.03,
+              10.45,
+              9.85
+            ],
+            "freeMemoryBytes": 6759522304,
+            "cpuCount": 24
+          }
+        },
+        {
+          "iteration": 9,
+          "browserMs": 334,
+          "hostMs": 333.9072430000015,
+          "hostBefore": {
+            "loadAverage": [
+              11.03,
+              10.45,
+              9.85
+            ],
+            "freeMemoryBytes": 6756093952,
+            "cpuCount": 24
+          }
+        },
+        {
+          "iteration": 10,
+          "browserMs": 336,
+          "hostMs": 336.342098000001,
+          "hostBefore": {
+            "loadAverage": [
+              11.03,
+              10.45,
+              9.85
+            ],
+            "freeMemoryBytes": 6764933120,
+            "cpuCount": 24
+          }
+        }
+      ],
+      "browserMs": {
+        "count": 10,
+        "min": 330,
+        "max": 348,
+        "median": 336,
+        "p95": 348
+      },
+      "hostMs": {
+        "count": 10,
+        "min": 330.4223750000019,
+        "max": 348.69805199999973,
+        "median": 336.3433220000006,
+        "p95": 348.69805199999973
+      }
+    }
+  },
+  "hostEnd": {
+    "loadAverage": [
+      11.03,
+      10.45,
+      9.85
+    ],
+    "freeMemoryBytes": 6767206400,
+    "cpuCount": 24
+  }
+}

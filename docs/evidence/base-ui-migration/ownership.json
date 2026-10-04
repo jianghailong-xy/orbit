@@ -1,0 +1,1246 @@
+{
+  "baselineCommit": "1068a14b899911838526111b6814394e99762aaf",
+  "phaseDefinitions": {
+    "P1.1": "Base UI 与主题基础",
+    "P1.2": "基础控件与状态样例",
+    "P2.1": "弹窗、抽屉与异步确认",
+    "P2.2": "菜单、浮层与选择控件",
+    "P2.3": "通知与反馈服务（当前已自有，保留并验证）",
+    "P3.1": "自动增高输入框及会话代表场景",
+    "P3.2": "任务详情、分享、任务附件试点",
+    "P3.3": "试点保真度/收益检查",
+    "P4.1": "登录、初始化、个人资料、设置",
+    "P4.2": "Provider、Runner、账号池、用户管理",
+    "P4.3": "任务、项目、依赖图、决策卡片",
+    "P4.4": "Wiki、共享、其他非会话入口",
+    "P5.1": "会话导航、搜索、输出与选择控件",
+    "P5.2": "消息图片预览与富内容",
+    "P5.3": "会话工作区完整迁移",
+    "P6": "AntD 运行时退役",
+    "KEEP": "无直接 AntD 组件依赖，保留已有实现；reviewPhase 标记集成复核批次"
+  },
+  "conventions": [
+    "phase 是当前文件实际切换/清理的负责阶段，foundationPhases 是公共能力建设阶段；不把引用 Dialog 的所有页面都误算 P2.1 完成。",
+    "Base UI 仅在 Orbit 公共组件内封装；替代名称描述所需最小能力，不要求复制完整 AntD API 或引入表单/表格框架。",
+    "保留 @ant-design/icons 和 .anticon；KEEP 不免除祖先 reset/theme 或子组件改变带来的集成回归。",
+    "同名测试和跨组件测试按其实际覆盖的生产责任复核；逐依赖行、测试、CSS 的扫描结果与本人工文件归属表配合使用。"
+  ],
+  "files": {
+    "src/web/src/components/AcceptanceConfirmationCard.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Alert→现有 CSS 的状态/错误语义区块",
+      "preserve": "验收确认问题、版本/收件会话约束、待处理/已决定回执、防重复提交和键盘确认。"
+    },
+    "src/web/src/components/AccountPools.tsx": {
+      "phase": "P4.2",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1",
+        "P2.2"
+      ],
+      "replacement": "Button→Orbit Button；Checkbox→Orbit Checkbox；Input/Input.TextArea→Orbit Input/Textarea（自动增高接 P3.1）；Modal→Orbit Dialog/异步 ConfirmDialog；Popconfirm→Orbit 确认浮层/ConfirmDialog；Radio/Radio.Group→Orbit Radio group；Segmented→Orbit 分段选择；Select→Orbit Select/Combobox，仅实现已用搜索/清除/禁用；Tag→Orbit Badge/既有状态样式；Tooltip→Orbit Tooltip；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "Codex/Claude 账号池分组、成员勾选、共享人员权限、新建/退出/移除确认和账号状态。"
+    },
+    "src/web/src/components/AccountSelect.tsx": {
+      "phase": "P4.2",
+      "foundationPhases": [
+        "P2.2"
+      ],
+      "replacement": "Select→Orbit Select/Combobox，仅实现已用搜索/清除/禁用",
+      "preserve": "Automatic/null 与 Default 的区别、已丢失账号仍可撤销、账号自己的额度/登录状态、envDir 优先级。",
+      "notes": "实际用于 RunnerDetailPage 等工作区配置，先由 P4.2 迁移，P5.1 复核会话相关选择器集成。"
+    },
+    "src/web/src/components/AppLink.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。",
+      "preserve": "Router 内 Link 导航、Router 外导出 HTML 的同源绝对链接，不引入 Router 上下文要求。",
+      "reviewPhase": "P4.4"
+    },
+    "src/web/src/components/AppShell.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "全站栏/手机菜单、侧栏开合及路由内容布局。",
+      "reviewPhase": "P5.1"
+    },
+    "src/web/src/components/ApprovalPanel.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。",
+      "preserve": "审批/提问输入、自定义回答、失效卡片不可操作、唯一键盘响应和后台会话约束。",
+      "reviewPhase": "P5.3"
+    },
+    "src/web/src/components/BackgroundJobsNote.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "后台任务折叠条目、运行/完成原因和输出，不改变事实顺序。",
+      "reviewPhase": "P5.2"
+    },
+    "src/web/src/components/BackgroundShellsTray.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "输入框上方后台进程托盘、折叠/展开、状态和停止动作。",
+      "reviewPhase": "P5.3"
+    },
+    "src/web/src/components/BackgroundWakeCard.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "后台唤醒结果、分组折叠、状态和输出末尾。",
+      "reviewPhase": "P5.2"
+    },
+    "src/web/src/components/BatchGraph.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。",
+      "preserve": "既有图绘制和布局、文本宽度/中日韩截断，不更换图实现。",
+      "reviewPhase": "P4.3"
+    },
+    "src/web/src/components/BootGate.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。",
+      "preserve": "首屏需要的数据全部就绪后揭开 splash、确定进度和无新增闪烁。",
+      "reviewPhase": "P4.4"
+    },
+    "src/web/src/components/CardAction.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。",
+      "preserve": "现有卡片按钮的四种外观、disabled/pending、键盘与操作行布局。",
+      "reviewPhase": "P4.3"
+    },
+    "src/web/src/components/CardHotkey.ts": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。",
+      "preserve": "按文档顺序仅最上方可答卡拥有快捷键；输入法、重复键和聚焦输入/按钮不误触。",
+      "reviewPhase": "P4.3"
+    },
+    "src/web/src/components/ClaudeHistoryOffer.tsx": {
+      "phase": "P4.2",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Radio/Radio.Group→Orbit Radio group；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "目录接管时 Claude 历史导入选择、数量/体积提示和原始提交值。"
+    },
+    "src/web/src/components/CodexResetCredit.tsx": {
+      "phase": "P5.1",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1"
+      ],
+      "replacement": "Button→Orbit Button；Modal→Orbit Dialog/异步 ConfirmDialog；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "额度重置异步状态、防重复消费、默认焦点落 Cancel、确认关闭返回触发器/状态行、确认层高于额度浮层。"
+    },
+    "src/web/src/components/CodexSignIn.tsx": {
+      "phase": "P4.2",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1"
+      ],
+      "replacement": "Button→Orbit Button；Modal→Orbit Dialog/异步 ConfirmDialog；Typography→原生文本/标题/段落及现有 CSS；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "官方设备码登录、轮询/取消、成功回调、外部授权链接及错误状态。"
+    },
+    "src/web/src/components/ComposerMirror.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。",
+      "preserve": "输入文字与芯片镜像逐字符对齐、滚动偏移同步、测量和换行规则。",
+      "reviewPhase": "P3.1",
+      "notes": "本文件无 antd import，P3.1 输入框试点必须验证镜像，P5.3 完整工作区再次回归。"
+    },
+    "src/web/src/components/ConfirmationReviewTurnCards.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Button→Orbit Button；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "复审请求/答复与转交会话入口、未送达/排队提示和回执事实。"
+    },
+    "src/web/src/components/CoordinatorQuestionCard.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Alert→现有 CSS 的状态/错误语义区块；Input/Input.TextArea→Orbit Input/Textarea（自动增高接 P3.1）",
+      "preserve": "协调者问题及输入、自定义答案、状态回执、失败反馈与防重复确认。"
+    },
+    "src/web/src/components/CriteriaChangeCard.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Alert→现有 CSS 的状态/错误语义区块",
+      "preserve": "项目验收项变更差异、确认条件和版本绑定，保留既有 CardAction。"
+    },
+    "src/web/src/components/CriteriaDecisionCard.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Alert→现有 CSS 的状态/错误语义区块",
+      "preserve": "验收项提案来源、版本/会话切换、决定回执、过期与已决定卡片状态。"
+    },
+    "src/web/src/components/DecisionRail.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Typography→原生文本/标题/段落及现有 CSS",
+      "preserve": "待回答事项固定栏、证据引用/异常/结算投影、滚动定位和已处理项刷新。"
+    },
+    "src/web/src/components/EvidenceDecisionCard.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Alert→现有 CSS 的状态/错误语义区块",
+      "preserve": "证据裁决的 criterion/checks/gaps 展示、待处理/决定回执和异步动作。"
+    },
+    "src/web/src/components/MentionDeliveryNotes.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P2.2"
+      ],
+      "replacement": "Tooltip→Orbit Tooltip",
+      "preserve": "每个 @ 提及的投递状态、未跟踪旧评论提示和详细失败原因。"
+    },
+    "src/web/src/components/MergeRecoveryPanel.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。",
+      "preserve": "工作区目标分支恢复状态、清理/重试动作、错误说明及共享调用边界。",
+      "reviewPhase": "P5.1"
+    },
+    "src/web/src/components/NewSessionProviderHero.tsx": {
+      "phase": "P5.1",
+      "foundationPhases": [
+        "P2.2"
+      ],
+      "replacement": "Popover→Orbit Popover",
+      "preserve": "新建会话 provider/账号池品牌、当前选择、账户可用状态与浮层交互。"
+    },
+    "src/web/src/components/OpenItemDeliveryCard.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "协调异常条目的来源、冲突文件折叠、会话入口和送达事实。",
+      "reviewPhase": "P4.3"
+    },
+    "src/web/src/components/OrbitLinkCard.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "任务/项目/会话/Wiki 卡片的加载、缺失、权限态及保留链接范围。",
+      "reviewPhase": "P5.2"
+    },
+    "src/web/src/components/OwnerConfirmationCard.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Alert→现有 CSS 的状态/错误语义区块；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "任务完成确认的来源/运行回执、待用户确认与已决定状态、按键和异步防重复。"
+    },
+    "src/web/src/components/OwnerConfirmationReopen.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1"
+      ],
+      "replacement": "Alert→现有 CSS 的状态/错误语义区块；Button→Orbit Button；Modal→Orbit Dialog/异步 ConfirmDialog；Typography→原生文本/标题/段落及现有 CSS",
+      "preserve": "复审后重新打开任务的原因、返回/确认、待提交/错误和原 endpoint 语义。"
+    },
+    "src/web/src/components/OwnerConfirmationReview.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Input/Input.TextArea→Orbit Input/Textarea（自动增高接 P3.1）；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "复审栏折叠、输入、排队/运行/决定状态，迟到复审结果和重新打开入口。"
+    },
+    "src/web/src/components/PlanUsageIndicator.tsx": {
+      "phase": "P5.1",
+      "foundationPhases": [
+        "P2.2"
+      ],
+      "replacement": "Popover→Orbit Popover",
+      "preserve": "绑定额度窗口和账号归属、hover 不夺焦点、点击入焦、Tab 环、Esc 返回触发器、手机浮层横向避让。"
+    },
+    "src/web/src/components/ProjectAcceptanceCard.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Alert→现有 CSS 的状态/错误语义区块；Button→Orbit Button；Card→现有 CSS 的 section；Skeleton→Orbit 现有样式的加载占位；Typography→原生文本/标题/段落及现有 CSS；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "验收条目/阻塞任务/requiredAction 的服务端事实、展开折叠和加载态。"
+    },
+    "src/web/src/components/ProjectBlockers.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1"
+      ],
+      "replacement": "Alert→现有 CSS 的状态/错误语义区块；Button→Orbit Button；Input/Input.TextArea→Orbit Input/Textarea（自动增高接 P3.1）；Modal→Orbit Dialog/异步 ConfirmDialog；Tag→Orbit Badge/既有状态样式；Typography→原生文本/标题/段落及现有 CSS",
+      "preserve": "项目阻塞分类、文件/任务跳转、解决说明与异步表单，不改变服务端裁决。"
+    },
+    "src/web/src/components/ProjectChainProgress.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Typography→原生文本/标题/段落及现有 CSS",
+      "preserve": "链式拓扑的当前步骤、后续步骤、阻塞排名和状态文案。"
+    },
+    "src/web/src/components/ProjectCoordinatorCard.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P1.2",
+        "P2.2"
+      ],
+      "replacement": "Button→Orbit Button；Dropdown→Orbit Menu；Space→现有 flex/gap；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "协调会话四态、工作区/会话导航、更多操作及会话结束区分。"
+    },
+    "src/web/src/components/ProjectCrossingsCard.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Alert→现有 CSS 的状态/错误语义区块；Button→Orbit Button；Card→现有 CSS 的 section；Skeleton→Orbit 现有样式的加载占位；Space→现有 flex/gap；Tag→Orbit Badge/既有状态样式；Typography→原生文本/标题/段落及现有 CSS",
+      "preserve": "跨项目依赖双方名称、批准/拒绝确认、权限边界及交互加载态。"
+    },
+    "src/web/src/components/ProjectDependencyGraph.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1",
+        "P2.2"
+      ],
+      "replacement": "Alert→现有 CSS 的状态/错误语义区块；Button→Orbit Button；Empty→原生空状态区块；Modal→Orbit Dialog/异步 ConfirmDialog；Popover→Orbit Popover；Spin→Orbit Spinner；Tooltip→Orbit Tooltip；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "项目任务图布局、失败前置的非颜色标记、全屏/详情浮层、缩放/导航和移动端。"
+    },
+    "src/web/src/components/ProjectGoalCard.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Typography→原生文本/标题/段落及现有 CSS；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "目标文本和图标、换行及内容密度。"
+    },
+    "src/web/src/components/ProjectIntegrationLine.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。",
+      "preserve": "项目产物去向、分支和合并检查状态按服务端事实显示，不把 UNKNOWN 当成功。",
+      "reviewPhase": "P4.3"
+    },
+    "src/web/src/components/ProjectPageBlocks.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。",
+      "preserve": "项目详情的区块顺序和 display:contents，公开页面按既有范围过滤。",
+      "reviewPhase": "P4.3"
+    },
+    "src/web/src/components/ProjectPanoramaHeader.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Alert→现有 CSS 的状态/错误语义区块；Button→Orbit Button；Spin→Orbit Spinner；Typography→原生文本/标题/段落及现有 CSS",
+      "preserve": "完整状态计数、readiness/阻塞说明、操作入口与加载态。"
+    },
+    "src/web/src/components/ProjectProgressStatus.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1"
+      ],
+      "replacement": "Alert→现有 CSS 的状态/错误语义区块；Button→Orbit Button；Input/Input.TextArea→Orbit Input/Textarea（自动增高接 P3.1）；Modal→Orbit Dialog/异步 ConfirmDialog",
+      "preserve": "仍欠事项、自动协调预算、异常/修复表单、来源标记与跳转。"
+    },
+    "src/web/src/components/ProjectPromotionCard.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Alert→现有 CSS 的状态/错误语义区块",
+      "preserve": "Merge to main 等操作、授权/过期判定、确认快捷键和异步回执。"
+    },
+    "src/web/src/components/ProjectReadyToRun.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1"
+      ],
+      "replacement": "Alert→现有 CSS 的状态/错误语义区块；Button→Orbit Button；Popconfirm→Orbit 确认浮层/ConfirmDialog；Spin→Orbit Spinner；Tag→Orbit Badge/既有状态样式；Typography→原生文本/标题/段落及现有 CSS；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "手动 Run/恢复列表/暂停等动作、幂等身份、提交后缓存刷新和禁用态。"
+    },
+    "src/web/src/components/ProjectRunSettings.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P1.2",
+        "P2.2"
+      ],
+      "replacement": "Alert→现有 CSS 的状态/错误语义区块；Button→Orbit Button；Input/Input.TextArea→Orbit Input/Textarea（自动增高接 P3.1）；InputNumber→实际取值约束的 Orbit 数字字段；Radio/Radio.Group→Orbit Radio group；Select→Orbit Select/Combobox，仅实现已用搜索/清除/禁用；Spin→Orbit Spinner；Switch→Orbit Switch",
+      "preserve": "执行位置、Automatic、并发数、merge check、超时/升级参数的既有取值和保存语义。"
+    },
+    "src/web/src/components/ProjectSections.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Button→Orbit Button；List→原生列表结构；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "项目生命周期分组、折叠为 pill、排序与稳定 key。"
+    },
+    "src/web/src/components/ProjectSettlementCard.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Alert→现有 CSS 的状态/错误语义区块",
+      "preserve": "未结算原因和例外、委托/确认动作、文档顺序快捷键及异步回执。"
+    },
+    "src/web/src/components/ProjectShareControls.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P1.2",
+        "P2.2"
+      ],
+      "replacement": "Button→Orbit Button；Dropdown→Orbit Menu；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "复制登录地址、公开分享状态、ShareModal 打开和 Markdown 导出。"
+    },
+    "src/web/src/components/ProjectStartedCard.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "项目启动回执及运行设置摘要，保持启动方式和通知事实。",
+      "reviewPhase": "P4.3"
+    },
+    "src/web/src/components/ProjectTaskLink.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。",
+      "preserve": "任务覆盖项目页面时 push/replace 历史语义、真链接及浏览器返回。",
+      "reviewPhase": "P4.3"
+    },
+    "src/web/src/components/ProjectTaskPanel.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。",
+      "preserve": "项目上下文任务面板复用、关闭回到项目和任务详情数据/动作。",
+      "reviewPhase": "P4.3"
+    },
+    "src/web/src/components/ProjectTasksGraph.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Typography→原生文本/标题/段落及现有 CSS",
+      "preserve": "项目图分区标题、已传入公开数据读取、前置→后继说明。"
+    },
+    "src/web/src/components/ProjectsToolbar.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Button→Orbit Button；Input/Input.TextArea→Orbit Input/Textarea（自动增高接 P3.1）；Segmented→Orbit 分段选择；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "名称/目标搜索、生命周期分段、项目新建和桌面/手机断点排列。"
+    },
+    "src/web/src/components/ProviderGallery.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。",
+      "preserve": "provider 厂商卡片、已连接状态、深链接连接页及浏览器返回。",
+      "reviewPhase": "P4.2"
+    },
+    "src/web/src/components/PublicShell.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。",
+      "preserve": "公开分享布局、权限范围内面包屑、Live link 描述和只读呈现。",
+      "reviewPhase": "P4.4"
+    },
+    "src/web/src/components/ReferencedTaskNote.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。",
+      "preserve": "引用任务摘要、最近运行/状态与折叠上下文，不把未运行伪装结果。",
+      "reviewPhase": "P5.2"
+    },
+    "src/web/src/components/RunSettingsSummary.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。",
+      "preserve": "运行设置和偏离建议值的标注，启动回执与项目卡共用语义。",
+      "reviewPhase": "P4.3"
+    },
+    "src/web/src/components/RunnerEngines.tsx": {
+      "phase": "P4.2",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1"
+      ],
+      "replacement": "Button→Orbit Button；Popconfirm→Orbit 确认浮层/ConfirmDialog；Tag→Orbit Badge/既有状态样式；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "CLI 安装/更新优先于探测状态、账户重命名/删除/重登录和默认启动账户。"
+    },
+    "src/web/src/components/RunnerEnginesSection.tsx": {
+      "phase": "P4.2",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Button→Orbit Button；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "机器引擎更新和通向 Providers 指定引擎账户的入口、pending/错误状态。"
+    },
+    "src/web/src/components/RunnerRegisterGuide.tsx": {
+      "phase": "P4.2",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Segmented→Orbit 分段选择；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "不同系统注册步骤、命令复制与成功提示。"
+    },
+    "src/web/src/components/RunnerSignIn.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "CLI 设备登录各状态、外部授权/复制、等待/成功/错误及取消。",
+      "reviewPhase": "P4.2"
+    },
+    "src/web/src/components/RunnerTokenRotation.tsx": {
+      "phase": "P4.2",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1"
+      ],
+      "replacement": "App.useApp 的 modal→Orbit 异步确认服务（保留现有 useToast）；Button→Orbit Button；Modal→Orbit Dialog/异步 ConfirmDialog；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "异步 token 轮换确认、生成后复制、错误/取消与防重复操作。"
+    },
+    "src/web/src/components/SameOriginLink.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。",
+      "preserve": "同源应用跳转与跨源普通链接、修饰键点击和下载/目标属性语义。",
+      "reviewPhase": "P4.4"
+    },
+    "src/web/src/components/SessionCreatedTasksStrip.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "会话创建任务条、任务状态与深链接，不改变消息顺序。",
+      "reviewPhase": "P5.2"
+    },
+    "src/web/src/components/SessionFind.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "会话内查找、匹配计数、上下条/关闭快捷键、输入焦点和滚动到命中。",
+      "reviewPhase": "P5.1"
+    },
+    "src/web/src/components/SessionMessageCard.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "跨会话消息来源、送达/排队/重试状态和关联会话链接。",
+      "reviewPhase": "P5.2"
+    },
+    "src/web/src/components/SessionMoveModal.tsx": {
+      "phase": "P5.1",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1"
+      ],
+      "replacement": "App.useApp 的 modal→Orbit 异步确认服务（保留现有 useToast）；Modal→Orbit Dialog/异步 ConfirmDialog；Spin→Orbit Spinner；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "文件夹选择/新建/移动、异步嵌套确认、加载和回到上级。"
+    },
+    "src/web/src/components/SessionOutputs.tsx": {
+      "phase": "P5.1",
+      "foundationPhases": [
+        "P1.1",
+        "P1.2",
+        "P2.1",
+        "P2.2"
+      ],
+      "replacement": "Drawer→Orbit Drawer；Dropdown→Orbit Menu；Input/Input.TextArea→Orbit Input/Textarea（自动增高接 P3.1）；Segmented→Orbit 分段选择；theme.useToken→现有语义 CSS 变量/Orbit 主题边界；Tooltip→Orbit Tooltip；MenuProps→Orbit 最小菜单项类型；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "输出抽屉、预览/全屏、文件/提交/合并切换、目标选择不立即合并、失败原因提示和重试原目标。",
+      "notes": "唯一生产 theme.useToken 读取点；P1.1 建语义主题边界，P5.1 切换此处 token 颜色；MenuProps 随菜单迁移。"
+    },
+    "src/web/src/components/SessionReplyCard.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "回复来源、用户问题/所选答案/结果、未送达与输出片段。",
+      "reviewPhase": "P5.2"
+    },
+    "src/web/src/components/SessionSearch.tsx": {
+      "phase": "P5.1",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1"
+      ],
+      "replacement": "Modal→Orbit Dialog/异步 ConfirmDialog；Spin→Orbit Spinner；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "Cmd/Ctrl+K、全局 capture Esc、打开清空、去抖/保留旧结果、Wiki 与会话合并键盘游标和焦点。",
+      "notes": ".ant-modal-wrap 仅在解释 Esc 的代码注释出现，不是运行时选择器；不得把现有全局 capture Escape 修复误删。"
+    },
+    "src/web/src/components/ShareModal.tsx": {
+      "phase": "P3.2",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1",
+        "P2.2"
+      ],
+      "replacement": "Button→Orbit Button；Checkbox→Orbit Checkbox；Dropdown→Orbit Menu；Modal→Orbit Dialog/异步 ConfirmDialog；Popconfirm→Orbit 确认浮层/ConfirmDialog；Select→Orbit Select/Combobox，仅实现已用搜索/清除/禁用；Spin→Orbit Spinner；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "Live/共享范围选项、创建/关闭共享、权限勾选、复制反馈和确认层焦点。"
+    },
+    "src/web/src/components/SharedPool.tsx": {
+      "phase": "P4.2",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1",
+        "P2.2"
+      ],
+      "replacement": "App.useApp 的 modal→Orbit 异步确认服务（保留现有 useToast）；Button→Orbit Button；Checkbox→Orbit Checkbox；Dropdown→Orbit Menu；Input/Input.TextArea→Orbit Input/Textarea（自动增高接 P3.1）；Modal→Orbit Dialog/异步 ConfirmDialog；Segmented→Orbit 分段选择；Select→Orbit Select/Combobox，仅实现已用搜索/清除/禁用；Switch→Orbit Switch；MenuProps→Orbit 最小菜单项类型；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "共享池所有者/成员权限、成员和账号动作、批量选择、异步确认与状态刷新。"
+    },
+    "src/web/src/components/SidebarNavIcon.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。",
+      "preserve": "现有侧栏自有 SVG 几何和选中外观。",
+      "reviewPhase": "P5.1"
+    },
+    "src/web/src/components/StartProjectCard.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1"
+      ],
+      "replacement": "Alert→现有 CSS 的状态/错误语义区块；Input/Input.TextArea→Orbit Input/Textarea（自动增高接 P3.1）；InputNumber→实际取值约束的 Orbit 数字字段；Modal→Orbit Dialog/异步 ConfirmDialog；Radio/Radio.Group→Orbit Radio group；Spin→Orbit Spinner；Switch→Orbit Switch",
+      "preserve": "项目启动确认、运行设置输入、原提案差异和提交/拒绝加载状态。"
+    },
+    "src/web/src/components/StatusTag.tsx": {
+      "phase": "P1.2",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Tag→Orbit Badge/既有状态样式",
+      "preserve": "现有状态文本/色彩/尺寸映射，调用方继续复用业务状态含义。",
+      "notes": "共享状态叶子由 P1.2 建立；P4/P5 页面迁移时复核各调用方状态含义。"
+    },
+    "src/web/src/components/TaskAttributionCard.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Alert→现有 CSS 的状态/错误语义区块；Card→现有 CSS 的 section；Skeleton→Orbit 现有样式的加载占位；Tag→Orbit Badge/既有状态样式；Typography→原生文本/标题/段落及现有 CSS",
+      "preserve": "任务归属、来源、状态/加载态和对应导航。"
+    },
+    "src/web/src/components/TaskDependencyGraph.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P2.1",
+        "P2.2"
+      ],
+      "replacement": "Modal→Orbit Dialog/异步 ConfirmDialog；Popconfirm→Orbit 确认浮层/ConfirmDialog；Tooltip→Orbit Tooltip；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "依赖图布局和导航、全屏、边删除确认与 tooltip、图操作不触发错误外层点击。"
+    },
+    "src/web/src/components/TaskDependencyList.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P2.1"
+      ],
+      "replacement": "Popconfirm→Orbit 确认浮层/ConfirmDialog；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "依赖任务链接、状态、移除确认和原始依赖 API。"
+    },
+    "src/web/src/components/TaskDetailPanel.tsx": {
+      "phase": "P3.2",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1",
+        "P2.2"
+      ],
+      "replacement": "Alert→现有 CSS 的状态/错误语义区块；Avatar→语义 img/头像回退外壳；Button→Orbit Button；Dropdown→Orbit Menu；Input/Input.TextArea→Orbit Input/Textarea（自动增高接 P3.1）；Modal→Orbit Dialog/异步 ConfirmDialog；Popconfirm→Orbit 确认浮层/ConfirmDialog；Segmented→Orbit 分段选择；Select→Orbit Select/Combobox，仅实现已用搜索/清除/禁用；Spin→Orbit Spinner；Switch→Orbit Switch；Tooltip→Orbit Tooltip；Typography→原生文本/标题/段落及现有 CSS；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "编辑/只读状态、运行/删除/依赖/分享、@提及选择后恢复 textarea 光标、附件与通知。",
+      "notes": "复用 P3.1 Textarea；@提及选择需要公开 HTMLTextAreaElement ref（focus/setSelectionRange），不能复制 resizableTextArea 内部树。"
+    },
+    "src/web/src/components/TaskInputs.tsx": {
+      "phase": "P3.2",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1"
+      ],
+      "replacement": "Button→Orbit Button；Popconfirm→Orbit 确认浮层/ConfirmDialog；Upload→原生 multiple 文件选择器，复用现有上传 API；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "多文件选择调用 uploadAttachment 的 multipart+bearer；删除仅影响将来运行；失败反馈、缓存刷新、授权缩略图及卸载/竞态 object URL 回收。"
+    },
+    "src/web/src/components/TaskProgressBlock.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "后台 workflow 阶段/当前工具/数量和队列进度，保留状态图标。",
+      "reviewPhase": "P4.3"
+    },
+    "src/web/src/components/TaskRunHandoffNotice.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。",
+      "preserve": "当前任务运行指向其他会话时的通知、打开运行会话/清理 pin/确认动作共享规则。",
+      "reviewPhase": "P5.3"
+    },
+    "src/web/src/components/TaskScheduleEditor.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Button→Orbit Button；Input/Input.TextArea→Orbit Input/Textarea（自动增高接 P3.1）；Typography→原生文本/标题/段落及现有 CSS",
+      "preserve": "开始时间设置/清除 PATCH 的 runAt 语义、时区显示和成功/失败通知。"
+    },
+    "src/web/src/components/TaskStartCard.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "任务启动时原始 brief、状态、折叠内容和权限标记。",
+      "reviewPhase": "P5.2"
+    },
+    "src/web/src/components/TaskStatusPill.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "会话实时 running/queued 优先于存储任务状态，列表和图保持一致。",
+      "reviewPhase": "P4.3"
+    },
+    "src/web/src/components/TasksSidePanel.tsx": {
+      "phase": "P5.1",
+      "foundationPhases": [
+        "P1.2",
+        "P2.2"
+      ],
+      "replacement": "Avatar→语义 img/头像回退外壳；Dropdown→Orbit Menu；Tooltip→Orbit Tooltip；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "任务/项目/Wiki/会话导航、Cmd/Ctrl+P、账号菜单/主题、拖放排序、折叠和手机布局。"
+    },
+    "src/web/src/components/ToastViewport.tsx": {
+      "phase": "P2.3",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "现有自有通知层的短消息/生命周期卡片、常驻错误、撤销/跳转/去重/堆叠及图标，验证新旧弹层共存。",
+      "notes": "已经是 Orbit 自有通知，不承担移除 AntD；P2.3 保留并验证。"
+    },
+    "src/web/src/components/Transcript.tsx": {
+      "phase": "P5.2",
+      "foundationPhases": [],
+      "replacement": "Image/Image.PreviewGroup→Orbit 授权图片与预览组；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "授权图片与预览组的切换/缩放/关闭、object URL 生命周期、Markdown/工具结果、增量顺序/折叠/选择/复制及公开导出。"
+    },
+    "src/web/src/components/WatchCard.tsx": {
+      "phase": "P4.4",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1"
+      ],
+      "replacement": "Button→Orbit Button；Popconfirm→Orbit 确认浮层/ConfirmDialog",
+      "preserve": "watch 条件/新鲜度/截止时间、编辑与停止确认、会话/任务入口。"
+    },
+    "src/web/src/components/WatchEditor.tsx": {
+      "phase": "P4.4",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1",
+        "P2.2"
+      ],
+      "replacement": "Checkbox→Orbit Checkbox；Modal→Orbit Dialog/异步 ConfirmDialog；Radio/Radio.Group→Orbit Radio group；Select→Orbit Select/Combobox，仅实现已用搜索/清除/禁用",
+      "preserve": "任务/会话条件、多目标和截止时间、通知/唤醒会话选择及原保存参数。"
+    },
+    "src/web/src/components/WatchParts.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。",
+      "preserve": "watch 目标实时状态和相对时间刷新，空目标不触发错误读取。",
+      "reviewPhase": "P4.4"
+    },
+    "src/web/src/components/WatchRelations.tsx": {
+      "phase": "P4.4",
+      "foundationPhases": [
+        "P1.2",
+        "P2.2"
+      ],
+      "replacement": "Button→Orbit Button；Popover→Orbit Popover；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "任务 Followed by、会话等待条件、浮层/新建关注入口和历史区分。"
+    },
+    "src/web/src/components/WatchWakeCard.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "关注触发原因、变化目标和折叠后的数量、会话跳转。",
+      "reviewPhase": "P5.2"
+    },
+    "src/web/src/components/WikiArticlePage.tsx": {
+      "phase": "P4.4",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1",
+        "P2.2"
+      ],
+      "replacement": "Button→Orbit Button；Drawer→Orbit Drawer；Popover→Orbit Popover；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "主题文章、引文浮层/抽屉、回溯来源、修订信息和手机布局。"
+    },
+    "src/web/src/components/WikiBrowsePage.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "按分类/文档浏览、待审核/未写状态、两列到手机布局与子页导航。",
+      "reviewPhase": "P4.4"
+    },
+    "src/web/src/components/WikiCards.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "复用项目 open-items 卡片框架、Wiki 标记和标题，不新建视觉系统。",
+      "reviewPhase": "P4.4"
+    },
+    "src/web/src/components/WikiContextNote.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。",
+      "preserve": "会话收到的 Wiki 上下文折叠、kind/来源/正文顺序及链接。",
+      "reviewPhase": "P5.2"
+    },
+    "src/web/src/components/WikiDirectory.tsx": {
+      "phase": "P4.4",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Button→Orbit Button；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "目录展开/收起、Home/Browse/Index/Plan 路由、待审数量和手机关闭。"
+    },
+    "src/web/src/components/WikiDocPage.tsx": {
+      "phase": "P4.4",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1",
+        "P2.2"
+      ],
+      "replacement": "Button→Orbit Button；Drawer→Orbit Drawer；Popover→Orbit Popover；Tooltip→Orbit Tooltip；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "文档读者/范围、过期提醒、逐句引文定位、浮层/抽屉和相关会话导航。"
+    },
+    "src/web/src/components/WikiEntryDrawer.tsx": {
+      "phase": "P4.4",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1",
+        "P2.2"
+      ],
+      "replacement": "Button→Orbit Button；Dropdown→Orbit Menu；Input/Input.TextArea→Orbit Input/Textarea（自动增高接 P3.1）；Modal→Orbit Dialog/异步 ConfirmDialog；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "条目详情/来源/锚点/历史、编辑/停用确认、more 菜单及关闭后回原页。"
+    },
+    "src/web/src/components/WikiEntryMarks.tsx": {
+      "phase": "P4.4",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Button→Orbit Button；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "确认/拒绝入口、当前修订的确认来源/时间/应用人和权限。"
+    },
+    "src/web/src/components/WikiEntryRow.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "条目两种行形态、kind/trust/用量/摘要及项目行密度。",
+      "reviewPhase": "P4.4"
+    },
+    "src/web/src/components/WikiHome.tsx": {
+      "phase": "P4.4",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Button→Orbit Button；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "Principles/决策日志/Review/Plan 排列、创建入口及手机横幅顺序。"
+    },
+    "src/web/src/components/WikiIndexPage.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "文档和独有章节索引、分类编号和路由链接。",
+      "reviewPhase": "P4.4"
+    },
+    "src/web/src/components/WikiMaintenanceStatus.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。",
+      "preserve": "维护运行等待/失败/正常状态、锚点后状态分隔和导航。",
+      "reviewPhase": "P4.4"
+    },
+    "src/web/src/components/WikiMarks.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "kind/trust/anchor/op/change 的统一词汇、颜色与独立图标。",
+      "reviewPhase": "P4.4"
+    },
+    "src/web/src/components/WikiNewEntry.tsx": {
+      "phase": "P4.4",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1",
+        "P2.2"
+      ],
+      "replacement": "Button→Orbit Button；Input/Input.TextArea→Orbit Input/Textarea（自动增高接 P3.1）；Modal→Orbit Dialog/异步 ConfirmDialog；Select→Orbit Select/Combobox，仅实现已用搜索/清除/禁用；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "按 kind schema 动态字段、录入/校验/保存、关闭/失败和新条目入口。"
+    },
+    "src/web/src/components/WikiPlanCard.tsx": {
+      "phase": "P4.4",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Button→Orbit Button；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "主页计划入口、桌面右栏/手机横幅、维护入口和计划变更状态。"
+    },
+    "src/web/src/components/WikiPlanPage.tsx": {
+      "phase": "P4.4",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1",
+        "P2.2"
+      ],
+      "replacement": "Button→Orbit Button；Drawer→Orbit Drawer；Dropdown→Orbit Menu；Input/Input.TextArea→Orbit Input/Textarea（自动增高接 P3.1）；InputNumber→实际取值约束的 Orbit 数字字段；Modal→Orbit Dialog/异步 ConfirmDialog；Select→Orbit Select/Combobox，仅实现已用搜索/清除/禁用；Switch→Orbit Switch；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "计划版本/确认/编辑、文档排序/删除、运行参数抽屉与异步确认。"
+    },
+    "src/web/src/components/WikiReviewPage.tsx": {
+      "phase": "P4.4",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1",
+        "P2.2"
+      ],
+      "replacement": "Alert→现有 CSS 的状态/错误语义区块；Button→Orbit Button；Dropdown→Orbit Menu；Modal→Orbit Dialog/异步 ConfirmDialog；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "每个 op 独立审核、拒绝/挑战/编辑、手机操作顺序和待定/已决定状态。"
+    },
+    "src/web/src/components/WikiRunPage.tsx": {
+      "phase": "P4.4",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1",
+        "P2.2"
+      ],
+      "replacement": "App.useApp 的 modal→Orbit 异步确认服务（保留现有 useToast）；Button→Orbit Button；Dropdown→Orbit Menu；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "维护/导入/提案运行抽屉、分组展开、Revert run 异步确认和来源会话。"
+    },
+    "src/web/src/components/WikiSettingsButton.tsx": {
+      "phase": "P4.4",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Button→Orbit Button；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "桌面 Settings 文字、手机图标按钮及 settings 路由。"
+    },
+    "src/web/src/components/WikiSettingsPage.tsx": {
+      "phase": "P4.4",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1",
+        "P2.2"
+      ],
+      "replacement": "Button→Orbit Button；Card→现有 CSS 的 section；InputNumber→实际取值约束的 Orbit 数字字段；Modal→Orbit Dialog/异步 ConfirmDialog；Radio/Radio.Group→Orbit Radio group；Select→Orbit Select/Combobox，仅实现已用搜索/清除/禁用；Switch→Orbit Switch；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "review mode/Automatic/维护运行设置、范围/频率/确认关停、手机单列布局。"
+    },
+    "src/web/src/components/WikiSources.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "第一手来源卡片、各类引用链接、离线导出不读取不存在的 window。",
+      "reviewPhase": "P4.4"
+    },
+    "src/web/src/components/WikiTopicPage.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "未生成文章时的分组条目、抽屉背景 topic 覆盖和文章存在时路由。",
+      "reviewPhase": "P4.4"
+    },
+    "src/web/src/components/WorkspaceConsole.tsx": {
+      "phase": "P5.3",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Button→Orbit Button；Result→原生结果区块；Spin→Orbit Spinner",
+      "preserve": "会话读取 loading/not-found、错误/重试和工作区初始化门控。"
+    },
+    "src/web/src/components/WorkspaceView.tsx": {
+      "phase": "P5.3",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1",
+        "P2.2"
+      ],
+      "replacement": "App.useApp 的 modal→Orbit 异步确认服务（保留现有 useToast）；Button→Orbit Button；Dropdown→Orbit Menu；Image/Image.PreviewGroup→Orbit 授权图片与预览组；Input/Input.TextArea→Orbit Input/Textarea（自动增高接 P3.1）；MenuProps→Orbit 最小菜单项类型；Popover→Orbit Popover；Select→Orbit Select/Combobox，仅实现已用搜索/清除/禁用；Spin→Orbit Spinner；Tooltip→Orbit Tooltip；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "发送/排队/中断/重试、附件选取/粘贴/拖入、输入法/Enter/Shift+Enter/候选菜单、镜像/手动高度/滚动跟随、深链接与手机返回。",
+      "notes": "P3.1 只交付自动增高 Textarea 和代表输入验证；P5.2 交付图片预览基础；P5.3 完整页面切换，移除 resizableTextArea.textArea；P2.1 的确认必须保留 promise/失败语义。"
+    },
+    "src/web/src/pages/AdminUsersPage.tsx": {
+      "phase": "P4.2",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1"
+      ],
+      "replacement": "App.useApp 的 modal→Orbit 异步确认服务（保留现有 useToast）；Button→Orbit Button；Input/Input.TextArea→Orbit Input/Textarea（自动增高接 P3.1）；Modal→Orbit Dialog/异步 ConfirmDialog；Popconfirm→Orbit 确认浮层/ConfirmDialog；Space→现有 flex/gap；Table→原生语义 table+现有响应式样式；Tag→Orbit Badge/既有状态样式；TableColumnsType→调用方实际使用的行/列类型",
+      "preserve": "原生表格列/行操作、管理员权限、添加用户/密码操作的异步确认、加载/空态。"
+    },
+    "src/web/src/pages/EnrollPage.tsx": {
+      "phase": "P4.2",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Alert→现有 CSS 的状态/错误语义区块；Button→Orbit Button；Card→现有 CSS 的 section；Descriptions→原生 dl/语义明细结构；Result→原生结果区块；Spin→Orbit Spinner；Tag→Orbit Badge/既有状态样式",
+      "preserve": "/enroll?code 机器注册确认、名称与 hostname 分离、授权/失效/成功状态。",
+      "notes": "P4.2 任务描述明确包含 Enroll；虽属 /enroll 独立入口，随 Runner 注册管理批次迁移。"
+    },
+    "src/web/src/pages/FollowingPage.tsx": {
+      "phase": "P4.4",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Button→Orbit Button；Spin→Orbit Spinner",
+      "preserve": "watch 状态分组、筛选/加载/空态及编辑/关注关系跳转。"
+    },
+    "src/web/src/pages/LoginPage.tsx": {
+      "phase": "P4.1",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Button→Orbit Button；Card→现有 CSS 的 section；Form/Form.Item→原生 form+Orbit 字段/仅实际需要的校验；Input/Input.TextArea→Orbit Input/Textarea（自动增高接 P3.1）",
+      "preserve": "邮箱/密码验证、提交禁用/加载/错误以及同源 next 重定向限制。"
+    },
+    "src/web/src/pages/ProfilePage.tsx": {
+      "phase": "P4.1",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Avatar→语义 img/头像回退外壳；Button→Orbit Button；Card→现有 CSS 的 section；Form/Form.Item→原生 form+Orbit 字段/仅实际需要的校验；Input/Input.TextArea→Orbit Input/Textarea（自动增高接 P3.1）",
+      "preserve": "基本资料、头像上传/删除、当前/新密码及确认密码联动验证、提交/重置。"
+    },
+    "src/web/src/pages/ProjectsPage.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1",
+        "P2.2"
+      ],
+      "replacement": "Alert→现有 CSS 的状态/错误语义区块；App.useApp 的 modal→Orbit 异步确认服务（保留现有 useToast）；Button→Orbit Button；Empty→原生空状态区块；List→原生列表结构；Modal→Orbit Dialog/异步 ConfirmDialog；Popconfirm→Orbit 确认浮层/ConfirmDialog；Select→Orbit Select/Combobox，仅实现已用搜索/清除/禁用；Spin→Orbit Spinner；Tag→Orbit Badge/既有状态样式；Typography→原生文本/标题/段落及现有 CSS；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "项目分组/搜索/排序/新建删除、任务嵌套面板、协调工作区绑定、自动执行配置和确认语义。"
+    },
+    "src/web/src/pages/ProviderConnectPage.tsx": {
+      "phase": "P4.2",
+      "foundationPhases": [
+        "P1.2",
+        "P2.2"
+      ],
+      "replacement": "Button→Orbit Button；Input/Input.TextArea→Orbit Input/Textarea（自动增高接 P3.1）；InputNumber→实际取值约束的 Orbit 数字字段；Select→Orbit Select/Combobox，仅实现已用搜索/清除/禁用；Space→现有 flex/gap；Spin→Orbit Spinner；Switch→Orbit Switch；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "厂商深链接连接向导、endpoint/模型列表/容量字段、可选功能和保存/编辑状态。"
+    },
+    "src/web/src/pages/ProviderPoolPage.tsx": {
+      "phase": "P4.2",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1"
+      ],
+      "replacement": "Button→Orbit Button；Modal→Orbit Dialog/异步 ConfirmDialog；Popconfirm→Orbit 确认浮层/ConfirmDialog；Radio/Radio.Group→Orbit Radio group；Spin→Orbit Spinner；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "账号池详情的所有者/成员权限、增删账号/删除池、ChatGPT 登录入口与共享关系。"
+    },
+    "src/web/src/pages/ProvidersPage.tsx": {
+      "phase": "P4.2",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1"
+      ],
+      "replacement": "Button→Orbit Button；Popconfirm→Orbit 确认浮层/ConfirmDialog；Space→现有 flex/gap；Table→原生语义 table+现有响应式样式；Tag→Orbit Badge/既有状态样式；TableColumnsType→调用方实际使用的行/列类型；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "引擎账号/账号池/API provider 分类、响应式表格与行编辑/删除确认。"
+    },
+    "src/web/src/pages/RunnerDetailPage.tsx": {
+      "phase": "P4.2",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1",
+        "P2.2"
+      ],
+      "replacement": "App.useApp 的 modal→Orbit 异步确认服务（保留现有 useToast）；Button→Orbit Button；Checkbox→Orbit Checkbox；Dropdown→Orbit Menu；Input/Input.TextArea→Orbit Input/Textarea（自动增高接 P3.1）；InputNumber→实际取值约束的 Orbit 数字字段；Modal→Orbit Dialog/异步 ConfirmDialog；Select→Orbit Select/Combobox，仅实现已用搜索/清除/禁用；Spin→Orbit Spinner；Switch→Orbit Switch；Tag→Orbit Badge/既有状态样式；MenuProps→Orbit 最小菜单项类型；RefSelectProps→Orbit 公开 focus/原生触发器 ref；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "容量整数1–64的 blur/Enter归一化保存、reserve Select 聚焦、工作区创建/编辑、账号路由、token/删除/清理确认。",
+      "notes": "RefSelectProps 是 AntD 公开 ref 类型，仍是包类型依赖；不同于 Workspace/TaskDetail 的 resizableTextArea 内部结构。"
+    },
+    "src/web/src/pages/RunnersPage.tsx": {
+      "phase": "P4.2",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1",
+        "P2.2"
+      ],
+      "replacement": "App.useApp 的 modal→Orbit 异步确认服务（保留现有 useToast）；Button→Orbit Button；Dropdown→Orbit Menu；Input/Input.TextArea→Orbit Input/Textarea（自动增高接 P3.1）；Modal→Orbit Dialog/异步 ConfirmDialog；Spin→Orbit Spinner；MenuProps→Orbit 最小菜单项类型；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "机器列表和在线状态、拖放排序、重命名/删除/轮换菜单、异步确认和手机交互。"
+    },
+    "src/web/src/pages/SettingsPage.tsx": {
+      "phase": "P4.1",
+      "foundationPhases": [
+        "P1.2",
+        "P2.2"
+      ],
+      "replacement": "Button→Orbit Button；Card→现有 CSS 的 section；Segmented→Orbit 分段选择；Select→Orbit Select/Combobox，仅实现已用搜索/清除/禁用；Switch→Orbit Switch",
+      "preserve": "会话权限/编排默认值、通知偏好、system/light/dark、账号同步和共享管理链接。"
+    },
+    "src/web/src/pages/SetupPage.tsx": {
+      "phase": "P4.1",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Button→Orbit Button；Card→现有 CSS 的 section；Form/Form.Item→原生 form+Orbit 字段/仅实际需要的校验；Input/Input.TextArea→Orbit Input/Textarea（自动增高接 P3.1）；Typography→原生文本/标题/段落及现有 CSS",
+      "preserve": "仅零用户首次创建 ADMIN、邮箱/密码及确认联动验证、自动登录和注册引导。"
+    },
+    "src/web/src/pages/SharedLinkPage.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。",
+      "preserve": "/s/:token 类型分派、项目子任务路径、范围内链接与无权限/失效公开态。",
+      "reviewPhase": "P4.4"
+    },
+    "src/web/src/pages/SharedLinksPage.tsx": {
+      "phase": "P4.4",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1"
+      ],
+      "replacement": "Button→Orbit Button；Popconfirm→Orbit 确认浮层/ConfirmDialog；Spin→Orbit Spinner；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "已发布共享条目状态、复制和关闭共享确认、加载/空态及手机布局。"
+    },
+    "src/web/src/pages/SharedProjectPage.tsx": {
+      "phase": "P4.4",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Empty→原生空状态区块；List→原生列表结构；Tag→Orbit Badge/既有状态样式；Typography→原生文本/标题/段落及现有 CSS",
+      "preserve": "公开项目范围内区块/任务/图、只读状态和链接边界，不暴露私有操作。"
+    },
+    "src/web/src/pages/SharedSessionPage.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "仅被分享会话可读、范围外链接降为文字、授权附件/图片和独立 HTML 导出。",
+      "reviewPhase": "P4.4",
+      "notes": "本文件仅独立图标依赖，公开入口由 P4.4 复核；复用 Transcript 的图片/富内容迁移归 P5.2，并保持公开权限限制。"
+    },
+    "src/web/src/pages/SharedTaskPage.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "公开任务验收/描述/评论/附件/运行与依赖，范围内导航和只读操作。",
+      "reviewPhase": "P4.4"
+    },
+    "src/web/src/pages/TaskDetailPage.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Button→Orbit Button；Input/Input.TextArea→Orbit Input/Textarea（自动增高接 P3.1）；Typography→原生文本/标题/段落及现有 CSS",
+      "preserve": "完整任务页验收/执行命令字段及结果语义，保留既有数据读取与保存。"
+    },
+    "src/web/src/pages/TaskListView.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P1.2",
+        "P2.1",
+        "P2.2"
+      ],
+      "replacement": "Avatar→语义 img/头像回退外壳；Button→Orbit Button；Checkbox→Orbit Checkbox；Dropdown→Orbit Menu；Input/Input.TextArea→Orbit Input/Textarea（自动增高接 P3.1）；InputNumber→实际取值约束的 Orbit 数字字段；MenuProps→Orbit 最小菜单项类型；Modal→Orbit Dialog/异步 ConfirmDialog；Popconfirm→Orbit 确认浮层/ConfirmDialog；Segmented→Orbit 分段选择；Select→Orbit Select/Combobox，仅实现已用搜索/清除/禁用；Spin→Orbit Spinner；Tag→Orbit Badge/既有状态样式；Tooltip→Orbit Tooltip；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "固定行高虚拟列表、过滤/排序/分组、批量运行/停止/分配/删除、原路由及手机密度。"
+    },
+    "src/web/src/pages/TaskRoute.tsx": {
+      "phase": "P4.3",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Spin→Orbit Spinner",
+      "preserve": "/tasks、/tasks/:id、/lists/:key 路由归属、项目背景判定与加载提示。"
+    },
+    "src/web/src/pages/WikiPage.tsx": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有 Orbit/原生实现；在所属批次复核集成行为。；保留 @ant-design/icons 与合法 .anticon 样式。",
+      "preserve": "所有 Wiki 子路由、space 选择/搜索/状态共享头部、抽屉返回与手机目录。",
+      "reviewPhase": "P4.4"
+    },
+    "src/web/src/App.tsx": {
+      "phase": "P4.4",
+      "foundationPhases": [
+        "P1.2"
+      ],
+      "replacement": "Spin→Orbit Spinner；保留现有路由结构。",
+      "preserve": "身份/初始化门控、公开与私有路由、延迟读取的加载状态；页面入口不得遗漏。"
+    },
+    "src/web/src/main.tsx": {
+      "phase": "P6",
+      "foundationPhases": [
+        "P1.1",
+        "P2.1",
+        "P2.3"
+      ],
+      "replacement": "P1.1 接 Orbit 主题并保留共存层；P2 完成确认服务和现有通知集成；P6 最后移除 ConfigProvider、AntApp、antd/dist/reset.css 及 AntD theme 引入。",
+      "preserve": "ThemeProvider 的 system/light/dark、React Query/BrowserRouter/BootGate 顺序、现有 ToastViewport、首屏处理、主动鉴权刷新、移动端返回和滚动条安装。",
+      "notes": "当前没有 @ant-design/v5-patch-for-react-19；历史 wiki 的 v5 导入规则不是本基线依赖。reset 移除须证实列表/表单等 UA 默认差异已由 Orbit 基础样式覆盖。"
+    },
+    "src/web/src/theme.ts": {
+      "phase": "P6",
+      "foundationPhases": [
+        "P1.1"
+      ],
+      "replacement": "P1.1 提取经过实测的 Orbit 语义变量，迁移期间保留 lightTheme/darkTheme 给旧组件；P6 删除 ThemeConfig 和 antdTheme.darkAlgorithm 的运行时实现。",
+      "preserve": "字体、32px 基础控件/6px 圆角/10px 弹窗圆角、明确覆盖的明暗中性色和各组件例外；暗色衍生结果须对照实测，不能只复制 seed。"
+    },
+    "src/web/src/index.css": {
+      "phase": "P6",
+      "foundationPhases": [
+        "P1.1",
+        "P1.2",
+        "P2.1",
+        "P2.2",
+        "P2.3"
+      ],
+      "replacement": "P1 建立现有语义变量和公共控件样式；P2 建弹层层级；P3/P4/P5 每批仅将自己消费的 .ant-* 内部选择器改为 Orbit 公开类/状态；P6 对全局遗留复查归零。",
+      "preserve": "全部现有业务布局/主题/hover/focus/disabled/loading/error、600/640/960px 及其他既有断点、弹层叠放、手机适配、合法 .anticon 图标样式。",
+      "notes": "按相邻业务 class 归属：tdp/share→P3.2；composer/镜像→P3.1并在P5.3整合；auth/settings→P4.1；provider/pool/runner/admin→P4.2；task/project/graph/decision→P4.3；wiki/shared/watch→P4.4；sidebar/search/output/selector→P5.1；transcript/image→P5.2；workspace→P5.3；通用 reset/provider/theme 残留→P6。不是把全文件推迟到P6，也不是重写全部CSS。"
+    },
+    "src/web/src/lib/theme.tsx": {
+      "phase": "P1.1",
+      "foundationPhases": [],
+      "replacement": "保留已有 ThemeProvider/useThemeMode；Orbit 公共组件读同一主题事实并使用 data-theme 变量。",
+      "preserve": "system/light/dark、媒体查询更新、账号偏好同步、documentElement data-theme 和首屏颜色。"
+    },
+    "src/web/src/lib/toast.tsx": {
+      "phase": "P2.3",
+      "foundationPhases": [],
+      "replacement": "保留已经自有的 useToast API 和 feed 实现；仅验证与新的弹层/确认服务集成。",
+      "preserve": "全部现有调用形状、通知动作/导航和去重边界。",
+      "notes": "本基线无 antd import，不能因为项目早期“替换 useToast 内核”措辞再造内核。"
+    },
+    "src/web/src/lib/toastFeed.ts": {
+      "phase": "P2.3",
+      "foundationPhases": [],
+      "replacement": "保留现有通知 feed 和持续时间/排序规则。",
+      "preserve": "确认3秒、带撤销/诊断6秒、错误/警告常驻、去重、生命周期卡片和堆叠。"
+    },
+    "src/web/src/lib/toastStore.ts": {
+      "phase": "P2.3",
+      "foundationPhases": [],
+      "replacement": "保留现有自有通知存储，不引入 AntD 反馈运行时。",
+      "preserve": "跨页面存活的模块通知状态、订阅、停留计时、hover暂停/恢复、手机常驻卡6秒折叠和退出登录清理；不新增磁盘持久化。"
+    },
+    "src/web/src/pages/SharedSessionPage.fixtures.ts": {
+      "phase": "KEEP",
+      "foundationPhases": [],
+      "replacement": "保留现有共享会话测试固定数据；静态扫描按文件名归非测试源文件，实际不是页面入口。",
+      "preserve": "共享会话事件顺序、状态及现实回执数据；随 SharedSessionPage 测试复核。",
+      "reviewPhase": "P4.4"
+    }
+  }
+}

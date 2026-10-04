@@ -12,6 +12,8 @@ Implemented in the web Session list. Open and Completed expose five actions; Tra
 
 An open menu owns the Complete shortcut. Disabled or absent actions cannot fall through to the selected conversation. Arrow keys navigate within the menu, Escape closes it and restores trigger focus, and holding the completion shortcut cannot complete a second session through key repeat. Existing lifecycle, Share and Move request handlers are reused.
 
+All action items use the same single-line height. Complete retains its keyboard shortcut; its running-state explanation and unavailable-state reason appear as a hover title instead of a second line. This supersedes the taller Complete item in the original design board. Browser measurements confirm 32px for all five actions, including disabled Complete and a narrow column; [updated screenshot](session-list-equal-height-en.png).
+
 Validation: web production build and 93 focused tests passed (16 menu, 11 folder and 66 existing related regressions). Browser checks passed for light/dark mode, a 260px session column, an 800px mouse/keyboard window, a 390px touch viewport, menu arrow navigation and Escape focus restoration. Browser checks use fixture data without real account writes.
 
 [Implemented UI screenshot](session-list-implemented-en.png)

@@ -1,5 +1,5 @@
 import { AgentProvider, PROVIDER_PRESETS, type ProviderBrand } from '@orbit/shared';
-import type { PlanUsage, RunnerEngineHealth, RunnerModelCatalog, RuntimeDefaultModels } from '@orbit/shared';
+import type { PlanUsage, RunnerAntigravityState, RunnerEngineHealth, RunnerModelCatalog, RuntimeDefaultModels } from '@orbit/shared';
 import type { CodexLogin } from './codexLogin';
 import { accountNameOf, accountPlanUsage } from './engineAccounts';
 import { encodeId } from './idCodec';
@@ -19,8 +19,8 @@ import {
  * configured provider spends the API key you pasted.
  *
  * Engines are the slugs a runner can sign into (LoginEngine in @orbit/shared), plus Antigravity,
- * which has no sign-in at all — agy runs on a Gemini API key from its environment — and so is
- * offered whenever the machine has it installed. `opencode` is an AgentProvider that is neither,
+ * which has no sign-in at all — agy runs on a Gemini API key from its environment — and is
+ * offered only when the server confirms an environment key. `opencode` is an AgentProvider that is neither,
  * so it never appears as a choice — it only shows up as the current pick when a workspace is
  * already set to it.
  */
@@ -53,6 +53,8 @@ export interface ProviderChoice {
   slug: string;
   label: string;
   kind: ProviderChoiceKind;
+  /** How this Gemini key reaches the runtime, shown in small type beside the identity. */
+  labelDetail?: string;
   /** Brand mark for the tile: the vendor's gradient plus the glyph key to draw on it. */
   brand: ProviderBrand;
   /** Which PROVIDER_GLYPHS entry to draw, or undefined to fall back to the monogram. */
@@ -171,7 +173,13 @@ export function defaultModelLabel(
   runtimeDefaultModels?: RuntimeDefaultModels,
 ): string {
   const model = defaultModelForProvider(slug, modelCatalog, configured, runtimeDefaultModels);
-  if (!model) return 'Managed by the provider';
+  if (!model) {
+    if (runtimeForProvider(slug, configured) === AgentProvider.ANTIGRAVITY) {
+      const preset = PROVIDER_PRESETS.find((p) => p.slug === 'gemini')!;
+      return preset.models.find((option) => option.value === preset.defaultModel)?.label ?? preset.defaultModel;
+    }
+    return 'Managed by the provider';
+  }
   const named = modelOptionsForProvider(slug, modelCatalog, configured).find(
     (option) => option.value === model,
   );
@@ -185,9 +193,7 @@ export function defaultModelLabel(
 function engineBlocker(health?: RunnerEngineHealth): string | undefined {
   if (!health) return undefined;
   if (!health.installed) return 'Not installed';
-  // Antigravity has no sign-in to be out of. Its key comes from the session's environment, which
-  // can be the workspace's own — something the runner's probe of the machine never sees.
-  if (health.auth === 'no' && health.engine !== 'antigravity') return 'Not signed in';
+  if (health.auth === 'no') return 'Not signed in';
   return undefined;
 }
 
@@ -197,6 +203,12 @@ function engineBlocker(health?: RunnerEngineHealth): string | undefined {
  *  key is the credential, and a signed-out CLI runs this provider fine. */
 function byokBlocker(health?: RunnerEngineHealth): string | undefined {
   return health && !health.installed ? 'Not installed' : undefined;
+}
+
+/** Antigravity admission uses the runner capability the server reads when dispatching. */
+function antigravityBlocker(state?: RunnerAntigravityState, health?: RunnerEngineHealth): string | undefined {
+  if (state?.supported === false) return 'Update runner';
+  return state ? (state.installed === false ? 'Not installed' : undefined) : byokBlocker(health);
 }
 
 /**
@@ -228,10 +240,14 @@ export function providerChoices(
   engineHealth?: RunnerEngineHealth[] | null,
   pools: readonly PoolChoiceSource[] = [],
   planUsage?: PlanUsage | null,
+  antigravity?: RunnerAntigravityState,
+  antigravityKeyAvailable: boolean = antigravity?.envKeyAvailable ?? false,
 ): ProviderChoice[] {
-  const engines: ProviderChoice[] = ENGINE_SLUGS.map((slug) => {
+  const engines: ProviderChoice[] = ENGINE_SLUGS.filter(
+    (slug) => slug !== AgentProvider.ANTIGRAVITY || antigravityKeyAvailable,
+  ).map((slug) => {
     const health = engineHealth?.find((e) => e.engine === slug);
-    const blocker = engineBlocker(health);
+    const blocker = slug === AgentProvider.ANTIGRAVITY ? antigravityBlocker(antigravity, health) : engineBlocker(health);
     const accounts =
       (slug === AgentProvider.CODEX || slug === AgentProvider.CLAUDE) && !blocker && (health?.accounts?.length ?? 0) >= 2
         ? health!.accounts!.map((account): AccountChoice => {
@@ -257,6 +273,7 @@ export function providerChoices(
       slug,
       label: ENGINE_LABELS[slug] ?? slug,
       kind: 'engine' as const,
+      ...(slug === AgentProvider.ANTIGRAVITY ? { labelDetail: 'env key' } : {}),
       ...brandForProvider(slug, ENGINE_LABELS[slug] ?? slug),
       modelLabel: defaultModelLabel(slug, modelCatalog, configured, runtimeDefaultModels),
       ...(blocker ? { unavailable: blocker, fixEngine: slug } : {}),
@@ -300,11 +317,13 @@ export function providerChoices(
     .filter((p) => !ENGINE_SLUGS.some((slug) => slug === p.slug) && !poolSlugs.has(p.slug))
     .map((p) => {
       const runtime = runtimeForProvider(p.slug, configured);
-      const blocker = byokBlocker(engineHealth?.find((e) => e.engine === runtime));
+      const health = engineHealth?.find((e) => e.engine === runtime);
+      const blocker = runtime === AgentProvider.ANTIGRAVITY ? antigravityBlocker(antigravity, health) : byokBlocker(health);
       return {
         slug: p.slug,
         label: p.label,
         kind: 'byok' as const,
+        ...(runtime === AgentProvider.ANTIGRAVITY ? { labelDetail: 'Antigravity CLI' } : {}),
         ...brandForProvider(p.slug, p.label, p.presetSlug),
         modelLabel: defaultModelLabel(p.slug, modelCatalog, configured, runtimeDefaultModels),
         ...(blocker ? { unavailable: blocker, fixEngine: runtime } : {}),
@@ -346,6 +365,7 @@ export function sameRuntimeChoices(
   configured: ConfiguredProvider[],
   modelCatalog?: RunnerModelCatalog | null,
   runtimeDefaultModels?: RuntimeDefaultModels,
+  antigravity?: RunnerAntigravityState,
 ): ProviderChoice[] {
   const runtime = runtimeForProvider(provider, configured);
   const sameRuntime = choices.filter(
@@ -353,7 +373,7 @@ export function sameRuntimeChoices(
   );
   if (sameRuntime.some((choice) => choice.slug === provider)) return sameRuntime;
   return [
-    currentProviderChoice(provider, choices, modelCatalog, configured, runtimeDefaultModels),
+    currentProviderChoice(provider, choices, modelCatalog, configured, runtimeDefaultModels, antigravity),
     ...sameRuntime,
   ];
 }
@@ -370,14 +390,18 @@ export function currentProviderChoice(
   modelCatalog?: RunnerModelCatalog | null,
   configured?: ConfiguredProvider[] | null,
   runtimeDefaultModels?: RuntimeDefaultModels,
+  antigravity?: RunnerAntigravityState,
 ): ProviderChoice {
   const found = choices.find((c) => c.slug === provider);
   if (found) return found;
   const label = ENGINE_LABELS[provider] ?? provider;
+  const blocker = provider === AgentProvider.ANTIGRAVITY ? antigravityBlocker(antigravity) : undefined;
   return {
     slug: provider,
     label,
     kind: Object.values(AgentProvider).some((p) => p === provider) ? 'engine' : 'byok',
+    ...(provider === AgentProvider.ANTIGRAVITY ? { labelDetail: 'env key' } : {}),
+    ...(blocker ? { unavailable: blocker, fixEngine: AgentProvider.ANTIGRAVITY } : {}),
     ...brandForProvider(provider, label),
     modelLabel: defaultModelLabel(provider, modelCatalog, configured, runtimeDefaultModels),
   };

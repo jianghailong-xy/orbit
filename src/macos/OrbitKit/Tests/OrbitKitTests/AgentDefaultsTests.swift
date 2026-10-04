@@ -927,16 +927,16 @@ final class AgentDefaultsTests: XCTestCase {
         for catalog in [nil, liveClaudeCatalog] as [RunnerModelCatalog?] {
             XCTAssertEqual(AgentDefaults.models(for: "antigravity", catalog: catalog).map(\.id), [""])
             XCTAssertEqual(AgentDefaults.models(for: "antigravity", catalog: catalog).map(\.name),
-                           ["Managed by Antigravity"])
+                           ["Gemini 3.8 Flash"])
         }
         XCTAssertEqual(AgentDefaults.models(for: "antigravity"), AgentDefaults.antigravityModels)
         XCTAssertEqual(AgentDefaults.friendlyName("gemini-3.1-pro", catalog: agyCatalog), "Gemini 3.1 Pro")
         XCTAssertEqual(AgentDefaults.friendlyName("", for: "antigravity", catalog: nil, configured: nil),
-                       "Managed by Antigravity")
+                       "Gemini 3.8 Flash")
         // Left on "" after the catalog replaced that row, it still reads as agy's own pick — the id
         // alone would find OpenCode's row first.
         XCTAssertEqual(AgentDefaults.friendlyName("", for: "antigravity", catalog: agyCatalog,
-                                                  configured: nil), "Managed by Antigravity")
+                                                  configured: nil), "Gemini 3.8 Flash")
         XCTAssertEqual(AgentDefaults.friendlyName("", for: "opencode", catalog: agyCatalog,
                                                   configured: nil), "Managed by OpenCode")
     }

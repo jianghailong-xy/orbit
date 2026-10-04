@@ -96,6 +96,14 @@ export function addTwins(value: unknown, replaceSource: boolean, depth = 0): unk
   }
   const obj = value as Record<string, unknown>;
   for (const key of Object.keys(obj)) addTwins(obj[key], replaceSource, depth + 1);
+  // This availability map is keyed by runner addresses rather than by an `id` field. Its keys
+  // must use the same spelling as runner.id, or a public client can never find its runner.
+  const antigravityKeys = obj.antigravityKeyAvailableByRunner;
+  if (replaceSource && antigravityKeys && typeof antigravityKeys === 'object' && !Array.isArray(antigravityKeys)) {
+    obj.antigravityKeyAvailableByRunner = Object.fromEntries(
+      Object.entries(antigravityKeys).map(([id, available]) => [encode(id) ?? id, available]),
+    );
+  }
   for (const [field, twinName] of TWIN) {
     if (!(field in obj)) continue;
     const encoded = encode(obj[field]);

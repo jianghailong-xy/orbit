@@ -1,0 +1,23 @@
+{
+  "probe": "print-usage",
+  "agy_version": "1.2.16",
+  "authentication": "copy of owner-authorized token file within private temp root; same account, not second account",
+  "argv": [
+    "<TMP>/bin/agy",
+    "--gemini_dir=<TMP>/runs/print-usage/gemini",
+    "--log-file=/dev/null",
+    "--print=/usage",
+    "--output-format",
+    "stream-json",
+    "--print-timeout=30s"
+  ],
+  "stdin_is_tty": false,
+  "stdout_is_tty": false,
+  "dbus": "nonexistent isolated socket",
+  "useG1Credits": false,
+  "duration_seconds": 3.345,
+  "forced_stop": false,
+  "exit_code": 0,
+  "stdout": "{\"event\":\"command_result\",\"command\":{\"name\":\"usage\",\"data\":{\"description\":\"Within each group, models share a weekly limit and a 5-hour limit. Quota is consumed proportionally to the cost of the tokens. Thus, limits will last longer with shorter tasks or using more cost-effective models. The 5-hour limit smooths out aggregate demand to fairly distribute global capacity across all users, while your weekly limit is tied directly to your individual tier.\",\"groups\":[{\"name\":\"Gemini Models\",\"description\":\"Models within this group: Gemini Flash, Gemini Pro\",\"buckets\":[{\"id\":\"gemini-weekly\",\"name\":\"Weekly Limit Remaining\",\"description\":\"You have used some of your weekly limit, it will fully refresh in 6 days, 23 hours.\",\"window\":\"weekly\",\"remaining_fraction\":0.9999245405197144,\"reset_time\":\"2026-10-10T17:31:03Z\"},{\"id\":\"gemini-5h\",\"name\":\"Five Hour Limit Remaining\",\"description\":\"You have used some of your 5-hour limit, it will fully refresh in 4 hours, 57 minutes.\",\"window\":\"5h\",\"remaining_fraction\":0.9995471239089966,\"reset_time\":\"2026-10-03T22:31:03Z\"}]},{\"name\":\"Claude and GPT models\",\"description\":\"Models within this group: Claude Opus, Claude Sonnet, GPT-OSS\",\"buckets\":[{\"id\":\"3p-weekly\",\"name\":\"Weekly Limit Remaining\",\"window\":\"weekly\",\"remaining_fraction\":1,\"reset_time\":\"2026-10-10T17:33:07Z\"},{\"id\":\"3p-5h\",\"name\":\"Five Hour Limit Remaining\",\"window\":\"5h\",\"remaining_fraction\":1,\"reset_time\":\"2026-10-03T22:33:07Z\"}]}]}}}\n{\"event\":\"result\",\"result\":{\"conversation_id\":\"\",\"status\":\"SUCCESS\",\"response\":\"Gemini Models\\tWeekly Limit Remaining\\t100%\\t2026-10-10T17:31:03Z\\nGemini Models\\tFive Hour Limit Remaining\\t100%\\t2026-10-03T22:31:03Z\\nClaude and GPT models\\tWeekly Limit Remaining\\t100%\\t2026-10-10T17:33:07Z\\nClaude and GPT models\\tFive Hour Limit Remaining\\t100%\\t2026-10-03T22:33:07Z\\n\",\"duration_seconds\":0,\"num_turns\":0,\"usage\":{\"input_tokens\":0,\"output_tokens\":0,\"thinking_tokens\":0,\"cache_read_tokens\":0,\"total_tokens\":0},\"command\":{\"name\":\"usage\",\"data\":{\"description\":\"Within each group, models share a weekly limit and a 5-hour limit. Quota is consumed proportionally to the cost of the tokens. Thus, limits will last longer with shorter tasks or using more cost-effective models. The 5-hour limit smooths out aggregate demand to fairly distribute global capacity across all users, while your weekly limit is tied directly to your individual tier.\",\"groups\":[{\"name\":\"Gemini Models\",\"description\":\"Models within this group: Gemini Flash, Gemini Pro\",\"buckets\":[{\"id\":\"gemini-weekly\",\"name\":\"Weekly Limit Remaining\",\"description\":\"You have used some of your weekly limit, it will fully refresh in 6 days, 23 hours.\",\"window\":\"weekly\",\"remaining_fraction\":0.9999245405197144,\"reset_time\":\"2026-10-10T17:31:03Z\"},{\"id\":\"gemini-5h\",\"name\":\"Five Hour Limit Remaining\",\"description\":\"You have used some of your 5-hour limit, it will fully refresh in 4 hours, 57 minutes.\",\"window\":\"5h\",\"remaining_fraction\":0.9995471239089966,\"reset_time\":\"2026-10-03T22:31:03Z\"}]},{\"name\":\"Claude and GPT models\",\"description\":\"Models within this group: Claude Opus, Claude Sonnet, GPT-OSS\",\"buckets\":[{\"id\":\"3p-weekly\",\"name\":\"Weekly Limit Remaining\",\"window\":\"weekly\",\"remaining_fraction\":1,\"reset_time\":\"2026-10-10T17:33:07Z\"},{\"id\":\"3p-5h\",\"name\":\"Five Hour Limit Remaining\",\"window\":\"5h\",\"remaining_fraction\":1,\"reset_time\":\"2026-10-03T22:33:07Z\"}]}]}}}}\n",
+  "stderr": ""
+}

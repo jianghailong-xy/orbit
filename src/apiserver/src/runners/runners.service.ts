@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type {
+  InstallEngine,
   LoginEngine,
   RunnerAccountRemoveState,
   RunnerEngineAccount,
@@ -16,6 +17,7 @@ import type {
 } from '@orbit/shared';
 import { generateToken, sha256 } from '../common/crypto.util';
 import { namedRunnerEngines, sanitizeRunnerEngines } from '../common/runner-engines';
+import { antigravityState } from '../common/antigravity-readiness';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { ACTIVE_TURN_STATUSES } from '../common/session-scheduling';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
@@ -178,6 +180,7 @@ export class RunnersService {
       // null (not []) for a runner that has never reported: "we don't know yet" and "nothing is
       // installed" are different answers, and only one of them is ours to make up.
       engines: namedRunnerEngines({ engines, accountNames }),
+      antigravity: antigravityState({ capabilities: r.capabilities, engines }),
       install: installStateOf({
         installStatus,
         installEngine,
@@ -608,11 +611,14 @@ export class RunnersService {
    * One at a time per machine, like the sign-in relay: a second request replaces the first, since
    * a user staring at a stuck row needs a way out that isn't waiting for a timeout.
    */
-  async startInstall(ownerId: string, id: string, engine: LoginEngine): Promise<RunnerInstallState> {
+  async startInstall(ownerId: string, id: string, engine: InstallEngine): Promise<RunnerInstallState> {
     const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
     if (!runner) throw new NotFoundException('runner not found');
     if (runner.status === 'OFFLINE') {
       throw new BadRequestException('Runner is offline — it can only install while connected');
+    }
+    if (engine === 'antigravity' && !antigravityState(runner).supported) {
+      throw new BadRequestException('Antigravity needs Orbit runner 0.1.209 or newer — updates itself when idle');
     }
     const r = await this.prisma.runner.update({
       where: { id },
@@ -805,7 +811,7 @@ export function installStateOf(r: {
 }): RunnerInstallState {
   return {
     status: (r.installStatus as RunnerInstallState['status']) ?? null,
-    engine: r.installStatus ? ((r.installEngine as LoginEngine) ?? null) : null,
+    engine: r.installStatus ? ((r.installEngine as InstallEngine) ?? null) : null,
     command: r.installCommand,
     message: r.installMessage,
     // A row written before updates shared this relay is an install, which is also what a client

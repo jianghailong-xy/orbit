@@ -4987,13 +4987,6 @@ html[data-theme='dark'] .session-tag-chip {
   font-size: 12px;
   line-height: 16px;
 }
-.session-row-menu .session-menu-description {
-  display: block;
-  margin-top: 2px;
-  color: var(--text-3);
-  font-size: 12px;
-  line-height: 1.4;
-}
 .session-status {
   font-size: 12.5px;
 }
@@ -8007,6 +8000,11 @@ button.chat-jump-start:hover {
 .chat-authfix-desc {
   margin: 8px 0 0;
   color: var(--text-2);
+}
+.chat-authfix-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 /* Browser-driven runner sign-in, inside the sign-in card. */
 /* No panel of its own: the card is already the container, and buttons are self-delimiting —
@@ -15644,6 +15642,18 @@ button.chat-jump-start:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.np-label-detail {
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-3);
+}
+.prov-runtime {
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-3);
+}
 /* Each row previews the model it would switch to, so the consequence is visible before the click. */
 .np-row-model {
   margin-left: auto;
@@ -15728,6 +15738,10 @@ button.chat-jump-start:hover {
 /* Account names are often emails, so the list makes room for one beside its quota. */
 .np-list.with-accounts {
   width: 280px;
+}
+.np-list.with-details {
+  width: 360px;
+  max-width: calc(100vw - 32px);
 }
 /* The composer's account pill: which of a pool's accounts this session is spending. */
 .composer-account {

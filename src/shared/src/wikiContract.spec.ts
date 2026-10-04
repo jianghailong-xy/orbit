@@ -955,6 +955,19 @@ describe('wiki contract', () => {
     expect(run.cleanStart.flags).toEqual(expect.arrayContaining(['--bare', '--strict-mcp-config', '--max-turns 120']));
     expect(run.cleanStart.thinking).toMatch(/CLAUDE_CODE_EFFORT_LEVEL=unset and MAX_THINKING_TOKENS=0/u);
     expect(run.cleanStart.auth).toMatch(/apiKeyHelper/u);
+    // The orbit wiki commands are pre-approved by the CLI's path, as the system prompt gives it, and bare, as the
+    // task prompts write them — bare only where `orbit` on the engine's PATH is the runner's own executable
+    // (2026-10-01..03: every bare one was refused, and four runs failed on it).
+    expect(run.cleanStart.flags).toContain("--allowedTools <the orbit MCP tools below and the orbit wiki commands, by the CLI's path and bare (orbitCommand)>");
+    expect(run.cleanStart.orbitCommand).toMatch(/The orbit wiki commands the platform pre-approves for every session, and no other command of the CLI, are pre-approved by the CLI's absolute path/u);
+    expect(run.cleanStart.orbitCommand).toMatch(/and also as the bare `orbit wiki <command>` the task prompts write \(maintenance\.job\.task, plan\.jobs\.task\), when `orbit` on the PATH the engine is handed is the runner's own executable/u);
+    expect(run.cleanStart.orbitCommand).toMatch(/with the executable's directory added at its end when that is what makes `orbit` on it the runner's own/u);
+    expect(run.cleanStart.orbitCommand).toMatch(/the bare form is not pre-approved, so a bare command is refused rather than run on another program/u);
+    expect(run.cleanStart.environment).toMatch(/PATH \(with the CLI's directory added when orbitCommand says so\)/u);
+    for (const command of ['maintain', 'plan draft', 'docs build']) {
+      expect(`${CONTRACT.maintenance.job.task.description} ${CONTRACT.plan.jobs.task.description}`).toContain(`run \`orbit wiki ${command} --space <id>\``);
+    }
+    expect(readFileSync(path.join(ROOT, 'docs/wiki-contract.md'), 'utf8')).toContain('- **`orbit` 写路径或裸命令都放行**（`cleanStart.orbitCommand`）');
     // The one Bash call is the whole run: five hours whether or not the model names a timeout, and every
     // maintenance session's task tells it to name that and not to run a call the tool cut off again (2026-10-03).
     expect(run.bashTimeoutMs).toBe(WIKI_MAINTENANCE_RUN.bashTimeoutMs);

@@ -106,6 +106,7 @@ export function NewSessionProviderHero({
   projectIntent?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const displayedChoices = choices.some((choice) => choice.slug === current.slug) ? choices : [current, ...choices];
   const pinnable = choices.filter((choice) => choice.inPool);
   // Open from the start when the pick already is one of those accounts, so its tick is in view.
   const [pinOpen, setPinOpen] = useState(() => pinnable.some((choice) => choice.slug === current.slug));
@@ -134,7 +135,7 @@ export function NewSessionProviderHero({
         onClick={() => setOpen(false)}
       >
         <ProviderMark choice={choice} size={20} />
-        <span className="np-row-name">{choice.label}</span>
+        <span className="np-row-name">{choice.label}{choice.labelDetail && <small className="np-label-detail">{choice.labelDetail}</small>}</span>
         <span className="np-row-model np-fix">{choice.unavailable}</span>
       </Link>
     ) : (
@@ -148,7 +149,7 @@ export function NewSessionProviderHero({
           }}
         >
           <ProviderMark choice={choice} size={20} />
-          <span className="np-row-name">{choice.label}</span>
+          <span className="np-row-name">{choice.label}{choice.labelDetail && <small className="np-label-detail">{choice.labelDetail}</small>}</span>
           <span className="np-row-model">{choice.modelLabel}</span>
         </button>
         {choice.accounts && automatic?.[choice.slug] !== undefined && automaticRow(choice)}
@@ -224,8 +225,8 @@ export function NewSessionProviderHero({
   // an account pool runs on fold away under it: picking the pool is the usual answer, and one of
   // them on its own is the exception.
   const list = (
-    <div className={`np-list${choices.some((choice) => choice.accounts) ? ' with-accounts' : ''}`}>
-      {choices.filter((choice) => !choice.inPool).map(row)}
+    <div className={`np-list${choices.some((choice) => choice.accounts) ? ' with-accounts' : ''}${displayedChoices.some((choice) => choice.labelDetail) ? ' with-details' : ''}`}>
+      {displayedChoices.filter((choice) => !choice.inPool).map(row)}
       {pinnable.length > 0 && (
         <>
           <button
@@ -263,6 +264,7 @@ export function NewSessionProviderHero({
       <ProviderMark choice={current} size={56} />
       <span className="np-name">
         {current.label}
+        {current.labelDetail && <small className="np-label-detail">{current.labelDetail}</small>}
         {!disabled && <span className="np-chev">▾</span>}
       </span>
     </button>
