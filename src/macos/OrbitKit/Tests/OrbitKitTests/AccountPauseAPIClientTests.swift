@@ -50,7 +50,7 @@ final class AccountPauseAPIClientTests: XCTestCase {
         let request = try XCTUnwrap(seen.request)
         XCTAssertEqual(request.httpMethod, "POST")
         XCTAssertEqual(request.url?.path, "/api/runners/runner/accounts/codex/slot-2/pause")
-        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: request.httpBody!) as? [String: Int])
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Int])
         XCTAssertEqual(body, ["durationMinutes": 120])
     }
 
@@ -65,7 +65,7 @@ final class AccountPauseAPIClientTests: XCTestCase {
         XCTAssertEqual(request.httpMethod, "POST")
         XCTAssertEqual(request.url?.path, "/api/providers/pools/pool/members/login:…AB12/pause")
         XCTAssertTrue(request.url?.absoluteString.contains("%E2%80%A6AB12") == true)
-        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: request.httpBody!) as? [String: Any])
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Any])
         XCTAssertTrue(body["durationMinutes"] is NSNull)
     }
 
@@ -80,6 +80,16 @@ final class AccountPauseAPIClientTests: XCTestCase {
             XCTAssertEqual(APIClient.failureReason(error), "Only the contributor or an admin can pause this account")
         }
     }
+
+    func testStubCapturesAStreamedRequestBody() throws {
+        let body = Data(#"{"durationMinutes":120}"#.utf8)
+        var request = URLRequest(url: URL(string: "https://orbit.test/api/pause")!)
+        request.httpBodyStream = InputStream(data: body)
+        XCTAssertNil(request.httpBody)
+        let seen = PauseSeenRequest()
+        seen.record(request)
+        XCTAssertEqual(try XCTUnwrap(seen.request?.httpBody), body)
+    }
 }
 
 /// The request the stub was handed, read back by the test once the call returned.
@@ -88,8 +98,22 @@ private final class PauseSeenRequest: @unchecked Sendable {
     private var seen: URLRequest?
 
     func record(_ request: URLRequest) {
+        // macOS URLSession moves the body to a stream before handing it to URLProtocol.
+        var captured = request
+        if captured.httpBody == nil, let stream = request.httpBodyStream {
+            stream.open()
+            defer { stream.close() }
+            var body = Data()
+            var buffer = [UInt8](repeating: 0, count: 4096)
+            while stream.hasBytesAvailable {
+                let count = stream.read(&buffer, maxLength: buffer.count)
+                if count <= 0 { break }
+                body.append(contentsOf: buffer[0..<count])
+            }
+            captured.httpBody = body
+        }
         lock.lock()
-        seen = request
+        seen = captured
         lock.unlock()
     }
 

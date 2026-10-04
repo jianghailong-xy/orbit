@@ -17,8 +17,11 @@
 | 三个改动的 SwiftUI 文件 `swift -frontend -parse` | `bgj_62fbb3f12912` | 退出码 0；只证明语法，类型与平台编译须由 client CI 证明 |
 | 浏览器取证 `node docs/evidence/antigravity-google-login/clients/capture.mjs` | `bgj_a0e5a6a68d27` | 退出码 0；16 张截图，检查了浏览器异常与横向溢出 |
 | 原始截图总览 `node docs/evidence/antigravity-google-login/clients/contact-sheets.mjs` | `bgj_54121c744d84` | 退出码 0；两张总览 |
+| `AccountPauseAPIClientTests`（包含 body stream 回归） | `bgj_947cd2fb277e` | 退出码 0；4 用例、0 失败 |
 
 客户端 CI：由协调会话对上述分支 dispatch `.github/workflows/client.yml`，必须确认 macOS 的 `Test OrbitKit`、`Build OrbitApp` 和 iOS 的 `Build for iOS Simulator` 真正运行并通过。最终 CI 链接记入任务的证据信封。
+
+首次 [client CI](https://github.com/jianghailong-xy/orbit/actions/runs/37176072114) 在 `e212ac8625e1efca08a4dc99eab020ccd084dc60` 上：iOS Simulator 真编译通过；macOS OrbitKit 编译通过，但既有 `AccountPauseAPIClientTests.testPausesTheNamedRunnerSlot` 直接解包 nil `httpBody` 崩溃，OrbitApp 编译被跳过。main 上该测试相同：macOS URLSession 将请求体移到 `httpBodyStream`，测试没有读取流。本分支让测试 stub 在收到请求时读取流、保留请求体，再断言 duration 和显式 null；增加流式请求回归测试。这只修复测试取证，不改客户端网络行为。需对修复后的 SHA 重跑 client CI。
 
 ## 原生同源数据证明
 
