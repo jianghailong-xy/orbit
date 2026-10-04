@@ -1,8 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Orbit Android</string>
-    <string name="foundation_title">Android foundation</string>
-    <string name="foundation_description">Application shell</string>
+    <string name="sign_in">Sign in</string>
+    <string name="signed_in">Signed in</string>
+    <string name="sign_out">Sign out</string>
+    <string name="switch_account_instance">Switch account or instance</string>
+    <string name="cancel_sign_in">Cancel sign in</string>
+    <string name="instance_address">Instance address</string>
+    <string name="email">Email</string>
+    <string name="password">Password</string>
+    <string name="session_expired">Your session expired. Sign in again.</string>
+    <string name="auth_address_error">Enter an HTTPS instance address without credentials, query or fragment.</string>
+    <string name="auth_credentials_error">Check your email and password.</string>
+    <string name="auth_network_error">Could not reach the server. Check your connection and try again.</string>
+    <string name="auth_storage_error">Could not access secure storage. Sign in again.</string>
+    <string name="auth_server_error">The server could not complete sign in. Try again.</string>
     <string name="build_information">Build information</string>
     <string name="back">Back</string>
     <string name="package_label">Package</string>

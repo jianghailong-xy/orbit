@@ -55,12 +55,23 @@ function announce(): void {
   for (const listener of [...listeners]) listener();
 }
 
+/** Opening a review form suspends every background card, including when the form has no hotkey. */
+export function refreshCardKeys(): void {
+  announce();
+}
+
+function reviewDialog(): Element | null {
+  return document.querySelector('.review-card-content[data-review-open="true"]');
+}
+
 /** The claim the keys belong to: the asking card drawn highest on the page. */
 function holder(): symbol | null {
+  const dialog = reviewDialog();
   let top: symbol | null = null;
   let topAt: Element | null = null;
   for (const [claim, anchor] of askers) {
     const at = anchor?.current ?? null;
+    if (dialog && (!at || !dialog.contains(at))) continue;
     const above =
       at !== null &&
       (topAt === null || (at.compareDocumentPosition(topAt) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0);
@@ -133,20 +144,26 @@ export function useCardKeyClaim(asking: boolean, anchor?: RefObject<Element | nu
  * `active` is whether this card holds the keys — `useCardKeyClaim`'s answer, which the caller gets
  * once for the card, because a card claiming twice is never the only asker.
  */
-export function useApproveHotkey(active: boolean, onTrigger: () => void, opts?: { requireMod?: boolean }): void {
+export function useApproveHotkey(active: boolean, onTrigger: () => void, opts?: {
+  requireMod?: boolean;
+  anchor?: RefObject<Element | null>;
+}): void {
   const requireMod = opts?.requireMod ?? true;
+  const anchor = opts?.anchor;
   const fn = useRef(onTrigger);
   fn.current = onTrigger;
   useEffect(() => {
     if (!active) return;
     const onKey = (e: KeyboardEvent): void => {
+      const dialog = reviewDialog();
+      if (dialog && (!anchor?.current || !dialog.contains(anchor.current))) return;
       if (!isCardAnswer(e, requireMod)) return;
       e.preventDefault();
       fn.current();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [active, requireMod]);
+  }, [active, requireMod, anchor]);
 }
 
 /**
@@ -165,6 +182,6 @@ export function useDecisionCardKeys({
   anchor?: RefObject<Element | null>;
 }): boolean {
   const owns = useCardKeyClaim(confirmEnabled, anchor);
-  useApproveHotkey(owns, onConfirm, { requireMod: false });
+  useApproveHotkey(owns, onConfirm, { requireMod: false, anchor });
   return owns;
 }
