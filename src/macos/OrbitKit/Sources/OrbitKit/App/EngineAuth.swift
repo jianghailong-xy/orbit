@@ -6,6 +6,7 @@ public enum LoginEngine: String, Codable, Equatable, Sendable, CaseIterable, Ide
     case claude
     case codex
     case kimi
+    case antigravity
 
     public var id: String { rawValue }
 
@@ -16,6 +17,7 @@ public enum LoginEngine: String, Codable, Equatable, Sendable, CaseIterable, Ide
         case .claude: return "Claude Code"
         case .codex:  return "Codex"
         case .kimi:   return "Kimi Code"
+        case .antigravity: return "Antigravity"
         }
     }
 }
@@ -26,6 +28,16 @@ public enum LoginEngine: String, Codable, Equatable, Sendable, CaseIterable, Ide
 /// expired…"), which reads like the agent's own reply and tells the user nothing about what to do.
 /// The transcript turns that text into a remedy card instead — same as web's `AuthErrorCard`.
 public enum EngineAuth {
+    public static let googleTermsURL = URL(string: "https://antigravity.google/terms")!
+    public static let googleTermsWarning = "Google terms restrict personal account sign-in through third-party tools; your account may be suspended."
+
+    public static func antigravityLoginHint(_ login: AntigravityGoogleLogin?) -> String? {
+        switch login {
+        case .available: return nil
+        case .unsupportedPlatform: return "Google sign-in is not supported on macOS runners yet. Use a Gemini API key."
+        default: return "Update this runner to sign in with Google."
+        }
+    }
     /// Whether text carries a sign-in failure — this machine's stored credentials being gone,
     /// expired or rejected. Keys on the runtime's stable `Failed to authenticate` prefix;
     /// heuristic and intentionally narrow. Keep in sync with `isAuthErrorText` in @orbit/shared
@@ -43,7 +55,7 @@ public enum EngineAuth {
         /// can't express (the runner refuses such a request outright — `loginFlowFor` in login.go),
         /// so the card names the command to run on that machine instead of a button that can't work.
         case runCommand(String)
-        /// Antigravity uses a Gemini API key, connected and stored encrypted in Providers.
+        /// A runner that cannot relay Google sign-in can use a Gemini API key in Providers.
         case connectGemini
         /// Any other slug is a control-plane–configured provider, i.e. an API key to fix. These
         /// clients have no Providers screen, so the card says where the key lives rather than
@@ -52,10 +64,10 @@ public enum EngineAuth {
     }
 
     /// Which remedy a session's provider slug earns. Mirrors web's LOCAL_LOGIN / RELAY_LOGIN split.
-    public static func remedy(forProvider provider: String) -> Remedy {
+    public static func remedy(forProvider provider: String, googleLogin: AntigravityGoogleLogin? = nil) -> Remedy {
+        if provider == "antigravity" { return googleLogin == .available ? .signIn(.antigravity) : .connectGemini }
         if let engine = LoginEngine(rawValue: provider) { return .signIn(engine) }
         if provider == "opencode" { return .runCommand("opencode auth login") }
-        if provider == "antigravity" { return .connectGemini }
         return .apiKey(slug: provider)
     }
 
@@ -80,7 +92,7 @@ public enum EngineAuth {
 
     public static func antigravityTitle(_ repair: AntigravityRepair, runnerName: String?) -> String {
         switch repair {
-        case .needsKey: return "Antigravity needs a Gemini API key"
+        case .needsKey: return "Antigravity needs authentication"
         case .updateRunner: return "Waiting for a newer runner"
         case .notInstalled: return "Antigravity CLI isn't installed on \(machineName(runnerName))"
         }
@@ -90,7 +102,7 @@ public enum EngineAuth {
                                        runnerVersion: String?) -> String {
         switch repair {
         case .needsKey:
-            return "Connect Gemini in Providers. Orbit stores the key encrypted, and this conversation can continue on it."
+            return "Sign in with Google on this runner, or connect a Gemini API key in Providers."
         case .updateRunner:
             let version = runnerVersion?.isEmpty == false ? runnerVersion! : "an unknown version"
             return "\(machineName(runnerName)) runs Orbit runner \(version); Antigravity needs 0.1.209 or newer. The runner updates itself when no session is running on it, and this session starts then."

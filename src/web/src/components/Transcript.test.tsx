@@ -1866,8 +1866,8 @@ describe('runtime authentication help', () => {
   it('takes Antigravity to the encrypted Gemini key in Providers', () => {
     const html = card('antigravity');
 
-    expect(html).toContain('Antigravity needs a Gemini API key');
-    expect(html).toContain('Orbit stores the key encrypted');
+    expect(html).toContain('Antigravity needs authentication');
+    expect(html).toContain('Update this runner to sign in with Google.');
     expect(html).not.toContain('GEMINI_API_KEY');
     expect(html).not.toContain('rsi-');
     expect(html).not.toContain('Update the API key');

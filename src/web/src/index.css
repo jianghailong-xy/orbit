@@ -20767,3 +20767,8 @@ a.wkctx-title:hover { text-decoration: underline; }
     grid-template-columns: minmax(96px, 1fr) minmax(0, max-content);
   }
 }
+
+.re-login-note {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
