@@ -10,6 +10,7 @@ import type { Runner } from './TasksSidePanel';
 import {
   CHAT_ABOUT_INTENT,
   CHAT_ABOUT_THIS,
+  CHAT_FACTS_AS_ARMED,
   CHAT_SUBJECT_GONE,
   COORDINATOR_CHAT_PLACEHOLDER,
   EXCEPTION_CHAT_PREFIX,
@@ -37,6 +38,7 @@ vi.mock('../api', async (importOriginal) => {
     getSessionEventPage: vi.fn(),
     listApprovals: vi.fn(),
     sendTurn: vi.fn(),
+    uploadAttachment: vi.fn(),
   };
 });
 vi.mock('../lib/transcriptStore', () => ({
@@ -44,7 +46,7 @@ vi.mock('../lib/transcriptStore', () => ({
   saveTranscript: async () => {},
 }));
 
-const { api, getSessionEventPage, listApprovals, sendTurn } = await import('../api');
+const { api, getSessionEventPage, listApprovals, sendTurn, uploadAttachment } = await import('../api');
 const apiMock = vi.mocked(api);
 const sendTurnMock = vi.mocked(sendTurn);
 const { WorkspaceView } = await import('./WorkspaceView');
@@ -119,7 +121,9 @@ const PROMOTION_ROW: ProjectOpenItemRow = {
   detailLine: 'MERGE_CHECK exited 1 on the combined tree; main did not move',
   taskId: null,
   promotionId: PROMOTION_ID,
-  actions: ['REVIEW'],
+  // What the server lists for an escalated merge failure while there is a coordinator to ask: the
+  // way back to it, and the merge card (§4.7).
+  actions: ['ASK_COORDINATOR_AGAIN', 'REVIEW'],
 };
 
 const BLOCKED: ProjectPromotionView = {
@@ -170,6 +174,9 @@ class FakeEventSource {
 /** Every request the page made, as `METHOD path`. */
 const requested: string[] = [];
 let openItems: { needsYou: ProjectOpenItemRow[]; withCoordinator: ProjectOpenItemRow[]; settled: ProjectOpenItemRow[] };
+let promotion: ProjectPromotionView | null = BLOCKED;
+/** Every element `scrollIntoView` was called on, in order — jsdom has no `scrollIntoView` of its own. */
+let scrolledTo: Element[] = [];
 let search = '';
 let container: HTMLDivElement | null = null;
 let root: Root | null = null;
@@ -198,6 +205,8 @@ beforeEach(() => {
   requested.length = 0;
   search = '';
   openItems = { needsYou: [TASK_ROW, PROMOTION_ROW], withCoordinator: [], settled: [] };
+  promotion = BLOCKED;
+  scrolledTo = [];
   focusManager.setFocused(false);
   vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {} });
   vi.stubGlobal('EventSource', FakeEventSource);
@@ -232,7 +241,7 @@ beforeEach(() => {
       });
     }
     if (path === `/projects/${PROJECT_PUBLIC}/open-items`) return reply(openItems);
-    if (path === `/projects/${PROJECT_PUBLIC}/promotions/current`) return reply(BLOCKED);
+    if (path === `/projects/${PROJECT_PUBLIC}/promotions/current`) return reply(promotion);
     if (path === `/projects/${PROJECT_PUBLIC}/promotions/merged`) return reply([]);
     if (path === `/projects/${PROJECT_PUBLIC}/acceptance/confirmation`) return reply(null);
     if (path === `/projects/${PROJECT_PUBLIC}/acceptance/criteria-decisions/pending`) {
@@ -267,7 +276,12 @@ beforeEach(() => {
   }));
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   Object.defineProperty(HTMLElement.prototype, 'scrollTo', { configurable: true, value: () => {} });
-  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: () => {} });
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+    configurable: true,
+    value(this: Element) {
+      scrolledTo.push(this);
+    },
+  });
 });
 
 afterEach(async () => {
@@ -287,6 +301,8 @@ afterEach(async () => {
     node?.remove();
     delete (HTMLElement.prototype as { scrollTo?: unknown }).scrollTo;
     delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    delete (URL as { createObjectURL?: unknown }).createObjectURL;
+    delete (URL as { revokeObjectURL?: unknown }).revokeObjectURL;
     focusManager.setFocused(undefined);
     vi.unstubAllGlobals();
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
@@ -338,6 +354,49 @@ async function typeAndSend(words: string): Promise<void> {
   });
   await waitForUi(() => {
     expect(sendTurnMock).toHaveBeenCalledTimes(1);
+  });
+}
+
+/** Pastes one screenshot into the composer, as from the clipboard. */
+async function pasteImage(): Promise<void> {
+  const box = mounted().querySelector<HTMLTextAreaElement>('.composer-box textarea')!;
+  const png = new File([new Uint8Array([137, 80, 78, 71])], 'failure.png', { type: 'image/png' });
+  const paste = new Event('paste', { bubbles: true, cancelable: true });
+  Object.defineProperty(paste, 'clipboardData', {
+    value: { items: [{ kind: 'file', getAsFile: () => png }] },
+  });
+  await act(async () => {
+    box.dispatchEvent(paste);
+  });
+}
+
+/** Presses Enter in the composer with nothing typed. */
+async function sendAsIs(): Promise<void> {
+  const box = mounted().querySelector<HTMLTextAreaElement>('.composer-box textarea')!;
+  box.focus();
+  await act(async () => {
+    box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+  });
+}
+
+/** The task card's press, made and armed. */
+async function armOnTheTaskCard(): Promise<void> {
+  await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+  const card = (): Element | null => mounted().querySelector(`[data-open-item="${TASK_ITEM}"]`);
+  await waitForUi(() => {
+    expect(card(), 'the escalated card is not drawn').not.toBeNull();
+  });
+  await act(async () => chatPressOn(card()!).click());
+  await waitForUi(() => {
+    expect(armedBar()).toBe(`${EXCEPTION_CHAT_PREFIX}${TASK_ROW.title}`);
+  });
+}
+
+/** The project's items read again, as its 20-second poll would. */
+async function itemsMove(next: typeof openItems): Promise<void> {
+  openItems = next;
+  await act(async () => {
+    await client!.invalidateQueries({ queryKey: ['project', PROJECT_PUBLIC, 'open-items'] });
   });
 }
 
@@ -406,6 +465,74 @@ describe('Chat about this in the coordinator conversation', { timeout: 60_000 },
   });
 });
 
+describe('what the send carries is read at the send', { timeout: 60_000 }, () => {
+  it('handed back to the coordinator after the press: says where the item stands now', async () => {
+    await armOnTheTaskCard();
+    // "Ask the coordinator again", pressed on the card — or anywhere else — before the sentence goes.
+    await itemsMove({
+      needsYou: [PROMOTION_ROW],
+      withCoordinator: [{
+        ...TASK_ROW,
+        assignee: 'COORDINATOR',
+        assigneeReason: 'DEFAULT',
+        waitingSince: new Date(Date.now() - 60_000).toISOString(),
+        escalateAt: new Date(Date.now() + 2 * 3_600_000).toISOString(),
+        escalatedAt: null,
+        actions: ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK'],
+        chat: { ...CHAT, stage: 'WITH_COORDINATOR' },
+      }],
+      settled: [],
+    });
+    expect(armedBar(), 'the chat stays armed while its item moves').toBe(
+      `${EXCEPTION_CHAT_PREFIX}${TASK_ROW.title}`,
+    );
+
+    await typeAndSend('can you take it from here?');
+    const content = String(sendTurnMock.mock.calls[0]![1]);
+    expect(content).toContain('Where it stands: waiting on the coordinator for');
+    expect(content).not.toContain('the owner’s now');
+    expect(content).not.toContain(CHAT_FACTS_AS_ARMED);
+    expect(content.endsWith('\n\ncan you take it from here?')).toBe(true);
+    expect(doorsPressed()).toEqual([]);
+  });
+
+  it('gone from the reads since the press: goes as the card read then, and says so', async () => {
+    await armOnTheTaskCard();
+    await itemsMove({ needsYou: [PROMOTION_ROW], withCoordinator: [], settled: [] });
+
+    await typeAndSend('what happened to it?');
+    const content = String(sendTurnMock.mock.calls[0]![1]);
+    expect(content.startsWith(`${CHAT_FACTS_AS_ARMED}\n\nAbout the exception in “${PROJECT_TITLE}”:`)).toBe(true);
+    expect(content).toContain('Where it stands: the owner’s now — no one acted on it for 2h');
+    expect(content.endsWith('\n\nwhat happened to it?')).toBe(true);
+  });
+
+  it('an image alone goes too, behind the card’s facts — no door waits on a note', async () => {
+    vi.mocked(uploadAttachment).mockReset();
+    vi.mocked(uploadAttachment).mockResolvedValue({ id: 'att-failure' } as never);
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: () => 'blob:failure' });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: () => {} });
+    await armOnTheTaskCard();
+
+    await pasteImage();
+    await waitForUi(() => {
+      expect(uploadAttachment).toHaveBeenCalledTimes(1);
+    });
+    await act(async () => {});
+    await sendAsIs();
+    await waitForUi(() => {
+      expect(sendTurnMock).toHaveBeenCalledTimes(1);
+    });
+    const [sessionId, content, attachmentIds] = sendTurnMock.mock.calls[0]!;
+    expect(sessionId).toBe(COORDINATOR_PUBLIC);
+    expect(String(content).startsWith(`About the exception in “${PROJECT_TITLE}”:`)).toBe(true);
+    expect(String(content)).toContain(`open item ${TASK_ITEM}`);
+    expect(attachmentIds).toEqual(['att-failure']);
+    expect(armedBar(), 'the bar stayed armed after the send').toBeNull();
+    expect(doorsPressed().filter((request) => !request.includes('/attachments'))).toEqual([]);
+  });
+});
+
 describe('arriving from a Chat about this pressed elsewhere', { timeout: 60_000 }, () => {
   it('an item: the composer arrives armed for it, and the intent goes', async () => {
     await mount(`/sessions/${COORDINATOR_PUBLIC}?intent=${CHAT_ABOUT_INTENT}&item=${TASK_ITEM}`);
@@ -426,6 +553,56 @@ describe('arriving from a Chat about this pressed elsewhere', { timeout: 60_000 
     await waitForUi(() => {
       expect(search).toBe('');
     });
+  });
+
+  it('brings the card it is about into view once the transcript under it has landed', async () => {
+    await mount(`/sessions/${COORDINATOR_PUBLIC}?intent=${CHAT_ABOUT_INTENT}&item=${TASK_ITEM}`);
+    await waitForUi(() => {
+      expect(armedBar()).toBe(`${EXCEPTION_CHAT_PREFIX}${TASK_ROW.title}`);
+    });
+    await waitForUi(() => {
+      expect(scrolledTo.map((element) => element.getAttribute('data-open-item'))).toContain(TASK_ITEM);
+    });
+  });
+
+  it('brings the blocked merge card into view, for a press made on it elsewhere', async () => {
+    await mount(`/sessions/${COORDINATOR_PUBLIC}?intent=${CHAT_ABOUT_INTENT}&promotion=${PROMOTION_ID}`);
+    await waitForUi(() => {
+      expect(scrolledTo.map((element) => element.id)).toContain(`promotion-${PROMOTION_ID}`);
+    });
+  });
+
+  it('a merge no longer blocked: nothing is armed about why it could not happen, and it says so', async () => {
+    // The coordinator's re-check passed between the press and the arrival: the same candidate now
+    // asks to be merged, with its approval item beside it.
+    promotion = {
+      ...BLOCKED,
+      state: 'READY',
+      checks: BLOCKED.checks.map((check) => ({ ...check, exitCode: 0, outputTail: '' })),
+      askedAt: '2026-09-11T03:05:00.000Z',
+      decidedAt: null,
+    };
+    openItems = {
+      needsYou: [TASK_ROW, {
+        ...PROMOTION_ROW,
+        kind: 'PROMOTION_APPROVAL',
+        title: 'Merge 2 tasks into main?',
+        detailLine: '',
+        assigneeReason: 'DEFAULT',
+        escalatedAt: null,
+        actions: ['REVIEW'],
+      }],
+      withCoordinator: [],
+      settled: [],
+    };
+    await mount(`/sessions/${COORDINATOR_PUBLIC}?intent=${CHAT_ABOUT_INTENT}&promotion=${PROMOTION_ID}`);
+    await waitForUi(() => {
+      expect(search).toBe('');
+    });
+    await waitForUi(() => {
+      expect(document.body.textContent).toContain(CHAT_SUBJECT_GONE);
+    });
+    expect(armedBar()).toBeNull();
   });
 
   it('something that has moved on since: nothing is armed, and it says so', async () => {

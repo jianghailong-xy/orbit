@@ -293,11 +293,15 @@ import {
   promotionRecordMoment,
 } from './ProjectPromotionCard';
 import {
+  CHAT_FACTS_AS_ARMED,
   CHAT_SUBJECT_GONE,
   COORDINATOR_CHAT_PLACEHOLDER,
+  chatAboutOf,
   chatIntentOf,
+  chatSubjectIn,
   coordinatorChatPath,
   itemChat,
+  type ChatAbout,
   type CoordinatorChatSubject,
 } from '../lib/coordinatorChat';
 import { criteriaDecisionReceiptRows, decisionReceiptAnchor } from '../lib/decisionReceipt';
@@ -1825,7 +1829,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       // this one (`evidenceDecidingSession`) — a dispatched task's card drawn in its run.
       | { kind: 'evidenceDecision'; taskId: string; evidenceRevision: string; decidingSessionId: string | null }
       | { kind: 'planChange'; projectId: string; criteriaDigest: string }
-      | { kind: 'coordinatorChat'; projectId: string; about: string };
+      | { kind: 'coordinatorChat'; projectId: string; about: ChatAbout };
     /** What the reply bar says it is about to answer, whole — built by whoever armed it. */
     banner: string;
     /** What the empty composer asks for while this is armed. */
@@ -4675,47 +4679,35 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // presses no door: the coordinator reads it and acts with the doors it has, and the card's own
   // presses stay where they were.
   const chatProjectTitle = selectedSession?.projectTitle ?? null;
+  // The card's facts as they read at `now`: at the press, for the bar, and again at the send.
+  const coordinatorChatContext = useCallback(
+    (subject: CoordinatorChatSubject, projectId: string, now: number): string =>
+      subject.kind === 'item'
+        ? openItemChatContext({ projectTitle: chatProjectTitle, projectId, row: subject.row, now })
+        : promotionChatContext({
+            projectTitle: chatProjectTitle,
+            projectId,
+            promotion: subject.promotion,
+            item: subject.item,
+            now,
+          }),
+    [chatProjectTitle],
+  );
   const startCoordinatorChat = useCallback(
     (subject: CoordinatorChatSubject) => {
       if (!coordinatedProjectId) return;
-      const now = Date.now();
-      setReplyTo(
-        subject.kind === 'item'
-          ? {
-              target: {
-                kind: 'coordinatorChat',
-                projectId: coordinatedProjectId,
-                about: `item:${subject.row.itemId}`,
-              },
-              banner: openItemChatBanner(subject.row),
-              placeholder: COORDINATOR_CHAT_PLACEHOLDER,
-              context: openItemChatContext({
-                projectTitle: chatProjectTitle,
-                projectId: coordinatedProjectId,
-                row: subject.row,
-                now,
-              }),
-            }
-          : {
-              target: {
-                kind: 'coordinatorChat',
-                projectId: coordinatedProjectId,
-                about: `promotion:${subject.promotion.promotionId}`,
-              },
-              banner: promotionChatBanner(subject.promotion),
-              placeholder: COORDINATOR_CHAT_PLACEHOLDER,
-              context: promotionChatContext({
-                projectTitle: chatProjectTitle,
-                projectId: coordinatedProjectId,
-                promotion: subject.promotion,
-                item: subject.item,
-                now,
-              }),
-            },
-      );
+      setReplyTo({
+        target: { kind: 'coordinatorChat', projectId: coordinatedProjectId, about: chatAboutOf(subject) },
+        banner:
+          subject.kind === 'item'
+            ? openItemChatBanner(subject.row)
+            : promotionChatBanner(subject.promotion),
+        placeholder: COORDINATOR_CHAT_PLACEHOLDER,
+        context: coordinatorChatContext(subject, coordinatedProjectId, Date.now()),
+      });
       setTimeout(() => taRef.current?.focus(), 0);
     },
-    [chatProjectTitle, coordinatedProjectId],
+    [coordinatedProjectId, coordinatorChatContext],
   );
   // The press itself, as the cards drawn in this conversation make it: armed here when this IS the
   // project's coordinator conversation — the one the read names for the item — and otherwise taken
@@ -4871,32 +4863,27 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // the item or the candidate, `coordinatorChatPath`): once this conversation has read what the
   // chat is about, its composer is armed exactly as the card's own press would arm it, the card is
   // brought into view, and the intent goes, so a refresh does not arm it again. A subject that has
-  // left the read since the press is said rather than armed about.
+  // left the read since the press — or a candidate no longer blocked — is said rather than armed
+  // about (`chatSubjectIn`).
   const chatIntent = selectedId ? chatIntentOf(searchParams) : null;
   const chatIntentItem = chatIntent && 'itemId' in chatIntent ? chatIntent.itemId : null;
   const chatIntentPromotion = chatIntent && 'promotionId' in chatIntent ? chatIntent.promotionId : null;
+  // Where an arrival's chat is about, until its card is on screen to be brought into view: the cards
+  // are drawn at moments of the transcript (`exceptionCardRows`), which lands after the reads do.
+  const [chatReveal, setChatReveal] = useState<{ sessionId: string; about: ChatAbout } | null>(
+    null,
+  );
   useEffect(() => {
     if (!chatIntentItem && !chatIntentPromotion) return;
     const read = openItems.data;
     if (!read) return;
-    let subject: CoordinatorChatSubject | null = null;
-    if (chatIntentItem) {
-      const wanted = routeId(chatIntentItem);
-      const row = [...read.needsYou, ...read.withCoordinator, ...(read.settled ?? [])].find(
-        (candidate) => routeId(candidate.itemId) === wanted,
-      );
-      if (row) subject = { kind: 'item', row };
-    } else {
-      // `undefined` is a read on its way; `null` is a project with no candidate on offer.
-      if (currentPromotion.data === undefined) return;
-      const promotion = currentPromotion.data;
-      if (promotion && routeId(promotion.promotionId) === routeId(chatIntentPromotion)) {
-        const item = [...read.needsYou, ...read.withCoordinator].find(
-          (row) => row.promotionId === promotion.promotionId,
-        );
-        subject = { kind: 'promotion', promotion, item: item ?? null };
-      }
-    }
+    // `undefined` is a read on its way; `null` is a project with no candidate on offer.
+    if (chatIntentPromotion && currentPromotion.data === undefined) return;
+    const subject = chatSubjectIn(
+      chatIntentItem ? { itemId: chatIntentItem } : { promotionId: chatIntentPromotion! },
+      read,
+      currentPromotion.data,
+    );
     setSearchParams(
       (current) => {
         const next = new URLSearchParams(current);
@@ -4912,21 +4899,34 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       return;
     }
     startCoordinatorChat(subject);
-    if (subject.kind === 'item') revealOpenItemCard(subject.row.itemId);
-    else {
-      document
-        .getElementById(`promotion-${subject.promotion.promotionId}`)
-        ?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
-    }
+    if (selectedId) setChatReveal({ sessionId: selectedId, about: chatAboutOf(subject) });
   }, [
     chatIntentItem,
     chatIntentPromotion,
     currentPromotion.data,
     message,
     openItems.data,
+    selectedId,
     setSearchParams,
     startCoordinatorChat,
   ]);
+  // The arrival's card, once it is drawn and the transcript under it has landed. The card sits above
+  // the newest message, and a transcript still pinned to its tail follows every row that lands —
+  // which carried the reader straight back down past it — so the pin is let go first, as a reader
+  // scrolling up to it would.
+  useEffect(() => {
+    if (!chatReveal || chatReveal.sessionId !== selectedId || seeding) return;
+    const { about } = chatReveal;
+    const card = 'itemId' in about
+      ? document.querySelector<HTMLElement>(`[data-open-item="${about.itemId}"]`)
+      : document.getElementById(`promotion-${about.promotionId}`);
+    if (!card) return;
+    atBottomRef.current = false;
+    setAtBottom(false);
+    if ('itemId' in about) revealOpenItemCard(about.itemId);
+    else card.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+    setChatReveal(null);
+  }, [chatReveal, currentPromotion.data, openItems.data, seeding, selectedId, transcriptEvents]);
   // The start card's "View tasks": the tasks this conversation filed are the strip above the
   // composer, so it is opened there rather than navigating away from the card being read. The same
   // read the strip is drawn from says whether there is one; without it the card links to the
@@ -6426,18 +6426,27 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       }
       // Chatting about an exception or a blocked merge (`lib/coordinatorChat`) is the same kind of
       // ordinary turn — to the coordinator, with the card's facts in front of the sentence — and
-      // reaches no door either: a rerun, a merge or a close stays the press it was on the card.
+      // reaches no door either: a rerun, a merge or a close stays the press it was on the card. No
+      // door waits on a note, so an image alone goes too. The facts go as they stand at the send,
+      // not at the press — the item may have been handed back, rerun or handled while the sentence
+      // was typed (§4.7) — and a subject that has left the reads since goes as it read then, saying so.
       if (replyTo.target.kind === 'coordinatorChat') {
-        if (!c) return;
+        if (!c && readyImages.length === 0) return;
+        const { projectId, about } = replyTo.target;
+        const live = chatSubjectIn(about, openItems.data, currentPromotion.data);
+        const carried = live
+          ? coordinatorChatContext(live, projectId, Date.now())
+          : replyTo.context
+            ? `${CHAT_FACTS_AS_ARMED}\n\n${replyTo.context}`
+            : undefined;
         pinToBottom();
-        const carried = replyTo.context;
         setReplyTo(null);
         setText('');
         setComposerRefs({});
         setHistIdx(-1);
-        const typed = materializeReferences(c, composerRefs);
+        const typed = c ? materializeReferences(c, composerRefs) : '';
         send.mutate({
-          content: carried ? `${carried}\n\n${typed}` : typed,
+          content: [carried, typed].filter(Boolean).join('\n\n'),
           images: readyImages,
           intent,
         });

@@ -117,6 +117,9 @@ function escalated(chat?: Partial<OpenItemChat>): ProjectOpenItemRow {
       // An owner's item is delivered to nobody: the card cannot lean on a delivery to find the
       // coordinator, which is exactly how it came to have no way in at all.
       delivery: { state: 'NOT_REQUIRED', sessionId: null, at: null },
+      // The server's presses for it while there is a coordinator to ask (§4.7): the way back to it,
+      // drawn on the item's own card, and the merge card.
+      actions: ['ASK_COORDINATOR_AGAIN', 'REVIEW'],
     },
     { stage: 'WITH_OWNER', ...chat },
   );
@@ -206,6 +209,24 @@ describe('state D is never a grey press alone', () => {
     });
     expect(pressIn(html, CHAT_ABOUT_THIS)?.disabled).toBe(true);
     expect(html).toContain(CHAT_REFUSAL_LABEL.COORDINATOR_UNAVAILABLE);
+  });
+
+  it('gives the reason a line of its own under the presses, rather than squeezing them', () => {
+    // The row does not wrap for the presses; a refused chat's reason is the one thing that takes a
+    // line of its own (`has-chat-refusal`), in the conversation as on the project page.
+    for (const onChat of [undefined, () => undefined]) {
+      const doc = new DOMParser().parseFromString(
+        card(blocked(), { item: escalated({ refusal: 'COORDINATOR_UNAVAILABLE' }), onChat }),
+        'text/html',
+      );
+      const row = doc.querySelector('.project-promotion-actions');
+      expect(row?.classList.contains('has-chat-refusal')).toBe(true);
+      expect(row?.querySelector('.project-promotion-chat-refusal')?.textContent)
+        .toBe(CHAT_REFUSAL_LABEL.COORDINATOR_UNAVAILABLE);
+    }
+    const live = new DOMParser().parseFromString(card(blocked(), { item: escalated() }), 'text/html');
+    expect(live.querySelector('.project-promotion-actions')?.classList.contains('has-chat-refusal'))
+      .toBe(false);
   });
 
   it('with no item filed yet, takes the project’s own coordinator conversation — or says there is none', () => {

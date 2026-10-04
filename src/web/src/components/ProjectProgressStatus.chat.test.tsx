@@ -161,9 +161,11 @@ const HANDLING_PROMOTION: ProjectOpenItemRow = {
   chat: chat({ stage: 'HANDLING' }),
 };
 
-/** Promotion-scoped, the owner's: what the merge card reads as "It is yours · waiting". */
+/** Promotion-scoped, the owner's: what the merge card reads as "It is yours · waiting". While there
+ *  is a coordinator to ask, the server gives it the way back to it beside the merge card (§4.7). */
 const ESCALATED_PROMOTION: ProjectOpenItemRow = {
   ...PROMOTION,
+  actions: ['ASK_COORDINATOR_AGAIN', 'REVIEW'],
   assignee: 'OWNER',
   assigneeReason: 'ESCALATED',
   waitingSince: at(3 * HOUR),
@@ -303,8 +305,9 @@ describe('every exception card carries the conversation about it', () => {
       'Mark as handled',
     ]);
     expect(doors(LANDING)).toEqual(['Open task session', 'Retry', 'Open coordinator', 'Cancel task']);
-    // The candidate's item is the merge card's way in and nothing more — no retry, no merge, here.
-    expect(doors(ESCALATED_PROMOTION)).toEqual(['Review', 'Mark as handled']);
+    // The candidate's item is the way back to the coordinator and the merge card's way in — no
+    // retry, no merge, here, and the chat beside them rather than among them.
+    expect(doors(ESCALATED_PROMOTION)).toEqual(['Ask the coordinator again', 'Review', 'Mark as handled']);
     for (const row of Object.values(LIVE)) {
       expect(doors(row)).not.toContain(CHAT_ABOUT_THIS);
     }

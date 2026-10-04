@@ -3,9 +3,10 @@ import type {
   OpenItemChatRefusal,
   OpenItemStage,
   ProjectOpenItemRow,
+  ProjectOpenItemsView,
   ProjectPromotionView,
 } from '@orbit/shared';
-import { encodeId } from './idCodec';
+import { encodeId, routeId } from './idCodec';
 
 /**
  * "Chat about this" on the cards that say what a project owes somebody — an exception item, the
@@ -90,13 +91,62 @@ export function coordinatorChatPath(sessionId: string, subject: CoordinatorChatS
 export const CHAT_SUBJECT_GONE =
   'What you chose to chat about has moved on since — nothing was carried into the composer.';
 
+/** Said ahead of the facts a send carries when its subject has left the reads since the chat was
+ *  armed: what the card said then, marked as such rather than passed off as where it stands now. */
+export const CHAT_FACTS_AS_ARMED = 'As the card read when this chat began — it has moved on since:';
+
+/** What a chat is about, as ids: what a `coordinatorChatPath` carries, and what an armed composer
+ *  keeps so its send can read the subject again. */
+export type ChatAbout = { itemId: string } | { promotionId: string };
+
 /** The subject a `coordinatorChatPath` names, as ids — or null for any other URL. */
-export function chatIntentOf(
-  params: URLSearchParams,
-): { itemId: string } | { promotionId: string } | null {
+export function chatIntentOf(params: URLSearchParams): ChatAbout | null {
   if (params.get('intent') !== CHAT_ABOUT_INTENT) return null;
   const itemId = params.get('item');
   if (itemId) return { itemId };
   const promotionId = params.get('promotion');
   return promotionId ? { promotionId } : null;
+}
+
+/** The ids of what a chat is about. */
+export function chatAboutOf(subject: CoordinatorChatSubject): ChatAbout {
+  return subject.kind === 'item'
+    ? { itemId: subject.row.itemId }
+    : { promotionId: subject.promotion.promotionId };
+}
+
+/** The kinds an item holding a blocked merge is filed as (§4.2). A merge approval names the same
+ *  candidate, but it is the question a READY one asks — not what is holding it. */
+const BLOCKED_MERGE_ITEM_KINDS: ReadonlySet<string> = new Set([
+  'INTEGRATION_CONFLICT',
+  'INTEGRATION_CHECK_FAILED',
+  'INTEGRATION_ERROR',
+]);
+
+/**
+ * What a chat is about, as the reads in front of the conversation have it now: the item, wherever
+ * the list holds it, or the candidate while it is still the blocked one, with the item holding it.
+ * Null when the subject has left the reads or the candidate is no longer blocked — a chat is not
+ * armed, and its facts are not re-read, about something that is no longer what the press was about.
+ * Ids are compared however either side spells them (`routeId`).
+ */
+export function chatSubjectIn(
+  about: ChatAbout,
+  items: ProjectOpenItemsView | undefined,
+  promotion: ProjectPromotionView | null | undefined,
+): CoordinatorChatSubject | null {
+  if (!items) return null;
+  const sameId = (a: string, b: string): boolean => routeId(a) === routeId(b);
+  if ('itemId' in about) {
+    const row = [...items.needsYou, ...items.withCoordinator, ...(items.settled ?? [])].find(
+      (candidate) => sameId(candidate.itemId, about.itemId),
+    );
+    return row ? { kind: 'item', row } : null;
+  }
+  if (!promotion || promotion.state !== 'BLOCKED') return null;
+  if (!sameId(promotion.promotionId, about.promotionId)) return null;
+  const item = [...items.needsYou, ...items.withCoordinator].find(
+    (row) => row.promotionId === promotion.promotionId && BLOCKED_MERGE_ITEM_KINDS.has(row.kind),
+  );
+  return { kind: 'promotion', promotion, item: item ?? null };
 }

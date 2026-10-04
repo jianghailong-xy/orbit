@@ -677,7 +677,11 @@ export function ProjectPromotionCard({
       ) : null}
       {/* A receipt asks for nothing, so it has no action row at all. */}
       {merged ? null : (
-        <CardActions className="approval-actions project-promotion-actions">
+        <CardActions
+          className={`approval-actions project-promotion-actions${
+            blocked && chatRefusal != null ? ' has-chat-refusal' : ''
+          }`}
+        >
           <CardActionButton
             tone="primary"
             // The one rule `CardAction` exists for: a press that the door would refuse — a merge
