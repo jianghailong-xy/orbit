@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { Injectable, Logger } from '@nestjs/common';
+import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { EventEmitter } from 'events';
 import {
@@ -27,7 +27,7 @@ import {
 } from '../providers/shared-pool';
 import { PoolNotices } from '../providers/pool-notice';
 import { CLAUDE_ACCOUNT_MOVE_V1, CODEX_ACCOUNT_MOVE_V1 } from '../providers/account-move-capability';
-import { accountBeforeDispatch, accountSwitchNotice } from '../providers/plan-usage-accounts';
+import { accountBeforeDispatch, accountSwitchNotice, sessionAccountPausedUntil } from '../providers/plan-usage-accounts';
 import {
   choosePoolMember,
   poolFallbackNotice,
@@ -139,6 +139,54 @@ export class QueueService {
     }
   }
 
+  /** Evaluate pauses before the short global claim lock. The inbox rechecks after claim,
+   * so a concurrent pause cannot leak a new turn; paused rows never occupy runner capacity. */
+  private async pausedPendingSessions(runnerId: string): Promise<string[]> {
+    const now = new Date();
+    const pending = await this.prisma.session.findMany({
+      where: {
+        assignedRunnerId: runnerId, status: 'PENDING', cancelRequestedAt: null,
+        OR: [{ providerBuiltin: false }, { assignedRunner: { accountPauses: { not: Prisma.DbNull } } }],
+      },
+      select: {
+        id: true, ownerId: true, provider: true, providerBuiltin: true, error: true,
+        codexAccount: true, codexAccountPinned: true, claudeAccount: true, claudeAccountPinned: true,
+        workspace: { select: { env: true, codexAccount: true, claudeAccount: true } },
+        assignedRunner: { select: { engines: true, accountPauses: true, planUsage: true, capabilities: true } },
+      },
+    });
+    const blocked: string[] = [];
+    const poolPauses = new Map<string, Date | null>();
+    for (const session of pending) {
+      const runner = session.assignedRunner;
+      let until = runner ? sessionAccountPausedUntil(session, session.workspace, runner, now) : null;
+      const engine = session.provider;
+      if (until && runner && (engine === 'codex' || engine === 'claude')) {
+        const canMove = runner.capabilities.includes(engine === 'codex' ? CODEX_ACCOUNT_MOVE_V1 : CLAUDE_ACCOUNT_MOVE_V1);
+        const move = canMove && accountBeforeDispatch(engine, {
+          account: engine === 'codex' ? session.codexAccount : session.claudeAccount,
+          pinned: engine === 'codex' ? session.codexAccountPinned : session.claudeAccountPinned,
+        }, session.workspace, runner.engines, runner.planUsage, now, runner.accountPauses);
+        if (move) until = null;
+      }
+      if (!isBuiltinProvider(engine, session.providerBuiltin) && engine) {
+        const key = `${session.ownerId}:${engine}`;
+        if (!poolPauses.has(key)) poolPauses.set(key, await this.accountPoolPausedUntil(session.ownerId, engine, now));
+        until = poolPauses.get(key) ?? null;
+      }
+      if (!until) continue;
+      blocked.push(session.id);
+      const error = `Account paused until ${until.toISOString()}`;
+      if (session.error !== error) {
+        const updated = await this.prisma.session.updateMany({
+          where: { id: session.id, status: 'PENDING' }, data: { error },
+        });
+        if (updated.count) this.realtime.publishSessionUpdated(session.id);
+      }
+    }
+    return blocked;
+  }
+
   private async trySessionClaim(
     runner: { id: string; supportedProviders?: readonly AgentProvider[] },
     supportsTerminalHandoff: boolean,
@@ -148,6 +196,7 @@ export class QueueService {
   ): Promise<ClaimedSession | null> {
     const supportsOpenCode = runner.supportedProviders?.includes(AgentProvider.OPENCODE) ?? false;
     const supportsAntigravity = runner.supportedProviders?.includes(AgentProvider.ANTIGRAVITY) ?? false;
+    const paused = await this.pausedPendingSessions(runner.id);
     // Atomically claim one PENDING session assigned to this runner. The runner id
     // must be cast to ::uuid: Prisma binds template params as text, and Postgres
     // has no `uuid = text` operator (claim silently fails otherwise — 42883).
@@ -195,7 +244,7 @@ export class QueueService {
               ${OPENCODE_RUNNER_UPGRADE_ERROR},
               ${ANTIGRAVITY_RUNNER_UPGRADE_ERROR},
               ${SOURCE_PROTOCOL_UNSUPPORTED_ERROR}
-            ) THEN NULL
+            ) OR error LIKE 'Account paused until %' THEN NULL
             ELSE error
           END,
           "started_at" = COALESCE("started_at", now()),
@@ -219,6 +268,7 @@ export class QueueService {
         WHERE id = (
           SELECT s.id FROM "session" s
           WHERE s.status = 'PENDING'
+            AND NOT (s.id = ANY(${paused}::uuid[]))
             AND s."cancel_requested_at" IS NULL
             AND s."assigned_runner_id" = ${runnerId}
             -- Legacy runners treat an unknown provider as Claude. Require a positive OpenCode
@@ -337,7 +387,18 @@ export class QueueService {
       // before hydration: buildSession can fail after the claim committed, and in that case there
       // is still a durable state change every connected client must reconcile.
       this.realtime.publishSessionUpdated(rows[0].id);
-      return this.buildSession(rows[0].id);
+      try {
+        return await this.buildSession(rows[0].id);
+      } catch (error: any) {
+        const refusal = error?.getResponse?.();
+        if (refusal?.code !== 'POOL_ACCOUNT_PAUSED') throw error;
+        await this.prisma.session.updateMany({
+          where: { id: rows[0].id, status: 'RUNNING' },
+          data: { status: 'PENDING', error: `Account paused until ${refusal.pausedUntil}` },
+        });
+        this.realtime.publishSessionUpdated(rows[0].id);
+        return null;
+      }
     } catch (err: any) {
       // pg error 55P03 = lock_not_available: FOR UPDATE NOWAIT cannot lock the
       // candidate row because a concurrent transaction (e.g. activateLeases in a
@@ -378,7 +439,7 @@ export class QueueService {
     claudeAccount: string | null;
     claudeAccountPinned: boolean;
     workspace: { env: unknown; codexAccount: string | null; claudeAccount: string | null } | null;
-    assignedRunner: { engines: unknown; accountNames: unknown; planUsage: unknown; capabilities: string[] } | null;
+    assignedRunner: { engines: unknown; accountNames: unknown; accountPauses?: unknown; planUsage: unknown; capabilities: string[] } | null;
   }): Promise<{ codexAccount: string | null | undefined; claudeAccount: string | null | undefined }> {
     const workspace = session.workspace;
     const accounts = {
@@ -401,6 +462,7 @@ export class QueueService {
       runner.engines,
       runner.planUsage,
       new Date(),
+      runner.accountPauses,
     );
     if (!move) return accounts;
     const { count } = await this.prisma.session.updateMany({
@@ -415,6 +477,9 @@ export class QueueService {
       where: { id: session.id, poolSwitchNotice: null },
       data: { poolSwitchNotice: accountSwitchNotice(engine, move, runner) },
     });
+    // A resident engine still holds the previous account's environment. Reload before
+    // the next message so a pause cannot be bypassed by reusing that warm process.
+    if (move.paused) await new PoolNotices(this.prisma, this.realtime).carrier(session.id, engine);
     return codex ? { ...accounts, codexAccount: move.to } : { ...accounts, claudeAccount: move.to };
   }
 
@@ -435,6 +500,7 @@ export class QueueService {
             engines: true,
             // What naming the account it moves to reads (accountSwitchNotice).
             accountNames: true,
+            accountPauses: true,
             // What moving it off a spent account before this start reads (accountsForClaim).
             planUsage: true,
             capabilities: true,
@@ -547,7 +613,7 @@ export class QueueService {
         (maintenance
           ? null
           : ((await this.resolveLoginPool(this.prisma, session, declared!, true)) ??
-            (await this.resolvePoolMember(this.prisma, session, declared!)) ??
+            (await this.resolvePoolMember(this.prisma, session, declared!, true)) ??
             (await this.resolveSharedPool(this.prisma, session, declared!, true)))));
     const resolveExec = (sessionModel: string | null) =>
       resolveProviderExec({
@@ -736,6 +802,62 @@ export class QueueService {
       },
       source,
     }, maintenance);
+  }
+
+  /** Manual pauses wait at dispatch, before a credential or runner default can be consumed. */
+  async accountPoolPausedUntil(
+    ownerId: string, slug: string, now: Date, db: Prisma.TransactionClient | PrismaService = this.prisma,
+  ): Promise<Date | null> {
+    if (isBuiltinProvider(slug)) return null;
+    const own = await this.accountPool(ownerId, slug, db);
+    if (own && own.engine !== AgentProvider.CODEX) {
+      const paused = own.candidates.filter((candidate) => candidate.pausedUntil && candidate.pausedUntil > now);
+      if (!paused.length) return null;
+      const selection = selectPoolMember(own.candidates, null, now);
+      if (selection.kind === 'SELECTED') return null;
+      return selection.kind === 'EXHAUSTED' && selection.resetsAt
+        ? selection.resetsAt
+        : new Date(Math.min(...paused.map((candidate) => candidate.pausedUntil!.getTime())));
+    }
+    const pool = own ?? await this.sharedPoolOf(db, ownerId, slug);
+    if (!pool) return null;
+    const keys = await sharedPoolKeyCandidates(db, pool.id, now);
+    const pauses = [...pool.logins, ...keys].flatMap((row) => row.pausedUntil && row.pausedUntil > now ? [row.pausedUntil.getTime()] : []);
+    if (!pauses.length || pool.logins.some((login) => loginCanRun(login, now)) || keys.some((key) => keyCanRun(key, ownerId, now))) return null;
+    return earliest(loginPoolResumesAt(pool.logins, now), poolKeysResumeAt(keys, ownerId, now)) ?? new Date(Math.min(...pauses));
+  }
+
+  /** The selected member may have been paused after the claim; inbox requeues before the next turn. */
+  async pausedPoolMemberUntil(
+    ownerId: string,
+    slug: string,
+    session: { poolMemberProviderId: string | null; poolCodexAccountId: string | null; poolKeyId: string | null },
+    now: Date,
+    db: Prisma.TransactionClient | PrismaService = this.prisma,
+  ): Promise<Date | null> {
+    if (isBuiltinProvider(slug)) return null;
+    const pool = await db.providerPool.findFirst({
+      where: { slug, OR: [{ ownerId, shared: false }, { engine: AgentProvider.CODEX, people: { some: { userId: ownerId } } }] },
+      select: { id: true, engine: true },
+    });
+    if (!pool) return null;
+    // The inbox calls inside its session transaction. Holding this membership through delivery makes
+    // pause and delivery ordered: either this turn was delivered before pause, or it sees the pause.
+    const rows = pool.engine !== AgentProvider.CODEX && session.poolMemberProviderId
+      ? await db.$queryRaw<Array<{ pausedUntil: Date | null }>>`
+          SELECT "paused_until" AS "pausedUntil" FROM "provider_pool_member"
+          WHERE "pool_id" = ${pool.id}::uuid AND "provider_id" = ${session.poolMemberProviderId}::uuid FOR SHARE`
+      : session.poolCodexAccountId
+        ? await db.$queryRaw<Array<{ pausedUntil: Date | null }>>`
+            SELECT "paused_until" AS "pausedUntil" FROM "pool_codex_login"
+            WHERE "pool_id" = ${pool.id}::uuid AND "account_id" = ${session.poolCodexAccountId} FOR SHARE`
+        : session.poolKeyId
+          ? await db.$queryRaw<Array<{ pausedUntil: Date | null }>>`
+              SELECT "paused_until" AS "pausedUntil" FROM "pool_api_key"
+              WHERE "pool_id" = ${pool.id}::uuid AND "id" = ${session.poolKeyId}::uuid FOR SHARE`
+          : [];
+    const pausedUntil = rows[0]?.pausedUntil;
+    return pausedUntil && pausedUntil > now ? pausedUntil : null;
   }
 
   /**
@@ -946,12 +1068,12 @@ export class QueueService {
         members: {
           where: { ownerId },
           orderBy: { provider: { slug: 'asc' } },
-          select: { provider: true },
+          select: { provider: true, pausedUntil: true },
         },
       },
     });
     if (!pool) return null;
-    const rows = pool.members.map((member) => member.provider);
+    const rows = pool.members.map((member) => ({ ...member.provider, pausedUntil: member.pausedUntil }));
     // A member no claim may choose is no candidate, and nobody asks after its quota.
     const candidates = rows
       .filter(isPoolCandidate)
@@ -959,6 +1081,7 @@ export class QueueService {
         const standing = this.planUsage?.usageStanding(row) ?? null;
         return {
           row,
+          pausedUntil: row.pausedUntil,
           usage: this.planUsage?.snapshot(row) ?? null,
           refused: standing === 'KEY_REFUSED',
           usageUnreadable: standing === 'USAGE_UNKNOWN',
@@ -998,6 +1121,7 @@ export class QueueService {
     db: Prisma.TransactionClient | PrismaService,
     session: { id: string; ownerId: string; poolMemberProviderId: string | null },
     slug: string,
+    atClaim = false,
   ) {
     const pool = await this.accountPool(session.ownerId, slug, db);
     // A Codex pool of one's own has no members to choose: it is resolveLoginPool's.
@@ -1005,6 +1129,10 @@ export class QueueService {
     const now = new Date();
     const { rows, candidates } = pool;
     const chosen = choosePoolMember(candidates, session.poolMemberProviderId, now);
+    if (!chosen && candidates.some((candidate) => candidate.pausedUntil && candidate.pausedUntil > now)) {
+      const pausedUntil = await this.accountPoolPausedUntil(session.ownerId, slug, now, db);
+      throw new ConflictException({ code: 'POOL_ACCOUNT_PAUSED', message: 'The pool accounts are paused', pausedUntil: pausedUntil?.toISOString() });
+    }
     if (!chosen) {
       await db.session.update({
         where: { id: session.id },
@@ -1028,6 +1156,7 @@ export class QueueService {
                   ? {
                       label: previous.label,
                       enabled: previous.enabled,
+                      pausedUntil: previous.pausedUntil,
                       usage: standing?.usage ?? null,
                       refused: standing?.refused ?? false,
                     }
@@ -1038,6 +1167,9 @@ export class QueueService {
           : {}),
       },
     });
+    if (atClaim && previous?.pausedUntil && previous.pausedUntil > now) {
+      await new PoolNotices(this.prisma, this.realtime).carrier(session.id, slug);
+    }
     return chosen;
   }
 
@@ -1090,7 +1222,7 @@ export class QueueService {
     if (pool?.engine !== AgentProvider.CODEX) return null;
     const now = new Date();
     // accountPool found it as a pool of the session's owner's own, never a shared one: its accounts first.
-    const { next, notice } = choosePoolCredential(
+    const { chosen, next, notice } = choosePoolCredential(
       {
         ownerId: session.ownerId,
         accounts: pool.logins,
@@ -1100,6 +1232,12 @@ export class QueueService {
       { ownerId: session.ownerId, accountId: session.poolCodexAccountId, keyId: session.poolKeyId },
       now,
     );
+    if (!chosen) {
+      const pausedUntil = await this.accountPoolPausedUntil(session.ownerId, slug, now, db);
+      if (pausedUntil) throw new ConflictException({
+        code: 'POOL_ACCOUNT_PAUSED', message: 'The pool accounts are paused', pausedUntil: pausedUntil.toISOString(),
+      });
+    }
     if (next.accountId !== session.poolCodexAccountId || next.keyId !== session.poolKeyId) {
       await db.session.update({
         where: { id: session.id },
@@ -1175,7 +1313,7 @@ export class QueueService {
     const now = new Date();
     // This person's sessions run on the pool's ChatGPT accounts first — whoever in the pool signed each
     // one in (migration 0371) — and on its keys when none can run (pool-credential-select.ts).
-    const { next, notice } = choosePoolCredential(
+    const { chosen, next, notice } = choosePoolCredential(
       {
         ownerId: pool.ownerId,
         accounts: pool.logins,
@@ -1185,6 +1323,12 @@ export class QueueService {
       { ownerId: session.ownerId, accountId: session.poolCodexAccountId, keyId: session.poolKeyId },
       now,
     );
+    if (!chosen) {
+      const pausedUntil = await this.accountPoolPausedUntil(session.ownerId, slug, now, db);
+      if (pausedUntil) throw new ConflictException({
+        code: 'POOL_ACCOUNT_PAUSED', message: 'The pool accounts are paused', pausedUntil: pausedUntil.toISOString(),
+      });
+    }
     if (next.keyId !== session.poolKeyId || next.accountId !== session.poolCodexAccountId) {
       await db.session.update({
         where: { id: session.id },
@@ -1268,7 +1412,7 @@ async function poolLogins(
   const rows = await db.poolCodexLogin.findMany({
     where: { poolId },
     orderBy: [{ createdAt: 'asc' }, { accountId: 'asc' }],
-    select: { accountId: true, userId: true, email: true, state: true, spentUntil: true, usage: true },
+    select: { accountId: true, userId: true, email: true, state: true, spentUntil: true, pausedUntil: true, usage: true },
   });
   return rows.map((login) => ({ ...login, usage: login.usage as PlanUsageSnapshot | null }));
 }

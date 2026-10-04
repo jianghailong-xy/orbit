@@ -449,6 +449,7 @@ model Runner {
   // Latest provider quota for the account(s) this runner uses, reported via heartbeat.
   // Shape mirrors @orbit/shared PlanUsage.
   planUsage         Json?        @map("plan_usage")
+  accountPauses     Json?        @map("account_pauses")
   // Runtime model catalog reported via heartbeat (for example Codex `debug models`).
   modelCatalog      Json?        @map("model_catalog")
   // When the user last asked this machine to re-read those lists, cleared as the next heartbeat
@@ -5606,6 +5607,10 @@ model ProviderPoolMember {
   provider   ModelProvider @relation(fields: [providerId, ownerId], references: [id, ownerId], onDelete: Cascade)
   createdAt  DateTime      @default(now()) @map("created_at")
 
+  // A manual pause affects the next turn; the credential and quota stay unchanged.
+  pausedAt        DateTime? @map("paused_at") @db.Timestamptz(3)
+  pausedUntil     DateTime? @map("paused_until") @db.Timestamptz(3)
+
   @@id([poolId, providerId])
   @@index([providerId, ownerId])
   @@map("provider_pool_member")
@@ -5660,6 +5665,10 @@ model PoolApiKey {
   usage           PoolUsage[]
   createdAt       DateTime           @default(now()) @map("created_at")
   updatedAt       DateTime           @updatedAt @map("updated_at")
+
+  // A manual pause affects the next turn; the credential and quota stay unchanged.
+  pausedAt        DateTime? @map("paused_at") @db.Timestamptz(3)
+  pausedUntil     DateTime? @map("paused_until") @db.Timestamptz(3)
 
   @@unique([poolId, keyFingerprint])
   // What a ledger row's composite key points at: this key, in this pool.
@@ -5746,6 +5755,10 @@ model PoolCodexLogin {
   usageReadAt     DateTime?    @map("usage_read_at")
   createdAt       DateTime     @default(now()) @map("created_at")
   updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  // A manual pause affects the next turn; the credential and quota stay unchanged.
+  pausedAt        DateTime? @map("paused_at") @db.Timestamptz(3)
+  pausedUntil     DateTime? @map("paused_until") @db.Timestamptz(3)
 
   @@id([poolId, accountId])
   @@map("pool_codex_login")

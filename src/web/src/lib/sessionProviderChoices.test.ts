@@ -87,7 +87,9 @@ describe('providerChoices', () => {
         { value: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro', reasoningLevels: ['low', 'high'] },
       ],
     } as never;
-    const row = providerChoices([], withAgy, undefined, undefined, [], undefined, undefined, true).find((c) => c.slug === 'antigravity');
+    const choices = providerChoices([], withAgy, undefined, undefined, [], undefined, undefined, true);
+    expect(choices.map((choice) => choice.slug)).toEqual(['claude', 'codex', 'antigravity', 'kimi']);
+    const row = choices.find((c) => c.slug === 'antigravity');
     expect(row).toMatchObject({ kind: 'engine', label: 'Antigravity', labelDetail: 'env key', glyphKey: 'antigravity' });
     expect(row?.modelLabel).toBe('Gemini 3.8 Flash');
     expect(defaultModelLabel('antigravity', catalog)).toBe('Gemini 3.8 Flash');
@@ -97,10 +99,13 @@ describe('providerChoices', () => {
   it('uses the server key boolean instead of inferring availability from runner auth', () => {
     const ready = { supported: true, installed: true, version: 'agy 1.2.16', envKeyAvailable: true };
     const health = [{ engine: 'antigravity' as const, installed: true, auth: 'yes' as const }];
-    expect(providerChoices([gemini], catalog, undefined, health).map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'gemini']);
+    expect(providerChoices([gemini], catalog, undefined, health).map((c) => c.slug)).toEqual(['claude', 'codex', 'gemini', 'kimi']);
     expect(providerChoices([gemini], catalog, undefined, health, [], undefined, ready, false).some((c) => c.slug === 'antigravity')).toBe(false);
     expect(providerChoices([gemini], catalog, undefined, undefined, [], undefined, ready, true).find((c) => c.slug === 'antigravity')).toMatchObject({ labelDetail: 'env key' });
-    expect(providerChoices([gemini], catalog).find((c) => c.slug === 'gemini')).toMatchObject({ labelDetail: 'Antigravity CLI' });
+    expect(providerChoices([gemini], catalog).find((c) => c.slug === 'gemini')).toMatchObject({
+      label: 'Antigravity', labelDetail: 'API key', glyphKey: 'antigravity', modelLabel: 'Gemini 3.8 Flash',
+    });
+    expect(providerChoices([{ ...gemini, label: 'Work Gemini' }], catalog).find((c) => c.slug === 'gemini')?.label).toBe('Work Gemini');
   });
 
   it.each([
@@ -315,13 +320,13 @@ describe('brandForProvider', () => {
     expect(brandForProvider('kimi', 'Kimi').glyphKey).toBe('moonshot');
   });
 
-  it('gives Antigravity its own mark rather than the Gemini preset’s', () => {
-    // Google ships both, and a Gemini key runs on Antigravity, but the preset is named for the
-    // models the key buys and the engine is the CLI that drives them.
+  it('gives the Antigravity engine and Gemini preset the same mark', () => {
     const { brand, glyphKey } = brandForProvider('antigravity', 'Antigravity');
     expect(glyphKey).toBe('antigravity');
     expect(brand).toEqual({ mono: 'A', from: '#3186ff', to: '#00b95c' });
     expect(PROVIDER_GLYPHS.antigravity).toBeTruthy();
+    expect(brandForProvider('gemini', 'Gemini', 'gemini')).toEqual({ brand, glyphKey });
+    expect(brandForProvider('gemini-2', 'Work Gemini', 'gemini')).toEqual({ brand, glyphKey });
   });
 
   it('resolves every glyph key it hands out to actual artwork', () => {

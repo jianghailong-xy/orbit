@@ -141,6 +141,9 @@ export function promotionHeading(promotion: ProjectPromotionView): string {
       return promotion.merged?.automatic ? MERGED_AUTOMATICALLY_HEADING : MERGED_HEADING;
     case 'CONFIRMED':
     case 'RECHECKING':
+      if (promotion.execution?.state === 'QUEUED') return `Merge queued: ${source} into ${upstream}`;
+      if (promotion.execution?.state !== 'RUNNING') return `Merge confirmed: ${source} into ${upstream}`;
+      if (promotion.execution.phase === 'CHECK') return `Re-checking ${source} before merging into ${upstream}…`;
       return `Merging ${source} into ${upstream}…`;
     case 'BLOCKED':
       return `${source} can’t merge into ${upstream} yet`;
@@ -188,7 +191,7 @@ function criteriaTally(project: PromotionProjectView | null): { met: number; tot
  *  "on main". Empty when the document was not read, and then the receipt says nothing about them. */
 function landingCriteria(project: PromotionProjectView | null): number[] {
   return (project?.acceptanceCriteriaItems ?? [])
-    .filter((item) => item.satisfied === true)
+    .filter((item) => item.landing === 'LANDED')
     .map((item) => item.ordinal);
 }
 
@@ -318,7 +321,9 @@ function ReadyRows({
 /** State B's body: why it is still going, and that the reader is not the one it is waiting for. */
 function MergingRows({ promotion, now }: { promotion: ProjectPromotionView; now: number }): JSX.Element {
   const upstream = shortRef(promotion.upstreamRef);
-  const rechecking = promotion.state === 'RECHECKING';
+  const execution = promotion.execution;
+  const running = execution?.state === 'RUNNING';
+  const rechecking = running && execution.phase === 'CHECK';
   // The re-check's own numbers when the server has them, and what the row already carried when it
   // does not: a promotion re-checked before the platform counted anything still says how long it
   // has been running rather than going silent.
@@ -326,13 +331,25 @@ function MergingRows({ promotion, now }: { promotion: ProjectPromotionView; now:
   const since = startedAt ? formatSpan(now - Date.parse(startedAt)) : null;
   const movedBy = promotion.recheck?.upstreamMovedBy ?? null;
   const typical = promotion.recheck?.typicalMs ?? null;
+  const phaseStatus = {
+    FETCH: 'fetching the branches',
+    MAIN_SYNC: 'syncing the branches',
+    REBASE: 'rebasing the branch',
+    MERGE: 'preparing the combined tree',
+    VERIFY: 'verifying the tested tree',
+    PUSH: `publishing the tested tree to ${upstream}`,
+  };
   return (
     <>
       <Row k="Status">
-        <span className="promotion-spin" aria-hidden="true" />
-        {rechecking
-          ? `${upstream} moved${movedBy != null ? ` ${plural(movedBy, 'commit')}` : ''} since the check — re-checking the combined tree${since ? ` (${since}${typical != null ? ` of ~${formatSpan(typical)}` : ' so far'})` : ''}`
-          : `confirmed — merging the tested tree into ${upstream}`}
+        {running && <span className="promotion-spin" aria-hidden="true" />}
+        {execution?.state === 'QUEUED'
+          ? `confirmed — queued to merge into ${upstream}`
+          : !running
+            ? 'confirmed — waiting for merge execution'
+            : rechecking
+              ? `${promotion.state === 'RECHECKING' ? `${upstream} moved${movedBy != null ? ` ${plural(movedBy, 'commit')}` : ''} since the check — ` : ''}re-checking the combined tree${since ? ` (${since}${typical != null ? ` of ~${formatSpan(typical)}` : ' so far'})` : ''}`
+              : `confirmed — ${execution.phase && execution.phase !== 'CHECK' ? phaseStatus[execution.phase] : 'starting the merge'}`}
       </Row>
       <Row k="You">{NOTHING_TO_DO}</Row>
     </>
@@ -586,7 +603,9 @@ export function ProjectPromotionCard({
             onClick={() => decide.mutate('confirm')}
           >
             {merging ? (
-              MERGING
+              promotion.execution?.state === 'QUEUED' ? 'Queued'
+                : promotion.execution?.state !== 'RUNNING' ? 'Confirmed'
+                  : promotion.execution.phase === 'CHECK' ? 'Re-checking…' : MERGING
             ) : blocked ? (
               <>
                 {resolving.spinning ? (
@@ -602,7 +621,7 @@ export function ProjectPromotionCard({
             )}
           </CardActionButton>
           {merging ? (
-            <CardActionButton disabled={decide.isPending} onClick={() => decide.mutate('cancel')}>
+            <CardActionButton disabled={decide.isPending || promotion.execution?.phase === 'PUSH'} onClick={() => decide.mutate('cancel')}>
               {CANCEL_MERGE}
             </CardActionButton>
           ) : blocked ? null : (

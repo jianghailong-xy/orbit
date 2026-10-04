@@ -322,13 +322,14 @@ describe('state A — the checks passed and it is waiting on you', () => {
 describe('state B — you confirmed it and main moved since the check', () => {
   const rechecking = promotion({
     state: 'RECHECKING',
+    execution: { state: 'RUNNING', phase: 'CHECK', startedAt: at(2 * MINUTE) },
     recheckedAt: at(2 * MINUTE),
     recheck: { upstreamMovedBy: 1, startedAt: at(2 * MINUTE), typicalMs: 6 * MINUTE + 12 * 1000 },
   });
 
   it('says how far main moved, and how long a check like this one takes', () => {
     const html = card(rechecking);
-    expect(html).toContain('Merging project/bg-jobs into main…');
+    expect(html).toContain('Re-checking project/bg-jobs before merging into main…');
     expect(html).toContain('main moved 1 commit since the check');
     expect(html).toContain('re-checking the combined tree');
     expect(html).toContain('(2m of ~6m)');
@@ -336,6 +337,7 @@ describe('state B — you confirmed it and main moved since the check', () => {
 
   it('counts the commits main moved in the plural', () => {
     const html = card(promotion({
+      ...rechecking,
       state: 'RECHECKING',
       recheckedAt: at(2 * MINUTE),
       recheck: { upstreamMovedBy: 3, startedAt: at(2 * MINUTE), typicalMs: 6 * MINUTE },
@@ -345,6 +347,7 @@ describe('state B — you confirmed it and main moved since the check', () => {
 
   it('says less rather than inventing a count or a typical the runner never reported', () => {
     const html = card(promotion({
+      ...rechecking,
       state: 'RECHECKING',
       recheckedAt: at(2 * MINUTE),
       recheck: { upstreamMovedBy: null, startedAt: at(2 * MINUTE), typicalMs: null },
@@ -360,21 +363,54 @@ describe('state B — you confirmed it and main moved since the check', () => {
 
   it('cannot be merged again, and can be called back', () => {
     const html = card(rechecking);
-    expect(html).toContain(MERGING);
+    expect(html).toContain('Re-checking…');
     expect(html).toContain(CANCEL_MERGE);
     // The one that says "it is happening" is the one that cannot be pressed.
-    expect(html).toMatch(/<button[^>]*disabled[^>]*>(?:(?!<\/button>).)*Merging/);
+    expect(html).toMatch(/<button[^>]*disabled[^>]*>(?:(?!<\/button>).)*Re-checking/);
     // State B is untouched by state D's readout: the press is still `Merging…`, and the mark is
     // still on the Status row rather than over the button.
     expect(html).toContain('promotion-spin');
     expect(html).not.toContain(RESOLVING);
   });
 
-  it('draws a confirmed merge that has not had to re-check as the same card', () => {
-    const html = card(promotion({ state: 'CONFIRMED' }));
+  it('draws a confirmed merge as running only when its runner has started', () => {
+    const html = card(promotion({
+      state: 'CONFIRMED', execution: { state: 'RUNNING', phase: 'VERIFY', startedAt: at(MINUTE) },
+    }));
     expect(html).toContain('Merging project/bg-jobs into main…');
     expect(html).toContain(MERGING);
     expect(html).not.toContain('main moved since the check');
+    expect(html).toContain('verifying the tested tree');
+  });
+
+  it('keeps a confirmed or rechecking merge queued until a runner claims it', () => {
+    for (const state of ['CONFIRMED', 'RECHECKING'] as const) {
+      const html = card(promotion({
+        ...rechecking, state, execution: { state: 'QUEUED', phase: null, startedAt: at(MINUTE) },
+      }));
+      expect(html).toContain('Merge queued: project/bg-jobs into main');
+      expect(html).toContain('confirmed — queued to merge into main');
+      expect(html).not.toContain('promotion-spin');
+      expect(html).not.toContain('re-checking the combined tree');
+      expect(html).not.toContain(MERGING);
+    }
+  });
+
+  it('does not invent execution when a server has no active job reading', () => {
+    const html = card(promotion({ state: 'CONFIRMED' }));
+    expect(html).toContain('Merge confirmed: project/bg-jobs into main');
+    expect(html).toContain('waiting for merge execution');
+    expect(html).not.toContain('promotion-spin');
+    expect(html).not.toContain(MERGING);
+  });
+
+  it('stops describing an old re-check once the runner is pushing, and cannot cancel that push', () => {
+    const html = card(promotion({
+      ...rechecking, execution: { state: 'RUNNING', phase: 'PUSH', startedAt: at(MINUTE) },
+    }));
+    expect(html).toContain('publishing the tested tree to main');
+    expect(html).not.toContain('re-checking the combined tree');
+    expect(html).toMatch(/<button[^>]*disabled[^>]*>(?:(?!<\/button>).)*Cancel/);
   });
 });
 
@@ -407,6 +443,16 @@ describe('state C — it merged, and the card is the receipt', () => {
 
   it('asks for nothing: a receipt has no presses', () => {
     expect(card(merged)).not.toContain('<button');
+  });
+
+  it('only names criteria whose landing reading actually says on upstream', () => {
+    const html = card(merged, { project: project({ acceptanceCriteriaItems: [
+      { ordinal: 1, satisfied: true, landing: 'UNKNOWN' },
+      { ordinal: 2, satisfied: true, landing: 'ON_INTEGRATION_LINE' },
+      { ordinal: 3, satisfied: true, landing: 'LANDED' },
+    ] }) });
+    expect(html).toContain('criterion 3 show “on main”');
+    expect(html).not.toContain('criteria 1, 2');
   });
 });
 

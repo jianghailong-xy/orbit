@@ -156,6 +156,7 @@ export interface CodexLoginView {
   /** Until when the Codex backend said the account's usage limit is reached (migration 0324), while that
    *  is ahead of the reading's time; null otherwise. */
   spentUntil: string | null;
+  pausedUntil: string | null;
 }
 
 /** Why `usage` is null when it is: nothing has read this account's quota yet. */
@@ -173,6 +174,7 @@ export function codexLoginView(
     expiresAt: Date;
     createdAt: Date;
     spentUntil?: Date | null;
+    pausedUntil?: Date | null;
   } | null,
   usage: PlanUsageSnapshot | null = null,
   now: Date = new Date(),
@@ -180,6 +182,7 @@ export function codexLoginView(
   if (!row) return null;
   return {
     state: row.state,
+    pausedUntil: row.pausedUntil && row.pausedUntil > now ? row.pausedUntil.toISOString() : null,
     email: row.email,
     plan: row.plan,
     fingerprint: maskedAccount(row.accountId),

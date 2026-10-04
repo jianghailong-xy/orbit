@@ -6,6 +6,7 @@ import { AgentProvider } from '@orbit/shared';
 import { sha256 } from '../common/crypto.util';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { PrismaService } from '../prisma/prisma.service';
+import { poolPauseBlocksRequest } from './pool-pause';
 import { responseCostMicros } from './openai-prices';
 import { keyRoom, poolKeysResumeAt } from './pool-key-select';
 import { PoolUsageLedger } from './pool-usage-ledger';
@@ -117,6 +118,8 @@ interface GatewayKey {
   enabled: boolean;
   shareCap: number | null;
   spentUntil: Date | null;
+  pausedAt?: Date | null;
+  pausedUntil?: Date | null;
   keyHint: string;
   secretEncrypted: string;
 }
@@ -180,6 +183,10 @@ export class PoolGatewayService {
     if (!key || why) {
       refuse(res, 403, 'orbit_pool_key_unavailable', await this.unavailable(caller, key, why, now));
       this.log.log(`session ${caller.sessionId} pool ${caller.poolId}: ${key ? `${maskedKey(key.keyHint)} ${why}` : 'no key'} — refused`);
+      return;
+    }
+    if (await poolPauseBlocksRequest(this.prisma, caller.sessionId, key, now)) {
+      refuse(res, 403, 'orbit_pool_account_paused', `This account is paused until ${key.pausedUntil!.toISOString()}`);
       return;
     }
     let body: Buffer;
@@ -282,7 +289,7 @@ export class PoolGatewayService {
       where: { id: keyId, poolId },
       select: {
         id: true, label: true, contributorId: true, state: true, enabled: true, shareCap: true, spentUntil: true,
-        keyHint: true, secretEncrypted: true,
+        keyHint: true, secretEncrypted: true, pausedAt: true, pausedUntil: true,
       },
     });
   }

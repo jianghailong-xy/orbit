@@ -18,20 +18,18 @@ import { ago } from '../lib/watches';
  * is absorbed in the other direction; and none of that was visible anywhere, so a reader watching a
  * green project had no way to tell work that had shipped from work sitting on a branch. Five facts
  * answer it: which branch, how far ahead of main, when main last came in, what is in flight, and
- * whether the tip is green.
+ * what the last landing attempt's checks reported.
  *
  * The settings that decide the line are no longer behind this row: they are the project's "How it
  * runs" block (`ProjectRunSettings`), with Automatic and the rest of what the start card set, so a
  * question the start card answered is changed in one place afterwards.
  */
 
-/** The merge check's verdict on the line's tip, as a word and a colour. UNKNOWN prints as itself:
- *  no finished job is a different thing from a job that failed, and the row must not round one to
- *  the other. */
+/** The last landing attempt's checks, not a claim about the current branch tip. */
 const TIP_STATE: Record<ProjectIntegrationView['mergeCheckOnTip'], { text: string; color: string }> = {
   PASSING: { text: '✓ passing', color: 'var(--success)' },
   FAILING: { text: '✕ failing', color: 'var(--error)' },
-  UNKNOWN: { text: 'not run yet', color: 'var(--text-3)' },
+  UNKNOWN: { text: 'not checked', color: 'var(--text-3)' },
 };
 
 /** The branch mark from the mock, drawn rather than typed: `⎇` renders as a box in several of the
@@ -148,7 +146,7 @@ export function ProjectIntegrationLine({
             <>
               <Separator />
               <span>
-                <b>{ahead}</b> commit{ahead === 1 ? '' : 's'} ahead of main
+                <b>{ahead}</b> commit{ahead === 1 ? '' : 's'} ahead of main at last measurement
               </span>
             </>
           ) : null}
@@ -161,13 +159,12 @@ export function ProjectIntegrationLine({
 
           <Separator />
           <span>
-            <b>Integrating</b> {view.integratingCount} <Separator /> <b>Queued</b>{' '}
+            <b>Running jobs</b> {view.integratingCount} <Separator /> <b>Queued</b>{' '}
             {view.queuedCount}
           </span>
           <Separator />
           <span>
-            Merge check <span style={{ color: tip.color }}>{tip.text}</span>
-            {branchLine ? ' on the branch tip' : ''}
+            Last landing check <span style={{ color: tip.color }}>{tip.text}</span>
           </span>
         </span>
       </div>

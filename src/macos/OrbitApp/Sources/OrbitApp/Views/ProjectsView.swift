@@ -853,7 +853,7 @@ struct ProjectDetailView: View {
                     }
                     .listRowBackground(Color.orange.opacity(0.1))
                 }
-                if ProjectPage.wrappingUp(status: document.status, buckets) {
+                if ProjectPage.wrappingUp(status: document.status, buckets, inFlight: store.integration?.inFlight) {
                     banner(glyph: .check, title: ProjectPage.wrapUpTitle,
                            text: ProjectPage.wrapUpSentence(settled: buckets.done + buckets.cancelled)) {
                         EmptyView()

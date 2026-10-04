@@ -1100,6 +1100,8 @@ export interface RunnerEngineHealth {
  * the runner computed locally.
  */
 export interface RunnerEngineAccount {
+  /** Manual pause in Orbit. Sign-in and quota remain unchanged; expires automatically. */
+  pausedUntil?: string | null;
   /** `default` — the directory the runner's own environment selects — or the id of a slot the
    *  runner added: the same value LoginCommand.account names. */
   id: string;

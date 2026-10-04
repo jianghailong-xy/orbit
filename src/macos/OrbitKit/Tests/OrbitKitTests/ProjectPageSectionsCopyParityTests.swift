@@ -66,9 +66,12 @@ final class ProjectPageSectionsCopyParityTests: XCTestCase {
     /// one the owner approved on 2026-09-25; both clients draw it from the same three facts.
     func testTheLandingRowsWords() throws {
         let web = try source(Self.panorama)
-        assertSays(web, "export const LANDING_WORD = '\(ProjectPage.landingWord)';", in: Self.panorama)
-        // The two state words, as the web spells them for the job state the server sends.
-        assertSays(web, "state: running ? 'checking' : 'queued'", in: Self.panorama)
+        for (kind, word) in ProjectPage.integrationJobWords {
+            assertSays(web, "\(kind): '\(word)'", in: Self.panorama)
+        }
+        for (phase, word) in ProjectPage.integrationPhaseWords {
+            assertSays(web, "\(phase): '\(word)'", in: Self.panorama)
+        }
         // The clock: the same expression on both sides, unit for unit.
         assertSays(web, "return `${Math.floor(whole / 60)}m ${whole % 60}s`;", in: Self.panorama)
         // The name slot's second answer, so one task's title cannot stand in for several jobs.

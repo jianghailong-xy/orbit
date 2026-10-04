@@ -117,6 +117,16 @@ final class AgentsModel {
         if let pools = try? await api.providerPools() { providerPools = pools }
     }
 
+    func pausePoolMember(_ pool: ProviderPool, member: PoolMember, durationMinutes: Int?) async -> String? {
+        do {
+            try await api.pausePoolMember(poolID: pool.id, memberID: member.id, durationMinutes: durationMinutes)
+            await reloadPools()
+            return nil
+        } catch {
+            return APIClient.failureReason(error)
+        }
+    }
+
     /// "Sign in with ChatGPT": the page to open and the one-time code, from the server's device sign-in.
     func startCodexLogin(_ pool: ProviderPool) async throws -> CodexLoginAttempt {
         try await api.startCodexLogin(poolID: pool.id)

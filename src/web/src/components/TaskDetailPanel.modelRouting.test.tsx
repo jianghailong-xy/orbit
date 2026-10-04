@@ -324,12 +324,12 @@ describe('Gemini task provider pins', () => {
     });
     await vi.waitFor(() => expect(document.body.querySelectorAll('.ant-select-item-option').length).toBe(keyAvailable ? 6 : 5));
     const options = [...document.body.querySelectorAll<HTMLElement>('.ant-select-item-option')];
-    const builtin = options.find((option) => option.textContent?.startsWith('Antigravity'));
+    const builtin = options.find((option) => option.textContent?.includes('env key'));
     expect(!!builtin).toBe(keyAvailable);
     if (builtin) expect(builtin.textContent).toContain('env key');
     expect(options.some((option) => option.textContent === 'OpenCode')).toBe(true);
-    const provider = options.find((option) => option.textContent?.startsWith('Gemini'))!;
-    expect(provider.textContent).toContain('Antigravity CLI');
+    const provider = options.find((option) => option.textContent?.includes('API key'))!;
+    expect(provider.textContent).toContain('Antigravity');
     expect(provider.textContent).toContain('Update runner');
     await click(provider, 'Gemini needing a runner update');
     expect(where).toBe('/providers');

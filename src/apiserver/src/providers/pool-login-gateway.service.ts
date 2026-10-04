@@ -6,6 +6,7 @@ import { AgentProvider } from '@orbit/shared';
 import { sha256 } from '../common/crypto.util';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { PrismaService } from '../prisma/prisma.service';
+import { poolPauseBlocksRequest } from './pool-pause';
 import { RealtimeService } from '../realtime/realtime.service';
 import { ACCESS_TOKEN_FALLBACK_MS, accountOf, maskedAccount } from './codex-login';
 import {
@@ -57,11 +58,13 @@ interface GatewayLogin {
   accessTokenEnc: string;
   expiresAt: Date;
   spentUntil: Date | null;
+  pausedAt?: Date | null;
+  pausedUntil?: Date | null;
 }
 
 const LOGIN_SELECT = {
   accountId: true, userId: true, email: true, state: true, accessTokenEnc: true, expiresAt: true,
-  spentUntil: true,
+  spentUntil: true, pausedAt: true, pausedUntil: true,
 } as const;
 
 /** What a refresh came to. */
@@ -167,6 +170,10 @@ export class PoolLoginGatewayService {
       await this.owe(caller.sessionId, loginSignedOutNotice(login, caller.poolLabel, byContributor));
       refuse(res, 403, 'orbit_pool_login_signed_out', loginSignedOutNotice(login, caller.poolLabel, byContributor));
       this.log.log(`session ${caller.sessionId} account ${account}: signed out — refused`);
+      return;
+    }
+    if (await poolPauseBlocksRequest(this.prisma, caller.sessionId, login, new Date())) {
+      refuse(res, 403, 'orbit_pool_account_paused', `This account is paused until ${login.pausedUntil!.toISOString()}`);
       return;
     }
     let body: Buffer;
