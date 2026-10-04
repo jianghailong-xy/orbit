@@ -1,0 +1,88 @@
+[WebServer] (node:2163221) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 10 tests using 1 worker
+
+(node:2163337) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:10:3 › existing notification stays at viewport origin during Dialog entry (2.5s)
+  ✓   2 [chromium-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:10:3 › existing notification stays at viewport origin during Drawer entry (1.8s)
+  ✓   3 [chromium-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:10:3 › existing notification stays at viewport origin during Bottom drawer entry (1.9s)
+  ✓   4 [chromium-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:46:1 › hover pause releases after a keyboard opened and closed overlay changes portal (894ms)
+  ✓   5 [chromium-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:69:1 › native hover deadline resumes after portal changes (7.3s)
+(node:2163910) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   6 [webkit-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:10:3 › existing notification stays at viewport origin during Dialog entry (1.9s)
+  ✓   7 [webkit-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:10:3 › existing notification stays at viewport origin during Drawer entry (1.8s)
+  ✓   8 [webkit-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:10:3 › existing notification stays at viewport origin during Bottom drawer entry (1.8s)
+  ✘   9 [webkit-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:46:1 › hover pause releases after a keyboard opened and closed overlay changes portal (925ms)
+(node:2164799) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  10 [webkit-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:69:1 › native hover deadline resumes after portal changes (8.4s)
+
+
+  1) [webkit-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:46:1 › hover pause releases after a keyboard opened and closed overlay changes portal 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 0
+    Received: 1
+
+      63 |   const after = await region.count();
+      64 |   await info.attach('timer-after-portal', { body: JSON.stringify({ after, releasedAfterMs: 6001 }), contentType: 'application/json' });
+    > 65 |   expect(after).toBe(0);
+         |                 ^
+      66 | });
+      67 |
+      68 |
+        at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/coordinator-feedback.browser.mjs:65:17
+
+    Error Context: src/web/.coordinator-feedback-results/coordinator-feedback.brows-ced25-osed-overlay-changes-portal-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.coordinator-feedback-results/coordinator-feedback.brows-ced25-osed-overlay-changes-portal-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.coordinator-feedback-results/coordinator-feedback.brows-ced25-osed-overlay-changes-portal-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [webkit-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:69:1 › native hover deadline resumes after portal changes 
+
+    Error: expect(locator).toHaveCount(expected) failed
+
+    Locator:  locator('.toast-viewport')
+    Expected: 0
+    Received: 1
+    Timeout:  7500ms
+
+    Call log:
+      - Expect "toHaveCount" locator('.toast-viewport') with timeout 7500ms
+      - waiting for locator('.toast-viewport')
+        19 × locator resolved to 1 element
+           - unexpected value "1"
+
+
+      78 |   await page.mouse.move(0, 0);
+      79 |   const releasedAt = Date.now();
+    > 80 |   try { await expect(region).toHaveCount(0, { timeout: 7500 }); }
+         |                              ^
+      81 |   finally {
+      82 |     await info.attach('native-timer', {body: JSON.stringify({ elapsedMs:Date.now()-releasedAt, count:await region.count() }), contentType:'application/json'});
+      83 |   }
+        at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/coordinator-feedback.browser.mjs:80:30
+
+    Error Context: src/web/.coordinator-feedback-results/coordinator-feedback.brows-4283b-esumes-after-portal-changes-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.coordinator-feedback-results/coordinator-feedback.brows-4283b-esumes-after-portal-changes-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.coordinator-feedback-results/coordinator-feedback.brows-4283b-esumes-after-portal-changes-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2 failed
+    [webkit-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:46:1 › hover pause releases after a keyboard opened and closed overlay changes portal 
+    [webkit-light-desktop] › src/web/ui-migration/coordinator-feedback.browser.mjs:69:1 › native hover deadline resumes after portal changes 
+  8 passed (31.0s)
