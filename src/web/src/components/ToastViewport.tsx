@@ -11,13 +11,14 @@ import {
   SyncOutlined,
   UndoOutlined,
 } from '@ant-design/icons';
-import { useState, type ReactNode } from 'react';
+import { useLayoutEffect, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { encodeId } from '../lib/idCodec';
 import { levelOf, type ToastGlyph, type ToastItem } from '../lib/toastFeed';
 import { closeToast, holdToasts, openToast, releaseToasts, useToastFeed } from '../lib/toastStore';
 import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
+import { useFeedbackPortal } from './ui/feedbackPortal';
 
 /**
  * Every toast on screen (docs/mocks/toast-system): what waits for you, pinned, above what passes.
@@ -33,6 +34,66 @@ import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
  */
 export function ToastViewport() {
   const feed = useToastFeed();
+  const portal = useFeedbackPortal();
+  // A stable React portal keeps notification DOM and hover state across modal
+  // ownership changes. The manual popover paints outside ancestor transforms.
+  const [host] = useState(() => {
+    const element = document.createElement('div');
+    element.className = 'toast-layer';
+    element.popover = 'manual';
+    return element;
+  });
+  useLayoutEffect(() => {
+    // Reparenting restarts CSS animations even when React keeps the same DOM.
+    // Carry each notification's original animation time into its new parent.
+    for (const toast of host.querySelectorAll<HTMLElement>('[data-toast-enter-start]')) {
+      toast.style.animationDelay = `${Number(toast.dataset.toastEnterStart) - Number(document.timeline.currentTime)}ms`;
+    }
+    (portal ?? document.body).appendChild(host);
+    host.showPopover?.();
+    return () => { host.remove(); };
+  }, [host, portal]);
+  useLayoutEffect(() => {
+    let held = false;
+    const release = () => {
+      if (!held) return;
+      held = false;
+      releaseToasts();
+    };
+    // WebKit can omit mouseleave when a hovered node changes modal owners.
+    // mouseover also covers a notification arriving or moving under a still
+    // pointer. Movement remains necessary when WebKit omits a boundary event.
+    const trackHover = (event: MouseEvent) => {
+      const target = event.target;
+      const next = target instanceof Element && host.contains(target) && !!target.closest('[data-toast-dwell]');
+      // Reapply hold on entry: clearing the feed resets the store's hold state.
+      if (next) { held = true; holdToasts(); }
+      else release();
+    };
+    document.addEventListener('mouseover', trackHover, true);
+    document.addEventListener('mousemove', trackHover, true);
+    document.addEventListener('mouseleave', release);
+    return () => {
+      document.removeEventListener('mouseover', trackHover, true);
+      document.removeEventListener('mousemove', trackHover, true);
+      document.removeEventListener('mouseleave', release);
+      release();
+    };
+  }, [host]);
+  const [viewportWidth, setViewportWidth] = useState<number>();
+  useLayoutEffect(() => {
+    // WebKit top-layer descendants can retain a wider scroll viewport during
+    // modal transitions. Match a body-mounted notification even while closing.
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:fixed;inset:0;visibility:hidden;pointer-events:none';
+    probe.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(probe);
+    const measure = () => setViewportWidth(probe.getBoundingClientRect().width);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(probe);
+    return () => { observer.disconnect(); probe.remove(); };
+  }, []);
   const narrow = useMediaQuery(PHONE_QUERY);
   const navigate = useNavigate();
   const [allPinned, setAllPinned] = useState(false);
@@ -51,7 +112,17 @@ export function ToastViewport() {
   if (pinned.length === 0 && passing.length === 0) return null;
 
   return createPortal(
-    <section className={narrow ? 'toast-viewport toast-viewport--narrow' : 'toast-viewport'} aria-label="Notifications">
+    <section className={narrow ? 'toast-viewport toast-viewport--narrow' : 'toast-viewport'} aria-label="Notifications"
+      onAnimationStart={(event) => {
+        const toast = event.target;
+        if (!(toast instanceof HTMLElement) || !event.animationName.startsWith('orbit-toast-') || toast.dataset.toastEnterStart) return;
+        const animation = toast.getAnimations().find((a) => a instanceof CSSAnimation && a.animationName === event.animationName);
+        if (animation) toast.dataset.toastEnterStart = String(Number(document.timeline.currentTime) - Number(animation.currentTime));
+      }}
+      style={viewportWidth ? narrow
+        ? { width: `calc(${viewportWidth}px - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px))` }
+        : { left: `calc(${viewportWidth}px - max(16px, env(safe-area-inset-right, 0px)) - 360px)`, right: 'auto' }
+        : undefined}>
       {pinned.map((toast) =>
         narrow && feed.expanded !== toast.id ? (
           <Pill key={toast.id} toast={toast} behind={feed.pinned.length - 1} onClick={() => openToast(toast.id)} />
@@ -72,7 +143,7 @@ export function ToastViewport() {
         ),
       )}
     </section>,
-    document.body,
+    host,
   );
 }
 
@@ -134,8 +205,7 @@ function Pill({ toast, behind = 0, onClick }: { toast: ToastItem; behind?: numbe
       type="button"
       className={`toast toast--pill toast--live${tinted}`}
       onClick={onClick}
-      onMouseEnter={holdToasts}
-      onMouseLeave={releaseToasts}
+      data-toast-dwell=""
     >
       {body}
     </button>
@@ -147,7 +217,7 @@ function Pill({ toast, behind = 0, onClick }: { toast: ToastItem; behind?: numbe
 function ResultCard({ toast, onOpen }: { toast: ToastItem; onOpen: (toast: ToastItem) => void }) {
   const action = toast.action;
   return (
-    <div className="toast toast--card toast--live" onMouseEnter={holdToasts} onMouseLeave={releaseToasts}>
+    <div className="toast toast--card toast--live" data-toast-dwell="">
       <Glyph toast={toast} />
       {toast.sessionId ? (
         <button

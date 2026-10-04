@@ -1,0 +1,9 @@
+{
+  "assertiveErrorAndDetail": true,
+  "liveRegionNotHidden": true,
+  "politeSuccess": true,
+  "copyText": "revision 12 is stale",
+  "selectedDiagnostic": true,
+  "notificationSurvivesEachOverlayClose": true,
+  "themeChangedWhileOpen": true
+}

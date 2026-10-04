@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useRe
 import { Dialog as BaseDialog } from '@base-ui/react/dialog';
 import { AlertDialog } from '@base-ui/react/alert-dialog';
 import { CloseOutlined } from '@ant-design/icons';
+import { registerFeedbackLayer } from './feedbackPortal';
 import './Overlay.css';
 
 interface Scope {
@@ -83,6 +84,11 @@ export function OverlaySurface({
 }) {
   const { parent, scope, setContainer } = useScope();
   const popup = useRef<HTMLDivElement>(null);
+  const setPopup = useCallback((node: HTMLDivElement | null) => {
+    popup.current = node;
+    if (!node || !open) return;
+    return registerFeedbackLayer(node, scope.level);
+  }, [open, scope.level]);
   const Root = kind === 'confirm' ? AlertDialog.Root : BaseDialog.Root;
   const zIndex = 1000 + scope.level * 100;
   return (
@@ -104,7 +110,7 @@ export function OverlaySurface({
       <BaseDialog.Portal container={parent?.container} keepMounted={keepMounted}>
         <BaseDialog.Backdrop forceRender className="orbit-overlay-backdrop" style={{ zIndex }} />
         <BaseDialog.Viewport className={`orbit-overlay-viewport orbit-${kind}-viewport`} style={{ zIndex }}>
-          <BaseDialog.Popup ref={popup} initialFocus={initialFocus ?? popup} finalFocus={returnFocus}
+          <BaseDialog.Popup ref={setPopup} initialFocus={initialFocus ?? popup} finalFocus={returnFocus}
             className={`orbit-overlay orbit-${kind}${className ? ` ${className}` : ''}`}
             data-placement={kind === 'drawer' ? placement : undefined} aria-busy={busy || undefined}
             style={{ width: kind === 'drawer' && placement === 'bottom' ? '100%' : width,

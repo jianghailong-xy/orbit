@@ -60,6 +60,12 @@ return <><Button onClick={() => void remove()}>Delete</Button>{confirmation}</>;
 
 弹层以1000为根层级，每个拥有者内递增100；现有 toast 为2050。每层有自己的遮罩，Base UI 管理模态焦点、Tab/Shift+Tab、IME期间Esc和文档滚动锁。长 Dialog 由 viewport 滚动，Drawer 正文单独滚动。主题仍来自 html 的 data-theme；没有第二套主题状态。不要给 portal 宿主增加 transform 或裁切样式。
 
+通知继续使用 `useToast` / `toastFeed` / `toastStore` 和唯一的 `ToastViewport`。打开的 Orbit 弹层通过自有 ref 登记反馈挂载点，最上层接收通知，使已有通知与后到通知都留在可访问树和 Tab 范围内；关闭后回到父层或 body，keepMounted 的关闭层不接收通知。React portal 始终使用同一宿主，避免切层重建通知 DOM。宿主使用原生 `popover="manual"` 顶层绘制，逃离弹层的缩放、平移和裁切；不增加遮罩或抢焦点，也不改变原 Dialog/Drawer 动画。通知自身保留首次入场的动画起点，切层以负 delay 延续原进度，不重播或删除入场动画。样式清除 popover 的默认盒模型，保留原通知原点、字体和安全区规则。持久的 body 固定定位测量节点保留 WebKit 的滚动条预留宽度，并随通知视口卸载清理。此能力依赖浏览器的 Popover API，已在本项目固定 Chromium/WebKit 版本验证。
+
+悬停仍只暂停原先可悬停的结果卡片和可操作短通知。真实 mouseover 覆盖通知到达或布局移动到静止指针下的进入；mousemove 补足 WebKit 切层时遗漏的 mouseleave。清空队列后再次进入会重新确认暂停状态；鼠标静止时切层继续暂停，真正离开后才重新完整计时，未悬停的通知保留原截止时间。队列、去重和计时内核未改动，不读取库的内部 DOM。短通知及空宿主穿透点击，通知动作不关闭拥有它的弹层。
+
+通知行为与集成矩阵：`npm run test:ui-toasts -w @orbit/web`；固定端口14377，沿用 P0 浏览器/字体环境。`toasts-lifecycle.browser.mjs` 保留验收方的原复现，追加正常动画每帧卡片位置/透明度、嵌套开关、静止悬停和原截止时间检查；`toasts-hover.browser.mjs` 以原生时钟验证静止指针下的新通知，并精确验证布局进入/离开、清空后替换及恢复计时。可访问检查证明 live region 的优先级、内容和可见性，不代替真实读屏软件听测。P0 生产通知链路的单独复跑为 `npm run test:ui-migration -w @orbit/web -- feedback-production.browser.mjs`，原 P0 截图断言保持不变。
+
 混用时显式标出拥有关系，不查询 `.ant-*`：
 
 ```tsx

@@ -726,7 +726,11 @@ final class ConsoleModel {
     /// to send, so it belongs next to the input and stays until the ✕. Fleeting confirmations must
     /// *not* land here: the line is in-flow, so each one reflowed the composer up and back down
     /// mid-typing. They go to the app's toast host instead — see `showTransientStatus`.
-    var statusMessage: String?
+    var statusMessage: String? {
+        didSet { statusMessageRevision += 1 }
+    }
+    /// A repeated failure is a new notice even when its text matches an earlier attempt.
+    private(set) var statusMessageRevision = 0
     /// Sink for a session outcome — the app's toast host, injected by `ConsoleRegistry`.
     @ObservationIgnored var onToast: (ToastRequest) -> Void = { _ in }
     /// Local `/status` results belong in the conversation, not the error/info banner above the
@@ -842,6 +846,25 @@ final class ConsoleModel {
             for: provider, model: defaultModel, catalog: modelCatalog,
             configured: configuredProviders)
         wireWorktree()
+    }
+
+    /// Seed the live composer's first frame before the draft opens it. The create response owns
+    /// the config; the draft's catalogue names it without another asynchronous runner read.
+    func adoptCreatedSession(_ session: Session, from draft: ConsoleModel) {
+        provider = session.provider ?? draft.provider
+        modelCatalog = draft.modelCatalog
+        configuredProviders = draft.configuredProviders
+        configuredProvidersLoaded = draft.configuredProvidersLoaded
+        providerPools = draft.providerPools
+        sharedPools = draft.sharedPools
+        modelID = session.model ?? AgentDefaults.defaultModel(
+            for: provider, catalog: modelCatalog, configured: configuredProviders)
+        permissionMode = PermissionMode(rawValue: session.permissionMode ?? "") ?? draft.permissionMode
+        effort = Effort(rawValue: session.effort ?? draft.effort.rawValue) ?? draft.effort
+        fastMode = session.fastMode ?? draft.fastMode
+        if ComposerLogic.isLive(status: session.effectiveRunStatus), session.model != nil {
+            syncedConfig = (modelID, permissionMode.rawValue, effort.rawValue, fastMode)
+        }
     }
 
     /// Hand the worktree sub-model the host context it needs: the live status (its poll cadence), the
@@ -4187,42 +4210,54 @@ final class ConsoleModel {
     /// The card is not dropped: the interesting outcomes are the door's refusals and the states
     /// that follow (it goes to CONFIRMED, then RECHECKING or MERGED), and the card is where a
     /// reader watches that happen.
-    func confirmMergeToMain(_ view: ProjectPromotionView) async {
-        guard let projectID else { return }
+    @discardableResult
+    func confirmMergeToMain(_ view: ProjectPromotionView) async -> String? {
+        guard let projectID else { return nil }
+        var failure: String?
         do {
             promotion = try await api.confirmPromotion(projectID: projectID,
                                                        promotionID: view.promotionId,
                                                        sourceSha: view.sourceSha)
         } catch {
-            statusMessage = "That merge was not confirmed — \(APIClient.failureReason(error))."
+            failure = "That merge was not confirmed — \(APIClient.failureReason(error))."
+            statusMessage = failure
         }
         await refreshRulerQuestions(force: true)
+        return failure
     }
 
     /// M-T10: call it back, while the landing job has not reached the push. The card stays: what
     /// the door answers is the state it left the candidate in, which is what the reader watches.
-    func cancelMergeToMain(_ view: ProjectPromotionView) async {
-        guard let projectID else { return }
+    @discardableResult
+    func cancelMergeToMain(_ view: ProjectPromotionView) async -> String? {
+        guard let projectID else { return nil }
+        var failure: String?
         do {
             promotion = try await api.cancelPromotion(projectID: projectID,
                                                       promotionID: view.promotionId)
         } catch {
-            statusMessage = "That merge was not called back — \(APIClient.failureReason(error))."
+            failure = "That merge was not called back — \(APIClient.failureReason(error))."
+            statusMessage = failure
         }
         await refreshRulerQuestions(force: true)
+        return failure
     }
 
     /// M-T5: not now. The branch is left exactly where it is, and the next landing offers it again.
-    func declineMergeToMain(_ view: ProjectPromotionView) async {
-        guard let projectID else { return }
+    @discardableResult
+    func declineMergeToMain(_ view: ProjectPromotionView) async -> String? {
+        guard let projectID else { return nil }
+        var failure: String?
         do {
             promotion = try await api.declinePromotion(projectID: projectID,
                                                        promotionID: view.promotionId)
             close(.promotionApproval(promotionID: view.promotionId))
         } catch {
-            statusMessage = "That was not recorded — \(APIClient.failureReason(error))."
+            failure = "That was not recorded — \(APIClient.failureReason(error))."
+            statusMessage = failure
         }
         await refreshRulerQuestions(force: true)
+        return failure
     }
 
     private func close(_ kind: DeliveredDecisionCard.Kind) {

@@ -1,0 +1,71 @@
+[
+  {
+    "screenshot": "chromium-dark-desktop/plan-scrolled.png",
+    "sha256": "94bf9659e34e58f80ddac64c4828b8d5b5b3d234f5103581c661cec85f648f21",
+    "candidateSha256": "94bf9659e34e58f80ddac64c4828b8d5b5b3d234f5103581c661cec85f648f21",
+    "identical": true
+  },
+  {
+    "screenshot": "chromium-dark-desktop/question-retained.png",
+    "sha256": "efcc33e6f3c8f2e8ca4fd5d24b7948a5a1e3a0e70070ba0773239ac49e81f84a",
+    "candidateSha256": "efcc33e6f3c8f2e8ca4fd5d24b7948a5a1e3a0e70070ba0773239ac49e81f84a",
+    "identical": true
+  },
+  {
+    "screenshot": "chromium-dark-phone/plan-scrolled.png",
+    "sha256": "a3bb3660a3b0298f08cc0227a9386497def9133d2f61bf9d1a8f0f2adde90d51",
+    "candidateSha256": "4e6629aeadd6fda6bfcc8b33d25459d6881a6add5e20da625da13a4c3f80e33c",
+    "identical": false,
+    "difference": {
+      "pixels": 1,
+      "bounds": [
+        37,
+        771,
+        38,
+        772
+      ],
+      "sourceRgb": [
+        19,
+        19,
+        19
+      ],
+      "candidateRgb": [
+        20,
+        20,
+        20
+      ],
+      "geometryAndBehaviorJsonIdentical": true,
+      "assessment": "One raster pixel on the action button border; direct geometry/behavior records are identical. The other seven PNGs are byte-identical. No layout or content difference observed; this comparison is diagnostic, not the final P7 visual matrix."
+    }
+  },
+  {
+    "screenshot": "chromium-dark-phone/question-retained.png",
+    "sha256": "cdab2bb31cda2317bc617cd37f9e0fabe2c892760291b17bb542b3924a40dfc1",
+    "candidateSha256": "cdab2bb31cda2317bc617cd37f9e0fabe2c892760291b17bb542b3924a40dfc1",
+    "identical": true
+  },
+  {
+    "screenshot": "chromium-light-desktop/plan-scrolled.png",
+    "sha256": "9a08eba6d078f92306930788c2a7a9a902deb6246389d2bb32a20e636dfc1557",
+    "candidateSha256": "9a08eba6d078f92306930788c2a7a9a902deb6246389d2bb32a20e636dfc1557",
+    "identical": true
+  },
+  {
+    "screenshot": "chromium-light-desktop/question-retained.png",
+    "sha256": "3603d68ac04c4a683160ae105f58fe3d56f431263a355f24f45f7172b5af939b",
+    "candidateSha256": "3603d68ac04c4a683160ae105f58fe3d56f431263a355f24f45f7172b5af939b",
+    "identical": true
+  },
+  {
+    "screenshot": "chromium-light-phone/plan-scrolled.png",
+    "sha256": "7820cfd7a0f09a7515e56795a463c5f9c1cb2a39bd72538730a737eac8575f6a",
+    "candidateSha256": "7820cfd7a0f09a7515e56795a463c5f9c1cb2a39bd72538730a737eac8575f6a",
+    "identical": true
+  },
+  {
+    "screenshot": "chromium-light-phone/question-retained.png",
+    "sha256": "698357e937122bda7994b6034776d594aa7fc93fc7bcbe517d914f23cfbbb6fb",
+    "candidateSha256": "698357e937122bda7994b6034776d594aa7fc93fc7bcbe517d914f23cfbbb6fb",
+    "identical": true
+  }
+]

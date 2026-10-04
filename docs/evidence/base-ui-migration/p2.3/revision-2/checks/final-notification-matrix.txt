@@ -1,0 +1,500 @@
+
+> @orbit/web@0.1.0 pretest:ui-toasts
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-toasts
+> playwright test --config ui-migration/toasts.config.mjs
+
+[WebServer] (node:2340577) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 208 tests using 1 worker
+
+(node:2340675) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓    1 [chromium-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Dialog entry (2.3s)
+  ✓    2 [chromium-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Drawer entry (2.0s)
+  ✓    3 [chromium-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Bottom drawer entry (1.9s)
+  ✓    4 [chromium-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:46:1 › hover pause releases after a keyboard opened and closed overlay changes portal (1.0s)
+  ✓    5 [chromium-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:69:1 › native hover deadline resumes after portal changes (7.5s)
+  ✓    6 [chromium-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Dialog entry, nested layers and exit (2.6s)
+  ✓    7 [chromium-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Drawer entry, nested layers and exit (3.1s)
+  ✓    8 [chromium-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (2.9s)
+  ✓    9 [chromium-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:146:1 › stationary hover stays paused across nested modal owners then resumes for exactly six seconds (1.1s)
+  ✓   10 [chromium-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:172:1 › unhovered notifications retain their original deadline through modal owner changes (823ms)
+  ✓   11 [chromium-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Dialog animation midpoints (1.8s)
+  ✓   12 [chromium-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Drawer animation midpoints (2.0s)
+  ✓   13 [chromium-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Bottom drawer animation midpoints (1.9s)
+  ✘   14 [chromium-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Confirmation animation midpoints (1.4s)
+(node:2343497) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   15 [chromium-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:222:1 › a newly posted notification still plays its original entrance animation once (1.8s)
+  ✓   16 [chromium-light-desktop] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Dialog with unchanged appearance (1.6s)
+  ✓   17 [chromium-light-desktop] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Drawer with unchanged appearance (1.9s)
+  ✓   18 [chromium-light-desktop] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Bottom drawer with unchanged appearance (2.4s)
+  ✓   19 [chromium-light-desktop] › ui-migration/toasts.browser.mjs:71:1 › mixed pinned and passing notifications stack without overlap and retain all pinned errors (1.3s)
+  ✓   20 [chromium-light-desktop] › ui-migration/toasts.browser.mjs:98:1 › short and lifecycle dwell, hover restart, phone folding and permanent warnings keep their rules (1.2s)
+  ✓   21 [chromium-light-desktop] › ui-migration/toasts.browser.mjs:134:1 › event and entity deduplication, Undo and session navigation retain the business boundary (1.4s)
+  ✓   22 [chromium-light-desktop] › ui-migration/toasts.browser.mjs:164:1 › copyable diagnostics and live announcements survive nested overlays and theme changes (1.6s)
+  ✓   23 [chromium-light-desktop] › ui-migration/toasts.browser.mjs:208:1 › async confirmation keeps pending locks, accessible failure feedback and successful retry (1.2s)
+  ✓   24 [chromium-light-desktop] › ui-migration/toasts.browser.mjs:241:1 › legacy AntApp confirmation still works with the same notification service (1.6s)
+  ✓   25 [chromium-light-desktop] › ui-migration/toasts.browser.mjs:251:1 › retained closed overlays release notifications and normal motion settles at the original origin (2.2s)
+  ✓   26 [chromium-light-desktop] › ui-migration/toasts.browser.mjs:285:1 › notification origin follows viewport resize across the phone breakpoint (1.5s)
+(node:2345171) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   27 [chromium-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Dialog entry (2.1s)
+  ✓   28 [chromium-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Drawer entry (2.1s)
+  ✓   29 [chromium-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Bottom drawer entry (2.0s)
+  ✓   30 [chromium-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:46:1 › hover pause releases after a keyboard opened and closed overlay changes portal (1.1s)
+  ✓   31 [chromium-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:69:1 › native hover deadline resumes after portal changes (7.3s)
+  ✓   32 [chromium-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Dialog entry, nested layers and exit (2.7s)
+  ✓   33 [chromium-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Drawer entry, nested layers and exit (2.8s)
+  ✓   34 [chromium-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (2.9s)
+  ✓   35 [chromium-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:146:1 › stationary hover stays paused across nested modal owners then resumes for exactly six seconds (997ms)
+  ✓   36 [chromium-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:172:1 › unhovered notifications retain their original deadline through modal owner changes (1.0s)
+  ✓   37 [chromium-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Dialog animation midpoints (1.8s)
+  ✓   38 [chromium-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Drawer animation midpoints (1.9s)
+  ✓   39 [chromium-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Bottom drawer animation midpoints (2.1s)
+  ✘   40 [chromium-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Confirmation animation midpoints (1.3s)
+(node:2348534) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   41 [chromium-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:222:1 › a newly posted notification still plays its original entrance animation once (1.8s)
+  ✓   42 [chromium-light-phone] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Dialog with unchanged appearance (1.5s)
+  ✓   43 [chromium-light-phone] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Drawer with unchanged appearance (1.5s)
+  ✓   44 [chromium-light-phone] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Bottom drawer with unchanged appearance (1.6s)
+  ✓   45 [chromium-light-phone] › ui-migration/toasts.browser.mjs:71:1 › mixed pinned and passing notifications stack without overlap and retain all pinned errors (1.3s)
+  ✓   46 [chromium-light-phone] › ui-migration/toasts.browser.mjs:98:1 › short and lifecycle dwell, hover restart, phone folding and permanent warnings keep their rules (1.5s)
+  ✓   47 [chromium-light-phone] › ui-migration/toasts.browser.mjs:134:1 › event and entity deduplication, Undo and session navigation retain the business boundary (1.8s)
+  ✓   48 [chromium-light-phone] › ui-migration/toasts.browser.mjs:164:1 › copyable diagnostics and live announcements survive nested overlays and theme changes (1.8s)
+  ✓   49 [chromium-light-phone] › ui-migration/toasts.browser.mjs:208:1 › async confirmation keeps pending locks, accessible failure feedback and successful retry (1.4s)
+  ✓   50 [chromium-light-phone] › ui-migration/toasts.browser.mjs:241:1 › legacy AntApp confirmation still works with the same notification service (2.0s)
+  ✓   51 [chromium-light-phone] › ui-migration/toasts.browser.mjs:251:1 › retained closed overlays release notifications and normal motion settles at the original origin (3.0s)
+  ✓   52 [chromium-light-phone] › ui-migration/toasts.browser.mjs:285:1 › notification origin follows viewport resize across the phone breakpoint (2.8s)
+(node:2351525) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   53 [chromium-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Dialog entry (4.6s)
+  ✓   54 [chromium-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Drawer entry (4.5s)
+  ✓   55 [chromium-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Bottom drawer entry (2.6s)
+  ✓   56 [chromium-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:46:1 › hover pause releases after a keyboard opened and closed overlay changes portal (1.5s)
+  ✓   57 [chromium-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:69:1 › native hover deadline resumes after portal changes (7.7s)
+  ✓   58 [chromium-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Dialog entry, nested layers and exit (3.4s)
+  ✓   59 [chromium-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Drawer entry, nested layers and exit (3.4s)
+  ✓   60 [chromium-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (3.4s)
+  ✓   61 [chromium-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:146:1 › stationary hover stays paused across nested modal owners then resumes for exactly six seconds (1.1s)
+  ✓   62 [chromium-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:172:1 › unhovered notifications retain their original deadline through modal owner changes (901ms)
+  ✓   63 [chromium-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Dialog animation midpoints (1.7s)
+  ✓   64 [chromium-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Drawer animation midpoints (1.8s)
+  ✓   65 [chromium-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Bottom drawer animation midpoints (2.0s)
+  ✘   66 [chromium-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Confirmation animation midpoints (1.3s)
+(node:2357021) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   67 [chromium-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:222:1 › a newly posted notification still plays its original entrance animation once (1.7s)
+  ✓   68 [chromium-dark-desktop] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Dialog with unchanged appearance (1.3s)
+  ✓   69 [chromium-dark-desktop] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Drawer with unchanged appearance (1.4s)
+  ✓   70 [chromium-dark-desktop] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Bottom drawer with unchanged appearance (1.4s)
+  ✓   71 [chromium-dark-desktop] › ui-migration/toasts.browser.mjs:71:1 › mixed pinned and passing notifications stack without overlap and retain all pinned errors (1.1s)
+  ✓   72 [chromium-dark-desktop] › ui-migration/toasts.browser.mjs:98:1 › short and lifecycle dwell, hover restart, phone folding and permanent warnings keep their rules (1.0s)
+  ✓   73 [chromium-dark-desktop] › ui-migration/toasts.browser.mjs:134:1 › event and entity deduplication, Undo and session navigation retain the business boundary (1.3s)
+  ✓   74 [chromium-dark-desktop] › ui-migration/toasts.browser.mjs:164:1 › copyable diagnostics and live announcements survive nested overlays and theme changes (1.5s)
+  ✓   75 [chromium-dark-desktop] › ui-migration/toasts.browser.mjs:208:1 › async confirmation keeps pending locks, accessible failure feedback and successful retry (1.1s)
+  ✓   76 [chromium-dark-desktop] › ui-migration/toasts.browser.mjs:241:1 › legacy AntApp confirmation still works with the same notification service (2.1s)
+  ✓   77 [chromium-dark-desktop] › ui-migration/toasts.browser.mjs:251:1 › retained closed overlays release notifications and normal motion settles at the original origin (2.3s)
+  ✓   78 [chromium-dark-desktop] › ui-migration/toasts.browser.mjs:285:1 › notification origin follows viewport resize across the phone breakpoint (1.1s)
+(node:2359060) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   79 [chromium-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Dialog entry (1.9s)
+  ✓   80 [chromium-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Drawer entry (1.9s)
+  ✓   81 [chromium-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Bottom drawer entry (1.9s)
+  ✓   82 [chromium-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:46:1 › hover pause releases after a keyboard opened and closed overlay changes portal (1.0s)
+  ✓   83 [chromium-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:69:1 › native hover deadline resumes after portal changes (7.3s)
+  ✓   84 [chromium-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Dialog entry, nested layers and exit (2.6s)
+  ✓   85 [chromium-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Drawer entry, nested layers and exit (2.8s)
+  ✓   86 [chromium-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (2.8s)
+  ✓   87 [chromium-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:146:1 › stationary hover stays paused across nested modal owners then resumes for exactly six seconds (1.1s)
+  ✓   88 [chromium-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:172:1 › unhovered notifications retain their original deadline through modal owner changes (1.0s)
+  ✓   89 [chromium-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Dialog animation midpoints (1.7s)
+  ✓   90 [chromium-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Drawer animation midpoints (1.7s)
+  ✓   91 [chromium-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Bottom drawer animation midpoints (1.8s)
+  ✘   92 [chromium-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Confirmation animation midpoints (1.3s)
+(node:2363825) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   93 [chromium-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:222:1 › a newly posted notification still plays its original entrance animation once (1.7s)
+  ✓   94 [chromium-dark-phone] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Dialog with unchanged appearance (1.3s)
+  ✓   95 [chromium-dark-phone] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Drawer with unchanged appearance (1.3s)
+  ✓   96 [chromium-dark-phone] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Bottom drawer with unchanged appearance (1.3s)
+  ✓   97 [chromium-dark-phone] › ui-migration/toasts.browser.mjs:71:1 › mixed pinned and passing notifications stack without overlap and retain all pinned errors (1.1s)
+  ✓   98 [chromium-dark-phone] › ui-migration/toasts.browser.mjs:98:1 › short and lifecycle dwell, hover restart, phone folding and permanent warnings keep their rules (1.2s)
+  ✓   99 [chromium-dark-phone] › ui-migration/toasts.browser.mjs:134:1 › event and entity deduplication, Undo and session navigation retain the business boundary (2.1s)
+  ✓  100 [chromium-dark-phone] › ui-migration/toasts.browser.mjs:164:1 › copyable diagnostics and live announcements survive nested overlays and theme changes (1.9s)
+  ✓  101 [chromium-dark-phone] › ui-migration/toasts.browser.mjs:208:1 › async confirmation keeps pending locks, accessible failure feedback and successful retry (1.7s)
+  ✓  102 [chromium-dark-phone] › ui-migration/toasts.browser.mjs:241:1 › legacy AntApp confirmation still works with the same notification service (1.5s)
+  ✓  103 [chromium-dark-phone] › ui-migration/toasts.browser.mjs:251:1 › retained closed overlays release notifications and normal motion settles at the original origin (2.4s)
+  ✓  104 [chromium-dark-phone] › ui-migration/toasts.browser.mjs:285:1 › notification origin follows viewport resize across the phone breakpoint (1.2s)
+(node:2366342) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  105 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Dialog entry (1.8s)
+  ✓  106 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Drawer entry (1.7s)
+  ✓  107 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Bottom drawer entry (1.7s)
+  ✓  108 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:46:1 › hover pause releases after a keyboard opened and closed overlay changes portal (901ms)
+  ✓  109 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:69:1 › native hover deadline resumes after portal changes (7.2s)
+  ✓  110 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Dialog entry, nested layers and exit (2.6s)
+  ✓  111 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Drawer entry, nested layers and exit (2.8s)
+  ✓  112 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (2.8s)
+  ✓  113 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:146:1 › stationary hover stays paused across nested modal owners then resumes for exactly six seconds (1.1s)
+  ✓  114 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:172:1 › unhovered notifications retain their original deadline through modal owner changes (841ms)
+  ✓  115 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Dialog animation midpoints (1.6s)
+  ✓  116 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Drawer animation midpoints (1.6s)
+  ✓  117 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Bottom drawer animation midpoints (1.6s)
+  ✘  118 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Confirmation animation midpoints (1.2s)
+(node:2370148) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  119 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:222:1 › a newly posted notification still plays its original entrance animation once (1.5s)
+  ✓  120 [webkit-light-desktop] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Dialog with unchanged appearance (1.4s)
+  ✓  121 [webkit-light-desktop] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Drawer with unchanged appearance (1.4s)
+  ✓  122 [webkit-light-desktop] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Bottom drawer with unchanged appearance (1.4s)
+  ✓  123 [webkit-light-desktop] › ui-migration/toasts.browser.mjs:71:1 › mixed pinned and passing notifications stack without overlap and retain all pinned errors (1.2s)
+  ✓  124 [webkit-light-desktop] › ui-migration/toasts.browser.mjs:98:1 › short and lifecycle dwell, hover restart, phone folding and permanent warnings keep their rules (1.0s)
+  ✓  125 [webkit-light-desktop] › ui-migration/toasts.browser.mjs:134:1 › event and entity deduplication, Undo and session navigation retain the business boundary (1.4s)
+  ✓  126 [webkit-light-desktop] › ui-migration/toasts.browser.mjs:164:1 › copyable diagnostics and live announcements survive nested overlays and theme changes (1.5s)
+  ✓  127 [webkit-light-desktop] › ui-migration/toasts.browser.mjs:208:1 › async confirmation keeps pending locks, accessible failure feedback and successful retry (1.1s)
+  ✓  128 [webkit-light-desktop] › ui-migration/toasts.browser.mjs:241:1 › legacy AntApp confirmation still works with the same notification service (1.5s)
+  ✓  129 [webkit-light-desktop] › ui-migration/toasts.browser.mjs:251:1 › retained closed overlays release notifications and normal motion settles at the original origin (2.2s)
+  ✓  130 [webkit-light-desktop] › ui-migration/toasts.browser.mjs:285:1 › notification origin follows viewport resize across the phone breakpoint (1.0s)
+(node:2373094) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  131 [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Dialog entry (1.7s)
+  ✓  132 [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Drawer entry (1.7s)
+  ✓  133 [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Bottom drawer entry (1.7s)
+  ✓  134 [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:46:1 › hover pause releases after a keyboard opened and closed overlay changes portal (784ms)
+  ✓  135 [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:69:1 › native hover deadline resumes after portal changes (7.1s)
+  ✓  136 [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Dialog entry, nested layers and exit (2.8s)
+  ✓  137 [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Drawer entry, nested layers and exit (5.0s)
+  ✓  138 [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (4.9s)
+  ✓  139 [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:146:1 › stationary hover stays paused across nested modal owners then resumes for exactly six seconds (1.1s)
+  ✓  140 [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:172:1 › unhovered notifications retain their original deadline through modal owner changes (855ms)
+  ✓  141 [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Dialog animation midpoints (1.4s)
+  ✓  142 [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Drawer animation midpoints (1.4s)
+  ✓  143 [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Bottom drawer animation midpoints (1.4s)
+  ✘  144 [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Confirmation animation midpoints (1.0s)
+(node:2382973) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  145 [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:222:1 › a newly posted notification still plays its original entrance animation once (1.4s)
+  ✓  146 [webkit-light-phone] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Dialog with unchanged appearance (1.1s)
+  ✓  147 [webkit-light-phone] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Drawer with unchanged appearance (1.0s)
+  ✓  148 [webkit-light-phone] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Bottom drawer with unchanged appearance (1.0s)
+  ✓  149 [webkit-light-phone] › ui-migration/toasts.browser.mjs:71:1 › mixed pinned and passing notifications stack without overlap and retain all pinned errors (879ms)
+  ✓  150 [webkit-light-phone] › ui-migration/toasts.browser.mjs:98:1 › short and lifecycle dwell, hover restart, phone folding and permanent warnings keep their rules (951ms)
+  ✓  151 [webkit-light-phone] › ui-migration/toasts.browser.mjs:134:1 › event and entity deduplication, Undo and session navigation retain the business boundary (1.1s)
+  ✓  152 [webkit-light-phone] › ui-migration/toasts.browser.mjs:164:1 › copyable diagnostics and live announcements survive nested overlays and theme changes (1.2s)
+  ✓  153 [webkit-light-phone] › ui-migration/toasts.browser.mjs:208:1 › async confirmation keeps pending locks, accessible failure feedback and successful retry (929ms)
+  ✓  154 [webkit-light-phone] › ui-migration/toasts.browser.mjs:241:1 › legacy AntApp confirmation still works with the same notification service (1.0s)
+  ✓  155 [webkit-light-phone] › ui-migration/toasts.browser.mjs:251:1 › retained closed overlays release notifications and normal motion settles at the original origin (2.1s)
+  ✓  156 [webkit-light-phone] › ui-migration/toasts.browser.mjs:285:1 › notification origin follows viewport resize across the phone breakpoint (913ms)
+(node:2388314) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  157 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Dialog entry (1.7s)
+  ✓  158 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Drawer entry (1.7s)
+  ✓  159 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Bottom drawer entry (1.7s)
+  ✓  160 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:46:1 › hover pause releases after a keyboard opened and closed overlay changes portal (810ms)
+  ✓  161 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:69:1 › native hover deadline resumes after portal changes (7.1s)
+  ✓  162 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Dialog entry, nested layers and exit (2.3s)
+  ✓  163 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Drawer entry, nested layers and exit (2.6s)
+  ✓  164 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (2.7s)
+  ✓  165 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:146:1 › stationary hover stays paused across nested modal owners then resumes for exactly six seconds (903ms)
+  ✓  166 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:172:1 › unhovered notifications retain their original deadline through modal owner changes (765ms)
+  ✓  167 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Dialog animation midpoints (1.4s)
+  ✓  168 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Drawer animation midpoints (1.6s)
+  ✓  169 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Bottom drawer animation midpoints (1.4s)
+  ✘  170 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Confirmation animation midpoints (1.1s)
+(node:2392852) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  171 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:222:1 › a newly posted notification still plays its original entrance animation once (1.6s)
+  ✓  172 [webkit-dark-desktop] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Dialog with unchanged appearance (1.3s)
+  ✓  173 [webkit-dark-desktop] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Drawer with unchanged appearance (1.5s)
+  ✓  174 [webkit-dark-desktop] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Bottom drawer with unchanged appearance (1.3s)
+  ✓  175 [webkit-dark-desktop] › ui-migration/toasts.browser.mjs:71:1 › mixed pinned and passing notifications stack without overlap and retain all pinned errors (1.1s)
+  ✓  176 [webkit-dark-desktop] › ui-migration/toasts.browser.mjs:98:1 › short and lifecycle dwell, hover restart, phone folding and permanent warnings keep their rules (917ms)
+  ✓  177 [webkit-dark-desktop] › ui-migration/toasts.browser.mjs:134:1 › event and entity deduplication, Undo and session navigation retain the business boundary (1.2s)
+  ✓  178 [webkit-dark-desktop] › ui-migration/toasts.browser.mjs:164:1 › copyable diagnostics and live announcements survive nested overlays and theme changes (1.3s)
+  ✓  179 [webkit-dark-desktop] › ui-migration/toasts.browser.mjs:208:1 › async confirmation keeps pending locks, accessible failure feedback and successful retry (1.0s)
+  ✓  180 [webkit-dark-desktop] › ui-migration/toasts.browser.mjs:241:1 › legacy AntApp confirmation still works with the same notification service (1.4s)
+  ✓  181 [webkit-dark-desktop] › ui-migration/toasts.browser.mjs:251:1 › retained closed overlays release notifications and normal motion settles at the original origin (2.1s)
+  ✓  182 [webkit-dark-desktop] › ui-migration/toasts.browser.mjs:285:1 › notification origin follows viewport resize across the phone breakpoint (915ms)
+(node:2401760) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  183 [webkit-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Dialog entry (1.7s)
+  ✓  184 [webkit-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Drawer entry (1.7s)
+  ✓  185 [webkit-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Bottom drawer entry (1.7s)
+  ✓  186 [webkit-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:46:1 › hover pause releases after a keyboard opened and closed overlay changes portal (777ms)
+  ✓  187 [webkit-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:69:1 › native hover deadline resumes after portal changes (7.0s)
+  ✓  188 [webkit-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Dialog entry, nested layers and exit (2.6s)
+  ✓  189 [webkit-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Drawer entry, nested layers and exit (2.6s)
+  ✓  190 [webkit-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (2.5s)
+  ✓  191 [webkit-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:146:1 › stationary hover stays paused across nested modal owners then resumes for exactly six seconds (757ms)
+  ✓  192 [webkit-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:172:1 › unhovered notifications retain their original deadline through modal owner changes (674ms)
+  ✓  193 [webkit-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Dialog animation midpoints (1.3s)
+  ✓  194 [webkit-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Drawer animation midpoints (1.3s)
+  ✓  195 [webkit-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Bottom drawer animation midpoints (1.4s)
+  ✘  196 [webkit-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Confirmation animation midpoints (956ms)
+(node:2413968) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  197 [webkit-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:222:1 › a newly posted notification still plays its original entrance animation once (1.4s)
+  ✓  198 [webkit-dark-phone] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Dialog with unchanged appearance (1.1s)
+  ✓  199 [webkit-dark-phone] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Drawer with unchanged appearance (1.9s)
+  ✓  200 [webkit-dark-phone] › ui-migration/toasts.browser.mjs:42:3 › existing notifications remain accessible in Bottom drawer with unchanged appearance (1.3s)
+  ✓  201 [webkit-dark-phone] › ui-migration/toasts.browser.mjs:71:1 › mixed pinned and passing notifications stack without overlap and retain all pinned errors (2.1s)
+  ✓  202 [webkit-dark-phone] › ui-migration/toasts.browser.mjs:98:1 › short and lifecycle dwell, hover restart, phone folding and permanent warnings keep their rules (1.3s)
+  ✓  203 [webkit-dark-phone] › ui-migration/toasts.browser.mjs:134:1 › event and entity deduplication, Undo and session navigation retain the business boundary (1.5s)
+  ✓  204 [webkit-dark-phone] › ui-migration/toasts.browser.mjs:164:1 › copyable diagnostics and live announcements survive nested overlays and theme changes (1.3s)
+  ✓  205 [webkit-dark-phone] › ui-migration/toasts.browser.mjs:208:1 › async confirmation keeps pending locks, accessible failure feedback and successful retry (1.0s)
+  ✓  206 [webkit-dark-phone] › ui-migration/toasts.browser.mjs:241:1 › legacy AntApp confirmation still works with the same notification service (1.7s)
+  ✓  207 [webkit-dark-phone] › ui-migration/toasts.browser.mjs:251:1 › retained closed overlays release notifications and normal motion settles at the original origin (2.4s)
+  ✓  208 [webkit-dark-phone] › ui-migration/toasts.browser.mjs:285:1 › notification origin follows viewport resize across the phone breakpoint (1.3s)
+
+
+  1) [chromium-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Confirmation animation midpoints 
+
+    Error: the real popup animation must exist; it is paused only for the screenshot
+
+    expect(received).toBeGreaterThan(expected)
+
+    Expected: > 0
+    Received:   0
+
+      208 |         return { count: window.frozenPopupAnimations.length, scale: s?.scale, translate: s?.translate, opacity: s?.opacity };
+      209 |       });
+    > 210 |       expect(frozen.count, 'the real popup animation must exist; it is paused only for the screenshot').toBeGreaterThan(0);
+          |                                                                                                         ^
+      211 |       await page.mouse.move(0, 0);
+      212 |       await info.attach(`${phase}-page`, { body: await page.screenshot({ animations: 'allow' }), contentType: 'image/png' });
+      213 |       await info.attach(`${phase}-notification`, { body: await region(page).screenshot({ animations: 'allow' }), contentType: 'image/png' });
+        at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts-lifecycle.browser.mjs:210:105
+
+    Error Context: .toasts-results/toasts-lifecycle.browser.m-3d535-rmation-animation-midpoints-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .toasts-results/toasts-lifecycle.browser.m-3d535-rmation-animation-midpoints-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .toasts-results/toasts-lifecycle.browser.m-3d535-rmation-animation-midpoints-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Confirmation animation midpoints 
+
+    Error: the real popup animation must exist; it is paused only for the screenshot
+
+    expect(received).toBeGreaterThan(expected)
+
+    Expected: > 0
+    Received:   0
+
+      208 |         return { count: window.frozenPopupAnimations.length, scale: s?.scale, translate: s?.translate, opacity: s?.opacity };
+      209 |       });
+    > 210 |       expect(frozen.count, 'the real popup animation must exist; it is paused only for the screenshot').toBeGreaterThan(0);
+          |                                                                                                         ^
+      211 |       await page.mouse.move(0, 0);
+      212 |       await info.attach(`${phase}-page`, { body: await page.screenshot({ animations: 'allow' }), contentType: 'image/png' });
+      213 |       await info.attach(`${phase}-notification`, { body: await region(page).screenshot({ animations: 'allow' }), contentType: 'image/png' });
+        at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts-lifecycle.browser.mjs:210:105
+
+    Error Context: .toasts-results/toasts-lifecycle.browser.m-3d535-rmation-animation-midpoints-chromium-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .toasts-results/toasts-lifecycle.browser.m-3d535-rmation-animation-midpoints-chromium-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .toasts-results/toasts-lifecycle.browser.m-3d535-rmation-animation-midpoints-chromium-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Confirmation animation midpoints 
+
+    Error: the real popup animation must exist; it is paused only for the screenshot
+
+    expect(received).toBeGreaterThan(expected)
+
+    Expected: > 0
+    Received:   0
+
+      208 |         return { count: window.frozenPopupAnimations.length, scale: s?.scale, translate: s?.translate, opacity: s?.opacity };
+      209 |       });
+    > 210 |       expect(frozen.count, 'the real popup animation must exist; it is paused only for the screenshot').toBeGreaterThan(0);
+          |                                                                                                         ^
+      211 |       await page.mouse.move(0, 0);
+      212 |       await info.attach(`${phase}-page`, { body: await page.screenshot({ animations: 'allow' }), contentType: 'image/png' });
+      213 |       await info.attach(`${phase}-notification`, { body: await region(page).screenshot({ animations: 'allow' }), contentType: 'image/png' });
+        at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts-lifecycle.browser.mjs:210:105
+
+    Error Context: .toasts-results/toasts-lifecycle.browser.m-3d535-rmation-animation-midpoints-chromium-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .toasts-results/toasts-lifecycle.browser.m-3d535-rmation-animation-midpoints-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .toasts-results/toasts-lifecycle.browser.m-3d535-rmation-animation-midpoints-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [chromium-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Confirmation animation midpoints 
+
+    Error: the real popup animation must exist; it is paused only for the screenshot
+
+    expect(received).toBeGreaterThan(expected)
+
+    Expected: > 0
+    Received:   0
+
+      208 |         return { count: window.frozenPopupAnimations.length, scale: s?.scale, translate: s?.translate, opacity: s?.opacity };
+      209 |       });
+    > 210 |       expect(frozen.count, 'the real popup animation must exist; it is paused only for the screenshot').toBeGreaterThan(0);
+          |                                                                                                         ^
+      211 |       await page.mouse.move(0, 0);
+      212 |       await info.attach(`${phase}-page`, { body: await page.screenshot({ animations: 'allow' }), contentType: 'image/png' });
+      213 |       await info.attach(`${phase}-notification`, { body: await region(page).screenshot({ animations: 'allow' }), contentType: 'image/png' });
+        at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts-lifecycle.browser.mjs:210:105
+
+    Error Context: .toasts-results/toasts-lifecycle.browser.m-3d535-rmation-animation-midpoints-chromium-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .toasts-results/toasts-lifecycle.browser.m-3d535-rmation-animation-midpoints-chromium-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .toasts-results/toasts-lifecycle.browser.m-3d535-rmation-animation-midpoints-chromium-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Confirmation animation midpoints 
+
+    Error: the real popup animation must exist; it is paused only for the screenshot
+
+    expect(received).toBeGreaterThan(expected)
+
+    Expected: > 0
+    Received:   0
+
+      208 |         return { count: window.frozenPopupAnimations.length, scale: s?.scale, translate: s?.translate, opacity: s?.opacity };
+      209 |       });
+    > 210 |       expect(frozen.count, 'the real popup animation must exist; it is paused only for the screenshot').toBeGreaterThan(0);
+          |                                                                                                         ^
+      211 |       await page.mouse.move(0, 0);
+      212 |       await info.attach(`${phase}-page`, { body: await page.screenshot({ animations: 'allow' }), contentType: 'image/png' });
+      213 |       await info.attach(`${phase}-notification`, { body: await region(page).screenshot({ animations: 'allow' }), contentType: 'image/png' });
+        at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts-lifecycle.browser.mjs:210:105
+
+    Error Context: .toasts-results/toasts-lifecycle.browser.m-3d535-rmation-animation-midpoints-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .toasts-results/toasts-lifecycle.browser.m-3d535-rmation-animation-midpoints-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .toasts-results/toasts-lifecycle.browser.m-3d535-rmation-animation-midpoints-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Confirmation animation midpoints 
+
+    Error: the real popup animation must exist; it is paused only for the screenshot
+
+    expect(received).toBeGreaterThan(expected)
+
+    Expected: > 0
+    Received:   0
+
+      208 |         return { count: window.frozenPopupAnimations.length, scale: s?.scale, translate: s?.translate, opacity: s?.opacity };
+      209 |       });
+    > 210 |       expect(frozen.count, 'the real popup animation must exist; it is paused only for the screenshot').toBeGreaterThan(0);
+          |                                                                                                         ^
+      211 |       await page.mouse.move(0, 0);
+      212 |       await info.attach(`${phase}-page`, { body: await page.screenshot({ animations: 'allow' }), contentType: 'image/png' });
+      213 |       await info.attach(`${phase}-notification`, { body: await region(page).screenshot({ animations: 'allow' }), contentType: 'image/png' });
+        at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts-lifecycle.browser.mjs:210:105
+
+    Error Context: .toasts-results/toasts-lifecycle.browser.m-3d535-rmation-animation-midpoints-webkit-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .toasts-results/toasts-lifecycle.browser.m-3d535-rmation-animation-midpoints-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .toasts-results/toasts-lifecycle.browser.m-3d535-rmation-animation-midpoints-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  7) [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Confirmation animation midpoints 
+
+    Error: the real popup animation must exist; it is paused only for the screenshot
+
+    expect(received).toBeGreaterThan(expected)
+
+    Expected: > 0
+    Received:   0
+
+      208 |         return { count: window.frozenPopupAnimations.length, scale: s?.scale, translate: s?.translate, opacity: s?.opacity };
+      209 |       });
+    > 210 |       expect(frozen.count, 'the real popup animation must exist; it is paused only for the screenshot').toBeGreaterThan(0);
+          |                                                                                                         ^
+      211 |       await page.mouse.move(0, 0);
+      212 |       await info.attach(`${phase}-page`, { body: await page.screenshot({ animations: 'allow' }), contentType: 'image/png' });
+      213 |       await info.attach(`${phase}-notification`, { body: await region(page).screenshot({ animations: 'allow' }), contentType: 'image/png' });
+        at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts-lifecycle.browser.mjs:210:105
+
+    Error Context: .toasts-results/toasts-lifecycle.browser.m-3d535-rmation-animation-midpoints-webkit-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .toasts-results/toasts-lifecycle.browser.m-3d535-rmation-animation-midpoints-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .toasts-results/toasts-lifecycle.browser.m-3d535-rmation-animation-midpoints-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8) [webkit-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Confirmation animation midpoints 
+
+    Error: the real popup animation must exist; it is paused only for the screenshot
+
+    expect(received).toBeGreaterThan(expected)
+
+    Expected: > 0
+    Received:   0
+
+      208 |         return { count: window.frozenPopupAnimations.length, scale: s?.scale, translate: s?.translate, opacity: s?.opacity };
+      209 |       });
+    > 210 |       expect(frozen.count, 'the real popup animation must exist; it is paused only for the screenshot').toBeGreaterThan(0);
+          |                                                                                                         ^
+      211 |       await page.mouse.move(0, 0);
+      212 |       await info.attach(`${phase}-page`, { body: await page.screenshot({ animations: 'allow' }), contentType: 'image/png' });
+      213 |       await info.attach(`${phase}-notification`, { body: await region(page).screenshot({ animations: 'allow' }), contentType: 'image/png' });
+        at /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/src/web/ui-migration/toasts-lifecycle.browser.mjs:210:105
+
+    Error Context: .toasts-results/toasts-lifecycle.browser.m-3d535-rmation-animation-midpoints-webkit-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .toasts-results/toasts-lifecycle.browser.m-3d535-rmation-animation-midpoints-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .toasts-results/toasts-lifecycle.browser.m-3d535-rmation-animation-midpoints-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8 failed
+    [chromium-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Confirmation animation midpoints 
+    [chromium-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Confirmation animation midpoints 
+    [chromium-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Confirmation animation midpoints 
+    [chromium-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Confirmation animation midpoints 
+    [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Confirmation animation midpoints 
+    [webkit-light-phone] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Confirmation animation midpoints 
+    [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Confirmation animation midpoints 
+    [webkit-dark-phone] › ui-migration/toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact at Confirmation animation midpoints 
+  200 passed (6.7m)
+npm error Lifecycle script `test:ui-toasts` failed with error:
+npm error code 1
+npm error path /root/.orbit/worktrees/***/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /root/.orbit/worktrees/***/src/web
+npm error command failed
+npm error command sh -c playwright test --config ui-migration/toasts.config.mjs

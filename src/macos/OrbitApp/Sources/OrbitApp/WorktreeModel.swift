@@ -163,6 +163,12 @@ final class WorktreeModel {
         generation == diffLoadGeneration && !Task.isCancelled
     }
 
+    /// File bytes are intentionally never retained by the worktree model: reopening a preview or
+    /// retrying it must read the current file, even when its relative path has not changed.
+    func readFile(path: String) async throws -> Data {
+        try await api.sessionWorktreeFile(sessionID: sessionID, path: path)
+    }
+
     func commit() async {
         busy = true
         defer { busy = false }

@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "node",
+    "node_modules/@playwright/test/cli.js",
+    "test",
+    "--config",
+    "docs/evidence/base-ui-migration/p2.3/revision-2/raster.config.mjs"
+  ],
+  "cwd": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc",
+  "startedFrom": "0e3b3a61cadc73bda93f06985dbd866e4d1fba79",
+  "finishedAt": "2026-10-04T08:06:25.326550+00:00",
+  "seconds": 18.623766743025044,
+  "exitCode": 0
+}

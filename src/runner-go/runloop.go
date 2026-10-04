@@ -1989,6 +1989,14 @@ func uploadLegacyArtifact(ctx context.Context, t *Transport, req ArtifactCommand
 		out.Message = "invalid artifact request"
 		return out
 	}
+	if req.Source == "worktree" {
+		return uploadWorktreeArtifact(ctx, t, req)
+	}
+	if req.Source != "" {
+		out.Status = "error"
+		out.Message = "unsupported artifact source"
+		return out
+	}
 	clean := filepath.Clean(req.Path)
 	if !pathWithinRoots(clean, artifactRequestRoots(req.SessionID)) {
 		out.Status = "missing"
@@ -2025,7 +2033,7 @@ func artifactRequestRoots(sessionID string) []string {
 			continue
 		}
 		seen[id] = true
-		roots = append(roots, filepath.Join(worktreesDir(), id))
+		roots = append(roots, filepath.Join(machineHome(), "worktrees", id))
 	}
 	return roots
 }

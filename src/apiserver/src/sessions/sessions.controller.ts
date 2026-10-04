@@ -5,6 +5,7 @@ import {
   Delete,
   ForbiddenException,
   Get,
+  Header,
   MessageEvent,
   Param,
   Patch,
@@ -400,6 +401,17 @@ export class SessionsController {
     @Query('path') artifactPath?: string,
   ): Promise<StreamableFile> {
     const { data, mimeType, disposition } = await this.sessions.getLegacyArtifactForOwner(user.userId, id, artifactPath);
+    return new StreamableFile(data, { type: mimeType, disposition, length: data.length });
+  }
+
+  @Get(':id/worktree-file')
+  @Header('Cache-Control', 'no-store')
+  async worktreeFile(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Query('path') filePath?: string,
+  ): Promise<StreamableFile> {
+    const { data, mimeType, disposition } = await this.sessions.getWorktreeFileForOwner(user.userId, id, filePath);
     return new StreamableFile(data, { type: mimeType, disposition, length: data.length });
   }
 
