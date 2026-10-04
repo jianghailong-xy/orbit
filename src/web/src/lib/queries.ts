@@ -282,6 +282,20 @@ export const sessionsQuery = (
   });
 };
 
+/** A single project's members across workspaces. Kept outside ['sessions'] so unrelated
+ *  session events cannot re-read every project's full member list. */
+export const PROJECT_SESSION_REFRESH_MS = 60_000;
+
+export const projectSessionsQuery = (opts: { projectId: string; view: SessionListView }) =>
+  queryOptions({
+    queryKey: ['project-sessions', opts.projectId, opts.view] as const,
+    queryFn: () => {
+      const qs = new URLSearchParams({ projectId: opts.projectId, view: opts.view });
+      return api<SessionListItem[]>(`/sessions?${qs}`);
+    },
+    staleTime: 15_000,
+  });
+
 /** One workspace's Open-session tallies, as returned by `GET /sessions/counts`. */
 export interface WorkspaceSessionCounts {
   workspaceId: string;
@@ -511,14 +525,24 @@ export function projectsQueryKey(filter: ProjectFilter): [string, ProjectFilter]
  * (one `['projects']` invalidation reaches every entry), while the page's own Open entry is no
  * longer dragged onto this cadence — it keeps its `PROJECTS_REFRESH_MS`.
  *
- * Polled because the control-plane stream names no project: a task starting, or a coordinator
- * taking a turn, reaches the group's working dot within one interval.
+ * Polled as a fallback for missed control events, alongside project changes and the debounced
+ * refresh when a member session moves.
  */
 export const openProjectsQuery = () =>
   queryOptions({
     queryKey: ['projects', 'sidebar'] as const,
     queryFn: () => api<SidebarProject[]>('/projects/sidebar'),
     refetchInterval: 15_000,
+  });
+
+/** The project document also supplies title and task counts when a finished project is
+ *  absent from the Open-only sidebar. Shares the detail page's existing cache entry. */
+export const projectDetailsQuery = (projectId: string) =>
+  queryOptions({
+    queryKey: ['project', projectId] as const,
+    queryFn: () => api<{ id: string; title: string; tasksByStatus?: Record<string, number> }>(
+      `/projects/${encodeURIComponent(projectId)}`,
+    ),
   });
 
 /**
