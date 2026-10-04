@@ -66,8 +66,9 @@ test('refused, with the reason, where the message has nowhere to go or is about 
 });
 
 test('the chat adds no door: what an item lets anybody press is still `openItemActions`', () => {
-  // The owner's own presses on an escalated item, and the candidate's single way in, are what they
-  // were — a chat about either is a message, never a rerun, a merge or a close.
+  // The owner's own presses on an escalated item — for the merge into main, the way back to the
+  // coordinator and the merge card (§4.7) — are what they were: a chat about either is a message,
+  // never a rerun, a merge or a close.
   assert.deepEqual(
     openItemActions({
       kind: 'INTEGRATION_CHECK_FAILED',
@@ -77,7 +78,7 @@ test('the chat adds no door: what an item lets anybody press is still `openItemA
       fuseEpisodeId: null,
       askable: true,
     }),
-    ['REVIEW'],
+    ['ASK_COORDINATOR_AGAIN', 'REVIEW'],
   );
   assert.deepEqual(
     openItemActions({

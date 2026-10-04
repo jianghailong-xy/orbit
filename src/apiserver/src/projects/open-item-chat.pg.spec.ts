@@ -65,8 +65,9 @@ import { WakeDispositionService } from './wake-disposition.service';
  *  - the chat is offered at every one of those stages but the superseded one, which it refuses with
  *    that reason, and it is refused with a reason of its own where there is no conversation to take
  *    the message or the one there is cannot take it;
- *  - it adds no door: the escalated item's presses, and the candidate's single way in, are what they
- *    were, and the coordinator's rerun and the merge into main are refused exactly as before.
+ *  - it adds no door: the escalated items' presses, and the candidate's way in, are what
+ *    `openItemActions` gives them, and the coordinator's rerun and the merge into main are refused
+ *    exactly as before.
  *
  * WHAT DRIVES EACH CASE. The doors a runner knocks on, through the production wiring
  * `open-item-coordinator-handling.pg.spec.ts` uses: the result route, the heartbeat that hands jobs
@@ -625,7 +626,9 @@ test('promotion-scoped, escalated ("It is yours"): the chat is open to the owner
         stage: 'WITH_OWNER',
         refusal: null,
       });
-      assert.deepEqual(read.row.actions, ['REVIEW'], 'no new door beside the merge card');
+      // The presses `openItemActions` gives an escalated failure of the merge — the way back to the
+      // coordinator (§4.7) and the merge card — and nothing beside them for the chat.
+      assert.deepEqual(read.row.actions, ['ASK_COORDINATOR_AGAIN', 'REVIEW'], 'no new door beside the merge card');
 
       // The owner-only edges, unmoved by a chat being on offer.
       const recheck = await denied(() => stack.openItems.retryPromotionCheck(w.ownerId, w.projectId,
