@@ -2619,9 +2619,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             sessionId: operation.id,
             sessionTitle: operation.title,
             event: 'merge-result',
-            headline: `Merge conflict in ${target}`,
-            detail: 'Merge aborted; your branch is unchanged. Resolve it from the status bar.',
-            tone: 'warning',
+            headline: `Couldn't merge into ${target}`,
+            detail: d.mergeError ?? 'Merge aborted; your branch is unchanged.',
+            tone: 'error',
+            action: d.branch ? {
+              label: 'Resolve in session',
+              ariaLabel: `Resolve the conflict in ${operation.title}`,
+              onClick: () => resolveMut.mutate({
+                id: operation.id,
+                title: operation.title,
+                branch: d.branch!,
+                target,
+              }),
+            } : undefined,
           });
         } else {
           message.sessionNotice({

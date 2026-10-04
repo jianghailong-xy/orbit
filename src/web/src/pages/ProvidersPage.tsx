@@ -181,20 +181,18 @@ export function ProvidersPage() {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1 className="page-title" style={{ marginBottom: 0 }}>
-            Providers
-          </h1>
-          <div style={{ color: 'var(--text-3)', fontSize: 12 }}>
-            Where your workspaces&apos; models come from — the CLIs signed in on your machines, and the
-            API keys on your account.
-          </div>
-        </div>
+      <div className="prov-page-head">
+        <h1 className="page-title" style={{ marginBottom: 0 }}>
+          Providers
+        </h1>
         {/* Still only about keys: an engine gets its identity from the Sign in on its own row. */}
         <Button type="primary" onClick={() => navigate('/providers/new')}>
           Add provider
         </Button>
+        <div className="prov-page-sub">
+          Where your workspaces&apos; models come from — the CLIs signed in on your machines, and the
+          API keys on your account.
+        </div>
       </div>
 
       <div ref={runnerSection} id="provider-runners"><RunnerEngines /></div>

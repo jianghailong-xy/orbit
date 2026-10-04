@@ -202,6 +202,10 @@ func TestMCPExposesExactlyTheProjectTools(t *testing.T) {
 			// sits beside: asking starts nothing — the owner's press on the start card does — and the
 			// server checks the acting session against the project's own coordinator pointer.
 			"project_request_start",
+			// Its counterpart at the other end, ungated for the same reasons: asking records nothing —
+			// the owner's press on the "Is this project done?" card does — and the server checks the
+			// acting session against the project's own coordinator pointer.
+			"project_request_done",
 		}
 		if tc.orchestration {
 			want = append(want, "project_ensure_coordinator", "project_send")

@@ -324,6 +324,7 @@ test('the index buckets every project in one aggregate, not one query per projec
     }],
     coordinatorItems: null,
     startRequest: null,
+    doneRequest: null,
   });
   assert.deepEqual(rows[2].attention, {
     userBlockers: 0,
@@ -335,6 +336,7 @@ test('the index buckets every project in one aggregate, not one query per projec
     ownerItems: [],
     coordinatorItems: null,
     startRequest: null,
+    doneRequest: null,
   });
   // The established tally shape is kept, now sourced from the same aggregate. The missing group
   // for c3 means it has no tasks, so its explicit total is zero.

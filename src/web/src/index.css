@@ -259,6 +259,17 @@ body {
   max-width: none;
   align-items: center;
 }
+.toast-slot {
+  width: fit-content;
+  max-width: 100%;
+  animation: orbit-toast-enter 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.toast-slot:has(.toast--card) {
+  width: 100%;
+}
+.toast-slot--leaving .toast {
+  pointer-events: none;
+}
 .toast {
   box-sizing: border-box;
   display: flex;
@@ -273,7 +284,6 @@ body {
   font-size: 14px;
   line-height: 20px;
   text-align: start;
-  animation: orbit-toast-enter 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 :root[data-theme='dark'] .toast {
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4);
@@ -519,8 +529,20 @@ button.toast--pill:focus-visible {
     transform: none;
   }
 }
-.toast-viewport--narrow .toast {
+.toast-viewport--narrow .toast-slot {
   animation-name: orbit-toast-drop;
+}
+.toast-viewport .toast-slot--leaving {
+  animation: orbit-toast-exit 250ms ease-in forwards;
+}
+
+@keyframes orbit-toast-exit {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translate3d(0, -12px, 0); }
+}
+@keyframes orbit-toast-fade {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 
 @media (pointer: coarse) {
@@ -530,8 +552,11 @@ button.toast--pill:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .toast {
+  .toast-viewport .toast-slot {
     animation: none;
+  }
+  .toast-viewport .toast-slot--leaving {
+    animation: orbit-toast-fade 250ms ease-in forwards;
   }
 }
 
@@ -13631,6 +13656,18 @@ button.chat-jump-start:hover {
 /* ============================================================================
    Provider onboarding — logo gallery + guided add flow (ProvidersPage).
    ========================================================================== */
+.prov-page-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px 12px;
+}
+.prov-page-sub {
+  flex-basis: 100%;
+  color: var(--text-3);
+  font-size: 12px;
+}
 .provider-gallery {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -13866,17 +13903,21 @@ button.chat-jump-start:hover {
 }
 .re-sec-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 10px;
   margin-bottom: 10px;
 }
 .re-sec-head h3 {
+  flex: none;
   margin: 0;
   font-size: 14px;
   font-weight: 650;
   color: var(--text-1);
 }
 .re-sec-sub {
+  order: 1;
+  flex-basis: 100%;
   font-size: 12px;
   color: var(--text-3);
 }
@@ -14159,9 +14200,10 @@ button.chat-jump-start:hover {
 }
 @media (max-width: 700px) {
   /* Keep the name and its actions together. Status and quota get their own lines so Add account
-     and Sign in can both remain visible without squeezing the account's state. */
+     and Sign in can both remain visible without squeezing the account's state. Reserve room for
+     the engine name and let the action column shrink so its buttons can wrap on a small phone. */
   .re-runner-card .re-row {
-    grid-template-columns: minmax(0, 1fr) max-content;
+    grid-template-columns: minmax(112px, 1fr) minmax(0, max-content);
     gap: 8px 10px;
   }
   .re-runner-card .re-row > .re-act {

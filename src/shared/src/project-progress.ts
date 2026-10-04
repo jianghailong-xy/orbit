@@ -13,6 +13,7 @@
  */
 import type { IntegrationCheckResult, IntegrationJobKind, IntegrationJobPhase, IntegrationJobState } from './dto';
 import type { ProjectStartRequest, ProjectStartSettingKey, ProjectStartSettings } from './project-start';
+import type { DoneRequest } from './project-done';
 
 /** Where this project's finished tasks land: straight onto main, or onto a branch of its own. */
 export type IntegrationLine = 'MAIN' | 'PROJECT_BRANCH';
@@ -465,6 +466,9 @@ export interface ProjectOpenItemRow<Instant = string> {
   /** The request a `START_REQUEST` carries — what the "Start this project?" card is drawn from —
    *  and null for every other kind. Absent from a server that predates start requests. */
   startRequest?: ProjectStartRequest | null;
+  /** The request a `DONE_REQUEST` carries — what the "Is this project done?" card is drawn from —
+   *  and null for every other kind. Absent from a server that predates done requests. */
+  doneRequest?: DoneRequest | null;
   /** What the item's payload holds, as the rows its card draws; null when the payload is not a
    *  shape this build reads — an item an older build opened, a pause, a question — and the card
    *  then draws what it drew before this existed. */
@@ -495,6 +499,13 @@ export interface ProjectOpenItemsView<Instant = string> {
    * Absent from a server that predates start requests.
    */
   startRequest?: ProjectOpenItemRow<Instant> | null;
+  /**
+   * The coordinator's open request to record the project done (`DONE_REQUEST`), or null — a project
+   * holds at most one, and it is drawn only while it still describes the project: one whose criteria,
+   * tasks or landings have moved since is superseded before this is read. Kept out of `needsYou` for
+   * the reason `startRequest` is. Absent from a server that predates done requests.
+   */
+  doneRequest?: ProjectOpenItemRow<Instant> | null;
 }
 
 /**
@@ -869,6 +880,13 @@ export interface ProjectListAttention<Instant = string> {
    * reason the two fields above are.
    */
   startRequest?: { waitingSince: Instant } | null;
+  /**
+   * The coordinator's open request to record this project done (`DONE_REQUEST`,
+   * `project_request_done`) while the project is OPEN — since when it has been asking — or null. The
+   * row names it as waiting on the owner ("Needs you · Ready to close"), apart from `ownerItems` for
+   * the reason `startRequest` is. Optional for the same reason the fields above are.
+   */
+  doneRequest?: { waitingSince: Instant } | null;
 }
 
 /**
@@ -890,16 +908,19 @@ export interface SessionOwnerItem<Instant = string> {
 
 /**
  * What a session row says its `pendingApprovals` is counting, when one word says it better than
- * "approval" — the three kinds whose count is not an approval at all.
+ * "approval" — the kinds whose count is not an approval at all.
  *
  * `OWNER_CONFIRMATION` is an OWNER_CONFIRMED task's run waiting for its owner to confirm it done.
  * `OWNER_ITEM` is one of the four above: the row says the oldest item's own word (`Escalated to
  * you`, `Paused`, …) — the same words the Needs-you banner and the card in the conversation use —
  * because on a project whose coordinator is switched off the item is the owner's precisely when
  * nobody else will take it. `START_REQUEST` is a project not started yet whose coordinator has asked
- * to start it: the row says "Ready to start", over the "Start this project?" card. A row counting
- * anything else (a blocked tool call, a proposal) keeps the generic approval wording, and so does
- * one counting two kinds at once.
+ * to start it: the row says "Ready to start", over the "Start this project?" card. `DONE_REQUEST` is
+ * an OPEN project whose coordinator has asked its owner to record it done: the row says "Ready to
+ * close", over the "Is this project done?" card. `RECORD_AS_DONE` is a project that looks finished
+ * and that its coordinator did not ask to have recorded done within the project's escalation window:
+ * the row says "Record as done…". A row counting anything else (a blocked tool call, a proposal)
+ * keeps the generic approval wording, and so does one counting two kinds at once.
  */
 export type SessionWaitingKind =
   | 'OWNER_CONFIRMATION'

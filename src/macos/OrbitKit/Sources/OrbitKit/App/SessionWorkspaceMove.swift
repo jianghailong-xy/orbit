@@ -221,7 +221,7 @@ public extension SessionMoveCopy {
     static func movedToWorkspace(_ name: String) -> String { "Moved to \(name)" }
 
     /// The alert when it isn't, over the reason.
-    static let couldNotMove = "Couldn’t Move Session"
+    static let couldNotMove = "Couldn't move the session"
 
     /// The end request failed for a reason other than the session already ending.
     static func endFailed(_ error: Error) -> String {
@@ -232,13 +232,9 @@ public extension SessionMoveCopy {
     static let endTimedOut = "The session hasn’t finished ending, so it wasn’t moved. "
         + "Try again once it has ended."
 
-    /// The move was refused or didn't arrive. A refusal (409) is the server's own sentence for what
-    /// stands in the way now, shown as it is; anything else says the move didn't happen, and why.
+    /// The move's reason goes below the failed-action title. A refusal (409) is the server's own
+    /// sentence, shown as it is; other failures also show only their reason.
     static func moveFailed(_ error: Error) -> String {
-        if case APIError.http(let code, let body) = error, code == 409,
-           let reason = ComposerLogic.serverMessage(body) {
-            return reason
-        }
-        return "The session couldn’t be moved: \(APIClient.failureReason(error))."
+        APIClient.failureReason(error)
     }
 }

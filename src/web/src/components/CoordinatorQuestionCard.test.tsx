@@ -373,3 +373,6 @@ describe('answering it', () => {
     expect(host.textContent).toContain(QUESTION);
   });
 });
+
+// The card's content/decision contract is tested inline; real dialogs are covered in ReviewCard.test.tsx.
+vi.mock('./ReviewCard', () => import('../test/inlineReviewCard'));

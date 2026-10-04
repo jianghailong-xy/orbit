@@ -1,0 +1,77 @@
+{
+  "browser": "153.0.8010.12",
+  "geometry": {
+    "viewport": {
+      "width": 1280,
+      "height": 900,
+      "dpr": 1
+    },
+    "theme": "dark",
+    "documentWidth": 1280,
+    "popup": {
+      "x": 280,
+      "y": 24,
+      "width": 720,
+      "height": 760,
+      "top": 24,
+      "right": 1000,
+      "bottom": 784,
+      "left": 280
+    },
+    "body": {
+      "x": 304,
+      "y": 76,
+      "width": 672,
+      "height": 631,
+      "top": 76,
+      "right": 976,
+      "bottom": 707,
+      "left": 304,
+      "scrollTop": 0,
+      "scrollHeight": 631,
+      "clientHeight": 631,
+      "overflow": "auto"
+    },
+    "actions": {
+      "x": 304,
+      "y": 707,
+      "width": 672,
+      "height": 57,
+      "top": 707,
+      "right": 976,
+      "bottom": 764,
+      "left": 304
+    },
+    "buttons": [
+      {
+        "text": "Submit",
+        "x": 318,
+        "y": 718,
+        "width": 74.46875,
+        "height": 36,
+        "top": 718,
+        "right": 392.46875,
+        "bottom": 754,
+        "left": 318
+      },
+      {
+        "text": "💬 Chat about this",
+        "x": 402.46875,
+        "y": 718,
+        "width": 141.0625,
+        "height": 36,
+        "top": 718,
+        "right": 543.53125,
+        "bottom": 754,
+        "left": 402.46875
+      }
+    ]
+  },
+  "behavior": {
+    "portal": true,
+    "tabBothDirections": true,
+    "escapeAndCloseRestoreFocus": true,
+    "choicesAndDraftRetained": true,
+    "backgroundShortcutsSuspended": true
+  }
+}

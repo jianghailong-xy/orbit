@@ -227,12 +227,12 @@ final class SharedPoolCopyParityTests: XCTestCase {
         assertSays(lib, "planUsage: keyWindow(key, pool),", in: Self.sharedPools)
         assertSays(lib, "...(pool.logins ?? []).map((login) => loginMember(pool, login)), ...keyMembers(pool)",
                    in: Self.sharedPools)
-        assertSays(lib, "next: login.next,", in: Self.sharedPools)
+        assertSays(lib, "next: login.next && !accountIsPaused(login.pausedUntil),", in: Self.sharedPools)
         // A stopped key's reset is its own mark when OpenAI set one, else the month's end; the pool's is
         // the EARLIEST of those, both as this client reads them (`SharedPoolPage.earliest`).
         assertSays(lib, "resetsAt: state === 'SPENT' ? (key.spentUntil ?? pool.window.end) : null,",
                    in: Self.sharedPools)
-        assertSays(lib, "next: key.next,", in: Self.sharedPools)
+        assertSays(lib, "next: key.next && !accountIsPaused(key.pausedUntil),", in: Self.sharedPools)
         assertSays(lib, "resetsAt: !free && stops.length > 0 ? earliest(stops) : null,", in: Self.sharedPools)
         assertSays(lib, "const earliest = (stops: string[]): string => stops.reduce((a, b) => (Date.parse(a) <= Date.parse(b) ? a : b));",
                    in: Self.sharedPools)
