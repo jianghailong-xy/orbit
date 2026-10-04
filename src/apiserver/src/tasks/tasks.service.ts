@@ -9138,6 +9138,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // for a mixed-version deployment; it is transaction routing only and feeds no acceptance
     // digest or completion decision.
     const touchesAcceptanceFacts = touchesAcceptanceFact(dto);
+    // The dedicated task_reopen door is the exact three-field OPEN write shared by the runner,
+    // web and native clients. Remember it transactionally; by the time this task reaches DONE its
+    // status is IN_PROGRESS again, so a later reader cannot infer the door from status alone.
+    const isTaskReopenDoor =
+      dto.status === TaskStatus.OPEN
+      && dto.supersededByTaskId === null
+      && dto.terminalReason === null
+      && ['DONE', 'CANCELLED', 'FAILED'].includes(String(before.status));
     // Restructuring is what rank 10 is for. A status write moves one row and no edge, so it must
     // not queue behind another request's DAG rewrite — the same reasoning that keeps a rename off
     // the lock entirely, applied to the writes that now need rank 40.
@@ -9147,7 +9155,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       consumesVerificationRequest ||
       !!supersession ||
       dto.listId !== undefined ||
-      dto.fixesOpenItemId !== undefined;
+      dto.fixesOpenItemId !== undefined ||
+      isTaskReopenDoor;
     // The FK re-check only fires on a SECOND write of this task's row. A supersession is that
     // second write (its own statement, beside `task.update`). A dependency replacement no longer
     // is: since 0132 the edge write advances `task_dependency_revision` instead of re-writing the
@@ -9181,7 +9190,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             // during the rolling-upgrade window and preserves the established rank-40 ordering,
             // but it no longer expresses acceptance semantics: no task column below enters the
             // project acceptance digest or DONE gate.
-            const needsCurrent = touchesHierarchy || touchesAcceptanceFacts || !!supersession;
+            const needsCurrent = touchesHierarchy || touchesAcceptanceFacts || !!supersession || isTaskReopenDoor;
             const current = needsCurrent
               ? await tx.task.findFirst({
                 where: { id, ownerId },
@@ -9231,6 +9240,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
                 tx, ownerId, [id],
                 [...acceptanceProjects, ...(dto.projectId ? [dto.projectId] : [])],
               );
+            }
+
+            // The marker and the status write share this task lock. A stale preflight may have
+            // observed a stopped row that another writer already reopened; in that case this
+            // update is still judged by the normal task rules, but it must not claim the dedicated
+            // reopen door for a lifecycle it did not open.
+            let reopenStatusBefore: string | null = null;
+            if (isTaskReopenDoor) {
+              const [lockedTask] = await tx.$queryRaw<Array<{ status: string }>>`
+                SELECT "status"::text AS "status" FROM "task"
+                 WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+                 FOR UPDATE`;
+              reopenStatusBefore = lockedTask?.status ?? null;
             }
 
             // ...and the task row IMMEDIATELY after, before anything else in this transaction
@@ -9420,6 +9442,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             if (retiresAfter) {
               await writeSupersession();
               task = await tx.task.findUniqueOrThrow({ where: { id } });
+            }
+            if (
+              isTaskReopenDoor
+              && reopenStatusBefore != null
+              && ['DONE', 'CANCELLED', 'FAILED'].includes(reopenStatusBefore)
+              && task.status === TaskStatus.OPEN
+            ) {
+              await tx.taskReopenIntent.upsert({
+                where: { taskId: id },
+                create: { taskId: id },
+                update: { createdAt: new Date() },
+              });
             }
             if (dto.fixesOpenItemId) {
               await this.assertFixesOpenItem(

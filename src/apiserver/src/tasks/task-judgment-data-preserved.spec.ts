@@ -1893,7 +1893,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // the two existing all-or-none CHECKs are replaced with XOR checks. Existing coordinator
       // retries satisfy the widened constraints, and no task, project, acceptance, DONE fence,
       // trigger or function is rewritten; nothing is backfilled.
-      '0380_owner_integration_retry'],
+      '0380_owner_integration_retry',
+      // Reopen landing intent (0381): one task-keyed marker row records the explicit task_reopen
+      // door until the next DONE queues its LAND_TASK generation. It is consumed transactionally;
+      // no existing task, project, acceptance, DONE fence, trigger or function is rewritten.
+      '0381_task_reopen_landing_intent'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

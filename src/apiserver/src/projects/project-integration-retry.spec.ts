@@ -462,6 +462,8 @@ test('a blocked candidate\'s item names the door that checks it again, and that 
     payload: { jobKind: 'CHECK_PROMOTION', phase: 'MERGE', files: ['src/web/src/pages/ProjectsPage.tsx'], failureClass: 'CONFLICT', generation: 1 },
   });
   assert.match(conflicted, /integration_retry 也不接受冲突/);
+  assert.match(conflicted, /用 task_create 新建一条同步任务，从项目分支 tip 出发把 upstream tip 合进它的源分支/);
+  assert.match(conflicted, /解掉冲突并提交/);
   assert.doesNotMatch(conflicted, /promotionId 传/);
 });
 

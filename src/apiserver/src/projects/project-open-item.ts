@@ -476,6 +476,9 @@ export const INTEGRATION_ITEM_KINDS: readonly OpenItemKind[] = [
  *    the two facts `resolveByFact` answers it with. A task that LANDED is deliberately not among
  *    them: the item is about landing on this project's line, and that the work reached some other
  *    branch instead is in no row, so such an item stays owed and the backstop only reports it;
+ *    `handling_job_id` does not change this answer while H1 is in flight. H2/H3 are the terminal
+ *    edges for a handled item; until one commits, M-T11 and the readers that use this predicate
+ *    still count the OPEN item, including an owner-held item under H4;
  *  - anything else — a task's failure, a question, a pause, a request — while it is open: what
  *    answers those is a person, or a fact this predicate has no row for.
  *
@@ -908,13 +911,12 @@ export async function markOpenItemsHandling(
  * or a blocked candidate's check came back READY — so the items it was handling are HANDLED, in the
  * transaction that wrote the job's terminal state.
  *
- * Every column of the ending is a fact somebody can check: the coordinator (`resolved_by`), the
- * conversation that asked for the rerun, the reason it gave, and the job that answered it — beside the
- * task or the candidate the item was always about. Only the items still the coordinator's: one the
- * clock handed to the account owner while the rerun ran is theirs (§4.6), and nothing closes it in the
- * coordinator's name after that — a landing answers it as it answers every item about the task
- * (LANDED, by the platform, J-T5), and a candidate's passing check leaves it to the owner, whose card
- * the merge then waits on (M-T11 counts it).
+ * Every column of the ending is a fact somebody can check: the coordinator or owner (`resolved_by`),
+ * the conversation or account that asked for the rerun, the reason it gave, and the job that answered
+ * it — beside the task or the candidate the item was always about. Only the items still the
+ * coordinator's, plus an item explicitly handled by its owner, are closed as HANDLED. One the clock
+ * handed to the account owner while a coordinator rerun ran is left to the owner (§4.6), and a task
+ * landing answers it as LANDED by the platform instead.
  *
  * Returns the items it closed.
  */
@@ -927,9 +929,11 @@ export async function resolveHandledItems(
        SET "state" = 'RESOLVED',
            "resolution" = 'HANDLED',
            "resolved_at" = now(),
-           "resolved_by" = CASE WHEN job."retry_requested_by_user_id" IS NOT NULL THEN 'USER' ELSE 'COORDINATOR' END,
-           "resolved_by_user_id" = job."retry_requested_by_user_id",
-           "resolved_by_session_id" = job."retry_requested_by_session_id",
+           "resolved_by" = CASE
+             WHEN item."handling_user_id" IS NOT NULL THEN 'USER'
+             ELSE 'COORDINATOR' END,
+           "resolved_by_user_id" = item."handling_user_id",
+           "resolved_by_session_id" = item."handling_session_id",
            "resolution_note" = "handling_reason",
            "resolved_by_job_id" = "handling_job_id",
            "updated_at" = now()
@@ -938,7 +942,7 @@ export async function resolveHandledItems(
        AND item."handling_job_id" = job."id"
        AND item."state" = 'OPEN'
        AND (item."assignee" = 'COORDINATOR'
-         OR (item."assignee" = 'OWNER' AND job."retry_requested_by_user_id" IS NOT NULL))
+         OR (item."assignee" = 'OWNER' AND item."handling_user_id" IS NOT NULL))
     RETURNING item."id"`);
   return rows.map((row) => row.id);
 }
@@ -987,9 +991,11 @@ export async function supersedeHandledItems(
        SET "state" = 'SUPERSEDED',
            "resolution" = 'RETRIED',
            "resolved_at" = now(),
-           "resolved_by" = CASE WHEN job."retry_requested_by_user_id" IS NOT NULL THEN 'USER' ELSE 'COORDINATOR' END,
-           "resolved_by_user_id" = job."retry_requested_by_user_id",
-           "resolved_by_session_id" = job."retry_requested_by_session_id",
+           "resolved_by" = CASE
+             WHEN item."handling_user_id" IS NOT NULL THEN 'USER'
+             ELSE 'COORDINATOR' END,
+           "resolved_by_user_id" = item."handling_user_id",
+           "resolved_by_session_id" = item."handling_session_id",
            "resolution_note" = "handling_reason",
            "resolved_by_job_id" = "handling_job_id",
            "superseded_by_item_id" = ${byItemId}::uuid,
@@ -1268,6 +1274,7 @@ function landingNextStep(
   payload: IntegrationItemPayload,
   doors: {
     retryMcp: string;
+    taskCommentMcp: string;
     taskReopenMcp: string;
     taskCreateMcp: string;
     taskUpdateMcp: string;
@@ -1304,7 +1311,7 @@ function landingNextStep(
  */
 function mainSyncNextStep(
   payload: IntegrationItemPayload,
-  doors: { retryMcp: string; taskReopenMcp: string },
+  doors: { retryMcp: string; taskCommentMcp: string; taskReopenMcp: string },
 ): string {
   const line = payload.targetRef ? `项目分支 ${payload.targetRef} ` : '项目分支';
   return `这次冲突停在 MAIN_SYNC：平台先把 upstream（project_get 的 integration.upstreamRef）合进${line}的 tip，`
@@ -1317,7 +1324,7 @@ function mainSyncNextStep(
     + '2. 源分支同时包含这两个 tip，它的下一次落地就不再先合 upstream，而是按 J-S4 的 MERGE 模式落地，'
     + '进项目分支的树就是源分支的树。落地时其中一个 tip 又往前走了，源分支就缺了它，'
     + '落地会照旧停在 MAIN_SYNC，那就再合一次。\n'
-    + '3. 这个合并提交由这项任务自己的会话放进源分支：先用 task_comment 在任务上写明这一轮只做第 1 步，'
+    + `3. 这个合并提交由这项任务自己的会话放进源分支：先用 ${doors.taskCommentMcp} 在任务上写明这一轮只做第 1 步，`
     + `再用 ${doors.taskReopenMcp} 把它退回。它再次 DONE 就会排下一次落地。\n`
     + '这条待办开着时，同一条集成线上其他任务的落地都在等（M2），只有这项任务自己的下一次落地不用等。'
     + '它落进项目分支后，这条待办由平台关闭，排着的落地接着走。';
@@ -1337,21 +1344,22 @@ function promotionNextStep(
   projectId: string,
   promotionId: string | null,
   payload: IntegrationItemPayload,
-  retryDoor: string,
+  doors: { retryMcp: string; taskCreateMcp: string },
 ): string {
   const about = '这条待办身后没有任务：它来自一次晋升（把项目分支合入 main）的作业，那种作业不为任何单个'
     + '任务做事。\n';
   if (payload.failureClass === 'CONFLICT' || (payload.files?.length ?? 0) > 0) {
     return about
-      + `冲突只有改过的项目分支才能解开：原样重跑会再冲突一次，${retryDoor} 也不接受冲突。`
-      + '另起一个任务在项目分支上解决它；那个任务落地后，平台会为新的分支尖端开一个新的候选并重新检查，'
+      + `冲突只有改过的项目分支才能解开：原样重跑会再冲突一次，${doors.retryMcp} 也不接受冲突。`
+      + `用 ${doors.taskCreateMcp} 新建一条同步任务，从项目分支 tip 出发把 upstream tip 合进它的源分支，解掉冲突并提交；`
+      + '那个任务落地后，平台会为新的分支尖端开一个新的候选并重新检查，'
       + '这个候选和这条待办随之由平台关闭。';
   }
   const candidate = promotionId ? uuidToBase62(promotionId) : '这个候选的编号';
   const retry = `（projectId 传 ${projectId}，promotionId 传 ${candidate}，reason 写明这次为什么会不同）`;
   return about
     + '先判断红的是谁。是项目分支上的工作有问题，就另起一个任务修它，它落地后平台会开新的候选。'
-    + `不是工作的问题——合并检查的基线后来修好了、检查超时、集成机器出错——就用 ${retryDoor}`
+    + `不是工作的问题——合并检查的基线后来修好了、检查超时、集成机器出错——就用 ${doors.retryMcp}`
     + `${retry}把这个候选的检查重跑一次。检查通过之后，合并照旧由账号所有者在卡上确认，或由 Automatic `
     + '设置按原来的规则自动合并：这扇门只让候选回到可以合并的状态，不替任何人合并。';
 }
@@ -1514,7 +1522,10 @@ export function openItemMessage(item: OpenItemMessageSource): string {
         ? `${landingNextStep(projectId, taskId, payload, doorNames)}\n`
           + '任务落地、被取消或被取代之后，这条待办由平台自己关闭。'
           + `${handling('重排', '落地了')}你不用回报。${handClose}\n`
-        : `${promotionNextStep(projectId, item.promotionId ?? null, payload, doorNames.retryMcp)}\n`
+        : `${promotionNextStep(projectId, item.promotionId ?? null, payload, {
+          retryMcp: doorNames.retryMcp,
+          taskCreateMcp: doorNames.taskCreateMcp,
+        })}\n`
           + '这个候选被新的落地取代、被拒绝或已经合并之后，这条待办由平台自己关闭。'
           + `${handling('重跑检查', '检查通过了')}你不用回报。${handClose}\n`)
       + `\n${notice}`;

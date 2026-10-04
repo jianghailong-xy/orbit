@@ -4566,7 +4566,7 @@ export class RunnerApiController {
       // transaction as the DONE so the two commit together (contract §2.3 J-T1a). Outside the
       // comparison block for the same reason `recordTaskFailure` is.
       if (acceptanceTaskCompleted && current.taskId) {
-        await enqueueForDoneTask(tx, current.ownerId, current.taskId);
+        await enqueueForDoneTask(tx, current.ownerId, current.taskId, { sessionId });
       }
       // The task a successful message turn is about, read once for the two questions the completion
       // asks of it: whether an EXECUTABLE acceptance shell turn is owed now, and whether a run of an

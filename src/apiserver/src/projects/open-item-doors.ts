@@ -38,19 +38,15 @@ export type OpenItemDoorFailureClass = (typeof OPEN_ITEM_DOOR_FAILURE_CLASSES)[n
 export const OPEN_ITEM_DOOR_ASSIGNEES = ['COORDINATOR', 'OWNER'] as const;
 export type OpenItemDoorAssignee = (typeof OPEN_ITEM_DOOR_ASSIGNEES)[number];
 
-/** Stable names for the intentional holes in this matrix. */
-export const KNOWN_GAPS = [
-  'PROMOTION_CONFLICT_BOTH_ASSIGNEES',
-  'MAIN_SYNC_CONFLICT_COORDINATOR',
-] as const;
+/**
+ * There are no unresolved cells in the matrix.  Keep the export for callers that used the census
+ * before the conflict-specific doors were added; an empty tuple makes a newly introduced hole fail
+ * the census instead of being silently accepted.
+ */
+export const KNOWN_GAPS = [] as const;
 export type OpenItemDoorKnownGap = (typeof KNOWN_GAPS)[number];
 
-export const KNOWN_GAP_DESCRIPTIONS: Readonly<Record<OpenItemDoorKnownGap, string>> = {
-  PROMOTION_CONFLICT_BOTH_ASSIGNEES:
-    'a promotion conflict has no resolving retry door for either assignee; create a task that resolves it on the project branch',
-  MAIN_SYNC_CONFLICT_COORDINATOR:
-    'a MAIN_SYNC conflict has no resolving coordinator door until the conflict-specific repair path lands',
-};
+export const KNOWN_GAP_DESCRIPTIONS: Readonly<Record<OpenItemDoorKnownGap, string>> = {};
 
 export type OpenItemDoorKind = 'MCP' | 'ROUTE';
 export type OpenItemDoorCapability =
@@ -193,6 +189,45 @@ const createFixTask = (holder: OpenItemDoorAssignee): OpenItemDoor => door(
   },
 );
 
+/** The first half of the MAIN_SYNC repair recipe.  It is deliberately non-resolving: the comment
+ * records why the next run is different, while `task_reopen` below is the door that changes the
+ * task's generation. */
+const commentOnTask = (holder: OpenItemDoorAssignee): OpenItemDoor => door(
+  holder,
+  'task-comment',
+  'task_comment',
+  'MCP',
+  'REPAIR',
+  [],
+  {
+    mcp: 'task_comment',
+    resolving: false,
+  },
+);
+
+/** File the concrete sync task that resolves a promotion MERGE conflict on the project branch. */
+const createSyncTask = (holder: OpenItemDoorAssignee): OpenItemDoor => door(
+  holder,
+  'task-create-sync',
+  'task_create',
+  'MCP',
+  'REPAIR',
+  ['SUCCESSOR_FILED'],
+  {
+    mcp: 'task_create',
+    route: '/runner/tasks',
+    resolving: true,
+  },
+);
+
+function reopenTask(holder: OpenItemDoorAssignee, action?: OpenItemAction): OpenItemDoor {
+  return door(holder, 'task-reopen', 'task_reopen', 'MCP', 'RERUN', ['RETRIED'], {
+    action,
+    mcp: 'task_reopen',
+    route: '/runner/tasks/:id',
+  });
+}
+
 function retryTask(holder: OpenItemDoorAssignee, resolving: boolean): OpenItemDoor[] {
   const owner = holder === 'OWNER';
   return [door(holder, 'integration-retry-task', 'integration_retry', owner ? 'ROUTE' : 'MCP', 'RERUN', ['RETRIED'], {
@@ -219,11 +254,7 @@ function retryPromotion(holder: OpenItemDoorAssignee, resolving: boolean): OpenI
 
 function taskRepair(holder: OpenItemDoorAssignee, action?: OpenItemAction): OpenItemDoor[] {
   return [
-    door(holder, 'task-reopen', 'task_reopen', 'MCP', 'RERUN', ['RETRIED'], {
-      action,
-      mcp: 'task_reopen',
-      route: '/runner/tasks/:id',
-    }),
+    reopenTask(holder, action),
     door(holder, 'task-create', 'task_create', 'MCP', 'RERUN', ['SUCCESSOR_FILED'], {
       action,
       mcp: 'task_create',
@@ -395,20 +426,24 @@ export function doorsForCell(cell: Pick<OpenItemDoorCell,
   }
   if (!isIntegration(todoType)) return [handClose(assignee), handOver(assignee)];
 
-  // The coordinator and owner use the same integration_retry decision.  A CONFLICT remains a
-  // deliberate hole: replaying the same source cannot repair it, so T14's project-branch repair
-  // path is the only resolving door for those cells.
+  // The coordinator and owner use the same integration_retry decision.  A conflict is different:
+  // replaying the same source cannot repair it, so the table names the concrete branch-changing
+  // operation that does.
   if (promotionFailure) {
     doors.push(...retryPromotion(assignee, failureClass !== 'CONFLICT'));
     doors.push(review(assignee, false));
     if (assignee === 'OWNER') doors.push(askAgain(assignee));
+    if (failureClass === 'CONFLICT') doors.push(createSyncTask(assignee));
     doors.push(createFixTask(assignee), handClose(assignee), handOver(assignee));
     return doors;
   }
 
   if (sourceJob === 'MAIN_SYNC' && failureClass === 'CONFLICT' && assignee === 'COORDINATOR') {
-    // The existing UI still exposes the ordinary task controls, but none repairs this conflict.
-    doors.push(openCoordinator(assignee), openTaskSession(assignee), cancelTask(assignee, false));
+    // The conflict belongs to the project line.  The coordinator records the narrow re-open recipe
+    // before changing the task generation; sending the task back to redo its own work is not the
+    // remedy for a conflict that happened before that work was examined.
+    doors.push(openCoordinator(assignee), openTaskSession(assignee), commentOnTask(assignee),
+      reopenTask(assignee, 'RETRY'), cancelTask(assignee, false));
   } else if ((sourceJob === 'LAND_TASK' || sourceJob === 'MAIN_SYNC') && assignee === 'COORDINATOR') {
     doors.push(openCoordinator(assignee), openTaskSession(assignee));
     if (failureClass === 'CONFLICT') {
@@ -466,19 +501,10 @@ export const OPEN_ITEM_DOOR_TABLE: readonly OpenItemDoorCell[] = buildTable();
 
 export function knownGapsForCell(cell: Pick<OpenItemDoorCell,
   'todoType' | 'sourceJob' | 'failureClass' | 'assignee'>): OpenItemDoorKnownGap[] {
-  const gaps: OpenItemDoorKnownGap[] = [];
-  if ((isIntegration(cell.todoType) || cell.todoType === 'PROMOTION_APPROVAL')
-      && isPromotionSource(cell.sourceJob)
-      && cell.failureClass === 'CONFLICT') {
-    gaps.push('PROMOTION_CONFLICT_BOTH_ASSIGNEES');
-  }
-  if (isIntegration(cell.todoType)
-      && cell.sourceJob === 'MAIN_SYNC'
-      && cell.failureClass === 'CONFLICT'
-      && cell.assignee === 'COORDINATOR') {
-    gaps.push('MAIN_SYNC_CONFLICT_COORDINATOR');
-  }
-  return gaps;
+  // Kept as a function so the census API remains source-compatible.  Every current cell has a
+  // resolving door; a future gap must be added deliberately and made visible in the spec.
+  void cell;
+  return [];
 }
 
 export function cellForOpenItem(input: OpenItemDoorInput): OpenItemDoorCell | null {
@@ -546,6 +572,7 @@ export function openItemActionsFromDoors(input: OpenItemDoorInput): OpenItemActi
 export function openItemDoorMessageNames(input: OpenItemDoorInput): {
   retryMcp: string;
   resolveMcp: string;
+  taskCommentMcp: string;
   taskStartMcp: string;
   taskCreateMcp: string;
   taskUpdateMcp: string;
@@ -560,6 +587,7 @@ export function openItemDoorMessageNames(input: OpenItemDoorInput): {
   return {
     retryMcp: retry?.mcp ?? 'integration_retry',
     resolveMcp: resolve?.mcp ?? 'open_item_resolve',
+    taskCommentMcp: named('task_comment', 'task_comment'),
     taskStartMcp: named('task_start', 'task_start'),
     taskCreateMcp: named('task_create', 'task_create'),
     taskUpdateMcp: named('task_update', 'task_update'),
