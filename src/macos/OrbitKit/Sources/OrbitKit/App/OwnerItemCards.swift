@@ -221,6 +221,32 @@ public enum PromotionCards {
         }
     }
 
+    /// The transcript preview keeps the branch on its own line, outside the heading.
+    public static func previewTitle(_ view: ProjectPromotionView) -> String {
+        let into = shortRef(view.upstreamRef)
+        switch stage(view) {
+        case .askingYou: return "Merge to \(into)"
+        case .merging: return "\(mergingActionLabel(view)) · \(into)"
+        case .blocked: return "Merge to \(into) blocked"
+        case .merged: return title(view)
+        case .none: return supersededTitle
+        }
+    }
+
+    public static func previewCounts(_ view: ProjectPromotionView) -> String {
+        let tasks = view.taskIds.count
+        let taskCount = "\(tasks) task\(tasks == 1 ? "" : "s")"
+        guard let commits = view.commitsAhead else { return taskCount }
+        return "\(commits) commit\(commits == 1 ? "" : "s") · \(taskCount)"
+    }
+
+    /// No commands in the preview, but every recorded check contributes to its verdict.
+    public static func previewChecks(_ view: ProjectPromotionView) -> String {
+        guard !view.checks.isEmpty else { return "No checks recorded" }
+        if view.checks.contains(where: { $0.timedOut == true }) { return "Checks timed out" }
+        return view.checks.allSatisfy(\.passed) ? "✓ Checks passed" : "✕ Checks failed"
+    }
+
     /// `project/bg-jobs · 7 commits ahead of main` — mock 4's Branch row.
     public static func branchLine(_ view: ProjectPromotionView) -> String {
         let branch = shortRef(view.sourceRef)
@@ -237,12 +263,14 @@ public enum PromotionCards {
     /// `✓ Passed on the combined tree · <command> · 6m 12s`, or what failed instead. The check the
     /// owner is being asked to trust, named by the command that ran and how long it took.
     public static func checksLine(_ view: ProjectPromotionView) -> String {
-        guard let check = view.checks.last else { return "no checks recorded" }
-        let elapsed = check.durationMs.map { " · \(duration(ms: $0))" } ?? ""
-        let verdict = check.passed
-            ? "✓ Passed on the combined tree"
-            : (check.timedOut == true ? "✕ Timed out on the combined tree" : "✕ Failed on the combined tree")
-        return "\(verdict) · \(check.command)\(elapsed)"
+        guard !view.checks.isEmpty else { return "no checks recorded" }
+        return view.checks.map { check in
+            let elapsed = check.durationMs.map { " · \(duration(ms: $0))" } ?? ""
+            let verdict = check.passed
+                ? "✓ Passed on the combined tree"
+                : (check.timedOut == true ? "✕ Timed out on the combined tree" : "✕ Failed on the combined tree")
+            return "\(verdict) · \(check.command)\(elapsed)"
+        }.joined(separator: "\n\n")
     }
 
     /// The upstream row: whether this candidate conflicts with it, and — on a re-check — that it

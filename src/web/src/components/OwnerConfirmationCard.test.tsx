@@ -339,7 +339,7 @@ describe('the confirmation card', () => {
     const scope = await mount(
       <OwnerConfirmationCard view={view({ ifConfirmed })} waiting={waiting()} onDecide={() => {}} onSendBack={() => {}} />,
     );
-    const next = scope.querySelector('.owner-confirmation-if')?.nextElementSibling as HTMLElement | null;
+    const next = scope.querySelector('.approval-body')?.nextElementSibling as HTMLElement | null;
     expect(next?.querySelector('button')?.textContent).toContain(OWNER_CONFIRM_ACTION);
   });
 
@@ -639,3 +639,6 @@ describe('the list row and the pinned line only signal', () => {
     )).toBe('');
   });
 });
+
+// The card's content/decision contract is tested inline; real dialogs are covered in ReviewCard.test.tsx.
+vi.mock('./ReviewCard', () => import('../test/inlineReviewCard'));

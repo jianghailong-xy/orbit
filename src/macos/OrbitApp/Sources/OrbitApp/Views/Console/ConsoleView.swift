@@ -28,6 +28,9 @@ struct ConsoleView: View {
     @Environment(AppModel.self) private var appModel
     /// The public read-only link's sheet — opened from the nav bar on iOS, the window toolbar on macOS.
     @State private var showShare = false
+    @State private var promotionReview: PromotionReviewTarget?
+    @State private var approvalReview: ApprovalReviewTarget?
+    @State private var approvalReviewDrafts = ApprovalReviewDrafts()
     #if os(iOS)
     /// Tapping the nav-bar title renames the session (web double-clicks its header title). Seeded
     /// from the session's own title — not `SessionHeader.title`, whose agent-name fallback would
@@ -202,6 +205,20 @@ struct ConsoleView: View {
                 .environment(\.sessionImagePreview, sessionImagePreview(console))
                 // The workspace's background agents and workflows, for the cards that draw them.
                 .environment(\.taskActivity, taskActivity(console))
+                .environment(\.openPromotionReview, { promotionID in
+                    promotionReview = PromotionReviewTarget(id: promotionID)
+                })
+                .sheet(item: $promotionReview) { target in
+                    PromotionReviewSheet(console: console, promotionID: target.id)
+                }
+                .environment(approvalReviewDrafts)
+                .environment(\.openApprovalReview, { target in
+                    approvalReview = target
+                })
+                .sheet(item: $approvalReview) { target in
+                    ApprovalReviewSheet(console: console, target: target)
+                        .environment(approvalReviewDrafts)
+                }
                 .imagePreview($imagePreviewTarget, images: imagePreviewPages, ns: imagePreviewNS,
                               store: registry.attachments)
             } else {
@@ -214,6 +231,11 @@ struct ConsoleView: View {
         // keeps this off-screen view cached, and at most one session ever streams.
         .task(id: sessionID) {
             _ = registry.model(for: sessionID, agentID: agentID)
+        }
+        .onChange(of: sessionID) { _, _ in
+            promotionReview = nil
+            approvalReview = nil
+            approvalReviewDrafts = ApprovalReviewDrafts()
         }
         #if os(iOS)
         // "Another session needs you", below the nav bar and above the transcript. Compact only:
