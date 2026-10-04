@@ -1,0 +1,477 @@
+{
+  "sourceCommit": "e3f53d40246c005aac7c3e1060f0734d38afbb47",
+  "revision2": {
+    "count": 256,
+    "allHashesMatch": true,
+    "types": {
+      ".png": 160,
+      ".json": 96
+    },
+    "stats": {
+      "startTime": "2026-10-04T05:01:00.078Z",
+      "duration": 229013.06199999998,
+      "expected": 96,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    }
+  },
+  "revision1": {
+    "count": 224,
+    "allHashesMatch": true,
+    "types": {
+      ".png": 128,
+      ".json": 96
+    },
+    "stats": {
+      "startTime": "2026-10-04T04:21:32.021Z",
+      "duration": 215398.722,
+      "expected": 96,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    }
+  },
+  "p0Baselines": {
+    "referenceCommit": "297d33e97729c66ebdc8f2b63b0e094db1d9e8df",
+    "count": 252,
+    "allUnchanged": true
+  },
+  "appearance": [
+    {
+      "project": "chromium-dark-desktop",
+      "allFourSurfacesEqual": true,
+      "rightDrawerSeparators": {
+        "header": {
+          "color": "rgba(223, 223, 226, 0.05)",
+          "width": "1px",
+          "style": "solid"
+        },
+        "footer": {
+          "color": "rgba(223, 223, 226, 0.05)",
+          "width": "1px",
+          "style": "solid"
+        }
+      },
+      "bottomDrawerSeparators": {
+        "header": {
+          "color": "rgba(223, 223, 226, 0.05)",
+          "width": "1px",
+          "style": "solid"
+        },
+        "footer": {
+          "color": "rgba(223, 223, 226, 0.05)",
+          "width": "1px",
+          "style": "solid"
+        }
+      },
+      "bottomInputStates": {
+        "hover": {
+          "hovered": true,
+          "focused": false,
+          "focusVisible": false,
+          "borderColor": "rgb(85, 133, 232)",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "boxShadow": "none"
+        },
+        "focus": {
+          "hovered": false,
+          "focused": true,
+          "focusVisible": true,
+          "borderColor": "rgb(46, 98, 220)",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "boxShadow": "rgba(1, 58, 182, 0.33) 0px 0px 0px 2px"
+        }
+      }
+    },
+    {
+      "project": "chromium-dark-phone",
+      "allFourSurfacesEqual": true,
+      "rightDrawerSeparators": {
+        "header": {
+          "color": "rgba(223, 223, 226, 0.05)",
+          "width": "1px",
+          "style": "solid"
+        },
+        "footer": {
+          "color": "rgba(223, 223, 226, 0.05)",
+          "width": "1px",
+          "style": "solid"
+        }
+      },
+      "bottomDrawerSeparators": {
+        "header": {
+          "color": "rgba(223, 223, 226, 0.05)",
+          "width": "1px",
+          "style": "solid"
+        },
+        "footer": {
+          "color": "rgba(223, 223, 226, 0.05)",
+          "width": "1px",
+          "style": "solid"
+        }
+      },
+      "bottomInputStates": {
+        "hover": {
+          "hovered": true,
+          "focused": false,
+          "focusVisible": false,
+          "borderColor": "rgb(85, 133, 232)",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "boxShadow": "none"
+        },
+        "focus": {
+          "hovered": false,
+          "focused": true,
+          "focusVisible": true,
+          "borderColor": "rgb(46, 98, 220)",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "boxShadow": "rgba(1, 58, 182, 0.33) 0px 0px 0px 2px"
+        }
+      }
+    },
+    {
+      "project": "chromium-light-desktop",
+      "allFourSurfacesEqual": true,
+      "rightDrawerSeparators": {
+        "header": {
+          "color": "rgba(17, 42, 80, 0.08)",
+          "width": "1px",
+          "style": "solid"
+        },
+        "footer": {
+          "color": "rgba(17, 42, 80, 0.08)",
+          "width": "1px",
+          "style": "solid"
+        }
+      },
+      "bottomDrawerSeparators": {
+        "header": {
+          "color": "rgba(17, 42, 80, 0.08)",
+          "width": "1px",
+          "style": "solid"
+        },
+        "footer": {
+          "color": "rgba(17, 42, 80, 0.08)",
+          "width": "1px",
+          "style": "solid"
+        }
+      },
+      "bottomInputStates": {
+        "hover": {
+          "hovered": true,
+          "focused": false,
+          "focusVisible": false,
+          "borderColor": "rgb(92, 146, 255)",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "boxShadow": "none"
+        },
+        "focus": {
+          "hovered": false,
+          "focused": true,
+          "focusVisible": true,
+          "borderColor": "rgb(51, 112, 255)",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "boxShadow": "rgba(5, 122, 255, 0.06) 0px 0px 0px 2px"
+        }
+      }
+    },
+    {
+      "project": "chromium-light-phone",
+      "allFourSurfacesEqual": true,
+      "rightDrawerSeparators": {
+        "header": {
+          "color": "rgba(17, 42, 80, 0.08)",
+          "width": "1px",
+          "style": "solid"
+        },
+        "footer": {
+          "color": "rgba(17, 42, 80, 0.08)",
+          "width": "1px",
+          "style": "solid"
+        }
+      },
+      "bottomDrawerSeparators": {
+        "header": {
+          "color": "rgba(17, 42, 80, 0.08)",
+          "width": "1px",
+          "style": "solid"
+        },
+        "footer": {
+          "color": "rgba(17, 42, 80, 0.08)",
+          "width": "1px",
+          "style": "solid"
+        }
+      },
+      "bottomInputStates": {
+        "hover": {
+          "hovered": true,
+          "focused": false,
+          "focusVisible": false,
+          "borderColor": "rgb(92, 146, 255)",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "boxShadow": "none"
+        },
+        "focus": {
+          "hovered": false,
+          "focused": true,
+          "focusVisible": true,
+          "borderColor": "rgb(51, 112, 255)",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "boxShadow": "rgba(5, 122, 255, 0.06) 0px 0px 0px 2px"
+        }
+      }
+    },
+    {
+      "project": "webkit-dark-desktop",
+      "allFourSurfacesEqual": true,
+      "rightDrawerSeparators": {
+        "header": {
+          "color": "rgba(223, 223, 226, 0.05)",
+          "width": "1px",
+          "style": "solid"
+        },
+        "footer": {
+          "color": "rgba(223, 223, 226, 0.05)",
+          "width": "1px",
+          "style": "solid"
+        }
+      },
+      "bottomDrawerSeparators": {
+        "header": {
+          "color": "rgba(223, 223, 226, 0.05)",
+          "width": "1px",
+          "style": "solid"
+        },
+        "footer": {
+          "color": "rgba(223, 223, 226, 0.05)",
+          "width": "1px",
+          "style": "solid"
+        }
+      },
+      "bottomInputStates": {
+        "hover": {
+          "hovered": true,
+          "focused": false,
+          "focusVisible": false,
+          "borderColor": "rgb(85, 133, 232)",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "boxShadow": "none"
+        },
+        "focus": {
+          "hovered": false,
+          "focused": true,
+          "focusVisible": true,
+          "borderColor": "rgb(46, 98, 220)",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "boxShadow": "rgba(1, 58, 182, 0.33) 0px 0px 0px 2px"
+        }
+      }
+    },
+    {
+      "project": "webkit-dark-phone",
+      "allFourSurfacesEqual": true,
+      "rightDrawerSeparators": {
+        "header": {
+          "color": "rgba(223, 223, 226, 0.05)",
+          "width": "1px",
+          "style": "solid"
+        },
+        "footer": {
+          "color": "rgba(223, 223, 226, 0.05)",
+          "width": "1px",
+          "style": "solid"
+        }
+      },
+      "bottomDrawerSeparators": {
+        "header": {
+          "color": "rgba(223, 223, 226, 0.05)",
+          "width": "1px",
+          "style": "solid"
+        },
+        "footer": {
+          "color": "rgba(223, 223, 226, 0.05)",
+          "width": "1px",
+          "style": "solid"
+        }
+      },
+      "bottomInputStates": {
+        "hover": {
+          "hovered": true,
+          "focused": false,
+          "focusVisible": false,
+          "borderColor": "rgb(85, 133, 232)",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "boxShadow": "none"
+        },
+        "focus": {
+          "hovered": false,
+          "focused": true,
+          "focusVisible": true,
+          "borderColor": "rgb(46, 98, 220)",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "boxShadow": "rgba(1, 58, 182, 0.33) 0px 0px 0px 2px"
+        }
+      }
+    },
+    {
+      "project": "webkit-light-desktop",
+      "allFourSurfacesEqual": true,
+      "rightDrawerSeparators": {
+        "header": {
+          "color": "rgba(17, 42, 80, 0.08)",
+          "width": "1px",
+          "style": "solid"
+        },
+        "footer": {
+          "color": "rgba(17, 42, 80, 0.08)",
+          "width": "1px",
+          "style": "solid"
+        }
+      },
+      "bottomDrawerSeparators": {
+        "header": {
+          "color": "rgba(17, 42, 80, 0.08)",
+          "width": "1px",
+          "style": "solid"
+        },
+        "footer": {
+          "color": "rgba(17, 42, 80, 0.08)",
+          "width": "1px",
+          "style": "solid"
+        }
+      },
+      "bottomInputStates": {
+        "hover": {
+          "hovered": true,
+          "focused": false,
+          "focusVisible": false,
+          "borderColor": "rgb(92, 146, 255)",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "boxShadow": "none"
+        },
+        "focus": {
+          "hovered": false,
+          "focused": true,
+          "focusVisible": true,
+          "borderColor": "rgb(51, 112, 255)",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "boxShadow": "rgba(5, 122, 255, 0.06) 0px 0px 0px 2px"
+        }
+      }
+    },
+    {
+      "project": "webkit-light-phone",
+      "allFourSurfacesEqual": true,
+      "rightDrawerSeparators": {
+        "header": {
+          "color": "rgba(17, 42, 80, 0.08)",
+          "width": "1px",
+          "style": "solid"
+        },
+        "footer": {
+          "color": "rgba(17, 42, 80, 0.08)",
+          "width": "1px",
+          "style": "solid"
+        }
+      },
+      "bottomDrawerSeparators": {
+        "header": {
+          "color": "rgba(17, 42, 80, 0.08)",
+          "width": "1px",
+          "style": "solid"
+        },
+        "footer": {
+          "color": "rgba(17, 42, 80, 0.08)",
+          "width": "1px",
+          "style": "solid"
+        }
+      },
+      "bottomInputStates": {
+        "hover": {
+          "hovered": true,
+          "focused": false,
+          "focusVisible": false,
+          "borderColor": "rgb(92, 146, 255)",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "boxShadow": "none"
+        },
+        "focus": {
+          "hovered": false,
+          "focused": true,
+          "focusVisible": true,
+          "borderColor": "rgb(51, 112, 255)",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "boxShadow": "rgba(5, 122, 255, 0.06) 0px 0px 0px 2px"
+        }
+      }
+    }
+  ],
+  "pixelComparison": {
+    "pairCount": 48,
+    "identicalPairs": 18,
+    "changedPixels": 767,
+    "differenceLocations": {
+      "button rounded edge": 360,
+      "input rounded edge/shadow": 291,
+      "surface rounded edge": 112,
+      "outside rounded edges": 4
+    },
+    "maxChannelDelta": 4,
+    "separatorRows": 64,
+    "separatorChangedPixels": 0
+  },
+  "controlsRegression": {
+    "startTime": "2026-10-04T05:01:59.720Z",
+    "duration": 89334.789,
+    "expected": 24,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "checks": {
+    "overlays-revision-2": 0,
+    "controls-regression": 0,
+    "fixture-types": 0,
+    "boundary-and-theme": 0,
+    "web-build": 0
+  },
+  "sourceFiles": [
+    {
+      "path": "src/web/src/components/ui/Overlay.css",
+      "sha256": "e5164678dd71c69744dc6356ffc9dfa85e2170a82a213a8ad033c35d3c203d2c"
+    },
+    {
+      "path": "src/web/src/components/ui/README.md",
+      "sha256": "9693c08a07fd8e04d2212b2e3816933918b7d14984ccb24fd634c3c4ccaf1195"
+    },
+    {
+      "path": "src/web/src/components/ui/__fixtures__/OverlaysFixture.tsx",
+      "sha256": "6c00f549e41a864009887205e47e65abf7a59c48269502955073eaae5ba5eab1"
+    },
+    {
+      "path": "src/web/src/components/ui/foundation.css",
+      "sha256": "d4c221d1b9571ba2e864473e05731d0f5b73d8aa518e464a01010f5ceb68799d"
+    },
+    {
+      "path": "src/web/ui-migration/overlays.browser.mjs",
+      "sha256": "bdbd04f57b53fc0455770e4d313048580f92ce63e4c247e0c4674819edf07759"
+    }
+  ]
+}

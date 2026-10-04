@@ -1,0 +1,1820 @@
+{
+  "stats": {
+    "startTime": "2026-10-04T04:13:57.746Z",
+    "duration": 174373.689,
+    "expected": 80,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 6565
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-dialog.png",
+          "sha256": "6fce7a3fb447d889de7647d87e465c6aeb23a62db39d97c9774ec66a613dd2fe"
+        },
+        {
+          "file": "chromium-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-dialog.png",
+          "sha256": "6fce7a3fb447d889de7647d87e465c6aeb23a62db39d97c9774ec66a613dd2fe"
+        },
+        {
+          "file": "chromium-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-right-drawer.png",
+          "sha256": "63460894437b3fedab7766967214ee085836129f0c575973ee1f9067719a084f"
+        },
+        {
+          "file": "chromium-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-right-drawer.png",
+          "sha256": "1cddc251c23cc7a099a0c4fea673dbeede03a59311f0e1afdef9c8d6f2e31df2"
+        },
+        {
+          "file": "chromium-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-bottom-drawer.png",
+          "sha256": "79ad5b23592e0d483543d6228c564ba7530713f850e13c3e2cf638c65fea81a5"
+        },
+        {
+          "file": "chromium-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-bottom-drawer.png",
+          "sha256": "419041a3da461b76f6e7d43b823481b97e40bb5f507496b34a1e2e3db6e98049"
+        },
+        {
+          "file": "chromium-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-confirm.png",
+          "sha256": "fc12f332d36bc59cd535a3cdae2c982add57675b383c1a2d79ba3598b314a13c"
+        },
+        {
+          "file": "chromium-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-confirm.png",
+          "sha256": "015907c5f8008534b0c7a4969392b551b6dc92db0ecef7a7ac0948b2f4b80339"
+        },
+        {
+          "file": "chromium-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--appearance.json",
+          "sha256": "988f3f3e0378487994ac909080a91cb1cd6e0c0260df9b6c36fb1bf6e1e9f6f5"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--dialog-traps-Tab-ignores-drag-release-closes-on-Esc-or-outside-press-and-restores-focus",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1666
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--dialog-traps-Tab-ignores-drag-release-closes-on-Esc-or-outside-press-and-restores-focus--dismissal.json",
+          "sha256": "b14d0080fcbe9d035b1b691704a8232bca043b885c967735f0aec5d37c2ee0d4"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--nested-dialog-and-imperative-confirmation-close-only-the-top-layer",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1445
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--nested-dialog-and-imperative-confirmation-close-only-the-top-layer--drawer-with-dialog.png",
+          "sha256": "e902bfdbdecd80cc1a12e5ad31b696c1ca1bd53cc4f22572a6979f8ef6b441f9"
+        },
+        {
+          "file": "chromium-light-desktop--nested-dialog-and-imperative-confirmation-close-only-the-top-layer--nested-focus-and-scroll.json",
+          "sha256": "5c8905f3501523babc2f2af15808f8f8158344dd6c3a9330e1f10c97eb5ea42f"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-dialog",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3139
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-dialog--legacy-inside-orbit.png",
+          "sha256": "461fc162b479f5c2a99b114a8d74e4b4f2bdf1360abc24ec7adf8d0cfc3c5b7b"
+        },
+        {
+          "file": "chromium-light-desktop--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-dialog--legacy-children.json",
+          "sha256": "2710222f2cbcf3035f3a33bf653152a648c14f4e466d88d55f0ef0ee28b24748"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-modal",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2891
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-modal--orbit-inside-legacy.png",
+          "sha256": "fbb84614089dfbc86621e0961e542a629479b742f96ec289c4077398896b16bd"
+        },
+        {
+          "file": "chromium-light-desktop--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-modal--legacy-parent.json",
+          "sha256": "f28ddae0d77255a4499750b5800706f2a0b908dc85fd4c5f77ff84f5c11afbeb"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1111
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation--confirm-pending.png",
+          "sha256": "51ce708cd36be8f69ca55d9ce571393a179f542423c8ea1818a49adda60c446f"
+        },
+        {
+          "file": "chromium-light-desktop--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation--confirm-error.png",
+          "sha256": "23cbe27676867dd94a4a7cd0fb7b1d97e8b8497677de62297d768d7bf27613a1"
+        },
+        {
+          "file": "chromium-light-desktop--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation--async-confirm.json",
+          "sha256": "72187390c9306e83921bf6a3abc7eeec0e0d40a769205def1066fe9db91f574b"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--dismissal-controls-retained-form-values-long-content-and-bottom-sheet-remain-usable",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1561
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--dismissal-controls-retained-form-values-long-content-and-bottom-sheet-remain-usable--bottom-sheet.png",
+          "sha256": "2080d413d5714e1e7b87d56d398b89debfe9053613562a2b8bbfd7a98a774936"
+        },
+        {
+          "file": "chromium-light-desktop--dismissal-controls-retained-form-values-long-content-and-bottom-sheet-remain-usable--sizing-and-controls.json",
+          "sha256": "eba6abb89ac29be284c959bb861802c4bc81188d10dae47fd2a56016997b5b51"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--open-portals-inherit-live-theme-changes-and-composing-Escape-preserves-the-dialog",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1150
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--open-portals-inherit-live-theme-changes-and-composing-Escape-preserves-the-dialog--theme-and-composition.json",
+          "sha256": "0dd72cd9af1c3d3950a8d0210ba3b96e0f8c6f502a56ed651cae08b9e1372a4e"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--confirmation-owner-unmount-and-immediate-sequential-prompts-do-not-reuse-stale-state",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1341
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--confirmation-owner-unmount-and-immediate-sequential-prompts-do-not-reuse-stale-state--confirmation-lifecycle.json",
+          "sha256": "aff3e37282591a2733b1c7ff5cd33995e44e299cff7f0f089cba76edab95393a"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1802
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--focus-form-motion-scroll.json",
+          "sha256": "122221eed72ed9423a5094e09d0fd17925a179f795c0974646e051faf21f0d7e"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 6349
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-dialog.png",
+          "sha256": "dc44ed042e5f01a870f8eaad061554caec3827c86753a12f37c6b53c72fd87e0"
+        },
+        {
+          "file": "chromium-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-dialog.png",
+          "sha256": "ad2680d3d4777e46701e24d26a872ca0c025065cad87a776ee5ca2579d51d4be"
+        },
+        {
+          "file": "chromium-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-right-drawer.png",
+          "sha256": "e1474850ecd471cd6d35babb0406c31b31373f772f7fcd06ea6fa328a0c66706"
+        },
+        {
+          "file": "chromium-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-right-drawer.png",
+          "sha256": "01dc466043ffc7091fb18ccc13f32c3da042510b6c7ecdb08d38d0960632c50c"
+        },
+        {
+          "file": "chromium-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-bottom-drawer.png",
+          "sha256": "adada5ff02e9940fab97810a7309fcff3f64f10b29655e5093751ea2df025df6"
+        },
+        {
+          "file": "chromium-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-bottom-drawer.png",
+          "sha256": "02ebb85db043fdec1f88ad45fde975b9e9aa8bb9a6610bdbdb6a61b9f9233bb8"
+        },
+        {
+          "file": "chromium-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-confirm.png",
+          "sha256": "e78da32d3fb10287262366b32c50053d832d307fa6a724269fb756596b9678d3"
+        },
+        {
+          "file": "chromium-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-confirm.png",
+          "sha256": "846fb7657b1170d9f58db7ac844985d70e3c9d27c0855e7136721bb39e99bb8f"
+        },
+        {
+          "file": "chromium-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--appearance.json",
+          "sha256": "026928732a3f346f385970458a237a607155514a15c53c9285934950c3364a20"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--dialog-traps-Tab-ignores-drag-release-closes-on-Esc-or-outside-press-and-restores-focus",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1571
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--dialog-traps-Tab-ignores-drag-release-closes-on-Esc-or-outside-press-and-restores-focus--dismissal.json",
+          "sha256": "9e3e89b01ae53fe132b8cbe898e5cd83e2fceb164b7121b03bb0a1dc793fd19b"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--nested-dialog-and-imperative-confirmation-close-only-the-top-layer",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1602
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--nested-dialog-and-imperative-confirmation-close-only-the-top-layer--drawer-with-dialog.png",
+          "sha256": "e826ff63fdb8bbfef96ab516005a97def2115b044462456761fc00da55fb11f5"
+        },
+        {
+          "file": "chromium-light-phone--nested-dialog-and-imperative-confirmation-close-only-the-top-layer--nested-focus-and-scroll.json",
+          "sha256": "5c8905f3501523babc2f2af15808f8f8158344dd6c3a9330e1f10c97eb5ea42f"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-dialog",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2689
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-dialog--legacy-inside-orbit.png",
+          "sha256": "42a253ac3b2247311a681412cbeed208a0935525e79ef27909d2c7395aa38c4d"
+        },
+        {
+          "file": "chromium-light-phone--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-dialog--legacy-children.json",
+          "sha256": "2710222f2cbcf3035f3a33bf653152a648c14f4e466d88d55f0ef0ee28b24748"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-modal",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2431
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-modal--orbit-inside-legacy.png",
+          "sha256": "732341451fb208adb1c4970da60b85bddf139c2ee5645ac550fd9c4ebeba9be6"
+        },
+        {
+          "file": "chromium-light-phone--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-modal--legacy-parent.json",
+          "sha256": "f28ddae0d77255a4499750b5800706f2a0b908dc85fd4c5f77ff84f5c11afbeb"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1017
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation--confirm-pending.png",
+          "sha256": "e614680f7f0775e5b6ba66c6e8540093cb7c38c8c37c53a0cbcc2c2ea3de6fbf"
+        },
+        {
+          "file": "chromium-light-phone--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation--confirm-error.png",
+          "sha256": "35f850a3b4ccaba175bab65509be8205e5eee3b6218743db995470bff18e4083"
+        },
+        {
+          "file": "chromium-light-phone--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation--async-confirm.json",
+          "sha256": "72187390c9306e83921bf6a3abc7eeec0e0d40a769205def1066fe9db91f574b"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--dismissal-controls-retained-form-values-long-content-and-bottom-sheet-remain-usable",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1744
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--dismissal-controls-retained-form-values-long-content-and-bottom-sheet-remain-usable--bottom-sheet.png",
+          "sha256": "66373dbb7e37b0e84086def0d623abd846fd5ba6aeef044c1864a6d327a7d7dd"
+        },
+        {
+          "file": "chromium-light-phone--dismissal-controls-retained-form-values-long-content-and-bottom-sheet-remain-usable--sizing-and-controls.json",
+          "sha256": "eba6abb89ac29be284c959bb861802c4bc81188d10dae47fd2a56016997b5b51"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--open-portals-inherit-live-theme-changes-and-composing-Escape-preserves-the-dialog",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1160
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--open-portals-inherit-live-theme-changes-and-composing-Escape-preserves-the-dialog--theme-and-composition.json",
+          "sha256": "0dd72cd9af1c3d3950a8d0210ba3b96e0f8c6f502a56ed651cae08b9e1372a4e"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--confirmation-owner-unmount-and-immediate-sequential-prompts-do-not-reuse-stale-state",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1234
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--confirmation-owner-unmount-and-immediate-sequential-prompts-do-not-reuse-stale-state--confirmation-lifecycle.json",
+          "sha256": "aff3e37282591a2733b1c7ff5cd33995e44e299cff7f0f089cba76edab95393a"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1748
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--focus-form-motion-scroll.json",
+          "sha256": "122221eed72ed9423a5094e09d0fd17925a179f795c0974646e051faf21f0d7e"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 6525
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-dialog.png",
+          "sha256": "420dd5de048a78a110099a3a12161206bc4a5fc7a994c66ea51fba6e6ade2c57"
+        },
+        {
+          "file": "chromium-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-dialog.png",
+          "sha256": "420dd5de048a78a110099a3a12161206bc4a5fc7a994c66ea51fba6e6ade2c57"
+        },
+        {
+          "file": "chromium-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-right-drawer.png",
+          "sha256": "3c4e98540b00674edfec79037fca315c11ff42a333d4d3c06e14d7ec843b93c7"
+        },
+        {
+          "file": "chromium-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-right-drawer.png",
+          "sha256": "805bbe69d53630ea0b0ebf7f79e89eb6986d4280c57e2331fb2b8ec45a922bd0"
+        },
+        {
+          "file": "chromium-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-bottom-drawer.png",
+          "sha256": "4e5e8a73f065af485b121163ed277013fe6f0eca4ec8fa431c76745bf7e9ca16"
+        },
+        {
+          "file": "chromium-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-bottom-drawer.png",
+          "sha256": "2240db03699c4a04247a9c8bc83c139b9017afaa299a369e1e9cb7da64b7c00c"
+        },
+        {
+          "file": "chromium-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-confirm.png",
+          "sha256": "27d7517f66cccf56800c2e9a7af277d0cc6bc81fbcebefa7b9d84d0f73ea5031"
+        },
+        {
+          "file": "chromium-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-confirm.png",
+          "sha256": "23dda4970fcf82cc5cf33b235d3c4b8dc3c1668be6df35a7b51f50ddc7b87022"
+        },
+        {
+          "file": "chromium-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--appearance.json",
+          "sha256": "44b7267d021c73e80bfed3a92b7520dc19137737351110c8c5f3ad3c80f472c4"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--dialog-traps-Tab-ignores-drag-release-closes-on-Esc-or-outside-press-and-restores-focus",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1685
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--dialog-traps-Tab-ignores-drag-release-closes-on-Esc-or-outside-press-and-restores-focus--dismissal.json",
+          "sha256": "b14d0080fcbe9d035b1b691704a8232bca043b885c967735f0aec5d37c2ee0d4"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--nested-dialog-and-imperative-confirmation-close-only-the-top-layer",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2069
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--nested-dialog-and-imperative-confirmation-close-only-the-top-layer--drawer-with-dialog.png",
+          "sha256": "434dc775c3326a710c17b267c995decb1170b3b22bf3723a32c21d8e7e41c59b"
+        },
+        {
+          "file": "chromium-dark-desktop--nested-dialog-and-imperative-confirmation-close-only-the-top-layer--nested-focus-and-scroll.json",
+          "sha256": "5c8905f3501523babc2f2af15808f8f8158344dd6c3a9330e1f10c97eb5ea42f"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-dialog",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2788
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-dialog--legacy-inside-orbit.png",
+          "sha256": "f597e2a0cf051821729273783483c1eb6b52ff86aca20aab74349d4643d85e44"
+        },
+        {
+          "file": "chromium-dark-desktop--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-dialog--legacy-children.json",
+          "sha256": "2710222f2cbcf3035f3a33bf653152a648c14f4e466d88d55f0ef0ee28b24748"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-modal",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3000
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-modal--orbit-inside-legacy.png",
+          "sha256": "cf37dfd920b193afb1b1486c4a3a6c7a38a45e1346a13ef001c7bf3a2bd8ef26"
+        },
+        {
+          "file": "chromium-dark-desktop--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-modal--legacy-parent.json",
+          "sha256": "f28ddae0d77255a4499750b5800706f2a0b908dc85fd4c5f77ff84f5c11afbeb"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1121
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation--confirm-pending.png",
+          "sha256": "1ea73e06cef84e555992e513639886369c623a394f1cbb9abf1540ff76b77cd6"
+        },
+        {
+          "file": "chromium-dark-desktop--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation--confirm-error.png",
+          "sha256": "3e02edeb8e76335bd1269607b775e74974238af9c7edff4d6b151b0fdde261cd"
+        },
+        {
+          "file": "chromium-dark-desktop--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation--async-confirm.json",
+          "sha256": "72187390c9306e83921bf6a3abc7eeec0e0d40a769205def1066fe9db91f574b"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--dismissal-controls-retained-form-values-long-content-and-bottom-sheet-remain-usable",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1472
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--dismissal-controls-retained-form-values-long-content-and-bottom-sheet-remain-usable--bottom-sheet.png",
+          "sha256": "4df7af60dd468fe50b414ac0f3799aae6e7ebeee072bd72eb94d902d32bfae5a"
+        },
+        {
+          "file": "chromium-dark-desktop--dismissal-controls-retained-form-values-long-content-and-bottom-sheet-remain-usable--sizing-and-controls.json",
+          "sha256": "eba6abb89ac29be284c959bb861802c4bc81188d10dae47fd2a56016997b5b51"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--open-portals-inherit-live-theme-changes-and-composing-Escape-preserves-the-dialog",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1101
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--open-portals-inherit-live-theme-changes-and-composing-Escape-preserves-the-dialog--theme-and-composition.json",
+          "sha256": "e47e9fc589ef68a15a88c080b733b7b856f113fa17d9e4cd05a8bcc6ecc36983"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--confirmation-owner-unmount-and-immediate-sequential-prompts-do-not-reuse-stale-state",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1125
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--confirmation-owner-unmount-and-immediate-sequential-prompts-do-not-reuse-stale-state--confirmation-lifecycle.json",
+          "sha256": "aff3e37282591a2733b1c7ff5cd33995e44e299cff7f0f089cba76edab95393a"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1767
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--focus-form-motion-scroll.json",
+          "sha256": "122221eed72ed9423a5094e09d0fd17925a179f795c0974646e051faf21f0d7e"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 6398
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-dialog.png",
+          "sha256": "ef6c2cbf6a5833b934b55995b73c675f27ebc3a8ccc3d631b47572fb8be57071"
+        },
+        {
+          "file": "chromium-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-dialog.png",
+          "sha256": "88561772a5c5cffa5f03d73664bf340d44857bd120749a2f68d28ddd1c6f8f36"
+        },
+        {
+          "file": "chromium-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-right-drawer.png",
+          "sha256": "79e4e53bcc153a82ae58e77414f89b154f11e40c2f95be86a0d15072414482b4"
+        },
+        {
+          "file": "chromium-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-right-drawer.png",
+          "sha256": "d0ac590b73c4c41b440a250cf7bbb52f0d8f5be22502b63614f2805445f38737"
+        },
+        {
+          "file": "chromium-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-bottom-drawer.png",
+          "sha256": "9e9019cb38fe9017cdc2b1ba7fcfbeb2b78f15ebe3e9963788d5acea3c4d62e7"
+        },
+        {
+          "file": "chromium-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-bottom-drawer.png",
+          "sha256": "0ba0720883cf1c9819f6263f1a3773f085ac0d1fad9e5189587ebd15f170add1"
+        },
+        {
+          "file": "chromium-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-confirm.png",
+          "sha256": "26b75ddc056288943c8750da5ac723fa11d53232124e0d040f00533688a0139f"
+        },
+        {
+          "file": "chromium-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-confirm.png",
+          "sha256": "bac858d658c94ae90506234e254c83c97b8ccf38ea45730d01c149566c4918ea"
+        },
+        {
+          "file": "chromium-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--appearance.json",
+          "sha256": "7ef32fe6b289f85f25ec7fb3365fe8f7abf48a24d38eec9b414d5c3ffba319aa"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--dialog-traps-Tab-ignores-drag-release-closes-on-Esc-or-outside-press-and-restores-focus",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1486
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--dialog-traps-Tab-ignores-drag-release-closes-on-Esc-or-outside-press-and-restores-focus--dismissal.json",
+          "sha256": "9e3e89b01ae53fe132b8cbe898e5cd83e2fceb164b7121b03bb0a1dc793fd19b"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--nested-dialog-and-imperative-confirmation-close-only-the-top-layer",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1792
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--nested-dialog-and-imperative-confirmation-close-only-the-top-layer--drawer-with-dialog.png",
+          "sha256": "a0f3bf6b58f814929dd9e9cccddf0b6bd11ada4c547934ee50fdcbd891dbbde2"
+        },
+        {
+          "file": "chromium-dark-phone--nested-dialog-and-imperative-confirmation-close-only-the-top-layer--nested-focus-and-scroll.json",
+          "sha256": "5c8905f3501523babc2f2af15808f8f8158344dd6c3a9330e1f10c97eb5ea42f"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-dialog",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3211
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-dialog--legacy-inside-orbit.png",
+          "sha256": "9419d83faaf5ea8211f5e8607d88ddc64b6e946270f030f6cace2061ea299569"
+        },
+        {
+          "file": "chromium-dark-phone--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-dialog--legacy-children.json",
+          "sha256": "2710222f2cbcf3035f3a33bf653152a648c14f4e466d88d55f0ef0ee28b24748"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-modal",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3119
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-modal--orbit-inside-legacy.png",
+          "sha256": "3b82163554df4c98c6a8d4016e3a4be1c329a9aa4a9dac5fedcb86376325940e"
+        },
+        {
+          "file": "chromium-dark-phone--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-modal--legacy-parent.json",
+          "sha256": "f28ddae0d77255a4499750b5800706f2a0b908dc85fd4c5f77ff84f5c11afbeb"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1186
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation--confirm-pending.png",
+          "sha256": "2fa23e1713bc3c9537e0e65db91034639ee84647675936dbc08aa3ebc9ee90a8"
+        },
+        {
+          "file": "chromium-dark-phone--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation--confirm-error.png",
+          "sha256": "8aa134e049bfb19494c525c9d1a8b75eed919066783a3978add9b90dfc910364"
+        },
+        {
+          "file": "chromium-dark-phone--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation--async-confirm.json",
+          "sha256": "72187390c9306e83921bf6a3abc7eeec0e0d40a769205def1066fe9db91f574b"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--dismissal-controls-retained-form-values-long-content-and-bottom-sheet-remain-usable",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1777
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--dismissal-controls-retained-form-values-long-content-and-bottom-sheet-remain-usable--bottom-sheet.png",
+          "sha256": "f0f0b1f90906f1245a3f6f1e1a12ea452cd13ca62a2e40af1aadd0d3ab70ea10"
+        },
+        {
+          "file": "chromium-dark-phone--dismissal-controls-retained-form-values-long-content-and-bottom-sheet-remain-usable--sizing-and-controls.json",
+          "sha256": "eba6abb89ac29be284c959bb861802c4bc81188d10dae47fd2a56016997b5b51"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--open-portals-inherit-live-theme-changes-and-composing-Escape-preserves-the-dialog",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1175
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--open-portals-inherit-live-theme-changes-and-composing-Escape-preserves-the-dialog--theme-and-composition.json",
+          "sha256": "e47e9fc589ef68a15a88c080b733b7b856f113fa17d9e4cd05a8bcc6ecc36983"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--confirmation-owner-unmount-and-immediate-sequential-prompts-do-not-reuse-stale-state",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1297
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--confirmation-owner-unmount-and-immediate-sequential-prompts-do-not-reuse-stale-state--confirmation-lifecycle.json",
+          "sha256": "aff3e37282591a2733b1c7ff5cd33995e44e299cff7f0f089cba76edab95393a"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1869
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--focus-form-motion-scroll.json",
+          "sha256": "122221eed72ed9423a5094e09d0fd17925a179f795c0974646e051faf21f0d7e"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 5881
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-dialog.png",
+          "sha256": "45a6b850af5798bbf02226ae08eb6d350192b203e1b6cf7977ea1422eb8e6a26"
+        },
+        {
+          "file": "webkit-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-dialog.png",
+          "sha256": "f59ec272f08842584e6cd96e16394efbc4aec1124dc6e5fa5ab10df7f70c3ca8"
+        },
+        {
+          "file": "webkit-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-right-drawer.png",
+          "sha256": "7a5b69dd79020d2c1dd2a6eff5c3b9d2443c0a854a312a8f38e01d96e8cd98c1"
+        },
+        {
+          "file": "webkit-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-right-drawer.png",
+          "sha256": "7a5b69dd79020d2c1dd2a6eff5c3b9d2443c0a854a312a8f38e01d96e8cd98c1"
+        },
+        {
+          "file": "webkit-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-bottom-drawer.png",
+          "sha256": "95453d3d6d2d8cc1383fd96232dc7e2b103d8344f6e214fcc7d73684e08353e2"
+        },
+        {
+          "file": "webkit-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-bottom-drawer.png",
+          "sha256": "95453d3d6d2d8cc1383fd96232dc7e2b103d8344f6e214fcc7d73684e08353e2"
+        },
+        {
+          "file": "webkit-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-confirm.png",
+          "sha256": "5d896f29eeddd00e9beb4410d55b07052606d50bf223ea0d932763bc9762c05f"
+        },
+        {
+          "file": "webkit-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-confirm.png",
+          "sha256": "d373ee4d1e897aa4f1acba13a238e1668c8037275468593fde3927fc50d09411"
+        },
+        {
+          "file": "webkit-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--appearance.json",
+          "sha256": "bca2b65e3214049f4b726fb10c7519aa15eeabb25a88aff1ba880032a8e353dc"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--dialog-traps-Tab-ignores-drag-release-closes-on-Esc-or-outside-press-and-restores-focus",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1615
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--dialog-traps-Tab-ignores-drag-release-closes-on-Esc-or-outside-press-and-restores-focus--dismissal.json",
+          "sha256": "b14d0080fcbe9d035b1b691704a8232bca043b885c967735f0aec5d37c2ee0d4"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--nested-dialog-and-imperative-confirmation-close-only-the-top-layer",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1593
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--nested-dialog-and-imperative-confirmation-close-only-the-top-layer--drawer-with-dialog.png",
+          "sha256": "4fb26ae6e11683f254e0e6196a62ed6bfaab4de4051b4a894dd859585a7c86b7"
+        },
+        {
+          "file": "webkit-light-desktop--nested-dialog-and-imperative-confirmation-close-only-the-top-layer--nested-focus-and-scroll.json",
+          "sha256": "5c8905f3501523babc2f2af15808f8f8158344dd6c3a9330e1f10c97eb5ea42f"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-dialog",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2642
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-dialog--legacy-inside-orbit.png",
+          "sha256": "d3cf87b6e361c51d05eba8239cf5d74b34f41508f77b4aa8e4e91efa0b37de4b"
+        },
+        {
+          "file": "webkit-light-desktop--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-dialog--legacy-children.json",
+          "sha256": "2710222f2cbcf3035f3a33bf653152a648c14f4e466d88d55f0ef0ee28b24748"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-modal",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2399
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-modal--orbit-inside-legacy.png",
+          "sha256": "6c178f4256ad4fd83ce300de9938a32b3fdbf960c86bef227e8df010ec20678e"
+        },
+        {
+          "file": "webkit-light-desktop--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-modal--legacy-parent.json",
+          "sha256": "f28ddae0d77255a4499750b5800706f2a0b908dc85fd4c5f77ff84f5c11afbeb"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1091
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation--confirm-pending.png",
+          "sha256": "84ea5408a4221d2203453e92be04ae4f7aa9319763eea3993b6465c8dc9e8dd3"
+        },
+        {
+          "file": "webkit-light-desktop--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation--confirm-error.png",
+          "sha256": "aa966c7ae7e3cf122533fe9a49d5abcabe39ec58563f29a641e8bff8f28b97f4"
+        },
+        {
+          "file": "webkit-light-desktop--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation--async-confirm.json",
+          "sha256": "72187390c9306e83921bf6a3abc7eeec0e0d40a769205def1066fe9db91f574b"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--dismissal-controls-retained-form-values-long-content-and-bottom-sheet-remain-usable",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1315
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--dismissal-controls-retained-form-values-long-content-and-bottom-sheet-remain-usable--bottom-sheet.png",
+          "sha256": "133a4f06cda51f8293f26973b02966c45a661f902fe952022520b0b6432eecb9"
+        },
+        {
+          "file": "webkit-light-desktop--dismissal-controls-retained-form-values-long-content-and-bottom-sheet-remain-usable--sizing-and-controls.json",
+          "sha256": "eba6abb89ac29be284c959bb861802c4bc81188d10dae47fd2a56016997b5b51"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--open-portals-inherit-live-theme-changes-and-composing-Escape-preserves-the-dialog",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1082
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--open-portals-inherit-live-theme-changes-and-composing-Escape-preserves-the-dialog--theme-and-composition.json",
+          "sha256": "0dd72cd9af1c3d3950a8d0210ba3b96e0f8c6f502a56ed651cae08b9e1372a4e"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--confirmation-owner-unmount-and-immediate-sequential-prompts-do-not-reuse-stale-state",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1297
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--confirmation-owner-unmount-and-immediate-sequential-prompts-do-not-reuse-stale-state--confirmation-lifecycle.json",
+          "sha256": "aff3e37282591a2733b1c7ff5cd33995e44e299cff7f0f089cba76edab95393a"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2241
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--focus-form-motion-scroll.json",
+          "sha256": "122221eed72ed9423a5094e09d0fd17925a179f795c0974646e051faf21f0d7e"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 5700
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-dialog.png",
+          "sha256": "58068058e6c0fb276645f04cc3fa39aead678da2e9f10e3572252ac515e2d7ca"
+        },
+        {
+          "file": "webkit-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-dialog.png",
+          "sha256": "a22da0b95340061bbced2dd5471e6a9d92a2b317fad97f6fe41037ebb914330b"
+        },
+        {
+          "file": "webkit-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-right-drawer.png",
+          "sha256": "06b368789e47950b97b5d1895e60ee32dfb2e11b491cbaca9f0845c6d6906bf5"
+        },
+        {
+          "file": "webkit-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-right-drawer.png",
+          "sha256": "06b368789e47950b97b5d1895e60ee32dfb2e11b491cbaca9f0845c6d6906bf5"
+        },
+        {
+          "file": "webkit-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-bottom-drawer.png",
+          "sha256": "d825d764358c921ac4bcfe54078f34efde6f9438313de82831e54d0d8301b816"
+        },
+        {
+          "file": "webkit-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-bottom-drawer.png",
+          "sha256": "d825d764358c921ac4bcfe54078f34efde6f9438313de82831e54d0d8301b816"
+        },
+        {
+          "file": "webkit-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-confirm.png",
+          "sha256": "ef1b0bb86b4bac983c1b71751cf578ca667c8e8f4d1b38b04bcb46631794a7a0"
+        },
+        {
+          "file": "webkit-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-confirm.png",
+          "sha256": "0821db8b791835368f4758924f1c875b922d38dac4b30cccb82bda06bcbd387f"
+        },
+        {
+          "file": "webkit-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--appearance.json",
+          "sha256": "9689125cd7eed6a4fac5b8c49f2787d3a45bd7b78caaf983fadd361e0527ae4e"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--dialog-traps-Tab-ignores-drag-release-closes-on-Esc-or-outside-press-and-restores-focus",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1416
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--dialog-traps-Tab-ignores-drag-release-closes-on-Esc-or-outside-press-and-restores-focus--dismissal.json",
+          "sha256": "9e3e89b01ae53fe132b8cbe898e5cd83e2fceb164b7121b03bb0a1dc793fd19b"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--nested-dialog-and-imperative-confirmation-close-only-the-top-layer",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1570
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--nested-dialog-and-imperative-confirmation-close-only-the-top-layer--drawer-with-dialog.png",
+          "sha256": "dba71270856e156df813628e9e66f796d81d17f65882631409f5955428fbb058"
+        },
+        {
+          "file": "webkit-light-phone--nested-dialog-and-imperative-confirmation-close-only-the-top-layer--nested-focus-and-scroll.json",
+          "sha256": "5c8905f3501523babc2f2af15808f8f8158344dd6c3a9330e1f10c97eb5ea42f"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-dialog",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2517
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-dialog--legacy-inside-orbit.png",
+          "sha256": "a96c0ced4190bd24d9a95cf6f0cb03d7988ba92d9aa7b173dd980eadb533705f"
+        },
+        {
+          "file": "webkit-light-phone--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-dialog--legacy-children.json",
+          "sha256": "2710222f2cbcf3035f3a33bf653152a648c14f4e466d88d55f0ef0ee28b24748"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-modal",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2248
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-modal--orbit-inside-legacy.png",
+          "sha256": "aaab898a1775652fd5729ce5f3ffd38fe0f6ce14c34a3afec855139698784c44"
+        },
+        {
+          "file": "webkit-light-phone--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-modal--legacy-parent.json",
+          "sha256": "f28ddae0d77255a4499750b5800706f2a0b908dc85fd4c5f77ff84f5c11afbeb"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 924
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation--confirm-pending.png",
+          "sha256": "2e00415b48fd0c2abbbd01827fda4b9819f04e511b5fc90b1ceb0c772e60a039"
+        },
+        {
+          "file": "webkit-light-phone--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation--confirm-error.png",
+          "sha256": "09fff6db362318f9c171ac4423e22d6dbdac17f7239bd5e538780a0eca6501fb"
+        },
+        {
+          "file": "webkit-light-phone--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation--async-confirm.json",
+          "sha256": "72187390c9306e83921bf6a3abc7eeec0e0d40a769205def1066fe9db91f574b"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--dismissal-controls-retained-form-values-long-content-and-bottom-sheet-remain-usable",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1313
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--dismissal-controls-retained-form-values-long-content-and-bottom-sheet-remain-usable--bottom-sheet.png",
+          "sha256": "459e9cf27833e416284b5c27bd0de82e1a31c98efd40b4b656cf1703144244fe"
+        },
+        {
+          "file": "webkit-light-phone--dismissal-controls-retained-form-values-long-content-and-bottom-sheet-remain-usable--sizing-and-controls.json",
+          "sha256": "eba6abb89ac29be284c959bb861802c4bc81188d10dae47fd2a56016997b5b51"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--open-portals-inherit-live-theme-changes-and-composing-Escape-preserves-the-dialog",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 921
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--open-portals-inherit-live-theme-changes-and-composing-Escape-preserves-the-dialog--theme-and-composition.json",
+          "sha256": "0dd72cd9af1c3d3950a8d0210ba3b96e0f8c6f502a56ed651cae08b9e1372a4e"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--confirmation-owner-unmount-and-immediate-sequential-prompts-do-not-reuse-stale-state",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1033
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--confirmation-owner-unmount-and-immediate-sequential-prompts-do-not-reuse-stale-state--confirmation-lifecycle.json",
+          "sha256": "aff3e37282591a2733b1c7ff5cd33995e44e299cff7f0f089cba76edab95393a"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1502
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--focus-form-motion-scroll.json",
+          "sha256": "77f52b5cbc7ca2a6dbca17c3c59c36dc4766a1229fcc9af6f5ef3eca7be7d4a7"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 5801
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-dialog.png",
+          "sha256": "675068ba254b4350da4bf8dd55ea5dd073356757c3f16d2cf13898560e165fa3"
+        },
+        {
+          "file": "webkit-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-dialog.png",
+          "sha256": "0825a7b08dc604dbef50ca8d9483c3f4a6f3ff51a78a38b90a1b528840f8db55"
+        },
+        {
+          "file": "webkit-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-right-drawer.png",
+          "sha256": "3d174a2b0b418730164fe5b925c812a12255757c3750efb26f6052533b340144"
+        },
+        {
+          "file": "webkit-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-right-drawer.png",
+          "sha256": "5af08b134ee1fb3c4d2be0ac9cae32b3ec6f9549dae0c01388255eddac5cfd31"
+        },
+        {
+          "file": "webkit-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-bottom-drawer.png",
+          "sha256": "c75ee865e8248e232d4c9802eba37f091273d6a47cc4aba3a304cbddd8871a8d"
+        },
+        {
+          "file": "webkit-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-bottom-drawer.png",
+          "sha256": "8876753c16608436379a39aeb0cff12edc8757ffad4ead923f1b8974aac9bc31"
+        },
+        {
+          "file": "webkit-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-confirm.png",
+          "sha256": "470b618278c4e076ae5b232107f340dbef404337fc8438e327f042e498ad25c2"
+        },
+        {
+          "file": "webkit-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-confirm.png",
+          "sha256": "505866771ead6b852afcd02312a51f466a0a6a455c4281584affd0fb61e8a681"
+        },
+        {
+          "file": "webkit-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--appearance.json",
+          "sha256": "59d33b86ae62eef57fc1a693c62d43a7b30f143c25f9c91445eb05d22315ba19"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--dialog-traps-Tab-ignores-drag-release-closes-on-Esc-or-outside-press-and-restores-focus",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1307
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--dialog-traps-Tab-ignores-drag-release-closes-on-Esc-or-outside-press-and-restores-focus--dismissal.json",
+          "sha256": "b14d0080fcbe9d035b1b691704a8232bca043b885c967735f0aec5d37c2ee0d4"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--nested-dialog-and-imperative-confirmation-close-only-the-top-layer",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1520
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--nested-dialog-and-imperative-confirmation-close-only-the-top-layer--drawer-with-dialog.png",
+          "sha256": "9baae4d20576e5cdafcb786783fc582e24b97311b64a33a09afcb6110c42451d"
+        },
+        {
+          "file": "webkit-dark-desktop--nested-dialog-and-imperative-confirmation-close-only-the-top-layer--nested-focus-and-scroll.json",
+          "sha256": "5c8905f3501523babc2f2af15808f8f8158344dd6c3a9330e1f10c97eb5ea42f"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-dialog",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2565
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-dialog--legacy-inside-orbit.png",
+          "sha256": "bdabbcb435450211df0af5a2f2575eedd8bf8bf9bf95690f6ee06d90aa9d2615"
+        },
+        {
+          "file": "webkit-dark-desktop--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-dialog--legacy-children.json",
+          "sha256": "2710222f2cbcf3035f3a33bf653152a648c14f4e466d88d55f0ef0ee28b24748"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-modal",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2464
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-modal--orbit-inside-legacy.png",
+          "sha256": "d473693f9c33151f4c53b87f74f2118d25f0fffcaea45eb24dd2d8b11df1cc31"
+        },
+        {
+          "file": "webkit-dark-desktop--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-modal--legacy-parent.json",
+          "sha256": "f28ddae0d77255a4499750b5800706f2a0b908dc85fd4c5f77ff84f5c11afbeb"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1002
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation--confirm-pending.png",
+          "sha256": "08eeadb1cc17e83b8cdb8213455c3ed0b36fc2d1465df37ebdd3eef9b5af51a0"
+        },
+        {
+          "file": "webkit-dark-desktop--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation--confirm-error.png",
+          "sha256": "ec6e30af4b3ac9951d942afe27da4f888232471e72292a6faa6fdcc5356fcf7a"
+        },
+        {
+          "file": "webkit-dark-desktop--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation--async-confirm.json",
+          "sha256": "72187390c9306e83921bf6a3abc7eeec0e0d40a769205def1066fe9db91f574b"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--dismissal-controls-retained-form-values-long-content-and-bottom-sheet-remain-usable",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1331
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--dismissal-controls-retained-form-values-long-content-and-bottom-sheet-remain-usable--bottom-sheet.png",
+          "sha256": "ed4f49734c5cbac3023e6caa15c599b83f051df044512f414572479381233688"
+        },
+        {
+          "file": "webkit-dark-desktop--dismissal-controls-retained-form-values-long-content-and-bottom-sheet-remain-usable--sizing-and-controls.json",
+          "sha256": "eba6abb89ac29be284c959bb861802c4bc81188d10dae47fd2a56016997b5b51"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--open-portals-inherit-live-theme-changes-and-composing-Escape-preserves-the-dialog",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1034
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--open-portals-inherit-live-theme-changes-and-composing-Escape-preserves-the-dialog--theme-and-composition.json",
+          "sha256": "e47e9fc589ef68a15a88c080b733b7b856f113fa17d9e4cd05a8bcc6ecc36983"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--confirmation-owner-unmount-and-immediate-sequential-prompts-do-not-reuse-stale-state",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1156
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--confirmation-owner-unmount-and-immediate-sequential-prompts-do-not-reuse-stale-state--confirmation-lifecycle.json",
+          "sha256": "aff3e37282591a2733b1c7ff5cd33995e44e299cff7f0f089cba76edab95393a"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1691
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--focus-form-motion-scroll.json",
+          "sha256": "122221eed72ed9423a5094e09d0fd17925a179f795c0974646e051faf21f0d7e"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 5774
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-dialog.png",
+          "sha256": "133b19b1c29b4f4d57d81fbafa776571d9d8333bdc644771a2a49240f3c3734e"
+        },
+        {
+          "file": "webkit-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-dialog.png",
+          "sha256": "dd1ce71eb235784a37bf7d52795364cfa1d47f41b634f92d19d94266e88c63e1"
+        },
+        {
+          "file": "webkit-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-right-drawer.png",
+          "sha256": "ba86601fa9b0bf713039b84cc49beddf505288fa012bc272b7146971358e5374"
+        },
+        {
+          "file": "webkit-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-right-drawer.png",
+          "sha256": "a2f63095ce5200bfbb6fc316a7e05a69a2d8f80fd83a2dd8be688625620939f5"
+        },
+        {
+          "file": "webkit-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-bottom-drawer.png",
+          "sha256": "060e5bcbcb03dfea4deb4362dffe623d6d430b0aa1bfb5029cff9656728c4ec6"
+        },
+        {
+          "file": "webkit-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-bottom-drawer.png",
+          "sha256": "13ca0f6bf539dc21c1a5c313fa5d4c21da117dd02dbe3f4c5f0cc1f1d832c044"
+        },
+        {
+          "file": "webkit-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-confirm.png",
+          "sha256": "11a2444c3ee14cdb2e3dfd4a9ae4ce167ac09bb35c839760bbd5ad2ec7c18b9c"
+        },
+        {
+          "file": "webkit-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-confirm.png",
+          "sha256": "9390f724a1aea36e0dba9bc2ff501dbaab9235bad6f1127fb4920ce1314b2090"
+        },
+        {
+          "file": "webkit-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--appearance.json",
+          "sha256": "d6eb47c8fc48be6b97ef5d61d85c41d7114722880b3a2a50042de619e6a957a8"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--dialog-traps-Tab-ignores-drag-release-closes-on-Esc-or-outside-press-and-restores-focus",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1340
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--dialog-traps-Tab-ignores-drag-release-closes-on-Esc-or-outside-press-and-restores-focus--dismissal.json",
+          "sha256": "9e3e89b01ae53fe132b8cbe898e5cd83e2fceb164b7121b03bb0a1dc793fd19b"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--nested-dialog-and-imperative-confirmation-close-only-the-top-layer",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1414
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--nested-dialog-and-imperative-confirmation-close-only-the-top-layer--drawer-with-dialog.png",
+          "sha256": "acb3e8e6a6a27614aa0befe10af2e211af3e522acb03c4df0e39fe0a5bdbdfbb"
+        },
+        {
+          "file": "webkit-dark-phone--nested-dialog-and-imperative-confirmation-close-only-the-top-layer--nested-focus-and-scroll.json",
+          "sha256": "5c8905f3501523babc2f2af15808f8f8158344dd6c3a9330e1f10c97eb5ea42f"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-dialog",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3221
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-dialog--legacy-inside-orbit.png",
+          "sha256": "d4ccaf857be5eefa1b07dff332a14c6f39b902ab60e8a565dbc105f06bce0661"
+        },
+        {
+          "file": "webkit-dark-phone--actual-legacy-modal-Popconfirm-and-Select-work-inside-Orbit-dialog--legacy-children.json",
+          "sha256": "2710222f2cbcf3035f3a33bf653152a648c14f4e466d88d55f0ef0ee28b24748"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-modal",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2294
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-modal--orbit-inside-legacy.png",
+          "sha256": "cf09ffd814ed6d101f038d5f33f1bffadbc4c838a2f7aa4dbc20e95a31f90108"
+        },
+        {
+          "file": "webkit-dark-phone--Orbit-dialog-and-nested-confirmation-work-inside-a-legacy-modal--legacy-parent.json",
+          "sha256": "f28ddae0d77255a4499750b5800706f2a0b908dc85fd4c5f77ff84f5c11afbeb"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1313
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation--confirm-pending.png",
+          "sha256": "59b18bb1ed13cc6676a1ff7dbcd3b1b0329ac43ef70f2f3ce259ee4a0e68481d"
+        },
+        {
+          "file": "webkit-dark-phone--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation--confirm-error.png",
+          "sha256": "3f04ca34ce6ee4dfa49582a4c91e983ff13c381185fab4d6bc6e442bfdf07ebc"
+        },
+        {
+          "file": "webkit-dark-phone--async-confirmation-prevents-duplicate-submits-retains-failures-and-permits-retry-or-cancellation--async-confirm.json",
+          "sha256": "72187390c9306e83921bf6a3abc7eeec0e0d40a769205def1066fe9db91f574b"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--dismissal-controls-retained-form-values-long-content-and-bottom-sheet-remain-usable",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1415
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--dismissal-controls-retained-form-values-long-content-and-bottom-sheet-remain-usable--bottom-sheet.png",
+          "sha256": "478092bdd36e8e13fe315b5290170f25fc39503d696d09601ac93636965f2725"
+        },
+        {
+          "file": "webkit-dark-phone--dismissal-controls-retained-form-values-long-content-and-bottom-sheet-remain-usable--sizing-and-controls.json",
+          "sha256": "eba6abb89ac29be284c959bb861802c4bc81188d10dae47fd2a56016997b5b51"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--open-portals-inherit-live-theme-changes-and-composing-Escape-preserves-the-dialog",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 952
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--open-portals-inherit-live-theme-changes-and-composing-Escape-preserves-the-dialog--theme-and-composition.json",
+          "sha256": "e47e9fc589ef68a15a88c080b733b7b856f113fa17d9e4cd05a8bcc6ecc36983"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--confirmation-owner-unmount-and-immediate-sequential-prompts-do-not-reuse-stale-state",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1174
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--confirmation-owner-unmount-and-immediate-sequential-prompts-do-not-reuse-stale-state--confirmation-lifecycle.json",
+          "sha256": "aff3e37282591a2733b1c7ff5cd33995e44e299cff7f0f089cba76edab95393a"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1584
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--explicit-focus-native-form-validation-motion-and-document-scroll-restore-correctly--focus-form-motion-scroll.json",
+          "sha256": "77f52b5cbc7ca2a6dbca17c3c59c36dc4766a1229fcc9af6f5ef3eca7be7d4a7"
+        }
+      ]
+    }
+  ]
+}
