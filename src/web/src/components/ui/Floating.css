@@ -1,0 +1,53 @@
+.orbit-floating-positioner { outline: none; }
+.orbit-menu, .orbit-popover, .orbit-tooltip, .orbit-select-popup {
+  box-sizing: border-box;
+  font-family: var(--orbit-font-family);
+  font-size: var(--orbit-font-size);
+  line-height: 1.5714285714285714;
+  color: var(--text-1);
+  background: var(--orbit-bg-elevated);
+  border-radius: var(--orbit-radius-popup);
+  box-shadow: var(--orbit-shadow-popup);
+  outline: none;
+}
+.orbit-menu { min-width: var(--orbit-menu-anchor-width, var(--anchor-width)); max-width: var(--available-width); max-height: var(--available-height); overflow-y: auto; padding: 4px; }
+.orbit-menu-item {
+  display: flex; align-items: center; gap: 8px; padding: 5px 12px; min-height: 32px;
+  border-radius: 4px; cursor: pointer; outline: none; white-space: nowrap;
+}
+.orbit-menu-label { flex: 1; min-width: 0; }
+.orbit-menu-icon { display: inline-flex; min-width: 14px; font-size: 12px; }
+.orbit-menu-icon > * { min-width: inherit; }
+.orbit-menu-submenu-icon { font-size: 10px; margin-left: 8px; }
+.orbit-menu-item[data-highlighted], .orbit-menu-item[data-popup-open] { background: var(--orbit-control-hover-bg); }
+.orbit-menu-item[data-selected], .orbit-menu-item[data-checked] { background: var(--orbit-menu-selected-bg); color: var(--orbit-control-primary); }
+.orbit-menu-item[data-danger] { color: var(--orbit-control-error); }
+.orbit-menu-item[data-danger][data-highlighted] { color: white; background: var(--orbit-control-error); }
+.orbit-menu-item[data-disabled] { color: var(--orbit-control-disabled-text); cursor: not-allowed; background: transparent; }
+.orbit-menu-separator { height: 1px; margin: 4px 0; background: var(--orbit-border-split); }
+.orbit-menu-group-label { padding: 5px 12px; color: var(--text-3); }
+.orbit-menu-check { display: inline-flex; width: 14px; }
+.orbit-menu-check:not([data-checked]) { visibility: hidden; }
+.orbit-popover { --orbit-callout-bg: var(--orbit-bg-elevated); position: relative; padding: 12px; max-width: min(100vw - 16px, var(--available-width)); }
+.orbit-popover-title { min-width: 177px; margin: 0 0 8px; font: inherit; font-weight: 600; }
+.orbit-callout-positioner { filter: var(--orbit-filter-popover); }
+.orbit-popover, .orbit-tooltip { box-shadow: none; }
+.orbit-tooltip { --orbit-callout-bg: var(--orbit-tooltip-bg); position: relative; max-width: 250px; min-height: 32px; padding: 6px 8px; color: #fff; background: var(--orbit-tooltip-bg); border-radius: 6px; overflow-wrap: break-word; }
+/* Retains Ant Design's rounded arrow geometry (MIT; ./antd-empty.LICENSE). */
+.orbit-floating-arrow { position: absolute; width: 16px; height: 16px; overflow: hidden; pointer-events: none; }
+.orbit-floating-arrow::before { content: ''; position: absolute; bottom: 0; left: 0; width: 16px; height: 8px; background: var(--orbit-callout-bg); clip-path: path('M 0 8 A 4 4 0 0 0 2.82842712474619 6.82842712474619 L 6.585786437626905 3.0710678118654755 A 2 2 0 0 1 9.414213562373096 3.0710678118654755 L 13.17157287525381 6.82842712474619 A 4 4 0 0 0 16 8 Z'); }
+.orbit-floating-arrow[data-side='top'] { bottom: 0; transform: translateY(100%) rotate(180deg); }
+.orbit-floating-arrow[data-side='bottom'] { top: 0; transform: translateY(-100%); }
+.orbit-floating-arrow[data-side='left'] { right: 0; transform: translateX(100%) rotate(90deg); }
+.orbit-floating-arrow[data-side='right'] { left: 0; transform: translateX(-100%) rotate(-90deg); }
+@media (max-width: 600px) {
+  .orbit-menu[data-variant='attachment'] {
+    min-width: 250px; width: max-content; max-width: calc(100vw - 44px);
+    padding: 10px 0; border-radius: 26px;
+    box-shadow: 0 18px 44px rgba(0, 0, 0, .17), 0 2px 8px rgba(0, 0, 0, .06);
+  }
+  .orbit-menu[data-variant='attachment'] .orbit-menu-item { height: 42.4px; padding: 0 0 0 31px; border-radius: 0; font-size: 17px; gap: 16px; }
+  .orbit-menu[data-variant='attachment'] .orbit-menu-icon { min-width: 19px; font-size: 19px; }
+  .orbit-menu[data-variant='attachment'] .orbit-menu-item:not([data-disabled]) .orbit-menu-icon { color: #8a8a8e; }
+  .orbit-menu[data-variant='attachment'] .orbit-menu-separator { margin: 9.5px 24px; background: #eaeaea; }
+}

@@ -6,7 +6,7 @@
 
 - 业务按组件导入 `components/ui/<Component>`；组件内部按需导入 `@base-ui/react/<component>`，不把 Base UI 的 Root/Portal/状态对象直接重导出给业务。
 - 公共 props 只覆盖当前业务需要；优先原生 DOM 属性、可访问名称与原生 ref。不要复制 AntD 全部 props，不读取第三方内部 class/DOM。
-- `__fixtures__` 仅供 `ui-migration/foundation.html`、`controls.html` 和 `overlays.html` 使用，没有业务路由、生产入口或公共导出。Foundation 的临时按钮/弹窗仍为私有；Controls/Overlays 使用真实公共组件与旧控件对照。
+- `__fixtures__` 仅供 `ui-migration/foundation.html`、`controls.html`、`overlays.html` 和 `choices.html` 使用，没有业务路由、生产入口或公共导出。Foundation 的临时按钮/弹窗仍为私有；其余使用真实公共组件与旧控件对照。
 - `boundary.test.ts` 检查实际源码的导入、重导出、动态导入及类型引用：Base UI 只能在本目录内；业务不能引用私有 fixture；公共 ui 不能依赖 antd。共存 fixture 中的 AntD 对照在 P6 删除。
 
 ## 基础控件
@@ -97,6 +97,19 @@ AntD `ConfigProvider` / `AntApp`、`theme.ts` 算法和 reset 保留到 P6。当
 
 保持现有页面层叠关系；不要直接给整个 `#root` 添加 `isolation`（会改变旧 toast/portal 的关系）。Foundation 的历史样例只验证一个嵌套方向；P2.1 的真实公共弹层及双向组合按上节约定使用。尚未迁移的其它浮层由后续批次按实际组合验证，不能把这些组合推广为全站均已兼容。
 
+## 菜单、浮层与选择控件
+
+P2.2 提供 `Menu`、`Popover`、`Tooltip`、`Select`、`Combobox` 和 `MultiSelect`。业务从具体文件导入；Base UI 的部件和事件类型不外泄。共同的 `open/onOpenChange` 可受控，也可省略；`side/align`、`popupClassName/popupStyle` 是公开定位/外观入口。默认 portal 归属当前 OverlayScope；在旧 Modal/Drawer 正文中包一层 Scope，沿用 P2.1 的共存约定。
+
+- `Menu` 接收可承接 ref 的按钮 `trigger` 和 `items`。动作含 key/label/icon、disabled/danger/selected/onSelect；separator/group/children 覆盖现有分隔、分组与子菜单。`checked/onCheckedChange` 提供 checkbox 语义，默认选中后保持打开；普通动作默认关闭，`closeOnSelect` 可覆盖。复杂 label 可给 `textValue` 支持文字导航。`variant="attachment"` 仅在 <=600px 使用42.4px行高、17px字号、26px圆角。菜单触发器和弹出内容拦截点击冒泡，避免触发行导航。菜单动作打开 Dialog 时给 Dialog `returnFocus` 指向稳定菜单按钮。
+- `Popover` 用 `trigger/title/children`；无标题传 null。默认点击打开，可设 `openOnHover`；`initialFocus/returnFocus` 遵循弹层约定。内容内可直接放 Select/Combobox，Esc 逐层关闭。`Tooltip` 用 `children/content`，保留触发器原有 aria-describedby；disabled 原生按钮需用可聚焦 span 包裹，让提示可由键盘获得。
+- `Select` 与 `Combobox` 共用字符串 `value | null`、`options` 和 `onValueChange`。空字符串是有效选择（账号 Automatic）；null 表示未选择/显式清除。options 为 `{value,label,disabled?}` 或 `{label,options}` 分组；label 为搜索/无障碍文本，复杂展示使用 `renderOption/renderValue`。支持 small/middle、outlined/borderless、disabled/loading、placeholder/clearable、emptyContent、showArrow 和 matchTriggerWidth。
+- 需要文本检索时使用 `Combobox`；默认按 label 忽略大小写匹配。修改查询和 Esc 不清掉已选值；显式清除才回调 null。远端搜索设置 `filter={false}` 与 `onSearch`，由业务处理请求/过期响应；`value={null}` 可用于选择后重置的动作入口。已选标签通过 aria-describedby 暴露给辅助技术。ref 分别指向 Select 按钮和 Combobox 输入框，name 支持原生表单值。
+
+`MultiSelect` 使用字符串数组 value/onValueChange；搜索选项后保持列表打开，支持逐项移除、全清、分组和 maxTagCount。`mode="tags"`、`open={false}`、`searchValue/onSearch`、`tokenSeparators={[',', ' ']}` 对应现有邮件输入：Enter 或失焦提交尾项，输入法组合期间不提交，值去重；格式校验和分享请求仍由业务负责。Backspace 删除数组末项，即使它在折叠计数内。
+
+样式只使用 Orbit 类名、自己的属性与 Base UI 公开的 data-selected/data-highlighted/data-disabled 等状态；不查询或覆盖 AntD DOM。箭头与空态 SVG 沿用原 MIT 许可图形，保留许可。详见 [P2.2 证据](../../../../../docs/evidence/base-ui-migration/p2.2/README.md)，其中明示原手机14px覆盖缺陷与任务要求17px的差异，以及旧 Modal 最后一次 Tab 的宿主缺陷。
+
 ## 验证入口
 
 从仓库根执行：
@@ -108,6 +121,8 @@ node node_modules/typescript/bin/tsc -p src/web/ui-migration/controls.tsconfig.j
 npm run test:ui-controls -w @orbit/web
 npm run test:ui-overlays -w @orbit/web
 node node_modules/typescript/bin/tsc -p src/web/ui-migration/overlays.tsconfig.json --noEmit
+npm run test:ui-choices -w @orbit/web
+node node_modules/typescript/bin/tsc -p src/web/ui-migration/choices.tsconfig.json --noEmit
 npm run test:ui-foundation -w @orbit/web
 npm run test:ui-migration -w @orbit/web
 npm run build -w @orbit/web
