@@ -1,0 +1,12 @@
+{
+  "name": "regression-after",
+  "cwd": "/root/.orbit/worktrees/aa737ee0-40f5-5381-8a38-f4ce4a64335e",
+  "command": "node --test --test-reporter=tap scripts/worktree-overlay.test.mjs",
+  "start": "2026-10-04T00:56:34.575589+00:00",
+  "commit": "3abb5194b6bc60f2097122f23d832dd8da6b335f",
+  "tree": "1ba95cef1004046ff78a13083e1c12e8be8c9bae",
+  "trackedBefore": "",
+  "exitCode": 0,
+  "end": "2026-10-04T00:56:38.296062+00:00",
+  "trackedAfter": ""
+}

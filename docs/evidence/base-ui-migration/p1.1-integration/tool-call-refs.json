@@ -1,0 +1,62 @@
+[
+  {
+    "ref": "exec-023ed14d-36b7-48a5-abb2-89b2918c8b33",
+    "command": "cat > /tmp/orbit-p11-run.py <<'PY'\nimport sys, pathlib, subprocess, datetime, json\nout=pathlib.Path('/root/.orbit/worktrees/aa737ee0-40f5-5381-8a38-f4ce4a64335e/docs/evidence/base-ui-migration/p1.1-integration')\nname,cwd,command=sys.argv[1:]\nrecord={'name':name,'cwd':cwd,'command':command,'start':datetime.datetime.now(datetime.timezone.utc).isoformat()}\nfor key,arg in [('commit','HEAD'),('tree','HEAD^{tree}')]:\n record[key]=subprocess.check_output(['git','rev-parse',arg],cwd=cwd,text=True).strip()\nrecord['trackedBefore']=subprocess.check_output(['git','status','--porcelain','--untracked-files=no'],cwd=cwd,text=True)\nwith (out/(name+'.txt')).open('w') as log:\n p=subprocess.run(['bash','-c',command],cwd=cwd,stdout=log,stderr=subprocess.STDOUT)\nrecord['exitCode']=p.returncode\nrecord['end']=datetime.datetime.now(datetime.timezone.utc).isoformat()\nrecord['trackedAfter']=subprocess.check_output(['git','status','--porcelain','--untracked-files=no'],cwd=cwd,text=True)\n(out/(name+'.json')).write_text(json.dumps(record,indent=2)+'\\n')\nprint(json.dumps(record,indent=2))\nprint((out/(name+'.txt')).read_text()[-5000:])\nsys.exit(p.returncode)\nPY\npython3 /tmp/orbit-p11-run.py before-overlay /tmp/orbit-p11-before-aa737ee0 'bash scripts/worktree-overlay.sh'",
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-4ee5be31-22e7-4853-b0bb-4ce9f06efea5",
+    "command": "python3 /tmp/orbit-p11-run.py before-web-check /tmp/orbit-p11-before-aa737ee0 'npm run build -w @orbit/web && npm run test -w @orbit/web'",
+    "status": "failed",
+    "exitCode": 1
+  },
+  {
+    "ref": "exec-afa9e039-d451-4e30-af0f-e5f3de20b6e4",
+    "command": "python3 /tmp/orbit-p11-run.py final-preflight /tmp/orbit-p11-final-aa737ee0 'test ! -e node_modules && test ! -L node_modules && test ! -e src/web/node_modules && git show -s --format=fuller HEAD && node -e '\\''for (const mod of [\"@base-ui/react/button\", \"@base-ui/react/dialog\"]) { try { console.log(require.resolve(mod, {paths: [process.cwd()+\"/src/web\"]})); process.exitCode=1; } catch(e) { if(e.code!==\"MODULE_NOT_FOUND\") throw e; console.log(mod, e.code); } }'\\'''",
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-865ef740-fd26-4333-9f6a-aa1837b051e4",
+    "command": "python3 /tmp/orbit-p11-run.py final-overlay /tmp/orbit-p11-final-aa737ee0 'bash scripts/worktree-overlay.sh'",
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-ec90695f-61cb-4ee2-b690-afb728251046",
+    "command": "python3 /tmp/orbit-p11-run.py regression-final /root/.orbit/worktrees/aa737ee0-40f5-5381-8a38-f4ce4a64335e 'node --test --test-reporter=tap scripts/worktree-overlay.test.mjs'",
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-702a5a5d-e5f6-45d4-b146-1b737b6664ff",
+    "command": "python3 /tmp/orbit-p11-run.py final-paths-before-rerun /tmp/orbit-p11-final-aa737ee0 'node /root/.orbit/worktrees/aa737ee0-40f5-5381-8a38-f4ce4a64335e/docs/evidence/base-ui-migration/p1.1-integration/inspect-candidate.cjs /tmp/orbit-p11-final-aa737ee0'",
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-b9c348c9-6c97-4d57-9212-3a5931c5deeb",
+    "command": "python3 /tmp/orbit-p11-run.py regression-baseline /root/.orbit/worktrees/aa737ee0-40f5-5381-8a38-f4ce4a64335e 'node --test --test-reporter=tap /tmp/orbit-overlay-before/scripts/worktree-overlay.test.mjs'",
+    "status": "failed",
+    "exitCode": 1
+  },
+  {
+    "ref": "exec-9cf67dc7-8f5d-4c36-bf22-fcc144c80b8a",
+    "command": "python3 /tmp/orbit-p11-run.py final-web-check /tmp/orbit-p11-final-aa737ee0 'npm run build -w @orbit/web && npm run test -w @orbit/web'",
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-d69aa030-de53-4924-bce8-c7fb61d9388a",
+    "command": "python3 /tmp/orbit-p11-run.py final-overlay-rerun /tmp/orbit-p11-final-aa737ee0 'bash scripts/worktree-overlay.sh' && python3 /tmp/orbit-p11-run.py final-paths-after-rerun /tmp/orbit-p11-final-aa737ee0 'node /root/.orbit/worktrees/aa737ee0-40f5-5381-8a38-f4ce4a64335e/docs/evidence/base-ui-migration/p1.1-integration/inspect-candidate.cjs /tmp/orbit-p11-final-aa737ee0'",
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "ref": "exec-cef0bedb-76c5-49b2-9fa8-72a7a6db5bab",
+    "command": "python3 docs/evidence/base-ui-migration/p1.1-integration/snapshot-main.py final && python3 - <<'PY'\nimport pathlib,json,subprocess\nout=pathlib.Path('docs/evidence/base-ui-migration/p1.1-integration')\nb=json.loads((out/'final-paths-before-rerun.txt').read_text()); a=json.loads((out/'final-paths-after-rerun.txt').read_text())\npaths=['node_modules/@base-ui/react/package.json','node_modules/.package-lock.json','src/apiserver/node_modules/.prisma/client/index.d.ts']\nfor p in paths: assert a['paths'][p]==b['paths'][p],p\nassert 'reusing this worktree' in (out/'final-overlay-rerun.txt').read_text()\nfor p in ['src/web/node_modules/.vite','src/web/node_modules/.vite-temp']:\n assert a['paths'][p]['exists'] and not a['paths'][p]['symlink']\nresult={'sameInstallAndGeneratedFileIdentity':paths,'realViteCacheDirectories':True,'trackedTreeUnchanged':a['trackedStatus']=='','mainInstallUnchanged':json.loads((out/'main-install-final.summary.json').read_text())['unchanged']}\n(out/'final-verification.json').write_text(json.dumps(result,indent=2)+'\\n')\nprint(json.dumps(result,indent=2))\nPY",
+    "status": "completed",
+    "exitCode": 0
+  }
+]
