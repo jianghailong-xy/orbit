@@ -148,7 +148,7 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(regular.contains(".padding(.vertical, 5)"))
         XCTAssertTrue(row.contains("square.grid.2x2"))
         XCTAssertTrue(row.contains("Text(row.title)"))
-        XCTAssertTrue(row.contains(".semibold") || row.contains(".bold"))
+        XCTAssertFalse(row.contains(".bold()") || row.contains(".semibold"), "项目条目标题与会话行同一字重（owner 10-04）")
         XCTAssertTrue(row.contains("row.line.text"))
         XCTAssertFalse(row.contains("SessionCoordinatorBadge"))
         XCTAssertFalse(row.contains("NeedsYouCountCapsule"), "attention is a dot, never a count")
