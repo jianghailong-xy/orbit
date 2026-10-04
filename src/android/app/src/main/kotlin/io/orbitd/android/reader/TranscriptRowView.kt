@@ -15,6 +15,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import io.orbitd.android.core.realtime.*
+import io.orbitd.android.core.cards.transcriptCards
+import io.orbitd.android.cards.TranscriptCardView
+import io.orbitd.android.cards.DetailFold
 import io.orbitd.android.text.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -35,6 +38,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
     val shown = fullEvent ?: event
     val result = fullResult ?: row.result
     val tool = event.type in setOf("tool_use", "tool_result")
+    val cards = remember(shown) { transcriptCards(shown) }
     fun loadFull(copy: Boolean = false) { scope.launch {
         loading = true; error = false
         try {
@@ -50,7 +54,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
         finally { loading = false }
     } }
     val title = when (event.type) {
-        "user" -> (event.fields["sessionMessage"] as? JsonObject)?.let { "From ${it.string("fromTitle") ?: "another Orbit session"}" } ?: "You"
+        "user" -> if (cards.isNotEmpty()) "Orbit" else (event.fields["sessionMessage"] as? JsonObject)?.let { "From ${it.string("fromTitle") ?: "another Orbit session"}" } ?: "You"
         "assistant" -> "Assistant"
         "thinking" -> "Thinking"
         "tool_use" -> shown.fields.string("name") ?: shown.fields.string("toolName") ?: "Tool"
@@ -96,7 +100,10 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
             TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "Hide thinking" else "Show thinking") }
             if (expanded) MarkdownText(shown.body(), open = open)
         } else {
-            MarkdownText(shown.body().ifBlank { shown.payload.toString() }, open = open)
+            cards.forEach { TranscriptCardView(it, open) }
+            if (cards.isEmpty()) MarkdownText(shown.body().ifBlank { shown.payload.toString() }, open = open)
+            else if (shown.body().isNotBlank()) DetailFold("Orbit attached") { MarkdownText(shown.body(), open = open) }
+            shown.fields.string("controlPlaneNote")?.let { note -> DetailFold("Orbit context") { MarkdownText(note, open = open) } }
             val atts = (shown.fields["attachments"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
             atts.forEach { attachment -> attachment.string("id")?.let { id ->
                 val name = attachment.string("name") ?: "Attachment"
