@@ -41,4 +41,13 @@ class DirectoryGroupingTest {
         assertEquals(listOf("System", "Later", "Untagged"), groups.map { it.title })
         assertEquals(3, groups.sumOf { it.sessions.size })
     }
+
+    @Test fun tagIdentitySurvivesRenameAndCannotCollideWithSyntheticBucket() {
+        fun groups(name: String) = directoryGroups(listOf(DirectorySession("a", tags = listOf(Tag("t", name))),
+            DirectorySession("b")), SessionView.OPEN, Grouping.TAG)
+        val before = groups("Untagged")
+        assertEquals(listOf("Untagged", "Untagged"), before.map { it.title })
+        assertEquals(2, before.map { it.id }.distinct().size)
+        assertEquals(before.map { it.id }, groups("Renamed").map { it.id })
+    }
 }

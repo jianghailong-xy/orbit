@@ -99,6 +99,9 @@ The production shell consumes `OrbitApplication.session` and the A04 `RealtimeSt
 process registers `RealtimeLifecycle` in `Application.onCreate`, before any Activity starts.
 UI requires `RealtimeState.handle === SignedIn.handle`. A04 owns snapshots, network gates,
 SSE and cache; `app/directory/RealtimeDirectory.kt` projects its full JSON into UI fields.
+The shell also waits until navigation is bound to the current account before issuing object
+requests or selecting a session. It re-applies the route when the matching realtime handle
+arrives. A04's scoped selection fix is included at `237eeef3` (public API unchanged).
 Cached rows remain readable; mutations require a fresh directory and still pass through
 the captured A03 `SessionHandle`. HTTP 403/404/409, failed snapshots and empty/loading data
 have distinct presentations. A session's filing scope is independent of its execution state.
@@ -110,6 +113,8 @@ grouping. Open includes empty folders; Completed omits empty folders; Trash/tag 
 flat. Folder sessions appear once, and a vanished folder never hides its sessions. Folder
 navigation preserves the selected filing scope. Search keeps the server's snippets,
 `contentSearched` notice and total count; cancellation discards old queries.
+Group keys use tag IDs and distinct bucket IDs, independently of display names; a real
+tag named `Untagged` can coexist with the untagged bucket and retain its identity on rename.
 
 Metadata/lifecycle requests use the existing authenticated endpoints: rename, pin/unpin,
 complete/restore, Trash + Undo, confirmed permanent purge, folder create/rename/delete,
@@ -130,7 +135,11 @@ object routing. Only the iOS-defined `orbit://` hosts are accepted; project/wiki
 `orbit-project:` / `orbit-wiki:` references. No unverified HTTPS App Links are declared.
 
 `ObjectDestination` resolves real object overviews and related links as the attachment point
-for A06/A11/A12/A13. It is not their full detail implementation. The draft route retains
+for A06/A11/A12/A13. It is not their full detail implementation.
+On a subsequent authoritative 403/404, the overview removes old content, links and actions.
+Transient failures retain explicitly marked stale content with links/actions disabled until
+a successful read. Focused rendering regressions cover both cases and subsequent recovery.
+The draft route retains
 workspace/folder context for A07; it never creates an empty server session. A06 must consume
 `recordId`, implement transcript positioning and missing-record feedback. A07 supplies the
 composer/model selection/send flow. These future pages must call `navigation.push` and use
@@ -168,17 +177,23 @@ env A05_FONT_SCALE=2.0 A05_NIGHT=no bash src/android/scripts/directory-device-te
 ```
 
 The two device cases cover directory/search/folders/lifecycle/403/IME/rotation and cold
-ACTION_VIEW → unsigned recreation → login → destination, plus warm links and system Back.
+ACTION_VIEW → unsigned recreation → login → selected session, plus warm links and system Back.
+The real MainActivity is also tested with a rapid A → B account change, explicit B session
+selection and socket-failure/recovery. These are production-entry tests, separate from A04's
+debug probe. Back diagnostics retain lifecycle, focus, IME and callback state, and assert
+that the old detail disappears. Failures are saved before cleanup to preserve their cause.
 ActivityScenario filters lifecycle callbacks by its launch Intent; tests restore that monitor
 identity after receiving a new Intent, without changing Orbit's received route or saved stack.
 See [AndroidX ActivityScenario](https://github.com/android/android-test/blob/main/core/java/androidx/test/core/app/ActivityScenario.java).
 
 The driver holds `/var/lib/orbit/android/ui.lock` throughout, uses a signed-out debug install and
 synthetic loopback HTTP accounts, captures device/APK identities, screenshots, request paths,
-IME geometry and process logs, and restores emulator settings. Physical devices supplied
+IME geometry and process logs, and restores emulator settings. Captures live in app-private
+storage and are extracted with `run-as`, including on API30's restricted external storage.
+Physical devices supplied
 by serial keep their configuration. Input reaches the system input dispatcher, not only
 Compose's semantic click action. This fixture proves the client/HTTP boundary and observed
 emulator behavior; it is not a deployed-server login, physical-phone or iOS comparison.
 Evidence must retain those distinctions, including any failing exploratory runs. Real
-TalkBack traversal, agreed physical devices, same-data iOS captures and approved deployment
+TalkBack traversal and spoken feedback, agreed physical devices, same-data iOS captures and approved deployment
 accounts still require direct evidence before A05's alignment criterion can be confirmed.

@@ -61,7 +61,7 @@ data class MoveTargets(val workspaceId: String? = null, val folderId: String? = 
 
 enum class SessionView(val query: String, val label: String) { OPEN("open", "Open"), COMPLETED("completed", "Completed"), TRASH("trash", "Trash") }
 enum class Grouping { RECENCY, TAG }
-data class SessionGroup(val title: String, val sessions: List<DirectorySession>)
+data class SessionGroup(val id: String, val title: String, val sessions: List<DirectorySession>)
 
 fun directoryGroups(sessions: List<DirectorySession>, view: SessionView, grouping: Grouping,
     now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): List<SessionGroup> {
@@ -71,8 +71,8 @@ fun directoryGroups(sessions: List<DirectorySession>, view: SessionView, groupin
     if (grouping == Grouping.TAG) {
         val tags = sorted.mapNotNull { it.tags.firstOrNull() }.distinctBy { it.id }
             .sortedWith(compareByDescending<Tag> { it.isSystem }.thenBy { it.position }.thenBy { it.name })
-        return tags.map { tag -> SessionGroup(tag.name, sorted.filter { it.tags.firstOrNull()?.id == tag.id }) } +
-            listOfNotNull(sorted.filter { it.tags.isEmpty() }.takeIf { it.isNotEmpty() }?.let { SessionGroup("Untagged", it) })
+        return tags.map { tag -> SessionGroup("tag:${ObjectId.canonical(tag.id) ?: tag.id}", tag.name, sorted.filter { it.tags.firstOrNull()?.id == tag.id }) } +
+            listOfNotNull(sorted.filter { it.tags.isEmpty() }.takeIf { it.isNotEmpty() }?.let { SessionGroup("bucket:untagged", "Untagged", it) })
     }
     val today = now.atZone(zone).toLocalDate()
     val titles = listOf("Pinned", "Today", "Yesterday", "2–7 days ago", "8–30 days ago", "Older")
@@ -88,7 +88,7 @@ fun directoryGroups(sessions: List<DirectorySession>, view: SessionView, groupin
             else -> 5
         }
     }
-    return titles.mapIndexedNotNull { i, title -> buckets[i]?.let { SessionGroup(title, it) } }
+    return titles.mapIndexedNotNull { i, title -> buckets[i]?.let { SessionGroup("time:$i", title, it) } }
 }
 
 /** A missing folder never hides a session. Trash is flat. A folder page contains its own rows once. */

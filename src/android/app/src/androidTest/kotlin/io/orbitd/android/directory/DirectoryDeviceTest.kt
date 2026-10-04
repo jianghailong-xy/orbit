@@ -41,7 +41,7 @@ class DirectoryDeviceTest {
         instrumentation.sendStatus(0, report)
         compose.waitUntil(10_000) { app.session.state.value !is AuthState.Restoring }
         assertTrue("Requires a dedicated signed-out debug installation", app.session.state.value is AuthState.SignedOut)
-        compose.activity.getExternalFilesDir("a05-directory")!!.apply { mkdirs(); listFiles()?.forEach { it.delete() } }
+        File(app.filesDir, "a05-directory").apply { mkdirs(); listFiles()?.forEach { it.delete() } }
         MockWebServer().use { server ->
             server.dispatcher = fixtureDispatcher()
             try {
@@ -73,6 +73,12 @@ class DirectoryDeviceTest {
                 val hit = compose.onNodeWithText("Review navigation")
                 hit.performScrollTo()
                 capture("directory-ime")
+                key(KeyEvent.KEYCODE_BACK)
+                awaitIme(false)
+                compose.onNodeWithText("Review").assertIsDisplayed() // IME Back must keep the folder/search route.
+                tap(compose.onNodeWithText("Search sessions"), false)
+                awaitIme(true)
+                hit.performScrollTo()
                 tap(hit, true)
                 compose.waitUntil(10_000) { compose.onAllNodesWithText("Session options").fetchSemanticsNodes().isNotEmpty() }
                 awaitIme(false)
@@ -118,7 +124,7 @@ class DirectoryDeviceTest {
             } finally {
                 runBlocking { app.session.logout() }
                 app.realtime.selectSession(null)
-                File(compose.activity.getExternalFilesDir("a05-directory"), "requests.txt").writeText(apiCalls.joinToString("\n"))
+                File(File(app.filesDir, "a05-directory"), "requests.txt").writeText(apiCalls.joinToString("\n"))
             }
         }
     }
@@ -189,7 +195,7 @@ class DirectoryDeviceTest {
         compose.waitForIdle()
     }
     private fun capture(name: String) {
-        val directory = compose.activity.getExternalFilesDir("a05-directory")!!.also { it.mkdirs() }
+        val directory = File(app.filesDir, "a05-directory").also { it.mkdirs() }
         val bitmap = instrumentation.uiAutomation.takeScreenshot()
         File(directory, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         bitmap.recycle()

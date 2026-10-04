@@ -87,7 +87,7 @@ fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: DirectoryApi,
                             modifier = Modifier.clickable(role = Role.Button) { open(OrbitRoute(Destination.FOLDER, f.id, workspace, origin = Origin.LIST, sessionView = view.query)) })
                     }
                     groups.forEach { group ->
-                        item(key = "heading:${group.title}") { SectionHeading(group.title) }
+                        item(key = "heading:${group.id}") { SectionHeading(group.title) }
                         items(group.sessions, key = { it.id }) { session ->
                             SessionRow(session, { open(OrbitRoute(Destination.SESSION, session.id, workspace, if (isFolder) route.id else null)) },
                                 { action = DirectoryDialog.SessionMenu(session, view) })

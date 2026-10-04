@@ -103,8 +103,11 @@ fi
 "$adb" -s "$serial" shell am force-stop "$package"
 start="$("$adb" -s "$serial" shell date +%s | tr -d '\r').000"
 "$adb" -s "$serial" shell am instrument -w -r -e class io.orbitd.android.directory.DirectoryDeviceTest,io.orbitd.android.directory.LinkDeviceTest "$runner" > "$output/instrumentation.txt" 2>&1
-"$adb" -s "$serial" pull "/sdcard/Android/data/$package/files/a05-directory" "$output/screenshots" > "$output/pull.txt" 2>&1 || true
-"$adb" -s "$serial" pull "/sdcard/Android/data/$package/files/a05-links" "$output/links" > "$output/pull-links.txt" 2>&1 || true
+"$adb" -s "$serial" exec-out run-as "$package" tar -c -C files a05-directory a05-links > "$output/captures.tar"
+tar --no-same-owner -xf "$output/captures.tar" -C "$output"
+mv "$output/a05-directory" "$output/screenshots"
+mv "$output/a05-links" "$output/links"
+chmod -R a+rX "$output/screenshots" "$output/links"
 pid="$(sed -n 's/.*a05_pid=\([0-9]*\).*/\1/p' "$output/instrumentation.txt" | head -1)"
 [[ -n "$pid" ]]
 "$adb" -s "$serial" logcat -d -v threadtime --pid="$pid" -T "$start" > "$output/logcat.txt"
@@ -114,6 +117,10 @@ if rg 'a05-fixture-(password|access|refresh)' "$output/logcat.txt"; then
   exit 1
 fi
 rg -F 'OK (2 tests)' "$output/instrumentation.txt" >/dev/null
+for capture in login-ime folder directory-ime completed directory permission landscape; do
+  [[ -s "$output/screenshots/$capture.png" ]]
+done
+[[ -s "$output/links/warm-wiki.png" && -s "$output/links/result.txt" ]]
 if rg 'FAILURES!!!|INSTRUMENTATION_FAILED|Process crashed|INSTRUMENTATION_STATUS_CODE: -[234]' "$output/instrumentation.txt"; then
   exit 1
 fi

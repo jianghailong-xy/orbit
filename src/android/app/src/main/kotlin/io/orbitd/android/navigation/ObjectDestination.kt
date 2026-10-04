@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.directory.*
+import io.orbitd.android.core.net.ApiError
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.*
 
@@ -21,6 +22,7 @@ fun ObjectDestination(route: OrbitRoute, api: DirectoryApi, data: DirectoryData,
     var content by remember(route) { mutableStateOf<JsonElement?>(null) }
     var error by remember(route) { mutableStateOf<String?>(null) }
     var loading by remember(route) { mutableStateOf(true) }
+    var fresh by remember(route) { mutableStateOf(false) }
     var retry by remember { mutableIntStateOf(0) }
     var action by remember { mutableStateOf<DirectoryDialog?>(null) }
     val path = when (route.destination) {
@@ -38,17 +40,23 @@ fun ObjectDestination(route: OrbitRoute, api: DirectoryApi, data: DirectoryData,
     }
     LaunchedEffect(route, revision, retry) {
         if (path.isEmpty()) { loading = false; return@LaunchedEffect }
-        loading = true; error = null
+        loading = true; error = null; fresh = false
         try { content = api.read(path, JsonElement.serializer(),
-            if (route.destination == Destination.LIST) listOf("tasks" to "none") else emptyList()) }
+            if (route.destination == Destination.LIST) listOf("tasks" to "none") else emptyList()); fresh = true }
         catch (cancel: CancellationException) { throw cancel }
-        catch (failure: Exception) { error = directoryError(failure) }
+        catch (failure: Exception) {
+            error = directoryError(failure)
+            if (failure is ApiError && failure.status in setOf(403, 404)) { content = null; action = null }
+        }
         finally { loading = false }
     }
     fun field(obj: JsonObject, name: String) = (obj[name] as? JsonPrimitive)?.contentOrNull
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (loading) item { LoadingMessage("Loading…") }
         error?.let { item { StatusMessage("Couldn't open this item", it, { retry++ }) } }
+        if (content != null && !fresh && !loading) item {
+            Text("Showing previously loaded details. Reconnect and retry before making changes.")
+        }
         if (route.destination == Destination.DRAFT) item {
             Text("New session", style = MaterialTheme.typography.headlineMedium)
             Text(data.workspaces.firstOrNull { ObjectId.same(it.id, route.workspaceId) }?.name ?: "Workspace unavailable")
@@ -66,7 +74,7 @@ fun ObjectDestination(route: OrbitRoute, api: DirectoryApi, data: DirectoryData,
                 }
                 ListItem(headlineContent = { Text(field(obj, "title") ?: field(obj, "name") ?: "Untitled") },
                     supportingContent = { field(obj, "status")?.let { Text(it) } },
-                    modifier = Modifier.clickable(enabled = id != null, role = Role.Button) { open(OrbitRoute(destination, id)) })
+                    modifier = Modifier.clickable(enabled = id != null && fresh, role = Role.Button) { open(OrbitRoute(destination, id)) })
             }
         }
         (content as? JsonObject)?.let { obj ->
@@ -78,16 +86,16 @@ fun ObjectDestination(route: OrbitRoute, api: DirectoryApi, data: DirectoryData,
             }
             listOf("taskId" to Destination.TASK, "projectId" to Destination.PROJECT,
                 "coordinatorSessionId" to Destination.SESSION, "sessionId" to Destination.SESSION).forEach { (key, type) ->
-                field(obj, key)?.let { id -> item { TextButton(onClick = { open(OrbitRoute(type, id, origin = Origin.LINK)) }) {
+                field(obj, key)?.let { id -> item { TextButton(enabled = fresh, onClick = { open(OrbitRoute(type, id, origin = Origin.LINK)) }) {
                     Text(when (key) { "taskId" -> "Open task"; "projectId" -> "Open project"; "coordinatorSessionId" -> "Open coordinator session"; else -> "Open session" })
                 } } }
             }
             if (route.destination == Destination.SESSION) item {
                 val session = runCatching { io.orbitd.android.core.protocol.Wire.json.decodeFromJsonElement(DirectorySession.serializer(), obj) }.getOrNull()
-                session?.let { TextButton(onClick = { action = DirectoryDialog.SessionMenu(it,
+                session?.let { TextButton(enabled = fresh && data.fresh, onClick = { action = DirectoryDialog.SessionMenu(it,
                     SessionView.entries.firstOrNull { v -> v.name == it.lifecycleState } ?: SessionView.OPEN) }) { Text("Session options") } }
             }
         }
     }
-    action?.let { DirectoryActionDialog(it, api, data, { action = it }) { retry++; refresh() } }
+    action?.let { DirectoryActionDialog(it, api, data.copy(fresh = data.fresh && fresh), { action = it }) { retry++; refresh() } }
 }

@@ -58,6 +58,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
     val authState by auth.state.collectAsState()
     val authMessage by auth.message.collectAsState()
     val signedIn = authState as? AuthState.SignedIn
+    val accountKey = signedIn?.handle?.account?.let { "${it.server}|${it.userId}" }
     val saver = remember { Saver<OrbitNavigation, String>(save = { Wire.json.encodeToString(it) }, restore = { Wire.json.decodeFromString<OrbitNavigation>(it) }) }
     var navigation by rememberSaveable(stateSaver = saver) { mutableStateOf(OrbitNavigation()) }
     var showBuild by rememberSaveable { mutableStateOf(false) }
@@ -68,7 +69,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
     val imeVisible = WindowInsets.isImeVisible
     LaunchedEffect(authState) {
         if (authState != AuthState.Restoring) {
-            navigation = navigation.bindAccount(signedIn?.handle?.account?.let { "${it.server}|${it.userId}" })
+            navigation = navigation.bindAccount(accountKey)
             if (signedIn == null) drawer.close()
         }
     }
@@ -79,7 +80,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
             }
         }
     }
-    BackHandler(enabled = !imeVisible && (drawer.isOpen || navigation.canGoBack || showBuild)) {
+    BackHandler(enabled = !imeVisible && navigation.account == accountKey && (drawer.isOpen || navigation.canGoBack || showBuild)) {
         when { drawer.isOpen -> scope.launch { drawer.close() }; showBuild -> showBuild = false; else -> navigation = navigation.back() }
     }
     if (signedIn == null) {
@@ -95,6 +96,10 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
         }
         return
     }
+    if (navigation.account != accountKey) {
+        LoadingMessage("Opening Orbit…")
+        return
+    }
     key(signedIn.handle) {
         val api = remember { DirectoryApi(app.session, signedIn.handle) }
         val data by rememberDirectoryData(app, signedIn.handle)
@@ -106,8 +111,8 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
         fun select(key: String, root: OrbitRoute) {
             keyboard?.hide(); focus.clearFocus(); navigation = navigation.select(key, root); scope.launch { drawer.close() }
         }
-        LaunchedEffect(route, signedIn.handle) {
-            app.realtime.selectSession(if (route.destination == Destination.SESSION) route.id else null)
+        LaunchedEffect(route, signedIn.handle, live.handle) {
+            if (live.handle === signedIn.handle) app.realtime.selectSession(if (route.destination == Destination.SESSION) route.id else null)
         }
         ModalNavigationDrawer(drawerState = drawer, gesturesEnabled = !imeVisible,
             drawerContent = {
