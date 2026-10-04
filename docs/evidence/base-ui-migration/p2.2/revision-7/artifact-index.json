@@ -1,8 +1,13 @@
 [
   {
     "path": "docs/evidence/base-ui-migration/p2.2/revision-7/README.md",
-    "sha256": "f94640ea5d482a95a1aec415a2ea1e124e56f6576f0424fde7a7ab7b91fa4e40",
-    "bytes": 7972
+    "sha256": "ceca883f9a2876ea345e4db2bf05e799ea9d7de3fe782ba2392a91c4b8049083",
+    "bytes": 8300
+  },
+  {
+    "path": "docs/evidence/base-ui-migration/p2.2/revision-7/archive-verification-attempt-1.json",
+    "sha256": "10e572d9a231973412be8424994543d9c6886b2026a1bc1ae079439971d9a01b",
+    "bytes": 747
   },
   {
     "path": "docs/evidence/base-ui-migration/p2.2/revision-7/audit-entry.py",

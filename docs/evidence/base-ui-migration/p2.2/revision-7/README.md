@@ -42,6 +42,8 @@
 
 [来源审计](source-audit.json)证明以下全部为最终分支祖先：已验收P2.2 `d71afc686760eb4a37c84822bf1ea478dbe8fcf1`、通知最终 `59c439e47515f15f581a76318df0ecad6b23e53e`、项目tip `18e75cfe14d0a0858c9a46e514535439c9cdf9d8`、main `53da29cc1e799e1b5a82e98167305d9b41cc54cc`。此前16,634份迁移证据的Git mode/blob完整保留，包括第6版及更早失败。未推送、改写main/project ref或自行落地。
 
+首个归档提交 `38e9e38ee` 的Git对象检查发现两份原始stderr日志被仓库 `*.log` 规则漏收；[首次检查记录](archive-verification-attempt-1.json)保留该缺口，后续显式补入原件，不改其字节、测试输入或执行结果。原日志与error-context中的尾空格也按原字节保留。
+
 执行/审计命令与退出码在 [tool-call-refs.json](tool-call-refs.json)，原命令日志在 `../checks/r7-*`。`audit-source.py`验证来源、祖先、六文件增量及历史保全；`audit-entry.py`验证原始附件SHA和实际入口观测。`artifact-index.json`覆盖本版归档及命令日志；复跑必须用新的输出目录和命令名称，不覆盖这些原件。
 
 本版仍不确立真机iOS、原生IME/软键盘、读屏或全站P7，也不声称平台已合并。按EVIDENCE_JUDGMENT提交第7版，由独立判断产生完成状态。
