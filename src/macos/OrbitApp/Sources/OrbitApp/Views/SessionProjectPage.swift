@@ -57,8 +57,9 @@ struct SessionProjectRowView: View {
                 .layoutPriority(1)
             Spacer(minLength: 8)
             liveIndicator
-            if let timestamp = row.lastTurnAt ?? row.createdAt {
-                Text(RelativeTime.format(timestamp))
+            if let timestamp = row.lastTurnAt ?? row.createdAt,
+               let relative = RelativeTime.format(timestamp) {
+                Text(relative)
                     .font(.orbitMeta)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: regular, vertical: false)
@@ -210,6 +211,7 @@ private struct SessionProjectRowActions: ViewModifier {
         }
     }
 
+    @ViewBuilder
     private var menu: some View {
         Button(action: onCoordinator) {
             Label(SessionProjectCopy.openCoordinator, systemImage: "bubble.left")
