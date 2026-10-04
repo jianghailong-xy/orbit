@@ -51,10 +51,15 @@ fun ObjectDestination(route: OrbitRoute, api: DirectoryApi, data: DirectoryData,
         finally { loading = false }
     }
     fun field(obj: JsonObject, name: String) = (obj[name] as? JsonPrimitive)?.contentOrNull
+    // Build one interval set per composition, even if a response arrives during measurement.
+    val displayedContent = content
+    val displayedError = error
+    val displayedLoading = loading
+    val displayedFresh = fresh
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (loading) item { LoadingMessage("Loading…") }
-        error?.let { item { StatusMessage("Couldn't open this item", it, { retry++ }) } }
-        if (content != null && !fresh && !loading) item {
+        if (displayedLoading) item { LoadingMessage("Loading…") }
+        displayedError?.let { item { StatusMessage("Couldn't open this item", it, { retry++ }) } }
+        if (displayedContent != null && !displayedFresh && !displayedLoading) item {
             Text("Showing previously loaded details. Reconnect and retry before making changes.")
         }
         if (route.destination == Destination.DRAFT) item {
@@ -62,7 +67,7 @@ fun ObjectDestination(route: OrbitRoute, api: DirectoryApi, data: DirectoryData,
             Text(data.workspaces.firstOrNull { ObjectId.same(it.id, route.workspaceId) }?.name ?: "Workspace unavailable")
             route.folderId?.let { id -> Text(data.folders.firstOrNull { ObjectId.same(it.id, id) }?.name ?: "Folder unavailable") }
         }
-        val list = (content as? JsonArray)?.filterIsInstance<JsonObject>()
+        val list = (displayedContent as? JsonArray)?.filterIsInstance<JsonObject>()
         if (list != null) {
             if (list.isEmpty()) item { StatusMessage("No items yet", "Items from your instance will appear here.") }
             items(list, key = { field(it, "id").orEmpty() }) { obj ->
@@ -74,10 +79,10 @@ fun ObjectDestination(route: OrbitRoute, api: DirectoryApi, data: DirectoryData,
                 }
                 ListItem(headlineContent = { Text(field(obj, "title") ?: field(obj, "name") ?: "Untitled") },
                     supportingContent = { field(obj, "status")?.let { Text(it) } },
-                    modifier = Modifier.clickable(enabled = id != null && fresh, role = Role.Button) { open(OrbitRoute(destination, id)) })
+                    modifier = Modifier.clickable(enabled = id != null && displayedFresh, role = Role.Button) { open(OrbitRoute(destination, id)) })
             }
         }
-        (content as? JsonObject)?.let { obj ->
+        (displayedContent as? JsonObject)?.let { obj ->
             item {
                 Text(field(obj, "title") ?: field(obj, "name") ?: route.destination.name.lowercase().replaceFirstChar(Char::uppercase), style = MaterialTheme.typography.headlineMedium)
                 field(obj, "status")?.let { Text(it) }
@@ -86,13 +91,13 @@ fun ObjectDestination(route: OrbitRoute, api: DirectoryApi, data: DirectoryData,
             }
             listOf("taskId" to Destination.TASK, "projectId" to Destination.PROJECT,
                 "coordinatorSessionId" to Destination.SESSION, "sessionId" to Destination.SESSION).forEach { (key, type) ->
-                field(obj, key)?.let { id -> item { TextButton(enabled = fresh, onClick = { open(OrbitRoute(type, id, origin = Origin.LINK)) }) {
+                field(obj, key)?.let { id -> item { TextButton(enabled = displayedFresh, onClick = { open(OrbitRoute(type, id, origin = Origin.LINK)) }) {
                     Text(when (key) { "taskId" -> "Open task"; "projectId" -> "Open project"; "coordinatorSessionId" -> "Open coordinator session"; else -> "Open session" })
                 } } }
             }
             if (route.destination == Destination.SESSION) item {
                 val session = runCatching { io.orbitd.android.core.protocol.Wire.json.decodeFromJsonElement(DirectorySession.serializer(), obj) }.getOrNull()
-                session?.let { TextButton(enabled = fresh && data.fresh, onClick = { action = DirectoryDialog.SessionMenu(it,
+                session?.let { TextButton(enabled = displayedFresh && data.fresh, onClick = { action = DirectoryDialog.SessionMenu(it,
                     SessionView.entries.firstOrNull { v -> v.name == it.lifecycleState } ?: SessionView.OPEN) }) { Text("Session options") } }
             }
         }

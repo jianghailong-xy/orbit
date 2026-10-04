@@ -130,10 +130,14 @@ private fun SearchResultsList(query: String, api: DirectoryApi, open: (OrbitRout
         catch (failure: Exception) { error = directoryError(failure) }
         finally { loading = false }
     }
+    // Keep the lazy interval set stable for a complete measure pass.
+    val displayedResults = results
+    val displayedError = error
+    val displayedLoading = loading
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
-        if (loading) item { LoadingMessage("Searching sessions…") }
-        error?.let { item { StatusMessage("Search couldn't be loaded", it, { retry++ }) } }
-        results?.let { result ->
+        if (displayedLoading) item { LoadingMessage("Searching sessions…") }
+        displayedError?.let { item { StatusMessage("Search couldn't be loaded", it, { retry++ }) } }
+        displayedResults?.let { result ->
             item { SectionHeading(if (query.isBlank()) "Recent sessions" else "${result.hits.size} of ${result.total ?: result.hits.size} matching sessions") }
             if (query.isNotBlank() && !result.contentSearched) item {
                 Text("Matching names only — type more to search message text.", Modifier.padding(16.dp), style = MaterialTheme.typography.bodySmall)
