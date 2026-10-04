@@ -10,6 +10,11 @@ android_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 evidence_dir=${1:-"$android_dir/.artifacts/verify-$(date -u +%Y%m%dT%H%M%SZ)"}
 mkdir -p "$evidence_dir"
 evidence_dir=$(cd "$evidence_dir" && pwd)
+existing_evidence=$(find "$evidence_dir" -mindepth 1 -maxdepth 1 -print -quit)
+if [[ -n "$existing_evidence" ]]; then
+  echo 'Use a new, empty evidence directory for each run' >&2
+  exit 2
+fi
 : "${JAVA_HOME:?Set JAVA_HOME to a Java 21 installation}"
 : "${ANDROID_HOME:=${ANDROID_SDK_ROOT:?Set ANDROID_HOME to the Android SDK}}"
 export ANDROID_HOME
@@ -19,17 +24,20 @@ gradle=(bash "$android_dir/gradlew" -p "$android_dir" --no-daemon --max-workers=
 collect_evidence() {
   local result=$?
   trap - EXIT
-  printf '%s\n' "$result" > "$evidence_dir/exit-code.txt"
   # Keep diagnostics on failures too. Presence here does not establish success;
   # the test census and required output checks below are the acceptance gates.
   for module in core app; do
-    mkdir -p "$evidence_dir/$module"
+    if ! mkdir -p "$evidence_dir/$module"; then
+      result=1
+      continue
+    fi
     for output in reports test-results; do
       if [[ -d "$android_dir/$module/build/$output" ]]; then
-        cp -R "$android_dir/$module/build/$output" "$evidence_dir/$module/"
+        cp -R "$android_dir/$module/build/$output" "$evidence_dir/$module/" || result=1
       fi
     done
   done
+  printf '%s\n' "$result" > "$evidence_dir/exit-code.txt"
   echo "Android verification exit=$result; evidence: $evidence_dir"
   exit "$result"
 }

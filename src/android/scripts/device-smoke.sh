@@ -13,7 +13,7 @@ serial="${4:-}"
 conditions="${5:-}"
 [[ -f "$apk" ]] || { echo "APK missing: $apk" >&2; exit 2; }
 mkdir -p "$output"
-[[ ! -e "$output/result.txt" ]] || { echo 'Use a new evidence directory for each run' >&2; exit 2; }
+[[ -z "$(ls -A "$output")" ]] || { echo 'Use a new evidence directory for each run' >&2; exit 2; }
 export JAVA_HOME="${JAVA_HOME:-/usr/lib/jvm/java-21-openjdk-amd64}"
 export ANDROID_HOME="${ANDROID_HOME:-/opt/android-sdk}"
 export ANDROID_SDK_ROOT="$ANDROID_HOME"
