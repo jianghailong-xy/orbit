@@ -267,7 +267,7 @@ const JOB_WORDS = {
   LAND_PROMOTION: 'Merge to main',
 };
 
-const JOB_PHASES = {
+export const JOB_PHASES = {
   FETCH: 'fetching',
   MAIN_SYNC: 'syncing main',
   REBASE: 'rebasing',

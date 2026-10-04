@@ -154,6 +154,7 @@ import {
 } from './task-lock-order';
 import { PROJECT_LIVE_SESSION_STATUS_SQL } from '../projects/live-session-status';
 import { readCurrentVerifier, readTaskWorkState } from '../projects/project-task-work-state';
+import { readTaskIntegrationViews } from '../projects/project-task-integration';
 import {
   admitProjectScopeWrite,
   type ScopeAdmission,
@@ -8113,7 +8114,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // work lanes ask: a `VERIFICATION` criterion says who settles the task, not whether it has work,
     // and a row with work of its own is one whose detail has a verifier state like any other.
     const [
-      dependencyFacts, supersession, autoRunSkipped, workState, progress, verifier, routes, modelHintOptions,
+      dependencyFacts, supersession, autoRunSkipped, workState, progress, verifier, routes, modelHintOptions, integrations,
     ] =
       await Promise.all([
         this.dependencyFactsFor(ownerId, [id]),
@@ -8129,6 +8130,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // The Route Decision behind each run, by the Session its plan named (model routing §7.5).
         readTaskRouteSummaries(this.prisma, ownerId, (task.sessions ?? []).map((session) => session.id)),
         this.modelHintOptions(ownerId, task),
+        task.projectId ? readTaskIntegrationViews(this.prisma, ownerId, task.projectId, [id]) : new Map(),
       ]);
     const dependencyState = computeDependencyState(dependencyFacts.get(id) ?? []);
     return {
@@ -8163,6 +8165,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       progress,
       // What each suggested tier runs as for this task, so no client keeps a tier table of its own.
       modelHintOptions,
+      // Where the work stands between DONE and main, with its newest LAND_TASK (§2.7a): the read
+      // the project's task rows make, so the task's page and the project's cannot disagree.
+      integration: integrations.get(id) ?? {
+        state: 'NOT_APPLICABLE' as const,
+        since: null,
+        handler: null,
+        openItemId: null,
+        jobId: null,
+        checksRunningForMs: null,
+        landTask: null,
+      },
       ...supersession,
     };
   }
