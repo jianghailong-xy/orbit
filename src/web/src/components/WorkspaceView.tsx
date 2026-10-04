@@ -9456,6 +9456,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 <SessionProjectSettlementCard
                   key={`settlement:${selectedId}`}
                   projectId={selectedSession?.projectId ?? null}
+                  coordinator={
+                    selectedSession?.projectMembership?.role === undefined
+                      || selectedSession?.projectMembership?.role === 'COORDINATOR'
+                  }
                   onDelegate={delegateProjectSettlement}
                 />
               )}
