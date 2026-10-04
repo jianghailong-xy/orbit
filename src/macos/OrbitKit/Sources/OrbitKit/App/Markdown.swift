@@ -150,7 +150,7 @@ private func paragraphBlocks(_ paragraph: Paragraph) -> [MarkdownBlock] {
     var result: [MarkdownBlock] = []
     var run: [InlineMarkup] = []   // non-image inlines awaiting a flush into a paragraph block
     func flushText() {
-        let text = trimTrailingNewline(Paragraph(run).format())
+        let text = inlineText(of: Paragraph(run))
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if !text.isEmpty { result.append(.paragraph(text: text)) }
         run.removeAll()
@@ -221,7 +221,27 @@ private func makeTable(_ table: Table) -> MarkdownTable {
 /// inline source. Round-trip-correct and multibyte-safe; soft breaks stay as `\n`.
 private func inlineText(of markup: Markup) -> String {
     let inlines = markup.children.compactMap { $0 as? InlineMarkup }
-    return trimTrailingNewline(Paragraph(inlines).format())
+    // swift-markdown's formatter omits Link.title. For uploaded files that title is the
+    // original filename, so preserve it before the renderer decides between a picture and a file.
+    var text = ""
+    var run: [InlineMarkup] = []
+    func flush() {
+        text += trimTrailingNewline(Paragraph(run).format())
+        run.removeAll()
+    }
+    for inline in inlines {
+        if let link = inline as? Link, let destination = link.destination,
+           AttachmentLink.attachmentID(source: destination) != nil, let title = link.title {
+            flush()
+            let escaped = title.replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"")
+            text += "[\(inlineText(of: link))](\(destination) \"\(escaped)\")"
+        } else {
+            run.append(inline)
+        }
+    }
+    flush()
+    return text
 }
 
 /// A blockquote's inline source: each child paragraph's inline text, joined by newlines.
