@@ -1081,16 +1081,10 @@ export const SESSION_SHARED_TIP = 'Shared · anyone with the link';
 export function SessionTitleRow({
   session: s,
   hoverTipOpen = false,
-  showPinned = false,
-}: { session: any; hoverTipOpen?: boolean; showPinned?: boolean }) {
+}: { session: any; hoverTipOpen?: boolean }) {
   return (
     <div className="session-title-row">
       <div className="session-title">{s.title}</div>
-      {showPinned && s.pinnedAt && (
-        <span className="session-pin-indicator" title="Pinned" aria-label="Pinned">
-          <PushpinFilled />
-        </span>
-      )}
       {(s.mergeStatus === 'error' || s.mergeStatus === 'conflict') && (
         <Tooltip
           title={s.mergeStatus === 'conflict' ? 'Merge conflict — needs resolving' : 'Merge failed'}
@@ -8216,7 +8210,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                         <StatusIcon session={actionSession} watching={watching?.word} />
                       </span>
                       <div className="session-main">
-                        <SessionTitleRow session={s} hoverTipOpen={hoverTipOpen} showPinned={view !== 'trash'} />
+                        <SessionTitleRow session={s} hoverTipOpen={hoverTipOpen} />
                         {/* Tags lead the second line and the reply preview follows them. They sat
                             beside the title as bare colour dots until the naming pass started
                             writing semantic ones ("登录", "性能"): a dot cannot show a word, so the
