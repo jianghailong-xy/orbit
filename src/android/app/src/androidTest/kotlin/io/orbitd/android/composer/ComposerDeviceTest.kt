@@ -111,7 +111,7 @@ class ComposerDeviceTest {
         compose.onNodeWithText("Expired account · Not signed in").performScrollTo().assertIsNotEnabled()
         compose.onNodeWithText("Close").performClick()
         control("""{"status":"RUNNING"}"""); compose.runOnIdle { app.realtime.refreshSession() }; awaitText("Stop")
-        compose.onNodeWithText("Stop").performClick(); awaitText("Stop requested.")
+        clickSendWhenEnabled(); awaitText("Stop requested.")
         compose.onNodeWithTag("composer-input").performTextInput("queued message")
         compose.onNodeWithTag("composer-send").performClick()
         compose.waitUntil(10000) { model.state.value.draft.pending==null && !model.state.value.busy && !model.state.value.waiting }
@@ -305,7 +305,12 @@ class ComposerDeviceTest {
     }
     private fun clickSendWhenEnabled() {
         compose.waitUntil(10000) { compose.onNodeWithTag("composer-send").fetchSemanticsNode().config.getOrNull(SemanticsProperties.Disabled)==null }
-        compose.onNodeWithTag("composer-send").performClick()
+        // Use screen coordinates from the platform node after DocumentsUI/dialog transitions.
+        // Compose's injected touch can retain the previous window offset at the bottom edge.
+        var node:AccessibilityNodeInfo?=null
+        compose.waitUntil(5000) { node=systemNode("Send") ?: systemNode("Stop"); node!=null }
+        val bounds=android.graphics.Rect();node!!.getBoundsInScreen(bounds)
+        shellBytes("input tap ${bounds.centerX()} ${bounds.centerY()}")
     }
     private fun ready() { compose.waitUntil(10000) { app.realtime.state.value.session?.fresh==true && !model.state.value.busy };compose.waitForIdle() }
     private fun awaitText(text:String) { compose.waitUntil(15000) { compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() } }

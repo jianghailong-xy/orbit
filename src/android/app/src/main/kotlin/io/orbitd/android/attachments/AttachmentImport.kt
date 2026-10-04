@@ -25,6 +25,13 @@ object AttachmentLimits {
     }
 }
 
+/** Grants left by an interrupted import must not survive signing out of its account. */
+fun clearAttachmentImports(context: Context) {
+    context.contentResolver.persistedUriPermissions.filter { it.isReadPermission }.forEach {
+        runCatching { context.contentResolver.releasePersistableUriPermission(it.uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+    }
+}
+
 /** SAF/Photo Picker grants last until a private durable copy exists, including process recreation. */
 fun importAttachment(context: Context, model: ComposerModel, uri: Uri, source: String, existing: StagedAttachment? = null) {
     val resolver = context.contentResolver

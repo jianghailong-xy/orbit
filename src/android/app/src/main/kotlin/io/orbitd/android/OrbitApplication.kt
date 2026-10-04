@@ -17,6 +17,7 @@ import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.composer.ComposerModel
 import io.orbitd.android.composer.DraftTarget
 import io.orbitd.android.attachments.clearAttachmentHandoffs
+import io.orbitd.android.attachments.clearAttachmentImports
 import io.orbitd.android.navigation.ObjectId
 
 /** One process-wide session owns all HTTP requests and token rotations, across activity recreation. */
@@ -37,6 +38,9 @@ open class OrbitApplication : Application() {
         realtime // Register lifecycle/network callbacks before the first Activity starts.
         clearAttachmentHandoffs(this)
         processScope.launch { session.state.collect { state ->
+            if (state is AuthState.SignedOut || composerHandle != null && state is AuthState.SignedIn && state.handle !== composerHandle) {
+                clearAttachmentImports(this@OrbitApplication)
+            }
             if ((state as? AuthState.SignedIn)?.handle !== composerHandle) {
                 composers.values.forEach { it.close() }; composers.clear(); composerHandle = null
                 clearAttachmentHandoffs(this@OrbitApplication)

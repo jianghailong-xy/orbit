@@ -51,12 +51,15 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
     var preview by remember { mutableStateOf<StagedAttachment?>(null) }
     var queued by remember { mutableStateOf(false) }
     var slashScope by remember { mutableStateOf<String?>(null) }
+    var selectionNotice by remember { mutableStateOf<String?>(null) }
     val usable = state.loaded && session.canCompose()
     val files = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         uris.forEach { importAttachment(context, model, it, "file") }
     }
     val photos = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(5)) { uris ->
-        uris.forEach { importAttachment(context, model, it, "photo") }
+        // The older OpenDocument fallback does not enforce Photo Picker's selection count.
+        selectionNotice = if (uris.size > 5) "Only the first five selected photos were added." else null
+        uris.take(5).forEach { importAttachment(context, model, it, "photo") }
     }
     val clipboard = context.getSystemService(ClipboardManager::class.java)
     val detail = session?.snapshot?.detail ?: JsonObject(emptyMap())
@@ -68,6 +71,7 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
                 state.error?.let { Text(it, color = MaterialTheme.colorScheme.error); TextButton(onClick = model::clearError) { Text("Dismiss error") } }
                 if (!state.loaded && !state.busy) TextButton(onClick = model::restore) { Text("Retry draft restore") }
                 state.notice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                selectionNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 if (target == null && terminal(detail)) {
                     Text("Sending a message will resume this session in Open.", style = MaterialTheme.typography.bodySmall)
                     (detail["capabilities"] as? JsonObject)?.text("resumeBlockedReason")?.let { reason ->

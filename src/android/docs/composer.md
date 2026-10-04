@@ -68,7 +68,9 @@ The fixed Swift ComposerView / FileHandoff / Attachments and backend MAX_UPLOAD_
 
 Do not silently apply the File 5 MiB cap to Photos/Paste. Boundary tests preserve that difference.
 Persistable grants are taken where offered, bytes are copied into the account's private storage,
-and grants are released. Temporary clipboard/provider grants also work. Failed private-copy
+and grants are released. Sign-out also releases grants left by an interrupted process; restoring
+the same login preserves them for a pending import. Older system file-picker photo fallbacks
+explicitly retain the five-photo selection limit. Temporary clipboard/provider grants also work. Failed private-copy
 access requires reselecting the URI; a network upload retry uses the private copy.
 
 Image previews are sampled, zoomable and share the same action dialog as transcript files.
