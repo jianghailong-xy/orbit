@@ -46,6 +46,11 @@ cleanup() {
     kill "$emulator_pid" 2>/dev/null || true
     wait "$emulator_pid" 2>/dev/null || true
     timeout 20 "$adb" -s "$serial" wait-for-disconnect > "$output/disconnect.txt" 2>&1 || result=1
+    local deadline=$((SECONDS + 20))
+    while "$adb" devices | rg -q "^$serial[[:space:]]"; do
+      if (( SECONDS >= deadline )); then result=1; break; fi
+      sleep 0.25
+    done
   fi
   printf 'exit_code=%s\nfinished_utc=%s\n' "$result" "$(date -u +%FT%TZ)" >> "$output/result.txt"
   exit "$result"
