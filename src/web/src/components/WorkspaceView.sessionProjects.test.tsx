@@ -221,7 +221,8 @@ beforeEach(() => {
       const params = new URLSearchParams(path.split('?')[1]);
       const lifecycle = params.get('view') === 'completed' ? 'COMPLETED' : params.get('view') === 'trash' ? 'TRASH' : 'OPEN';
       const inScope = params.has('workspaceId') ? rows : [...rows, ...remoteRows];
-      return reply(inScope.filter((r) => r.lifecycleState === lifecycle));
+      return reply(inScope.filter((r) => r.lifecycleState === lifecycle &&
+        (!params.has('projectId') || r.projectMembership?.projectId === params.get('projectId'))));
     }
     if (path.startsWith('/sessions/')) {
       if (path.includes('/events/page')) return reply({ events: [], hasMore: false });
@@ -322,7 +323,8 @@ describe('project entries in the session list', { timeout: 60_000 }, () => {
     await until(() => expect(preview()?.textContent).toBe('Completed coordinator summary'));
     expect(titles()).toEqual(['Project Alpha']);
     expect(projectRow().querySelector('.session-project-status')).toBeNull();
-    expect(listCalls.some((p) => p.includes('view=completed') && !p.includes('workspaceId=') && !p.includes('limit='))).toBe(true);
+    expect(listCalls.some((p) => p.includes('view=completed') && p.includes(`projectId=${PROJECT_ID}`))).toBe(true);
+    expect(listCalls.some((p) => p.includes('view=completed') && !p.includes('workspaceId=') && !p.includes('projectId='))).toBe(false);
   });
 
   it('keeps legacy server sessions flat when projectMembership is absent', async () => {

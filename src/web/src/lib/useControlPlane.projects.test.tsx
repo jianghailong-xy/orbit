@@ -25,13 +25,16 @@ class FakeEventSource {
 const PROJECTS: QueryKey = openProjectsQuery().queryKey;
 const PROJECT_PAGE: QueryKey = ['projects', 'OPEN'];
 const SESSIONS: QueryKey = ['sessions'];
+const PROJECT_SESSIONS: QueryKey = ['project-sessions', 'P1', 'open'];
+const COMPLETED_PROJECT_SESSIONS: QueryKey = ['project-sessions', 'P1', 'completed'];
+const OTHER_PROJECT_SESSIONS: QueryKey = ['project-sessions', 'P2', 'open'];
 let container: HTMLDivElement | null = null;
 let root: Root | null = null;
 
 async function mount(): Promise<QueryClient> {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   // Unobserved cache entries expose invalidation without any network request or polling.
-  for (const key of [PROJECTS, PROJECT_PAGE, SESSIONS]) client.setQueryData(key, []);
+  for (const key of [PROJECTS, PROJECT_PAGE, SESSIONS, PROJECT_SESSIONS, COMPLETED_PROJECT_SESSIONS, OTHER_PROJECT_SESSIONS]) client.setQueryData(key, []);
   container = document.createElement('div');
   document.body.appendChild(container);
   const next = createRoot(container);
@@ -125,6 +128,70 @@ describe('project summaries ride the control-plane stream', () => {
     const client = await mount();
     await act(async () => { FakeEventSource.open[0].onopen?.(); });
     expect(invalidated(client, PROJECTS)).toBe(true);
+    expect(invalidated(client, PROJECT_SESSIONS)).toBe(true);
+    expect(invalidated(client, OTHER_PROJECT_SESSIONS)).toBe(true);
+  });
+
+  it('debounces project member reads independently and leaves unrelated projects alone', async () => {
+    const client = await mount();
+    await publish('session.updated', { projectMembership: { projectId: 'P1' } });
+    await advance(400);
+    await publish('session.updated', { projectMembership: { projectId: 'P1' } });
+    await advance(499);
+    expect(invalidated(client, PROJECT_SESSIONS)).toBe(false);
+    await advance(1);
+    expect(invalidated(client, PROJECT_SESSIONS)).toBe(true);
+    expect(invalidated(client, COMPLETED_PROJECT_SESSIONS)).toBe(true);
+    expect(invalidated(client, OTHER_PROJECT_SESSIONS)).toBe(false);
+  });
+
+  it('refreshes a cached former member when membership is cleared', async () => {
+    const client = await mount();
+    client.setQueryData(PROJECT_SESSIONS, [{ id: 'S1' }]);
+    await publish('session.updated', { id: 'S1', projectMembership: null });
+    await advance(500);
+    expect(invalidated(client, PROJECT_SESSIONS)).toBe(true);
+    expect(invalidated(client, OTHER_PROJECT_SESSIONS)).toBe(false);
+  });
+
+  it('unrelated session updates leave every project member query alone', async () => {
+    const client = await mount();
+    await publish('session.updated', { id: 'S1', projectMembership: { projectId: 'P3' } });
+    await advance(2_000);
+    expect(invalidated(client, SESSIONS)).toBe(true);
+    expect(invalidated(client, PROJECT_SESSIONS)).toBe(false);
+    expect(invalidated(client, COMPLETED_PROJECT_SESSIONS)).toBe(false);
+    expect(invalidated(client, OTHER_PROJECT_SESSIONS)).toBe(false);
+  });
+
+  it('reconciles a loaded member on lifecycle-ended frames without membership', async () => {
+    const client = await mount();
+    client.setQueryData(PROJECT_SESSIONS, [{ id: 'S1' }]);
+    await publish('session.ended', { lifecycleState: 'COMPLETED', endReason: 'task_done' });
+    await advance(500);
+    expect(invalidated(client, PROJECT_SESSIONS)).toBe(true);
+    expect(invalidated(client, COMPLETED_PROJECT_SESSIONS)).toBe(true);
+    expect(invalidated(client, OTHER_PROJECT_SESSIONS)).toBe(false);
+  });
+
+  it.each(['workspace-list', 'session-detail'])('finds a newly Completed member through its cached %s', async (source) => {
+    const client = await mount();
+    const member = { id: 'S1', projectMembership: { projectId: 'P1', role: 'TASK' } };
+    if (source === 'workspace-list') client.setQueryData(SESSIONS, [member]);
+    else client.setQueryData(['session', 'S1'], member);
+    await publish('session.ended', { lifecycleState: 'COMPLETED' });
+    await advance(500);
+    expect(invalidated(client, COMPLETED_PROJECT_SESSIONS)).toBe(true);
+    expect(invalidated(client, OTHER_PROJECT_SESSIONS)).toBe(false);
+  });
+
+  it('does not re-read a project for an unrelated lifecycle-ended frame', async () => {
+    const client = await mount();
+    await publish('session.ended', { lifecycleState: 'COMPLETED' });
+    await advance(500);
+    expect(invalidated(client, PROJECT_SESSIONS)).toBe(false);
+    expect(invalidated(client, COMPLETED_PROJECT_SESSIONS)).toBe(false);
+    expect(invalidated(client, OTHER_PROJECT_SESSIONS)).toBe(false);
   });
 
   it('cancels a pending member refresh when the provider unmounts', async () => {
@@ -135,6 +202,7 @@ describe('project summaries ride the control-plane stream', () => {
     root = null;
     await advance(2_000);
     expect(invalidated(client, PROJECTS)).toBe(false);
+    expect(invalidated(client, PROJECT_SESSIONS)).toBe(false);
   });
 
   it('keeps the sidebar summary poll as the fallback for missed events', () => {

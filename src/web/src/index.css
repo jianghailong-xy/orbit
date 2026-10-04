@@ -3347,6 +3347,9 @@ button.toast--pill:focus-visible {
 .session-section-head:first-child {
   padding-top: 2px;
 }
+.session-col-list > section:not(:first-child) > .session-section-head {
+  padding-top: 12px;
+}
 /* The Pinned heading folds its rows away, as Notes' Pinned does: the whole heading is the button,
    and the chevron at its end points down while the rows show, right once they are folded. */
 .session-section-fold {
@@ -4898,11 +4901,39 @@ html[data-theme='dark'] .session-tag-chip {
   color: var(--text-3);
   font-size: 10px;
   line-height: 1;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
 }
 .session-project-progress.done {
   color: var(--success);
   border-color: var(--success-border);
   background: var(--success-bg);
+}
+.session-project-progress:hover,
+.session-project-progress:focus-visible {
+  border-color: var(--brand);
+}
+.session-project-page-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-3);
+}
+.session-project-page-progress a {
+  margin-left: auto;
+  font-size: 16px;
+  color: var(--text-3);
+}
+.session-project-page-progress a:hover {
+  color: var(--brand);
+}
+.session-project-page-header .session-kebab {
+  border: 0;
+  background: transparent;
 }
 .session-project-progress-bar {
   display: flex;

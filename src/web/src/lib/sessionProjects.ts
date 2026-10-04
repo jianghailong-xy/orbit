@@ -197,7 +197,7 @@ export function sessionProjectListing<T extends SessionProjectSession>(
       title: summary?.title ?? membership.projectTitle,
       status: summary?.status ?? membership.projectStatus,
       members: [...members],
-      sessionCount: content.length,
+      sessionCount: new Set([...content.map((session) => session.id), ...(coordinator ? [coordinator.id] : [])]).size,
       coordinator,
       folderId,
       pinnedAt: coordinator?.pinnedAt ?? null,

@@ -55,6 +55,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     let listsTimer: ReturnType<typeof setTimeout> | undefined;
     let watchesTimer: ReturnType<typeof setTimeout> | undefined;
     let projectsTimer: ReturnType<typeof setTimeout> | undefined;
+    const projectSessionTimers = new Map<string, ReturnType<typeof setTimeout>>();
     let listsRefetchedAt = 0;
     let stopped = false;
     let dropped = false;
@@ -120,6 +121,14 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         projectsTimer = undefined;
         refetchProjects();
       }, PROJECTS_REFRESH_DEBOUNCE_MS);
+    };
+    const scheduleProjectSessions = (projectId: string): void => {
+      const previous = projectSessionTimers.get(projectId);
+      if (previous) clearTimeout(previous);
+      projectSessionTimers.set(projectId, setTimeout(() => {
+        projectSessionTimers.delete(projectId);
+        void qc.invalidateQueries({ queryKey: ['project-sessions', projectId] });
+      }, REFRESH_DEBOUNCE_MS));
     };
     // The two reads a decision card is drawn from, which none of the list refetches above reach.
     // Evidence being submitted or decided arrives as `task.changed`, and its read is keyed by the
@@ -263,6 +272,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         // could have swallowed exactly the revive this tab needs to stop drawing a session as
         // ended (see refetchSessionDetail). Prefix key, so a session id isn't needed here.
         for (const refetch of Object.values(REFETCH)) refetch();
+        void qc.invalidateQueries({ queryKey: ['project-sessions'] });
         void qc.invalidateQueries({ queryKey: ['session'] });
         // Keyed under ['project'], so the prefix above misses it: a proposal filed or decided
         // during the gap would otherwise wait out its poll.
@@ -285,8 +295,35 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         // events (tag/provider/task-list) legitimately carry none.
         if (!ev?.type || ev.type === 'ping') return;
         const projectId = ev.data?.projectMembership?.projectId;
-        if (ev.type === 'session.updated' && typeof projectId === 'string' && projectId) scheduleProjectRefresh();
         const id = ev.data?.id;
+        if (ev.type === 'session.updated' || ev.type === 'session.created' || ev.type === 'session.ended') {
+          if (typeof projectId === 'string' && projectId) {
+            if (ev.type === 'session.updated') scheduleProjectRefresh();
+            scheduleProjectSessions(projectId);
+          }
+          // A membership can be cleared (or changed), and older peers can omit it. Refresh a
+          // loaded project's former member too, without touching any unrelated project.
+          const sessionId = ev.sessionId || (typeof id === 'string' ? id : '');
+          if (sessionId) {
+            for (const [key, rows] of qc.getQueriesData<readonly { id: string }[]>({ queryKey: ['project-sessions'] })) {
+              if (typeof key[1] === 'string' && rows?.some((row) => row.id === sessionId)) {
+                scheduleProjectSessions(key[1]);
+              }
+            }
+            // Lifecycle-ended frames carry no membership. A member entering Completed may
+            // only be known in an earlier workspace Open list or its own session detail.
+            if (ev.type === 'session.ended') {
+              const known = qc.getQueriesData<readonly { id: string; projectMembership?: { projectId?: string } | null }[]>(
+                { queryKey: ['sessions'] },
+              ).flatMap(([, rows]) => rows?.filter((row) => row.id === sessionId) ?? []);
+              const detail = qc.getQueryData<{ projectMembership?: { projectId?: string } | null }>(['session', sessionId]);
+              for (const row of [...known, detail]) {
+                if (row?.projectMembership?.projectId) scheduleProjectSessions(row.projectMembership.projectId);
+              }
+            }
+          }
+        }
+        if (ev.type === 'project.changed' && typeof id === 'string' && id) scheduleProjectSessions(id);
         scheduleRefresh(ev.type, ev.sessionId, typeof id === 'string' ? id : undefined);
       };
       es.onerror = () => drop();
@@ -303,6 +340,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       if (listsTimer) clearTimeout(listsTimer);
       if (watchesTimer) clearTimeout(watchesTimer);
       if (projectsTimer) clearTimeout(projectsTimer);
+      for (const timer of projectSessionTimers.values()) clearTimeout(timer);
       es?.close();
     };
   }, [qc]);

@@ -203,6 +203,14 @@ describe('project second line and target', () => {
     expect(out.projects[0].target.id).toBe('known');
   });
 
+  it('includes a supplemental coordinator in the progress hint count once', () => {
+    const coord = coordinator();
+    const task = member('completed');
+    const out = listing([task], { view: 'completed', coordinators: [coord], contentSessions: [task] });
+    expect(out.projects[0].sessionCount).toBe(2);
+    expect(listing([coord, task], { coordinators: [coord], contentSessions: [coord, task] }).projects[0].sessionCount).toBe(2);
+  });
+
   it.each([
     ['INTEGRATION_CONFLICT', 'Resolving a merge conflict'],
     ['INTEGRATION_CHECK_FAILED', 'Checks failed'],

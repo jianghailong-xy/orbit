@@ -282,6 +282,20 @@ export const sessionsQuery = (
   });
 };
 
+/** A single project's members across workspaces. Kept outside ['sessions'] so unrelated
+ *  session events cannot re-read every project's full member list. */
+export const PROJECT_SESSION_REFRESH_MS = 60_000;
+
+export const projectSessionsQuery = (opts: { projectId: string; view: SessionListView }) =>
+  queryOptions({
+    queryKey: ['project-sessions', opts.projectId, opts.view] as const,
+    queryFn: () => {
+      const qs = new URLSearchParams({ projectId: opts.projectId, view: opts.view });
+      return api<SessionListItem[]>(`/sessions?${qs}`);
+    },
+    staleTime: 15_000,
+  });
+
 /** One workspace's Open-session tallies, as returned by `GET /sessions/counts`. */
 export interface WorkspaceSessionCounts {
   workspaceId: string;
@@ -519,6 +533,16 @@ export const openProjectsQuery = () =>
     queryKey: ['projects', 'sidebar'] as const,
     queryFn: () => api<SidebarProject[]>('/projects/sidebar'),
     refetchInterval: 15_000,
+  });
+
+/** The project document also supplies title and task counts when a finished project is
+ *  absent from the Open-only sidebar. Shares the detail page's existing cache entry. */
+export const projectDetailsQuery = (projectId: string) =>
+  queryOptions({
+    queryKey: ['project', projectId] as const,
+    queryFn: () => api<{ id: string; title: string; tasksByStatus?: Record<string, number> }>(
+      `/projects/${encodeURIComponent(projectId)}`,
+    ),
   });
 
 /**
