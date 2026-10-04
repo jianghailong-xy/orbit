@@ -692,6 +692,24 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(projectStartRequestFiled(raw), false)
 
+	case "project_request_done":
+		id := getString(args, "projectId")
+		if id == "" {
+			return toolResult("projectId is required", true)
+		}
+		body, err := projectDoneRequestBody(args)
+		if err != nil {
+			return toolResult(err.Error(), true)
+		}
+		// The asking session IS the authority, as it is for project_request_start: the server checks
+		// it against the project's own coordinator pointer, so a call made from anywhere else files
+		// nothing.
+		raw, err := s.t.requestProjectDone(s.sessionID, id, body)
+		if err != nil {
+			return toolResult(projectDoneRequestRefusal(err), true)
+		}
+		return toolResult(projectDoneRequestFiled(raw), false)
+
 	case "open_item_resolve":
 		id := getString(args, "projectId")
 		itemID := getString(args, "itemId")
@@ -3023,6 +3041,68 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 						"to the owner on the card as written.",
 				},
 			}, "projectId", "line", "automatic", "maxConcurrentTasks", "why"),
+		},
+		{
+			"name": "project_request_done",
+			"description": "Ask the account owner to record the project you coordinate done. Orbit " +
+				"records a project done by itself when it can prove every criterion — met by its work, " +
+				"and that work on main. Call this when it cannot, and you have checked the project is " +
+				"done anyway: give your call in a sentence or two (judgment) and one gap for each thing " +
+				"Orbit cannot prove — the criterion's key (criterionKey, as project_get gives it), why " +
+				"Orbit cannot prove it, what you checked instead, and where that evidence is. Orbit " +
+				"checks the project first. If it is not ready the call is refused and nothing is filed, " +
+				"with every reason listed at once, each with what to do: a criterion its work has not " +
+				"met, a task running, queued or IN_PROGRESS, an item waiting on the owner, a landing or " +
+				"a merge into main queued or running. Fix them all and call again. If it is ready, the " +
+				"request is filed and this returns AT ONCE — it does not wait for the owner — with the " +
+				"request's itemId and a warning for every criterion not landed on main, with why (in " +
+				"flight, on the project branch, nothing to land, no receipt, codeless), which the owner " +
+				"reads beside your gaps. The owner then sees an \"Is this project done?\" card and " +
+				"records the project done on it, and your conversation shows Ready to close. Asking " +
+				"again replaces the open request, and the project moving before the owner answers — its " +
+				"criteria, a task, a run or a landing — voids it, so ask again once it has settled. Only " +
+				"the conversation the project is coordinated from may ask.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project you coordinate, as shown in its web UI URL (/projects/<id>).",
+				},
+				"judgment": map[string]interface{}{
+					"type": "string",
+					"description": "Your call on whether the project is done, in a sentence or two — the " +
+						"first thing the owner reads on the card, as written.",
+				},
+				"gaps": map[string]interface{}{
+					"type": "array",
+					"description": "One entry for each thing Orbit cannot prove — [] when it can prove " +
+						"everything. Several entries may name one criterion.",
+					"items": obj(map[string]interface{}{
+						"criterionKey": map[string]interface{}{
+							"type":        "string",
+							"description": "The criterion it is about: its key, as project_get gives it.",
+						},
+						"title": map[string]interface{}{
+							"type": "string",
+							"description": "A few words naming the gap, the card's headline for it — " +
+								"e.g. \"Go-live has nothing to land\".",
+						},
+						"whyNotProven": map[string]interface{}{
+							"type":        "string",
+							"description": "Why Orbit cannot prove this criterion by itself.",
+						},
+						"coordinatorChecked": map[string]interface{}{
+							"type":        "string",
+							"description": "What you checked instead, and what you found.",
+						},
+						"evidenceRefs": map[string]interface{}{
+							"type":  "array",
+							"items": map[string]interface{}{"type": "string"},
+							"description": "Where that evidence is — task ids, comment links, commits, " +
+								"URLs. At least one.",
+						},
+					}, "criterionKey", "whyNotProven", "coordinatorChecked", "evidenceRefs"),
+				},
+			}, "projectId", "judgment", "gaps"),
 		},
 		{
 			"name": "open_item_resolve",
