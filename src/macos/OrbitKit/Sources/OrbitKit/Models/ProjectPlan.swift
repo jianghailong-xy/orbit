@@ -128,6 +128,19 @@ public struct ResolveProjectBlockerRequest: Codable, Equatable, Sendable {
 /// `GET /projects/:id/panorama/ready`: the tasks that can run now or are running, the ones that
 /// release the most work first.
 public struct ProjectReadyToRun: Codable, Equatable, Sendable {
+    /// Counted across the whole ready queue before its item limit, with one task to open.
+    public struct ManualReady: Codable, Equatable, Sendable {
+        public let count: Int
+        public let taskId: String
+        public let title: String
+
+        public init(count: Int, taskId: String, title: String) {
+            self.count = count
+            self.taskId = taskId
+            self.title = title
+        }
+    }
+
     /// The list holding an otherwise-ready task, which has to be resumed before Run is offered.
     public struct PausedList: Codable, Equatable, Sendable {
         public let id: String
@@ -214,6 +227,7 @@ public struct ProjectReadyToRun: Codable, Equatable, Sendable {
 
     /// Every runnable task in the project, not only the rows in `items`.
     public let readyCount: Int
+    public let manualReady: ManualReady?
     public let queuedCount: Int
     public let runningCount: Int
     public let pausedCount: Int
@@ -221,8 +235,10 @@ public struct ProjectReadyToRun: Codable, Equatable, Sendable {
     public let impactTruncated: ImpactTruncated?
 
     public init(readyCount: Int = 0, queuedCount: Int = 0, runningCount: Int = 0, pausedCount: Int = 0,
-                items: [Item] = [], impactTruncated: ImpactTruncated? = nil) {
+                items: [Item] = [], impactTruncated: ImpactTruncated? = nil,
+                manualReady: ManualReady? = nil) {
         self.readyCount = readyCount
+        self.manualReady = manualReady
         self.queuedCount = queuedCount
         self.runningCount = runningCount
         self.pausedCount = pausedCount
@@ -233,6 +249,7 @@ public struct ProjectReadyToRun: Codable, Equatable, Sendable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         readyCount = try c.decodeIfPresent(Int.self, forKey: .readyCount) ?? 0
+        manualReady = try c.decodeIfPresent(ManualReady.self, forKey: .manualReady)
         queuedCount = try c.decodeIfPresent(Int.self, forKey: .queuedCount) ?? 0
         runningCount = try c.decodeIfPresent(Int.self, forKey: .runningCount) ?? 0
         pausedCount = try c.decodeIfPresent(Int.self, forKey: .pausedCount) ?? 0

@@ -326,6 +326,7 @@ test('an empty queue preserves its count row and returns no fake task', async ()
 
   assert.deepEqual(result, {
     readyCount: 0,
+    manualReady: null,
     queuedCount: 0,
     runningCount: 0,
     pausedCount: 0,
@@ -335,6 +336,16 @@ test('an empty queue preserves its count row and returns no fake task', async ()
     items: [],
     impactTruncated: null,
   });
+});
+
+test('the manual-start summary names work outside the limited queue items', async () => {
+  const { prisma } = harness([{
+    readyCount: 8, manualReadyCount: 7, manualReadyTaskId: PROJECT_ID, manualReadyTitle: 'Manual task',
+    taskId: null, title: null, status: null, runState: null,
+  }]);
+  const result = await readProjectReadyToRun(prisma, OWNER_ID, PROJECT_ID, 1);
+  assert.deepEqual(result.manualReady, { count: 7, taskId: PROJECT_ID, title: 'Manual task' });
+  assert.deepEqual(result.items, []);
 });
 
 test('a truncated impact walk leaves ready rows runnable and reports why ranking is absent', async () => {

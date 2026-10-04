@@ -127,10 +127,10 @@ final class ProjectRunSettingsTests: XCTestCase {
         let lanes = ProjectPanoramaBuckets(ready: 1, integrating: 0, onIntegrationLine: 0, onUpstream: 0)
         XCTAssertEqual(ProjectPage.overviewCells(lanes, taskCount: 1, line: .projectBranch, started: false)
                         .first { $0.key == "ready" }?.footnote, ProjectPage.readyUntilStarted)
-        XCTAssertFalse(ProjectPage.stalledOnReady(buckets, started: false),
-                       "nothing running is the start being waited for, not dispatch needing attention")
-        XCTAssertTrue(ProjectPage.stalledOnReady(buckets, started: true))
-        XCTAssertTrue(ProjectPage.stalledOnReady(buckets))
+        let queue = ProjectReadyToRun(readyCount: 2,
+                                     manualReady: .init(count: 2, taskId: "t", title: "Ready task"))
+        XCTAssertNil(ProjectPage.manualReady(queue, status: .open, started: false))
+        XCTAssertNotNil(ProjectPage.manualReady(queue, status: .open, started: true))
     }
 
     // MARK: How it runs

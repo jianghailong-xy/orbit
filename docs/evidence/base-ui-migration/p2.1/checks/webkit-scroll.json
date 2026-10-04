@@ -1,0 +1,17 @@
+{
+  "command": [
+    "node",
+    "node_modules/@playwright/test/cli.js",
+    "test",
+    "--config",
+    "src/web/ui-migration/overlays.config.mjs",
+    "--project=webkit-light-phone",
+    "--grep",
+    "explicit focus"
+  ],
+  "cwd": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410",
+  "startedAt": "2026-10-04T04:07:36.119242+00:00",
+  "head": "297d33e97729c66ebdc8f2b63b0e094db1d9e8df",
+  "exitCode": 0,
+  "elapsedSeconds": 3.241
+}

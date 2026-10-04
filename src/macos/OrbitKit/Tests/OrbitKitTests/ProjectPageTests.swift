@@ -37,7 +37,7 @@ final class ProjectPageTests: XCTestCase {
         XCTAssertEqual(branch.map(\.label),
                        ["Running", "Ready", "Waiting", "Pending landing", "On project branch", "On main", "Failed"])
         XCTAssertEqual(branch.first { $0.key == "blocked" }?.footnote, "1 waiting for a prerequisite to land")
-        XCTAssertEqual(branch.first { $0.key == "integrating" }?.footnote, "finished work without a landing receipt")
+        XCTAssertEqual(branch.first { $0.key == "integrating" }?.footnote, "no landing receipt yet")
         // A project landing straight into main has no branch to strand work on.
         XCTAssertFalse(ProjectPage.overviewCells(b, taskCount: 35, line: .main)
                         .contains { $0.key == "onIntegrationLine" })
@@ -218,7 +218,7 @@ final class ProjectPageTests: XCTestCase {
             integratingCount: 0, queuedCount: 1,
             inFlight: .init(taskTitle: "T1", state: "QUEUED", startedAt: iso(40)))
         XCTAssertEqual(ProjectPage.landingLine(view, now: Self.now), ProjectPage.LandingLine(
-            what: "T1", running: false, state: "queued", clock: "0m 40s"))
+            what: "T1", running: false, state: "queued", clock: "0m 40s", clockLabel: "Queued for"))
     }
 
     /// The oldest job's state and clock, but the COUNT in the name slot: a title would have said
@@ -228,6 +228,38 @@ final class ProjectPageTests: XCTestCase {
             integratingCount: 2, queuedCount: 1,
             inFlight: .init(taskTitle: "T1", state: "RUNNING", startedAt: iso(80)))
         XCTAssertEqual(ProjectPage.landingLine(view, now: Self.now)?.what, "3 jobs")
+    }
+
+    func testLandingRefreshFailureFreezesTheClockAndStopsClaimingActivity() {
+        let view = ProjectIntegrationView(integratingCount: 1, inFlight: .init(
+            state: "RUNNING", startedAt: iso(80), kind: "LAND_TASK", phase: "CHECK"))
+        let later = Self.now.addingTimeInterval(60)
+        let line = ProjectPage.landingLine(view, now: later, updatedAt: Self.now, refreshFailed: true)
+        XCTAssertEqual(line?.state, "Update unavailable")
+        XCTAssertEqual(line?.running, false)
+        XCTAssertEqual(line?.clock, "1m 20s")
+        XCTAssertEqual(line?.updated, "Updated 1m ago")
+        XCTAssertEqual(ProjectPage.landingLine(view, now: Self.now.addingTimeInterval(91),
+                                              updatedAt: Self.now)?.running, false)
+        XCTAssertEqual(ProjectPage.landingLine(view, now: later, updatedAt: later)?.running, true)
+    }
+
+    func testLandingHeartbeatCanBeStaleEvenWhenTheAPIReadSucceeds() {
+        let view = ProjectIntegrationView(integratingCount: 1, inFlight: .init(
+            state: "RUNNING", startedAt: iso(720), kind: "LAND_TASK", phase: "CHECK", heartbeatAt: iso(660)))
+        let line = ProjectPage.landingLine(view, now: Self.now, updatedAt: Self.now)
+        XCTAssertEqual(line?.running, false)
+        XCTAssertEqual(line?.state, "Update unavailable")
+        XCTAssertEqual(line?.clock, "1m 0s")
+        XCTAssertEqual(line?.updated, "Updated 11m ago")
+    }
+
+    func testManualAndPausedReadyWorkUseTheirActualStartConditions() {
+        let buckets = ProjectPanoramaBuckets(ready: 1)
+        XCTAssertEqual(ProjectPage.overviewCells(buckets, taskCount: 1, line: nil, manualReadyCount: 1)
+            .first { $0.key == "ready" }?.footnote, "can start manually")
+        XCTAssertEqual(ProjectPage.overviewCells(buckets, taskCount: 1, line: nil, paused: true, manualReadyCount: 1)
+            .first { $0.key == "ready" }?.footnote, "project is paused")
     }
 
     /// Nothing in flight is the row's absence, and so is a project whose server never described a

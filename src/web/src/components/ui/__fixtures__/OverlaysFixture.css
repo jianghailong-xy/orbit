@@ -1,0 +1,4 @@
+.overlays-fixture { padding: 24px; font-family: var(--orbit-font-family); color: var(--text-1); }
+.overlays-fixture-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+.overlays-fixture-spacer { height: 1500px; padding-top: 100px; }
+.overlays-fixture output { margin: 8px; }

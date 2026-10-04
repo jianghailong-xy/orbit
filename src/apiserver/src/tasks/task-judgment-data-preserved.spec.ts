@@ -1874,7 +1874,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // Delivery landing questions (0375): widen only project_open_item_kind_chk with
       // DELIVERY_REVIEW. Existing rows satisfy the replacement constraint; no task, project,
       // acceptance, DONE fence, trigger or function is rewritten and nothing is backfilled.
-      '0375_delivery_review_item'],
+      '0375_delivery_review_item',
+      // Android push registration (0376) adds one nullable TEXT column and one unique index to
+      // device_token only. No existing token, user FK, task, project, acceptance row, fence,
+      // function or trigger is changed, and there is no DML or preserved object in its scope.
+      // Renumbered before landing because the delivery-review migration already occupies 0375.
+      '0376_android_push_installation'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

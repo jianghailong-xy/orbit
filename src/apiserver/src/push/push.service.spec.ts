@@ -180,7 +180,6 @@ function settleHarness(session: Record<string, unknown> | null) {
     body: string,
     _p: unknown,
     _pr: unknown,
-    _a: unknown,
     collapseId?: string,
   ) => {
     sent.push({ body, collapseId });
@@ -460,7 +459,6 @@ function ownerItemHarness(
     body: string,
     _p: unknown,
     _pr: unknown,
-    _a: unknown,
     collapseId?: string,
   ) => {
     sent.push({ body, collapseId });

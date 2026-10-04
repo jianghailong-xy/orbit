@@ -209,8 +209,10 @@ final class ProjectsWiringTests: XCTestCase {
         XCTAssertEqual(positions.compactMap { $0 }, positions.compactMap { $0 }.sorted(),
                        "the sections read in the web's order (ProjectPageSectionsCopyParityTests holds the web's)")
         let overview = try slice(view, from: "private func overviewSection(", to: "private func overviewCell(")
-        XCTAssertTrue(overview.contains("model.selectedSection = .runners"),
-                      "the stalled banner's press goes where an engine signs in")
+        XCTAssertTrue(overview.contains("openTask(manual.taskId)"),
+                      "manual work opens the named task over this project")
+        XCTAssertFalse(overview.contains("model.selectedSection = .runners"),
+                       "readiness alone cannot diagnose a runner problem")
     }
 
     /// A project nobody has started (mock board3 ②) says so in its header, and its Open items lead

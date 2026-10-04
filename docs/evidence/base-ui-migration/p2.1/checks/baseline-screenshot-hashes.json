@@ -1,0 +1,1267 @@
+{
+  "referenceCommit": "297d33e97729c66ebdc8f2b63b0e094db1d9e8df",
+  "count": 252,
+  "allUnchanged": true,
+  "files": [
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/breakpoint-599-dialog.png",
+      "sha256": "0674378435c5fb8531ef085b12363e7b9520c68aaba628abbddc65968dc5d219",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/breakpoint-599-share.png",
+      "sha256": "44f28d51b4be65e5cc57341f000ed1206a135ce13df4c7fc6da3cf5a19d753a6",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/breakpoint-601-dialog.png",
+      "sha256": "7592a1f0008edca5c3f59291b8a59e10abb027f19fb16800fb99f036a213fdfb",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/breakpoint-601-share.png",
+      "sha256": "ee7f345a8ae0c4427599e6e3183daa54c3eba4a5f1b8c5db7ba724b043be8e77",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/breakpoint-639-graph.png",
+      "sha256": "561c6b8fdf2426f74862a41592cbb5311b5246ac79de2913d2e6ec4d2da2fe3c",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/breakpoint-639-projects.png",
+      "sha256": "128218565194f26290e5d44d9f724f74a51878e3e96152eb21a171cc104deeca",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/breakpoint-641-graph.png",
+      "sha256": "078bfa1440f713a1cfe000657795d9040e38808b52f06ccf23afc78f54a8eb40",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/breakpoint-641-projects.png",
+      "sha256": "171027981201740cffbe4ebaefe52aad282bd8057b008e589311252eb12c283c",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/breakpoint-959-session.png",
+      "sha256": "494318ddefdbb270d5a668607c57a46b67e00fc0c3b2a336b3a8dc7125d830ba",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/breakpoint-959-wiki.png",
+      "sha256": "a0dc0724d4e939ff685b2085f1e5097329018be8a9f90f755e4dc8c7278f8953",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/breakpoint-961-session.png",
+      "sha256": "6ceb8a6abdf06521533b3c788400f7d5f6ff82199c2658cac85472321ed59857",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/breakpoint-961-wiki.png",
+      "sha256": "e50858dbdf17697929bb5e3aabc6e59d5c707b4755c4ff9856a3b103c1c50598",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/notification-error.png",
+      "sha256": "c86f4c31de2895572490cdadf7e8f75cfee4cc5d7f815de03daf14dc88ff7bb4",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/profile-validation.png",
+      "sha256": "e52eb8f22549612a8da10d1649bf410fbed39e485d3b2f7036bb78a3aa5e2a37",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/profile.png",
+      "sha256": "b95f566baa63e499c5d51cf18da26c1ef82fabbb419ae64c76e6842a3fb34914",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/project-graph-fullscreen.png",
+      "sha256": "05524ffe05f67dc8e51b133b8e56c4232f36f9654ad1c45865ecb2218a5a1724",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/project-graph.png",
+      "sha256": "ff13d5e8ab50fdf1b29574f87b4896e0a86c446ec0ae62cb8a94f065cfabf912",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/project-overview.png",
+      "sha256": "646d262f2d53ed9c552843f698fe037d8187e601d32740ac1d835537f55b3197",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/projects-error.png",
+      "sha256": "4644af19367e5b8d76be576b66900ad76d0fa9086d7da215c6e064fb4c6d498e",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/projects-list.png",
+      "sha256": "168a1fd37bba2ed39235d7bd483340cf4a6f67dacaf7d9b153a6b752372d1870",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/projects-loading.png",
+      "sha256": "6921c0cdf8f0f403a384c350b4b94ea5473b0f69caac60930cb16fe90ce669fc",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/projects-search-empty.png",
+      "sha256": "934b5a10c517665ca13b9b94543d74c8e6e4ccf03521f3d4635fcb0b18a7ab24",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/session-attachment-menu.png",
+      "sha256": "2cc8da44401abea35c0d638a9292055f4c9ca962fafb7d2847f3a65373264498",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/session-attachment-staged.png",
+      "sha256": "4e82fa32893c3f44b3c2fe1b960b4bf64a578f48a31cb3538af0ae7c7f096e69",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/session-composer-focus.png",
+      "sha256": "f1575c5d9f871dd4a75febf3623bafd2a45fab1d5416056104e427227571bc6c",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/session-idle.png",
+      "sha256": "14529f4c1cf79b4e7a91a618b360490e0029fc3f93c726cced10a1e6b4a48506",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/session-streaming.png",
+      "sha256": "58126a183bd55186d73a8a1e830d35d86b3a45ac5ae281bc369ab479e1506fdd",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/settings-saved.png",
+      "sha256": "927c9fd470e3f4d9f18a763199017a3c5bc9834c27d549ec3d0126a01f462ac1",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/settings.png",
+      "sha256": "6fd64cb05d25e9af6ff7a1e5863f2eb4f640ad8a3f27304b91fd4af51bb01f9e",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/task-action-focus.png",
+      "sha256": "6b203cdfe454d352ff800da1dbaaf2c8f35271df52bbe48e419807b9fc86c77b",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/task-action-hover.png",
+      "sha256": "74ea0d2e5852fc8e954e0b7f6f04b88d3bea0fdf453381dc5e1ffeaaa27bd645",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/task-action-menu.png",
+      "sha256": "6825b740b5fa4c9e13a4b02e5e5a949b58371745433ab31d93c9c714ca0901f6",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/task-detail.png",
+      "sha256": "d2fb4786e1d577902d2a4a3da1681acabc01cb628d5a22c1945ef259ae2f95a8",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/task-public-share.png",
+      "sha256": "7b0843aed860e884a277b1090b01150873daf095e649a531c84da56f31f6ff2c",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/task-share-dialog.png",
+      "sha256": "891a9387c3ac39f644845b0aa243aaa5c7fa6721a9cf16d9f607e264e588ca55",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/wiki-home.png",
+      "sha256": "4c6830147feb1950eb3b31fa58587a16bcc083586b08d6ddd700cb2c0ff5af0e",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/wiki-new-entry.png",
+      "sha256": "83dcc7cbceca029af072ed15c75e5a0decc504d680d1df52968b6e62f97012df",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/notification-error.png",
+      "sha256": "a12160704f9814d42b26a9e9abf1ea9c170f15d4e3118f6e8bf36976035a644e",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/profile-validation.png",
+      "sha256": "55270904362b5152509c2053fbff3542273214f349d326d3e3809e43a196fa26",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/profile.png",
+      "sha256": "7fca6448b3d3ed994ee8ad010f7e293dcd0e0d39ca8382bd24ae3b618a6dd906",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/project-graph-fullscreen.png",
+      "sha256": "c21d31f9bfb0dc2207b9838505fb5d8b9c962c9a8be513e1a2bf224de3392b04",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/project-graph.png",
+      "sha256": "1be261cda4363a0a0d509f7a65193964c5557df3f3ad7cb28d622b9e6068be31",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/project-overview.png",
+      "sha256": "e0e9d6d892fe0cf899dcc297921fcaf2f281ebeac1e9548a214d8580f6fe857c",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/projects-error.png",
+      "sha256": "e63566cbeea337d9474a12267eaec1a86a7a4bea7649be9b5e50f2816347ca57",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/projects-list.png",
+      "sha256": "0a8be67e46e7baf377b8e9f6842165a46ef713ff5e8fd1e168307d75859328ea",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/projects-loading.png",
+      "sha256": "1614aa0e4d60b611754415281630f307085f93381245f3c1d8129de81d20f69f",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/projects-search-empty.png",
+      "sha256": "ad4d2042668ddad43527cfa4a22f729c1271e432b892838579c492924b0ec0c0",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/session-attachment-menu.png",
+      "sha256": "ac212e01664a76bd4317372e5985e6feceee6689c490bfcf1447b5c24782e06d",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/session-attachment-staged.png",
+      "sha256": "33a3ffa6183617aa5f100d407dd8fc78cc1c8a03ccc5e9404c47fd6e13243e05",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/session-composer-focus.png",
+      "sha256": "3183e94a16af8aa138c783efb796456ef4423a9d412e4b9e1f3df016d1e8ef2b",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/session-idle.png",
+      "sha256": "30db161a582062433a28bdfda12c95f347264d8967278674d561ee63505f3eac",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/session-streaming.png",
+      "sha256": "112c86141e46bb1f40ad2b63c3b359817826c66f93e1af94d55c8a49ca7ebd8e",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/settings-saved.png",
+      "sha256": "74024f5ab34cddf597feb04960e95c56d3196bc1a1ee781551dcba563622ddb6",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/settings.png",
+      "sha256": "fa8f3d560e9aeaf2f957c369dae694c02e93d546b019f4fceedc00ce985270c7",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/task-action-focus.png",
+      "sha256": "f88377408bc76247b3a17aef0f0103e2ebfaaa6174b1c9a1d9b4fc64b74579de",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/task-action-hover.png",
+      "sha256": "aa3c339bf5743d01e8ea766e8524066d9d180619486a53fad623d7d77d51890a",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/task-action-menu.png",
+      "sha256": "707004fbd7321ad26da634379342fb7d9e52b8617192f12ff52846fb67d453cb",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/task-detail.png",
+      "sha256": "368a5e37b9332d89717886ec1e4aeb487fbed1c1591bc9e67ab8a4ebcb5a239b",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/task-public-share.png",
+      "sha256": "6f5d09a6629db5b8f5bef019b2f244b5a751b90d1dc6691403d7f138a120117b",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/task-share-dialog.png",
+      "sha256": "5bc30f6d73731f47cbbeb367a0c4e3805e2acafd737f3bc4710a5f9a047860fb",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/wiki-contents.png",
+      "sha256": "6aac670820ae5816842f75842c8ec2e62d476868981f977e3cd976b8bc75db9d",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/wiki-home.png",
+      "sha256": "49e8242b9206595d9b0f2b239658f0feb6275b1ece9e29e6708cfa59f8fecee4",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/wiki-new-entry.png",
+      "sha256": "5cb07338a572e2fc8a69668dc85f4c6d8f734e631eaa57c0be8ae88c66eed340",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/breakpoint-599-dialog.png",
+      "sha256": "ff3a14a83ea15cd02b1c2b9a8ff49df6f15442c890e20e4a3c77da6c2a05fe4c",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/breakpoint-599-share.png",
+      "sha256": "59ce81b7b27542bb3ab9d6ba0afd48d6cde516ada450c3d9b9471094deaf9f88",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/breakpoint-601-dialog.png",
+      "sha256": "aa79dcd06a9a7c079b622d53844796093be41f62d06e96926d7c5b88637162cc",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/breakpoint-601-share.png",
+      "sha256": "e0fb7cefb5368a5b2e9afa660dc01f53e7d60ced1470bdb42a2ac11976f8ee22",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/breakpoint-639-graph.png",
+      "sha256": "a612e6b2e4ddf9785e488fcfbbdc660444bc60489a7739baf19ca94335c2d3ea",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/breakpoint-639-projects.png",
+      "sha256": "ae90a2a736a1e9c8e37d46fab052605547a542cfe727219138967e5778c54319",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/breakpoint-641-graph.png",
+      "sha256": "e02df3ef7c43093b264d919b1f9b3d1709d64a32cc28af705c54f25915291b26",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/breakpoint-641-projects.png",
+      "sha256": "3280498edea4698f4159a7e0acf77f6c16f3d0fa73bb67100c2fe0a9d4ec0089",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/breakpoint-959-session.png",
+      "sha256": "d99a35ba82e81b13ac07f26b47d2c6194705e70cdb02ab83865144fea60c4627",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/breakpoint-959-wiki.png",
+      "sha256": "0488633d491a70dadb52e406e46823c79c1f822dbcff8aed673fa9e4f49ae116",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/breakpoint-961-session.png",
+      "sha256": "230673d26f4b2c379c30863f5dd2d41ab239689b2112e090db8795cc9f66b3ca",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/breakpoint-961-wiki.png",
+      "sha256": "9d45a2a0763ec836abfd6bd8e0d15d69939c6d452a7c0d1bb83ac898b6ea65e4",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/notification-error.png",
+      "sha256": "183fed1b668e7d98413e6d91aa67dee11b56e615ee66e856c15815aa1f37b7c8",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/profile-validation.png",
+      "sha256": "c19e7b89a66ce177089708e954d3de8d6d380e049479933d9faf0f240bb3fbf7",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/profile.png",
+      "sha256": "bee5cfd83eb10740b16f7ecacf90e4f6c41d0deef7706bb22959d69df0af115a",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/project-graph-fullscreen.png",
+      "sha256": "8a403b77fb2a675de59288acf7bf5e8785f2c9c007efe1321eca7c1bd20083a6",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/project-graph.png",
+      "sha256": "4dcf29b14cb42f5e06da90fce89422e9a72bbdc45b5575c66e647446ddd99798",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/project-overview.png",
+      "sha256": "4a68a08d10648e47b413a067cc342f3a1ca81439ab23c7ea59c8917f40d061f2",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/projects-error.png",
+      "sha256": "9fe1c84fd1ebd8e640e8d62732351313dea74e2869037bc1f9299ffbd77d8af1",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/projects-list.png",
+      "sha256": "87e54e1ce447ba1a3846682eded18cc979c0f7ab01f9956192cc78d860b642e8",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/projects-loading.png",
+      "sha256": "88f155dbb7a51039bfde92f94bc0fb57eb811ead50b4242102dfd1f4dbd5f331",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/projects-search-empty.png",
+      "sha256": "ac9abf6591891dca4144d6f17205a1d593945d68aceca93cedd42c9bba847038",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/session-attachment-menu.png",
+      "sha256": "6ca5c3bd76ecf2f5936b673743a225f63e5b24b1adcec33312000609e7c73171",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/session-attachment-staged.png",
+      "sha256": "dccc94a0d0d91638e58918506207035818ee6a3559a1fc0494044de4da421791",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/session-composer-focus.png",
+      "sha256": "5df77e707a8ec1c4ef45d2f34421614b7e586bae18cec0a4a68e1e3d06558bf3",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/session-idle.png",
+      "sha256": "a07ca3641845248af740f7055eb4ee9b6d3bcf41a619eef1a5a56565c879db8b",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/session-streaming.png",
+      "sha256": "2bcc70ecd0c9412979e5db5ab5fc74f7dc20c33e1a7e02eea99b04a78712efbe",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/settings-saved.png",
+      "sha256": "103b7643ed1c0503fb80892e20525258e10b5f9583d99e2a4364d3279c3f4adf",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/settings.png",
+      "sha256": "fd0fb44f2a47ab338959279da76c435e5048072bd3750437954a7de456141062",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/task-action-focus.png",
+      "sha256": "66b654529dddab8204d6c853495b40e81c4bfa7793e5a3dc4951440f9184f669",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/task-action-hover.png",
+      "sha256": "e88bdc63b832af3f229f34b7c418a21cd0d83cb332e0348a357809511be7db61",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/task-action-menu.png",
+      "sha256": "fe461b344988e087ea2b953be16b9b30061af424e03a041969e41b224319d1c5",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/task-detail.png",
+      "sha256": "b95cc146aa516642d9c32fe378bb73929f74605c0ed5817be2de9d38cf596a67",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/task-public-share.png",
+      "sha256": "b6a708a53434ccc519901b82e9a02d6240bf241f48537f7378458d58c01480ab",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/task-share-dialog.png",
+      "sha256": "75b45fa01706f1ba0a49332e2ec5c7952248a6eb31ba68485c0e21e575c6de38",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/wiki-home.png",
+      "sha256": "2c833d090c10d36f27a87b1afa373716040fd83272f504c62b19c198c270529e",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/wiki-new-entry.png",
+      "sha256": "d77d8e964898441bb773a7c0cebb1561f5f6a3844b11739594db162b43f6c38e",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/notification-error.png",
+      "sha256": "9cd245f259ddd93569ffdfee9aa2bc55ab3e1f3469cb59314afed6c27a95e194",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/profile-validation.png",
+      "sha256": "a1b7022414a38a54d312788cf4a97956416f44fa38a162f3d194181d86d9479b",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/profile.png",
+      "sha256": "499301e9ac2f42611a2aa6b8950da630d2b99910716e4e20f47d485485e8ba04",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/project-graph-fullscreen.png",
+      "sha256": "5bbdd1f3349bec5251905e2d57de03894d1e270ba0977c708fd63efc0cd7da27",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/project-graph.png",
+      "sha256": "8a10c5b4b1c4e0cb92aedb48acefa51e4762857466aba0172b695e29848d6e77",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/project-overview.png",
+      "sha256": "9bc7bd14b2da04bc0c63300f62cff798a19237d6ee8a911cc688326f5ac94f06",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/projects-error.png",
+      "sha256": "18b3b9c5652c13f68d4647f4640ebbd5efb441bbb6f52231b7d3dcaa3d0fe41b",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/projects-list.png",
+      "sha256": "93c9a517fbfe60397330c8a4e8866c2d3984ffad74e009bdda4299a8e190d07e",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/projects-loading.png",
+      "sha256": "f6b89be306f058e88fd69868e5e74027cd3cc836f8203346ae7c46d8f6731247",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/projects-search-empty.png",
+      "sha256": "64ab73ad7ea02e255dab79dcbb156f55ac0f8c6d31ac3b60d17074ffeb0c27c8",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/session-attachment-menu.png",
+      "sha256": "73987e3c014dac469138b1564e21478e93c5d44376607f54f587c292475b1f00",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/session-attachment-staged.png",
+      "sha256": "5f8eea566775512397762e9d4a4df146c8f016ae89fd3426a4cdba7be906850b",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/session-composer-focus.png",
+      "sha256": "58aa7ab6fe17276dcc3d2fa465d735a3e34950018092e9e8c06fc50461281089",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/session-idle.png",
+      "sha256": "dd804528a07f0f37f85a1860fcf7b4918ea1a17cfe0bd840ea08ab84e8ccf79b",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/session-streaming.png",
+      "sha256": "c8df62d3ac623ce195d663a087e7e54e647567050efc189541e5e0b1534c759a",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/settings-saved.png",
+      "sha256": "44b09df8d9781add70e853933a6841a29b1e6a6f5fa12dc710263130dd80a0df",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/settings.png",
+      "sha256": "d2710f74d35d68573f4164661d8e79f4f194cac30fd6c249972919ca4f65ed83",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/task-action-focus.png",
+      "sha256": "69a835aee580f8a224e24d04ba336430abf1233dbf138cc9c6de410242a4b2b0",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/task-action-hover.png",
+      "sha256": "39a385ed4113cbcc5df114e71e06b64b7019a533d4016b38730a3c254f5bd091",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/task-action-menu.png",
+      "sha256": "044ef992a5953f20b30a3e72c4cf0314ff718566c6689bf65f326b6bba232289",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/task-detail.png",
+      "sha256": "fc5836d759c98a56f09655d9fc990311c3fd0ab43105d458b8839558c693999f",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/task-public-share.png",
+      "sha256": "f074c9b7219930eaa0f74135d2661ec1f2c39a764d2a8b26f8b7119d0a03d048",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/task-share-dialog.png",
+      "sha256": "8dd22856b0d05a03d819af375e98e574961a6b7176e71b5255aae18ab16d65ee",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/wiki-contents.png",
+      "sha256": "473b0b655a5cd148a6a665a988f47b59d844839a68ee16e0a2d1d44f92b3bce9",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/wiki-home.png",
+      "sha256": "f46d6754b0c536982a7e06de49b031ecb2e4011dbceea7ac6b47e03aec8676cf",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/wiki-new-entry.png",
+      "sha256": "67f3f58a27a956301d721db0fd282fcd2a2d575ef30baefc4d3b7ed919329020",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/breakpoint-599-dialog.png",
+      "sha256": "f3a22e1fc429321d752bb40a87838c099aee4b93cb3f643d0c6b4345c46699aa",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/breakpoint-599-share.png",
+      "sha256": "a13dc7a2bd275eb9226cedae966421816dd8b1e267553fd5d84d20b29cd3a8b1",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/breakpoint-601-dialog.png",
+      "sha256": "1ed1faee51d63e04cc527937b9933f1431bd0e40c619ce76062b5bf133ff19c3",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/breakpoint-601-share.png",
+      "sha256": "21772b0dd8ec4d76faf756b79fd95381ebfcf33a939dd1e1d5a11aae76a8aae7",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/breakpoint-639-graph.png",
+      "sha256": "4cd47f045b306877375085b8d113fad45aea111017a34e03e117b0e37bb1a715",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/breakpoint-639-projects.png",
+      "sha256": "777b8188a81db6a12b62b0660d39897dc1ae30ea73343c7d9749009993a561b1",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/breakpoint-641-graph.png",
+      "sha256": "3d2a5176745005e2d06d38194f74f5efbfb26cc80d3f840020e1a73b512e500a",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/breakpoint-641-projects.png",
+      "sha256": "589c6221709e40bb575bef86da73375800e2fe47982cffe88270320a98c6cc79",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/breakpoint-959-session.png",
+      "sha256": "4117d7b22fca64369c5bef0549af387b62607894907ce77e7d2c7539edffa401",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/breakpoint-959-wiki.png",
+      "sha256": "73934b4918b656ce6b4c32c0ddea12add2690b14d7539af5d698b98ebe5aa626",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/breakpoint-961-session.png",
+      "sha256": "ed7d99f1b64418f1f54df524a1c9dbe316f3820fd9fbe41995db0a9384ffc873",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/breakpoint-961-wiki.png",
+      "sha256": "33b4b57707143d3f6182d9afbc20ce449835ffb5a215d8782dba7d6bc2b6ecf1",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/notification-error.png",
+      "sha256": "717d7eac7747ff4086e7651673e0fbecf25856c3765156e71675908b3e2e1f6a",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/profile-validation.png",
+      "sha256": "99deef7f1461db0467cce09876082b2f5f8958d80090f528825dfd5d4ee82fc4",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/profile.png",
+      "sha256": "7e602183d7575a135496b41e7cc2845c9ec5d37db6283ccd03a3a59b0c8911fc",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/project-graph-fullscreen.png",
+      "sha256": "d1e26d498c48b8da568c60d4675f4dfce560de23a590f309ecc1cd381a8feab7",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/project-graph.png",
+      "sha256": "6ebd1ec5a2f928df1ac3fcb953ba84b0540a6377e8a625c21eea8f6f0441c980",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/project-overview.png",
+      "sha256": "78e93546208e49d996196caf05ddfb874a0e89a9e8a8297e46999db6d7df74ba",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/projects-error.png",
+      "sha256": "ae48f589a075ac9bac4940d444421bcd13bdf23f09a2b5075e3b50553ed33c65",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/projects-list.png",
+      "sha256": "19d175489da0d30d293bcd11ff748b8af5600d901fd9f854546a945c5386f192",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/projects-loading.png",
+      "sha256": "f78e2c028839e220c1f6ba4ed2557c3a21fa46f131978bfc0e75f15a5520d29b",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/projects-search-empty.png",
+      "sha256": "46d2d9f7798f9ba0705d319975ad69c574ee0c3ea1a92a985b237c5db4e28e15",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/session-attachment-menu.png",
+      "sha256": "fb8a664620ab1b2dd1c7131920324628a114e26caa86a2fee6bdfe5f5910156f",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/session-attachment-staged.png",
+      "sha256": "a986954a4e648f6cc568a51d969fa23c9f55d044ab06d8a0c100c2d35e03b2d6",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/session-composer-focus.png",
+      "sha256": "ff68ac401ca8e1e3019cbd63f5a9f82d91ed57328c8ca904b3c859c29093a253",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/session-idle.png",
+      "sha256": "810d6303b7898fc37200888b628c251df7b495e2250b3cf59a29557251960b9e",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/session-streaming.png",
+      "sha256": "789fbb5d4fb5669124fbd52a1542302d50d49cc6797ad24d6a5fd5a93dd642d8",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/settings-saved.png",
+      "sha256": "e09aeadb3bc89a4fdb08e5aefcfb79a588634597b380684999f1de7242b2da3c",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/settings.png",
+      "sha256": "c2a6074c5a4004424ecce19c4ffb1d9411c9cb84956c859afaece745b6b59765",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/task-action-focus.png",
+      "sha256": "7bc713ca48b606db79d16c20b7d76b8c8ae70dab7923e1e03c29b4d6f24d2ddd",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/task-action-hover.png",
+      "sha256": "752ae3b28626680ad8ba7a008479712360506147e3de00894130c59e6742b713",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/task-action-menu.png",
+      "sha256": "6b182d2cb253797fd165f9035ae4ed2dda66883ca89bd473537adf5b46f4a899",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/task-detail.png",
+      "sha256": "1f100e4c134db07de479538bc11197553c15b124d7328ed9a6e5c0060d57c442",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/task-public-share.png",
+      "sha256": "6276adb67d96e6a368aceae885fb8ce0c5ac067b4db96d7103661f761da19852",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/task-share-dialog.png",
+      "sha256": "edc24390fa6470ed4f22c38245db99bde8985f9b39877b292c1f184b9dbdbfaf",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/wiki-home.png",
+      "sha256": "d8486450e8e29bb74f0b7b175d3d19f7d1adb2ce7e75daaa690dff086329f200",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/wiki-new-entry.png",
+      "sha256": "8264becbeefc40412c158c1f1bfa535c674605b7c17407d346436eea157c39ab",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/notification-error.png",
+      "sha256": "f5d6ab570e4a9c77bfb60c69d1dccc3ba90caa1f14ef699e7dc34223ce4c0dc8",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/profile-validation.png",
+      "sha256": "5051bae1c5726c5222bfe49f8d2f1abaf111c35efe08067fc77234a255600cfe",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/profile.png",
+      "sha256": "9790302ed85bb6d415885bf18199bcc3d3fc847687f8e32e8fae4712b37998bf",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/project-graph-fullscreen.png",
+      "sha256": "dafed8c223afc325c5a996329bfd9cfbce6156da713e453b682a61b250dc0c74",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/project-graph.png",
+      "sha256": "599d0af8e71a1c195530a42de9a0830ae58c59cacf5b64af8d729a2c09b0a7ef",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/project-overview.png",
+      "sha256": "6c37ad62dde9851e483525cb6442df6c11aa9f2a1edad4946fd5e32b4a6d383c",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/projects-error.png",
+      "sha256": "4ec3d1663023cdc43821c11098ac7215ca8a8cd3a51965837e90aec423ab73f3",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/projects-list.png",
+      "sha256": "dd29ed7d5494935dd15fc54f81ae1f43395340b8236ef3da30e32b5c178ae94c",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/projects-loading.png",
+      "sha256": "9bd2154df1f3083598c6b03cbe712d74831da45803db139a39dd6ec49f65795a",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/projects-search-empty.png",
+      "sha256": "0fbfd38a6877dc70206f8109e0796ee70eca21f12bd4f40dec04db65c2b1c671",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/session-attachment-menu.png",
+      "sha256": "53e77a01dd67f94de15e2620939eff341ab4b84177d5e23fa932d02192724b49",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/session-attachment-staged.png",
+      "sha256": "3a76b9156075d82c91d4ca42892fd741f25b827fc842530e74cb0cada15362a6",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/session-composer-focus.png",
+      "sha256": "7c4726da2ea9b3550d24b23d154306fa651197c887b0cdc98e39fe575bed1e29",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/session-idle.png",
+      "sha256": "f8d569ed67365e15ecb80d274a6862299cb01f54c889f80ebd450b60ef966b52",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/session-streaming.png",
+      "sha256": "d4ee34eb79f525cbe1444cd3d3167aa6b62222638499a6343b9300cf50536aad",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/settings-saved.png",
+      "sha256": "5510774a8c37dcab5062a5c223136e70e07639a8c6d4a5f8e998a27938a8600d",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/settings.png",
+      "sha256": "0c9d6ca621584a7387ad9b1b90f342c2b19bcc4633a1bc668c9eeb89e7687cd2",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/task-action-focus.png",
+      "sha256": "c97286c56bd61f2260a892d7ab8b6315e8279c8b579402a9e74bb1315f757c7c",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/task-action-hover.png",
+      "sha256": "1206ac53e0d5f710edef84ffffc76aa6a522d17d64d40a53c5c76d4fb34d8613",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/task-action-menu.png",
+      "sha256": "64e08339fcecd2c48572eff2784c9eb427b36a740120ea01630053edd5888c73",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/task-detail.png",
+      "sha256": "6be00b57f3a6c8a433865efcae717540410ca615a936b5f1a9bc0aed88af4505",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/task-public-share.png",
+      "sha256": "22a4ffc866526331018f0bc0b52fdcfec4a3ff2bf9f9e6bb562c0bf60cd76c2c",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/task-share-dialog.png",
+      "sha256": "e57c4d8b43baeea348346813a7b02d6befd0ec06f39097198ead37d6a226abbc",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/wiki-contents.png",
+      "sha256": "5f5bfe10d9d00e5782eba642362945e327791feb573c00de63a59a77324fbd0d",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/wiki-home.png",
+      "sha256": "c43d256e034df9040def057cd2d1fcd90ffd32fcac98dc05e98269c7d550898e",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/wiki-new-entry.png",
+      "sha256": "37a43076717f6d17a37cddf338d7d0009c34d05a97e6544a023df68d2b8929b2",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/breakpoint-599-dialog.png",
+      "sha256": "627e2ff9ac010eb6760dd0156cba11b11eb9e73081713c0dcb3632883b35b907",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/breakpoint-599-share.png",
+      "sha256": "741c28464f8492cf3ccb401b49068847be37cfed2afa722e15fb60a2e1c9a598",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/breakpoint-601-dialog.png",
+      "sha256": "465981ef617a71cfe15e3b9e4b68506b88132a202e1763b89acaea9520a874e1",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/breakpoint-601-share.png",
+      "sha256": "118113262d6073fd94a5374e522748c402216e4a8b9695ae10980d9e0ed6b5e3",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/breakpoint-639-graph.png",
+      "sha256": "32925ccbcd2cccc9df09e27975eaff539ec612c353284f0dd24fe735e4612f4c",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/breakpoint-639-projects.png",
+      "sha256": "d62edba5fe757c10a1d20f3f50ca945650778236273b55ad7295115329879098",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/breakpoint-641-graph.png",
+      "sha256": "9c3dbb360bfc66598ae246dd2f7bc0139aaef80798574bb38614a84c7ff35b44",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/breakpoint-641-projects.png",
+      "sha256": "dbd43b5f7243bd667bfb9f3948243355c76d717477c5ca7b6164ecf8a1f3ccb7",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/breakpoint-959-session.png",
+      "sha256": "0bdeb7116f017a8e1b385373b7694460939f62c3201221775d3a9f77799014bb",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/breakpoint-959-wiki.png",
+      "sha256": "92b682d12c2021299d9899539196d6379adebca66e09ac8a6aa8dcb39c1ce24f",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/breakpoint-961-session.png",
+      "sha256": "9e5b3682e793fbe4d523c3281a020eb1a636febad45a70c04d67408a542744be",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/breakpoint-961-wiki.png",
+      "sha256": "05a565ee862a78c6ed0d3c0f69a87da5e3d940e6ca905e667960a759aea4bd3a",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/notification-error.png",
+      "sha256": "ecb16d8862bab3c306d73a72f9bc8f8ebee2c30bc92dbc793d07249b6286f0ce",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/profile-validation.png",
+      "sha256": "9038001c0a8612c4d255d0c1b3ffa8b16d5653a6a172deeed466908daee70bca",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/profile.png",
+      "sha256": "0f8618857d899d8ae6d3bb72099706b19663b6796c6928345e972e6b0ba59272",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/project-graph-fullscreen.png",
+      "sha256": "10bf49e7579ff7f8ae298d8986c04f86ad235049bf7a69767090ba9a5ea42ae1",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/project-graph.png",
+      "sha256": "5e820ac81616f14a4997aac1ced8a2701572c940df11c7aeefc4e476ee3b103c",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/project-overview.png",
+      "sha256": "04f48c13cb7040a66f59b3ac73e322848fee7bb72f478a267a4b0cce006ecac0",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/projects-error.png",
+      "sha256": "756f48f62204f225f9f2efc628e0b3926e2a8d465cf316c7a903fa7a2eb5ee21",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/projects-list.png",
+      "sha256": "6be690046e60b107a28673124cf7083a32677bae615df1fcb567aa742a07de24",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/projects-loading.png",
+      "sha256": "8c98fe979ac52e373d438a863df8b47e046ee96f336390c0f0ef2c76e016303a",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/projects-search-empty.png",
+      "sha256": "e062bda1b465572786cd598c44d63eb8ea33607a0fe24ce65f47e183950e9dac",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/session-attachment-menu.png",
+      "sha256": "f34b38e6dcdf9a871e3ad90b110dde40dc5fe24f6fb26112eecc7c75538bee0d",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/session-attachment-staged.png",
+      "sha256": "3b520ded580f6a3710ced2db8ebd06afdd4cfd47a7bbb4a9d5637eb91a35b317",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/session-composer-focus.png",
+      "sha256": "d04b86915c663e7cf268aa63d8fb8d24e7d2eedd8e055b33e6943743d2b8d2f6",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/session-idle.png",
+      "sha256": "0891aef3d541717ca05c671bbb700c5524d07a4cf0028102ef2b1221e83cf5f8",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/session-streaming.png",
+      "sha256": "47b5c55504f1d1404b1d2631bf6a5dac6cdc5ed5199d13fa27139191138301d6",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/settings-saved.png",
+      "sha256": "38b4ec32f2ffdaf0686fe4c356966410bdd54e1cacbaf86ec5478d791e4a99c0",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/settings.png",
+      "sha256": "2095110c8aa0d2b83f3aafa4513c6daecde71fde6100c1c98846c79cff0de269",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/task-action-focus.png",
+      "sha256": "e2fd9d25de6e208be2f49dd08e6cd80ce470540e5ffbedf67b03abd25621b2c5",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/task-action-hover.png",
+      "sha256": "fe27f5eebcf02549dda3b9626523c9cf02627b8c2e76d74c1efb1462663403a9",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/task-action-menu.png",
+      "sha256": "cf20986bb63dc2e4490f9eae1665018bc366d94df77f13c849d4ebe63125eac3",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/task-detail.png",
+      "sha256": "2f7c9ddeadac5dc37ed20dadcdbe7173b5b8abb8143b280f0aab09454cb0158b",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/task-public-share.png",
+      "sha256": "3486e927411e0d117ac162a1ad6299c8226e6641e8fa71f929d6e990cda70a56",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/task-share-dialog.png",
+      "sha256": "a81db6f6e07c0e1455a8e66d0f5a1851b90537d6cc9442bf25f508cac763156c",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/wiki-home.png",
+      "sha256": "f0e2a2e88b4eeaddda40c2c17aeae93c2d9bcceb97422f7474c2195a351bf4dc",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/wiki-new-entry.png",
+      "sha256": "9012286f05e87ae5b0aba0e727c00ac57e14e55cdefde396c836bc5b2490e4da",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/notification-error.png",
+      "sha256": "a29eb4ac4bf476776583d8bce42555fc88d73139ad58f662741c4dc7070c37c8",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/profile-validation.png",
+      "sha256": "658610ffbfe446786ed1487d20295706ca8c81760e9b041186ce07b8a612f90f",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/profile.png",
+      "sha256": "7232da9dc15065c7dc14dd61352a6ba12a2251404541e475188dd3a16d26d8da",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/project-graph-fullscreen.png",
+      "sha256": "4c25fd1acefe818d78cf63f75e7dd4598c1561095580096c0db02a569e631e64",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/project-graph.png",
+      "sha256": "ffb522c526772af2fd038ff19f0d796026e5643c062e42d43481d41a49d02ca3",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/project-overview.png",
+      "sha256": "ee90c76a819359062526ad0800ace295c630fc55ea3bbe457a60c3c2c4b6f441",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/projects-error.png",
+      "sha256": "bf80fed79089ba055f584a8c3f09ea5c857dc2a0710fc771538ace5574c12e1e",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/projects-list.png",
+      "sha256": "d8c22faa736fa636a094f19f954394c6597eea76c4a7288dc2173a710ee99ede",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/projects-loading.png",
+      "sha256": "1d31a39992a6f1c3e68ebc1f45a64291ccf7b7035f156f784648001a61a538e1",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/projects-search-empty.png",
+      "sha256": "10c4ed86c0df40dc2c46924299bfedb98587fb9aad287c79a24eda51b9bca774",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/session-attachment-menu.png",
+      "sha256": "693ed52ac4b28181851cf9c7848d9a16cd929fc9b504079b869c98fcd2588068",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/session-attachment-staged.png",
+      "sha256": "681d802e82fe6a2e6410ea10439779a564d2bd92e4e2134c5a38872f99425f39",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/session-composer-focus.png",
+      "sha256": "45254e6ab720f7935fd9bebf13fbaec66de991e40f3b6ab167b30139dd8d8dd7",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/session-idle.png",
+      "sha256": "afcf7dc6b95ca73b0bcb60b7e97f9092fb24c2cd2c571a57fe4ae8f09f0ff21b",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/session-streaming.png",
+      "sha256": "247f9251aecd81336ed491704932054d9ae7aa34fd865258cc8ce0a03795a11e",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/settings-saved.png",
+      "sha256": "9b6e26c602f4dbcb15772bbf2573e8e83ad653cc368047be0f3c1579bd0fd590",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/settings.png",
+      "sha256": "81c7b721bf4fec51608336eeccbfb41d03301bd8dce50d24b4f2492d6feef5a2",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/task-action-focus.png",
+      "sha256": "66c9bb8f6c5cd235fce5464ba6638362a4172e560f27873648b71989adaa2850",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/task-action-hover.png",
+      "sha256": "9d52450470767e504beadc0cf3b3a1f392931c560c4d153f3755c85f87c87d3b",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/task-action-menu.png",
+      "sha256": "326934764f4260d12171beba215a51a50b85516636e2bbbb5501e6d88f31747e",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/task-detail.png",
+      "sha256": "8a44664deb1d7f9f9dcb4eef08b38e99c0e0a74cdf7bd5bb259197166901d4b6",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/task-public-share.png",
+      "sha256": "56c69301dbb0bd027839303054f7b662214884705f362549d21f350cc604a209",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/task-share-dialog.png",
+      "sha256": "8e9b6e707018d17c37540da902750e1200b288e8326a6d5966cfddd2fbeb08d1",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/wiki-contents.png",
+      "sha256": "acf1ea4fe755834c04e50350297183e984bec0078ecc2a123a711dd690077ee2",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/wiki-home.png",
+      "sha256": "c33242877cebcfba29581c771be6b89513fe208634e10f9fde470128ae5460fa",
+      "unchanged": true
+    },
+    {
+      "path": "docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/wiki-new-entry.png",
+      "sha256": "8186a88601c2c20cb8a85f3492a94006fbb8446f2f3fb395ab4bf7e4feda5e02",
+      "unchanged": true
+    }
+  ]
+}

@@ -36,6 +36,7 @@ public enum ProjectPage {
     /// start when the owner starts the project and not before, so "can start now" would be the one
     /// untrue thing about them.
     public static let readyUntilStarted = "starts when you start"
+    public static let readyWhilePaused = "project is paused"
 
     /// The cells the card draws, in reading order. A project that integrates splits Done into
     /// Pending landing / On project branch / On main (the branch lane dropped on a `MAIN` line), and draws
@@ -43,12 +44,14 @@ public enum ProjectPage {
     /// lanes, Done carrying its share of the whole. `started` is whether anybody has started the
     /// project; only `false` changes anything — Ready's footnote.
     public static func overviewCells(_ b: ProjectPanoramaBuckets, taskCount: Int,
-                                     line: IntegrationLine?, started: Bool? = nil) -> [OverviewCell] {
-        let readyFootnote = started == false ? readyUntilStarted : "can start now"
+                                     line: IntegrationLine?, started: Bool? = nil,
+                                     paused: Bool = false, manualReadyCount: Int = 0) -> [OverviewCell] {
+        let readyFootnote = started == false ? readyUntilStarted : paused ? readyWhilePaused
+            : b.ready > 0 && manualReadyCount == b.ready ? "can start manually" : "can start now"
         if reportsIntegrationLanes(b) {
             var lanes: [OverviewCell] = [
                 OverviewCell(key: "running", label: "Running", value: b.running,
-                             footnote: "active sessions", glyph: .disc),
+                             footnote: "task work in progress", glyph: .disc),
                 OverviewCell(key: "ready", label: "Ready", value: b.ready,
                              footnote: readyFootnote, glyph: .triangle),
                 OverviewCell(key: "blocked", label: "Waiting", value: b.blocked,
@@ -56,7 +59,7 @@ public enum ProjectPage {
                                 ? "\(b.waitingForLanding ?? 0) waiting for a prerequisite to land" : "waiting on dependencies",
                              glyph: .square),
                 OverviewCell(key: "integrating", label: "Pending landing", value: b.integrating ?? 0,
-                             footnote: "finished work without a landing receipt", glyph: .hourglass),
+                             footnote: "no landing receipt yet", glyph: .hourglass),
             ]
             if line != .main {
                 lanes.append(OverviewCell(key: "onIntegrationLine", label: "On project branch",
@@ -83,7 +86,7 @@ public enum ProjectPage {
             : "no tasks yet"
         return [
             OverviewCell(key: "running", label: "Running", value: b.running,
-                         footnote: "active sessions", glyph: .disc),
+                         footnote: "task work in progress", glyph: .disc),
             OverviewCell(key: "ready", label: "Ready", value: b.ready,
                          footnote: readyFootnote, glyph: .triangle),
             OverviewCell(key: "blocked", label: "Waiting", value: b.blocked,
@@ -128,13 +131,18 @@ public enum ProjectPage {
         public let state: String
         /// "1m 20s". See `landingClock`.
         public let clock: String
+        public let clockLabel: String
+        public let updated: String?
 
-        public init(what: String?, running: Bool, state: String, clock: String, word: String = "Integration") {
+        public init(what: String?, running: Bool, state: String, clock: String, word: String = "Integration",
+                    clockLabel: String = "Elapsed", updated: String? = nil) {
             self.word = word
             self.what = what
             self.running = running
             self.state = state
             self.clock = clock
+            self.clockLabel = clockLabel
+            self.updated = updated
         }
     }
 
@@ -168,18 +176,29 @@ public enum ProjectPage {
     /// The name slot takes the job's task, or the COUNT when there is more than one: "Landing 2
     /// jobs" says what a single task's title would have pretended to — that this is the oldest of
     /// several, not the only thing the queue is doing.
-    public static func landingLine(_ view: ProjectIntegrationView, now: Date = Date()) -> LandingLine? {
+    public static func landingLine(_ view: ProjectIntegrationView, now: Date = Date(),
+                                   updatedAt: Date? = nil, refreshFailed: Bool = false) -> LandingLine? {
         guard let inFlight = view.inFlight else { return nil }
         let running = inFlight.state == "RUNNING"
         let jobs = view.integratingCount + view.queuedCount
+        let heartbeatAt = inFlight.heartbeatAt.flatMap(RelativeTime.parse)
+        let heartbeatStale = running && heartbeatAt.map { now.timeIntervalSince($0) > 600 } == true
+        let readStale = updatedAt.map { now.timeIntervalSince($0) > 90 } == true
+        let unavailable = refreshFailed || readStale || heartbeatStale
+        let lastUpdate = running ? (heartbeatAt ?? updatedAt) : updatedAt
+        let elapsedAt = unavailable ? min(now, lastUpdate ?? now) : now
+        let age = lastUpdate.map { Int(max(0, now.timeIntervalSince($0)) / 60) }
         // An instant this clock cannot read is no elapsed time rather than a wrong one: the row
         // stays up and counts from zero, which is the one thing it can still say truthfully.
-        let elapsed = RelativeTime.parse(inFlight.startedAt).map { now.timeIntervalSince($0) } ?? 0
+        let elapsed = RelativeTime.parse(inFlight.startedAt).map { elapsedAt.timeIntervalSince($0) } ?? 0
         return LandingLine(what: jobs > 1 ? "\(jobs) jobs" : inFlight.taskTitle,
-                           running: running,
-                           state: running ? (integrationPhaseWords[inFlight.phase ?? ""] ?? "running") : "queued",
+                           running: running && !unavailable,
+                           state: unavailable ? "Update unavailable"
+                               : running ? (integrationPhaseWords[inFlight.phase ?? ""] ?? "running") : "queued",
                            clock: landingClock(elapsed),
-                           word: integrationJobWords[inFlight.kind ?? ""] ?? "Integration")
+                           word: integrationJobWords[inFlight.kind ?? ""] ?? "Integration",
+                           clockLabel: running ? "Elapsed" : "Queued for",
+                           updated: age.map { $0 == 0 ? "Updated just now" : "Updated \($0)m ago" })
     }
 
     // MARK: - Acceptance criteria

@@ -108,7 +108,13 @@ final class ConsoleRegistry {
                                  modelCatalog: modelCatalog, accountDefaultEffort: accountDefaultEffort,
                                  folderID: folderID,
                                  baseURL: baseURL, tokenStore: tokenStore, attachments: attachments)
-        model.onSessionCreated = onCreated
+        model.onSessionCreated = { [weak self, weak model] session in
+            if let self, let model {
+                self.model(for: session.id, agentID: agent.id)
+                    .adoptCreatedSession(session, from: model)
+            }
+            onCreated(session)
+        }
         model.onToast = { [weak self] request in self?.onToast(request, nil) }
         wireAccountDefaults(model)
         return model
