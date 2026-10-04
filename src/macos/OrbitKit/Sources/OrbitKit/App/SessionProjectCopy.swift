@@ -12,6 +12,7 @@ public enum SessionProjectCopy {
     }
 
     public static let noCoordinator = "No coordinator"
+    public static let openSession = "Open Session"
     public static let openCoordinator = "Open Coordinator"
     public static let sessions = "Sessions"
     public static let openProject = "Open Project"

@@ -2085,10 +2085,20 @@ final class AppModel {
         projectSessionsLoading = true
         defer { if projectSessionsAddress == address { projectSessionsLoading = false } }
         do {
-            let rows = try await api.listSessions(view: address.view, projectId: address.projectID)
+            let openRead = Task { try await api.listSessions(view: .open, projectId: address.projectID) }
+            let completedRead = Task { try await api.listSessions(view: .completed, projectId: address.projectID) }
+            defer {
+                openRead.cancel()
+                completedRead.cancel()
+            }
+            let rows = try await openRead.value + completedRead.value
             guard projectSessionsAddress == address, !Task.isCancelled else { return }
             // An older server may ignore projectId. It must never put unrelated sessions here.
-            projectSessions = rows.filter { $0.projectMembership?.projectId == address.projectID }
+            var seen = Set<String>()
+            projectSessions = rows.filter {
+                $0.projectMembership?.projectId == address.projectID &&
+                    $0.effectiveLifecycleState != .trash && seen.insert($0.id).inserted
+            }.sorted { ($0.lastTurnAt ?? $0.createdAt ?? "") > ($1.lastTurnAt ?? $1.createdAt ?? "") }
             projectSessionsError = nil
             for row in projectSessions { sessionDetails.store(row) }
         } catch {
