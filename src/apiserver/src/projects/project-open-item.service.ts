@@ -1145,7 +1145,7 @@ export class ProjectOpenItemService {
       const newestLanding = await tx.projectIntegrationJob.findFirst({
         where: { taskId, kind: 'LAND_TASK' },
         orderBy: [{ generation: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
-        select: { id: true, generation: true, state: true, checks: true },
+        select: { id: true, generation: true, state: true, checks: true, phase: true },
       });
       const openItems = await tx.projectOpenItem.findMany({
         where: { projectId, taskId, kind: { in: [...INTEGRATION_ITEM_KINDS] }, state: 'OPEN' },

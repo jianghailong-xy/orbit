@@ -3073,8 +3073,13 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"only when you can say why this run will come out differently (the merge check's baseline " +
 				"was repaired, the check timed out, the machinery failed). A red that belongs to the " +
 				"delivery is sent back (task_reopen) or replaced instead, and a CONFLICT is refused here: " +
-				"only a branch that changed answers one. Queues exactly one new job, which carries your " +
-				"reason and the failure class it reruns; your open items about the failure stay open and " +
+				"only a branch that changed answers one. A conflict at MAIN_SYNC (absorbing the upstream " +
+				"into the project branch) is the project line's, not the delivery's: absorb the upstream on " +
+				"the project line first, by having the task's run put a merge commit of the project branch " +
+				"tip and the upstream tip, conflicts resolved, into its source branch and do nothing else " +
+				"(task_reopen) — with both tips in it, its next landing lands by MERGE. Queues exactly " +
+				"one new job, which carries your reason and the failure class it reruns; your open items " +
+				"about the failure stay open and " +
 				"read as being handled until that job reports — if it lands or passes they are marked " +
 				"handled in your name with your reason, and if it fails again they are marked superseded " +
 				"by the new item its failure opens. Refused with the reason when the task's landing or the " +

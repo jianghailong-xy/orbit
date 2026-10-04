@@ -306,8 +306,9 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
       `5h limit23%resets ${formatResetTime(IN_AN_HOUR)}`,
       `Weekly limit41%resets ${formatResetTime(IN_THREE_DAYS)}`,
     ]);
-    // Nothing to do to a working account from here: signing out is on the pool's own page.
-    expect(row().querySelector('.re-act')?.children).toHaveLength(0);
+    // Nothing to do to a working account from here but pause it (migration 0374): signing out is on
+    // the pool's own page.
+    expect([...row().querySelectorAll('.re-act button')].map((button) => button.textContent)).toEqual(['Pause…']);
   });
 
   it('says so when no quota has been read yet — the account runs all the same', async () => {
