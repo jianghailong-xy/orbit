@@ -67,7 +67,7 @@ class SessionReaderModelTest {
             test.runCurrent()
             return reader().also { test.runCurrent() }
         }
-        fun reader(record: String? = null) = SessionReaderModel(auth, handle, store, "s", test.backgroundScope, record)
+        fun reader(record: String? = null, restoreSavedRecord: Boolean = false) = SessionReaderModel(auth, handle, store, "s", test.backgroundScope, record, restoreSavedRecord)
     }
     @Test fun bookmarkRestoresHistoryOfflineBySequenceAndOffset() = runTest {
         val rig = Rig(this); val reader = rig.start()
@@ -117,5 +117,19 @@ class SessionReaderModelTest {
         assertEquals("That message is not in this session", reader.state.value.error)
         assertEquals(100L, reader.state.value.window.events.first().seq)
         assertFalse(reader.state.value.denied)
+    }
+    @Test fun recordReadingRestoresItsOwnPositionWithoutReplacingTheReturnSource() = runTest {
+        val rig = Rig(this); val source = rig.start()
+        source.position(850, 37, false); source.close(); runCurrent()
+        val linked = rig.reader("record"); runCurrent()
+        linked.position(150, 22, false); linked.close(); runCurrent()
+        val restoredLink = rig.reader("record", restoreSavedRecord = true); runCurrent()
+        assertEquals(150L, restoredLink.state.value.targetSeq)
+        assertEquals(22, restoredLink.state.value.targetOffset)
+        val restoredSource = rig.reader(); runCurrent()
+        assertEquals(850L, restoredSource.state.value.targetSeq)
+        assertEquals(37, restoredSource.state.value.targetOffset)
+        val explicitLink = rig.reader("record"); runCurrent()
+        assertEquals(180L, explicitLink.state.value.targetSeq)
     }
 }

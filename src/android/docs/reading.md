@@ -43,6 +43,9 @@ session and directory state and the captured auth handle. No auth rotation logic
   a folded child/result anchor, recreation and cache restoration use that identity. The offset
   deliberately excludes the content-padding origin. A touch pauses following for selection;
   scrolling to the bottom or Jump to latest resumes it. Historical reading stays in place.
+  A linked record has its own saved position, so reading it does not replace the return source's
+  bookmark. Recreating an already-open record restores its current position. Connection notices
+  share a fixed-height status row so reconnecting does not displace the transcript.
 - Saved reading windows use account-scoped storage, at most 200 events and 1 MiB. Large windows
   shrink around the anchor. If even one event exceeds that limit, only position metadata is
   stored and restoration pages to its sequence; offline failure offers Retry rather than

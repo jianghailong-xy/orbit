@@ -29,13 +29,21 @@ import kotlinx.serialization.json.*
 @Composable
 fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, api: DirectoryApi,
     data: DirectoryData, open: (OrbitRoute) -> Unit) {
+    var recordOpened by rememberSaveable { mutableStateOf(false) }
     val model = remember(handle, route.id, route.recordId) { SessionReaderModel(app.session, handle,
-        app.realtime, route.id!!, app.processScope, route.recordId) }
+        app.realtime, route.id!!, app.processScope, route.recordId, recordOpened) }
     DisposableEffect(model) { onDispose { model.close() } }
     val state by model.state.collectAsState()
+    LaunchedEffect(state.window.seeded, state.loading, state.targetSeq) {
+        if (route.recordId != null && state.window.seeded && !state.loading && state.targetSeq != null) recordOpened = true
+    }
     val rows = remember(state.window.events) { transcriptRows(state.window.events) }
     val resources = remember(handle, route.id) { ReaderResources(app.session, handle, route.id) }
-    val openLink = rememberReaderLinkHandler(resources, open)
+    val openLink = rememberReaderLinkHandler(resources) { next ->
+        if (next.destination == Destination.SESSION && ObjectId.same(next.id, route.id) &&
+            next.recordId != null && next.recordId == route.recordId) model.openRecord(next.recordId)
+        else open(next)
+    }
     val list = rememberLazyListState()
     var follow by rememberSaveable { mutableStateOf(route.recordId == null) }
     var placed by remember(model) { mutableStateOf(false) }

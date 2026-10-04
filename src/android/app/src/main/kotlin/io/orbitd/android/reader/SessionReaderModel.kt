@@ -21,7 +21,8 @@ internal data class ReadingState(val window: ReadingWindow = ReadingWindow(), va
 
 /** One route/account lifetime; the application's A04 store continues to own all SSE and authority. */
 internal class SessionReaderModel(private val auth: AuthSession, private val handle: SessionHandle,
-    private val store: RealtimeStore, val id: String, private val scope: CoroutineScope, record: String?) : AutoCloseable {
+    private val store: RealtimeStore, val id: String, private val scope: CoroutineScope, record: String?,
+    restoreSavedRecord: Boolean = false) : AutoCloseable {
     private val job = SupervisorJob(scope.coroutineContext[Job])
     private val owner = CoroutineScope(scope.coroutineContext + job)
     private val api = TranscriptApi(auth, handle, id)
@@ -33,20 +34,21 @@ internal class SessionReaderModel(private val auth: AuthSession, private val han
     private var pageJob: Job? = null
     private var saveJob: Job? = null
     private var generation = 0L
-    private val cacheKey = "reader-${ObjectId.canonical(id) ?: id}"
+    private val cacheKey = "reader-${ObjectId.canonical(id) ?: id}" + (record?.let { "-${ObjectId.canonical(it) ?: it}" } ?: "")
 
     init {
         owner.launch {
             val saved = try { auth.readData(handle, DataKind.CACHE, cacheKey)?.takeIf { it.size <= CACHE_LIMIT }
                 ?.let { Wire.decode(it, ReadingBookmark.serializer()) } } catch (cancel: CancellationException) { throw cancel }
                 catch (_: Exception) { null }
-            if (record == null && saved != null && saved.window.events.size <= ReadingWindow.LIMIT) {
+            val restoreSaved = (record == null || restoreSavedRecord) && saved != null && saved.window.events.size <= ReadingWindow.LIMIT
+            if (restoreSaved && saved != null) {
                 bookmark = saved; following = saved.following
                 mutable.value = ReadingState(window = saved.window, ready = true,
                     targetSeq = saved.seq.takeIf { !saved.following }, targetOffset = saved.offset, targetTick = 1)
                 if (!saved.following && !saved.window.seeded) restore(saved.seq, saved.offset)
             } else mutable.value = ReadingState(ready = true)
-            if (record != null) openRecord(record)
+            if (record != null && !restoreSaved) openRecord(record)
             var previousEvents: List<RunEvent>? = null
             store.state.collect { live ->
                 val s = live.session?.takeIf { live.handle === handle && it.id == id } ?: return@collect
