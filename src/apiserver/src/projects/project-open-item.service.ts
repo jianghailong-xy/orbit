@@ -14,6 +14,7 @@ import { Prisma } from '@prisma/client';
 
 import {
   COORDINATOR_LEAD_KINDS,
+  type OpenItemChat,
   type OpenItemFacts,
   type OpenItemHandling,
   type OpenItemOutcome,
@@ -44,6 +45,7 @@ import {
   coordinatorQuestion,
   markOpenItemsHandling,
   openItemActions,
+  openItemChat,
   openItemFacts,
   openItemMessage,
   openItemOwed,
@@ -182,6 +184,8 @@ export interface OpenItemRow {
   handling: OpenItemHandling<Date> | null;
   /** How it ended, on a row of `settled` (§4.7 H5); null on every open row. */
   outcome: OpenItemOutcome<Date> | null;
+  /** "Chat about this": where its handling stands, and where a message about it goes (§4.8). */
+  chat: OpenItemChat;
 }
 
 /** A question filed, as `ask_owner` answers its caller (§5.2 R7). */
@@ -1530,6 +1534,16 @@ export class ProjectOpenItemService {
     const askable = project.coordinatorSessionId != null
       && project.coordinatorSession != null
       && !sessionHasEnded(project.coordinatorSession);
+    // Where "Chat about this" goes, for every row (`openItemChat`): the conversation coordinating the
+    // project, and whether it can be handed a message now — asked of the authority the delivering
+    // door asks (`receiveBlockedReasonFor`), once for the whole list. A pointer to a row that is not
+    // there any more is no conversation at all.
+    const coordinatorBlocked = project.coordinatorSessionId
+      ? await this.sessions.receiveBlockedReasonFor(ownerId, project.coordinatorSessionId)
+      : null;
+    const coordinator = project.coordinatorSessionId && coordinatorBlocked !== 'SESSION_GONE'
+      ? { sessionId: project.coordinatorSessionId, receiving: coordinatorBlocked == null }
+      : null;
     const open = await this.prisma.projectOpenItem.findMany({
       where: { projectId, state: 'OPEN' },
       orderBy: [{ waitingSince: 'asc' }, { id: 'asc' }],
@@ -1647,6 +1661,7 @@ export class ProjectOpenItemService {
     const view = rows.map((row): OpenItemRow => {
       const [sent] = row.deliveries;
       const handed = sent ? deliveredAt.get(`${sent.sessionId}:${sent.clientTurnId}`) ?? null : null;
+      const handling = handlingOf(row, inFlight);
       const question = row.kind === 'COORDINATOR_QUESTION'
         ? (row.payload as unknown as CoordinatorQuestion)
         : null;
@@ -1701,8 +1716,14 @@ export class ProjectOpenItemService {
           fuseEpisodeId: row.fuseEpisodeId,
           askable,
         }),
-        handling: handlingOf(row, inFlight),
+        handling,
         outcome: null,
+        chat: openItemChat({
+          assignee: row.assignee,
+          handling: handling != null,
+          resolution: null,
+          coordinator,
+        }),
       };
     });
     const settledView = closed.map((row): OpenItemRow => {
@@ -1743,6 +1764,12 @@ export class ProjectOpenItemService {
           jobId: row.resolvedByJobId,
           supersededByItemId: row.supersededByItemId,
         },
+        chat: openItemChat({
+          assignee: row.assignee,
+          handling: false,
+          resolution: row.resolution as OpenItemOutcome['resolution'],
+          coordinator,
+        }),
       };
     });
     return {
