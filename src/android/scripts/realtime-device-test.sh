@@ -50,4 +50,5 @@ until [[ "$("$adb" -s "$serial" shell getprop sys.boot_completed | tr -d '\r')" 
   sleep 2
 done
 [[ "$("$adb" -s "$serial" shell getprop ro.build.version.sdk | tr -d '\r')" == "$api" ]]
-python3 "$(dirname "$0")/realtime-device-test.py" "$serial" "$apk" "$output" --sdk "$ANDROID_HOME"
+python3 "$(dirname "$0")/realtime-device-test.py" "$serial" "$apk" "$output" --sdk "$ANDROID_HOME" \
+  --network-mode "${A04_NETWORK_MODE:-wifi-cellular}"

@@ -168,6 +168,14 @@ shared emulator or starts `orbit-ui-api29` through `orbit-ui-api35`, and restore
 network/rotation settings on exit. Supply a new evidence directory each run.
 It records APK hash/signature, device build, source SHA/dirty flag, JSON state,
 screenshots, request/cursor history, per-process logs and command exit codes.
+The normal run requires an actual Wi-Fi default network before starting and
+an actual cellular default afterward. The local API29 image produced no Wi-Fi
+scan results with emulator 37.2.12 (also after separately trying the legacy
+network/driver options). `A04_NETWORK_MODE=cellular-reconnect` permits the other
+recovery checks to run there, but explicitly reports `PARTIAL` and a missing
+Wi-Fi/cellular-switch check. It never turns that gap into PASS; its zero exit
+only means the available assertions completed. Inspect `report.json` as well
+as the exit code.
 
 The ten assertions cover initial two-stream state, socket loss/catch-up,
 rotation, Wi-Fi/cellular switch, offline stop, offline process/cache restore,
