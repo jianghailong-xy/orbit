@@ -45,8 +45,9 @@ export interface IntegrationRetryFacts {
   /** The project's Automatic switch (`coordinator_enabled`). */
   coordinatorEnabled: boolean;
   taskStatus: string;
-  /** The task's newest LAND_TASK, by generation; null when it never had one. */
-  newestLanding: { id: string; generation: number; state: string; checks: unknown } | null;
+  /** The task's newest LAND_TASK, by generation; null when it never had one. `phase` is where it
+   *  stopped: a CONFLICT at MAIN_SYNC is the line's, and its refusal says what resolves that one. */
+  newestLanding: { id: string; generation: number; state: string; checks: unknown; phase?: string | null } | null;
   /** The task's OPEN `INTEGRATION_*` items. */
   openItems: ReadonlyArray<{ id: string; kind: string; assignee: string; assigneeReason: string }>;
   /** The task's open `project_blocker` episodes that wait on the account owner. */
@@ -124,9 +125,10 @@ export function decideIntegrationRetry(facts: IntegrationRetryFacts): Integratio
   }
   const failureClass: LandingFailureClass | null = landingFailureClass(newest);
   if (!isRetryableLandingFailure(failureClass)) {
-    return refuse(409, INTEGRATION_RETRY_NOT_APPLICABLE, notRetryable(newest.state, failureClass), {
-      newestLanding: { ...landing, failureClass },
-    });
+    return refuse(409, INTEGRATION_RETRY_NOT_APPLICABLE,
+      notRetryable(newest.state, failureClass, newest.phase ?? null), {
+        newestLanding: { ...landing, failureClass },
+      });
   }
 
   const owned = ownerItemRefusal(facts.openItems, 'failed landing');
@@ -258,7 +260,17 @@ function notAutomaticRefusal(failure: string): IntegrationRetryRefusal {
 }
 
 /** Why a landing that ended this way is not run again, and what answers it instead. */
-function notRetryable(state: string, failureClass: LandingFailureClass | null): string {
+function notRetryable(state: string, failureClass: LandingFailureClass | null, phase: string | null): string {
+  if (failureClass === 'CONFLICT' && phase === 'MAIN_SYNC') {
+    // §3.1 M3: the line's conflict, not the task's work — the item's own message says the same.
+    return 'this task\'s newest landing stopped at MAIN_SYNC: absorbing the upstream into the project '
+      + 'branch conflicted before any of the task\'s commits were looked at, so running it again meets '
+      + 'the same conflict, and so does sending the task back to redo its work. Absorb the upstream on '
+      + 'the project line first: the task\'s source branch gets a merge commit of the project branch tip '
+      + 'and the upstream tip, conflicts resolved, and nothing else (task_comment saying the run does '
+      + 'only that, then task_reopen). With both tips in the source, its next landing skips the main sync '
+      + 'and lands by J-S4 MERGE.';
+  }
   if (failureClass === 'CONFLICT') {
     return 'this task\'s newest landing ended in a CONFLICT, and running the same commits again '
       + 'conflicts the same way: only a branch that changed answers a conflict. Send the task back '

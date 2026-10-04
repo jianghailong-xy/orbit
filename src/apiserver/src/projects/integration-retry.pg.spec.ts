@@ -811,6 +811,29 @@ test('CHECK_TIMED_OUT and ERROR are rerun, a CONFLICT is not',
     }
   });
 
+test('a MAIN_SYNC conflict is refused as well, and the refusal sends the absorb to the project line',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      // §3.1 M3, read off the phase the job row recorded: the line conflicted absorbing the upstream,
+      // so the same source run again conflicts in the same place, and the task's own work is not
+      // what to change. What resolves it is a source branch that carries the absorb.
+      const w = await world(stack, 'retry-main-sync');
+      const clash = await failedLanding(stack, w, 'retry-main-sync', { ...CONFLICTED, phase: 'MAIN_SYNC' });
+      const refused = await denied(() => retry(stack, w, clash.task.taskId, 'the ledger conflict is resolved'));
+      assert.equal(refused.status, 409);
+      assert.equal(refused.code, 'INTEGRATION_RETRY_NOT_APPLICABLE');
+      assert.match(refused.message, /stopped at MAIN_SYNC/);
+      assert.match(refused.message, /Absorb the upstream on the project line first/);
+      assert.match(refused.message, /lands by J-S4 MERGE/);
+      assert.equal((await landings(stack.db, clash.task.taskId)).length, 1, 'nothing queued for a conflict');
+      const [stillOpen] = await itemsOf(stack.db, clash.task.taskId);
+      assert.equal(stillOpen?.state, 'OPEN', 'and its item is left for the decision it needs');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
 test('the coordinator closed the item by hand: an Automatic project still reruns the landing (the state ③ was left in)',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
