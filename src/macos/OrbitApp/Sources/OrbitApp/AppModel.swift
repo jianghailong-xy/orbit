@@ -509,6 +509,19 @@ final class AppModel {
             self?.rememberDefaultPermissionMode(raw)
         }
         consoleRegistry?.accountDefaultModels = { [weak self] in self?.defaultModels ?? [:] }
+        consoleRegistry?.seedSessionContext = { [weak self] console in
+            guard let self, let session = self.session(id: console.sessionID) else { return }
+            console.seedSessionContext(
+                session,
+                modelCatalog: self.agents?.modelCatalog(for: session.assignedRunnerId),
+                runtimeDefaultModels: session.assignedRunnerId.flatMap {
+                    self.agents?.runnerRuntimeDefaultModels[$0]
+                },
+                configuredProviders: self.agents?.configuredProviders ?? [],
+                configuredProvidersLoaded: self.agents?.configuredProvidersLoaded ?? false,
+                providerPools: self.agents?.providerPools ?? [],
+                sharedPools: self.agents?.sharedPools ?? [])
+        }
         #if os(macOS)
         runnerControl = RunnerControl(baseURL: url, tokenStore: tokenStore)
         #endif
