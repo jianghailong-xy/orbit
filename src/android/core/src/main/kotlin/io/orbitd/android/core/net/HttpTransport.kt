@@ -23,6 +23,7 @@ class ApiRequest(
     query: List<Pair<String, String>> = emptyList(),
     body: ByteArray? = null,
     val contentType: String = "application/json; charset=utf-8",
+    val maxResponseBytes: Long? = null,
 ) {
     val path = path.toList()
     val query = query.toList()
@@ -89,7 +90,16 @@ class OkHttpTransport : HttpTransport {
                 override fun onResponse(call: Call, response: Response) {
                     response.use {
                         try {
-                            continuation.resume(ApiResponse(it.code, it.body?.bytes() ?: ByteArray(0)))
+                            val responseBody = it.body
+                            val limit = api.maxResponseBytes
+                            val data = if (responseBody == null) ByteArray(0) else if (limit == null) responseBody.bytes() else {
+                                if (responseBody.contentLength() > limit) throw IOException("Response exceeds read limit")
+                                val source = responseBody.source()
+                                source.request(limit + 1)
+                                if (source.buffer.size > limit) throw IOException("Response exceeds read limit")
+                                source.readByteArray()
+                            }
+                            continuation.resume(ApiResponse(it.code, data))
                         } catch (_: IOException) {
                             continuation.resumeWithException(NetworkException())
                         }

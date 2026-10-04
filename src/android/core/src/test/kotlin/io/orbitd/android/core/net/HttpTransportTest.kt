@@ -20,6 +20,21 @@ import org.junit.Test
 class HttpTransportTest {
     private fun MockWebServer.address() = ServerAddress.parse(url("/prefix").toString(), true)
 
+    @Test fun readingLimitsBoundBothDeclaredAndChunkedBinaryResponses() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("x".repeat(100)))
+            server.enqueue(MockResponse().setChunkedBody("x".repeat(100), 5))
+            server.enqueue(MockResponse().setBody("12345678"))
+            val transport = OkHttpTransport()
+            val request = HttpRequest(server.address(), ApiRequest(listOf("attachments", "id"), maxResponseBytes = 8), "test")
+            repeat(2) {
+                try { transport.execute(request); fail("Oversized resource must not be buffered") }
+                catch (_: NetworkException) { }
+            }
+            assertEquals("12345678", transport.execute(request).body.decodeToString())
+        }
+    }
+
     @Test fun loginRefreshRetryAndLogoutUseTheWireContractAndIdenticalMutationBody() = runBlocking {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setBody(Wire.json.encodeToString(tokens())))

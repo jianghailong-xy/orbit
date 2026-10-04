@@ -13,6 +13,7 @@ import io.orbitd.android.directory.*
 import io.orbitd.android.core.net.ApiError
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.*
+import io.orbitd.android.text.*
 
 /** The shared route boundary for A06/A07/A11/A12/A13. It resolves real objects already;
  * feature pages replace this overview without changing object identity or its return stack. */
@@ -56,6 +57,8 @@ fun ObjectDestination(route: OrbitRoute, api: DirectoryApi, data: DirectoryData,
     val displayedError = error
     val displayedLoading = loading
     val displayedFresh = fresh
+    val resources = LocalReaderResources.current
+    val textLink = resources?.let { rememberReaderLinkHandler(it, open) } ?: { raw: String -> OrbitLinks.parse(raw)?.let(open); Unit }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (displayedLoading) item { LoadingMessage("Loading…") }
         displayedError?.let { item { StatusMessage("Couldn't open this item", it, { retry++ }) } }
@@ -86,8 +89,9 @@ fun ObjectDestination(route: OrbitRoute, api: DirectoryApi, data: DirectoryData,
             item {
                 Text(field(obj, "title") ?: field(obj, "name") ?: route.destination.name.lowercase().replaceFirstChar(Char::uppercase), style = MaterialTheme.typography.headlineMedium)
                 field(obj, "status")?.let { Text(it) }
-                field(obj, "description")?.let { Text(it) }
-                field(obj, "goal")?.let { Text(it) }
+                listOf("description", "goal", "summary", "body").forEach { name ->
+                    field(obj, name)?.let { MarkdownText(it, open = { raw -> if (displayedFresh) textLink(raw) }) }
+                }
             }
             listOf("taskId" to Destination.TASK, "projectId" to Destination.PROJECT,
                 "coordinatorSessionId" to Destination.SESSION, "sessionId" to Destination.SESSION).forEach { (key, type) ->

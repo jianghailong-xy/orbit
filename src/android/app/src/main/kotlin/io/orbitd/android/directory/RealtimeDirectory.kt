@@ -7,11 +7,16 @@ import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.ConnectionState
 import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.json.JsonObject
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
+import io.orbitd.android.core.realtime.RealtimeState
 
 /** A04 owns disk/SSE/REST recovery. A05 only projects the current handle's complete snapshot. */
 @Composable
 fun rememberDirectoryData(app: OrbitApplication, handle: SessionHandle): State<DirectoryData> {
-    val live by app.realtime.state.collectAsState()
+    // A streaming delta cannot change the directory. Avoid decoding every session on each one.
+    val live by remember(app) { app.realtime.state.map { it.copy(session = null) }.distinctUntilChanged() }
+        .collectAsState(RealtimeState())
     return remember(live, handle) { mutableStateOf(
         if (live.handle !== handle) DirectoryData() else {
             val snapshot = live.directory

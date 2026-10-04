@@ -35,6 +35,7 @@ class RealtimeStoreTest {
         var pending = true
         var title = "original"
         var directoryError: Int? = null
+        var detailError: Int? = null
         var project = false
         var heldDirectory: CompletableDeferred<Unit>? = null
         fun response(json: String) = ApiResponse(200, json.encodeToByteArray())
@@ -56,8 +57,10 @@ class RealtimeStoreTest {
                     val selected = rows.filter { after == null || Wire.decode(it.encodeToByteArray(), RunEvent.serializer()).seq > after }
                     response("""{"events":[${selected.joinToString()}],"hasMore":false,"after":null}""")
                 }
-                path == listOf("sessions", "s1") || path == listOf("sessions", "s2") ->
+                path == listOf("sessions", "s1") || path == listOf("sessions", "s2") -> {
+                    detailError?.let { return@HttpTransport ApiResponse(it, "{}".encodeToByteArray()) }
                     response("""{"id":"${path.last()}","status":"RUNNING"${if (project) ",\"taskId\":\"t1\",\"projectId\":\"p1\"" else ""}}""")
+                }
                 path.last() in setOf("approvals", "turns", "background") ->
                     response(if (pending) """[{"id":"pending-card-marker","status":"PENDING"}]""" else "[]")
                 else -> response(if (pending) """{"pending":[{"id":"standing-card-marker"}]}""" else "null")
@@ -105,6 +108,39 @@ class RealtimeStoreTest {
         assertTrue(store.state.value.session!!.snapshot!!.queuedTurns.isEmpty())
         assertTrue(store.state.value.session!!.snapshot!!.background.isEmpty())
         assertEquals("null", store.state.value.session!!.snapshot!!.standing["ownerConfirmation"].toString())
+    }
+
+    @Test fun forbiddenAndMissingSessionWithdrawTranscriptAndCacheUntilAuthorityRecovers() = runTest {
+        for (status in listOf(403, 404)) {
+            val rig = Rig(this)
+            val (_, store) = rig.start()
+            rig.detailError = status
+            store.refreshSession(); runCurrent(); advanceTimeBy(101); runCurrent()
+            assertTrue(store.state.value.session!!.accessDenied)
+            assertNull(store.state.value.session!!.snapshot)
+            assertTrue(store.state.value.session!!.transcript.events.isEmpty())
+            rig.streams.session().emit("""{"seq":2,"type":"assistant","payload":{"text":"must stay hidden"}}""")
+            runCurrent()
+            assertTrue(store.state.value.session!!.transcript.events.isEmpty())
+            val cache = Wire.decode(rig.data.values.values.single(), RealtimeCache.serializer())
+            assertFalse(cache.sessions.containsKey("s1"))
+            rig.detailError = null
+            advanceTimeBy(1_001); runCurrent()
+            assertFalse(store.state.value.session!!.accessDenied)
+            assertTrue(store.state.value.session!!.fresh)
+            assertEquals("initial", store.state.value.session!!.transcript.events.single().fields.text("text"))
+            store.close(); runCurrent()
+        }
+    }
+
+    @Test fun temporarySessionErrorRetainsOnlyStaleReadContent() = runTest {
+        val rig = Rig(this)
+        val (_, store) = rig.start()
+        rig.detailError = 503
+        store.refreshSession(); runCurrent()
+        assertFalse(store.state.value.session!!.fresh)
+        assertFalse(store.state.value.session!!.accessDenied)
+        assertEquals("initial", store.state.value.session!!.transcript.events.single().fields.text("text"))
     }
 
     @Test fun processRestoreReplaysOverlapToRecoverMissingOutOfOrderDurableEvent() = runTest {

@@ -5,6 +5,7 @@ import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.auth.SessionChanged
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.net.ApiRequest
+import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.protocol.Wire
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -200,6 +201,7 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
         fun check() { if (!active(handle, path) || selection.value != focus) throw CancellationException() }
         fun save() {
             check()
+            if (state.value.session?.accessDenied == true) return
             val transcript = state.value.session?.transcript ?: return
             cache.update { it.remember(id, transcript) }
             writes.trySend(Unit)
@@ -216,11 +218,23 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
                     currentCoroutineContext().ensureActive()
                     check()
                     if (revision != sessionRevision.value) { refresh.trySend(Unit); continue }
-                    updateSession(handle, focus) { it.copy(snapshot = snapshot, fresh = true, error = null) }
+                    val wasDenied = state.value.session?.accessDenied == true
+                    updateSession(handle, focus) { it.copy(snapshot = snapshot, fresh = true, error = null, accessDenied = false) }
+                    if (wasDenied) {
+                        val tail = rest.page(handle, id)
+                        check()
+                        updateSession(handle, focus) { it.copy(transcript = it.transcript.tail(tail)) }
+                        save()
+                    }
                     policy.healthy()
                 } catch (cancelled: CancellationException) { throw cancelled }
                 catch (error: Exception) {
-                    updateSession(handle, focus) { it.copy(fresh = false, error = RealtimeError.from(error)) }
+                    val denied = error is ApiError && error.status in setOf(403, 404)
+                    updateSession(handle, focus) { it.copy(fresh = false, error = RealtimeError.from(error),
+                        accessDenied = it.accessDenied || denied,
+                        snapshot = if (denied) null else it.snapshot,
+                        transcript = if (denied) Transcript() else it.transcript) }
+                    if (denied) { cache.update { it.copy(sessions = it.sessions - id) }; writes.trySend(Unit) }
                     delay(policy.delayMs(true))
                     refresh.trySend(Unit)
                 }
@@ -270,7 +284,7 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
                     if (event.type == "resync") throw Resync()
                     // An opening heartbeat alone does not prove that the replay window works.
                     if (event.type != "ping") policy.healthy()
-                    updateSession(handle, focus) { it.copy(transcript = it.transcript.apply(event)) }
+                    updateSession(handle, focus) { if (it.accessDenied) it else it.copy(transcript = it.transcript.apply(event)) }
                     if (event.durable) save()
                     if (event.type in SNAPSHOT_EVENTS) refreshSession()
                 })

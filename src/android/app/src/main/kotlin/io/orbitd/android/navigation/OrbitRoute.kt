@@ -73,7 +73,7 @@ object OrbitLinks {
         var id: String? = null
         if (scheme.startsWith("orbit-")) {
             kind = references[scheme.removePrefix("orbit-")]
-            id = uri.schemeSpecificPart
+            id = if (kind == Destination.SESSION) uri.schemeSpecificPart.substringBefore('?') else uri.schemeSpecificPart
         } else if (scheme == "orbit") {
             if (uri.host in listOf(null, "", "active") && uri.path.orEmpty().trim('/').isEmpty()) return OrbitRoute(Destination.WORKSPACES, origin = origin)
             kind = deepLinks[uri.host?.lowercase()]
@@ -97,7 +97,8 @@ object OrbitLinks {
         }
         val canonical = id?.let(ObjectId::canonical)
         if (kind == null || canonical == null) null else {
-            val record = if (kind == Destination.SESSION) uri.rawQuery?.split('&')?.firstOrNull { it.startsWith("at=") }
+            val query = uri.rawQuery ?: if (uri.isOpaque) uri.rawSchemeSpecificPart.substringAfter('?', "") else null
+            val record = if (kind == Destination.SESSION) query?.split('&')?.firstOrNull { it.startsWith("at=") }
                 ?.substringAfter('=')?.let { URLDecoder.decode(it, "UTF-8") }?.let(ObjectId::canonical) else null
             OrbitRoute(kind, canonical, recordId = record, origin = origin)
         }

@@ -28,6 +28,11 @@ import io.orbitd.android.auth.AuthScreen
 import io.orbitd.android.auth.AuthViewModel
 import io.orbitd.android.core.BuildIdentity
 import io.orbitd.android.core.auth.AuthState
+import io.orbitd.android.reader.SessionReader
+import io.orbitd.android.text.LocalReaderResources
+import io.orbitd.android.text.ReaderResources
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.directory.*
 import io.orbitd.android.navigation.*
@@ -104,16 +109,17 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
     key(signedIn.handle) {
         val api = remember { DirectoryApi(app.session, signedIn.handle) }
         val data by rememberDirectoryData(app, signedIn.handle)
-        val live by app.realtime.state.collectAsState()
-        val revision = if (live.handle === signedIn.handle) live.invalidationRevision else 0L
+        val live by remember(app) { app.realtime.state.map { it.handle to it.invalidationRevision }.distinctUntilChanged() }
+            .collectAsState(null to 0L)
+        val revision = if (live.first === signedIn.handle) live.second else 0L
         val holder = rememberSaveableStateHolder()
         val route = navigation.current
         fun open(next: OrbitRoute) { keyboard?.hide(); focus.clearFocus(); navigation = navigation.push(next) }
         fun select(key: String, root: OrbitRoute) {
             keyboard?.hide(); focus.clearFocus(); navigation = navigation.select(key, root); scope.launch { drawer.close() }
         }
-        LaunchedEffect(route, signedIn.handle, live.handle) {
-            if (live.handle === signedIn.handle) app.realtime.selectSession(if (route.destination == Destination.SESSION) route.id else null)
+        LaunchedEffect(route, signedIn.handle, live.first) {
+            if (live.first === signedIn.handle) app.realtime.selectSession(if (route.destination == Destination.SESSION) route.id else null)
         }
         ModalNavigationDrawer(drawerState = drawer,
             drawerContent = {
@@ -169,11 +175,13 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
             }) { padding ->
                 Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding(), contentAlignment = Alignment.TopCenter) {
                     Box(Modifier.fillMaxHeight().widthIn(max = 840.dp).fillMaxWidth()) {
+                        CompositionLocalProvider(LocalReaderResources provides remember(signedIn.handle) { ReaderResources(app.session, signedIn.handle) }) {
                         holder.SaveableStateProvider(Wire.json.encodeToString(route)) {
                             when (route.destination) {
                                 Destination.WORKSPACES -> WorkspaceHome(data, { w -> select(w.id, OrbitRoute(Destination.WORKSPACE, w.id, w.id)) }) { app.realtime.refreshDirectory() }
                                 Destination.WORKSPACE, Destination.FOLDER -> DirectoryScreen(route, data, api, ::open) { app.realtime.refreshDirectory() }
                                 Destination.SEARCH -> SearchScreen(api, ::open)
+                                Destination.SESSION -> SessionReader(app, signedIn.handle, route, api, data, ::open)
                                 Destination.SETTINGS -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                     AuthScreen(authState, authMessage, auth::login, auth::logout)
                                     Button(onClick = { open(OrbitRoute(Destination.BUILD)) }) { Text("Build information") }
@@ -181,6 +189,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 Destination.BUILD -> BuildInformation { navigation = navigation.back() }
                                 else -> ObjectDestination(route, api, data, revision, ::open) { app.realtime.refreshDirectory() }
                             }
+                        }
                         }
                     }
                 }

@@ -15,7 +15,7 @@ import kotlinx.coroutines.SupervisorJob
 /** One process-wide session owns all HTTP requests and token rotations, across activity recreation. */
 open class OrbitApplication : Application() {
     val session: AuthSession by lazy { createSession() }
-    private val processScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    internal val processScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val realtime: RealtimeStore by lazy { RealtimeStore(session, processScope).also { RealtimeLifecycle(this, it) } }
     override fun onCreate() {
         super.onCreate()
