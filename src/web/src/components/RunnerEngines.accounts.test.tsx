@@ -158,11 +158,11 @@ describe('a runner with two Codex accounts', () => {
     expect(engineRows.map((row) => row.querySelector('.re-name')?.textContent)).toEqual([
       'Claude Code',
       'Codex',
+      'Antigravity',
       'Kimi Code',
-      'Antigravity CLI',
     ]);
     expect(tags(engineRows[0])).toEqual(['Signed in']);
-    expect(tags(engineRows[2])).toEqual(['Signed in']);
+    expect(tags(engineRows[3])).toEqual(['Signed in']);
   });
 
   it('names each account by what the user called it and where it lives, never by who it is', () => {
