@@ -15838,6 +15838,10 @@ button.chat-jump-start:hover {
   margin-bottom: 4px;
   font-weight: 600;
   font-size: 12.5px;
+  color: var(--text-1);
+}
+.project-land-task-title:hover {
+  color: var(--brand);
 }
 /* A task's newest landing attempt: the task's status and the landing's apart, the reason, the facts. */
 .land-task-status {
