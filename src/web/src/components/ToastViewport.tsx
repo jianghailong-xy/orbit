@@ -61,19 +61,21 @@ export function ToastViewport() {
       releaseToasts();
     };
     // WebKit can omit mouseleave when a hovered node changes modal owners.
-    // Actual pointer movement remains reliable; changing owners alone must not
-    // resume a stationary hover or restart an unpaused notification's deadline.
-    const move = (event: MouseEvent) => {
+    // mouseover also covers a notification arriving or moving under a still
+    // pointer. Movement remains necessary when WebKit omits a boundary event.
+    const trackHover = (event: MouseEvent) => {
       const target = event.target;
       const next = target instanceof Element && host.contains(target) && !!target.closest('[data-toast-dwell]');
-      if (next === held) return;
+      // Reapply hold on entry: clearing the feed resets the store's hold state.
       if (next) { held = true; holdToasts(); }
       else release();
     };
-    document.addEventListener('mousemove', move, true);
+    document.addEventListener('mouseover', trackHover, true);
+    document.addEventListener('mousemove', trackHover, true);
     document.addEventListener('mouseleave', release);
     return () => {
-      document.removeEventListener('mousemove', move, true);
+      document.removeEventListener('mouseover', trackHover, true);
+      document.removeEventListener('mousemove', trackHover, true);
       document.removeEventListener('mouseleave', release);
       release();
     };
