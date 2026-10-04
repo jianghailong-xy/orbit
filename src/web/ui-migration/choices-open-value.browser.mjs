@@ -34,7 +34,18 @@ for (const kind of ['expiry', 'account', 'search']) test(`${kind} dims the curre
     const control = page.locator('.sample-choice');
     samples[system] = { closed: await appearance(control) };
     await choice.click();
-    await expect(page.locator('.sample-surface:visible')).toBeVisible();
+    const popup = page.locator('.sample-surface:visible');
+    await expect(popup).toBeVisible();
+    await popup.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await expect.poll(() => popup.evaluate((node) => {
+      for (let parent = node; parent; parent = parent.parentElement) {
+        const style = getComputedStyle(parent);
+        const matrix = new DOMMatrixReadOnly(style.transform);
+        if (Number(style.opacity) !== 1 || Math.hypot(matrix.a, matrix.b) !== 1 || Math.hypot(matrix.c, matrix.d) !== 1) return false;
+      }
+      return true;
+    })).toBe(true);
+    await control.evaluate(async (node) => Promise.all(node.getAnimations({ subtree: true }).map((animation) => animation.finished.catch(() => {}))));
     samples[system].open = await appearance(control);
     await info.attach(`${system}-${kind}-open-value`, { body: await page.screenshot({ animations: 'disabled' }), contentType: 'image/png' });
     await page.keyboard.press('Escape');
