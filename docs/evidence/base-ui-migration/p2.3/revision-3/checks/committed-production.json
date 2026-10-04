@@ -1,0 +1,17 @@
+{
+  "argv": [
+    "npm",
+    "run",
+    "test:ui-migration",
+    "-w",
+    "@orbit/web",
+    "--",
+    "feedback-production.browser.mjs"
+  ],
+  "cwd": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc",
+  "sourceCommitAtStart": "1b17eaf7d25674d220298c0141d5366324eb7ab8",
+  "sourceCommitAtEnd": "1b17eaf7d25674d220298c0141d5366324eb7ab8",
+  "finishedAt": "2026-10-04T09:18:17.907779+00:00",
+  "seconds": 29.841843052010518,
+  "exitCode": 0
+}

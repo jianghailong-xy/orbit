@@ -1,0 +1,6 @@
+{
+  "pausedAcrossFourTransfersMs": 40800,
+  "pausedBeforeTransfersMs": 10000,
+  "visibleAfterReleaseMs": 5999,
+  "expiredAfterReleaseMs": 6000
+}

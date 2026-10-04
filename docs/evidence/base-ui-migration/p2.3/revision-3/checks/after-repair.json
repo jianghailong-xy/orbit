@@ -1,0 +1,12 @@
+{
+  "argv": [
+    "node",
+    "docs/evidence/base-ui-migration/p2.3/revision-3/after-repair/coordinator-stationary-arrival.mjs"
+  ],
+  "cwd": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc",
+  "sourceCommitAtStart": "192ee6cf0fa45727096b0bf23d5a4f2ce3e5c96e",
+  "sourceCommitAtEnd": "192ee6cf0fa45727096b0bf23d5a4f2ce3e5c96e",
+  "finishedAt": "2026-10-04T09:09:08.450057+00:00",
+  "seconds": 28.681052163999993,
+  "exitCode": 0
+}
