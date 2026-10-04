@@ -148,6 +148,9 @@ class DirectoryDeviceTest {
                 capture("landscape")
                 compose.activityRule.scenario.onActivity { it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT }
                 compose.waitUntil(5_000) { compose.activity.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT }
+                compose.waitUntil(5_000) { compose.activity.window.decorView.hasWindowFocus() }
+                instrumentation.waitForIdleSync()
+                instrumentation.uiAutomation.waitForIdle(500, 5_000)
                 tap(compose.onNode(hasSetTextAction()), false)
                 awaitIme(true)
                 compose.onNodeWithText("Search sessions").performTextInput("Review")
