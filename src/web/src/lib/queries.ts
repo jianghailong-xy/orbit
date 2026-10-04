@@ -4,6 +4,7 @@ import type {
   LinkPreviewRef,
   LinkPreviewsResponse,
   ProjectIntegrationView,
+  ProjectManualReady,
   ProjectPromotionView,
   SessionCreatedTasks,
   SessionSearchResponse,
@@ -613,6 +614,8 @@ export interface ProjectReadyToRunItem {
 export interface ProjectReadyToRun {
   /** All runnable tasks in the project, not just the limited rows returned in `items`. */
   readyCount: number;
+  /** Absent on older servers; counted across the whole queue, before its item limit. */
+  manualReady?: ProjectManualReady | null;
   queuedCount: number;
   runningCount: number;
   pausedCount: number;

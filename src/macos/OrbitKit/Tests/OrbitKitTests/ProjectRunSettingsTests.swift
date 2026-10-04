@@ -70,6 +70,24 @@ final class ProjectRunSettingsTests: XCTestCase {
         XCTAssertNil(StartProject.pageRow(status: .done, started: false, openItems: asked))
     }
 
+    func testOpenItemsSummaryCountsOnlyAStartRequestThePageCanStillAnswer() {
+        let asked = ProjectOpenItemsView(startRequest: request())
+        let live = ProjectPage.openItemsSummary(status: .open, started: false, items: asked)
+        XCTAssertEqual(live?.count, 1)
+        XCTAssertEqual(live?.attention, "1 item needs you")
+        let own = ProjectPage.openItemsSummary(status: .open, started: false, items: .init())
+        XCTAssertEqual(own?.count, 0, "the owner's own Start… is not a pending request")
+        XCTAssertNil(own?.attention)
+        for started in [true, nil] as [Bool?] {
+            let stale = ProjectPage.openItemsSummary(status: .open, started: started, items: asked)
+            XCTAssertEqual(stale?.count, 0)
+            XCTAssertNil(stale?.attention)
+        }
+        for status in [ProjectStatus.done, .cancelled] {
+            XCTAssertEqual(ProjectPage.openItemsSummary(status: status, started: false, items: asked)?.count, 0)
+        }
+    }
+
     /// The default rule, as the browser's `defaultStartSettings` states it.
     func testTheOwnersStartTakesTheDefaultRule() {
         let chain = ProjectDependencyGraph(
@@ -127,10 +145,10 @@ final class ProjectRunSettingsTests: XCTestCase {
         let lanes = ProjectPanoramaBuckets(ready: 1, integrating: 0, onIntegrationLine: 0, onUpstream: 0)
         XCTAssertEqual(ProjectPage.overviewCells(lanes, taskCount: 1, line: .projectBranch, started: false)
                         .first { $0.key == "ready" }?.footnote, ProjectPage.readyUntilStarted)
-        XCTAssertFalse(ProjectPage.stalledOnReady(buckets, started: false),
-                       "nothing running is the start being waited for, not dispatch needing attention")
-        XCTAssertTrue(ProjectPage.stalledOnReady(buckets, started: true))
-        XCTAssertTrue(ProjectPage.stalledOnReady(buckets))
+        let queue = ProjectReadyToRun(readyCount: 2,
+                                     manualReady: .init(count: 2, taskId: "t", title: "Ready task"))
+        XCTAssertNil(ProjectPage.manualReady(queue, status: .open, started: false))
+        XCTAssertNotNil(ProjectPage.manualReady(queue, status: .open, started: true))
     }
 
     // MARK: How it runs

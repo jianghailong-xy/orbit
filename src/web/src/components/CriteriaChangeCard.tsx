@@ -37,6 +37,7 @@ import {
 } from './AcceptanceConfirmationCard';
 import { CardActionButton, CardActions } from './CardAction';
 import { ENTER_HINT, useDecisionCardKeys } from './CardHotkey';
+import { ReviewCard } from './ReviewCard';
 import { PROVENANCE_LABEL, shortSeal } from './CriteriaDecisionCard';
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 
@@ -242,6 +243,7 @@ export function SessionCriteriaChangeCard({
   onOpen?: (open: boolean) => void;
   onChatAbout?: (plan: SettlementPlanChat) => void;
 }): JSX.Element | null {
+  const [reviewOpen, setReviewOpen] = useState(false);
   const qc = useQueryClient();
   const project = projectId ?? '';
   const enabled = Boolean(projectId);
@@ -288,6 +290,7 @@ export function SessionCriteriaChangeCard({
   };
   const talkAbout = (): void => {
     if (!standing) return;
+    setReviewOpen(false);
     onChatAbout?.({
       projectId: project,
       criteriaDigest: standing.currentVersion.digest,
@@ -298,13 +301,16 @@ export function SessionCriteriaChangeCard({
   };
   const anchor = useRef<HTMLDivElement>(null);
   const keys = useDecisionCardKeys({
-    confirmEnabled: onScreen && !confirm.isPending,
+    confirmEnabled: reviewOpen && onScreen && !confirm.isPending,
     onConfirm: press,
     anchor,
   });
 
   if (!onScreen || !standing?.changesSinceConfirmed) return null;
   return (
+    <ReviewCard id="settlement-preview" title={CRITERIA_CHANGE_TITLE} summary={title}
+      meta={criteriaChangeCounts(standing.changesSinceConfirmed)}
+      open={reviewOpen} onOpenChange={setReviewOpen}>
     <CriteriaChangeCard
       ref={anchor}
       projectTitle={title}
@@ -317,5 +323,6 @@ export function SessionCriteriaChangeCard({
       onConfirm={press}
       onChatAbout={talkAbout}
     />
+    </ReviewCard>
   );
 }

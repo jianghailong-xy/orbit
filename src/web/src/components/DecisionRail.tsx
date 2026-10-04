@@ -240,11 +240,12 @@ export const WAITING_ON_YOU_LABEL = 'WAITING ON YOU';
  * the card with that set readable above the button, so a press here scrolls to the card and asks the
  * server nothing.
  *
- * A conversation draws at most one, so its class is the handle. Returns whether it arrived, as
+ * A conversation draws at most one; prefer its visible preview when the full card is in a dialog.
+ * Returns whether it arrived, as
  * `revealDecisionCard` does.
  */
 export function revealSettlementCard(scope: ParentNode = document): boolean {
-  const card = scope.querySelector<HTMLElement>('.settlement-card');
+  const card = scope.querySelector<HTMLElement>('#settlement-preview, .settlement-card');
   if (!card) return false;
   card.scrollIntoView({ block: 'center', behavior: 'smooth' });
   markReached(card);
@@ -287,7 +288,7 @@ export function ownerConfirmationPointer(title: string): string {
  * Returns whether it arrived, as `revealDecisionCard` does.
  */
 export function revealOwnerConfirmationCard(scope: ParentNode = document): boolean {
-  const card = scope.querySelector<HTMLElement>('[data-owner-confirmation]');
+  const card = scope.querySelector<HTMLElement>('#owner-confirmation-preview, [data-owner-confirmation]');
   if (!card) return false;
   card.scrollIntoView({ block: 'center', behavior: 'smooth' });
   markReached(card);

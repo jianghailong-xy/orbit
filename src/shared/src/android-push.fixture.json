@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "registration": {
+    "platform": "android",
+    "token": "fixture-fcm-token",
+    "bundleId": "io.orbitd.android.debug",
+    "environment": "production",
+    "installationId": "40000000-0000-4000-8000-000000000001"
+  },
+  "registered": {
+    "ok": true,
+    "registrationKey": "019a0000-0000-7000-8000-000000000001"
+  },
+  "unregister": {
+    "platform": "android",
+    "token": "fixture-fcm-token",
+    "registrationKey": "019a0000-0000-7000-8000-000000000001"
+  },
+  "samples": [
+    {
+      "name": "approval",
+      "pushType": "alert",
+      "source": {
+        "aps": {
+          "alert": {
+            "title": "Review deployment",
+            "body": "Needs your reply · Bash"
+          },
+          "sound": "default",
+          "category": "ORBIT_APPROVAL",
+          "thread-id": "019a0000-0000-7000-8000-000000000002",
+          "badge": 1
+        },
+        "kind": "approval",
+        "sessionID": "019a0000-0000-7000-8000-000000000002"
+      },
+      "data": {
+        "version": "1",
+        "type": "alert",
+        "registrationKey": "019a0000-0000-7000-8000-000000000001",
+        "eventId": "40000000-0000-4000-8000-000000000002",
+        "notificationKey": "approval-019a0000-0000-7000-8000-000000000002",
+        "sentAt": "2026-10-04T00:00:00.000Z",
+        "payload": "{\"kind\":\"approval\",\"sessionID\":\"019a0000-0000-7000-8000-000000000002\",\"title\":\"Review deployment\",\"body\":\"Needs your reply · Bash\",\"category\":\"ORBIT_APPROVAL\",\"threadId\":\"019a0000-0000-7000-8000-000000000002\",\"badge\":1}"
+      }
+    },
+    {
+      "name": "resolved",
+      "pushType": "background",
+      "source": {
+        "aps": {
+          "content-available": 1,
+          "badge": 0
+        },
+        "clearSessions": [
+          "019a0000-0000-7000-8000-000000000002"
+        ]
+      },
+      "data": {
+        "version": "1",
+        "type": "sync",
+        "registrationKey": "019a0000-0000-7000-8000-000000000001",
+        "eventId": "40000000-0000-4000-8000-000000000003",
+        "notificationKey": "badge-sync",
+        "sentAt": "2026-10-04T00:00:00.000Z",
+        "payload": "{\"clearSessions\":[\"019a0000-0000-7000-8000-000000000002\"],\"badge\":0}"
+      }
+    }
+  ]
+}

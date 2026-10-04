@@ -153,7 +153,10 @@ type bgTailer struct {
 	terminal map[string]bool      // toolUseId already reported in a terminal state
 	// progress is the latest progress relayed for each background agent/workflow, keyed by its
 	// launching tool_use id (claude_task_progress.go) — kept for the durable event that ends it.
-	progress map[string]map[string]interface{}
+	progress          map[string]map[string]interface{}
+	workflows         map[string]*workflowTranscript
+	claudeSessionUUID string
+	claudeConfigDir   string
 	// monitors are the Claude Monitors the engine is running, keyed by the launching tool_use id.
 	// A Monitor only watches, so it is no writer of the checkout: it holds nothing and nothing
 	// counts it. It is kept so the engine's stop can say the Monitor stopped with it, and so the
@@ -319,6 +322,9 @@ func (b *bgTailer) onToolResult(toolUseID, content string) {
 	if b.noteMonitorStart(toolUseID, content) {
 		return
 	}
+	if b.startWorkflowTranscript(toolUseID, content) {
+		return
+	}
 	idM := bgLaunchID.FindStringSubmatch(content)
 	pathM := bgLaunchPath.FindStringSubmatch(content)
 	if idM == nil || pathM == nil {
@@ -482,6 +488,7 @@ func (b *bgTailer) startTranscriptWatcher(sessionUUID, configDir string) {
 		b.mu.Unlock()
 		return
 	}
+	b.claudeSessionUUID, b.claudeConfigDir = sessionUUID, configDir
 	b.wg.Add(1)
 	b.mu.Unlock()
 	go func() {
@@ -621,7 +628,14 @@ func (b *bgTailer) killEngineShells() {
 	monitors := b.monitors
 	b.monitors = map[string]engineMonitor{}
 	b.monitorsLive.Add(-int64(len(monitors)))
+	workflowIDs := make([]string, 0, len(b.workflows))
+	for id := range b.workflows {
+		workflowIDs = append(workflowIDs, id)
+	}
 	b.mu.Unlock()
+	for _, id := range workflowIDs {
+		b.finishWorkflowTranscript(id, "killed")
+	}
 	for _, s := range killed {
 		if !b.markTerminal(s.toolUseID) {
 			continue // its own notification already reported a terminal state
@@ -691,7 +705,14 @@ func (b *bgTailer) stopAll() {
 	}
 	b.monitorsLive.Add(-int64(len(b.monitors)))
 	b.monitors = map[string]engineMonitor{}
+	workflowIDs := make([]string, 0, len(b.workflows))
+	for id := range b.workflows {
+		workflowIDs = append(workflowIDs, id)
+	}
 	b.mu.Unlock()
+	for _, id := range workflowIDs {
+		b.finishWorkflowTranscript(id, "stopped")
+	}
 	if stopShutdownDrain != nil {
 		stopShutdownDrain()
 	}
@@ -769,6 +790,7 @@ func bgTaskFromNotification(s string, emit emitFn, bg *bgTailer) bool {
 	// A background agent or workflow ends with the last progress relayed for it, so what it did —
 	// which agents ran, how far each got — outlives the live-only frames that reported it.
 	if bg != nil && toolUseID != "" && terminal {
+		bg.finishWorkflowTranscript(toolUseID, status)
 		if p := bg.takeTaskProgress(toolUseID); p != nil {
 			ended["progress"] = p
 		}

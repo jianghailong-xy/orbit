@@ -1193,16 +1193,20 @@ interface ProjectListAttention {
 
 | 格 | 数 | 脚注 |
 |---|---|---|
-| Running | `running` | active sessions |
-| Ready | `ready` | can start now |
+| Running | `running` | task work in progress |
+| Ready | `ready` | can start now；全为手动任务时 can start manually；项目暂停时 project is paused |
 | Waiting | `blocked` | `<waitingForLanding> waiting for a prerequisite to land`（`waitingForLanding > 0`，只说明其中这一部分）/ `waiting on dependencies` |
-| Pending landing | `integrating`（DONE 代码任务，集成已开始但尚无落地回执；包括排队、运行、失败、待处理） | finished work without a landing receipt |
+| Pending landing | `integrating`（DONE 代码任务，集成已开始但尚无落地回执；包括排队、运行、失败、待处理） | no landing receipt yet |
 | ⎇ On project branch | `onIntegrationLine`（`MAIN` 线不显示） | not on main yet |
 | ✓ On main | `onUpstream` | landed on main |
 
 `doneNotIntegrated`（非代码任务、未开始集成项目的 DONE）、`failed`、`cancelled`、`awaitingVerification` 非零时才显示为附加格（附录 A-Q19）。
 
-动态行只描述实际 `QUEUED` / `RUNNING` 作业，优先运行中的作业，再选最早排队者。按 `kind` 区分 `Landing`、`Merge check`、`Merge to main`，按 runner `phase` 显示 fetching / syncing main / rebasing / merging / checking / verifying / pushing；缺少阶段时只说 running。队列中的作业始终说 queued。列表与侧栏的活动读数包含这些作业，但不把失败或等待批准当作运行。任务已 DONE 但仍有待落地工作、只在项目分支上，或存在在途作业时，不显示 Ready to wrap up。
+动态行只描述实际 `QUEUED` / `RUNNING` 作业，优先运行中的作业，再选最早排队者。读数新鲜时，按 `kind` 区分 `Landing`、`Merge check`、`Merge to main`，按 runner `phase` 显示 fetching / syncing main / rebasing / merging / checking / verifying / pushing；缺少阶段时只说 running，队列中的作业说 queued。列表与侧栏的活动读数包含这些作业，但不把失败或等待批准当作运行。任务已 DONE 但仍有待落地工作、只在项目分支上，或存在在途作业时，不显示 Ready to wrap up。
+
+动态行分开显示阶段、任务名称与累计计时（运行中为 Elapsed，从本次领取计；排队为 Queued for，从入队计），另显示最近更新时间。刷新失败、读取超过 90 秒未更新，或 runner 心跳超过既有 10 分钟租约窗口时，显示 Update unavailable、停止动画，并把计时停在最后观察到的时间；不能用持续走动的本地时钟证明作业仍在推进。
+
+`ready > 0 && running = 0` 不再触发 Dispatch needs attention，也不据此指向 runner/provider。Run queue 的 `manualReady` 在分页前统计 READY 候选中的 OPEN、`autoRunWhenReady=false` 且 `runAt IS NULL` 的任务，并给出一条真实任务的 id/title；项目已启动、未暂停且仍 OPEN 时，概览显示中性的 Ready to start 和 Open task。旧服务端缺少此字段或队列读取失败时不推测。真实派发拒绝仍由既有任务/项目异常入口呈现。
 
 `Last landing check` 是最近完成 LAND_TASK 的实际检查结果，不证明当前分支 tip 的检查状态；没有检查记录就是 not checked。领先提交数标注 `at last measurement`，失败尝试不清除已有实测。正在处理旧异常的新作业，只有 `handlingJobId` 确实指向该作业时才以其 QUEUED / RUNNING 显示；异常在终态前仍保持 OPEN。
 

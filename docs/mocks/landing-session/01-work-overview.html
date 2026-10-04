@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>落地会话 ① Work overview 的落地行</title>
+<link rel="stylesheet" href="kit.css"><script src="icons.js"></script></head>
+<body>
+<h1>① Work overview 的落地行：从「一个数」变成「一扇门」</h1>
+<p class="lede">现在这一行只有一个字和一个秒表：看不出在落什么、是不是卡住了，也点不进去。改后每个<b>落地主体</b>都有自己的<b>落地会话</b>（由 Orbit 自己驱动，不启动 engine）：一个任务从 DONE 到落上集成线算一个落地主体，一轮合入 main 也算一个。这一行写清楚四件事：落的是谁、现在跑到哪一步、这一步用了多少预算、输出最后一次动是什么时候。<b>点整行就进入对应的落地会话。</b>例子取材于 2026-10-04 的 34Y7，时间和提交是示意的。按 owner 的决定，Merge to main 推送第一次被抢就交回候选，所以这里显示的是协调会话重跑出来的<b>第 2 代</b>合并检查。</p>
+
+<div class="row4">
+  <figure>
+    <span class="tag now">现在 · beta.170</span>
+    <div class="phone grouped">
+      <div class="status"><span>15:47</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:11px"></i></span>5G <span class="batt">35</span></span></div><div class="nav"><span class="platter circle"><i data-ic="chevl" data-s="20" data-c="#000"></i></span><span class="ttl">项目收尾重做：协调者请求收尾…</span><span class="platter circle"><i data-ic="dots" data-s="22" data-c="#000"></i></span></div>
+      <div class="secthead"><b>Work overview</b><span>24 tasks · 23 dependencies</span></div>
+      <div class="card mk" style="margin-top:2px">
+        <span class="badge" style="position:absolute;top:-10px;right:-10px">1</span>
+        <div class="old-row"><i data-ic="ring" data-s="17" data-c="#3E69F6"></i><span class="w">Landing</span><span class="s">checking</span><span class="clk">62m 58s</span></div>
+        <div class="hair"></div>
+        <div class="grid ov" style="grid-template-columns:1fr 1fr;padding:6px 8px 4px">
+          <div class="cell"><div class="k"><i class="g disc"></i>Running</div><div class="v">0</div><div class="f">active sessions</div></div>
+          <div class="cell"><div class="k"><i class="g tri"></i>Ready</div><div class="v">0</div><div class="f">can start now</div></div>
+          <div class="cell"><div class="k"><i class="g sq"></i>Waiting</div><div class="v">1</div><div class="f">waiting on dependencies</div></div>
+          <div class="cell"><div class="k" style="color:var(--label-2)"><i data-ic="ring" data-s="11" data-c="#8e8e93"></i>Integrating</div><div class="v">0</div><div class="f">checks running on the combined tree</div></div>
+          <div class="cell"><div class="k"><i data-ic="branch" data-s="11" data-c="#3E69F6"></i>On project branch</div><div class="v">23</div><div class="f">not on main yet</div></div>
+          <div class="cell"><div class="k"><span class="g chk">✓</span>On main</div><div class="v">0</div><div class="f">landed on main</div></div>
+        </div>
+        <div class="bigmeter"><i style="flex:1;background:#c7c7cc"></i><i style="flex:23;background:#3E69F6"></i></div>
+      </div>
+    </div>
+    <figcaption><b>现在：只有一个字和一个秒表</b>
+      <ol>
+        <li><span class="num">1</span>不管是落任务、合并检查还是合入 main，这一行都写 <i>Landing · checking</i>。只有一次 Merge to main 在跑时，名字位是空的。秒表从这次领取开始计，被抢后在同一个作业里重跑的几轮也都算在里面，所以 34Y7 才会跑到 62m 58s。</li>
+        <li>这一行点不了：<code>inFlight</code> 里没有任何 id。检查期间作业不续租（<code>heartbeat_at</code> 只在阶段切换时更新），所以「还在跑」和「runner 已经死了」看起来一模一样。HEAD 上作业超过 10 分钟没续租就显示 <i>Update unavailable</i>，健康的长检查也一样。</li>
+      </ol>
+    </figcaption>
+  </figure>
+
+  <figure>
+    <span class="tag after">改后 · 正在跑</span>
+    <div class="phone grouped">
+      <div class="status"><span>15:47</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:11px"></i></span>5G <span class="batt">35</span></span></div><div class="nav"><span class="platter circle"><i data-ic="chevl" data-s="20" data-c="#000"></i></span><span class="ttl">项目收尾重做：协调者请求收尾…</span><span class="platter circle"><i data-ic="dots" data-s="22" data-c="#000"></i></span></div>
+      <div class="secthead"><b>Work overview</b><span>24 tasks · 23 dependencies</span></div>
+      <div class="card mk" style="margin-top:2px">
+        <span class="badge" style="position:absolute;top:-10px;right:-10px">2</span>
+        <div class="lrow has-chev">
+          <span class="lg"><i data-ic="ring" data-s="17" data-c="#3E69F6"></i></span>
+          <div class="lb">
+            <div class="l1"><span class="w ink">Merge check</span><span class="s ink">checking</span></div>
+            <div class="nm">project/34Y7 → main · candidate #7</div>
+            <div class="ln" style="margin-top:6px">Merge check&nbsp;<b>14m 2s</b>&nbsp;/ 60m<span class="r">usually 24m</span></div>
+            <div class="bud"><i style="width:23.4%"></i><u style="left:40%"></u></div>
+            <div class="ln"><span class="live"></span>Output 6s ago · Updated just now</div>
+            <div class="ln">Generation 2 · re-run by the coordinator</div>
+          </div>
+          <span class="chev"><i data-ic="chevr" data-s="13" data-c="rgba(60,60,67,.35)" data-w="2.6"></i></span>
+        </div>
+        <div class="hair" style="margin-left:16px"></div>
+        <div class="grid ov" style="grid-template-columns:1fr 1fr;padding:6px 8px 4px">
+          <div class="cell"><div class="k"><i class="g disc"></i>Running</div><div class="v">0</div><div class="f">task work in progress</div></div>
+          <div class="cell"><div class="k"><i class="g tri"></i>Ready</div><div class="v">0</div><div class="f">can start now</div></div>
+          <div class="cell"><div class="k"><i class="g sq"></i>Waiting</div><div class="v">1</div><div class="f">waiting on dependencies</div></div>
+          <div class="cell"><div class="k" style="color:var(--label-2)"><span style="font-size:11px">⧗</span>Pending landing</div><div class="v">0</div><div class="f">no landing receipt yet</div></div>
+        </div>
+      </div>
+      <div class="secthead" style="padding-top:22px"><b>Coordinator</b><span class="pill open" style="font-size:12.5px">Working</span></div>
+      <div class="card"><div class="kv" style="border-top:none"><span>last active 1m ago · 1st coordinator of this project</span><span></span></div><div class="btn wide primary" style="margin-bottom:12px">Open coordinator</div></div>
+    </div>
+    <figcaption><b>改后：说清楚落的是谁、到哪一步、有没有在动</b>
+      <ol>
+        <li><span class="num">2</span>第 1 行是种类加阶段，种类有 <i>Landing / Merge check / Merge to main</i> 三种，这几个词 HEAD 已经有了。第 2 行是落的对象，名字位不会再空着。</li>
+        <li><b>主数字只计当前这一步</b>，拿它和这一步的预算（60m）比，再和这个项目最近几次 MERGE_CHECK 成功的用时（中位数约 24m）比；进度条上的竖线就是这个「通常」。TASK_ACCEPTANCE 每个任务的命令都不同，所以不给通常值。</li>
+        <li><b>证明在进展的是两个服务端事实</b>：<i>Output 6s ago</i> 和 <i>Updated just now</i>。runner 在检查期间每 30 秒回报一次 <code>outputIdleMs</code>，和 bg_run 是同一套模型。</li>
+        <li>点整行进入这一轮合入的落地会话（见 ②）。</li>
+      </ol>
+    </figcaption>
+  </figure>
+
+  <figure>
+    <span class="tag stall">改后 · 停滞</span>
+    <div class="phone grouped">
+      <div class="status"><span>16:06</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:11px"></i></span>5G <span class="batt">35</span></span></div><div class="nav"><span class="platter circle"><i data-ic="chevl" data-s="20" data-c="#000"></i></span><span class="ttl">项目收尾重做：协调者请求收尾…</span><span class="platter circle"><i data-ic="dots" data-s="22" data-c="#000"></i></span></div>
+      <div class="secthead"><b>Work overview</b><span>24 tasks · 23 dependencies</span></div>
+      <div class="card mk" style="margin-top:2px">
+        <span class="badge" style="position:absolute;top:-10px;right:-10px">3</span>
+        <div class="lrow has-chev">
+          <span class="lg"><i data-ic="dashc" data-s="17" data-c="#8e8e93"></i></span>
+          <div class="lb">
+            <div class="l1"><span class="w">Merge check</span><span class="s">Update unavailable</span></div>
+            <div class="nm">project/34Y7 → main · candidate #7</div>
+            <div class="ln" style="margin-top:6px">Merge check stopped at&nbsp;<b>21m 4s</b><span class="r">at 15:54</span></div>
+            <div class="bud grey"><i style="width:35%"></i><u style="left:40%"></u></div>
+            <div class="ln"><span class="live off"></span>No word from runner wikova for 12m</div>
+            <div class="ln amb" style="font-weight:600">Lease expired · nothing was pushed</div>
+          </div>
+          <span class="chev"><i data-ic="chevr" data-s="13" data-c="rgba(60,60,67,.35)" data-w="2.6"></i></span>
+        </div>
+        <div class="hair" style="margin-left:16px"></div>
+        <div class="grid ov" style="grid-template-columns:1fr 1fr;padding:6px 8px 4px">
+          <div class="cell"><div class="k"><i class="g disc"></i>Running</div><div class="v">0</div><div class="f">task work in progress</div></div>
+          <div class="cell"><div class="k"><i class="g tri"></i>Ready</div><div class="v">0</div><div class="f">can start now</div></div>
+          <div class="cell"><div class="k"><i class="g sq"></i>Waiting</div><div class="v">1</div><div class="f">waiting on dependencies</div></div>
+          <div class="cell"><div class="k" style="color:var(--label-2)"><span style="font-size:11px">⧗</span>Pending landing</div><div class="v">0</div><div class="f">no landing receipt yet</div></div>
+        </div>
+      </div>
+      <div class="secthead" style="padding-top:22px"><b>Coordinator</b><span class="pill open" style="font-size:12.5px">Working</span></div>
+      <div class="card"><div class="kv" style="border-top:none"><span>last active 1m ago · 1st coordinator of this project</span><span></span></div><div class="btn wide primary" style="margin-bottom:12px">Open coordinator</div></div>
+    </div>
+    <figcaption><b>停滞：秒表停住，并写明原因</b>
+      <ol>
+        <li><span class="num">3</span>作业断了回报以后，主数字<b>停在最后一次回报的时刻</b>，圆环变成灰色虚线，不再转。本地时钟不冒充进展（V6）。</li>
+        <li>超过 10 分钟没有回报就是租约过期，这时写 <i>Lease expired · nothing was pushed</i>。「没推送」是有依据的：runner 推送前必须先同步回报一次 PUSH，而服务端没有记下这一步。点进去后 owner 能看到 <b>Abandon</b>（见 ②-b）。过期满 15 分钟，还会给 owner 开一条待办（owner 已定）。</li>
+        <li>服务端不加 sweeper，也不加截止时间。卡住的作业只靠事实结束：要么被同一个 runner 的新进程接管，要么有人点了 Abandon。</li>
+      </ol>
+    </figcaption>
+  </figure>
+
+  <figure>
+    <span class="tag after">改后 · 同时几件事</span>
+    <div class="phone grouped">
+      <div class="status"><span>15:47</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:11px"></i></span>5G <span class="batt">35</span></span></div><div class="nav"><span class="platter circle"><i data-ic="chevl" data-s="20" data-c="#000"></i></span><span class="ttl">项目收尾重做：协调者请求收尾…</span><span class="platter circle"><i data-ic="dots" data-s="22" data-c="#000"></i></span></div>
+      <div class="secthead"><b>Work overview</b><span>24 tasks · 23 dependencies</span></div>
+      <div class="card mk" style="margin-top:2px">
+        <span class="badge" style="position:absolute;top:-10px;right:-10px">4</span>
+        <div class="lrow has-chev">
+          <span class="lg"><i data-ic="ring" data-s="17" data-c="#3E69F6"></i></span>
+          <div class="lb">
+            <div class="l1"><span class="w ink">Landing</span><span class="s ink">checking</span></div>
+            <div class="nm">零提交分支记 NOTHING_TO_LAND</div>
+            <div class="ln" style="margin-top:6px">Task acceptance&nbsp;<b>3m 10s</b>&nbsp;/ 60m</div>
+            <div class="bud"><i style="width:5.3%"></i></div>
+            <div class="ln"><span class="live"></span>Output 2s ago · Updated just now</div>
+          </div>
+          <span class="chev"><i data-ic="chevr" data-s="13" data-c="rgba(60,60,67,.35)" data-w="2.6"></i></span>
+        </div>
+        <div class="lrow has-chev">
+          <span class="lg"><i data-ic="x" data-s="17" data-c="#E5281D" data-w="2.4"></i></span>
+          <div class="lb">
+            <div class="l1"><span class="w redt">Landing</span><span class="s redt" style="font-weight:600">checks failed</span></div>
+            <div class="nm">收尾卡的 PATCH 只带浏览器凭证</div>
+            <div class="ln">Checks failed · coordinator · 18m · goes to you in 1h 42m</div>
+          </div>
+          <span class="chev"><i data-ic="chevr" data-s="13" data-c="rgba(60,60,67,.35)" data-w="2.6"></i></span>
+        </div>
+        <div class="lmore"><i data-ic="pause" data-s="15" data-c="#8e8e93"></i>2 more queued<span class="chev" style="margin-left:auto"><i data-ic="chevr" data-s="13" data-c="rgba(60,60,67,.35)" data-w="2.6"></i></span></div>
+        <div class="hair" style="margin-left:16px"></div>
+        <div class="grid ov" style="grid-template-columns:1fr 1fr;padding:6px 8px 4px">
+          <div class="cell"><div class="k"><i class="g disc"></i>Running</div><div class="v">1</div><div class="f">task work in progress</div></div>
+          <div class="cell"><div class="k"><i class="g tri"></i>Ready</div><div class="v">2</div><div class="f">can start now</div></div>
+          <div class="cell"><div class="k"><i class="g sq"></i>Waiting</div><div class="v">0</div><div class="f">waiting on dependencies</div></div>
+          <div class="cell"><div class="k" style="color:var(--label-2)"><span style="font-size:11px">⧗</span>Pending landing</div><div class="v">3</div><div class="f">no landing receipt yet</div></div>
+        </div>
+      </div>
+    </div>
+    <figcaption><b>同时有几件事：最多 3 行</b>
+      <ol>
+        <li><span class="num">4</span>排序依次是正在跑的、等判断的、停滞的，每行点进各自的落地会话。其余排队的折成一行 <i>N more queued</i>，点进去是项目会话页的 Landings 组（见 ③）。</li>
+        <li>等判断的那一行写清楚<b>在谁手里、等了多久、什么时候升级给你</b>（按 exceptionEscalationSeconds，34Y7 是 2 小时），和待办卡读的是同一份数据。它在协调会话手里，所以用红色的「失败」色，不用表示「在等你」的琥珀色。落地会话自己从不拥有待办。</li>
+        <li>没有在途的落地时，这张卡和今天一模一样。</li>
+      </ol>
+    </figcaption>
+  </figure>
+</div>
+
+<div class="box" style="width:1668px;background:#fff;border-radius:16px;padding:16px 22px;margin-top:30px">
+  <h2 style="font-size:17px;margin:0 0 8px">活性：服务端在读取时根据事实推导，不写进行里，也不靠任何时钟改变</h2>
+  <table style="border-collapse:collapse;width:100%;font-size:14px">
+    <tr><th style="text-align:left;padding:6px 10px;border-bottom:2px solid #eee;color:#5a5a62">状态</th><th style="text-align:left;padding:6px 10px;border-bottom:2px solid #eee;color:#5a5a62">条件</th><th style="text-align:left;padding:6px 10px;border-bottom:2px solid #eee;color:#5a5a62">这一行写什么</th><th style="text-align:left;padding:6px 10px;border-bottom:2px solid #eee;color:#5a5a62">秒表</th></tr>
+    <tr><td style="padding:7px 10px;border-bottom:1px solid #f1f1f4;font-weight:650">LIVE</td><td style="padding:7px 10px;border-bottom:1px solid #f1f1f4">作业 90 秒内有回报，且输出在 10 分钟内动过</td><td style="padding:7px 10px;border-bottom:1px solid #f1f1f4"><i>Output 6s ago · Updated just now</i></td><td style="padding:7px 10px;border-bottom:1px solid #f1f1f4">走</td></tr>
+    <tr><td style="padding:7px 10px;border-bottom:1px solid #f1f1f4;font-weight:650">QUIET</td><td style="padding:7px 10px;border-bottom:1px solid #f1f1f4">回报正常，但输出超过 10 分钟没动（例如某个测试包正在跑）</td><td style="padding:7px 10px;border-bottom:1px solid #f1f1f4"><i>No output for 14m · within its 60m budget</i></td><td style="padding:7px 10px;border-bottom:1px solid #f1f1f4">走</td></tr>
+    <tr><td style="padding:7px 10px;border-bottom:1px solid #f1f1f4;font-weight:650">SILENT</td><td style="padding:7px 10px;border-bottom:1px solid #f1f1f4">最后一次回报在 90 秒到 10 分钟之前</td><td style="padding:7px 10px;border-bottom:1px solid #f1f1f4"><i>No word from runner wikova for 4m</i></td><td style="padding:7px 10px;border-bottom:1px solid #f1f1f4">停在最后一次回报</td></tr>
+    <tr><td style="padding:7px 10px;border-bottom:1px solid #f1f1f4;font-weight:650">LEASE_EXPIRED</td><td style="padding:7px 10px;border-bottom:1px solid #f1f1f4">超过 10 分钟没有回报（此时同一个 runner 的新进程可以接管）</td><td style="padding:7px 10px;border-bottom:1px solid #f1f1f4"><i>Lease expired · nothing was pushed</i>；如果服务端已经记下 PUSH 这一步，就写 <i>may have been pushed</i>；会话页出现 Abandon</td><td style="padding:7px 10px;border-bottom:1px solid #f1f1f4">停在最后一次回报</td></tr>
+    <tr><td style="padding:7px 10px;border-bottom:1px solid #f1f1f4;font-weight:650">LEGACY</td><td style="padding:7px 10px;border-bottom:1px solid #f1f1f4">领取时 runner 还没声明 <code>integration-progress/v2</code></td><td style="padding:7px 10px;border-bottom:1px solid #f1f1f4"><i>Reports only between steps</i>：检查期间不推断静默，也不显示输出时间</td><td style="padding:7px 10px;border-bottom:1px solid #f1f1f4">只显示 <i>Elapsed</i>，不当作进展的证明</td></tr>
+    <tr><td style="padding:7px 10px;font-weight:650">读数陈旧</td><td style="padding:7px 10px">客户端自己超过 90 秒没读到新数据，或者读取失败</td><td style="padding:7px 10px"><i>Update unavailable</i></td><td style="padding:7px 10px">冻结（任何状态都一样）</td></tr>
+  </table>
+</div>
+</body></html>

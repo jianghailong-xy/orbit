@@ -50,7 +50,7 @@ final class AccountPauseAPIClientTests: XCTestCase {
         let request = try XCTUnwrap(seen.request)
         XCTAssertEqual(request.httpMethod, "POST")
         XCTAssertEqual(request.url?.path, "/api/runners/runner/accounts/codex/slot-2/pause")
-        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: request.httpBody!) as? [String: Int])
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Int])
         XCTAssertEqual(body, ["durationMinutes": 120])
     }
 
@@ -65,7 +65,7 @@ final class AccountPauseAPIClientTests: XCTestCase {
         XCTAssertEqual(request.httpMethod, "POST")
         XCTAssertEqual(request.url?.path, "/api/providers/pools/pool/members/login:…AB12/pause")
         XCTAssertTrue(request.url?.absoluteString.contains("%E2%80%A6AB12") == true)
-        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: request.httpBody!) as? [String: Any])
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Any])
         XCTAssertTrue(body["durationMinutes"] is NSNull)
     }
 
@@ -88,8 +88,22 @@ private final class PauseSeenRequest: @unchecked Sendable {
     private var seen: URLRequest?
 
     func record(_ request: URLRequest) {
+        // On macOS URLProtocol receives the body as a stream, as in ProfileRecorder.
+        var captured = request
+        if captured.httpBody == nil, let stream = request.httpBodyStream {
+            stream.open()
+            defer { stream.close() }
+            var data = Data()
+            var buffer = [UInt8](repeating: 0, count: 4096)
+            while stream.hasBytesAvailable {
+                let count = stream.read(&buffer, maxLength: buffer.count)
+                if count <= 0 { break }
+                data.append(contentsOf: buffer[0..<count])
+            }
+            captured.httpBody = data
+        }
         lock.lock()
-        seen = request
+        seen = captured
         lock.unlock()
     }
 

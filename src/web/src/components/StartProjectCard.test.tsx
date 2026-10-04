@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProjectOpenItemRow, ProjectStartRequest, StartProjectRequestBody } from '@orbit/shared';
 import { api, ApiError } from '../api';
+import { revealSettlementCard } from './DecisionRail';
 import type { StandardSetConfirmationStanding } from '../lib/acceptanceConfirmation';
 import {
   READY_TO_START,
@@ -284,11 +285,12 @@ async function mount(
   return { node, qc };
 }
 
-const cardIn = (node: ParentNode): HTMLElement | null => node.querySelector<HTMLElement>('.start-card');
+const cardIn = (_node: ParentNode): HTMLElement | null => document.querySelector<HTMLElement>('.start-card');
 
 async function delivered(options: { onViewTasks?: () => void } = {}) {
   const { node, qc } = await mount(options);
   await until(() => cardIn(node) !== null && (cardIn(node)!.querySelector('.start-card-plan span') !== null), 'the card and its plan');
+  await act(async () => { node.querySelector<HTMLButtonElement>('.review-card-preview')!.click(); });
   const card = (): HTMLElement => {
     const found = cardIn(node);
     if (!found) throw new Error('the card is not on the page');
@@ -494,7 +496,7 @@ describe('when the card is drawn', () => {
     const { node } = await mount({ router: true });
     await until(() => cardIn(node) !== null, 'the card');
     await until(() => reports.includes('START'), 'the router to report the start question');
-    expect(node.querySelectorAll('.settlement-card'), 'another settlement card was drawn beside it').toHaveLength(1);
+    expect(document.querySelectorAll('.settlement-card'), 'another settlement card was drawn beside it').toHaveLength(1);
   });
 });
 
@@ -700,5 +702,29 @@ describe('the press', () => {
     await until(() => bodies.length === 1, 'the press');
     expect(bodies[0]).toMatchObject({ line: 'MAIN', maxConcurrentTasks: 2, requestId: 'item-2' });
     expect(bodies[0]).not.toHaveProperty('projectBranchName');
+  });
+});
+
+describe('the compact project preview', () => {
+  it('holds no shortcut until opened and keeps edited settings across close and reopen', async () => {
+    const { node } = await mount();
+    await until(() => node.querySelector('.review-card-preview') !== null, 'the preview');
+    const preview = node.querySelector<HTMLElement>('#settlement-preview')!;
+    preview.scrollIntoView = vi.fn();
+    expect(revealSettlementCard()).toBe(true);
+    expect(preview.scrollIntoView).toHaveBeenCalled();
+    await key();
+    expect(bodies).toEqual([]);
+    await act(async () => { node.querySelector<HTMLButtonElement>('.review-card-preview')!.click(); });
+    const field = () => settingRow(cardIn(node)!, 'Merge check').querySelector<HTMLInputElement>('input')!;
+    await type(field(), 'npm run my-check');
+    await act(async () => { document.querySelector<HTMLButtonElement>('.review-card-dialog [aria-label="Close"]')!.click(); });
+    await key();
+    expect(bodies).toEqual([]);
+    await act(async () => { node.querySelector<HTMLButtonElement>('.review-card-preview')!.click(); });
+    expect(field().value).toBe('npm run my-check');
+    await act(async () => { action(cardIn(node)!, START_PROJECT_ACTION).click(); });
+    await until(() => bodies.length === 1, 'the start decision');
+    expect(bodies[0]).toMatchObject({ mergeCheckCommand: 'npm run my-check', requestId: 'item-1' });
   });
 });
