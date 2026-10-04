@@ -1,0 +1,12 @@
+{
+  "agy_version": "1.2.16",
+  "platform": "linux",
+  "observed_at": "2026-10-04",
+  "pty": true,
+  "ssh_environment": true,
+  "dbus": "unreachable private socket",
+  "code_submitted": "deliberately malformed placeholder; no Google account used",
+  "authorization_input_redaction": "Entire authorization input render interval omitted; only the fixed OAuth error is retained.",
+  "output": "oauth2: \"invalid_grant\" \"Malformed auth code.\"",
+  "process_still_running_after_rejection": true
+}

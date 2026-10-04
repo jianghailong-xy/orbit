@@ -763,9 +763,10 @@ func TestAntigravityEngineWiring(t *testing.T) {
 		hasInjectedCredentials(providerAntigravity, map[string]string{"ANTHROPIC_API_KEY": "k"}) {
 		t.Fatal("hasInjectedCredentials does not key on GEMINI_API_KEY")
 	}
-	if flow := loginFlowFor(providerAntigravity); flow.engine != providerAntigravity || len(flow.argv) != 0 {
-		t.Fatalf("login flow = %+v, want no sign-in to run", flow)
+	if flow := loginFlowFor(providerAntigravity); flow.engine != providerAntigravity || !flow.pty || !flow.takesCode || len(flow.argv) != 1 || flow.argv[0] != agyExecutable {
+		t.Fatalf("login flow = %+v, want Google OAuth over a PTY", flow)
 	}
+	t.Setenv("ORBIT_HOME", t.TempDir())
 	ctx := context.Background()
 	if got := probeAuthIn(ctx, providerAntigravity, "/nonexistent/agy", []string{"GEMINI_API_KEY=k"}); got != authYes {
 		t.Fatalf("with a key: %v", got)
@@ -818,11 +819,12 @@ func TestAntigravityFreshInstallLeavesTheKeyToThePreflight(t *testing.T) {
 	}
 }
 
-func TestAntigravityLoginRelayExplainsAPIKeyMode(t *testing.T) {
-	var got []LoginResultRequest
-	(&loginRelay{}).start(LoginCommand{Engine: providerAntigravity, Attempt: "a1"}, func(r LoginResultRequest) { got = append(got, r) })
-	if len(got) != 1 || got[0].Status != loginFailed || !strings.Contains(got[0].Message, "GEMINI_API_KEY") || got[0].Attempt != "a1" {
-		t.Fatalf("login results = %+v", got)
+func TestAntigravityLoginRelayUsesGoogleOAuth(t *testing.T) {
+	const url = "https://accounts.google.com/o/oauth2/auth?state=fixture"
+	flow := loginFlowFor(providerAntigravity)
+	got := flow.progress("\x1b]8;;" + url + "\x07Click here to authenticate\x1b]8;;\x07\nauthorization code...")
+	if got == nil || got.Status != loginAwaitingCode || got.URL != url || !flow.pty || !flow.takesCode {
+		t.Fatalf("login flow did not relay Google OAuth: %+v", got)
 	}
 }
 
