@@ -477,8 +477,67 @@ interface TaskIntegrationView {
   state: TaskIntegrationState; since: Date | null;
   handler: 'COORDINATOR' | 'OWNER' | null; openItemId: string | null;
   jobId: string | null; checksRunningForMs: number | null;
+  landTask?: LandTaskIntegrationView | null;
 }
 ```
+
+### 2.7a 当前 LAND_TASK（任务页与项目集成视图）
+
+任务 DONE 不等于已落地。`TaskIntegrationView.landTask` 是该任务**最新 generation** 的
+`LAND_TASK`（按 generation、created_at、id 取最新，只取本项目线上的作业），由作业行自己的字段给出；
+它与上面按「回执 → OPEN 待办 → 作业」派生的 `state` 并列，**不参与**那条优先级：较新的
+generation 排队或失败，不会把已有回执改回未落地。三处读同一个函数
+（`project-task-integration.ts` 的 `readTaskIntegrationViews`）：`GET /tasks/:id` 的
+`integration`、`GET /projects/:id/tasks` 每行的 `integration`、`GET /projects/:id/integration`
+的 `landTasks[].integration`。
+
+```ts
+interface LandTaskIntegrationView {
+  jobId: string;
+  state: IntegrationJobState;              // QUEUED / RUNNING / LANDED / CHECK_FAILED / CONFLICT / …
+  phase: IntegrationJobPhase | null;       // runner 当前步骤，或停下的那一步
+  generation: string;                      // 十进制字符串
+  queuedAt: Date;                          // 入队（created_at）
+  startedAt: Date | null;                  // 首次认领（started_at）
+  heartbeatAt: Date | null;                // 认领进程最近一次心跳 / 进度 / 结果
+  finishedAt: Date | null;                 // 终态写入
+  targetRef: string;                       // 入队时冻结的完整目标 ref
+  waitMs: number;                          // 排队时长，见下
+  blockingReason: { code; summary; jobId?; openItemId? } | null;
+}
+```
+
+`waitMs`：QUEUED 时为 `now - queuedAt`，一直累计；否则为 `(claimedAt ?? finishedAt) - queuedAt`，
+即到最近一次认领为止。太早认领、被送回 QUEUED 的作业（§2.6 judged too early）清掉认领但保留
+`started_at`，所以排队时长从入队算起，不从那次中断的启动算起。
+
+`blockingReason` 只在 QUEUED 与三种失败终态出现，由服务端给出 `code` 与一句可直接显示的
+`summary`；客户端只读它，不从任务 DONE、也不从异常卡是否存在去推断原因。QUEUED 的原因按
+`claimOne`（J-T2）的领取条件、依此顺序取第一条不满足的：
+
+| code | 条件 | summary 要点 |
+|---|---|---|
+| `CANCELLING` | `cancel_requested_at` 非空，领取跳过它 | 不会启动 |
+| `WAITING_TASK_WORK` | 任务仍有未结束的工作会话（J-T1a） | 等待落地：工作会话还在跑，分支还会动 |
+| `WAITING_MAIN_SYNC` | 同 serial_key 上另一任务的 MAIN_SYNC 冲突待办仍 OPEN（M2；冲突任务自己的后续 generation 豁免，M3） | 等待项目线同步：点名那次落地；附 `jobId`、`openItemId` |
+| `WAITING_RUNNER` | 工作会话所在 workspace 没有 runner；runner OFFLINE 或静默超过 90 s（与会话队列同一阈值）；DRAINING；心跳无租约或未声明 `integration-job/v1` | 等待 runner：点名 runner 与具体原因 |
+| `WAITING_SERIAL_SLOT` | 同 serial_key 已有 RUNNING 作业（J1） | 等待落地：点名正在跑的那次落地或晋升；附 `jobId` |
+| `WAITING_DISPATCH` | 以上都不成立 | 等待落地：下一次心跳认领 |
+
+阻塞作业属于其他账号时（serial_key 只是仓库 + ref），只给出原因，不给出它的 id 与标题。
+失败终态：`CONFLICT`（区分 MAIN_SYNC 与 REBASE / MERGE，附冲突文件数）、`CHECK_FAILED`（第一条
+未通过的检查及其退出码或超时）、`ERROR`（阶段与 error_code）。
+
+**项目集成视图的当前 LAND_TASK**（`ProjectIntegrationView.landTasks`）：取每个任务的最新
+generation，列出 (1) QUEUED / RUNNING 的，不论回执；(2) 停在 CONFLICT / CHECK_FAILED / ERROR、
+任务仍为 DONE、且之后没有回执落地其工作的；(3) 最近一次 LANDED / ALREADY_LANDED 的那一个。顺序：
+RUNNING、按入队顺序的 QUEUED、按结束时间倒序的失败、最后一次落地。数量受队列与失败数约束，
+不随项目历史增长。
+
+页面：任务页在状态徽标旁另起一枚落地徽标（如 `Done` · `Waiting to land`），并在 Landing 段落写
+`Task DONE`、落地状态、generation、原因与目标 ref、排队时长和四个时间；落地 RUNNING 时每 4 s、
+QUEUED 时每 15 s 重读。项目集成行下列出上述当前落地，链接到各自任务。两处均为只读：不新增重跑、
+合并、上线入口；PROMOTION_APPROVAL 与 owner-only 的门不变，这个读模型也不写任务状态。
 
 ### 2.8 测试
 
@@ -653,7 +712,7 @@ interface ProjectPromotionView {
 |---|---|---|
 | `id` | uuid(7) PK | |
 | `project_id` / `owner_id` | uuid | FK `project` CASCADE |
-| `kind` | text | CHECK ∈ {`INTEGRATION_CONFLICT`, `INTEGRATION_CHECK_FAILED`, `INTEGRATION_ERROR`, `TASK_FAILED`, `PROMOTION_APPROVAL`, `COORDINATOR_QUESTION`, `FUSE_PAUSED`} |
+| `kind` | text | CHECK ∈ {`INTEGRATION_CONFLICT`, `INTEGRATION_CHECK_FAILED`, `INTEGRATION_ERROR`, `TASK_FAILED`, `PROMOTION_APPROVAL`, `COORDINATOR_QUESTION`, `FUSE_PAUSED`, `START_REQUEST`, `DONE_REQUEST`, `DELIVERY_REVIEW`} |
 | `state` | text | CHECK ∈ {`OPEN`, `RESOLVED`, `SUPERSEDED`} |
 | `assignee` | text | CHECK ∈ {`COORDINATOR`, `OWNER`} |
 | `assignee_reason` | text | CHECK ∈ {`DEFAULT`, `NO_COORDINATOR`, `COORDINATOR_ENDED`, `CHAIN_LIMIT`, `ESCALATED`, `HANDED_OVER`} |
@@ -708,6 +767,7 @@ CHECK：`(state = 'OPEN') = (resolved_at IS NULL)`；`kind ∈ {PROMOTION_APPROV
 | `PROMOTION_APPROVAL` | OWNER | 晋升 `READY`（M-T2） | `PA:<promotionId>` | `ProjectPromotionView` 的快照 | 确认 → `APPROVED`；Not now → `DECLINED`；新候选 → `SUPERSEDED` |
 | `COORDINATOR_QUESTION` | OWNER | `ask_owner` 提交（§5.2） | `CQ:<clientQuestionId>` | `{ question, options: [{ label, description? }], recommendedOption?, blocksTaskIds[], ifUnanswered }` | owner 答复 → `ANSWERED`；提问会话撤回 → `WITHDRAWN` |
 | `FUSE_PAUSED` | OWNER | 暂停段插入（§6.3） | `FP:<episodeId>` | `{ dimension, observed, limit, spendToday, heldCount }` | 恢复 → `RESUMED` |
+| `DELIVERY_REVIEW` | COORDINATOR（Automatic 且有活着的协调会话；否则 OWNER） | `CRITERION_UNLANDED` 读到声明外改动或 git 拒绝合并 | `DR:<reason>:<taskId>` | `{ reason, paths[], declaredPaths[], criterionKey }` | 重开 → `RETRIED`；取消 → `TASK_CLOSED`；取代 → `SUCCESSOR_FILED`；成果落地 → `LANDED`（仅 git 拒绝的读数）；`open_item_resolve` → `HANDLED` |
 
 三种集成类待办的 payload 另带 `failureClass`（`CONFLICT` / `CHECK_FAILED` / `CHECK_TIMED_OUT` / `ERROR`）与 `generation`；由 `integration_retry` 要求的那一代失败时再带 `retry: { retryOfJobId, failureClass, reason, requestedBySessionId }`（J-T1b）。
 

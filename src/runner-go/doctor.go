@@ -149,9 +149,10 @@ var engineSpecs = []engineSpec{
 		// The manifest the installer and the updater read.
 		latestURL:   "https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/" + runtime.GOOS + "_" + runtime.GOARCH + ".json",
 		latestField: "version",
-		// API-key mode only: a Google-account sign-in is not something Orbit runs agy with.
+		// A key, or the runner's Google sign-in, which is made from Orbit and only on Linux
+		// (antigravity_google_login.go): `orbit doctor` has no sign-in of its own to offer.
 		apiKeyEnv:     "GEMINI_API_KEY",
-		loginHeadless: "set GEMINI_API_KEY in the runner's environment, or give the session a Gemini API key; Google-account sign-in is not supported",
+		loginHeadless: "set GEMINI_API_KEY in the runner's environment or give the session a Gemini API key — or, on a Linux runner, sign in to Google from Orbit",
 	},
 }
 

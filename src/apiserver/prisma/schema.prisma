@@ -527,6 +527,8 @@ model Runner {
   //   awaiting_approval — device flow (codex/kimi): loginUrl + loginUserCode are what the user
   //                       enters in the browser; nothing comes back through us
   //   done | failed — terminal, loginMessage explains a failure
+  //   cancelling — an Antigravity sign-in the user dismissed: the next heartbeat hands the runner
+  //                a `cancel` for loginAt's attempt and clears the slot; read as nothing in flight
   loginStatus   String?   @map("login_status")
   // Which CLI the relay is driving: 'claude' | 'codex'. NULL on a row written before the relay
   // handled more than claude.
@@ -543,7 +545,8 @@ model Runner {
   // the opposite direction from loginCode.
   loginUserCode String?   @map("login_user_code")
   // The pasted authorization code, cleared as soon as the heartbeat hands it to the runner. It
-  // is single-use and worthless without the PKCE verifier, which never leaves the runner.
+  // is single-use and worthless without the PKCE verifier, which never leaves the runner. Never
+  // Antigravity's: that code is held in the apiserver's memory only (login-code-relay.ts).
   loginCode     String?   @map("login_code")
   loginMessage  String?   @map("login_message")
   // When the current relay started, so an abandoned one can be timed out.

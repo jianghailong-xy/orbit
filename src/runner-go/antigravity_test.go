@@ -584,7 +584,7 @@ func TestAntigravityGeminiDirIsTheSessionsOwn(t *testing.T) {
 			},
 		},
 	}
-	dir, err := prepareAntigravityGeminiDir(scratch, job, "/opt/orbit/bin/orbit")
+	dir, err := prepareAntigravityGeminiDir(scratch, job, "/opt/orbit/bin/orbit", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -629,7 +629,7 @@ func TestAntigravityGeminiDirIsTheSessionsOwn(t *testing.T) {
 	job.Agent.AppendSystemPrompt = ""
 	job.Agent.SystemPrompt = ""
 	// No orbit executable to describe, and nothing configured: nothing to say.
-	if _, err := prepareAntigravityGeminiDir(scratch, job, ""); err != nil {
+	if _, err := prepareAntigravityGeminiDir(scratch, job, "", false); err != nil {
 		t.Fatal(err)
 	}
 	settings = nil

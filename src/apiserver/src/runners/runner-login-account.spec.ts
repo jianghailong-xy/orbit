@@ -231,6 +231,7 @@ test('a Claude account is signed in by name, on a runner that declares that', as
     engine: 'claude',
     account: SLOT,
     code: 'the-code',
+    attempt: attemptOf(h.row),
   });
   // A runner that has only ever signed in Codex accounts is not handed this one: it would take the
   // named account for a plain sign-in and put the machine's own login on the line.

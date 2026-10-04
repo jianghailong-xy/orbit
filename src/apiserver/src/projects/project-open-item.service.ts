@@ -31,6 +31,7 @@ import { SessionNotSendable, SessionsService } from '../sessions/sessions.servic
 import {
   AskedQuestion,
   CoordinatorQuestion,
+  DELIVERY_REVIEW_KIND,
   INTEGRATION_ITEM_KINDS,
   MAX_OPEN_ITEM_RESOLUTION_NOTE,
   OpenItemAssignee,
@@ -42,6 +43,7 @@ import {
   TASK_FAILURE_CHAIN_LIMIT,
   conversationIsOver,
   coordinatorQuestion,
+  deliveryReviewDetailLine,
   markOpenItemsHandling,
   openItemActions,
   openItemFacts,
@@ -121,6 +123,7 @@ export const OPEN_ITEM_HAS_ITS_OWN_DOOR = 'OPEN_ITEM_HAS_ITS_OWN_DOOR';
 const HAND_CLOSABLE_RESOLUTIONS: Readonly<Record<string, 'HANDLED' | 'WITHDRAWN'>> = {
   ...Object.fromEntries(INTEGRATION_ITEM_KINDS.map((kind) => [kind, 'HANDLED' as const])),
   TASK_FAILED: 'HANDLED',
+  [DELIVERY_REVIEW_KIND]: 'HANDLED',
   // §5.2 R12: a question is withdrawn, not handled, and who withdraws it is who asked it.
   COORDINATOR_QUESTION: 'WITHDRAWN',
 };
@@ -1496,6 +1499,25 @@ export class ProjectOpenItemService {
            AND i."state" = 'OPEN'
            AND t."id" IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`))})
            AND (t."status" = 'CANCELLED' OR t."superseded_by_task_id" IS NOT NULL)`);
+      // A delivery review is answered when the task leaves the DONE delivery it describes. A
+      // landing itself is handled by the receipt-aware wake service, while reopen/cancel/replace
+      // are settled here so an exception cannot remain owed forever.
+      await this.prisma.$executeRaw(Prisma.sql`
+        UPDATE "project_open_item" i
+           SET "state" = 'RESOLVED',
+               "resolution" = CASE
+                 WHEN t."superseded_by_task_id" IS NOT NULL THEN 'SUCCESSOR_FILED'
+                 WHEN t."status" = 'CANCELLED' THEN 'TASK_CLOSED'
+                 ELSE 'RETRIED' END,
+               "resolved_at" = now(),
+               "resolved_by" = 'PLATFORM',
+               "updated_at" = now()
+          FROM "task" t
+         WHERE i."task_id" = t."id"
+           AND i."kind" = ${DELIVERY_REVIEW_KIND}
+           AND i."state" = 'OPEN'
+           AND t."id" IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`))})
+           AND (t."status" <> 'DONE' OR t."superseded_by_task_id" IS NOT NULL)`);
     });
   }
 
@@ -1959,6 +1981,7 @@ function detailLine(kind: string, payload: unknown): string {
   // A pause writes its own, because what it has to say is not "something failed" but what the
   // coordinator spent, what is still running without it, and what resuming does and does not do.
   if (kind === 'FUSE_PAUSED') return fusePausedDetailLine(payload as FusePausedPayload);
+  if (kind === DELIVERY_REVIEW_KIND) return deliveryReviewDetailLine(payload);
   if (kind !== 'TASK_FAILED') return '';
   const failure = (payload ?? {}) as {
     how?: string;

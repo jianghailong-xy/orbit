@@ -27,6 +27,7 @@ const ENGINE_LABELS: Record<LoginEngine, string> = {
   claude: 'Claude Code',
   codex: 'Codex',
   kimi: 'Kimi Code',
+  antigravity: 'Antigravity',
 };
 
 /** What became of an agent's own `notify` call — the answer handed straight back to the agent. */

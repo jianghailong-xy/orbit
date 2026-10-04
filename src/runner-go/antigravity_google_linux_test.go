@@ -6,7 +6,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -37,7 +39,7 @@ func TestAntigravityGooglePrivateCommand(t *testing.T) {
 		"GEMINI_API_KEY=fake-key", "GOOGLE_API_KEY=fake-key", "OPENAI_API_KEY=fake-key", "ANTHROPIC_API_KEY=fake-key",
 		"GOOGLE_OAUTH_ACCESS_TOKEN=fake-token", "GOOGLE_APPLICATION_CREDENTIALS=/private/creds", "AGY_CLI_CDE_AUTH_ACTION=login",
 		"GOOGLE_GEMINI_BASE_URL=https://example.invalid", "DBUS_SESSION_BUS_ADDRESS=unix:path=/existing/socket"}
-	cmd, cleanup, err := antigravityGoogleCommand(context.Background(), "/fake/agy", env, "models")
+	cmd, cleanup, err := antigravityGoogleCommand(context.Background(), "/fake/agy", env, false, "models")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,25 +95,54 @@ func TestAntigravityGooglePrivateCommand(t *testing.T) {
 	}
 }
 
-func replayGoogleProbe(t *testing.T, recording googleProbeRecording) string {
+func TestAntigravityGooglePrivateProbeCommand(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	cmd, cleanup, err := antigravityGoogleCommand(context.Background(), "/fake/agy", nil, true, "--print=/usage", "--output-format", "stream-json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	root := filepath.Dir(cmd.Dir)
+	logFile := filepath.Join(root, "probe.log")
+	if got := cmd.Args; len(got) != 6 || got[2] != "--log-file="+logFile {
+		t.Fatalf("probe must have one private log argument: %v", got)
+	}
+	if info, err := os.Stat(root); err != nil || info.Mode().Perm() != 0o700 {
+		t.Fatalf("probe log directory is not private: %v %v", info, err)
+	}
+	if err := os.WriteFile(logFile, []byte("private agy log"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cleanup()
+	if _, err := os.Stat(root); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("probe log directory survived cleanup: %v", err)
+	}
+}
+
+func replayGoogleProbe(t *testing.T, recording googleProbeRecording, logLines ...string) string {
 	t.Helper()
 	dir := t.TempDir()
 	stdout, stderr := filepath.Join(dir, "stdout"), filepath.Join(dir, "stderr")
+	agyLog := filepath.Join(dir, "agy.log")
 	if err := os.WriteFile(stdout, []byte(recording.Stdout), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(stderr, []byte(recording.Stderr), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(agyLog, []byte(strings.Join(logLines, "\n")), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	return writeFakeBin(t, dir, "agy", `
 if [ "$1" = "--version" ]; then echo 1.2.16; exit 0; fi
 case "$1" in --gemini_dir=*) ;; *) exit 9 ;; esac
-[ "$2" = "--log-file=/dev/null" ] || exit 9
+case "$2" in --log-file=*) log_file="${2#--log-file=}" ;; *) exit 9 ;; esac
 [ "$3" = "--print=/usage" ] || exit 9
 [ "$4" = "--output-format" ] || exit 9
 [ "$5" = "stream-json" ] || exit 9
 [ -p /dev/stdin ] || exit 9
 [ -z "$GEMINI_API_KEY" ] || exit 9
+cat `+shellQuote(agyLog)+` > "$log_file" || exit 9
 cat `+shellQuote(stdout)+`
 cat `+shellQuote(stderr)+` >&2
 exit `+strconv.Itoa(recording.ExitCode))
@@ -130,10 +161,61 @@ func TestAntigravityGoogleProbeReplay(t *testing.T) {
 			bin := replayGoogleProbe(t, loadGoogleProbeRecording(t, test.name))
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 			defer cancel()
-			if result := probeAntigravityGoogle(ctx, bin, []string{"PATH=" + os.Getenv("PATH"), "GEMINI_API_KEY=fake-key"}); result.auth != test.want {
+			if result := probeAntigravityGoogle(ctx, bin, []string{"PATH=" + os.Getenv("PATH"), "GEMINI_API_KEY=fake-key"}); result.auth != test.want || (test.want == authNo && result.usage != nil) {
 				t.Fatalf("recording replay auth = %s, want %s", authWord(result.auth), authWord(test.want))
 			}
 		})
+	}
+}
+
+func TestAntigravityGoogleProbeNetworkFailureIsUnknown(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	measured := loadGoogleSessionFailures(t)
+	for _, network := range []string{"network_proxy_refused", "network_dns"} {
+		t.Run(network, func(t *testing.T) {
+			lines := measured.Cases[network].LogLines
+			if len(lines) == 0 {
+				t.Fatalf("no log lines recorded for %s", network)
+			}
+			bin := replayGoogleProbe(t, googleProbeRecording{
+				Stdout: measured.Stdout, Stderr: measured.Stderr, ExitCode: measured.ExitCode,
+			}, lines...)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if result := probeAntigravityGoogle(ctx, bin, nil); result.auth != authUnknown || result.usage != nil {
+				t.Fatalf("network failure probe = %+v, want unknown without quota", result)
+			}
+		})
+	}
+}
+
+func TestAntigravityGoogleContractProbeNetworkFailureIsUnknown(t *testing.T) {
+	path, err := exec.LookPath(agyExecutable)
+	if err != nil {
+		t.Fatal("real agy is required for the Linux Google contract tests:", err)
+	}
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	saveGoogleSignIn(t)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	proxy := "http://" + listener.Addr().String()
+	if err := listener.Close(); err != nil {
+		t.Fatal(err)
+	}
+	env := replaceEnv(os.Environ(), map[string]string{
+		"HTTPS_PROXY": proxy, "https_proxy": proxy, "HTTP_PROXY": proxy, "http_proxy": proxy,
+		"NO_PROXY": "", "no_proxy": "",
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	result := probeAntigravityGoogle(ctx, path, env)
+	if ctx.Err() != nil {
+		t.Fatal("real agy proxy refused probe did not finish:", ctx.Err())
+	}
+	if result.auth != authUnknown || result.usage != nil {
+		t.Fatalf("real agy proxy refused probe = %+v, want unknown without quota", result)
 	}
 }
 

@@ -17,7 +17,11 @@ import type {
 } from '@orbit/shared';
 import { generateToken, sha256 } from '../common/crypto.util';
 import { namedRunnerEngines, sanitizeRunnerEngines } from '../common/runner-engines';
-import { antigravityState } from '../common/antigravity-readiness';
+import {
+  antigravityGoogleLoginRefusal,
+  antigravitySignInUnderWay,
+  antigravityState,
+} from '../common/antigravity-readiness';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { ACTIVE_TURN_STATUSES } from '../common/session-scheduling';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
@@ -25,7 +29,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   CLAUDE_ACCOUNT_REMOVE_V1,
   CODEX_ACCOUNT_REMOVE_V1,
+  LOGIN_RELAY_TIMEOUT_MS,
 } from '../runner-api/runner-api.controller';
+import { loginCodeRelay } from './login-code-relay';
 import { engineKeepsAccounts } from '../common/runner-engines';
 import { ACCOUNT_ID_PATTERN, CreateEnrollmentTokenDto, StartLoginDto, UpdateRunnerDto } from './dto';
 import { accountPauseUntil } from '../common/account-pause';
@@ -405,6 +411,10 @@ export class RunnersService {
    * Codex may be told which account to sign in: one the runner has (`account`, 'default' or a
    * slot id), or a new one it adds under `accountName`. Naming neither signs in the runner's own
    * login, exactly as before accounts.
+   *
+   * Antigravity signs in a Google account, which only a runner that relays that sign-in can do: any
+   * other is refused here, in words the person who pressed the button can act on, rather than left
+   * to fail on the machine.
    */
   async startLogin(ownerId: string, id: string, dto: StartLoginDto = {}): Promise<RunnerLoginState> {
     const engine: LoginEngine = dto.engine ?? 'claude';
@@ -425,6 +435,8 @@ export class RunnersService {
     if (runner.status === 'OFFLINE') {
       throw new BadRequestException('Runner is offline — it can only sign in while connected');
     }
+    const refusal = engine === 'antigravity' ? antigravityGoogleLoginRefusal(runner) : null;
+    if (refusal) throw new BadRequestException(refusal);
     const r = await this.prisma.runner.update({
       where: { id },
       data: {
@@ -439,6 +451,8 @@ export class RunnersService {
         loginAt: new Date(),
       },
     });
+    // A code still held for the sign-in this replaces belongs to nobody now.
+    loginCodeRelay.drop(id);
     return loginStateOf(r);
   }
 
@@ -449,6 +463,9 @@ export class RunnersService {
    *
    * Only the paste-back flow ever reaches here: codex's device flow sits in `awaiting_approval`,
    * where the code goes to the browser, not through us.
+   *
+   * Antigravity's code is not stored at all: it is held in this process's memory for the sign-in it
+   * was pasted for, until the next heartbeat hands it over (login-code-relay.ts).
    */
   async submitLoginCode(ownerId: string, id: string, code: string): Promise<RunnerLoginState> {
     const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
@@ -458,10 +475,14 @@ export class RunnersService {
     }
     const trimmed = code?.trim();
     if (!trimmed) throw new BadRequestException('Code is empty');
+    const inMemory = runner.loginEngine === 'antigravity';
     const r = await this.prisma.runner.update({
       where: { id },
-      data: { loginCode: trimmed, loginMessage: null },
+      data: inMemory ? { loginMessage: null } : { loginCode: trimmed, loginMessage: null },
     });
+    if (inMemory && runner.loginAt) {
+      loginCodeRelay.hold(id, runner.loginAt.toISOString(), trimmed, runner.loginAt.getTime() + LOGIN_RELAY_TIMEOUT_MS);
+    }
     return loginStateOf(r);
   }
 
@@ -472,24 +493,34 @@ export class RunnersService {
     return loginStateOf(runner);
   }
 
-  /** Abandon an in-flight relay so the card can be dismissed without waiting for the timeout. */
+  /**
+   * Abandon an in-flight relay so the card can be dismissed without waiting for the timeout.
+   *
+   * An Antigravity sign-in is stopped on the machine as well: a runner signing a new Google account
+   * in sets the one it had aside, and puts it back only when that attempt ends — left to its timeout,
+   * the machine would read as signed out for ten minutes. So the row keeps that attempt as
+   * `cancelling` until the next heartbeat hands the runner a `cancel` for it (drainLoginRequest).
+   * Every reader sees nothing in flight from here on (loginStateOf).
+   */
   async cancelLogin(ownerId: string, id: string): Promise<RunnerLoginState> {
     const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
     if (!runner) throw new NotFoundException('runner not found');
+    const stopOnRunner = antigravitySignInUnderWay(runner);
     const r = await this.prisma.runner.update({
       where: { id },
       data: {
-        loginStatus: null,
-        loginEngine: null,
+        loginStatus: stopOnRunner ? 'cancelling' : null,
+        loginEngine: stopOnRunner ? runner.loginEngine : null,
         loginAccount: null,
         loginAccountName: null,
         loginUrl: null,
         loginUserCode: null,
         loginCode: null,
         loginMessage: null,
-        loginAt: null,
+        loginAt: stopOnRunner ? runner.loginAt : null,
       },
     });
+    loginCodeRelay.drop(id);
     return loginStateOf(r);
   }
 
@@ -892,13 +923,15 @@ function loginStateOf(r: {
   loginUserCode: string | null;
   loginMessage: string | null;
 }): RunnerLoginState {
+  // A cancel still owed to the runner (cancelLogin) is a sign-in the user has already dismissed.
+  const status = r.loginStatus === 'cancelling' ? null : r.loginStatus;
   return {
-    status: (r.loginStatus as RunnerLoginState['status']) ?? null,
+    status: (status as RunnerLoginState['status']) ?? null,
     // A row written before the relay drove anything but claude carries no engine.
-    engine: r.loginStatus ? ((r.loginEngine as LoginEngine) ?? 'claude') : null,
+    engine: status ? ((r.loginEngine as LoginEngine) ?? 'claude') : null,
     userCode: r.loginUserCode,
     url: r.loginUrl,
     message: r.loginMessage,
-    account: r.loginStatus ? (r.loginAccount ?? null) : null,
+    account: status ? (r.loginAccount ?? null) : null,
   };
 }

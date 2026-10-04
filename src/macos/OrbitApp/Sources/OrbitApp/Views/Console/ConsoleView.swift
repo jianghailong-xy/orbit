@@ -76,7 +76,10 @@ struct ConsoleView: View {
             ns: imagePreviewNS,
             open: { key, fallback, fallbackIndex in
                 let pages = SessionPreviewImages
-                    .collect(console.state.items) { fetched.byCard[$0.id] ?? $0.resultImages }
+                    .collect(console.state.items,
+                             isAttachmentImage: { console.attachments.image(for: $0) != nil }) {
+                        fetched.byCard[$0.id] ?? $0.resultImages
+                    }
                     .compactMap { PreviewImage($0) }
                 if let index = pages.firstIndex(where: { $0.id == key }) {
                     imagePreviewPages = pages

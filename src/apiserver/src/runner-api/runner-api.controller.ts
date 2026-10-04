@@ -308,6 +308,9 @@ import {
   replayableEventSql,
 } from '../common/system-noise';
 import { isInstallEngine, isLoginEngine, sanitizeRunnerEngines } from '../common/runner-engines';
+import { antigravityGoogleLoginRefusal, antigravitySignInUnderWay } from '../common/antigravity-readiness';
+import { RUNNER_OS_HEADER, withRunnerOs } from '../common/runner-platform';
+import { loginCodeRelay } from '../runners/login-code-relay';
 import { readRunnerRepoHealth, sanitizeRunnerRepoHealth } from '../common/runner-repo-health';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { ALWAYS_ALLOWED_TOOLS, resolvePermissionMode } from '../common/permission-mode';
@@ -340,7 +343,7 @@ import { providerSlugsOn, sessionExecRuntime } from '../providers/custom-provide
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
-const LOGIN_RELAY_TIMEOUT_MS = 11 * 60_000;
+export const LOGIN_RELAY_TIMEOUT_MS = 11 * 60_000;
 // Same contract for installs, against the runner's engineInstallTimeout (10 min) plus the
 // heartbeat it takes to pick the request up.
 const INSTALL_RELAY_TIMEOUT_MS = 12 * 60_000;
@@ -908,6 +911,7 @@ export class RunnerApiController {
     @Body() dto: RunnerHeartbeatRequest,
     @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
     @Headers(RUNNER_PROVIDERS_HEADER) providerHeader?: string,
+    @Headers(RUNNER_OS_HEADER) osHeader?: string,
   ): Promise<RunnerHeartbeatResponse> {
     const heartbeatLeaseOwner = parseLeaseGeneration(dto?.leaseOwner);
     const reportedCapabilities = parseRunnerCapabilities(capabilities);
@@ -954,8 +958,9 @@ export class RunnerApiController {
         // Capabilities belong to THIS authenticated process heartbeat, not to the machine forever.
         // Omission is an old/downgraded process and clears the prior process's declaration; keeping
         // the stale snapshot could admit CURRENT_WORK that the poller now owning the lease cannot
-        // acknowledge. Inbox dequeue rechecks the request header as the second fence.
-        capabilities: withProviderDeclarations(reportedCapabilities ?? [], providerHeader),
+        // acknowledge. Inbox dequeue rechecks the request header as the second fence. The OS the
+        // process names rides the same snapshot (runner-platform.ts).
+        capabilities: withRunnerOs(withProviderDeclarations(reportedCapabilities ?? [], providerHeader), osHeader),
         capabilitiesReportedAt: new Date(),
         // What Codex rate-limit reset admission reads about the process sending this heartbeat
         // (docs/codex-rate-limit-reset-contract.md §4). Overwritten every beat, so a runner too old
@@ -1055,6 +1060,9 @@ export class RunnerApiController {
         if (!current.installed || current.auth !== 'no') continue;
         if (!isLoginEngine(current.engine)) continue;
         if (priorEngines.find((was) => was.engine === current.engine)?.auth !== 'yes') continue;
+        // A runner signing Antigravity into another Google account sets the one it had aside until
+        // that attempt ends, so its probe reads `no` mid-sign-in — not news to whoever is signing in.
+        if (current.engine === 'antigravity' && antigravitySignInUnderWay(updated)) continue;
         void this.push.notifyEngineSignedOut(runner.id, current.engine);
       }
     }
@@ -1259,7 +1267,7 @@ export class RunnerApiController {
         }
       }
       artifactRequests = await this.realtime.drainArtifactRequests(runner.id);
-      loginRequest = await this.drainLoginRequest(runner.id, capabilities);
+      loginRequest = await this.drainLoginRequest(runner.id, capabilities, osHeader);
       const removeRequest = await this.drainAccountRemoveRequest(runner.id, capabilities);
       // Codex rides the field a control plane older than accounts-per-engine reads; every other
       // engine names itself. An old runner handed the generic field would remove a path under its
@@ -1679,11 +1687,17 @@ export class RunnerApiController {
    * An abandoned relay is swept here rather than by a timer: the runner kills its own CLI after
    * loginRelayTimeout, so a row still `pending`/`awaiting_code` past that window has no process
    * behind it and would otherwise block sign-in forever.
+   *
+   * A `cancelling` row is an Antigravity sign-in the user dismissed (RunnersService.cancelLogin):
+   * its `cancel` is handed over once, and the row is cleared by the same compare-and-set that
+   * claims it, so a sign-in started since is never the one taken away.
    */
   private async drainLoginRequest(
     runnerId: string,
     /** The capabilities header as it arrived, read through runnerSupportsCapability. */
     capabilities: string | string[] | undefined,
+    /** The OS header as it arrived (runner-platform.ts). */
+    osHeader?: string,
   ): Promise<LoginCommand | undefined> {
     const r = await this.prisma.runner.findUnique({
       where: { id: runnerId },
@@ -1697,8 +1711,17 @@ export class RunnerApiController {
       },
     });
     if (!r?.loginStatus) return undefined;
+    const attempt = r.loginAt?.toISOString() ?? '';
+    if (r.loginStatus === 'cancelling') {
+      const { count } = await this.prisma.runner.updateMany({
+        where: { id: runnerId, loginStatus: 'cancelling', loginAt: r.loginAt },
+        data: { loginStatus: null, loginEngine: null, loginAt: null },
+      });
+      return count > 0 ? { action: 'cancel', engine: r.loginEngine as LoginEngine, attempt } : undefined;
+    }
     const started = r.loginAt?.getTime() ?? 0;
     if (started && Date.now() - started > LOGIN_RELAY_TIMEOUT_MS) {
+      loginCodeRelay.drop(runnerId);
       if (r.loginStatus === 'pending' || r.loginStatus === 'awaiting_code' || r.loginStatus === 'awaiting_approval') {
         await this.prisma.runner.update({
           where: { id: runnerId },
@@ -1725,27 +1748,37 @@ export class RunnerApiController {
         capabilities,
         engine === 'claude' ? CLAUDE_ACCOUNT_LOGIN_V1 : CODEX_ACCOUNT_LOGIN_V1,
       );
-      if (!signsInAccounts && (accountName || (account && account !== 'default'))) {
+      // Antigravity's Google sign-in is judged again on the process polling now — the relay it
+      // declares and the OS it names — which the start (RunnersService.startLogin) could only
+      // check against the last heartbeat's.
+      const refusal =
+        !signsInAccounts && (accountName || (account && account !== 'default'))
+          ? `This runner is too old to sign in another ${engine === 'claude' ? 'Claude' : 'Codex'} account — ` +
+            'update it, then try again.'
+          : engine === 'antigravity'
+            ? antigravityGoogleLoginRefusal({ capabilities: withRunnerOs(parseRunnerCapabilities(capabilities) ?? [], osHeader) })
+            : null;
+      if (refusal) {
         await this.prisma.runner.update({
           where: { id: runnerId },
-          data: {
-            loginStatus: 'failed',
-            loginMessage:
-              `This runner is too old to sign in another ${engine === 'claude' ? 'Claude' : 'Codex'} account — ` +
-              'update it, then try again.',
-          },
+          data: { loginStatus: 'failed', loginMessage: refusal },
         });
         return undefined;
       }
       return {
         action: 'start',
         engine,
-        attempt: r.loginAt?.toISOString() ?? '',
+        attempt,
         // Only when named, so a start for the runner's own login is the shape it always was.
         ...(account ? { account } : {}),
         ...(accountName ? { accountName } : {}),
       };
     }
+    // Antigravity's code never touched the row: it is in this process's memory, bound to the attempt
+    // it was pasted for, and this is the one heartbeat that hands it over (login-code-relay.ts).
+    const heldCode =
+      engine === 'antigravity' && r.loginStatus === 'awaiting_code' ? loginCodeRelay.take(runnerId, attempt) : undefined;
+    if (heldCode) return { action: 'code', engine, code: heldCode, attempt };
     if (r.loginStatus === 'awaiting_code' && r.loginCode) {
       await this.prisma.runner.update({
         where: { id: runnerId },
@@ -1754,11 +1787,13 @@ export class RunnerApiController {
       // The account the code belongs to travels with it: with more than one Claude account, a
       // sign-in can be waiting in any of them, and the runner routes the paste by this pair
       // (loginAccountKey). An older control plane names none, and the runner falls back to the
-      // engine's own login.
+      // engine's own login. So does the attempt, so that a code pasted for a sign-in since replaced
+      // is never typed into its successor.
       return {
         action: 'code',
         engine,
         code: r.loginCode,
+        attempt,
         ...(r.loginAccount ? { account: r.loginAccount } : {}),
       };
     }
@@ -1931,14 +1966,16 @@ export class RunnerApiController {
     }
     // A report names the start it is about. One about a start this row has moved past — the user
     // cancelled, or asked for another sign-in, which the runner may still be running beside this
-    // one's successor — changes nothing. An older runner names none and is taken as it comes.
+    // one's successor — changes nothing. That includes an Antigravity sign-in whose cancel is still
+    // on its way to the runner (`cancelling` keeps its attempt until then). An older runner names
+    // none and is taken as it comes.
     const attempt = body.attempt ? new Date(body.attempt) : undefined;
     if (attempt && Number.isNaN(attempt.getTime())) {
       throw new BadRequestException('attempt must be the start this reports on');
     }
     const waiting = status === 'awaiting_code' || status === 'awaiting_approval';
     const { count } = await this.prisma.runner.updateMany({
-      where: { id: runner.id, ...(attempt ? { loginAt: attempt } : {}) },
+      where: { id: runner.id, ...(attempt ? { loginAt: attempt, loginStatus: { not: 'cancelling' } } : {}) },
       data: {
         loginStatus: status,
         // A retry after a rejected code republishes the same still-valid URL, so just take
@@ -1953,6 +1990,9 @@ export class RunnerApiController {
         ...(body.account ? { loginAccount: body.account } : {}),
       },
     });
+    // Whatever the runner says about the sign-in settles any code still held for it, as it clears
+    // `login_code` above: an Antigravity code waits in memory, never in the row (login-code-relay.ts).
+    if (count > 0) loginCodeRelay.drop(runner.id);
     return { ok: true, applied: count > 0 };
   }
 

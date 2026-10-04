@@ -94,6 +94,11 @@ function headline(card: Delivery): string | null {
     return `The integration job ended with ${card.errorCode ?? 'an error'}`
       + `${target}; the target branch did not move.`;
   }
+  if (card.kind === 'DELIVERY_REVIEW') {
+    return 'A finished delivery whose landing the coordinator decides — accept it as delivered, '
+      + 'send it back, replace it or run its landing again. The account owner is asked only if '
+      + 'nobody decides it in time.';
+  }
   return null;
 }
 

@@ -322,6 +322,12 @@ func engineAuthPreflight(bin string, agentEnv map[string]string) string {
 	if hasInjectedCredentials(bin, agentEnv) {
 		return ""
 	}
+	// A Google sign-in is checked by the session's own agy as it starts, which can tell a sign-in it
+	// refuses from a network it cannot reach (antigravity_google_session.go); asking /usage here first
+	// could not, and would put a network round trip in front of every session.
+	if bin == providerAntigravity && antigravityGoogleSignInSaved() {
+		return ""
+	}
 	path, ok := lookEngine(bin)
 	if !ok {
 		return "" // ensureEngine already had its say about a missing binary

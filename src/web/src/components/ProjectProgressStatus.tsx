@@ -106,6 +106,19 @@ const ITEM_HEADING: Partial<Record<OpenItemKind, string>> = {
   TASK_FAILED: 'Task failed',
 };
 
+const REVIEW_HEADING: Readonly<Record<string, string>> = {
+  OUTSIDE_DECLARED_SCOPE: 'Changed files it didn’t declare',
+  MERGE_REFUSED_BY_GIT: 'Git refused to merge it',
+};
+
+function itemHeading(row: ProjectOpenItemRow): string {
+  if (row.kind === 'DELIVERY_REVIEW') {
+    const reason = row.facts?.review?.reason;
+    return (reason ? REVIEW_HEADING[reason] : undefined) ?? row.title;
+  }
+  return ITEM_HEADING[row.kind] ?? row.title;
+}
+
 /** The two words each group's rows use for who has the item. */
 const WHO = { OWNER: 'You', COORDINATOR: 'Coordinator' } as const;
 
@@ -284,6 +297,7 @@ const KIND_NEXT_STEP: Partial<Record<OpenItemKind, OpenItemAction>> = {
   INTEGRATION_CONFLICT: 'OPEN_TASK_SESSION',
   INTEGRATION_CHECK_FAILED: 'OPEN_TASK_SESSION',
   TASK_FAILED: 'RETRY',
+  DELIVERY_REVIEW: 'OPEN_TASK_SESSION',
 };
 
 /** The presses a card leads with, in the order it draws them: the step this kind of exception is
@@ -524,6 +538,7 @@ const HAND_CLOSABLE_KINDS: ReadonlySet<OpenItemKind> = new Set<OpenItemKind>([
   'INTEGRATION_CHECK_FAILED',
   'INTEGRATION_ERROR',
   'TASK_FAILED',
+  'DELIVERY_REVIEW',
 ]);
 
 /**
@@ -845,7 +860,7 @@ export function OpenItemCard({
   return (
     <ItemCard
       row={row}
-      heading={ITEM_HEADING[row.kind] ?? row.title}
+      heading={itemHeading(row)}
       tone="coordinator"
       now={now}
     >
@@ -965,7 +980,16 @@ function ItemFactRows({ row }: { row: ProjectOpenItemRow }): JSX.Element | null 
       ) : null}
       {/* Only where the item is about a task: the press this sentence describes is a push to that
           task's branch, and a promotion's failure has no task branch to push to. */}
-      {facts.task && facts.files.length > 0 ? (
+      {facts.review ? (
+        <FactRow label="Declared">
+          <span className="project-open-item-mono">
+            {facts.review.declaredPaths.length > 0
+              ? facts.review.declaredPaths.join(' · ')
+              : 'no paths'}
+          </span>
+        </FactRow>
+      ) : null}
+      {facts.task && facts.files.length > 0 && !facts.review ? (
         <FactRow label="After a fix">
           push to the task branch — Orbit re-integrates and re-checks on its own
         </FactRow>
@@ -1153,7 +1177,7 @@ export function EscalatedItemCard({
   row: ProjectOpenItemRow;
   now: number;
 }): JSX.Element {
-  const heading = escalationHeading(row, now) ?? ITEM_HEADING[row.kind] ?? row.title;
+  const heading = escalationHeading(row, now) ?? itemHeading(row);
   return (
     <ItemCard row={row} heading={heading} tone="owner" now={now}>
       <CardActions projectId={projectId} row={row} />
@@ -1175,7 +1199,7 @@ export function SettledItemCard({
   now: number;
 }): JSX.Element {
   return (
-    <ItemCard row={row} heading={ITEM_HEADING[row.kind] ?? row.title} tone="settled" now={now} />
+    <ItemCard row={row} heading={itemHeading(row)} tone="settled" now={now} />
   );
 }
 

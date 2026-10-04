@@ -143,4 +143,21 @@ final class RunnerArtifactWiringTests: XCTestCase {
         expect(chip, "FileHandoff.deliver(",
                "the file chip no longer hands the bytes to the platform")
     }
+
+    func testScreenshotFileCardsUseTheExistingImageViewer() throws {
+        let markdown = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/MarkdownView.swift")
+        let card = try section(markdown, from: "private struct MarkdownFileLinkView: View",
+                              to: "/// Inline-only Markdown")
+        expect(card, ".imageTap(", "the card no longer uses the shared image transition")
+        expect(card, "sessionPreview.open(previewKey, [item], 0)",
+               "the screenshot no longer opens the session-wide image pager")
+        expect(card, ".imagePreview($previewTarget, images: previewImages",
+               "a screenshot outside the console no longer has an image viewer")
+        let fetch = try section(card, from: "private func fetch()")
+        let decode = try XCTUnwrap(fetch.range(of: "PlatformImage(data: data)"))
+        let text = try XCTUnwrap(fetch.range(of: "String(data: data, encoding: .utf8)"))
+        XCTAssertLessThan(decode.lowerBound, text.lowerBound,
+                          "image bytes must be recognized before choosing the document reader")
+        expect(fetch, "openImage(image)", "a legacy screenshot link no longer opens after decoding")
+    }
 }
