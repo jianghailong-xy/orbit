@@ -138,9 +138,9 @@ public final class APIClient: @unchecked Sendable {
     /// if the new one is rejected. Older servers silently treat unknown Completed/Trash values as
     /// Open, so a mismatched (or empty, for those two scopes) response also triggers the fallback.
     public func listSessions(view: SessionView = .open,
-                             runnerId: String? = nil) async throws -> [Session] {
+                             runnerId: String? = nil, projectId: String? = nil) async throws -> [Session] {
         do {
-            let sessions = try await listSessions(queryValue: view.queryValue, runnerId: runnerId)
+            let sessions = try await listSessions(queryValue: view.queryValue, runnerId: runnerId, projectId: projectId)
             if view == .open || (!sessions.isEmpty && sessions.allSatisfy({
                 $0.effectiveLifecycleState == view.lifecycleState
             })) {
@@ -149,12 +149,13 @@ public final class APIClient: @unchecked Sendable {
         } catch APIError.http(let status, _) where [400, 404, 422].contains(status) {
             // Fall through to the compatibility request.
         }
-        return try await listSessions(queryValue: view.legacyQueryValue, runnerId: runnerId)
+        return try await listSessions(queryValue: view.legacyQueryValue, runnerId: runnerId, projectId: projectId)
     }
 
-    private func listSessions(queryValue: String, runnerId: String?) async throws -> [Session] {
+    private func listSessions(queryValue: String, runnerId: String?, projectId: String?) async throws -> [Session] {
         var q = [URLQueryItem(name: "view", value: queryValue)]
         if let runnerId { q.append(URLQueryItem(name: "runnerId", value: runnerId)) }
+        if let projectId { q.append(URLQueryItem(name: "projectId", value: projectId)) }
         return try await get("sessions", query: q)
     }
 
