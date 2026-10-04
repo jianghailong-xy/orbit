@@ -1,0 +1,10 @@
+{
+  "activationCount": 2,
+  "radioArrowSkipsDisabled": true,
+  "checkboxLabelAndSpace": true,
+  "switchSpace": true,
+  "disabledAndLoadingBlocked": true,
+  "mixedExposed": true,
+  "values": "{\"project\":\"Updated project\",\"description\":\"First\\nUpdated second\",\"accepted\":\"yes\",\"mode\":\"two\",\"notifications\":\"enabled\"}",
+  "nativeTextReset": true
+}
