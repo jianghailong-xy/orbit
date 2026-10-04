@@ -56,6 +56,7 @@ export const SESSION_PROJECT_COPY = {
   progressHint: (sessions: number, running: number) => `${sessions} sessions · ${running} running`,
   waitingSession: (text: string, title: string) => `${text} · ${title}`,
   noCoordinator: 'No coordinator',
+  openSession: 'Open Session',
   openCoordinator: 'Open Coordinator',
   sessions: 'Sessions',
   openProject: 'Open Project',

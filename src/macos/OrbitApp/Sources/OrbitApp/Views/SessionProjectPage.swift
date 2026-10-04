@@ -187,7 +187,7 @@ private struct SessionProjectRowActions: ViewModifier {
     @Environment(AppModel.self) private var app
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     let row: SessionProjectRow
-    let onCoordinator: () -> Void
+    let onOpen: () -> Void
     let onSessions: () -> Void
     let onProject: () -> Void
     let onMove: () -> Void
@@ -212,16 +212,21 @@ private struct SessionProjectRowActions: ViewModifier {
 
     @ViewBuilder
     private var menu: some View {
-        Button(action: onCoordinator) {
-            Label(SessionProjectCopy.openCoordinator, systemImage: "bubble.left")
+        Button(action: onOpen) {
+            Label(SessionProjectCopy.openSession, systemImage: "bubble.left")
         }
-        .disabled(row.coordinator == nil)
+        .disabled(!canOpenSession)
         Button(action: onSessions) { Label(SessionProjectCopy.sessions, systemImage: "list.bullet") }
         Button(action: onProject) { Label(SessionProjectCopy.openProject, systemImage: "square.grid.2x2") }
         Divider()
         actionButton(pinAction)
         Button(action: onMove) { Label(SessionProjectCopy.move, systemImage: "folder") }
             .disabled(row.coordinator == nil)
+    }
+
+    private var canOpenSession: Bool {
+        if case .session = row.target { return true }
+        return false
     }
 
     private var leadingActions: [RowSwipeAction] { row.coordinator == nil ? [] : [pinAction] }
@@ -245,10 +250,10 @@ private struct SessionProjectRowActions: ViewModifier {
 }
 
 extension View {
-    func sessionProjectRowActions(_ row: SessionProjectRow, onCoordinator: @escaping () -> Void,
+    func sessionProjectRowActions(_ row: SessionProjectRow, onOpen: @escaping () -> Void,
                                   onSessions: @escaping () -> Void, onProject: @escaping () -> Void,
                                   onMove: @escaping () -> Void) -> some View {
-        modifier(SessionProjectRowActions(row: row, onCoordinator: onCoordinator, onSessions: onSessions,
+        modifier(SessionProjectRowActions(row: row, onOpen: onOpen, onSessions: onSessions,
                                           onProject: onProject, onMove: onMove))
     }
 }
@@ -258,19 +263,21 @@ struct SessionProjectPage: View {
     @Environment(AppModel.self) private var app
     let address: SessionProjectAddress
     var rowNavigation: SessionRowNavigation = .push
-    var searchQuery: Binding<String>? = nil
 
     @State private var rowSwipe = RowSwipeState()
     @State private var taggingSession: Session?
     @State private var sharingSession: Session?
     @State private var movingSession: Session?
-    @State private var hits: [SessionSearchHit] = []
-    @State private var hitsQuery = ""
-    @State private var contentSearched = true
-    @State private var searching = false
-    @AppStorage("sessionList.pinnedCollapsed") private var pinnedCollapsed = false
 
     private var sessions: [Session] { app.projectSessions }
+    private var runningCount: Int {
+        sessions.filter { session in
+            if case .spinner = SessionStatusGlyph.make(for: session, watching: app.watches?.summary(for: session.id)).shape {
+                return true
+            }
+            return false
+        }.count
+    }
     private var project: ProjectSummary? {
         app.projects?.sidebarProjects.first { $0.id == address.projectID } ?? app.projects?.project(address.projectID)
     }
@@ -285,13 +292,9 @@ struct SessionProjectPage: View {
     private var titleText: String {
         project?.title ?? sessions.first?.projectMembership?.projectTitle ?? "Project"
     }
-    private var query: String {
-        searchQuery?.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    }
-    private var isSearching: Bool { !query.isEmpty }
     private var timeSections: [SessionTimeSection] {
         SessionTimeGrouping.sections(sessions.filter { $0.projectMembership?.role != .coordinator },
-                                     pinnedFirst: address.view == .open)
+                                     pinnedFirst: false)
     }
     private var selection: Binding<String?>? {
         guard rowNavigation == .selection else { return nil }
@@ -304,30 +307,16 @@ struct SessionProjectPage: View {
 
     var body: some View {
         List(selection: selection) {
-            if isSearching {
-                searchResults
-            } else {
-                progressCard
-                    .listRowSeparator(.hidden)
-                if let coordinator {
-                    Section(SessionProjectCopy.coordinatorSection) { sessionRow(coordinator) }
-                }
-                ForEach(timeSections) { section in
-                    if section.title == "Pinned" {
-                        Section {
-                            if !pinnedCollapsed {
-                                ForEach(section.sessions) { sessionRow($0) }
-                            }
-                        } header: {
-                            pinnedSectionHeader
-                        }
-                    } else {
-                        Section {
-                            ForEach(section.sessions) { sessionRow($0) }
-                        } header: {
-                            Text(section.title).textCase(nil)
-                        }
-                    }
+            progressCard
+                .listRowSeparator(.hidden)
+            if let coordinator {
+                Section(SessionProjectCopy.coordinatorSection) { sessionRow(coordinator) }
+            }
+            ForEach(timeSections) { section in
+                Section {
+                    ForEach(section.sessions) { sessionRow($0) }
+                } header: {
+                    Text(section.title).textCase(nil)
                 }
             }
         }
@@ -336,12 +325,7 @@ struct SessionProjectPage: View {
         .rowSwipeList(rowSwipe)
         .refreshable { await app.loadProjectSessions(address) }
         .overlay {
-            if isSearching {
-                if hits.isEmpty && !searching && !hitsQuery.isEmpty {
-                    ContentUnavailableView("No matches", systemImage: "magnifyingglass",
-                                           description: Text("Nothing matches \u{201C}\(hitsQuery)\u{201D}."))
-                }
-            } else if sessions.isEmpty && !app.projectSessionsLoading {
+            if sessions.isEmpty && !app.projectSessionsLoading {
                 if let failure = app.projectSessionsError {
                     ContentUnavailableView("Couldn't load sessions", systemImage: "exclamationmark.bubble",
                                            description: Text(failure))
@@ -382,7 +366,6 @@ struct SessionProjectPage: View {
                 await app.loadProjectSessions(address)
             }
         }
-        .task(id: query) { await runSearch() }
     }
 
     private var title: some View {
@@ -400,10 +383,10 @@ struct SessionProjectPage: View {
     private var progressCard: some View {
         HStack(spacing: 10) {
             if let counts = project?.taskCounts {
-                SessionProjectProgressBar(counts: counts, running: project?.buckets.running ?? 0)
+                SessionProjectProgressBar(counts: counts, running: runningCount)
                     .frame(width: 66)
                 Text(SessionProjectCopy.pageProgress(done: counts.done, total: counts.total,
-                                                     running: project?.buckets.running ?? 0))
+                                                     running: runningCount))
                     .font(.orbitMeta)
                     .foregroundStyle(.secondary)
             } else {
@@ -447,66 +430,18 @@ struct SessionProjectPage: View {
     }
 
     @ViewBuilder private func sessionRow(_ session: Session) -> some View {
-        let row = AgentSessionRow(session: session, showsPin: address.view == .open)
+        let scope: SessionView = session.effectiveLifecycleState == .completed ? .completed : .open
+        let row = AgentSessionRow(session: session, showsPin: scope == .open)
         switch rowNavigation {
         case .selection:
-            row.sessionRowActions(session, scope: address.view, onTag: { taggingSession = session },
+            row.sessionRowActions(session, scope: scope, onTag: { taggingSession = session },
                                   onShare: { sharingSession = session }, onMove: { movingSession = session })
                 .tag(session.id)
         case .push:
             Button { app.openProjectMember(session, push: true) } label: { row.foregroundStyle(.primary) }
-                .sessionRowActions(session, scope: address.view, onTag: { taggingSession = session },
+                .sessionRowActions(session, scope: scope, onTag: { taggingSession = session },
                                    onShare: { sharingSession = session }, onMove: { movingSession = session })
         }
-    }
-
-    private var pinnedSectionHeader: some View {
-        Button {
-            withAnimation { pinnedCollapsed.toggle() }
-        } label: {
-            HStack {
-                Text("Pinned").textCase(nil)
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .rotationEffect(.degrees(pinnedCollapsed ? 0 : 90))
-                    .accessibilityHidden(true)
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(.isHeader)
-    }
-
-    private var searchResults: some View {
-        Section {
-            ForEach(hits) { hit in
-                Button { app.route(to: .session(hit.id)) } label: {
-                    SessionSearchRow(hit: hit, query: hitsQuery)
-                }
-                .buttonStyle(.plain)
-            }
-        } header: {
-            Text(contentSearched ? "All sessions" : "Matching names only — type more to search message text.")
-                .textCase(nil)
-        }
-    }
-
-    /// The wide column keeps the same global session search as the folder and workspace pages.
-    private func runSearch() async {
-        let q = query
-        guard !q.isEmpty else {
-            hits = []
-            hitsQuery = ""
-            return
-        }
-        try? await Task.sleep(for: sessionSearchDebounce)
-        guard !Task.isCancelled else { return }
-        searching = true
-        defer { searching = false }
-        guard let result = await app.searchSessions(q), !Task.isCancelled else { return }
-        hits = result.hits
-        contentSearched = result.contentSearched
-        hitsQuery = result.q
     }
 }
 #endif
