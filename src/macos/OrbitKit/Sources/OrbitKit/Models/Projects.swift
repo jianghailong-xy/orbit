@@ -208,10 +208,13 @@ public struct ProjectListIntegration: Codable, Equatable, Sendable {
     public let line: IntegrationLine
     /// The branch's own name, as a merge receipt spells it (no `refs/heads/`).
     public let ref: String
+    /// Queued or running landing, merge and check jobs; nil on older servers.
+    public let activeJobCount: Int?
 
-    public init(line: IntegrationLine, ref: String) {
+    public init(line: IntegrationLine, ref: String, activeJobCount: Int? = nil) {
         self.line = line
         self.ref = ref
+        self.activeJobCount = activeJobCount
     }
 }
 
@@ -232,11 +235,13 @@ public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
     public let attention: ProjectListAttention?
     /// Nil when nobody has decided a line and nothing has integrated yet.
     public let integration: ProjectListIntegration?
+    public let coordinatorActivity: ProjectCoordinatorPulse?
 
     public init(id: String, title: String, status: ProjectStatus = .open, goal: String? = nil,
                 createdAt: String = "", updatedAt: String? = nil, taskCount: Int = 0,
                 buckets: ProjectBuckets = ProjectBuckets(), lastActivityAt: String? = nil,
-                attention: ProjectListAttention? = nil, integration: ProjectListIntegration? = nil) {
+                attention: ProjectListAttention? = nil, integration: ProjectListIntegration? = nil,
+                coordinatorActivity: ProjectCoordinatorPulse? = nil) {
         self.id = id
         self.title = title
         self.status = status
@@ -248,6 +253,7 @@ public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
         self.lastActivityAt = lastActivityAt
         self.attention = attention
         self.integration = integration
+        self.coordinatorActivity = coordinatorActivity
     }
 
     private struct Counts: Codable {
@@ -256,7 +262,7 @@ public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
 
     enum CodingKeys: String, CodingKey {
         case id, title, status, goal, createdAt, updatedAt, buckets, lastActivityAt, attention,
-             integration
+             integration, coordinatorActivity
         case counts = "_count"
     }
 
@@ -273,6 +279,7 @@ public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
         lastActivityAt = try c.decodeIfPresent(String.self, forKey: .lastActivityAt)
         attention = try c.decodeIfPresent(ProjectListAttention.self, forKey: .attention)
         integration = try c.decodeIfPresent(ProjectListIntegration.self, forKey: .integration)
+        coordinatorActivity = try c.decodeIfPresent(ProjectCoordinatorPulse.self, forKey: .coordinatorActivity)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -288,5 +295,6 @@ public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
         try c.encodeIfPresent(lastActivityAt, forKey: .lastActivityAt)
         try c.encodeIfPresent(attention, forKey: .attention)
         try c.encodeIfPresent(integration, forKey: .integration)
+        try c.encodeIfPresent(coordinatorActivity, forKey: .coordinatorActivity)
     }
 }

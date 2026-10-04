@@ -54,6 +54,20 @@ func TestCodexResetFaultProcess(t *testing.T) {
 	var ops sync.WaitGroup
 	relay := newCodexResetRelay(ctx, transport, consumer.execute, &ops)
 	relay.wait = wait
+	var heartbeatMu sync.Mutex
+	var draining bool
+	consumer.wakeHeartbeat = func() {
+		heartbeatMu.Lock()
+		defer heartbeatMu.Unlock()
+		sent := time.Now()
+		response, err := transport.heartbeat(HeartbeatRequest{
+			Status: "ONLINE", IdleCapacity: 1, LeaseOwner: transport.leaseOwner,
+			Draining: draining, PlanUsage: combinePlanUsage(nil, probe.snapshot()),
+		})
+		if err == nil {
+			relay.handle(response.CodexRateLimitResetRequest, sent, draining)
+		}
+	}
 
 	var answering sync.Mutex
 	answer := func(id int64, fields map[string]interface{}) {
@@ -95,6 +109,8 @@ func TestCodexResetFaultProcess(t *testing.T) {
 			}
 			answer(cmd.ID, fields)
 		case "heartbeat":
+			heartbeatMu.Lock()
+			draining = cmd.Draining || cmd.DrainingOnReceipt
 			request := HeartbeatRequest{Status: "ONLINE", IdleCapacity: 1, Draining: cmd.Draining, PlanUsage: combinePlanUsage(nil, probe.snapshot())}
 			if cmd.LeaseOwner == nil || *cmd.LeaseOwner {
 				request.LeaseOwner = transport.leaseOwner
@@ -107,10 +123,12 @@ func TestCodexResetFaultProcess(t *testing.T) {
 			var response HeartbeatResponse
 			headers := map[string]string{runnerCapabilitiesHeader: capabilities}
 			if err := transport.doHeaders(nil, "POST", "/runner/heartbeat", request, &response, 15*time.Second, headers); err != nil {
+				heartbeatMu.Unlock()
 				answer(cmd.ID, map[string]interface{}{"ok": false, "error": codexResetErrorClass(err)})
 				continue
 			}
 			relay.handle(response.CodexRateLimitResetRequest, sent, cmd.Draining || cmd.DrainingOnReceipt)
+			heartbeatMu.Unlock()
 			fields := map[string]interface{}{"ok": true, "command": nil}
 			if command := response.CodexRateLimitResetRequest; command != nil {
 				fields["command"] = map[string]interface{}{

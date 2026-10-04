@@ -13,7 +13,7 @@ import {
   type ProviderRow,
 } from '../lib/providerAdmin';
 import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
-import { runtimeSummary } from '../lib/sessionProviderChoices';
+import { providerDisplayLabel, runtimeSummary } from '../lib/sessionProviderChoices';
 import { useToast } from '../lib/toast';
 
 // A model row while it's being edited in the form. contextWindow is a free InputNumber (null when
@@ -163,8 +163,11 @@ function ProviderForm({
 
   const [advOpen, setAdvOpen] = useState(isCustom && !editing);
   const [label, setLabel] = useState(
-    editing?.label ??
-      (preset ? suggestProviderName(preset.label, siblings.map((s) => s.label)) : ''),
+    editing
+      ? editing.label
+      : preset
+        ? suggestProviderName(providerDisplayLabel(preset.label, preset.slug), siblings.map((s) => providerDisplayLabel(s.label, s.presetSlug)))
+        : '',
   );
   const [baseUrl, setBaseUrl] = useState(editing?.baseUrl ?? preset?.baseUrl ?? '');
   const [apiKey, setApiKey] = useState('');
@@ -340,12 +343,17 @@ function ProviderForm({
     saveMut.mutate();
   };
 
-  const title = editing ? `Edit ${editing.label}` : preset ? `Connect ${preset.label}` : 'Add a custom provider';
+  const title = editing
+    ? `Edit ${providerDisplayLabel(editing.label, editing.presetSlug)}`
+    : preset
+      ? `Connect ${providerDisplayLabel(preset.label, preset.slug)}`
+      : 'Add a custom provider';
   // The hero above the form: the row being edited, or the vendor being connected. A blank custom
   // provider has no identity yet, so it gets none.
   const identity = editing
     ? {
         ...editing,
+        label: providerDisplayLabel(editing.label, editing.presetSlug),
         // The logo follows the vendor, not the row's identifier — a second Anthropic key sits on
         // "anthropic-2" and is still Anthropic.
         slug: editing.presetSlug ?? editing.slug,
@@ -353,7 +361,7 @@ function ProviderForm({
         counted: 'configured',
       }
     : preset
-      ? { ...preset, runtime: preset.runtime ?? 'claude', count: presetModels.length, counted: 'included' }
+      ? { ...preset, label: providerDisplayLabel(preset.label, preset.slug), runtime: preset.runtime ?? 'claude', count: presetModels.length, counted: 'included' }
       : null;
 
   return (

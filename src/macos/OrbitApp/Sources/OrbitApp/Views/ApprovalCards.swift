@@ -3553,14 +3553,14 @@ private struct PromotionApprovalCardView: View {
             }
         case .merging:
             ApprovalActions {
-                Button {} label: { Text(PromotionCards.merging).approvalActionLabel() }
+                Button {} label: { Text(PromotionCards.mergingActionLabel(view)).approvalActionLabel() }
                     .buttonStyle(.borderedProminent)
                     .disabled(true)
                 Button(role: .cancel) { act { await console.cancelMergeToMain(view) } } label: {
                     Text(PromotionCards.cancel).approvalActionLabel()
                 }
                 .buttonStyle(.bordered)
-                .disabled(acting)
+                .disabled(acting || view.execution?.phase == "PUSH")
             }
         case .merged, .none:
             EmptyView()

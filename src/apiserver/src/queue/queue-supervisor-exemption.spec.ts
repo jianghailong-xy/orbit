@@ -19,6 +19,7 @@ async function claimSql(): Promise<string> {
     },
   };
   const prisma = {
+    session: { findMany: async () => [] },
     $transaction: async (fn: (transaction: typeof tx) => Promise<unknown>) => fn(tx),
   };
   const queue = new QueueService(prisma as never, { publishSessionUpdated() {} } as never);

@@ -135,6 +135,9 @@ type EngineHealthReport struct {
 	Installed bool   `json:"installed"`
 	Version   string `json:"version,omitempty"`
 	Auth      string `json:"auth"` // "yes" | "no" | "unknown"
+	// Antigravity only: selected credentials and the quota read made with its Google auth probe.
+	AuthSource string     `json:"authSource,omitempty"` // "google" | "env_key"
+	PlanUsage  *PlanUsage `json:"planUsage,omitempty"`
 	// What the updater last did to this engine. Nil until it has run once — which the UI shows
 	// as "not reported yet", never as a problem.
 	Update *EngineUpdateReport `json:"update,omitempty"`

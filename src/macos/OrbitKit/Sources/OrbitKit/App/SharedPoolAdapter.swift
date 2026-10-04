@@ -17,7 +17,7 @@ public enum SharedPools {
     /// one of its keys rather than Claude on one of the viewer's subscriptions.
     public static func asProviderPool(_ pool: SharedPool) -> ProviderPool {
         let members = loginMembers(pool) + keyMembers(pool)
-        let free = members.contains { $0.state == .available || $0.state == .running }
+        let free = members.contains { !AccountPause.isPaused($0.pausedUntil) && ($0.state == .available || $0.state == .running) }
         // Whether waiting brings anything back: an account that is not signed out — a spent one comes back
         // by the hour — or a key OpenAI still takes that is switched on (web's `keysPool`).
         let revives = pool.logins.contains { $0.state != "SIGNED_OUT" }
@@ -62,8 +62,8 @@ public enum SharedPools {
                 planUsage: login.usage,
                 state: state,
                 resetsAt: state == .spent ? (CodexLoginPool.spentUntil(login) ?? nil) : nil,
-                next: login.next,
-                login: login)
+                next: login.next && !AccountPause.isPaused(login.pausedUntil),
+                login: login, pausedUntil: login.pausedUntil)
         }
     }
 
@@ -78,10 +78,15 @@ public enum SharedPools {
     /// accounts can take one.
     public static func ownPoolWithAccess(_ own: ProviderPool, _ access: SharedPool) -> ProviderPool {
         let accounts = own.members
-        let nextAccount = accounts.first(where: \.next) ?? accounts.first { $0.state == .available }
+        let paused = accounts.contains { AccountPause.isPaused($0.pausedUntil) }
+        let serverNext = access.logins.first(where: \.next)
+        // The owner's login list stays oldest first; the shared read names the server's replacement.
+        let nextAccount = paused
+            ? accounts.first { $0.login?.fingerprint == serverNext?.fingerprint && !AccountPause.isPaused($0.pausedUntil) }
+            : accounts.first(where: \.next) ?? accounts.first { $0.state == .available }
         let members = accounts.map { $0.marked(next: $0.id == nextAccount?.id) }
             + keyMembers(access).map { nextAccount == nil ? $0 : $0.marked(next: false) }
-        let working = members.contains { $0.state == .available || $0.state == .running }
+        let working = members.contains { !AccountPause.isPaused($0.pausedUntil) && ($0.state == .available || $0.state == .running) }
         let stops = members.compactMap { $0.state == .spent ? $0.resetsAt : nil }
         // Whether waiting brings anything back: not when every account is signed out and every key refused
         // or switched off.
@@ -124,8 +129,8 @@ public enum SharedPools {
                 // own mark when the gateway set one (`spentUntil`), else the month's end — the same
                 // choice web's `sharedPoolAsProviderPool` makes for the same key.
                 resetsAt: state == .spent ? (key.spentUntil ?? pool.window?.end) : nil,
-                next: key.next,
-                key: key)
+                next: key.next && !AccountPause.isPaused(key.pausedUntil),
+                key: key, pausedUntil: key.pausedUntil)
         }
     }
 
@@ -158,6 +163,6 @@ private extension PoolMember {
     /// The same member, the next session's or not.
     func marked(next: Bool) -> PoolMember {
         PoolMember(id: id, slug: slug, label: label, presetSlug: presetSlug, enabled: enabled, planUsage: planUsage,
-                   state: state, resetsAt: resetsAt, next: next, key: key, login: login)
+                   state: state, resetsAt: resetsAt, next: next, key: key, login: login, pausedUntil: pausedUntil)
     }
 }

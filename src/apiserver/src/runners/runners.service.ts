@@ -28,6 +28,7 @@ import {
 } from '../runner-api/runner-api.controller';
 import { engineKeepsAccounts } from '../common/runner-engines';
 import { ACCOUNT_ID_PATTERN, CreateEnrollmentTokenDto, StartLoginDto, UpdateRunnerDto } from './dto';
+import { accountPauseUntil } from '../common/account-pause';
 
 // Three missed 30s heartbeats — a runner quieter than this reads as offline.
 const OFFLINE_AFTER_MS = 90_000;
@@ -128,6 +129,7 @@ export class RunnersService {
         // (namedRunnerEngines), not only the ones the runner reports.
         engines: true,
         accountNames: true,
+        accountPauses: true,
         installStatus: true,
         installEngine: true,
         installCommand: true,
@@ -163,6 +165,7 @@ export class RunnersService {
       runtimeDefaultModels,
       engines,
       accountNames,
+      accountPauses,
       installStatus,
       installEngine,
       installCommand,
@@ -179,7 +182,7 @@ export class RunnersService {
       runtimeDefaultModels: sanitizeRuntimeDefaultModels(runtimeDefaultModels),
       // null (not []) for a runner that has never reported: "we don't know yet" and "nothing is
       // installed" are different answers, and only one of them is ours to make up.
-      engines: namedRunnerEngines({ engines, accountNames }),
+      engines: namedRunnerEngines({ engines, accountNames, accountPauses }),
       antigravity: antigravityState({ capabilities: r.capabilities, engines }),
       install: installStateOf({
         installStatus,
@@ -592,6 +595,36 @@ export class RunnersService {
        WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid`;
     if (written === 0) throw new NotFoundException('runner not found');
     return alias ? { ...reported, name: alias } : reported;
+  }
+
+  async pauseAccount(
+    ownerId: string, id: string, engine: LoginEngine, account: string, durationMinutes: number | null,
+  ): Promise<RunnerEngineAccount> {
+    if (!engineKeepsAccounts(engine) || !ACCOUNT_ID_PATTERN.test(account ?? '')) {
+      throw new BadRequestException('Unknown account');
+    }
+    const pausedUntil = accountPauseUntil(durationMinutes);
+    const runner = await this.prisma.runner.findFirst({
+      where: { id, ownerId }, select: { engines: true, accountNames: true },
+    });
+    if (!runner) throw new NotFoundException('runner not found');
+    const reported = namedRunnerEngines(runner)?.find((entry) => entry.engine === engine)
+      ?.accounts?.find((entry) => entry.id === account);
+    if (!reported) throw new NotFoundException('That account is not one this runner reports');
+    const until = pausedUntil?.toISOString() ?? null;
+    const written = await this.prisma.$executeRaw`
+      UPDATE "runner"
+         SET "account_pauses" = CASE
+               WHEN ${until}::text IS NULL
+                 THEN COALESCE("account_pauses", '{}'::jsonb) #- ARRAY[${engine}::text, ${account}::text]
+               ELSE jsonb_set(
+                      COALESCE("account_pauses", '{}'::jsonb), ARRAY[${engine}::text],
+                      COALESCE("account_pauses" -> ${engine}::text, '{}'::jsonb)
+                        || jsonb_build_object(${account}::text, ${until}::text))
+             END
+       WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid`;
+    if (written === 0) throw new NotFoundException('runner not found');
+    return { ...reported, pausedUntil: until };
   }
 
   /** @deprecated Codex's route; read removeAccount. */

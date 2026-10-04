@@ -214,7 +214,8 @@ import {
   runAccount,
   workspaceLeavesAccountToOrbit,
 } from '../providers/plan-usage-accounts';
-import { sanitizeRunnerEngines } from '../common/runner-engines';
+import { namedRunnerEngines, sanitizeRunnerEngines } from '../common/runner-engines';
+import { runnerAccountPausedUntil } from '../common/account-pause';
 import { CLAUDE_ACCOUNT_MOVE_V1, CODEX_ACCOUNT_MOVE_V1 } from '../providers/account-move-capability';
 import {
   CURRENT_WORK_INTERRUPTED,
@@ -632,7 +633,7 @@ function automaticAccountOnSwitch(
   session: {
     numTurns: number;
     workspace: { env: unknown; codexAccount: string | null; claudeAccount: string | null } | null;
-    assignedRunner: { engines: unknown; planUsage: unknown; capabilities: string[] } | null;
+    assignedRunner: { engines: unknown; accountPauses?: unknown; planUsage: unknown; capabilities: string[] } | null;
   },
   engine: AccountEngine,
   now: Date,
@@ -640,7 +641,7 @@ function automaticAccountOnSwitch(
   const runner = session.assignedRunner;
   if (!runner) return null;
   if (session.numTurns > 0 && !runnerCarriesAccounts(runner, engine)) return null;
-  return automaticAccount(engine, session.workspace, runner.engines, runner.planUsage, now);
+  return automaticAccount(engine, session.workspace, runner.engines, runner.planUsage, now, runner.accountPauses);
 }
 
 /** Whether `runner` carries a conversation from one of its `engine` accounts to another. */
@@ -1089,7 +1090,7 @@ export class SessionsService {
     // everything this deliberately lets through.
     const targetRunner = await this.prisma.runner.findFirst({
       where: { id: assignedRunnerId, ownerId },
-      select: { name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true, accountNames: true, planUsage: true },
+      select: { name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true, accountNames: true, accountPauses: true, planUsage: true },
     });
     // The Codex or Claude account this session runs on: the one picked for it — which pins it there —
     // else, when its workspace leaves the account to Orbit, the runner's account whose quota resets
@@ -1104,6 +1105,7 @@ export class SessionsService {
             targetRunner.engines,
             targetRunner.planUsage,
             new Date(),
+            targetRunner.accountPauses,
           )
         : null;
     const codexAccount = dto.codexAccount ?? automatic(AgentProvider.CODEX);
@@ -4637,7 +4639,7 @@ export class SessionsService {
     if (!engine || !isBuiltinProvider(session.provider, session.providerBuiltin)) return null;
     const runner = await tx.runner.findUnique({
       where: { id: session.assignedRunnerId },
-      select: { engines: true, accountNames: true, planUsage: true, capabilities: true },
+      select: { engines: true, accountNames: true, accountPauses: true, planUsage: true, capabilities: true },
     });
     if (!runner || !runnerCarriesAccounts(runner, engine)) return null;
     const workspace = session.workspaceId
@@ -4654,6 +4656,7 @@ export class SessionsService {
       runner.engines,
       runner.planUsage,
       new Date(),
+      runner.accountPauses,
     );
     if (!move) return null;
     await this.insertTurnLocked(tx, session.id, {
@@ -7658,7 +7661,7 @@ export class SessionsService {
         codexAccountPinned: true,
         claudeAccountPinned: true,
         workspace: { select: { env: true, codexAccount: true, claudeAccount: true } },
-        assignedRunner: { select: { engines: true, planUsage: true, capabilities: true } },
+        assignedRunner: { select: { engines: true, accountPauses: true, planUsage: true, capabilities: true } },
       },
     });
     const write = (to: string, pinned: boolean): AccountSwitchWrite =>
@@ -7685,6 +7688,9 @@ export class SessionsService {
       ?.accounts?.find((entry) => entry.id === account);
     if (!runner || !row) throw new BadRequestException("that account is not one this session's runner reports");
     if (row.auth === 'no') throw new ConflictException("that account is signed out on this session's runner");
+    if (runnerAccountPausedUntil(runner.accountPauses, engine, account)) {
+      throw new ConflictException('That account is paused — resume it before switching');
+    }
     if (session.numTurns > 0 && !runnerCarriesAccounts(runner, engine)) {
       throw new ConflictException(
         "this session's runner cannot move a conversation to another account yet — it updates itself when no turn is running",
@@ -8056,7 +8062,7 @@ export class SessionsService {
           claudeAccount: true,
           claudeAccountPinned: true,
           workspace: { select: { env: true, codexAccount: true, claudeAccount: true } },
-          assignedRunner: { select: { engines: true, accountNames: true, planUsage: true, capabilities: true } },
+          assignedRunner: { select: { engines: true, accountNames: true, accountPauses: true, planUsage: true, capabilities: true } },
         },
       });
       const engine: AccountEngine | null =
@@ -8072,7 +8078,7 @@ export class SessionsService {
       const choice = engine === AgentProvider.CODEX ? { codexAccount: own ?? workspacePick } : { claudeAccount: own ?? workspacePick };
       const current = runAccount(engine, session.workspace?.env, choice, runner.engines);
       if (!current) throw new BadRequestException("this session spends a key of its own, not one of its runner's accounts");
-      const accounts = sanitizeRunnerEngines(runner.engines)?.find((entry) => entry.engine === engine)?.accounts;
+      const accounts = namedRunnerEngines(runner)?.find((entry) => entry.engine === engine)?.accounts;
       const usage = runner.planUsage as PlanUsage | null;
       const now = new Date();
       let to = current;
@@ -8083,16 +8089,20 @@ export class SessionsService {
           throw new BadRequestException("this session's workspace decides its account");
         }
         pinned = false;
-        const spent = planUsageBlockedUntil(usage, engine, now, current) != null;
+        const paused = runnerAccountPausedUntil(runner.accountPauses, engine, current, now) !== null;
+        const spent = paused || planUsageBlockedUntil(usage, engine, now, current) != null;
         const roomier = spent ? accountToMoveTo(engine, accounts, usage, now, current) : null;
         if (roomier) {
           to = roomier;
-          notice = accountSwitchNotice(engine, { from: current, to }, runner);
+          notice = accountSwitchNotice(engine, { from: current, to, ...(paused ? { paused: true } : {}) }, runner);
         }
       } else {
         const row = accounts?.find((entry) => entry.id === account);
         if (!row) throw new BadRequestException("that account is not one this session's runner reports");
         if (row.auth === 'no') throw new ConflictException("that account is signed out on this session's runner");
+        if (runnerAccountPausedUntil(runner.accountPauses, engine, account, now)) {
+          throw new ConflictException('That account is paused — resume it before switching');
+        }
         to = account;
         if (to !== current) notice = `Switched to ${accountLabel(engine, to, runner)}`;
       }

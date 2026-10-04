@@ -993,7 +993,7 @@ export function ProjectRow({
   return (
     <div className={`tp-item tp-project ${active ? 'active' : ''}`} onClick={() => onOpen(project)}>
       <span className="tp-ico tp-project-mark">
-        <span className={`tp-list-dot ${working ? 'running' : ''}`} title={working ? 'Running' : undefined} />
+        <span className={`tp-list-dot ${working ? 'running' : ''}`} title={working ? 'Work in flight' : undefined} />
       </span>
       <span className="tp-label">{project.title}</span>
       {needsYou > 0 && (

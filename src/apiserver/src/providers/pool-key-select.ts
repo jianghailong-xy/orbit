@@ -16,6 +16,7 @@ export interface PoolKeyCandidate {
   othersCostMicros: number;
   /** Out of budget until then — OpenAI answered `insufficient_quota` for it; null when it has not. */
   spentUntil: Date | null;
+  pausedUntil?: Date | null;
 }
 
 /**
@@ -38,7 +39,7 @@ function spent(key: PoolKeyCandidate, now: Date): boolean {
  * spent its share cap this month.
  */
 export function keyCanRun(key: PoolKeyCandidate, requesterId: string, now: Date): boolean {
-  return key.enabled && key.state === 'ACTIVE' && !spent(key, now) && keyRoom(key, requesterId) > 0;
+  return key.enabled && key.state === 'ACTIVE' && !(key.pausedUntil && key.pausedUntil > now) && !spent(key, now) && keyRoom(key, requesterId) > 0;
 }
 
 /**
@@ -49,7 +50,7 @@ export function keyCanRun(key: PoolKeyCandidate, requesterId: string, now: Date)
  */
 export function keyRunsAgainAt(key: PoolKeyCandidate, requesterId: string, now: Date): Date | null {
   if (!key.enabled || key.state !== 'ACTIVE') return null;
-  let at = now.getTime();
+  let at = Math.max(now.getTime(), key.pausedUntil?.getTime() ?? 0);
   if (spent(key, now)) at = Math.max(at, key.spentUntil!.getTime());
   if (keyRoom(key, requesterId) <= 0) at = Math.max(at, nextUsageWindowStart(now).getTime());
   return new Date(at);
@@ -123,6 +124,7 @@ export function poolKeySwitchNotice(
 function whyKeyLeft(from: PoolKeyCandidate & { label: string }, requesterId: string, now: Date): string {
   if (from.state === 'INVALID') return `${from.label} was rejected by OpenAI`;
   if (!from.enabled || from.state === 'DISABLED') return `${from.label} is disabled`;
+  if (from.pausedUntil && from.pausedUntil > now) return `${from.label} is paused`;
   if (spent(from, now) || keyRoom(from, requesterId) <= 0) return `${from.label} is out of budget`;
   return `${from.label} is unavailable`;
 }

@@ -210,7 +210,11 @@ public enum PromotionCards {
         let branch = shortRef(view.sourceRef)
         let into = shortRef(view.upstreamRef)
         switch stage(view) {
-        case .merging: return "Merging \(branch) into \(into)…"
+        case .merging:
+            if view.execution?.state == "QUEUED" { return "Merge queued: \(branch) into \(into)" }
+            if view.execution?.state != "RUNNING" { return "Merge confirmed: \(branch) into \(into)" }
+            if view.execution?.phase == "CHECK" { return "Re-checking \(branch) before merging into \(into)…" }
+            return "Merging \(branch) into \(into)…"
         case .merged: return view.merged?.automatic == true ? mergedAutomaticallyHeading : mergedHeading
         case .blocked: return "\(branch) can’t merge into \(into) yet"
         default: return "Merge \(branch) into \(into)?"
@@ -269,9 +273,28 @@ public enum PromotionCards {
     /// B's status row: the upstream moved after the check, so the combined tree is being checked
     /// again — and nobody has to press anything for that.
     public static func mergingStatusLine(_ view: ProjectPromotionView) -> String {
-        view.state == .rechecking
-            ? "\(shortRef(view.upstreamRef)) moved since the check — re-checking the combined tree"
-            : "checks passed and this is landing on \(shortRef(view.upstreamRef))"
+        let into = shortRef(view.upstreamRef)
+        if view.execution?.state == "QUEUED" { return "confirmed — queued to merge into \(into)" }
+        guard view.execution?.state == "RUNNING" else { return "confirmed — waiting for merge execution" }
+        switch view.execution?.phase {
+        case "CHECK":
+            return view.state == .rechecking
+                ? "\(into) moved since the check — re-checking the combined tree"
+                : "re-checking the combined tree"
+        case "FETCH": return "confirmed — fetching the branches"
+        case "MAIN_SYNC": return "confirmed — syncing the branches"
+        case "REBASE": return "confirmed — rebasing the branch"
+        case "MERGE": return "confirmed — preparing the combined tree"
+        case "VERIFY": return "confirmed — verifying the tested tree"
+        case "PUSH": return "confirmed — publishing the tested tree to \(into)"
+        default: return "confirmed — starting the merge"
+        }
+    }
+
+    public static func mergingActionLabel(_ view: ProjectPromotionView) -> String {
+        if view.execution?.state == "QUEUED" { return "Queued" }
+        if view.execution?.state != "RUNNING" { return "Confirmed" }
+        return view.execution?.phase == "CHECK" ? "Re-checking…" : merging
     }
 
     /// C's commit row: what landed, who merged it, and when.

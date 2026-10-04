@@ -7,7 +7,8 @@ import OrbitKit
 ///
 /// The control plane has no project event, so the list is refetched: when the section or the
 /// drawer appears, on pull-to-refresh, on a short coalesced nudge after a task moved (a task write
-/// is what moves a project's lanes), and after every write this client makes.
+/// is what moves a project's lanes), after every write this client makes, and every 15 seconds
+/// while loaded: integration jobs can move without changing a task or session.
 @MainActor
 @Observable
 final class ProjectsModel {
@@ -19,6 +20,7 @@ final class ProjectsModel {
     /// Handed out from inside view bodies, so reading and filling it must not invalidate them.
     @ObservationIgnored private var details: [String: ProjectDetailModel] = [:]
     @ObservationIgnored private var nudgeTask: Task<Void, Never>?
+    @ObservationIgnored private var refreshNotBefore = Date.distantPast
 
     init(baseURL: URL, tokenStore: TokenStore) {
         api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
@@ -48,6 +50,14 @@ final class ProjectsModel {
         } catch {
             loadState.fail()
         }
+    }
+
+    /// Called by the app's existing polling task, which stops on sign-out.
+    func refreshIfDue(now: Date = Date()) async {
+        guard loadState.hasLoaded, now >= refreshNotBefore else { return }
+        refreshNotBefore = now.addingTimeInterval(15)
+        await load()
+        for detail in details.values where detail.isVisible { await detail.load(refreshGraph: false) }
     }
 
     /// A task moved, and a project's lanes with it maybe: refetch shortly, once for a burst.
@@ -97,6 +107,7 @@ final class ProjectDetailModel {
     private(set) var tasks: [ProjectTaskRow] = []
     private(set) var nextTaskCursor: String?
     private(set) var loadingMoreTasks = false
+    @ObservationIgnored private var refreshing = false
     private(set) var loadState = ListLoadState()
     /// The project is gone (deleted here or elsewhere); the page says so instead of spinning.
     private(set) var missing = false
@@ -125,16 +136,19 @@ final class ProjectDetailModel {
 
     /// Every read the page draws, side by side. The document is the one the page cannot draw
     /// without; the others each leave their own card out when they fail.
-    func load() async {
+    func load(refreshGraph: Bool = true) async {
+        guard !refreshing, !loadingMoreTasks else { return }
+        refreshing = true
+        defer { refreshing = false }
         loadState.begin()
         async let documentRead = api.project(projectID)
         async let panoramaRead = api.projectPanorama(projectID)
         async let integrationRead = api.projectIntegration(projectID)
         async let openItemsRead = api.projectOpenItems(projectID: projectID)
         async let coordinatorRead = api.projectCoordinatorStatus(projectID)
-        async let graphRead = api.projectDependencyGraph(projectID)
+        async let graphRead = refreshGraph ? api.projectDependencyGraph(projectID) : nil
         async let queueRead = api.projectReadyToRun(projectID)
-        async let tasksRead = api.projectTaskPage(projectID)
+        async let tasksRead = refreshedTaskWindow(count: max(100, tasks.count))
         do {
             let fetched = try await documentRead
             document = fetched
@@ -163,8 +177,21 @@ final class ProjectDetailModel {
         }
     }
 
+    /// Refresh every loaded page so a polling tick neither collapses the list nor leaves its tail stale.
+    private func refreshedTaskWindow(count: Int) async throws -> ProjectTaskPage {
+        var items: [ProjectTaskRow] = []
+        var cursor: String?
+        repeat {
+            let page = try await api.projectTaskPage(projectID, cursor: cursor,
+                                                    limit: min(200, count - items.count))
+            items += page.items
+            cursor = page.nextCursor
+        } while items.count < count && cursor != nil
+        return ProjectTaskPage(items: items, nextCursor: cursor)
+    }
+
     func loadMoreTasks() async {
-        guard let cursor = nextTaskCursor, !loadingMoreTasks else { return }
+        guard let cursor = nextTaskCursor, !loadingMoreTasks, !refreshing else { return }
         loadingMoreTasks = true
         defer { loadingMoreTasks = false }
         guard let page = try? await api.projectTaskPage(projectID, cursor: cursor) else { return }

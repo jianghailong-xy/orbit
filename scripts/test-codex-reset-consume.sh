@@ -18,6 +18,8 @@
 #   capability ........................... TestCodexResetCapabilityIsDeclaredWithTheConsumeThatServesIt
 #   transport and protocol errors ........ TestCodexResetConsumeRetriesWithoutAnOutcomeUnderTheSameKey
 #   consume apart from the refresh ....... TestCodexResetRefreshFollowsOnlyAConfirmedConsume
+#   publish usage before success ......... TestCodexResetRefreshPublishesUsageBeforeSuccess
+#   lost usage heartbeat ................. TestCodexResetRefreshWithoutUsageHeartbeatStopsWithoutSuccess
 #   crash and restart recovery ........... TestCodexResetConsumeRecoversFromACrashAtEveryCheckpoint
 #
 # WHAT COUNTS AS GREEN
@@ -41,6 +43,8 @@ GO_TESTS=(
   TestCodexResetConsumeCallsNothingForAnAccountItCannotVouchFor
   TestCodexResetConsumeRetriesWithoutAnOutcomeUnderTheSameKey
   TestCodexResetRefreshFollowsOnlyAConfirmedConsume
+  TestCodexResetRefreshPublishesUsageBeforeSuccess
+  TestCodexResetRefreshWithoutUsageHeartbeatStopsWithoutSuccess
   TestCodexResetConsumeRecoversFromACrashAtEveryCheckpoint
   TestCodexResetCapabilityIsDeclaredWithTheConsumeThatServesIt
   TestCodexResetRelayStartsEachClaimOncePerProcess
@@ -56,6 +60,7 @@ GO_TESTS=(
   TestCodexResetStatusDerivationMatchesTheContract
   TestCodexResetWireFixturesValidateLikeShared
   TestCodexUsageProbeReadsResetThroughAFakeAppServer
+  TestCodexResetProbeCacheOnlyMovesForward
 )
 
 # The scenarios inside the consume tests, as t.Run names them (`go test -v` prints spaces as underscores).

@@ -15,7 +15,7 @@ struct ProjectLandingRow: View {
         let ink = line.running ? Color.accentColor : Color.secondary
         HStack(spacing: 8) {
             LandingRing(running: line.running)
-            Text(ProjectPage.landingWord).font(.orbitLabel.weight(.semibold)).foregroundStyle(ink)
+            Text(line.word).font(.orbitLabel.weight(.semibold)).foregroundStyle(ink)
             // Always drawn, even empty: it is the row's flexible middle, and the one that keeps the
             // state and the clock against the trailing edge whether or not the job has a name.
             Text(line.what ?? "")

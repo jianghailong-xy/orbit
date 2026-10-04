@@ -24,6 +24,7 @@ test('queue claims v5-tagged terminal handoffs only for a capable runner', async
     },
   };
   const prisma = {
+    session: { findMany: async () => [] },
     $transaction: async (fn: (transaction: typeof tx) => Promise<unknown>) => fn(tx),
   };
   const queue = new QueueService(prisma as never, { publishSessionUpdated() {} } as never);

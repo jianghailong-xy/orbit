@@ -76,6 +76,7 @@ func init() {
 		integrationJobCapabilityV1,
 		promotionAutomaticLandCapabilityV1,
 		codexAccountLoginCapabilityV1,
+		antigravityGoogleLoginCapabilityV1,
 		codexAccountRemoveCapabilityV1,
 		codexAccountMoveCapabilityV1,
 		claudeAccountLoginCapabilityV1,
