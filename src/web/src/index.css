@@ -13933,6 +13933,92 @@ button.chat-jump-start:hover {
   white-space: nowrap;
 }
 
+/* The runner header's spare width belongs to its toggle, with Manage kept independent. */
+.re-runner-card .re-head {
+  gap: 0;
+  padding: 0;
+}
+.re-runner-card .re-toggle {
+  flex: 1;
+  align-self: stretch;
+  gap: 10px;
+  min-height: 64px;
+  padding: 10px 12px;
+  border-radius: 11px 0 0 11px;
+}
+.re-runner-card .re-toggle:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -3px;
+}
+.re-runner-card .re-chev {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  color: var(--text-2);
+  transition: color 0.15s, transform 0.15s;
+}
+.re-runner-card .re-chev.open,
+.re-runner-card .re-toggle:hover .re-chev {
+  color: var(--brand);
+}
+.re-runner-copy {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 9px;
+  min-width: 0;
+}
+.re-runner-copy .re-runner,
+.re-runner-copy .re-runner-meta {
+  overflow-wrap: anywhere;
+}
+.re-runner-card .re-manage {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  margin: 0 14px 0 8px;
+}
+.re-runner-card .re-manage:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+.re-runner-card .re-head > .ant-tag {
+  margin: 0 4px;
+}
+@container re-card (max-width: 600px) {
+  .re-runner-card .re-head {
+    flex-wrap: wrap;
+  }
+  .re-runner-card .re-toggle {
+    flex-basis: 100%;
+    gap: 8px;
+    padding: 10px 8px;
+    border-radius: 11px;
+  }
+  .re-runner-copy,
+  .re-runner-copy > span {
+    display: block;
+  }
+  .re-runner-copy .re-runner-meta {
+    margin-top: 3px;
+  }
+  .re-runner-card .re-summary {
+    border-left: 0;
+    padding: 3px 0 0;
+  }
+  .re-runner-card .re-manage {
+    margin-left: auto;
+    margin-right: 12px;
+  }
+  .re-runner-card .re-head > .ant-tag {
+    margin-left: 75px;
+  }
+}
+
 .re-row {
   display: grid;
   /* The last column is sized for two small buttons side by side: `+ Account` beside `Re-sign in` on

@@ -1035,21 +1035,31 @@ function RunnerEngineCard({
           className="re-toggle"
           type="button"
           aria-expanded={!collapsed}
+          aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${runner.displayName || runner.name}`}
           onClick={onToggle}
         >
           <span className={`re-chev${collapsed ? '' : ' open'}`} aria-hidden="true">
-            ▸
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <path
+                d="m9 5 7 7-7 7"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
           </span>
           <span className={`re-dot${runner.online ? ' on' : ''}`} />
-          <span className="re-runner">{runner.displayName || runner.name}</span>
-          <span className="re-runner-meta">
-            {[runner.hostname, runner.version && `runner ${runner.version}`]
-              .filter(Boolean)
-              .join(' · ')}
+          <span className="re-runner-copy">
+            <span className="re-runner">{runner.displayName || runner.name}</span>
+            <span className="re-runner-meta">
+              {[runner.hostname, runner.version && `runner ${runner.version}`]
+                .filter(Boolean)
+                .join(' · ')}
+            </span>
+            {collapsed && <span className="re-summary">{summaryOf(runner)}</span>}
           </span>
-          {collapsed && <span className="re-summary">{summaryOf(runner)}</span>}
         </button>
-        <span className="re-head-sp" />
         {!runner.online && <Tag>Offline</Tag>}
         {/* Updating the engine CLIs is not here, on purpose. It takes no engine — it does every
             CLI on the machine — so its object is the runner, and this is a page about identity
