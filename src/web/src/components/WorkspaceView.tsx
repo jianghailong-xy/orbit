@@ -111,6 +111,7 @@ import {
   sessionsQuery,
   sessionTagsQuery,
   ownerConfirmationQuery,
+  openProjectsQuery,
   pendingCriteriaDecisionsQuery,
   pendingDecisionsQuery,
   projectMergedPromotionsQuery,
@@ -128,10 +129,15 @@ import {
   folderNameDraft,
   folderNameFailure,
   listShowsFolders,
-  sessionFolderListing,
-  sessionsInFolder,
   type SessionFolderRow,
 } from '../lib/sessionFolders';
+import {
+  SESSION_PROJECT_COPY,
+  listShowsProjects,
+  sessionProjectListing,
+  type SessionProjectRow,
+} from '../lib/sessionProjects';
+import { SidebarNavIcon } from './SidebarNavIcon';
 import {
   type SessionTagRef,
   sessionTagSections,
@@ -1107,6 +1113,92 @@ export function SessionTitleRow({
   );
 }
 
+/** A project occupies the coordinator's row, using the same two lines as a session. */
+export function SessionProjectListRow({
+  project,
+  active,
+  onOpen,
+  menu,
+}: {
+  project: SessionProjectRow<any>;
+  active: boolean;
+  onOpen: () => void;
+  menu: MenuProps;
+}) {
+  const counts = project.taskCounts;
+  const total = counts?.total ?? 0;
+  const done = Math.min(counts?.done ?? 0, total);
+  const failed = Math.min(counts?.failed ?? 0, total - done);
+  const running = Math.min(project.runningCount, total - done - failed);
+  const width = (count: number) => `${total > 0 ? count / total * 100 : 0}%`;
+  return (
+    <div
+      className={`session-row session-project-row${active ? ' active' : ''}`}
+      data-project-id={project.projectId}
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
+        e.preventDefault();
+        onOpen();
+      }}
+    >
+      <div className="session-swipe">
+        <span className="session-icon session-project-icon">
+          <SidebarNavIcon name="projects" />
+          {project.indicator && (
+            <span
+              className={`session-project-status ${project.indicator}`}
+              data-state={project.indicator}
+              aria-label={project.indicator === 'needs-you' ? 'Waiting for you'
+                : project.indicator === 'running' ? 'Running' : 'Background jobs'}
+            />
+          )}
+        </span>
+        <div className="session-main">
+          <div className="session-title-row">
+            <div className="session-title">{project.title}</div>
+            <span className="session-time">{fmtTime(project.lastTurnAt ?? project.createdAt ?? undefined)}</span>
+          </div>
+          <div className="session-sub">
+            <span
+              className={`session-project-progress${project.status === 'DONE' ? ' done' : ''}`}
+              title={SESSION_PROJECT_COPY.progressHint(project.sessionCount, project.runningCount)}
+            >
+              {counts ? (
+                <>
+                  <span className="session-project-progress-bar" aria-hidden="true">
+                    <span className="done" style={{ width: width(done) }} />
+                    <span className="running" style={{ width: width(running) }} />
+                    <span className="failed" style={{ width: width(failed) }} />
+                  </span>
+                  {SESSION_PROJECT_COPY.progress(counts.done, counts.total)}
+                </>
+              ) : project.status}
+            </span>
+            <div
+              className={`session-preview${project.line.tone === 'preview' ? '' : ` tone-${project.line.tone}`}`}
+              title={project.line.text}
+            >
+              {project.line.text}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="session-right">
+        <div className="session-actions" onClick={(e) => e.stopPropagation()}>
+          <Dropdown trigger={['click']} placement="bottomRight" menu={menu}>
+            <button type="button" className="session-kebab" aria-label="Project actions">
+              <MoreOutlined />
+            </button>
+          </Dropdown>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** Compact tag summary for a session-list row. The first tag is the one users can scan; the
  * fixed count survives when that name has to ellipsize, and a container query swaps to the total
  * count when the resizable session column becomes too narrow to show a useful name. */
@@ -1753,7 +1845,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // A row's Share action opens the share dialog for that row rather than for the open session.
   const [shareRowId, setShareRowId] = useState<string | null>(null);
   // The session the Move dialog is open for: a row's, or the open conversation's.
-  const [moveTarget, setMoveTarget] = useState<MoveDialogSession | null>(null);
+  const [moveTarget, setMoveTarget] = useState<(MoveDialogSession & {
+    workspace?: { id: string; name: string };
+  }) | null>(null);
   // New Folder… and Rename…'s inline name field (`id` null for a new folder), and the folder row
   // whose ⋯ menu is open — it keeps the row's hover look while it is.
   const [folderEdit, setFolderEdit] = useState<{
@@ -2279,6 +2373,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // without folders keeps paging as before.
   const listByTag = !!tagFilter || groupByTag;
   const foldersShown = listShowsFolders(effectiveView, listByTag) && workspaceFolders.length > 0;
+  const projectScope = `${runner.id}:${scopeWorkspaceId}:${effectiveView}:${tagFilter ?? ''}`;
+  const [membershipScope, setMembershipScope] = useState<string | null>(null);
+  const projectsQ = useQuery({
+    ...openProjectsQuery(),
+    enabled: membershipScope === projectScope,
+  });
+  const projectsShown = listShowsProjects(effectiveView, listByTag) &&
+    ((projectsQ.data?.length ?? 0) > 0 || membershipScope === projectScope);
   // One factory call drives both the list query and the optimistic-update key below, so
   // they can never drift apart; it's also the exact key the BootGate splash pre-warms.
   const sessionsOpts = sessionsQuery({
@@ -2286,7 +2388,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     workspaceId: scopeWorkspaceId,
     view: effectiveView,
     tagId: tagFilter,
-    limit: foldersShown ? null : sessionLimit,
+    limit: foldersShown || projectsShown ? null : sessionLimit,
   });
   const sessionsKey = sessionsOpts.queryKey;
   // While the control-plane stream is connected it pushes list changes (a coalesced refetch per
@@ -2305,6 +2407,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       return prev;
     },
   });
+  useEffect(() => {
+    if (sessionsQ.data?.some((s) => s.projectMembership)) setMembershipScope(projectScope);
+  }, [sessionsQ.data, projectScope]);
   // Capabilities include heartbeat-derived runner availability. Refresh both list and detail when
   // this runner crosses online/offline so a cached RUNNER_OFFLINE denial cannot outlive recovery.
   const previousRunnerAvailability = useRef({ id: runner.id, online: runner.online });
@@ -2621,6 +2726,23 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     if (tagFilter) list = sessionsWithTag(list, tagFilter);
     return list;
   }, [sessions, resolvedWorkspaceId, tagFilter]);
+  // Other workspaces may contain only workers. Read the project's words across workspaces,
+  // keeping this view's activity and folder count scoped to its own members.
+  const coordinatorsQ = useQuery({
+    ...sessionsQuery({ view: 'open', limit: null }),
+    enabled: projectsShown && visibleSessions.some((s) => s.projectMembership),
+    refetchInterval: controlLive ? false : 4000,
+  });
+  const completedProjectSessionsQ = useQuery({
+    ...sessionsQuery({ view: 'completed', limit: null }),
+    enabled: projectsShown && visibleSessions.some((s) => s.projectMembership &&
+      (effectiveView === 'completed' || ![...visibleSessions, ...(coordinatorsQ.data ?? [])].some((c) =>
+        c.projectMembership?.role === 'COORDINATOR' &&
+        c.projectMembership.projectId === s.projectMembership.projectId,
+      )),
+    ),
+    refetchInterval: controlLive ? false : 4000,
+  });
   // The folder page the list is on: `?folder=<id>` on whichever route the console is at, so it
   // survives a reload and Back leaves it. Only a folder of this workspace, and only where the list
   // shows folders at all.
@@ -2647,21 +2769,26 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // The list split into its folder rows and the sessions in no folder — the ones the Pinned and
   // time sections below are made of. A folder's page lists the sessions filed in it instead.
   const folderListing = useMemo(
-    () =>
-      foldersShown && !openFolder
-        ? sessionFolderListing(visibleSessions, workspaceFolders, {
-            view: effectiveView,
-            byTag: false,
-            runnerOffline: runner.online === false,
-            needsYou: sessionNeedsYou,
-            motion: (s) => statusGlyphMotion(s, sessionWatching(watchingBySession, s.id)?.word),
-          })
-        : null,
-    [foldersShown, openFolder, visibleSessions, workspaceFolders, effectiveView, runner.online, watchingBySession],
+    () => sessionProjectListing(visibleSessions, workspaceFolders, projectsQ.data ?? [], {
+      view: effectiveView,
+      byTag: listByTag,
+      folderId: openFolder?.id,
+      coordinators: [...(completedProjectSessionsQ.data ?? []), ...(coordinatorsQ.data ?? [])],
+      contentSessions: effectiveView === 'completed'
+        ? completedProjectSessionsQ.data : coordinatorsQ.data,
+      runnerOffline: runner.online === false,
+      needsYou: sessionNeedsYou,
+      motion: (s) => statusGlyphMotion(s, sessionWatching(watchingBySession, s.id)?.word),
+      line: (s) => sessionLine(selectedSession?.id === s.id ? selectedSession : s,
+        effectiveView !== 'trash', sessionWatching(watchingBySession, s.id)),
+    }),
+    [openFolder, visibleSessions, workspaceFolders, projectsQ.data, coordinatorsQ.data, completedProjectSessionsQ.data,
+      effectiveView, listByTag, runner.online, watchingBySession, selectedSession],
   );
   const listedSessions = useMemo(
-    () => (openFolder ? sessionsInFolder(visibleSessions, openFolder.id) : (folderListing?.sessions ?? visibleSessions)),
-    [openFolder, folderListing, visibleSessions],
+    () => folderListing.entries.flatMap((entry) => entry.kind === 'project'
+      ? entry.coordinator ? [entry.coordinator] : [] : [entry]),
+    [folderListing],
   );
   // Where a session opened from this list lives. On a folder's page the page goes along, so the
   // list stays on it while the conversations it lists are opened one after another.
@@ -2670,7 +2797,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
 
   // Paging. The server answered with a full page, so there is probably more behind it; a short
   // answer means this scope is exhausted.
-  const hasMoreSessions = !foldersShown && (sessionsQ.data?.length ?? 0) >= sessionLimit;
+  const hasMoreSessions = !foldersShown && !projectsShown && (sessionsQ.data?.length ?? 0) >= sessionLimit;
   // The column has nothing to show yet for this scope (a switch to a workspace not in cache), or
   // is widening its window — `isPlaceholderData` is exactly that, since the guard above only
   // keeps rows within one scope. Neither is the ordinary background refresh, which must not
@@ -2711,13 +2838,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const sections = useMemo(
     () =>
       groupByTag
-        ? sessionTagSections(listedSessions).map((s) => ({
+        ? sessionTagSections(folderListing.entries).map((s) => ({
             key: s.tag?.id ?? '__untagged__',
             tag: s.tag,
             title: s.tag?.name ?? 'Untagged',
             sessions: s.sessions,
           }))
-        : sessionTimeSections(listedSessions, {
+        : sessionTimeSections(folderListing.entries, {
             pinnedFirst: view === 'open' && !tagFilter,
           }).map((s) => ({
             key: s.title,
@@ -2726,14 +2853,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             // Folded, Pinned keeps its heading but none of its rows — on screen or in the order below.
             sessions: s.title === 'Pinned' && pinnedCollapsed ? [] : s.sessions,
           })),
-    [listedSessions, groupByTag, view, tagFilter, pinnedCollapsed],
+    [folderListing, groupByTag, view, tagFilter, pinnedCollapsed],
   );
 
   // The rows in the order they're actually on screen. Sectioning can reorder relative to the
   // server sort — Completed arrives ordered by completion time but buckets by last activity,
   // and tag grouping regroups outright — so anything that moves the cursor by a row (Up/Down,
   // "open the next one after completing") has to walk this, not the pre-section list.
-  const orderedSessions = useMemo(() => sections.flatMap((s) => s.sessions), [sections]);
+  const orderedSessions = useMemo(() => sections.flatMap((s) => s.sessions.flatMap((entry) =>
+    entry.kind === 'project' ? entry.coordinator ? [entry.coordinator] : [] : [entry],
+  )), [sections]);
 
   // Right-pane mode. A real session (/sessions/<id>) shows its conversation; with
   // none selected we're composing a new session — explicitly (/workspaces/<id>/new),
@@ -7237,7 +7366,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     setSwipeOpen(null);
     setMenuOpenId(null);
     setHeaderMenuOpen(false);
-    setMoveTarget({ id: s.id, title: s.title, folderId: s.folderId ?? null });
+    setMoveTarget({ id: s.id, title: s.title, folderId: s.folderId ?? null, workspace: s.workspace });
   };
   // A folder row: the folder, who in it waits on you, how many sessions it holds. Activity sits on
   // the folder itself as on the sidebar's Workspace rows: a still dot while a session runs, a
@@ -8096,6 +8225,41 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 </div>
               )}
               {sec.sessions.map((s) => {
+                if (s.kind === 'project') {
+                  const coordinator = s.coordinator;
+                  const openCoordinator = () => {
+                    if (!coordinator) return;
+                    navigateWithPaneSlide('push', () =>
+                      navigate(sessionPath(coordinator.id), { state: stampFromList() }),
+                    );
+                  };
+                  return (
+                    <SessionProjectListRow
+                      key={s.id}
+                      project={s}
+                      active={s.members.some((member) => member.id === selectedId) ||
+                        selectedSession?.projectMembership?.projectId === s.projectId}
+                      onOpen={openCoordinator}
+                      menu={{
+                        items: [
+                          { key: 'coordinator', label: SESSION_PROJECT_COPY.openCoordinator, disabled: !coordinator },
+                          { key: 'project', label: SESSION_PROJECT_COPY.openProject },
+                          ...(coordinator ? [
+                            { type: 'divider' as const },
+                            { key: 'pin', label: coordinator.pinnedAt ? SESSION_PROJECT_COPY.unpin : SESSION_PROJECT_COPY.pin },
+                            { key: 'move', label: SESSION_PROJECT_COPY.move },
+                          ] : []),
+                        ],
+                        onClick: ({ key, domEvent }) => {
+                          domEvent.stopPropagation();
+                          if (key === 'coordinator') openCoordinator();
+                          else if (key === 'project') navigate(`/projects/${encodeId(s.projectId)}`);
+                          else if (coordinator) runSwipeAction(key as SwipeAction, coordinator);
+                        },
+                      }}
+                    />
+                  );
+                }
                 const actionSession = selectedSession?.id === s.id ? selectedSession : s;
                 const canCompleteRow = sessionCapabilityOf(actionSession, 'canComplete', true);
                 const canRestoreRow = sessionCapabilityOf(actionSession, 'canRestore', true);
@@ -8149,7 +8313,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                       ...swipeActions.leading.map(menuItem),
                       { type: 'divider' },
                       menuItem('share'),
-                      menuItem('move'),
+                      ...(!s.projectMembership || s.projectMembership.role === 'COORDINATOR' ? [menuItem('move')] : []),
                       { type: 'divider' },
                       menuItem('delete'),
                     ];
@@ -8619,8 +8783,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         <SessionMoveModal
           open={!!moveTarget}
           session={moveTarget}
-          workspace={scopeWorkspaceId ? { id: scopeWorkspaceId, name: headWorkspaceName } : null}
-          folders={workspaceFolders}
+          workspace={moveTarget?.workspace ?? (scopeWorkspaceId ? { id: scopeWorkspaceId, name: headWorkspaceName } : null)}
+          folders={moveTarget?.workspace
+            ? (foldersQ.data ?? []).filter((f) => f.workspaceId === moveTarget.workspace!.id)
+            : workspaceFolders}
           onClose={() => setMoveTarget(null)}
         />
 

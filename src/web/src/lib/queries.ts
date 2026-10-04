@@ -511,8 +511,8 @@ export function projectsQueryKey(filter: ProjectFilter): [string, ProjectFilter]
  * (one `['projects']` invalidation reaches every entry), while the page's own Open entry is no
  * longer dragged onto this cadence — it keeps its `PROJECTS_REFRESH_MS`.
  *
- * Polled because the control-plane stream names no project: a task starting, or a coordinator
- * taking a turn, reaches the group's working dot within one interval.
+ * Polled as a fallback for missed control events, alongside project changes and the debounced
+ * refresh when a member session moves.
  */
 export const openProjectsQuery = () =>
   queryOptions({

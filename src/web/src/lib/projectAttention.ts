@@ -389,7 +389,7 @@ const HOUR_MS = 60 * MINUTE_MS;
  * question is an errand, and the owner reads a half-hour wait and an eighteen-hour one differently.
  * Past a day the two agree, and both say `<n>d`.
  */
-function elapsedLabel(at: string | null | undefined, now: number): string | null {
+export function elapsedLabel(at: string | null | undefined, now: number): string | null {
   const rank = instantRank(at);
   if (rank === Number.NEGATIVE_INFINITY || rank > now) return null;
   const waited = now - rank;
@@ -400,7 +400,7 @@ function elapsedLabel(at: string | null | undefined, now: number): string | null
 }
 
 /** What the coordinator is doing with the item it holds, by the item's kind (§7.1 V2). */
-const COORDINATOR_LEAD_COPY: Record<CoordinatorLeadKind, string> = {
+export const COORDINATOR_LEAD_COPY: Record<CoordinatorLeadKind, string> = {
   INTEGRATION_CONFLICT: 'resolving a merge conflict',
   INTEGRATION_CHECK_FAILED: 'checks failed',
   INTEGRATION_ERROR: 'handling an integration error',
@@ -618,7 +618,8 @@ export interface SidebarProject {
   buckets: Pick<ProjectPanoramaBuckets, 'running'>;
   /** Absent on a server that predates sidebar task progress. */
   taskCounts?: ProjectSidebarTaskCounts;
-  attention?: Pick<ProjectAttentionSummary, 'ownerItems' | 'startRequest'> | null;
+  attention?: Pick<ProjectAttentionSummary, 'ownerItems' | 'startRequest'> &
+    Partial<Pick<ProjectAttentionSummary, 'coordinatorItems'>> | null;
   /** Absent from a server that predates it; null on a project with no coordinator bound. */
   coordinatorActivity?: ProjectListCoordinatorActivity | null;
   integration?: ProjectListIntegration | null;
