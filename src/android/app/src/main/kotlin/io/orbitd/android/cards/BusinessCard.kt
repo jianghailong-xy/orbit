@@ -9,6 +9,7 @@ import androidx.compose.runtime.saveable.Saver
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.protocol.Wire
@@ -86,14 +87,22 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
                     val id = q.text("key") ?: return@forEach
                     val choice = ownerAnswers.firstOrNull { it.key == id } ?: OwnerAnswer(id, q.number("recommendedOption"))
                     fun choose(answer: OwnerAnswer) { ownerAnswers = ownerAnswers.filterNot { it.key == id } + answer }
-                    Text(q.text("text") ?: "", style = MaterialTheme.typography.titleSmall)
-                    q.objects("options").forEachIndexed { index, o ->
-                        ChoiceRow(o.text("label") ?: "", o.text("description"), choice.option == index, enabled,
-                            recommended = index == q.number("recommendedOption")) { choose(OwnerAnswer(id, index)) }
+                    key(id) {
+                        Column(Modifier.testTag("owner-question:$id"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(q.text("text") ?: "", style = MaterialTheme.typography.titleSmall)
+                            q.objects("options").forEachIndexed { index, o ->
+                                ChoiceRow(o.text("label") ?: "", o.text("description"), choice.option == index, enabled,
+                                    recommended = index == q.number("recommendedOption")) { choose(OwnerAnswer(id, index)) }
+                            }
+                            ChoiceRow("Other", null, choice.option == null, enabled) { choose(OwnerAnswer(id, text = "")) }
+                            if (choice.option == null) OutlinedTextField(choice.text.orEmpty(), { choose(OwnerAnswer(id, text = it)) },
+                                Modifier.fillMaxWidth(), enabled = enabled, label = { Text("Your answer") })
+                            val refs = q.strings("evidenceRefs")
+                            if (refs.isNotEmpty()) DetailFold("Evidence") {
+                                refs.forEach { Text(it, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace) }
+                            }
+                        }
                     }
-                    ChoiceRow("Other", null, choice.option == null, enabled) { choose(OwnerAnswer(id, text = "")) }
-                    if (choice.option == null) OutlinedTextField(choice.text.orEmpty(), { choose(OwnerAnswer(id, text = it)) },
-                        Modifier.fillMaxWidth(), enabled = enabled, label = { Text("Your answer") })
                 }
             }
             if (card.family == CardFamily.OWNER_QUESTION && CardVerb.OWNER_ANSWER in card.actions) {

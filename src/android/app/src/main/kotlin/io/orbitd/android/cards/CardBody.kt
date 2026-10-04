@@ -33,7 +33,13 @@ internal fun CardBody(card: InteractionCard, open: (String) -> Unit) {
             val input = row.obj("input") ?: JsonObject(emptyMap())
             Text(input.text("title") ?: "", style = MaterialTheme.typography.titleSmall)
             input.obj("preview")?.let { BatchImpact(it) }
-            CardFields(input, listOf("projectTitle", "listTitle", "completionCriterion"), open)
+            val isTask = row.text("toolName") == "orbit_task_create"
+            if (isTask) {
+                val list = input.obj("preview")?.objects("lists")?.firstOrNull()?.text("title")?.takeIf { it.isNotBlank() }
+                    ?: input.text("listTitle")?.takeIf { it.isNotBlank() }
+                list?.let { Text("Into $it") }
+            }
+            CardFields(input, if (isTask) listOf("projectTitle", "completionCriterion") else listOf("projectTitle", "listTitle", "completionCriterion"), open)
             input.text("description")?.let { DetailFold("Description") { MarkdownText(it, open = open) } }
             input.text("goal")?.let { DetailFold("Goal") { MarkdownText(it, open = open) } }
             Field("Done when", input["acceptanceCriteria"], open)
