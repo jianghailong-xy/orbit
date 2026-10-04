@@ -13,6 +13,7 @@ export const ENGINE_NAME: Record<LoginEngine, string> = {
   claude: 'Claude Code',
   codex: 'Codex',
   kimi: 'Kimi Code',
+  antigravity: 'Antigravity',
 };
 
 /** A sign-in still under way: the card polls while one of these is current, and seeing one is
