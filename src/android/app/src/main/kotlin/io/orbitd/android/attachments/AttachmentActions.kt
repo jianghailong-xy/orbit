@@ -44,10 +44,12 @@ fun clearAttachmentHandoffs(context: Context) {
 }
 
 @Composable
-fun AttachmentActions(name: String, mime: String, bytes: suspend () -> ByteArray, closeLabel: String = "Close attachment", close: () -> Unit) {
+fun AttachmentActions(name: String, mime: String, bytes: suspend () -> ByteArray, closeLabel: String = "Close attachment",
+    previous: (() -> Unit)? = null, next: (() -> Unit)? = null, close: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var error by remember { mutableStateOf<String?>(null) }
+    var notice by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var retry by remember { mutableIntStateOf(0) }
     val image by produceState<android.graphics.Bitmap?>(null, retry) {
@@ -66,18 +68,18 @@ fun AttachmentActions(name: String, mime: String, bytes: suspend () -> ByteArray
             catch (_: Exception) { error = "Couldn't load image. Retry or open the file." }
         }
     }
-    fun run(action: suspend (ByteArray) -> Unit) {
+    fun run(success: String? = null, action: suspend (ByteArray) -> Unit) {
         if (busy) return
         busy = true; error = null
         scope.launch {
-            try { action(bytes()) }
+            try { action(bytes()); notice = success }
             catch (cancel: CancellationException) { throw cancel }
             catch (_: Exception) { error = "Couldn't open or save this file. Check access and try again." }
             finally { busy = false }
         }
     }
     val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(mime)) { uri ->
-        if (uri != null) run { data -> withContext(Dispatchers.IO) {
+        if (uri != null) run("Saved file") { data -> withContext(Dispatchers.IO) {
             context.contentResolver.openOutputStream(uri)?.use { it.write(data) } ?: error("Unavailable destination")
         } }
     }
@@ -121,14 +123,19 @@ fun AttachmentActions(name: String, mime: String, bytes: suspend () -> ByteArray
         Surface(Modifier.fillMaxSize().safeDrawingPadding()) { Column(Modifier.padding(12.dp)) {
             TextButton(onClick = close) { Text(closeLabel) }
             Text(name, style = MaterialTheme.typography.titleMedium)
+            notice?.let { Text(it) }
             error?.let { Text(it, color = MaterialTheme.colorScheme.error); TextButton(onClick = { error = null; retry++ }) { Text("Retry") } }
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-                if (mime.startsWith("image/")) TextButton(enabled = !busy, onClick = { run { saveImage(it) } }) { Text("Save image") }
+                if (mime.startsWith("image/")) TextButton(enabled = !busy, onClick = { run("Saved to Pictures/Orbit") { saveImage(it) } }) { Text("Save image") }
                 TextButton(enabled = !busy, onClick = { save.launch(name) }) { Text("Download") }
                 TextButton(enabled = !busy, onClick = { run { handoff(it, Intent.ACTION_VIEW) } }) { Text("Open") }
                 TextButton(enabled = !busy, onClick = { run { handoff(it, Intent.ACTION_SEND) } }) { Text("Share") }
-                TextButton(enabled = !busy, onClick = { run { handoff(it, "copy") } }) { Text("Copy") }
+                TextButton(enabled = !busy, onClick = { run("Copied file") { handoff(it, "copy") } }) { Text("Copy") }
+            }
+            if (previous != null || next != null) Row {
+                TextButton(enabled = previous != null, onClick = { previous?.invoke() }) { Text("Previous image") }
+                TextButton(enabled = next != null, onClick = { next?.invoke() }) { Text("Next image") }
             }
             image?.let { bitmap ->
                 var scale by remember { mutableFloatStateOf(1f) }

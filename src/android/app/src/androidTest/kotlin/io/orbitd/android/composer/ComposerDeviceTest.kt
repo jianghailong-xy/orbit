@@ -100,6 +100,8 @@ class ComposerDeviceTest {
 
     @Test fun realModelAccountQueueStopPermissionsAndRefresh() = journey("controls") {
         login()
+        compose.onNodeWithText("Context: 0 tokens · Usage").performClick()
+        awaitText("Primary: 23%");compose.onNodeWithText("Close").performClick()
         compose.onNodeWithText("fixture-model").performClick()
         awaitText("Fixture Two"); compose.onNodeWithText("Fixture Two").performClick()
         compose.waitUntil(5000) { stats()["config"]!!.jsonObject["model"]?.jsonPrimitive?.content == "fixture-model-2" }
@@ -138,10 +140,12 @@ class ComposerDeviceTest {
         try {
             control("""{"uploadFailures":1,"uploadDelay":0.3}""")
             compose.onNodeWithText("+").performClick(); compose.onNodeWithText("File",useUnmergedTree=true).performClick()
+            compose.waitUntil(10000) { systemNode("a07-中文附件.txt") != null }
             capture("system-files")
-            systemClick("a07-中文附件.txt")
-            SystemClock.sleep(300)
-            if (systemNode("Open")!=null) systemClick("Open")
+            val bounds=android.graphics.Rect();systemNode("a07-中文附件.txt")!!.getBoundsInScreen(bounds)
+            shellBytes("input swipe ${bounds.centerX()} ${bounds.centerY()} ${bounds.centerX()} ${bounds.centerY()} 700")
+            capture("system-file-selected")
+            systemClick(if (systemNode("Select") != null) "Select" else "Open")
             compose.waitUntil(15000) { model.state.value.failures.isNotEmpty() }
             compose.onNodeWithText("Retry upload").performClick()
             compose.waitUntil(15000) { model.state.value.draft.attachments.singleOrNull()?.remoteId!=null }
@@ -205,9 +209,12 @@ class ComposerDeviceTest {
             var tile:AccessibilityNodeInfo?=null
             compose.waitUntil(10000) { tile=systemFind { it.contentDescription?.toString()?.startsWith("Photo taken") == true || it.text?.toString()=="a07-picker.png" };tile!=null }
             capture("native-photo-picker")
-            clickNode(tile!!)
+            if (tile!!.text?.toString() == "a07-picker.png") {
+                val bounds=android.graphics.Rect();tile!!.getBoundsInScreen(bounds)
+                shellBytes("input swipe ${bounds.centerX()} ${bounds.centerY()} ${bounds.centerX()} ${bounds.centerY()} 700")
+            } else clickNode(tile!!)
             var add:AccessibilityNodeInfo?=null
-            compose.waitUntil(5000) { add=systemFind { it.text?.toString()?.let { text -> text.startsWith("Add") || text == "Done" || text.equals("Open",true) } == true };add!=null || model.state.value.draft.attachments.isNotEmpty() }
+            compose.waitUntil(5000) { add=systemFind { it.text?.toString()?.let { text -> text.startsWith("Add") || text == "Done" || text.equals("Open",true) || text == "Select" } == true };add!=null || model.state.value.draft.attachments.isNotEmpty() }
             add?.let(::clickNode)
             compose.waitUntil(10000) { model.state.value.draft.attachments.singleOrNull()?.remoteId!=null }
             val photo=model.state.value.draft.attachments.single()
@@ -230,6 +237,13 @@ class ComposerDeviceTest {
             compose.onNodeWithText("+").performClick();compose.onNodeWithText("Paste image",useUnmergedTree=true).performClick()
             compose.waitUntil(10000) { model.state.value.draft.attachments.size==2 && model.state.value.draft.attachments.all { it.remoteId!=null } }
             assertTrue(model.state.value.draft.attachments.any { it.source=="paste" })
+            compose.onNodeWithText("${photo.name} · ${photo.size/1024} KB").performClick()
+            compose.onNodeWithText("Next image").performClick()
+            compose.waitUntil(5000) { compose.onAllNodesWithContentDescription("pasted.png").fetchSemanticsNodes().isNotEmpty() }
+            capture("gallery-next")
+            compose.onNodeWithText("Previous image").performClick()
+            compose.waitUntil(5000) { compose.onAllNodesWithContentDescription("photo.png").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithText("Close attachment").performClick()
             ready();compose.onNodeWithTag("composer-send").performClick()
             compose.waitUntil(10000) { !model.state.value.busy && model.state.value.draft.pending==null && model.state.value.draft.attachments.isEmpty() }
             assertEquals(2,stats()["attachments"]!!.jsonObject.size)
@@ -291,6 +305,9 @@ class ComposerDeviceTest {
     private fun systemClick(text:String) {
         var found:AccessibilityNodeInfo?=null
         compose.waitUntil(10000) { found=systemNode(text); found!=null }
+        found!!.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SHOW_ON_SCREEN.id)
+        SystemClock.sleep(300)
+        found = systemNode(text) ?: found
         clickNode(found!!)
     }
     private fun clickNode(node:AccessibilityNodeInfo) {
@@ -303,6 +320,14 @@ class ComposerDeviceTest {
     private fun sha(data:ByteArray)=MessageDigest.getInstance("SHA-256").digest(data).joinToString(""){"%02x".format(it)}
     private fun capture(name:String) {
         SystemClock.sleep(300)
+        val tree=StringBuilder()
+        fun visit(node:AccessibilityNodeInfo?,depth:Int) {
+            if(node==null || depth>20)return
+            val bounds=android.graphics.Rect();node.getBoundsInScreen(bounds)
+            tree.appendLine("${" ".repeat(depth)}${node.className} ${node.viewIdResourceName} text=${node.text} desc=${node.contentDescription} click=${node.isClickable} enabled=${node.isEnabled} $bounds")
+            for(i in 0 until node.childCount)visit(node.getChild(i),depth+1)
+        }
+        visit(instrument.uiAutomation.rootInActiveWindow,0);File(evidence,"$name-ui.txt").writeText(tree.toString())
         instrument.uiAutomation.takeScreenshot().let { b->File(evidence,"$name.png").outputStream().use { b.compress(Bitmap.CompressFormat.PNG,100,it) };b.recycle() }
     }
     private fun journey(name:String,block:()->Unit) {

@@ -51,7 +51,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 (it.string("name") ?: it.string("fileName") ?: "Attachment") to
                     (it.string("mime") ?: it.string("mimeType") ?: "application/octet-stream")
             }
-        }) }
+        }, images = { attachmentMetadata.values.filter { (it.string("mime") ?: it.string("mimeType"))?.startsWith("image/") == true }
+            .mapNotNull { it.string("id")?.let { id -> "orbit-attachment:$id" } } }) }
     val openLink = rememberReaderLinkHandler(resources) { next ->
         if (next.destination == Destination.SESSION && ObjectId.same(next.id, route.id) &&
             next.recordId != null && next.recordId == route.recordId) model.openRecord(next.recordId)

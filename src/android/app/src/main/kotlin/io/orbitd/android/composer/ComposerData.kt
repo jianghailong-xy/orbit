@@ -38,6 +38,29 @@ data class ProviderOption(val id: String, val label: String, val runtime: String
     val models: List<JsonObject>, val unavailable: String? = null)
 
 data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObject>) {
+    fun usage(detail: JsonObject): JsonObject? {
+        val provider = detail.text("provider") ?: return null
+        if (provider in setOf("opencode", "antigravity")) return null
+        if (provider !in BUILT_INS) {
+            val row = providers.firstOrNull { it.text("slug") == provider } ?: return null
+            if (row["members"] is JsonArray) {
+                val assigned = detail.text("poolMemberProviderId")
+                val member = if (assigned != null) row.objects("members").firstOrNull { ObjectId.same(it.text("id"), assigned) }
+                    else row.objects("members").firstOrNull { it.flag("next") == true }
+                return member?.get("planUsage") as? JsonObject
+            }
+            return row["planUsage"] as? JsonObject // Never borrow a runner login's quota for BYOK.
+        }
+        val all = runner["planUsage"] as? JsonObject ?: return null
+        val snapshot = all[provider] as? JsonObject ?: when (provider) {
+            "codex" -> all.takeIf { it.text("provider") == "codex" || it["primary"] is JsonObject || it["secondary"] is JsonObject || it.objects("rateLimits").isNotEmpty() }
+            "claude" -> all.takeIf { it.text("provider") in listOf(null, "claude") }
+            "kimi" -> all.takeIf { it.text("provider") == "kimi" }
+            else -> null
+        } ?: return null
+        val account = detail.text("${provider}Account") ?: "default"
+        return if (account == "default") snapshot else (snapshot["accounts"] as? JsonObject)?.get(account) as? JsonObject
+    }
     fun slashItems(provider: String, agentId: String?): List<JsonObject> =
         (runner.objects("commands") + runner.objects("skills")).filter { item ->
             (item.text("agentId").isNullOrEmpty() || item.text("agentId") == agentId) && when (provider) {

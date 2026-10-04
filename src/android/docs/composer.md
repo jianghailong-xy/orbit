@@ -46,7 +46,12 @@ Catalogs use GET /runners (there is no GET /runners/:id), /providers, /providers
 account availability consume the existing capability contracts. Configured providers retain
 their own model space unless modelsFromRuntime is explicit. Command/Skill menus use that
 runner's agent/runtime-scoped catalog; local /status consumes no turn. No settings management
-screen or new server protocol is added. A08 owns question/approval/evidence reply targets.
+screen or new server protocol is added. Context uses reported transcript tokens/window and the
+selected model's reported contextWindow; unknown windows show a count. Usage reads the billed
+provider/account's snapshot, preserving fetched/reset timestamps and never substituting another
+login's quota. A08 owns question/approval/evidence reply targets. The A01 matrix's # reference
+picker was not found in the fixed Swift input; reference text is sent unchanged, with that
+matrix discrepancy returned to A01 rather than inventing an endpoint.
 
 ## Entry-specific attachment contract
 
@@ -64,6 +69,7 @@ and grants are released. Temporary clipboard/provider grants also work. Failed p
 access requires reselecting the URI; a network upload retry uses the private copy.
 
 Image previews are sampled, zoomable and share the same action dialog as transcript files.
+Previous/Next browses the staged images or attachment images in the loaded reading window.
 Download uses ACTION_CREATE_DOCUMENT; Save image uses scoped MediaStore. Open/Share hand off
 only cache/handoff files through a nonexported FileProvider and read-only URI grants/ClipData.
 Copy places a content URI on the clipboard. Login changes revoke and remove these temporary

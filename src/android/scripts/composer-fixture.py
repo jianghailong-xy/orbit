@@ -114,8 +114,12 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/api/events' or path in [f'/api/sessions/{SESSION}/events',f'/api/sessions/{CREATED}/events']:
             self.send_response(200); self.send_header('Content-Type','text/event-stream'); self.end_headers()
             try:
-                revision=-1
+                revision=-1; last_seq=0
                 for i in range(120):
+                    if path!='/api/events':
+                        for row in list(state.rows):
+                            if row['seq']>last_seq:
+                                self.wfile.write(b'data: '+encoded(row)+b'\n\n'); last_seq=row['seq']
                     value={'type':'session.updated','sessionId':SESSION,'data':{}} if path=='/api/events' and revision!=state.revision else {'type':'ping','seq':9007199254740991,'payload':{}}
                     revision=state.revision
                     self.wfile.write(b'data: '+encoded(value)+b'\n\n'); self.wfile.flush(); time.sleep(1)
@@ -134,6 +138,7 @@ class Handler(BaseHTTPRequestHandler):
             if att: state.downloads.append({'path':path,'sha256':att['sha256']})
             return self.reply(att['bytes'],mime=att['mime']) if att else self.reply({},404)
         if path=='/api/runners': return self.reply([{'id':RUNNER,'name':'Fixture runner','online':True,'runsAsRoot':False,'capabilities':['codex-account-move/v1'],
+            'planUsage':{'codex':{'primary':{'utilization':23},'secondary':{'utilization':42},'fetchedAt':'2026-10-04T00:00:00Z'}},
             'modelCatalog':{'codex':[{'value':'fixture-model','label':'Fixture One','reasoningLevels':['low','high'],'serviceTiers':['priority'],'permissionModes':['default','plan']},{'value':'fixture-model-2','label':'Fixture Two'}]},
             'engines':[{'engine':'codex','installed':True,'auth':'yes','accounts':[{'id':'default','name':'Default','auth':'yes'},{'id':'second','name':'Second account','auth':'yes'},{'id':'expired','name':'Expired account','auth':'no'}]}]}])
         if path=='/api/providers': return self.reply([{'slug':'custom-codex','label':'Custom account','runtime':'codex','models':[{'value':'custom-model','label':'Custom model'}]}])
@@ -142,5 +147,5 @@ class Handler(BaseHTTPRequestHandler):
 if __name__=='__main__':
     p=argparse.ArgumentParser(); p.add_argument('--port',type=int,default=18767); p.add_argument('--manifest'); a=p.parse_args()
     if a.manifest:
-        Path(a.manifest).mkdir(parents=True,exist_ok=True); Path(a.manifest,'scope.json').write_text(json.dumps({'scope':'A07 controlled HTTP','session':SESSION,'workspace':WORKSPACE})); raise SystemExit
+        Path(a.manifest).mkdir(parents=True,exist_ok=True); Path(a.manifest,'scope.json').write_text(json.dumps({'scope':'A07 controlled HTTP','session':SESSION,'workspace':WORKSPACE,'fixtureSha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest()})); raise SystemExit
     ThreadingHTTPServer(('127.0.0.1',a.port),Handler).serve_forever()

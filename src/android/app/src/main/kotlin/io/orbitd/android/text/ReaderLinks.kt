@@ -26,7 +26,8 @@ import java.util.concurrent.TimeUnit
 
 /** Only API paths can receive credentials. External image requests use a separate, bare client. */
 class ReaderResources(val auth: AuthSession, val handle: SessionHandle, val sessionId: String? = null,
-    val available: () -> Boolean = { true }, val metadata: (String) -> Pair<String, String>? = { null }) {
+    val available: () -> Boolean = { true }, val metadata: (String) -> Pair<String, String>? = { null },
+    val images: () -> List<String> = { emptyList() }) {
     suspend fun bytes(source: String): ByteArray {
         if ((auth.state.value as? AuthState.SignedIn)?.handle !== handle || !available()) throw SessionChanged()
         val request = resourceRequest(source, sessionId)
@@ -106,6 +107,7 @@ fun TranscriptImage(source: String, alt: String, open: (String) -> Unit) {
     val resources = LocalReaderResources.current
     var retry by remember { mutableIntStateOf(0) }
     var zoom by remember { mutableStateOf(false) }
+    var selected by remember(source) { mutableStateOf(source) }
     var failed by remember(source, resources) { mutableStateOf(false) }
     val bitmap by produceState<android.graphics.Bitmap?>(null, source, resources, retry) {
         value = null; failed = false
@@ -127,7 +129,7 @@ fun TranscriptImage(source: String, alt: String, open: (String) -> Unit) {
         Box(Modifier.fillMaxWidth().height(240.dp), contentAlignment = androidx.compose.ui.Alignment.Center) {
             val loaded = bitmap
             when {
-                loaded != null -> Image(loaded.asImageBitmap(), alt.ifBlank { "Image" }, Modifier.fillMaxSize().clickable { zoom = true }, contentScale = ContentScale.Fit)
+                loaded != null -> Image(loaded.asImageBitmap(), alt.ifBlank { "Image" }, Modifier.fillMaxSize().clickable { selected = source; zoom = true }, contentScale = ContentScale.Fit)
                 failed -> TextButton(onClick = { retry++ }) { Text("Image unavailable · Retry") }
                 else -> CircularProgressIndicator()
             }
@@ -136,8 +138,11 @@ fun TranscriptImage(source: String, alt: String, open: (String) -> Unit) {
         if (!source.startsWith("data:")) TextButton(onClick = { open(source) }) { Text("Open image") }
     }
     if (zoom && bitmap != null && resources?.available() == true) {
-        val info = resources.metadata(source)
-        AttachmentActions(info?.first ?: alt.ifBlank { "image.png" }, info?.second ?: "image/*",
-            { resources.bytes(source) }, closeLabel = "Close image") { zoom = false }
+        val info = resources.metadata(selected)
+        val gallery = resources.images(); val index = gallery.indexOf(selected)
+        key(selected) { AttachmentActions(info?.first ?: alt.ifBlank { "image.png" }, info?.second ?: "image/*",
+            { resources.bytes(selected) }, closeLabel = "Close image",
+            previous = if (index > 0) ({ selected = gallery[index - 1] }) else null,
+            next = if (index >= 0 && index < gallery.lastIndex) ({ selected = gallery[index + 1] }) else null) { zoom = false } }
     }
 }

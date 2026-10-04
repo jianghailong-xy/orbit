@@ -234,4 +234,17 @@ class ComposerModelTest {
         assertEquals("shell",body.text("kind"));assertEquals("echo 你好",body.text("content"))
         assertEquals(1,body["attachmentIds"]!!.jsonArray.size)
     }
+
+    @Test fun usageFollowsTheBilledAccountAndNeverFallsBackAcrossProviders() {
+        fun obj(text:String)=Wire.json.parseToJsonElement(text).jsonObject
+        val catalog=ComposerCatalog(obj("""{"planUsage":{"codex":{"planType":"default-plan","accounts":{"second":{"planType":"second-plan"}}},"claude":{"planType":"claude-plan"}}}"""),
+            listOf(obj("""{"slug":"custom","runtime":"codex","planUsage":{"planType":"custom-plan"}}"""),obj("""{"slug":"unknown","runtime":"codex"}"""),
+                obj("""{"slug":"pool","runtime":"claude","members":[{"id":"member","next":true,"planUsage":{"planType":"member-plan"}}]}""")))
+        assertEquals("second-plan",catalog.usage(obj("""{"provider":"codex","codexAccount":"second"}"""))?.text("planType"))
+        assertEquals("custom-plan",catalog.usage(obj("""{"provider":"custom"}"""))?.text("planType"))
+        assertNull(catalog.usage(obj("""{"provider":"unknown"}""")))
+        assertNull(catalog.usage(obj("""{"provider":"opencode"}""")))
+        assertEquals("member-plan",catalog.usage(obj("""{"provider":"pool"}"""))?.text("planType"))
+        assertNull(catalog.usage(obj("""{"provider":"pool","poolMemberProviderId":"removed"}""")))
+    }
 }

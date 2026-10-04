@@ -60,6 +60,12 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
                 state.error?.let { Text(it, color = MaterialTheme.colorScheme.error); TextButton(onClick = model::clearError) { Text("Dismiss error") } }
                 if (!state.loaded && !state.busy) TextButton(onClick = model::restore) { Text("Retry draft restore") }
                 state.notice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                if (target == null && terminal(detail)) {
+                    Text("Sending a message will resume this session in Open.", style = MaterialTheme.typography.bodySmall)
+                    (detail["capabilities"] as? JsonObject)?.text("resumeBlockedReason")?.let { reason ->
+                        Text(reason); TextButton(onClick = { app.realtime.refreshSession() }) { Text("Check Again") }
+                    }
+                }
                 if (!session.canCompose()) Text("Reconnect to send. Your draft is saved.", style = MaterialTheme.typography.bodySmall)
                 draft.pending?.let { pending ->
                     Text("Delivery unconfirmed: ${pending.text.take(120)}", style = MaterialTheme.typography.bodySmall)
@@ -82,6 +88,7 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
                     state.uploads[att.id]?.let { LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth()) }
                     state.failures[att.id]?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                 }
+                ComposerUsage(model, state, effective, session)
             OutlinedTextField(field, onValueChange = { field = it; model.edit(it.text, it.selection.start, it.selection.end) },
                 modifier = Modifier.fillMaxWidth().testTag("composer-input").onPreviewKeyEvent {
                     if (it.type == KeyEventType.KeyDown && it.key == Key.Enter && (it.isCtrlPressed || it.isMetaPressed) && field.composition == null && usable) {
@@ -125,7 +132,12 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
             }
         }
     }
-    preview?.let { att -> AttachmentActions(att.name, att.mime, { model.attachmentBytes(att.id) }) { preview = null } }
+    preview?.let { att ->
+        val images = draft.attachments.filter { it.mime.startsWith("image/") }; val index = images.indexOfFirst { it.id == att.id }
+        key(att.id) { AttachmentActions(att.name, att.mime, { model.attachmentBytes(att.id) },
+            previous = if (index > 0) ({ preview = images[index - 1] }) else null,
+            next = if (index >= 0 && index < images.lastIndex) ({ preview = images[index + 1] }) else null) { preview = null } }
+    }
     slashScope?.let { kind ->
         AlertDialog(onDismissRequest = { slashScope = null }, title = { Text(if (kind == "command") "Command" else "Skill") }, text = {
             Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
@@ -135,7 +147,9 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
                 if (!state.catalogLoading && state.catalogError == null && items.isEmpty()) Text("No ${kind}s reported for this runtime.")
                 items.forEach { item ->
                     TextButton(onClick = {
-                        val text = draft.text + (if (draft.text.isEmpty() || draft.text.last().isWhitespace()) "" else " ") + "/${item.text("name")} "
+                        val word = draft.text.takeLastWhile { !it.isWhitespace() }
+                        val prefix = if (word.startsWith("/")) draft.text.dropLast(word.length) else draft.text + (if (draft.text.isEmpty() || draft.text.last().isWhitespace()) "" else " ")
+                        val text = prefix + "/${item.text("name")} "
                         model.edit(text, text.length, text.length); slashScope = null
                     }) { Text("/${item.text("name")} · ${item.text("description").orEmpty()}") }
                 }
