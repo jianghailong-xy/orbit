@@ -48,8 +48,13 @@
   --orbit-focus-width: 3px;
   --orbit-focus-offset: 1px;
   --orbit-bg-elevated: #ffffff;
+  --orbit-border-split: rgba(17, 42, 80, 0.08);
   --orbit-shadow-popup: 0 6px 16px 0 rgba(0, 0, 0, 0.08),
     0 3px 6px -4px rgba(0, 0, 0, 0.12), 0 9px 28px 8px rgba(0, 0, 0, 0.05);
+  --orbit-shadow-drawer-right: -6px 0 16px 0 rgba(0, 0, 0, 0.08),
+    -3px 0 6px -4px rgba(0, 0, 0, 0.12), -9px 0 28px 8px rgba(0, 0, 0, 0.05);
+  --orbit-shadow-drawer-bottom: 0 -6px 16px 0 rgba(0, 0, 0, 0.08),
+    0 -3px 6px -4px rgba(0, 0, 0, 0.12), 0 -9px 28px 8px rgba(0, 0, 0, 0.05);
 }
 
 :root[data-theme='dark'] {
@@ -80,6 +85,11 @@
   --orbit-control-disabled-border: #5b5b6c;
   --orbit-focus-color: #1d305b;
   --orbit-bg-elevated: #343437;
+  --orbit-border-split: rgba(223, 223, 226, 0.05);
   --orbit-shadow-popup: 0 6px 16px 0 rgba(255, 255, 255, 0.016),
     0 3px 6px -4px rgba(255, 255, 255, 0.024), 0 9px 28px 8px rgba(255, 255, 255, 0.01);
+  --orbit-shadow-drawer-right: -6px 0 16px 0 rgba(255, 255, 255, 0.016),
+    -3px 0 6px -4px rgba(255, 255, 255, 0.024), -9px 0 28px 8px rgba(255, 255, 255, 0.01);
+  --orbit-shadow-drawer-bottom: 0 -6px 16px 0 rgba(255, 255, 255, 0.016),
+    0 -3px 6px -4px rgba(255, 255, 255, 0.024), 0 -9px 28px 8px rgba(255, 255, 255, 0.01);
 }

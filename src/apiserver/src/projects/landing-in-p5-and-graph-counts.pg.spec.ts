@@ -57,6 +57,37 @@ import { decideSessionSource } from './session-source';
  */
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
+
+test('manual ready work is counted before the queue limit and excludes automatic, scheduled and held tasks',
+  { skip, timeout: 120_000 }, async () => {
+    assertCoordinatorPgUrlIsIsolated(URL!);
+    const stack = connect();
+    try {
+      const ids = await world(stack.db, 'manual-ready');
+      const automatic = await task(stack, ids, 'A automatic', { autoRunWhenReady: true });
+      const scheduledAt = new Date(Date.now() + 86_400_000);
+      await task(stack, ids, 'B scheduled', { runAt: scheduledAt.toISOString() });
+      const first = await task(stack, ids, 'C manual');
+      const second = await task(stack, ids, 'D manual');
+      const blocked = await task(stack, ids, 'E blocked');
+      await stack.db.taskDependency.create({ data: { taskId: blocked, dependsOnTaskId: automatic } });
+      const held = await task(stack, ids, 'F held');
+      await stack.db.task.update({ where: { id: held }, data: { dispatchHold: true } });
+
+      const read = () => readProjectReadyToRun(stack.prisma, ids.ownerId, ids.projectId, 1);
+      const queue = await read();
+      assert.equal(queue.items.length, 1);
+      assert.equal(queue.items[0].taskId, automatic);
+      assert.deepEqual(queue.manualReady, { count: 2, taskId: first, title: 'C manual' });
+
+      await stack.db.task.update({ where: { id: first }, data: { autoRunWhenReady: true } });
+      assert.deepEqual((await read()).manualReady, { count: 1, taskId: second, title: 'D manual' });
+      await stack.db.task.update({ where: { id: second }, data: { runAt: scheduledAt } });
+      assert.equal((await read()).manualReady, null);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
 /** Emails are unique and this database can outlive one run. */
 const RUN = randomUUID().slice(0, 8);
 

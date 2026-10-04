@@ -160,7 +160,10 @@ final class StartProjectWiringTests: XCTestCase {
                                 to: "private struct CriteriaChangeCardView: View")
         XCTAssertTrue(start.contains("let standing = console.startStanding(itemID)"),
                       "the standing is re-derived from the console's reads on every render")
-        XCTAssertTrue(start.contains(".approvalChrome(.blue, dimmed: !StartProject.isOpen(standing))"),
+        let startForm = try section(file, from: "struct StartProjectCard: View",
+                                    to: "private struct CriteriaChangeCardView: View")
+        XCTAssertTrue(startForm.contains("ApprovalReviewLayout(title: StartProject.title"))
+        XCTAssertTrue(startForm.contains("dimmed: !StartProject.isOpen(standing)"),
                       "the confirmation card's surface, dimmed once its request no longer stands")
         XCTAssertTrue(start.contains(".disabled(starting || standing != .live || !draft.complete)"),
                       "Start is dead unless the request stands and the settings are ones the door "
@@ -188,7 +191,8 @@ final class StartProjectWiringTests: XCTestCase {
                                  to: "private struct StartSectionHead: View")
         XCTAssertTrue(change.contains("CriteriaChanges.rows(changes)"),
                       "the rows are the server's changes, as OrbitKit lays them out")
-        XCTAssertTrue(change.contains(".approvalChrome(.blue, dimmed: !CriteriaChanges.isOpen(standing))"))
+        XCTAssertTrue(change.contains("ApprovalReviewLayout(title: CriteriaChanges.title"))
+        XCTAssertTrue(change.contains("dimmed: !CriteriaChanges.isOpen(standing)"))
         XCTAssertTrue(change.contains(".disabled(confirming || !CriteriaChanges.answerable(standing))"))
         XCTAssertTrue(change.contains("console.startPlanChangeReply(standing, question: .criteriaChange)"))
         XCTAssertFalse((start + change).contains("\"Chat"),

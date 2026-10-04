@@ -380,6 +380,7 @@ struct WikiEntryView: View {
     @State private var retiring = false
     @State private var reason = ""
     @State private var notice: String?
+    @State private var noticeTitle = WikiCopy.entrySaveFailed
 
     var body: some View {
         if let wiki = model.wiki {
@@ -419,7 +420,8 @@ struct WikiEntryView: View {
                         let answer = form == .edit
                             ? await wiki.edit(detail.entry, title: title, summary: summary)
                             : await wiki.supersede(detail.entry, title: title, summary: summary)
-                        finish(answer, done: form == .edit ? WikiCopy.saved : WikiCopy.superseded)
+                        finish(answer, done: form == .edit ? WikiCopy.saved : WikiCopy.superseded,
+                               failure: form == .edit ? WikiCopy.entrySaveFailed : WikiCopy.entrySupersedeFailed)
                         return answer == nil
                     }
                 }
@@ -431,14 +433,14 @@ struct WikiEntryView: View {
                     let why = reason.trimmingCharacters(in: .whitespacesAndNewlines)
                     reason = ""
                     guard let entry = wiki.detail(entryID)?.entry, !why.isEmpty else { return }
-                    Task { finish(await wiki.retire(entry, reason: why), done: WikiCopy.retired) }
+                    Task { finish(await wiki.retire(entry, reason: why), done: WikiCopy.retired, failure: WikiCopy.entryRetireFailed) }
                 }
                 // A retirement says why, as the web's does: no reason, no Retire.
                 .disabled(reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             } message: {
                 Text(WikiCopy.retireNote)
             }
-            .alert(WikiCopy.refused, isPresented: Binding(get: { notice != nil },
+            .alert(noticeTitle, isPresented: Binding(get: { notice != nil },
                                                           set: { if !$0 { notice = nil } })) {
                 Button("OK", role: .cancel) { notice = nil }
             } message: {
@@ -458,10 +460,10 @@ struct WikiEntryView: View {
             openSession: { id in model.openFromConversation(.session(PublicID.toPublic(id)), overConsole: false) },
             openTask: { id in model.route(to: .task(PublicID.toPublic(id))) },
             confirm: {
-                Task { finish(await wiki.confirm(detail.entry), done: WikiModeCopy.confirmed) }
+                Task { finish(await wiki.confirm(detail.entry), done: WikiModeCopy.confirmed, failure: WikiCopy.entryConfirmFailed) }
             },
             reject: { reason in
-                Task { finish(await wiki.reject(detail.entry.id, reason: reason), done: WikiModeCopy.rejected) }
+                Task { finish(await wiki.reject(detail.entry.id, reason: reason), done: WikiModeCopy.rejected, failure: WikiCopy.entryRejectFailed) }
             })
     }
 
@@ -510,8 +512,9 @@ struct WikiEntryView: View {
         model.showToast(WikiCopy.linkCopied)
     }
 
-    private func finish(_ answer: String?, done: String) {
+    private func finish(_ answer: String?, done: String, failure: String) {
         if let answer {
+            noticeTitle = failure
             notice = answer
         } else {
             model.showToast(done)
@@ -632,7 +635,7 @@ struct WikiReviewView: View {
                     }
                 }
             }
-            .alert(WikiCopy.refused, isPresented: Binding(get: { notice != nil },
+            .alert(WikiCopy.decideFailed, isPresented: Binding(get: { notice != nil },
                                                           set: { if !$0 { notice = nil } })) {
                 Button("OK", role: .cancel) { notice = nil }
             } message: {

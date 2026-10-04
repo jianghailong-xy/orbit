@@ -98,10 +98,15 @@ final class ProjectDetailModel {
     /// The integration read failed and there is no earlier answer to draw — what How it runs says
     /// instead of a spinner that never ends.
     private(set) var integrationUnread = false
+    private(set) var integrationReadAt: Date?
+    private(set) var integrationReadFailed = false
     private(set) var openItems: ProjectOpenItemsView?
+    /// A failed first read must not leave the Open items panel spinning or claim there are none.
+    private(set) var openItemsUnread = false
     private(set) var coordinator: ProjectCoordinatorStatus?
     private(set) var graph: ProjectDependencyGraph?
     private(set) var readyQueue: ProjectReadyToRun?
+    private(set) var readyQueueUnread = false
     /// Run-queue rows a Run press is starting: the row says so until the next read has it running.
     private(set) var starting: Set<String> = []
     private(set) var tasks: [ProjectTaskRow] = []
@@ -164,13 +169,26 @@ final class ProjectDetailModel {
         if let view = try? await integrationRead {
             integration = view
             integrationUnread = false
+            integrationReadAt = Date()
+            integrationReadFailed = false
         } else {
             integrationUnread = integration == nil
+            integrationReadFailed = true
         }
-        openItems = (try? await openItemsRead) ?? openItems
+        if let items = try? await openItemsRead {
+            openItems = items
+            openItemsUnread = false
+        } else {
+            openItemsUnread = openItems == nil
+        }
         coordinator = (try? await coordinatorRead) ?? coordinator
         graph = (try? await graphRead) ?? graph
-        readyQueue = (try? await queueRead) ?? readyQueue
+        if let queue = try? await queueRead {
+            readyQueue = queue
+            readyQueueUnread = false
+        } else {
+            readyQueueUnread = true
+        }
         if let page = try? await tasksRead {
             tasks = page.items
             nextTaskCursor = page.nextCursor

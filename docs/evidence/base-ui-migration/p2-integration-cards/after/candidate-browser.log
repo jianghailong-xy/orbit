@@ -1,0 +1,23 @@
+[WebServer] (node:3817280) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 8 tests using 1 worker
+
+(node:3817359) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [chromium-light-desktop] › ui-migration/reviews.check.mjs:55:1 › question traps focus, preserves choices and drafts, and suspends background shortcuts (2.6s)
+  ✓  2 [chromium-light-desktop] › ui-migration/reviews.check.mjs:105:1 › long plan scrolls above visible actions and owns the foreground shortcut (1.5s)
+(node:3818153) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  3 [chromium-light-phone] › ui-migration/reviews.check.mjs:55:1 › question traps focus, preserves choices and drafts, and suspends background shortcuts (1.6s)
+  ✓  4 [chromium-light-phone] › ui-migration/reviews.check.mjs:105:1 › long plan scrolls above visible actions and owns the foreground shortcut (1.5s)
+(node:3818570) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  5 [chromium-dark-desktop] › ui-migration/reviews.check.mjs:55:1 › question traps focus, preserves choices and drafts, and suspends background shortcuts (1.7s)
+  ✓  6 [chromium-dark-desktop] › ui-migration/reviews.check.mjs:105:1 › long plan scrolls above visible actions and owns the foreground shortcut (1.2s)
+(node:3819269) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  7 [chromium-dark-phone] › ui-migration/reviews.check.mjs:55:1 › question traps focus, preserves choices and drafts, and suspends background shortcuts (1.6s)
+  ✓  8 [chromium-dark-phone] › ui-migration/reviews.check.mjs:105:1 › long plan scrolls above visible actions and owns the foreground shortcut (1.6s)
+
+  8 passed (15.2s)

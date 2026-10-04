@@ -180,9 +180,10 @@ const headerKeys = (projectUuid: string) => {
     // page already holds, so it adds exactly this one entry.
     ['project', id, 'promotion'],
     ['project', id, 'panorama'],
+    // Shared by the overview's manual-start summary and the Run queue; still one cache entry.
+    ['project', id, 'panorama', 'ready', 5],
     ['project', id, 'coordinator', 'status'],
     ['project', id, 'panorama', 'blocking', 5],
-    ['project', id, 'panorama', 'ready', 5],
   ];
 };
 
@@ -2303,7 +2304,7 @@ describe('ProjectDetailPage — integration', () => {
 
     expect(out).toContain('Running jobs');
     expect(out).toContain('Pending landing');
-    expect(out).toContain('finished work without a landing receipt');
+    expect(out).toContain('no landing receipt yet');
     expect(out).toContain('On project branch');
     expect(out).toContain('not on main yet');
     expect(out).toContain('On main');

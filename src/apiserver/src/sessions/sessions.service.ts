@@ -24,6 +24,7 @@ import { linkNotFound } from '../share-links/share-link';
 import { freshRunningBgJobs } from './background-job-activity';
 import { CLEARED_RUNNING_WORK } from './running-work';
 import { resolveLegacyArtifactPath } from './legacy-artifact-path';
+import { isWorktreeArtifactPath, readWorktreeArtifactRequest } from './worktree-artifact';
 import { isOrbitAuthoredTurn } from './orbit-authored-turn';
 import { readSessionMessageCard } from './session-message';
 import {
@@ -3987,6 +3988,81 @@ export class SessionsService {
       ORDER BY seq ASC
     `;
     return [...calls, ...results].sort((a, b) => a.seq - b.seq);
+  }
+
+  async getWorktreeFileForOwner(
+    ownerId: string,
+    id: string,
+    filePath: string | undefined,
+  ): Promise<{ data: Buffer; mimeType: string; disposition: string }> {
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId },
+      select: {
+        id: true, changedFiles: true,
+        assignedRunner: { select: { status: true, lastHeartbeatAt: true } },
+      },
+    });
+    if (!session) throw new NotFoundException('Session not found.');
+    if (!isWorktreeArtifactPath(filePath) || !Array.isArray(session.changedFiles)
+      || !session.changedFiles.some((file) => file && typeof file === 'object' && !Array.isArray(file)
+        && file.path === filePath && typeof file.status === 'string' && file.status !== 'D')) {
+      throw new NotFoundException('File is no longer available.');
+    }
+    if (!session.assignedRunner || !runnerIsOnline(session.assignedRunner)) {
+      throw new HttpException('The runner is offline. Try again when it is online.', HttpStatus.SERVICE_UNAVAILABLE);
+    }
+
+    // A new request always reads fresh bytes, including two files with the same basename.
+    const content = { source: 'worktree' as const, path: filePath };
+    const turn = await this.insertTurn(id, {
+      kind: 'artifact', content: JSON.stringify(content), clientTurnId: `worktree-file-${randomUUID()}`,
+    });
+    const deadline = Date.now() + 40_000;
+    while (true) {
+      const result = await this.prisma.conversationTurn.findFirst({
+        where: { id: turn.id, sessionId: id, kind: 'artifact' },
+        select: {
+          status: true, content: true,
+          attachments: {
+            where: { ownerId, sessionId: id }, take: 1,
+            select: { id: true, data: true, mimeType: true },
+          },
+        },
+      });
+      if (!result) throw new NotFoundException('File is no longer available.');
+      if (result.status === 'ANSWERED') {
+        const receipt = readWorktreeArtifactRequest(result.content)?.result;
+        const attachment = result.attachments[0];
+        if (receipt?.status === 'uploaded' && attachment) {
+          // Preview bytes are transient; do not retain a new blob for every file opening.
+          await this.prisma.attachment.deleteMany({
+            where: { id: attachment.id, turnId: turn.id, ownerId, sessionId: id },
+          });
+          return {
+            data: Buffer.from(attachment.data), mimeType: attachment.mimeType,
+            disposition: legacyArtifactDisposition(path.posix.basename(filePath)),
+          };
+        }
+        if (receipt?.status === 'missing') throw new NotFoundException('File is no longer available.');
+        if (receipt?.status === 'error' && receipt.errorCode === 'too_large') {
+          throw new HttpException('This file is too large to preview or download.', HttpStatus.PAYLOAD_TOO_LARGE);
+        }
+        throw new HttpException('The runner could not read this file. Please try again.', HttpStatus.BAD_GATEWAY);
+      }
+      if (Date.now() >= deadline) {
+        // A late callback cannot restart the request. If a result won this race, read it.
+        const expired = await this.prisma.conversationTurn.updateMany({
+          where: { id: turn.id, sessionId: id, kind: 'artifact', status: 'PENDING' },
+          data: {
+            status: 'ANSWERED', answeredAt: new Date(),
+            content: JSON.stringify({ ...content, result: { status: 'timeout' } }),
+          },
+        });
+        if (expired.count === 0) continue;
+        throw new HttpException('The file request timed out. Please try again.', HttpStatus.GATEWAY_TIMEOUT);
+      }
+      await sleep(1_000);
+    }
   }
 
   async getLegacyArtifactForOwner(

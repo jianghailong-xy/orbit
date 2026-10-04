@@ -411,3 +411,6 @@ describe('a dispatched task’s row is counted on the strip of the conversation 
     expect(scrolled).toEqual([anchorFor(scope, dispatched)]);
   });
 });
+
+// The card's content/decision contract is tested inline; real dialogs are covered in ReviewCard.test.tsx.
+vi.mock('./ReviewCard', () => import('../test/inlineReviewCard'));
