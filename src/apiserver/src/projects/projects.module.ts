@@ -3,6 +3,7 @@ import { PushModule } from '../push/push.module';
 import { SessionsModule } from '../sessions/sessions.module';
 import { ProjectsController } from './projects.controller';
 import { ProjectPromotionController } from './project-promotion.controller';
+import { ProjectIntegrationRetryController } from './project-integration-retry.controller';
 import { ProjectPromotionService } from './project-promotion.service';
 import { AttemptBudgetMeterService } from './attempt-budget-meter.service';
 import { ConvergenceLedgerService } from './convergence-ledger.service';
@@ -30,7 +31,7 @@ import { ProjectsService } from './projects.service';
     CoordinatorJudgmentModule,
     ProjectAcceptanceModule,
   ],
-  controllers: [ProjectsController, ProjectPromotionController],
+  controllers: [ProjectsController, ProjectPromotionController, ProjectIntegrationRetryController],
   providers: [
     ProjectsService,
     ConvergenceLedgerService,

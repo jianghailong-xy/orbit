@@ -29,12 +29,12 @@ const CONTROLLER_FILES = [
   'runner-api/runner-tasks.controller.ts',
   'projects/projects.controller.ts',
   'projects/project-promotion.controller.ts',
+  'projects/project-integration-retry.controller.ts',
 ].map((file) => path.join(SRC, file));
 
 const EXPECTED_GAPS = [
-  'PROMOTION_ITEMS_BOTH_ASSIGNEES',
+  'PROMOTION_CONFLICT_BOTH_ASSIGNEES',
   'MAIN_SYNC_CONFLICT_COORDINATOR',
-  'OWNER_LAND_TASK_RERUN',
 ] as const;
 
 function mcpNames(source: string): Set<string> {
@@ -75,9 +75,9 @@ function allRouteMetadata(): Set<string> {
   return routes;
 }
 
-test('the matrix has one resolving door per applicable cell, with only the three declared gaps', () => {
+test('the matrix has one resolving door per applicable cell, with only the declared gaps', () => {
   assert.deepEqual([...KNOWN_GAPS], [...EXPECTED_GAPS]);
-  assert.equal(KNOWN_GAPS.length, 3);
+  assert.equal(KNOWN_GAPS.length, 2);
   assert.ok(OPEN_ITEM_DOOR_TABLE.length > 0);
 
   for (const cell of OPEN_ITEM_DOOR_TABLE) {
@@ -95,11 +95,21 @@ test('the matrix has one resolving door per applicable cell, with only the three
   }
 });
 
-test('the three gaps describe distinct capability holes and handover is implemented', () => {
-  const promotion = OPEN_ITEM_DOOR_TABLE.filter((cell) =>
-    cell.sourceJob === 'CHECK_PROMOTION' || cell.sourceJob === 'LAND_PROMOTION');
-  assert.ok(promotion.length > 0);
-  assert.ok(promotion.every((cell) => knownGapsForCell(cell).includes('PROMOTION_ITEMS_BOTH_ASSIGNEES')));
+test('promotion gaps are limited to conflicts, and owner landings have a retry door', () => {
+  const promotionConflicts = OPEN_ITEM_DOOR_TABLE.filter((cell) =>
+    (cell.sourceJob === 'CHECK_PROMOTION' || cell.sourceJob === 'LAND_PROMOTION')
+    && cell.failureClass === 'CONFLICT');
+  assert.ok(promotionConflicts.length > 0);
+  assert.ok(promotionConflicts.every((cell) =>
+    knownGapsForCell(cell).includes('PROMOTION_CONFLICT_BOTH_ASSIGNEES')));
+
+  const promotionFailures = OPEN_ITEM_DOOR_TABLE.filter((cell) =>
+    (cell.sourceJob === 'CHECK_PROMOTION' || cell.sourceJob === 'LAND_PROMOTION')
+    && cell.failureClass !== 'CONFLICT');
+  assert.ok(promotionFailures.length > 0);
+  assert.ok(promotionFailures.every((cell) => cell.todoType === 'PROMOTION_APPROVAL'
+    ? cell.doors.some((door) => door.implemented && door.resolving && door.name === 'promotion review')
+    : cell.doors.some((door) => door.implemented && door.resolving && door.name === 'integration_retry')));
 
   const mainSyncConflict = OPEN_ITEM_DOOR_TABLE.filter((cell) =>
     cell.sourceJob === 'MAIN_SYNC' && cell.failureClass === 'CONFLICT' && cell.assignee === 'COORDINATOR');
@@ -108,9 +118,12 @@ test('the three gaps describe distinct capability holes and handover is implemen
     knownGapsForCell(cell).includes('MAIN_SYNC_CONFLICT_COORDINATOR')));
 
   const ownerLanding = OPEN_ITEM_DOOR_TABLE.filter((cell) =>
-    cell.sourceJob === 'LAND_TASK' && cell.assignee === 'OWNER' && cell.todoType.startsWith('INTEGRATION_'));
+    (cell.sourceJob === 'LAND_TASK' || cell.sourceJob === 'MAIN_SYNC')
+    && cell.assignee === 'OWNER' && cell.todoType.startsWith('INTEGRATION_')
+    && cell.failureClass !== 'CONFLICT');
   assert.ok(ownerLanding.length > 0);
-  assert.ok(ownerLanding.every((cell) => knownGapsForCell(cell).includes('OWNER_LAND_TASK_RERUN')));
+  assert.ok(ownerLanding.every((cell) => cell.doors.some((door) =>
+    door.name === 'integration_retry' && door.kind === 'ROUTE' && door.resolving)));
 
   const handover = OPEN_ITEM_DOOR_TABLE.flatMap((cell) => cell.doors)
     .filter((door) => door.name === 'open_item_hand_over');

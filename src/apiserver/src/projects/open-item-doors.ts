@@ -38,21 +38,18 @@ export type OpenItemDoorFailureClass = (typeof OPEN_ITEM_DOOR_FAILURE_CLASSES)[n
 export const OPEN_ITEM_DOOR_ASSIGNEES = ['COORDINATOR', 'OWNER'] as const;
 export type OpenItemDoorAssignee = (typeof OPEN_ITEM_DOOR_ASSIGNEES)[number];
 
-/** Stable names for the three intentional holes in this first matrix. */
+/** Stable names for the intentional holes in this matrix. */
 export const KNOWN_GAPS = [
-  'PROMOTION_ITEMS_BOTH_ASSIGNEES',
+  'PROMOTION_CONFLICT_BOTH_ASSIGNEES',
   'MAIN_SYNC_CONFLICT_COORDINATOR',
-  'OWNER_LAND_TASK_RERUN',
 ] as const;
 export type OpenItemDoorKnownGap = (typeof KNOWN_GAPS)[number];
 
 export const KNOWN_GAP_DESCRIPTIONS: Readonly<Record<OpenItemDoorKnownGap, string>> = {
-  PROMOTION_ITEMS_BOTH_ASSIGNEES:
-    'promotion-class integration items have no resolving door for either assignee until promotion_recheck lands',
+  PROMOTION_CONFLICT_BOTH_ASSIGNEES:
+    'a promotion conflict has no resolving retry door for either assignee; create a task that resolves it on the project branch',
   MAIN_SYNC_CONFLICT_COORDINATOR:
     'a MAIN_SYNC conflict has no resolving coordinator door until the conflict-specific repair path lands',
-  OWNER_LAND_TASK_RERUN:
-    'an owner-assigned LAND_TASK item has no rerun door; the owner can only ask back or stop the task',
 };
 
 export type OpenItemDoorKind = 'MCP' | 'ROUTE';
@@ -197,19 +194,25 @@ const createFixTask = (holder: OpenItemDoorAssignee): OpenItemDoor => door(
 );
 
 function retryTask(holder: OpenItemDoorAssignee, resolving: boolean): OpenItemDoor[] {
-  return [door(holder, 'integration-retry-task', 'integration_retry', 'MCP', 'RERUN', ['RETRIED'], {
-    action: holder === 'COORDINATOR' ? 'RETRY' : undefined,
-    mcp: 'integration_retry',
-    route: '/runner/projects/:id/tasks/:taskId/integration/retry',
+  const owner = holder === 'OWNER';
+  return [door(holder, 'integration-retry-task', 'integration_retry', owner ? 'ROUTE' : 'MCP', 'RERUN', ['RETRIED'], {
+    action: 'RETRY',
+    mcp: owner ? undefined : 'integration_retry',
+    route: owner
+      ? '/projects/:id/tasks/:taskId/integration/retry'
+      : '/runner/projects/:id/tasks/:taskId/integration/retry',
     resolving,
   })];
 }
 
 function retryPromotion(holder: OpenItemDoorAssignee, resolving: boolean): OpenItemDoor[] {
-  return [door(holder, 'integration-retry-promotion', 'integration_retry', 'MCP', 'RERUN', ['RETRIED'], {
-    action: undefined,
-    mcp: 'integration_retry',
-    route: '/runner/projects/:id/promotions/:promotionId/integration/retry',
+  const owner = holder === 'OWNER';
+  return [door(holder, 'integration-retry-promotion', 'integration_retry', owner ? 'ROUTE' : 'MCP', 'RERUN', ['RETRIED'], {
+    action: 'RETRY',
+    mcp: owner ? undefined : 'integration_retry',
+    route: owner
+      ? '/projects/:id/promotions/:promotionId/integration/retry'
+      : '/runner/projects/:id/promotions/:promotionId/integration/retry',
     resolving,
   })];
 }
@@ -377,10 +380,9 @@ export function doorsForCell(cell: Pick<OpenItemDoorCell,
   const promotionFailure = isIntegration(todoType) && isPromotionSource(sourceJob);
 
   if (todoType === 'PROMOTION_APPROVAL') {
-    // Promotion decision/recheck doors are deliberately one of T4's initial gaps.  The existing
-    // REVIEW action is still shown, but this matrix does not call it a resolving exception door
-    // until the promotion-specific capability is added.
-    doors.push(review(assignee, false));
+    // A READY candidate is decided by its own promotion card.  It is not an integration retry, but
+    // the confirm/decline/cancel route is a real resolving door for this row.
+    doors.push(review(assignee, true));
     doors.push(handClose(assignee), handOver(assignee));
     return doors;
   }
@@ -393,10 +395,11 @@ export function doorsForCell(cell: Pick<OpenItemDoorCell,
   }
   if (!isIntegration(todoType)) return [handClose(assignee), handOver(assignee)];
 
-  // The promotion-specific recheck door is T5/T14 work.  Keep today's generic retry named for
-  // the message, but non-resolving in these cells so the initial four-gap contract is honest.
+  // The coordinator and owner use the same integration_retry decision.  A CONFLICT remains a
+  // deliberate hole: replaying the same source cannot repair it, so T14's project-branch repair
+  // path is the only resolving door for those cells.
   if (promotionFailure) {
-    doors.push(...retryPromotion(assignee, false));
+    doors.push(...retryPromotion(assignee, failureClass !== 'CONFLICT'));
     doors.push(review(assignee, false));
     if (assignee === 'OWNER') doors.push(askAgain(assignee));
     doors.push(createFixTask(assignee), handClose(assignee), handOver(assignee));
@@ -406,7 +409,7 @@ export function doorsForCell(cell: Pick<OpenItemDoorCell,
   if (sourceJob === 'MAIN_SYNC' && failureClass === 'CONFLICT' && assignee === 'COORDINATOR') {
     // The existing UI still exposes the ordinary task controls, but none repairs this conflict.
     doors.push(openCoordinator(assignee), openTaskSession(assignee), cancelTask(assignee, false));
-  } else if (sourceJob === 'LAND_TASK' && assignee === 'COORDINATOR') {
+  } else if ((sourceJob === 'LAND_TASK' || sourceJob === 'MAIN_SYNC') && assignee === 'COORDINATOR') {
     doors.push(openCoordinator(assignee), openTaskSession(assignee));
     if (failureClass === 'CONFLICT') {
       doors.push(...taskRepair(assignee, 'RETRY'));
@@ -417,13 +420,14 @@ export function doorsForCell(cell: Pick<OpenItemDoorCell,
       doors.push(...taskRepair(assignee));
     }
     doors.push(cancelTask(assignee, false));
-  } else if (sourceJob === 'MAIN_SYNC' && assignee === 'COORDINATOR') {
-    doors.push(openCoordinator(assignee), openTaskSession(assignee), ...taskRepair(assignee));
-    doors.push(cancelTask(assignee, false));
   } else if (assignee === 'OWNER') {
     doors.push(askAgain(assignee), openTaskSession(assignee),
       cancelTask(assignee, sourceJob !== 'LAND_TASK'));
-    // The third known gap is the missing owner rerun, not the existing way back to a coordinator.
+    if (failureClass === 'CONFLICT') {
+      doors.push(...taskRepair(assignee, 'RETRY'));
+    } else if (sourceJob === 'LAND_TASK' || sourceJob === 'MAIN_SYNC') {
+      doors.push(...retryTask(assignee, true));
+    }
   }
   doors.push(createFixTask(assignee), handClose(assignee), handOver(assignee));
   return doors;
@@ -463,20 +467,16 @@ export const OPEN_ITEM_DOOR_TABLE: readonly OpenItemDoorCell[] = buildTable();
 export function knownGapsForCell(cell: Pick<OpenItemDoorCell,
   'todoType' | 'sourceJob' | 'failureClass' | 'assignee'>): OpenItemDoorKnownGap[] {
   const gaps: OpenItemDoorKnownGap[] = [];
-  if ((isIntegration(cell.todoType) && isPromotionSource(cell.sourceJob))
-      || (cell.todoType === 'PROMOTION_APPROVAL' && isPromotionSource(cell.sourceJob))) {
-    gaps.push('PROMOTION_ITEMS_BOTH_ASSIGNEES');
+  if ((isIntegration(cell.todoType) || cell.todoType === 'PROMOTION_APPROVAL')
+      && isPromotionSource(cell.sourceJob)
+      && cell.failureClass === 'CONFLICT') {
+    gaps.push('PROMOTION_CONFLICT_BOTH_ASSIGNEES');
   }
   if (isIntegration(cell.todoType)
       && cell.sourceJob === 'MAIN_SYNC'
       && cell.failureClass === 'CONFLICT'
       && cell.assignee === 'COORDINATOR') {
     gaps.push('MAIN_SYNC_CONFLICT_COORDINATOR');
-  }
-  if (isIntegration(cell.todoType)
-      && cell.sourceJob === 'LAND_TASK'
-      && cell.assignee === 'OWNER') {
-    gaps.push('OWNER_LAND_TASK_RERUN');
   }
   return gaps;
 }
@@ -519,7 +519,9 @@ export function openItemActionsFromDoors(input: OpenItemDoorInput): OpenItemActi
     const doors = directDoors.length > 0
       ? directDoors
       : [review(assignee, false), ...(assignee === 'OWNER' ? [askAgain(assignee)] : [])];
-    const actions: OpenItemAction[] = ['ASK_COORDINATOR_AGAIN', 'REVIEW'];
+    const actions: OpenItemAction[] = isIntegration(normalizeTodo(input.kind) ?? 'INTEGRATION_ERROR')
+      ? ['ASK_COORDINATOR_AGAIN', 'RETRY', 'REVIEW']
+      : ['ASK_COORDINATOR_AGAIN', 'REVIEW'];
     return actions.filter((action) => (action !== 'ASK_COORDINATOR_AGAIN' || (assignee === 'OWNER' && input.askable))
       && doors.some((candidate) => candidate.action === action && candidate.holder === assignee));
   }
@@ -534,7 +536,7 @@ export function openItemActionsFromDoors(input: OpenItemDoorInput): OpenItemActi
       });
   const actions: OpenItemAction[] = assignee === 'COORDINATOR'
     ? ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK']
-    : ['ASK_COORDINATOR_AGAIN', 'OPEN_TASK_SESSION', 'CANCEL_TASK'];
+    : ['ASK_COORDINATOR_AGAIN', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK'];
   return actions.filter((action) => (action !== 'ASK_COORDINATOR_AGAIN' || input.askable)
     && doors.some((candidate) => candidate.action === action && candidate.holder === assignee));
 }
