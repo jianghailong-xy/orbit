@@ -90,12 +90,14 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // an address a reader follows to the job, the session or the item.
   'retryOfJobId',
   'retryRequestedBySessionId',
+  'retryRequestedByUserId',
   'handlingItemIds',
   // How the coordinator handled an item (migration 0368): the job its rerun queued, the conversation
   // that asked, and the job whose terminal state ended the item. Addresses a reader follows to the
   // job or the session — history with no foreign key, never a fence.
   'handlingJobId',
   'handlingSessionId',
+  'handlingUserId',
   'resolvedByJobId',
   // What a promotion is made of (migration 0285). Every one of them is an address a reader of the
   // card follows: the tasks the merge would carry, the two jobs that checked and landed it, the
@@ -123,6 +125,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'assignedRunnerId',
   'targetRunnerId',
   'taskId',
+  // A concrete repair task's exception item (migration 0379), an address the task/open-item
+  // readers hand back to the task or project routes.
+  'fixesOpenItemId',
   'dependsOnTaskId',
   // The dependency graph's computed fields. They name tasks exactly as `taskId` does, but they are
   // not columns, so `public-id-coverage.spec.ts` — which walks the schema — never asked about
@@ -551,6 +556,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
  *  server interpolates them into raw SQL as `::uuid`. Translating one breaks the fence silently,
  *  so neither direction may touch them — they are not addresses, they are equality tokens. */
 export const NEVER_PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
+  // An open-item handover records the coordinator session that made the decision.  It is
+  // provenance for the audit trail, not a caller-addressable session reference.
+  'handedOverBySessionId',
   // The coordination workspace a project's DERIVED coordinator identity was derived FROM
   // (`project_runtime`, migration 0114). It names a workspace row, but it is not an address: it is
   // the value `project_coordinator_reconcile` compares the seated agent against, byte-for-byte, to

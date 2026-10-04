@@ -730,6 +730,25 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult("The item is closed, with your reason on it.\n"+prettyJSON(raw), false)
 
+	case "open_item_hand_over":
+		id := getString(args, "projectId")
+		itemID := getString(args, "itemId")
+		if id == "" || itemID == "" {
+			return toolResult("projectId and itemId are required", true)
+		}
+		note := strings.TrimSpace(getString(args, "note"))
+		if note == "" {
+			return toolResult("note is required: explain why the coordinator is handing this item to the account owner", true)
+		}
+		// The acting session IS the authority: the server checks it against the project's coordinator
+		// pointer and refuses an item that is already the owner's or a caller from another session.
+		raw, err := s.t.handOverOpenItem(s.sessionID, id, itemID, note)
+		if err != nil {
+			return toolResult("hand over open item failed: "+err.Error(), true)
+		}
+		return toolResult("The item is now with the account owner, with your explanation on it.\n"+
+			prettyJSON(raw), false)
+
 	case "integration_retry":
 		id := getString(args, "projectId")
 		taskID := getString(args, "taskId")
@@ -824,7 +843,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("title is required", true)
 		}
 		body := map[string]interface{}{"title": title}
-		copyIfPresent(body, args, "description", "attachmentIds", "listId", "projectId", "parentTaskId", "verifiesTaskId", "verification", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "handoff")
+		copyIfPresent(body, args, "description", "attachmentIds", "listId", "projectId", "fixesOpenItemId", "parentTaskId", "verifiesTaskId", "verification", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "handoff")
 		if err := requireHandoffNamesItsDestination(body); err != nil {
 			return toolResult(err.Error(), true)
 		}
@@ -869,7 +888,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 				return toolResult(fmt.Sprintf("tasks[%d]: title is required", i), true)
 			}
 			body := map[string]interface{}{"title": title}
-			copyIfPresent(body, item, "description", "attachmentIds", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef", "handoff")
+			copyIfPresent(body, item, "description", "attachmentIds", "listId", "projectId", "fixesOpenItemId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef", "handoff")
 			// Per item, because a crossing is per item: one plan can file most of its work at home
 			// and one piece of it over the line, and the item that crosses is the one that has to
 			// name where it is going.
@@ -916,7 +935,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// gives it all three outcomes for free: absent stays absent (the task keeps what it says),
 		// a string is forwarded as given, and an explicit null survives as null rather than being
 		// mistaken for "not supplied" — that last one is the whole clear path.
-		copyIfPresent(body, args, "title", "description", "status", "listId", "projectId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "runAt", "provider", "model", "modelHint", "modelHintReason", "acceptanceCriteria", "criterionKey", "codeless", "codelessReason", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "dependsOnTaskIds", "autoRunWhenReady", "priority", "completionPolicy", "verdict", "labels", "supersededByTaskId", "terminalReason", "handoff")
+		copyIfPresent(body, args, "title", "description", "status", "listId", "projectId", "fixesOpenItemId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "runAt", "provider", "model", "modelHint", "modelHintReason", "acceptanceCriteria", "criterionKey", "codeless", "codelessReason", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "dependsOnTaskIds", "autoRunWhenReady", "priority", "completionPolicy", "verdict", "labels", "supersededByTaskId", "terminalReason", "handoff")
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
 		}
@@ -2412,9 +2431,15 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"items":       str,
 				"description": "Ids of existing Orbit attachments owned by the caller, such as uploaded files or images from a session. Copies them into this task's inputs in the same transaction as creation; originals are preserved and each run receives its own copies. Pass attachment ids, not local file paths or URLs. Omit when no attachments are needed.",
 			},
-			"listId":             map[string]interface{}{"type": []string{"string", "null"}},
-			"assigneeId":         map[string]interface{}{"type": []string{"string", "null"}},
-			"projectId":          projectIDProp,
+			"listId":     map[string]interface{}{"type": []string{"string", "null"}},
+			"assigneeId": map[string]interface{}{"type": []string{"string", "null"}},
+			"projectId":  projectIDProp,
+			"fixesOpenItemId": map[string]interface{}{
+				"type": "string",
+				"description": "Attach this task to an OPEN integration or TASK_FAILED item as its concrete fix. " +
+					"The item must be in the same project and assigned to the owner or coordinating session; " +
+					"an item may have multiple fixing tasks.",
+			},
 			"handoff":            handoffProp,
 			"parentTaskId":       parentTaskIDProp,
 			"acceptanceCriteria": acceptanceCriteriaProp,
@@ -3139,6 +3164,29 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			}, "projectId", "itemId", "note"),
 		},
 		{
+			"name": "open_item_hand_over",
+			"description": "Hand one of this project's open coordinator items to the account owner, and " +
+				"say why. This is a deliberate decision, not the escalation clock: the item becomes OWNER " +
+				"/ HANDED_OVER, the explanation and this coordinator session stay on the row, and the owner " +
+				"is notified after the compare-and-set commits. Only the conversation coordinating this " +
+				"project may call it; an item that is already closed, already the owner's, or has another " +
+				"door is refused. The note is required and is limited to 2000 characters.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project you coordinate, as shown in its web UI URL (/projects/<id>).",
+				},
+				"itemId": map[string]interface{}{
+					"type":        "string",
+					"description": "The open item to hand to the owner, as project_get or the open-items list spells it.",
+				},
+				"note": map[string]interface{}{
+					"type":        "string",
+					"description": "Why the coordinator cannot settle it. Required, up to 2000 characters, and kept on the item.",
+				},
+			}, "projectId", "itemId", "note"),
+		},
+		{
 			"name": "integration_retry",
 			"description": "Run one of your project's failed integrations again. With taskId: a task " +
 				"that is DONE whose newest landing onto the project's integration line ended CHECK_FAILED " +
@@ -3292,12 +3340,16 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"name":        "task_update",
 			"description": "Update a task's fields. Direct status DONE is refused for every actor; the refusal names the declared EXECUTABLE, VERIFICATION, EVIDENCE_JUDGMENT, or OWNER_CONFIRMED path, and an OWNER_CONFIRMED task is confirmed only by the account owner in the Orbit app. A write that lands a task on OWNER_CONFIRMED in no project, or in a project whose Automatic is off — by changing the criterion, the project or the criterion it serves — needs ownerConfirmationReason (stored or sent), or it is refused 409 OWNER_CONFIRMATION_REASON_REQUIRED and nothing is written. FAILED remains writable as a run's conservative self-report. When setting `description`, write it as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps) — what would PROVE the task done goes in `acceptanceCriteria`, not into the prompt. `acceptanceCriteria` is editable for the whole life of the task, which is where it usually gets written: omit it to leave the current criteria untouched, pass a string to replace them, pass null to clear them. It states what settles THIS task, not the project it is filed under (project_get). `parentTaskId` moves this task under another one you own (same project, never itself or one of its own subtasks) — membership only, with no effect on when it runs. `projectId` re-files this task under another project, or null takes it out of every project — how a mis-filing is corrected, and the account owner's to make: a session acting under a project scope is refused UNMAPPED_PROJECT_WORK for null and PROJECT_SCOPE_MISMATCH for another project, and a declared crossing waits on the owner as CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING (read the row with project_crossings). Pass null for assigneeId/listId/parentTaskId/projectId/dueDate/runAt/provider/model/modelHint/modelHintReason to clear them. `codeless: true` declares that the task produces no code, which takes it out of its acceptance criterion's landing: it needs `codelessReason` in the same call, and is refused for a task that already has commits of its own.",
 			"inputSchema": obj(map[string]interface{}{
-				"taskId":             taskIDProp,
-				"title":              str,
-				"description":        taskDescriptionProp,
-				"status":             taskUpdateStatus,
-				"listId":             map[string]interface{}{"type": []string{"string", "null"}},
-				"projectId":          updateProjectIDProp,
+				"taskId":      taskIDProp,
+				"title":       str,
+				"description": taskDescriptionProp,
+				"status":      taskUpdateStatus,
+				"listId":      map[string]interface{}{"type": []string{"string", "null"}},
+				"projectId":   updateProjectIDProp,
+				"fixesOpenItemId": map[string]interface{}{
+					"type":        []string{"string", "null"},
+					"description": "Attach this task to an OPEN integration or TASK_FAILED item as its concrete fix. Omit to preserve the current link; pass null to detach it. The item must be in the same project and assigned to the owner or coordinating session.",
+				},
 				"handoff":            updateHandoffProp,
 				"assigneeId":         map[string]interface{}{"type": []string{"string", "null"}},
 				"parentTaskId":       updateParentTaskIDProp,

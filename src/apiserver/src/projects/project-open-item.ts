@@ -14,6 +14,7 @@ import {
 
 import { taskLanding, readLandingBranches } from './project-criterion-landing';
 import { LIVE_PROMOTION_STATES } from './project-promotion';
+import { openItemActionsFromDoors, openItemDoorMessageNames } from './open-item-doors';
 import type { PrismaService } from '../prisma/prisma.service';
 
 /** Nest token for the post-commit delivery edge, kept structural to avoid a service import cycle. */
@@ -149,6 +150,12 @@ export interface OpenItemActionsSource {
   /** Whether this project has a coordinator conversation left to ask again (§4.8) — the one press
    *  that turns on a fact outside the row. */
   askable: boolean;
+  /** Optional matrix dimensions carried by newer integration payloads. */
+  sourceJob?: string | null;
+  failureClass?: string | null;
+  phase?: string | null;
+  jobKind?: string | null;
+  payload?: unknown;
 }
 
 /**
@@ -160,33 +167,7 @@ export interface OpenItemActionsSource {
  * beside an item's delivery — and two derivations of one answer are two things free to disagree.
  */
 export function openItemActions(source: OpenItemActionsSource): OpenItemAction[] {
-  if (source.fuseEpisodeId) return ['RESUME'];
-  if (source.kind === 'COORDINATOR_QUESTION') return ['ANSWER'];
-  // A merge into main is decided on its own card, which says what would land and what the checks
-  // came to (§7.5): the row is the way in. An integration failure of that merge that has become the
-  // owner's also has the way back a task's item has (§4.7): the press puts it back in front of the
-  // coordinator, whose door for it is the candidate's re-check (`decidePromotionRetry`). The merge
-  // card itself is the owner's to decide and has no such way back.
-  if (source.promotionId) {
-    return source.assignee === 'OWNER'
-      && source.askable
-      && INTEGRATION_ITEM_KINDS.includes(source.kind as OpenItemKind)
-      ? ['ASK_COORDINATOR_AGAIN', 'REVIEW']
-      : ['REVIEW'];
-  }
-  if (!source.taskId) return [];
-  if (source.assignee === 'COORDINATOR') {
-    // The coordinator's own: it can be looked at, run again, or stopped.
-    return ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK'];
-  }
-  // An escalated item's route back is through the coordinator that should have had it (§4.7) —
-  // the owner's press is to ask again, not to retry work the coordinator owns — and to stop the
-  // task outright.
-  return [
-    ...(source.askable ? ['ASK_COORDINATOR_AGAIN' as const] : []),
-    'OPEN_TASK_SESSION',
-    'CANCEL_TASK',
-  ];
+  return openItemActionsFromDoors(source);
 }
 
 /**
@@ -879,8 +860,10 @@ export async function recordDeliveryReview(
 export interface OpenItemHandlingStart {
   /** The job the rerun queued: the task's next LAND_TASK, or the candidate's next CHECK_PROMOTION. */
   jobId: string;
-  /** The coordinator conversation that asked for it. */
-  sessionId: string;
+  /** The coordinator conversation that asked for it, or null for an owner press. */
+  sessionId?: string | null;
+  /** The account owner that asked for it, or null for a coordinator press. */
+  userId?: string | null;
   reason: string;
 }
 
@@ -903,11 +886,17 @@ export async function markOpenItemsHandling(
   handling: OpenItemHandlingStart,
 ): Promise<void> {
   if (itemIds.length === 0) return;
+  const owner = handling.userId != null;
   await tx.projectOpenItem.updateMany({
-    where: { id: { in: [...itemIds] }, state: 'OPEN', assignee: 'COORDINATOR' },
+    where: {
+      id: { in: [...itemIds] },
+      state: 'OPEN',
+      assignee: owner ? 'OWNER' : 'COORDINATOR',
+    },
     data: {
       handlingJobId: handling.jobId,
-      handlingSessionId: handling.sessionId,
+      handlingSessionId: owner ? null : (handling.sessionId ?? null),
+      handlingUserId: owner ? handling.userId : null,
       handlingReason: handling.reason,
       handlingStartedAt: new Date(),
     },
@@ -934,19 +923,23 @@ export async function resolveHandledItems(
   jobId: string,
 ): Promise<string[]> {
   const rows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-    UPDATE "project_open_item"
+    UPDATE "project_open_item" item
        SET "state" = 'RESOLVED',
            "resolution" = 'HANDLED',
            "resolved_at" = now(),
-           "resolved_by" = 'COORDINATOR',
-           "resolved_by_session_id" = "handling_session_id",
+           "resolved_by" = CASE WHEN job."retry_requested_by_user_id" IS NOT NULL THEN 'USER' ELSE 'COORDINATOR' END,
+           "resolved_by_user_id" = job."retry_requested_by_user_id",
+           "resolved_by_session_id" = job."retry_requested_by_session_id",
            "resolution_note" = "handling_reason",
            "resolved_by_job_id" = "handling_job_id",
            "updated_at" = now()
-     WHERE "handling_job_id" = ${jobId}::uuid
-       AND "state" = 'OPEN'
-       AND "assignee" = 'COORDINATOR'
-    RETURNING "id"`);
+      FROM "project_integration_job" job
+     WHERE item."handling_job_id" = ${jobId}::uuid
+       AND item."handling_job_id" = job."id"
+       AND item."state" = 'OPEN'
+       AND (item."assignee" = 'COORDINATOR'
+         OR (item."assignee" = 'OWNER' AND job."retry_requested_by_user_id" IS NOT NULL))
+    RETURNING item."id"`);
   return rows.map((row) => row.id);
 }
 
@@ -990,20 +983,23 @@ export async function supersedeHandledItems(
   byItemId: string,
 ): Promise<string[]> {
   const rows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-    UPDATE "project_open_item"
+    UPDATE "project_open_item" item
        SET "state" = 'SUPERSEDED',
            "resolution" = 'RETRIED',
            "resolved_at" = now(),
-           "resolved_by" = 'COORDINATOR',
-           "resolved_by_session_id" = "handling_session_id",
+           "resolved_by" = CASE WHEN job."retry_requested_by_user_id" IS NOT NULL THEN 'USER' ELSE 'COORDINATOR' END,
+           "resolved_by_user_id" = job."retry_requested_by_user_id",
+           "resolved_by_session_id" = job."retry_requested_by_session_id",
            "resolution_note" = "handling_reason",
            "resolved_by_job_id" = "handling_job_id",
            "superseded_by_item_id" = ${byItemId}::uuid,
            "updated_at" = now()
-     WHERE "handling_job_id" = ${jobId}::uuid
-       AND "state" = 'OPEN'
-       AND "id" <> ${byItemId}::uuid
-    RETURNING "id"`);
+      FROM "project_integration_job" job
+     WHERE item."handling_job_id" = ${jobId}::uuid
+       AND item."handling_job_id" = job."id"
+       AND item."state" = 'OPEN'
+       AND item."id" <> ${byItemId}::uuid
+    RETURNING item."id"`);
   return rows.map((row) => row.id);
 }
 
@@ -1186,6 +1182,8 @@ interface IntegrationItemPayload {
     retryOfJobId?: string;
     failureClass?: string | null;
     reason?: string | null;
+    requestedBySessionId?: string | null;
+    requestedByUserId?: string | null;
   } | null;
 }
 
@@ -1264,20 +1262,32 @@ function failureClassLines(payload: IntegrationItemPayload, aboutTask: boolean):
  * of the work it finished, which is how three DONE tasks of 34Y7My8sqhKLWtmCQYv1l stopped at their
  * first landing on 2026-10-01 with nothing able to move them.
  */
-function landingNextStep(projectId: string, taskId: string, payload: IntegrationItemPayload): string {
-  const read = `先读这条任务（task_get，taskId 传 ${taskId}，评论与它的会话都在上面）。任务本身已经是 DONE，`
-    + '落地失败不改它的状态；task_start 只会再跑一遍任务、开一条新分支，不会重新排这次落地。\n';
-  const rework = '用 task_reopen 把任务退回返工、另起一个取代它的任务（task_create 带 supersedesTaskId），'
-    + '或者取消（task_update 置 CANCELLED）';
-  if (payload.phase === 'MAIN_SYNC') return read + mainSyncNextStep(payload);
+function landingNextStep(
+  projectId: string,
+  taskId: string,
+  payload: IntegrationItemPayload,
+  doors: {
+    retryMcp: string;
+    taskReopenMcp: string;
+    taskCreateMcp: string;
+    taskUpdateMcp: string;
+    taskStartMcp: string;
+    taskGetMcp: string;
+  },
+): string {
+  const read = `先读这条任务（${doors.taskGetMcp}，taskId 传 ${taskId}，评论与它的会话都在上面）。任务本身已经是 DONE，`
+    + `落地失败不改它的状态；${doors.taskStartMcp} 只会再跑一遍任务、开一条新分支，不会重新排这次落地。\n`;
+  const rework = `用 ${doors.taskReopenMcp} 把任务退回返工、另起一个取代它的任务（${doors.taskCreateMcp} 带 supersedesTaskId），`
+    + `或者取消（${doors.taskUpdateMcp} 置 CANCELLED）`;
+  if (payload.phase === 'MAIN_SYNC') return read + mainSyncNextStep(payload, doors);
   if (payload.failureClass === 'CONFLICT' || (payload.files?.length ?? 0) > 0) {
     return read
-      + '冲突只有改过的分支才能解开：原样重跑会再冲突一次，integration_retry 也不接受冲突。'
+      + `冲突只有改过的分支才能解开：原样重跑会再冲突一次，${doors.retryMcp} 也不接受冲突。`
       + `${rework}。`;
   }
   return read
     + '先判断红的是谁。是交付本身的问题，就' + `${rework}。`
-    + '不是交付的问题——合并检查的基线后来修好了、检查超时、集成机器出错——就用 integration_retry'
+    + `不是交付的问题——合并检查的基线后来修好了、检查超时、集成机器出错——就用 ${doors.retryMcp}`
     + `（projectId 传 ${projectId}，taskId 传 ${taskId}，reason 写明这次为什么会不同）重排一次落地：`
     + '它入队这项任务的下一代落地，成了就进项目分支、继续往后的合并检查，没成会再开一条待办给你。'
     + '这类落地去留由你判，不拿去问账号所有者。';
@@ -1292,11 +1302,14 @@ function landingNextStep(projectId: string, taskId: string, payload: Integration
  * stopped in the same place. What resolves it is a source branch that already contains that absorb:
  * J-S2 then leaves the project branch's tip alone and J-S4 lands the source by MERGE.
  */
-function mainSyncNextStep(payload: IntegrationItemPayload): string {
+function mainSyncNextStep(
+  payload: IntegrationItemPayload,
+  doors: { retryMcp: string; taskReopenMcp: string },
+): string {
   const line = payload.targetRef ? `项目分支 ${payload.targetRef} ` : '项目分支';
   return `这次冲突停在 MAIN_SYNC：平台先把 upstream（project_get 的 integration.upstreamRef）合进${line}的 tip，`
     + '在那里就冲突了，还没看这项任务的提交。冲突在项目线和 upstream 之间，不在这项任务的工作里：'
-    + '原样重跑会再冲突一次，integration_retry 也不接受冲突；只让任务重做自己的工作也解不开，'
+    + `原样重跑会再冲突一次，${doors.retryMcp} 也不接受冲突；只让任务重做自己的工作也解不开，`
     + '下一次落地照样先停在这里。\n'
     + '先在项目线上吸收 upstream、解决冲突，再落地：\n'
     + `1. 在这项任务的源分支上，把${line}的 tip 和 upstream 的 tip 合进来，解掉上面这些文件的冲突，`
@@ -1305,7 +1318,7 @@ function mainSyncNextStep(payload: IntegrationItemPayload): string {
     + '进项目分支的树就是源分支的树。落地时其中一个 tip 又往前走了，源分支就缺了它，'
     + '落地会照旧停在 MAIN_SYNC，那就再合一次。\n'
     + '3. 这个合并提交由这项任务自己的会话放进源分支：先用 task_comment 在任务上写明这一轮只做第 1 步，'
-    + '再用 task_reopen 把它退回。它再次 DONE 就会排下一次落地。\n'
+    + `再用 ${doors.taskReopenMcp} 把它退回。它再次 DONE 就会排下一次落地。\n`
     + '这条待办开着时，同一条集成线上其他任务的落地都在等（M2），只有这项任务自己的下一次落地不用等。'
     + '它落进项目分支后，这条待办由平台关闭，排着的落地接着走。';
 }
@@ -1324,12 +1337,13 @@ function promotionNextStep(
   projectId: string,
   promotionId: string | null,
   payload: IntegrationItemPayload,
+  retryDoor: string,
 ): string {
   const about = '这条待办身后没有任务：它来自一次晋升（把项目分支合入 main）的作业，那种作业不为任何单个'
     + '任务做事。\n';
   if (payload.failureClass === 'CONFLICT' || (payload.files?.length ?? 0) > 0) {
     return about
-      + '冲突只有改过的项目分支才能解开：原样重跑会再冲突一次，integration_retry 也不接受冲突。'
+      + `冲突只有改过的项目分支才能解开：原样重跑会再冲突一次，${retryDoor} 也不接受冲突。`
       + '另起一个任务在项目分支上解决它；那个任务落地后，平台会为新的分支尖端开一个新的候选并重新检查，'
       + '这个候选和这条待办随之由平台关闭。';
   }
@@ -1337,7 +1351,7 @@ function promotionNextStep(
   const retry = `（projectId 传 ${projectId}，promotionId 传 ${candidate}，reason 写明这次为什么会不同）`;
   return about
     + '先判断红的是谁。是项目分支上的工作有问题，就另起一个任务修它，它落地后平台会开新的候选。'
-    + '不是工作的问题——合并检查的基线后来修好了、检查超时、集成机器出错——就用 integration_retry'
+    + `不是工作的问题——合并检查的基线后来修好了、检查超时、集成机器出错——就用 ${retryDoor}`
     + `${retry}把这个候选的检查重跑一次。检查通过之后，合并照旧由账号所有者在卡上确认，或由 Automatic `
     + '设置按原来的规则自动合并：这扇门只让候选回到可以合并的状态，不替任何人合并。';
 }
@@ -1467,6 +1481,16 @@ export function openItemMessage(item: OpenItemMessageSource): string {
     error?: string;
     chain?: { failuresInChain?: number; limit?: number };
   } & IntegrationItemPayload;
+  const doorNames = openItemDoorMessageNames({
+    kind: item.kind,
+    assignee: 'COORDINATOR',
+    taskId: item.taskId,
+    promotionId: item.promotionId ?? null,
+    payload,
+    phase: payload.phase ?? null,
+    jobKind: payload.jobKind ?? null,
+    failureClass: payload.failureClass ?? null,
+  });
   const notice = `待办编号 ${uuidToBase62(item.id)}。这是一条通知，不是打断：你正在跑的那一轮不会被它中断，`
     + '你是在那一轮结束之后才读到它的，所以以你自己刚读到的库里状态为准。';
   // The one ending the platform cannot produce for itself, and the only place a coordinator is told
@@ -1474,11 +1498,11 @@ export function openItemMessage(item: OpenItemMessageSource): string {
   // leaves the item saying "this did not land" for ever, because the branch tip is not an ancestor of
   // anything and no job will ever report a landing for it again.
   const handClose = '平台自己关不掉的情况——这项工作已经用别的方式在目标分支上了，或者你已经另行处理过——'
-    + '用 open_item_resolve 写明理由把它关掉：它标为已处理（HANDLED），你的会话和理由会留在待办上。';
+    + `用 ${doorNames.resolveMcp} 写明理由把它关掉：它标为已处理（HANDLED），你的会话和理由会留在待办上。`;
   if ((INTEGRATION_ITEM_KINDS as readonly string[]).includes(item.kind)) {
     const taskId = item.taskId ? uuidToBase62(item.taskId) : null;
     // §4.7 H1–H3, said once for both scopes: a rerun does not close this item, its result does.
-    const handling = (what: string, success: string) => `用 integration_retry ${what}后，这条待办显示为`
+    const handling = (what: string, success: string) => `用 ${doorNames.retryMcp} ${what}后，这条待办显示为`
       + `处理中、仍然开着，直到重跑的那次作业有结果：${success}，它自动标为已处理（HANDLED），记下你的会话`
       + '和理由；又失败了，它标为已取代（RETRIED），新的失败另开一条待办。';
     return `【例外待办】${item.title}\n\n`
@@ -1487,10 +1511,10 @@ export function openItemMessage(item: OpenItemMessageSource): string {
       + '这条待办的负责人是你。平台不会自己重试一次没有落地的集成，所以不会有第二次作业自己出现；'
       + '要判断的是下一步。\n'
       + (taskId
-        ? `${landingNextStep(projectId, taskId, payload)}\n`
+        ? `${landingNextStep(projectId, taskId, payload, doorNames)}\n`
           + '任务落地、被取消或被取代之后，这条待办由平台自己关闭。'
           + `${handling('重排', '落地了')}你不用回报。${handClose}\n`
-        : `${promotionNextStep(projectId, item.promotionId ?? null, payload)}\n`
+        : `${promotionNextStep(projectId, item.promotionId ?? null, payload, doorNames.retryMcp)}\n`
           + '这个候选被新的落地取代、被拒绝或已经合并之后，这条待办由平台自己关闭。'
           + `${handling('重跑检查', '检查通过了')}你不用回报。${handClose}\n`)
       + `\n${notice}`;
@@ -1517,9 +1541,9 @@ export function openItemMessage(item: OpenItemMessageSource): string {
     + (detail.length > 0 ? `${detail.join('\n')}\n` : '')
     + `这是这条取代链上的第 ${attempt} 次失败（上限 ${limit} 次；到第 ${limit} 次，待办不再发给你，`
     + `直接交给账号所有者）。\n\n`
-    + `这条待办的负责人是你，要判断的是下一步：重新运行（task_start）、另起一个取代它的任务`
-    + `（task_create 带 supersedesTaskId）、还是取消（task_update 置 CANCELLED）。`
-    + `失败原因先用 task_get（taskId 传 ${taskId}）读任务评论与它的会话，不要照着这条消息猜。\n`
+    + `这条待办的负责人是你，要判断的是下一步：重新运行（${doorNames.taskStartMcp}）、另起一个取代它的任务`
+    + `（${doorNames.taskCreateMcp} 带 supersedesTaskId）、还是取消（${doorNames.taskUpdateMcp} 置 CANCELLED）。`
+    + `失败原因先用 ${doorNames.taskGetMcp}（taskId 传 ${taskId}）读任务评论与它的会话，不要照着这条消息猜。\n`
     + `任务重新跑起来、被取代、被取消或完成之后，这条待办由平台自己关闭，你不用回报。`
     + `${handClose}\n\n`
     + notice;
