@@ -29,7 +29,7 @@ import org.junit.runner.RunWith
 class DirectoryDeviceTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
-    private val app get() = compose.activity.application as OrbitApplication
+    private val app get() = instrumentation.targetContext.applicationContext as OrbitApplication
     private val apiCalls = CopyOnWriteArrayList<String>()
     private val sessionId = "34TcwNgAIo6tGUiIKjqnQ"
     private val workspaceId = "34Tcl0kralZrY8opuLJU4"
@@ -125,7 +125,8 @@ class DirectoryDeviceTest {
                 directoryScrollTo("Research")
                 capture("landscape")
             } catch (failure: Throwable) {
-                capture("failure")
+                File(File(app.filesDir, "a05-directory"), "failure.txt").writeText(failure.stackTraceToString())
+                runCatching { capture("failure") }
                 throw failure
             } finally {
                 runBlocking { app.session.logout() }
@@ -213,6 +214,12 @@ class DirectoryDeviceTest {
         compose.waitForIdle()
         instrumentation.waitForIdleSync()
         instrumentation.uiAutomation.waitForIdle(500, 5_000)
+        val state = compose.activityRule.scenario.state
+        var detail = "key=$code state=$state"
+        if (state != androidx.lifecycle.Lifecycle.State.DESTROYED) compose.activityRule.scenario.onActivity {
+            detail += " activity=${it.lifecycle.currentState} focus=${it.window.decorView.hasWindowFocus()} callbacks=${it.onBackPressedDispatcher.hasEnabledCallbacks()} ime=${ViewCompat.getRootWindowInsets(it.window.decorView)?.isVisible(WindowInsetsCompat.Type.ime())}"
+        }
+        File(File(app.filesDir, "a05-directory"), "back-trace.txt").appendText(detail + "\n")
         instrumentation.sendKeyDownUpSync(code)
         compose.waitForIdle()
     }

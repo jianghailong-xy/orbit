@@ -128,15 +128,20 @@ fi
 "$adb" -s "$serial" shell am force-stop "$package"
 start="$("$adb" -s "$serial" shell date +%s | tr -d '\r').000"
 "$adb" -s "$serial" shell am instrument -w -r -e a05_cold_kind "${A05_COLD_LINK:-session}" -e class io.orbitd.android.directory.DirectoryDeviceTest,io.orbitd.android.directory.LinkDeviceTest "$runner" > "$output/instrumentation.txt" 2>&1
-"$adb" -s "$serial" exec-out run-as "$package" tar -c -C files a05-directory a05-links > "$output/captures.tar"
-tar --no-same-owner -xf "$output/captures.tar" -C "$output"
-mv "$output/a05-directory" "$output/screenshots"
-mv "$output/a05-links" "$output/links"
-chmod -R a+rX "$output/screenshots" "$output/links"
 pid="$(sed -n 's/.*a05_pid=\([0-9]*\).*/\1/p' "$output/instrumentation.txt" | head -1)"
 [[ -n "$pid" ]]
 "$adb" -s "$serial" logcat -d -v threadtime --pid="$pid" -T "$start" > "$output/logcat.txt"
 [[ -s "$output/logcat.txt" ]]
+capture_status=0
+"$adb" -s "$serial" shell run-as "$package" tar -cf files/a05-captures.tar -C files a05-directory a05-links > "$output/capture-create.txt" 2>&1 || capture_status=$?
+"$adb" -s "$serial" exec-out run-as "$package" cat files/a05-captures.tar > "$output/captures.tar"
+tar --no-same-owner -xf "$output/captures.tar" -C "$output"
+for entry in a05-directory a05-links; do
+  if [[ -d "$output/$entry" ]]; then chmod -R a+rX "$output/$entry"; fi
+done
+if [[ -d "$output/a05-directory" ]]; then mv "$output/a05-directory" "$output/screenshots"; fi
+if [[ -d "$output/a05-links" ]]; then mv "$output/a05-links" "$output/links"; fi
+(( capture_status == 0 ))
 if rg 'a05-fixture-(password|access|refresh)' "$output/logcat.txt"; then
   echo 'Fixture credential marker found in logcat' >&2
   exit 1

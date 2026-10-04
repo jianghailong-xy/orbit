@@ -80,7 +80,9 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
             }
         }
     }
-    BackHandler(enabled = !imeVisible && navigation.account == accountKey && (drawer.isOpen || navigation.canGoBack || showBuild)) {
+    // Android dispatches IME Back before this callback. Animated IME visibility can lag
+    // its actual dismissal; gating the route callback on it can finish the Activity.
+    BackHandler(enabled = navigation.account == accountKey && (drawer.isOpen || navigation.canGoBack || showBuild)) {
         when { drawer.isOpen -> scope.launch { drawer.close() }; showBuild -> showBuild = false; else -> navigation = navigation.back() }
     }
     if (signedIn == null) {
