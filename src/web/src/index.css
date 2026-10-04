@@ -4958,6 +4958,19 @@ html[data-theme='dark'] .session-tag-chip {
   font-size: 16px;
   cursor: pointer;
 }
+/* Keep the slot stable and the button reachable by keyboard when hidden from the mouse. */
+@media (hover: hover) and (pointer: fine) {
+  .session-actions > .session-kebab {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .session-row:hover .session-actions > .session-kebab,
+  .session-row:focus-within .session-actions > .session-kebab,
+  .session-row.menu-open .session-actions > .session-kebab {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
 .session-actions > .session-kebab:hover,
 .session-row.menu-open .session-actions > .session-kebab {
   background: var(--bg-hover-strong);
