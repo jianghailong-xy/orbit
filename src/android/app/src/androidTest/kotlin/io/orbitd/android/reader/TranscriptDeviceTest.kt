@@ -42,17 +42,15 @@ class TranscriptDeviceTest {
         compose.onNodeWithText("Long conversation").performClick()
         awaitText("Latest answer 9999", substring = true)
         capture("latest")
-        compose.runOnIdle { (app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
-            .setPrimaryClip(android.content.ClipData.newPlainText("A06 selection control", "a06-before-selection")) }
+        compose.runOnIdle { (app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).clearPrimaryClip() }
+        SystemClock.sleep(350)
         // Native long press must produce a selectable substring, not only a whole-message button.
         val prose = compose.onNodeWithText("Latest answer 9999", substring = true)
         longPress(prose)
         compose.waitForIdle()
         compose.mainClock.advanceTimeBy(100)
         capture("selection-pressed")
-        // Selection is produced by the native finger hold. Exercise the platform Copy key;
-        // the wall-clock manual journey separately checks the actual floating Copy toolbar.
-        instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_COPY)
+        copyFromNativeToolbar()
         compose.waitForIdle()
         val clipboard = app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         var copied = ""
@@ -81,9 +79,12 @@ class TranscriptDeviceTest {
         capture("history-stream")
         compose.activityRule.scenario.recreate()
         compose.waitUntil(10_000) { compose.onAllNodesWithTag("event:9801").fetchSemanticsNodes().isNotEmpty() }
-        val restored = compose.onNodeWithTag("event:9801").fetchSemanticsNode().boundsInRoot.top
-        assertTrue("Rotation/recreation preserves saved seq+offset", kotlin.math.abs(restored-after)/density <= 8f)
+        val firstAvailable = compose.onNodeWithTag("event:9801").fetchSemanticsNode().boundsInRoot.top
         capture("restored")
+        compose.waitForIdle()
+        val restored = compose.onNodeWithTag("event:9801").fetchSemanticsNode().boundsInRoot.top
+        File(evidence, "recreated-position.txt").writeText("beforePx=$after\nfirstAvailablePx=$firstAvailable\nsettledPx=$restored\ndensity=$density\n")
+        assertTrue("Rotation/recreation preserves saved seq+offset", kotlin.math.abs(restored-after)/density <= 8f)
         // Rich message, image and object links use the product's one return stack.
         compose.onNodeWithText("Jump to latest").performClick()
         awaitText("Latest answer 9999", true)
@@ -317,6 +318,29 @@ class TranscriptDeviceTest {
                 SystemClock.sleep(800)
             }
         }
+    }
+    private fun copyFromNativeToolbar() {
+        val automation = instrument.uiAutomation
+        val info = automation.serviceInfo
+        val oldFlags = info.flags
+        info.flags = oldFlags or android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
+            android.accessibilityservice.AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
+        automation.serviceInfo = info
+        fun find(node: android.view.accessibility.AccessibilityNodeInfo?): android.view.accessibility.AccessibilityNodeInfo? {
+            if (node == null) return null
+            if (node.text?.toString() == "Copy" && node.viewIdResourceName?.startsWith("android:id/") == true) return node
+            for (i in 0 until node.childCount) find(node.getChild(i))?.let { return it }
+            return null
+        }
+        try {
+            var found: android.view.accessibility.AccessibilityNodeInfo? = null
+            compose.waitUntil(8_000) { found = automation.windows.firstNotNullOfOrNull { find(it.root) }; found != null }
+            val label = found!!
+            var button: android.view.accessibility.AccessibilityNodeInfo? = label
+            while (button != null && !button.isClickable) button = button.parent
+            File(evidence, "selection-action.txt").writeText("native_toolbar_id=${label.viewIdResourceName}\naction=ACTION_CLICK\n")
+            assertTrue("Click the platform's Copy action", button?.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK) == true)
+        } finally { info.flags = oldFlags; automation.serviceInfo = info }
     }
     private fun capture(name: String) {
         SystemClock.sleep(300) // Let platform window/toolbar animations settle outside the Compose clock.

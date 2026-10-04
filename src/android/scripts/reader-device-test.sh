@@ -118,6 +118,11 @@ if [[ "$("$adb" -s "$serial" shell getprop ro.kernel.qemu | tr -d '\r')" == 1 ]]
     "$adb" -s "$serial" shell settings put secure stylus_handwriting_enabled 0
   fi
 fi
+deadline=$((SECONDS + 30))
+until "$adb" -s "$serial" shell wm size > "$output/window-ready.txt" 2>&1; do
+  (( SECONDS < deadline )) || { echo 'Window service did not settle after display configuration' >&2; exit 1; }
+  sleep 1
+done
 {
   printf 'input_scope=phone touchscreen keyboard; stylus handwriting not tested\noriginal_stylus_handwriting_enabled=%s\n' "${old_handwriting:-unchanged}"
   printf 'cold_link_kind=%s\n' "${A06_COLD_LINK:-session}"

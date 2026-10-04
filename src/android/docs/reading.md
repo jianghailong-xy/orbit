@@ -110,7 +110,8 @@ Device cases enter through actual login, directory and MainActivity. They cover 
 selection/Copy, GFM and images, 500-line output Copy all, around links/Back, twenty DS4 prepends,
 ten directory/session switches, recreation, permission withdrawal/recovery, subagents,
 background work and worktree diff. Native finger holds advance the Compose test clock while
-held; separate wall-clock manual evidence is needed for the floating system Copy toolbar.
+held. The check clears old clipboard data, clicks the platform's floating Copy action by its
+Android framework resource ID, and verifies the newly copied substring.
 Selection gestures pause following without consuming the native selection gesture.
 
 The streaming case samples process PSS once per loop and HWUI `TOTAL_DURATION` via
