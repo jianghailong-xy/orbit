@@ -59,6 +59,22 @@ const cases = [
       '      ORBIT_WIKI: "${ORBIT_WIKI_MODE:-on}"\n      ORBIT_WIKI: "off"'],
   ].map(([before, after]) => [`changed env: ${before}`,
     'nothing beyond the approved configuration was added', replace(before, after)]),
+  ...[
+    ['FCM_PROJECT_ID', ''],
+    ['FCM_CLIENT_EMAIL', ''],
+    ['FCM_PRIVATE_KEY', ''],
+    ['FCM_ANDROID_PACKAGE', 'io.orbitd.android'],
+  ].flatMap(([name, fallback]) => {
+    const line = `      ${name}: "\${${name}:-${fallback}}"`;
+    const guard = 'nothing beyond the approved configuration was added';
+    return [
+      [`changed FCM value: ${name}`, guard,
+        replace(line, `      ${name}: "\${${name}:-unapproved}"`)],
+      [`duplicate FCM env: ${name}`, guard, replace(line, `${line}\n${line}`)],
+    ];
+  }),
+  ['an unapproved FCM env', 'nothing beyond the approved configuration was added',
+    replace('      FCM_PROJECT_ID:', '      FCM_UNAPPROVED: "1"\n      FCM_PROJECT_ID:')],
 ];
 
 test('the topology checks accept the control and reject deployment counterexamples', async (t) => {

@@ -33,6 +33,11 @@ const BASELINE_SHA = 'ac1b16e752fb11c7230052e5c7ffbbc0096e3e22';
 // work_mem and shared_buffers were NOT changed. New settings still require an explicit review.
 const CONFIGURATION_SHA = '0022dd5f9f8c6b3dae4f0a625509e2b48ef24c37';
 
+// a68a3fe8 adds exactly four apiserver FCM env forwards after CONFIGURATION_SHA, and was merged
+// into main by 4652d58d. Pin its definitions for pgbackup/apiserver/web; postgres keeps its earlier
+// approved configuration and gateway keeps the removal baseline. No FCM prefix is exempted.
+const SURVIVING_CONFIGURATION_SHA = 'a68a3fe8774e4f181b9584443bfaeb1dca39547e';
+
 const EXPECTED_SERVICES = ['postgres', 'pgbackup', 'apiserver', 'web', 'gateway'];
 const REMOVED_SERVICES = [
   'watchdog', 'outcome-coordinator', 'outcome-coordinator-secondary', 'executable-dead-man',
@@ -45,6 +50,7 @@ function git(...args) {
 const current = readFileSync(path.join(repo, COMPOSE), 'utf8');
 const baseline = git('show', `${BASELINE_SHA}:${COMPOSE}`);
 const configuration = git('show', `${CONFIGURATION_SHA}:${COMPOSE}`);
+const survivingConfiguration = git('show', `${SURVIVING_CONFIGURATION_SHA}:${COMPOSE}`);
 
 /**
  * Split a Compose document into its top-level `services:` blocks, in file order. Blank lines and
@@ -86,14 +92,17 @@ const currentServices = new Map(
 const baselineServices = services(baseline);
 const configurationServices = new Map(
   [...services(configuration)].map(([name, block]) => [name, withoutLogging(block)]));
+const survivingConfigurationServices = new Map(
+  [...services(survivingConfiguration)].map(([name, block]) => [name, withoutLogging(block)]));
 
 test('the baseline commit really is the nine-service stack this change removes from', () => {
   assert.deepEqual([...baselineServices.keys()],
     [...EXPECTED_SERVICES.slice(0, 3), ...REMOVED_SERVICES, ...EXPECTED_SERVICES.slice(3)]);
 });
 
-test('the approved configuration commit still has exactly the five surviving services', () => {
+test('the approved configuration commits still have exactly the five surviving services', () => {
   assert.deepEqual([...configurationServices.keys()], EXPECTED_SERVICES);
+  assert.deepEqual([...survivingConfigurationServices.keys()], EXPECTED_SERVICES);
 });
 
 test('(a) Compose declares exactly the five surviving services', () => {
@@ -180,7 +189,7 @@ function directivesNotInBaseline(block, baselineBlock) {
 test('nothing beyond the approved configuration was added to pgbackup, apiserver or web', () => {
   for (const name of ['pgbackup', 'apiserver', 'web']) {
     assert.deepEqual(
-      directivesNotInBaseline(currentServices.get(name), configurationServices.get(name)), [],
+      directivesNotInBaseline(currentServices.get(name), survivingConfigurationServices.get(name)), [],
       `${name} declares something the baseline did not: adding to a surviving service is forbidden`);
   }
 });
