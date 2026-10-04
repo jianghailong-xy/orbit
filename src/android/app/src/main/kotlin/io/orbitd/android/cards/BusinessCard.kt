@@ -21,7 +21,7 @@ import java.util.UUID
 /** The same component and commands can be embedded in Tasks/Projects and Wiki when routed there. */
 @Composable
 fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState = CardActionState(),
-    open: (String) -> Unit, submit: (CardVerb, CardInput) -> Unit) {
+    open: (String) -> Unit, discuss: ((String) -> Unit)? = null, submit: (CardVerb, CardInput) -> Unit) {
     var note by rememberSaveable(card.key, card.binding) { mutableStateOf("") }
     var noteAction by rememberSaveable(card.key, card.binding) { mutableStateOf<CardVerb?>(null) }
     var selections by rememberSaveable(card.key, card.binding, stateSaver = jsonSaver(MapSerializer(String.serializer(), ListSerializer(String.serializer())))) { mutableStateOf<Map<String, List<String>>>(emptyMap()) }
@@ -57,6 +57,10 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
             Text("Filed by Orbit", style = MaterialTheme.typography.labelSmall)
             card.status?.let { Text(it, style = MaterialTheme.typography.labelMedium) }
             CardBody(card, open)
+            CardDiscussion.context(card)?.let { context ->
+                if (discuss == null) Text("Conversation discussion is not connected yet.", style = MaterialTheme.typography.bodySmall)
+                else TextButton(onClick = { discuss(context) }, enabled = fresh && !result.busy) { Text("Chat about this") }
+            }
             if (card.family == CardFamily.QUESTION && card.actions.isNotEmpty()) {
                 approvalQuestions(card.source.obj("input") ?: JsonObject(emptyMap())).forEach { q ->
                     Text(q.header ?: q.question, style = MaterialTheme.typography.titleSmall)

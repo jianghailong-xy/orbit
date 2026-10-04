@@ -115,6 +115,24 @@ class CardContractTest {
         assertEquals(CardFamily.REVIEW, transcriptCards(RunEvent("user", 2, source)).single().family)
         assertTrue(transcriptCards(RunEvent("assistant", 3, source)).isEmpty())
     }
+
+    @Test fun ordinaryDiscussionCarriesTheDisplayedSealAndDoesNotAnswerADoor() {
+        val card = cardList().single { it.family == CardFamily.ACCEPTANCE }
+        val context = CardDiscussion.context(card)!!
+        assertTrue(context.contains(card.projectId!!)); assertTrue(context.contains(card.source.obj("currentVersion")!!.text("digest")!!))
+        card.context.objects("acceptanceCriteriaItems").forEach { assertTrue(context.contains(it.text("text")!!)) }
+        assertNull(CardDiscussion.context(card.copy(context = JsonObject(emptyMap()))))
+        cardList().filter { it.family in setOf(CardFamily.QUESTION, CardFamily.EVIDENCE, CardFamily.OWNER_CONFIRMATION) }
+            .forEach { assertNull(CardDiscussion.context(it)) }
+    }
+
+    @Test fun exceptionDiscussionRetainsItemIdentityWithoutChangingItsActions() {
+        val card = cardList().single { it.objectId == "x1" }
+        val context = CardDiscussion.context(card)!!
+        assertTrue(context.contains(card.objectId)); assertTrue(context.contains(card.source.text("title")!!))
+        assertTrue(context.contains(card.source.text("waitingSince")!!))
+        assertNull(CardDiscussion.context(card.copy(source = JsonObject(card.source + ("assignee" to JsonPrimitive("COORDINATOR"))))))
+    }
 }
 
 private fun <T> List<T>.endsWith(other: List<T>) = takeLast(other.size) == other

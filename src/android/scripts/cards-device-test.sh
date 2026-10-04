@@ -133,6 +133,7 @@ until "$adb" -s "$serial" shell wm size > "$output/window-ready.txt" 2>&1; do
   sleep 1
 done
 {
+  printf 'requested_font_scale=%s\nrequested_night=%s\n' "${A08_FONT_SCALE:-1.0}" "${A08_NIGHT:-no}"
   printf 'input_scope=phone touchscreen keyboard; stylus handwriting not tested\noriginal_stylus_handwriting_enabled=%s\n' "${old_handwriting:-unchanged}"
   printf 'cold_link_kind=%s\n' "${A08_COLD_LINK:-session}"
   printf 'back_input=%s\n' "${A08_BACK_INPUT:-key}"
@@ -146,6 +147,7 @@ done
   "$adb" -s "$serial" shell settings get secure enabled_accessibility_services
   "$adb" -s "$serial" shell pm list packages --show-versioncode com.google.android.marvin.talkback
 } > "$output/conditions.txt"
+[[ "$("$adb" -s "$serial" shell cmd uimode night | awk '{print $NF}' | tr -d '\r')" == "${A08_NIGHT:-no}" ]] || { echo 'Requested night mode did not apply; not running under mislabeled conditions' >&2; exit 1; }
 cp "$(dirname "$0")/../../shared/src/interaction-cards.fixture.json" "$output/corpus.json"
 python3 "$(dirname "$0")/cards-fixture.py" --port 18768 > "$output/fixture.log" 2>&1 &
 fixture_pid=$!

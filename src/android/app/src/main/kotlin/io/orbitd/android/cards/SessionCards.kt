@@ -19,7 +19,7 @@ import kotlinx.serialization.json.*
 
 /** A04 is the only live-state owner. Reconnection/foreground/REST invalidations all feed this rail. */
 @Composable
-fun SessionCards(open: (String) -> Unit) {
+fun SessionCards(open: (String) -> Unit, discuss: ((String) -> Unit)? = null) {
     val resources = LocalReaderResources.current ?: return
     val app = LocalContext.current.applicationContext as OrbitApplication
     val auth by resources.auth.state.collectAsState()
@@ -73,7 +73,7 @@ fun SessionCards(open: (String) -> Unit) {
         }
         shown.distinctBy { it.key }.forEach { original -> key(resources.handle, original.key, original.binding) {
             val card = if (original.family == CardFamily.START && graph != null) original.copy(context = JsonObject(original.context + ("plan" to graph!!))) else original
-            BusinessCard(card, session.fresh && actions.valid(resources.handle, session.id) && (card.family != CardFamily.START || graph != null), results[card.key]?.takeIf { it.binding == card.binding } ?: CardActionState(), open) { verb, input ->
+            BusinessCard(card, session.fresh && actions.valid(resources.handle, session.id) && (card.family != CardFamily.START || graph != null), results[card.key]?.takeIf { it.binding == card.binding } ?: CardActionState(), open, discuss) { verb, input ->
                 actions.submit(resources.handle, card, verb, input)
             }
         } }
