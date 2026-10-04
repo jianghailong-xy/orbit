@@ -16,6 +16,7 @@ import io.orbitd.android.core.auth.AuthState
 import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.mockwebserver.*
 import org.junit.Assert.*
 import org.junit.Rule
@@ -89,7 +90,11 @@ class DirectoryDeviceTest {
                 compose.onNodeWithText("Clear").performClick()
                 compose.onNodeWithContentDescription("Options for Review navigation").performScrollTo().performClick()
                 compose.onNodeWithText("Complete", useUnmergedTree = true).performScrollTo().performClick()
-                compose.waitUntil(10_000) { completed && !app.realtime.state.value.directoryRefreshing }
+                compose.waitUntil(10_000) {
+                    val live = app.realtime.state.value
+                    completed && live.directoryFresh && !live.directoryRefreshing &&
+                        live.directory?.sessions?.get("completed")?.any { it["id"]?.jsonPrimitive?.content == sessionId } == true
+                }
                 directoryScrollTo("Completed")
                 compose.onNodeWithText("Completed").performClick()
                 directoryScrollTo("Review navigation")
@@ -147,10 +152,10 @@ class DirectoryDeviceTest {
                 "/api/sessions/search" -> """{"q":"Review","contentSearched":true,"total":1,"hits":[{"id":"$sessionId","title":"Review navigation","status":"ENDED","agent":{"id":"$workspaceId","name":"Field notes"},"snippet":"Same dataset across light and dark","matchField":"message"}]}"""
                 "/api/sessions/$sessionId", "/api/sessions/01a0cca7-8609-70ed-a0e2-d4b55b832b60" -> session
                 "/api/sessions/$sessionId/complete" -> { completed = true; "{}" }
-                "/api/events" -> return MockResponse().setHeader("Content-Type", "text/event-stream").setBody(": connected\n\n").setSocketPolicy(SocketPolicy.KEEP_OPEN)
+                "/api/events" -> return heartbeatStream()
                 else -> when {
                     path.endsWith("/events/page") -> """{"events":[],"hasMore":false,"lastSeq":0,"latestSeq":0}"""
-                    path.endsWith("/events") -> return MockResponse().setHeader("Content-Type", "text/event-stream").setBody(": connected\n\n")
+                    path.endsWith("/events") -> return heartbeatStream()
                     path.endsWith("/logout") -> "{}"
                     else -> "[]"
                 }
@@ -158,6 +163,11 @@ class DirectoryDeviceTest {
             return MockResponse().setHeader("Content-Type", "application/json").setBody(body)
         }
     }
+
+    // A finite response repeatedly reconnects and changes the list during visibility assertions.
+    private fun heartbeatStream() = MockResponse().setHeader("Content-Type", "text/event-stream")
+        .setChunkedBody(": connected\n\n".repeat(120), 13)
+        .throttleBody(13, 1, java.util.concurrent.TimeUnit.SECONDS)
 
     private fun directoryScrollTo(text: String) {
         compose.onNodeWithTag("directory-list").performScrollToNode(hasText(text))
