@@ -314,12 +314,17 @@ export function exceptionPointer(row: Pick<ProjectOpenItemRow, 'title' | 'assign
 
 /**
  * Take the reader to an exception card, which carries its item as `data-open-item` (`ItemCard` in
- * `ProjectProgressStatus.tsx`). Returns whether it arrived, as `revealDecisionCard` does.
+ * `ProjectProgressStatus.tsx`). Returns whether it arrived, as `revealDecisionCard` does. `behavior`
+ * is `auto` where the transcript is still landing under the card, which cancels a smooth scroll.
  */
-export function revealOpenItemCard(itemId: string, scope: ParentNode = document): boolean {
+export function revealOpenItemCard(
+  itemId: string,
+  scope: ParentNode = document,
+  behavior: ScrollBehavior = 'smooth',
+): boolean {
   const card = scope.querySelector<HTMLElement>(`[data-open-item="${itemId}"]`);
   if (!card) return false;
-  card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  card.scrollIntoView({ block: 'center', behavior });
   markReached(card);
   return true;
 }

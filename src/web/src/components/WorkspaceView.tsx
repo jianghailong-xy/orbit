@@ -4913,7 +4913,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // The arrival's card, once it is drawn and the transcript under it has landed. The card sits above
   // the newest message, and a transcript still pinned to its tail follows every row that lands —
   // which carried the reader straight back down past it — so the pin is let go first, as a reader
-  // scrolling up to it would.
+  // scrolling up to it would. The jump is instant: a smooth one is still near the tail when the
+  // first scroll is measured, which pins the transcript again, and the next resize (the reply bar
+  // this arrival just armed) snaps it back down.
   useEffect(() => {
     if (!chatReveal || chatReveal.sessionId !== selectedId || seeding) return;
     const { about } = chatReveal;
@@ -4923,8 +4925,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     if (!card) return;
     atBottomRef.current = false;
     setAtBottom(false);
-    if ('itemId' in about) revealOpenItemCard(about.itemId);
-    else card.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+    if ('itemId' in about) revealOpenItemCard(about.itemId, document, 'auto');
+    else card.scrollIntoView?.({ block: 'center' });
     setChatReveal(null);
   }, [chatReveal, currentPromotion.data, openItems.data, seeding, selectedId, transcriptEvents]);
   // The start card's "View tasks": the tasks this conversation filed are the strip above the
