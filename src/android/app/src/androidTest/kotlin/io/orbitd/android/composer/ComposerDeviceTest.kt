@@ -9,6 +9,7 @@ import android.view.*
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.inputmethod.EditorInfo
 import androidx.compose.ui.test.*
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -102,7 +103,7 @@ class ComposerDeviceTest {
         login()
         compose.onNodeWithText("Context: 0 tokens · Usage").performClick()
         awaitText("Primary: 23%");compose.onNodeWithText("Close").performClick()
-        systemClick("fixture-model")
+        appClick("fixture-model")
         awaitText("Fixture Two"); compose.onNodeWithText("Fixture Two").performClick()
         compose.waitUntil(5000) { stats()["config"]!!.jsonObject["model"]?.jsonPrimitive?.content == "fixture-model-2" }
         ready()
@@ -182,14 +183,14 @@ class ComposerDeviceTest {
             awaitText(staged.name)
             compose.onAllNodesWithText("\"attachments\":", substring=true).assertCountEquals(0)
             capture("attachment-only-sent")
-            compose.onNodeWithText(staged.name).performClick()
+            appClick(staged.name)
             val oldClip = app.getSystemService(ClipboardManager::class.java).primaryClip?.getItemAt(0)?.uri
-            systemClick("Copy")
+            appClick("Copy")
             compose.waitUntil(5000) { app.getSystemService(ClipboardManager::class.java).primaryClip?.getItemAt(0)?.uri?.let { it != oldClip } == true }
             val clip=app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).uri!!
             assertArrayEquals(bytes,resolver.openInputStream(clip)!!.use { it.readBytes() })
             compose.waitUntil(5000) { compose.onNodeWithText("Share",useUnmergedTree=true).fetchSemanticsNode().config.getOrNull(SemanticsProperties.Disabled)==null }
-            systemClick("Share")
+            appClick("Share")
             capture("system-share")
             systemFind { it.viewIdResourceName?.endsWith(":id/chooser_header")==true }?.let { header ->
                 val bounds=android.graphics.Rect();header.getBoundsInScreen(bounds)
@@ -209,14 +210,14 @@ class ComposerDeviceTest {
             assertEquals(sha(bytes),systemNode("Received file")!!.contentDescription.toString())
             capture("share-recipient-read")
             shellBytes("input keyevent KEYCODE_BACK")
-            systemClick("Open")
+            appClick("Open")
             systemClick("A07 receiver")
             if (systemNode("Just once") != null) systemClick("Just once")
             compose.waitUntil(5000) { systemNode("Received file") != null }
             assertEquals(sha(bytes),systemNode("Received file")!!.contentDescription.toString())
             capture("open-recipient-read")
             shellBytes("input keyevent KEYCODE_BACK")
-            systemClick("Download")
+            appClick("Download")
             selectFilesRoot("Downloads")
             var filename:AccessibilityNodeInfo?=null
             compose.waitUntil(5000) { filename=systemFind { it.isEditable };filename!=null }
@@ -227,7 +228,7 @@ class ComposerDeviceTest {
             shellBytes("rm /sdcard/Download/a07-export.txt")
             // A real external process reads the temporary grant and publishes its digest in the UI.
             File(evidence,"attachment-digest.txt").writeText(sha(bytes)+"\n")
-            systemClick("Close attachment")
+            appClick("Close attachment")
             val att=stats()["attachments"]!!.jsonObject.values.single().jsonObject
             assertEquals(sha(bytes),att["sha256"]!!.jsonPrimitive.content)
             assertEquals(1,att["references"]!!.jsonArray.size)
@@ -270,10 +271,10 @@ class ComposerDeviceTest {
             val photo=model.state.value.draft.attachments.single()
             assertEquals("photo",photo.source);assertEquals("image/png",photo.mime)
             val bytes=runBlocking { model.attachmentBytes(photo.id) }
-            compose.onNodeWithText("${photo.name} · ${photo.size/1024} KB").performClick()
+            appClick("${photo.name} · ${photo.size/1024} KB")
             compose.waitUntil(5000) { compose.onAllNodesWithContentDescription("photo.png").fetchSemanticsNodes().isNotEmpty() }
             capture("photo-preview")
-            systemClick("Save image")
+            appClick("Save image")
             var saved:Uri?=null
             compose.waitUntil(5000) {
                 resolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,arrayOf("_id"),"_display_name=? AND relative_path=?",arrayOf("photo.png","Pictures/Orbit/"),null)?.use { c->
@@ -282,18 +283,18 @@ class ComposerDeviceTest {
             }
             assertArrayEquals(bytes,resolver.openInputStream(saved!!)!!.use { it.readBytes() });resolver.delete(saved!!,null,null)
             File(evidence,"photo-save-sha256.txt").writeText(sha(bytes))
-            systemClick("Close attachment")
+            appClick("Close attachment")
             app.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newUri(resolver,"test photo",uri))
             compose.onNodeWithText("+").performClick();compose.onNodeWithText("Paste image",useUnmergedTree=true).performClick()
             compose.waitUntil(10000) { model.state.value.draft.attachments.size==2 && model.state.value.draft.attachments.all { it.remoteId!=null } }
             assertTrue(model.state.value.draft.attachments.any { it.source=="paste" })
-            compose.onNodeWithText("${photo.name} · ${photo.size/1024} KB").performClick()
-            systemClick("Next image")
+            appClick("${photo.name} · ${photo.size/1024} KB")
+            appClick("Next image")
             compose.waitUntil(5000) { compose.onAllNodesWithContentDescription("pasted.png").fetchSemanticsNodes().isNotEmpty() }
             capture("gallery-next")
-            systemClick("Previous image")
+            appClick("Previous image")
             compose.waitUntil(5000) { compose.onAllNodesWithContentDescription("photo.png").fetchSemanticsNodes().isNotEmpty() }
-            systemClick("Close attachment")
+            appClick("Close attachment")
             ready();clickSendWhenEnabled()
             compose.waitUntil(10000) { !model.state.value.busy && model.state.value.draft.pending==null && model.state.value.draft.attachments.isEmpty() }
             assertEquals(2,stats()["attachments"]!!.jsonObject.size)
@@ -332,8 +333,10 @@ class ComposerDeviceTest {
     }
     private fun clickSendWhenEnabled() {
         compose.waitUntil(10000) { compose.onNodeWithTag("composer-send").fetchSemanticsNode().config.getOrNull(SemanticsProperties.Disabled)==null }
-        // The platform action targets the current button through dialog/window transitions.
-        systemClick(if (systemNode("Stop") != null) "Stop" else "Send")
+        compose.onNodeWithTag("composer-send").performSemanticsAction(SemanticsActions.OnClick) { assertTrue(it()) }
+    }
+    private fun appClick(label:String) {
+        compose.onNode((hasText(label) or hasContentDescription(label)) and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick) { assertTrue(it()) }
     }
     private fun ready() { compose.waitUntil(10000) { app.realtime.state.value.session?.fresh==true && !model.state.value.busy };compose.waitForIdle() }
     private fun awaitText(text:String) { compose.waitUntil(15000) { compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() } }
@@ -345,6 +348,17 @@ class ComposerDeviceTest {
     private fun control(body:String) { request("/__control",body) }
     private fun stats()=Json.parseToJsonElement(request("/__stats")).jsonObject
     private fun systemNode(text:String)=systemFind { it.text?.toString()?.equals(text,ignoreCase=true)==true || it.contentDescription?.toString()==text }
+    private fun systemRoot():AccessibilityNodeInfo? {
+        val automation=instrument.uiAutomation
+        val info=automation.serviceInfo
+        if (info.flags and android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS==0) {
+            info.flags=info.flags or android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+            automation.serviceInfo=info
+        }
+        return automation.rootInActiveWindow ?: automation.windows
+            .filter { it.type==android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION }
+            .maxByOrNull { it.layer }?.root
+    }
     private fun systemFind(predicate:(AccessibilityNodeInfo)->Boolean):AccessibilityNodeInfo? {
         fun find(n:AccessibilityNodeInfo?):AccessibilityNodeInfo? {
             if(n==null)return null
@@ -352,7 +366,7 @@ class ComposerDeviceTest {
             for(i in 0 until n.childCount)find(n.getChild(i))?.let { return it }
             return null
         }
-        return find(instrument.uiAutomation.rootInActiveWindow)
+        return find(systemRoot())
     }
     private fun selectFilesRoot(name:String) {
         systemClick("Show roots")
@@ -408,7 +422,7 @@ class ComposerDeviceTest {
             tree.appendLine("${" ".repeat(depth)}${node.className} ${node.viewIdResourceName} text=${node.text} desc=${node.contentDescription} click=${node.isClickable} enabled=${node.isEnabled} $bounds")
             for(i in 0 until node.childCount)visit(node.getChild(i),depth+1)
         }
-        visit(instrument.uiAutomation.rootInActiveWindow,0);File(evidence,"$name-ui.txt").writeText(tree.toString())
+        visit(systemRoot(),0);File(evidence,"$name-ui.txt").writeText(tree.toString())
         instrument.uiAutomation.takeScreenshot().let { b->File(evidence,"$name.png").outputStream().use { b.compress(Bitmap.CompressFormat.PNG,100,it) };b.recycle() }
     }
     private fun journey(name:String,block:()->Unit) {
