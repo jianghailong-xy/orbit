@@ -26,7 +26,11 @@ flock -w 600 9
 cleanup() {
   local result=$?
   if [[ -n "${old_font:-}" ]]; then
-    "$adb" -s "$serial" shell settings put system font_scale "$old_font" >/dev/null || true
+    if [[ "$old_font" == null ]]; then
+      "$adb" -s "$serial" shell settings delete system font_scale >/dev/null || true
+    else
+      "$adb" -s "$serial" shell settings put system font_scale "$old_font" >/dev/null || true
+    fi
     "$adb" -s "$serial" shell wm size "${old_size:-reset}" >/dev/null || true
     "$adb" -s "$serial" shell wm density "${old_density:-reset}" >/dev/null || true
     "$adb" -s "$serial" shell cmd uimode night "$old_night" >/dev/null || true
@@ -41,8 +45,10 @@ cleanup() {
   if [[ -n "$emulator_pid" ]]; then
     kill "$emulator_pid" 2>/dev/null || true
     wait "$emulator_pid" 2>/dev/null || true
+    timeout 20 "$adb" -s "$serial" wait-for-disconnect > "$output/disconnect.txt" 2>&1 || result=1
   fi
   printf 'exit_code=%s\nfinished_utc=%s\n' "$result" "$(date -u +%FT%TZ)" >> "$output/result.txt"
+  exit "$result"
 }
 trap cleanup EXIT
 printf 'scope=A05 directory UI; controlled authenticated HTTP fixture; not a physical/deployed-account result\nstarted_utc=%s\n' "$(date -u +%FT%TZ)" > "$output/result.txt"
