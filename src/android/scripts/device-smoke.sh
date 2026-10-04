@@ -106,7 +106,9 @@ else
   printf '%s\n' '{"scope":"A02 shell only","fixture":"none (no backend)","network":"uncontrolled; unused by shell","performance":"not measured","FCM":"not tested"}' > "$output/run-conditions.json"
 fi
 sha256sum "$output/run-conditions.json" > "$output/run-conditions.sha256"
-device_start="$("$adb" -s "$serial" shell date '+%m-%d %H:%M:%S.000' | tr -d '\r')"
+# A numeric timestamp survives adb's remote-shell argument joining unchanged.
+device_start="$("$adb" -s "$serial" shell date +%s | tr -d '\r').000"
+printf 'device_log_start_epoch=%s\n' "$device_start" >> "$output/result.txt"
 "$adb" -s "$serial" install -r "$apk" > "$output/install.txt"
 "$adb" -s "$serial" shell input keyevent KEYCODE_WAKEUP
 "$adb" -s "$serial" shell wm dismiss-keyguard
