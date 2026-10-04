@@ -1,0 +1,5 @@
+{
+  "command": "npm run build -w @orbit/web",
+  "exitCode": 0,
+  "durationSeconds": 2.016146183013916
+}

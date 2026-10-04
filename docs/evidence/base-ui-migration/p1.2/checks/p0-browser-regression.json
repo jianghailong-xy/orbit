@@ -1,0 +1,5 @@
+{
+  "command": "npm run test:ui-migration -w @orbit/web",
+  "exitCode": 0,
+  "durationSeconds": 270.536404132843
+}

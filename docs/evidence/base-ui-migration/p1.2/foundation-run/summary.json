@@ -1,0 +1,830 @@
+{
+  "stats": {
+    "startTime": "2026-10-04T01:47:34.508Z",
+    "duration": 88862.361,
+    "expected": 48,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-light-desktop--production-boot-and-hydration-preserve-cached-system",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-light-desktop--production-boot-and-hydration-preserve-cached-system--production-boot-before-app.png",
+          "sha256": "30e9e3c99a4d3b6f793fa6d251e691d4669ae20c8b4a4852cedf83f577e7d34d",
+          "bytes": 11229
+        },
+        {
+          "path": "chromium-light-desktop--production-boot-and-hydration-preserve-cached-system--theme-browser-evidence.json",
+          "sha256": "be4de47013151d0f78c7309ae3c960fb0e292792675dcbbab26e7292b9ade7ed",
+          "bytes": 2350
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--production-boot-and-hydration-preserve-cached-light",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-light-desktop--production-boot-and-hydration-preserve-cached-light--production-boot-before-app.png",
+          "sha256": "30e9e3c99a4d3b6f793fa6d251e691d4669ae20c8b4a4852cedf83f577e7d34d",
+          "bytes": 11229
+        },
+        {
+          "path": "chromium-light-desktop--production-boot-and-hydration-preserve-cached-light--theme-browser-evidence.json",
+          "sha256": "9f465e5a084daeff82c61dd2f972e05d5ab3a733f73bb2d53db2c6b25689f324",
+          "bytes": 2349
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--production-boot-and-hydration-preserve-cached-dark",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-light-desktop--production-boot-and-hydration-preserve-cached-dark--production-boot-before-app.png",
+          "sha256": "13f9bd324bb53d4929ef7dac9549f8b2cfa0afb7bfa3119a5c672ef48e14ac35",
+          "bytes": 11541
+        },
+        {
+          "path": "chromium-light-desktop--production-boot-and-hydration-preserve-cached-dark--theme-browser-evidence.json",
+          "sha256": "4c5088bd9c92c6edd45655c5564c088e53b800095c375d74e86f78c7a2b3bf59",
+          "bytes": 2342
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--account-adoption-preference-writes-and-live-system-changes-share-the-foundation-theme",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-light-desktop--account-adoption-preference-writes-and-live-system-changes-share-the-foundation-theme--production-boot-before-app.png",
+          "sha256": "30e9e3c99a4d3b6f793fa6d251e691d4669ae20c8b4a4852cedf83f577e7d34d",
+          "bytes": 11229
+        },
+        {
+          "path": "chromium-light-desktop--account-adoption-preference-writes-and-live-system-changes-share-the-foundation-theme--theme-browser-evidence.json",
+          "sha256": "1648c404cb7d9901866d6753bd5cbdcd8a877a12dd9ed58eba55ffc62f3e6d56",
+          "bytes": 3558
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--production-boot-and-hydration-preserve-cached-system",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-light-phone--production-boot-and-hydration-preserve-cached-system--production-boot-before-app.png",
+          "sha256": "7aa47b642099923e6ce493627e41e6d8f92c3e908c693141b43d71186ed44961",
+          "bytes": 8511
+        },
+        {
+          "path": "chromium-light-phone--production-boot-and-hydration-preserve-cached-system--theme-browser-evidence.json",
+          "sha256": "be4de47013151d0f78c7309ae3c960fb0e292792675dcbbab26e7292b9ade7ed",
+          "bytes": 2350
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--production-boot-and-hydration-preserve-cached-light",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-light-phone--production-boot-and-hydration-preserve-cached-light--production-boot-before-app.png",
+          "sha256": "7aa47b642099923e6ce493627e41e6d8f92c3e908c693141b43d71186ed44961",
+          "bytes": 8511
+        },
+        {
+          "path": "chromium-light-phone--production-boot-and-hydration-preserve-cached-light--theme-browser-evidence.json",
+          "sha256": "9f465e5a084daeff82c61dd2f972e05d5ab3a733f73bb2d53db2c6b25689f324",
+          "bytes": 2349
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--production-boot-and-hydration-preserve-cached-dark",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-light-phone--production-boot-and-hydration-preserve-cached-dark--production-boot-before-app.png",
+          "sha256": "1c10ac05e9e7431804a69c05d9eb9a66ad8eb14779d80466e7842b7a65420c29",
+          "bytes": 8873
+        },
+        {
+          "path": "chromium-light-phone--production-boot-and-hydration-preserve-cached-dark--theme-browser-evidence.json",
+          "sha256": "4c5088bd9c92c6edd45655c5564c088e53b800095c375d74e86f78c7a2b3bf59",
+          "bytes": 2342
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--account-adoption-preference-writes-and-live-system-changes-share-the-foundation-theme",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-light-phone--account-adoption-preference-writes-and-live-system-changes-share-the-foundation-theme--production-boot-before-app.png",
+          "sha256": "7aa47b642099923e6ce493627e41e6d8f92c3e908c693141b43d71186ed44961",
+          "bytes": 8511
+        },
+        {
+          "path": "chromium-light-phone--account-adoption-preference-writes-and-live-system-changes-share-the-foundation-theme--theme-browser-evidence.json",
+          "sha256": "1648c404cb7d9901866d6753bd5cbdcd8a877a12dd9ed58eba55ffc62f3e6d56",
+          "bytes": 3558
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--production-boot-and-hydration-preserve-cached-system",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-dark-desktop--production-boot-and-hydration-preserve-cached-system--production-boot-before-app.png",
+          "sha256": "13f9bd324bb53d4929ef7dac9549f8b2cfa0afb7bfa3119a5c672ef48e14ac35",
+          "bytes": 11541
+        },
+        {
+          "path": "chromium-dark-desktop--production-boot-and-hydration-preserve-cached-system--theme-browser-evidence.json",
+          "sha256": "fac458549f34182c08df15a166c47f7e398c36d5b0960ffe790c19cfac8c9d5d",
+          "bytes": 2344
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--production-boot-and-hydration-preserve-cached-light",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-dark-desktop--production-boot-and-hydration-preserve-cached-light--production-boot-before-app.png",
+          "sha256": "30e9e3c99a4d3b6f793fa6d251e691d4669ae20c8b4a4852cedf83f577e7d34d",
+          "bytes": 11229
+        },
+        {
+          "path": "chromium-dark-desktop--production-boot-and-hydration-preserve-cached-light--theme-browser-evidence.json",
+          "sha256": "9f465e5a084daeff82c61dd2f972e05d5ab3a733f73bb2d53db2c6b25689f324",
+          "bytes": 2349
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--production-boot-and-hydration-preserve-cached-dark",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-dark-desktop--production-boot-and-hydration-preserve-cached-dark--production-boot-before-app.png",
+          "sha256": "13f9bd324bb53d4929ef7dac9549f8b2cfa0afb7bfa3119a5c672ef48e14ac35",
+          "bytes": 11541
+        },
+        {
+          "path": "chromium-dark-desktop--production-boot-and-hydration-preserve-cached-dark--theme-browser-evidence.json",
+          "sha256": "4c5088bd9c92c6edd45655c5564c088e53b800095c375d74e86f78c7a2b3bf59",
+          "bytes": 2342
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--account-adoption-preference-writes-and-live-system-changes-share-the-foundation-theme",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-dark-desktop--account-adoption-preference-writes-and-live-system-changes-share-the-foundation-theme--production-boot-before-app.png",
+          "sha256": "13f9bd324bb53d4929ef7dac9549f8b2cfa0afb7bfa3119a5c672ef48e14ac35",
+          "bytes": 11541
+        },
+        {
+          "path": "chromium-dark-desktop--account-adoption-preference-writes-and-live-system-changes-share-the-foundation-theme--theme-browser-evidence.json",
+          "sha256": "9f19e83cc04e1acc9891ac006840f5ad5f56bf027f71d66a94761b69fe81f838",
+          "bytes": 3494
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--production-boot-and-hydration-preserve-cached-system",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-dark-phone--production-boot-and-hydration-preserve-cached-system--production-boot-before-app.png",
+          "sha256": "1c10ac05e9e7431804a69c05d9eb9a66ad8eb14779d80466e7842b7a65420c29",
+          "bytes": 8873
+        },
+        {
+          "path": "chromium-dark-phone--production-boot-and-hydration-preserve-cached-system--theme-browser-evidence.json",
+          "sha256": "fac458549f34182c08df15a166c47f7e398c36d5b0960ffe790c19cfac8c9d5d",
+          "bytes": 2344
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--production-boot-and-hydration-preserve-cached-light",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-dark-phone--production-boot-and-hydration-preserve-cached-light--production-boot-before-app.png",
+          "sha256": "7aa47b642099923e6ce493627e41e6d8f92c3e908c693141b43d71186ed44961",
+          "bytes": 8511
+        },
+        {
+          "path": "chromium-dark-phone--production-boot-and-hydration-preserve-cached-light--theme-browser-evidence.json",
+          "sha256": "9f465e5a084daeff82c61dd2f972e05d5ab3a733f73bb2d53db2c6b25689f324",
+          "bytes": 2349
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--production-boot-and-hydration-preserve-cached-dark",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-dark-phone--production-boot-and-hydration-preserve-cached-dark--production-boot-before-app.png",
+          "sha256": "1c10ac05e9e7431804a69c05d9eb9a66ad8eb14779d80466e7842b7a65420c29",
+          "bytes": 8873
+        },
+        {
+          "path": "chromium-dark-phone--production-boot-and-hydration-preserve-cached-dark--theme-browser-evidence.json",
+          "sha256": "4c5088bd9c92c6edd45655c5564c088e53b800095c375d74e86f78c7a2b3bf59",
+          "bytes": 2342
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--account-adoption-preference-writes-and-live-system-changes-share-the-foundation-theme",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-dark-phone--account-adoption-preference-writes-and-live-system-changes-share-the-foundation-theme--production-boot-before-app.png",
+          "sha256": "1c10ac05e9e7431804a69c05d9eb9a66ad8eb14779d80466e7842b7a65420c29",
+          "bytes": 8873
+        },
+        {
+          "path": "chromium-dark-phone--account-adoption-preference-writes-and-live-system-changes-share-the-foundation-theme--theme-browser-evidence.json",
+          "sha256": "9f19e83cc04e1acc9891ac006840f5ad5f56bf027f71d66a94761b69fe81f838",
+          "bytes": 3494
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--production-boot-and-hydration-preserve-cached-system",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-light-desktop--production-boot-and-hydration-preserve-cached-system--production-boot-before-app.png",
+          "sha256": "515711fd3ea10718802e7264c4823fa7f5e69618f759a7e1b5d41854a2375822",
+          "bytes": 13068
+        },
+        {
+          "path": "webkit-light-desktop--production-boot-and-hydration-preserve-cached-system--theme-browser-evidence.json",
+          "sha256": "be4de47013151d0f78c7309ae3c960fb0e292792675dcbbab26e7292b9ade7ed",
+          "bytes": 2350
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--production-boot-and-hydration-preserve-cached-light",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-light-desktop--production-boot-and-hydration-preserve-cached-light--production-boot-before-app.png",
+          "sha256": "515711fd3ea10718802e7264c4823fa7f5e69618f759a7e1b5d41854a2375822",
+          "bytes": 13068
+        },
+        {
+          "path": "webkit-light-desktop--production-boot-and-hydration-preserve-cached-light--theme-browser-evidence.json",
+          "sha256": "9f465e5a084daeff82c61dd2f972e05d5ab3a733f73bb2d53db2c6b25689f324",
+          "bytes": 2349
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--production-boot-and-hydration-preserve-cached-dark",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-light-desktop--production-boot-and-hydration-preserve-cached-dark--production-boot-before-app.png",
+          "sha256": "03be95f65cec178a9ba1173ba457aaf01c3ca594df9917a26571437d54e53450",
+          "bytes": 13400
+        },
+        {
+          "path": "webkit-light-desktop--production-boot-and-hydration-preserve-cached-dark--theme-browser-evidence.json",
+          "sha256": "4c5088bd9c92c6edd45655c5564c088e53b800095c375d74e86f78c7a2b3bf59",
+          "bytes": 2342
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--account-adoption-preference-writes-and-live-system-changes-share-the-foundation-theme",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-light-desktop--account-adoption-preference-writes-and-live-system-changes-share-the-foundation-theme--production-boot-before-app.png",
+          "sha256": "515711fd3ea10718802e7264c4823fa7f5e69618f759a7e1b5d41854a2375822",
+          "bytes": 13068
+        },
+        {
+          "path": "webkit-light-desktop--account-adoption-preference-writes-and-live-system-changes-share-the-foundation-theme--theme-browser-evidence.json",
+          "sha256": "1648c404cb7d9901866d6753bd5cbdcd8a877a12dd9ed58eba55ffc62f3e6d56",
+          "bytes": 3558
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--production-boot-and-hydration-preserve-cached-system",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-light-phone--production-boot-and-hydration-preserve-cached-system--production-boot-before-app.png",
+          "sha256": "4edba1c6c742b4f27a01892855ac6c93fce36588622329fd48fae24b68ce261e",
+          "bytes": 9326
+        },
+        {
+          "path": "webkit-light-phone--production-boot-and-hydration-preserve-cached-system--theme-browser-evidence.json",
+          "sha256": "be4de47013151d0f78c7309ae3c960fb0e292792675dcbbab26e7292b9ade7ed",
+          "bytes": 2350
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--production-boot-and-hydration-preserve-cached-light",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-light-phone--production-boot-and-hydration-preserve-cached-light--production-boot-before-app.png",
+          "sha256": "4edba1c6c742b4f27a01892855ac6c93fce36588622329fd48fae24b68ce261e",
+          "bytes": 9326
+        },
+        {
+          "path": "webkit-light-phone--production-boot-and-hydration-preserve-cached-light--theme-browser-evidence.json",
+          "sha256": "9f465e5a084daeff82c61dd2f972e05d5ab3a733f73bb2d53db2c6b25689f324",
+          "bytes": 2349
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--production-boot-and-hydration-preserve-cached-dark",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-light-phone--production-boot-and-hydration-preserve-cached-dark--production-boot-before-app.png",
+          "sha256": "b5433312b2831cb86fe08d0ba01375e73bb7e359b7d648fdceec31aa4bf29ded",
+          "bytes": 9705
+        },
+        {
+          "path": "webkit-light-phone--production-boot-and-hydration-preserve-cached-dark--theme-browser-evidence.json",
+          "sha256": "4c5088bd9c92c6edd45655c5564c088e53b800095c375d74e86f78c7a2b3bf59",
+          "bytes": 2342
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--account-adoption-preference-writes-and-live-system-changes-share-the-foundation-theme",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-light-phone--account-adoption-preference-writes-and-live-system-changes-share-the-foundation-theme--production-boot-before-app.png",
+          "sha256": "4edba1c6c742b4f27a01892855ac6c93fce36588622329fd48fae24b68ce261e",
+          "bytes": 9326
+        },
+        {
+          "path": "webkit-light-phone--account-adoption-preference-writes-and-live-system-changes-share-the-foundation-theme--theme-browser-evidence.json",
+          "sha256": "1648c404cb7d9901866d6753bd5cbdcd8a877a12dd9ed58eba55ffc62f3e6d56",
+          "bytes": 3558
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--production-boot-and-hydration-preserve-cached-system",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-dark-desktop--production-boot-and-hydration-preserve-cached-system--production-boot-before-app.png",
+          "sha256": "03be95f65cec178a9ba1173ba457aaf01c3ca594df9917a26571437d54e53450",
+          "bytes": 13400
+        },
+        {
+          "path": "webkit-dark-desktop--production-boot-and-hydration-preserve-cached-system--theme-browser-evidence.json",
+          "sha256": "fac458549f34182c08df15a166c47f7e398c36d5b0960ffe790c19cfac8c9d5d",
+          "bytes": 2344
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--production-boot-and-hydration-preserve-cached-light",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-dark-desktop--production-boot-and-hydration-preserve-cached-light--production-boot-before-app.png",
+          "sha256": "515711fd3ea10718802e7264c4823fa7f5e69618f759a7e1b5d41854a2375822",
+          "bytes": 13068
+        },
+        {
+          "path": "webkit-dark-desktop--production-boot-and-hydration-preserve-cached-light--theme-browser-evidence.json",
+          "sha256": "9f465e5a084daeff82c61dd2f972e05d5ab3a733f73bb2d53db2c6b25689f324",
+          "bytes": 2349
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--production-boot-and-hydration-preserve-cached-dark",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-dark-desktop--production-boot-and-hydration-preserve-cached-dark--production-boot-before-app.png",
+          "sha256": "03be95f65cec178a9ba1173ba457aaf01c3ca594df9917a26571437d54e53450",
+          "bytes": 13400
+        },
+        {
+          "path": "webkit-dark-desktop--production-boot-and-hydration-preserve-cached-dark--theme-browser-evidence.json",
+          "sha256": "4c5088bd9c92c6edd45655c5564c088e53b800095c375d74e86f78c7a2b3bf59",
+          "bytes": 2342
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--account-adoption-preference-writes-and-live-system-changes-share-the-foundation-theme",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-dark-desktop--account-adoption-preference-writes-and-live-system-changes-share-the-foundation-theme--production-boot-before-app.png",
+          "sha256": "03be95f65cec178a9ba1173ba457aaf01c3ca594df9917a26571437d54e53450",
+          "bytes": 13400
+        },
+        {
+          "path": "webkit-dark-desktop--account-adoption-preference-writes-and-live-system-changes-share-the-foundation-theme--theme-browser-evidence.json",
+          "sha256": "9f19e83cc04e1acc9891ac006840f5ad5f56bf027f71d66a94761b69fe81f838",
+          "bytes": 3494
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--production-boot-and-hydration-preserve-cached-system",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-dark-phone--production-boot-and-hydration-preserve-cached-system--production-boot-before-app.png",
+          "sha256": "b5433312b2831cb86fe08d0ba01375e73bb7e359b7d648fdceec31aa4bf29ded",
+          "bytes": 9705
+        },
+        {
+          "path": "webkit-dark-phone--production-boot-and-hydration-preserve-cached-system--theme-browser-evidence.json",
+          "sha256": "fac458549f34182c08df15a166c47f7e398c36d5b0960ffe790c19cfac8c9d5d",
+          "bytes": 2344
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--production-boot-and-hydration-preserve-cached-light",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-dark-phone--production-boot-and-hydration-preserve-cached-light--production-boot-before-app.png",
+          "sha256": "4edba1c6c742b4f27a01892855ac6c93fce36588622329fd48fae24b68ce261e",
+          "bytes": 9326
+        },
+        {
+          "path": "webkit-dark-phone--production-boot-and-hydration-preserve-cached-light--theme-browser-evidence.json",
+          "sha256": "9f465e5a084daeff82c61dd2f972e05d5ab3a733f73bb2d53db2c6b25689f324",
+          "bytes": 2349
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--production-boot-and-hydration-preserve-cached-dark",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-dark-phone--production-boot-and-hydration-preserve-cached-dark--production-boot-before-app.png",
+          "sha256": "b5433312b2831cb86fe08d0ba01375e73bb7e359b7d648fdceec31aa4bf29ded",
+          "bytes": 9705
+        },
+        {
+          "path": "webkit-dark-phone--production-boot-and-hydration-preserve-cached-dark--theme-browser-evidence.json",
+          "sha256": "4c5088bd9c92c6edd45655c5564c088e53b800095c375d74e86f78c7a2b3bf59",
+          "bytes": 2342
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--account-adoption-preference-writes-and-live-system-changes-share-the-foundation-theme",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-dark-phone--account-adoption-preference-writes-and-live-system-changes-share-the-foundation-theme--production-boot-before-app.png",
+          "sha256": "b5433312b2831cb86fe08d0ba01375e73bb7e359b7d648fdceec31aa4bf29ded",
+          "bytes": 9705
+        },
+        {
+          "path": "webkit-dark-phone--account-adoption-preference-writes-and-live-system-changes-share-the-foundation-theme--theme-browser-evidence.json",
+          "sha256": "9f19e83cc04e1acc9891ac006840f5ad5f56bf027f71d66a94761b69fe81f838",
+          "bytes": 3494
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--foundation-states-match-current-AntD-and-the-frozen-P0-palette",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-light-desktop--foundation-states-match-current-AntD-and-the-frozen-P0-palette--computed-states.json",
+          "sha256": "ac972f615a55bccd13efccf79b2c79c96f279fe01f64776c96172e782c4da183",
+          "bytes": 3502
+        },
+        {
+          "path": "chromium-light-desktop--foundation-states-match-current-AntD-and-the-frozen-P0-palette--coexistence.png",
+          "sha256": "31b13e3fcd0ddf86d3b12ac6a823863ac6f5845e1299ea752a76448e65d0bc4e",
+          "bytes": 28032
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--body-and-nested-portals-inherit-theme-and-preserve-focus-ownership",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-light-desktop--body-and-nested-portals-inherit-theme-and-preserve-focus-ownership--nested-portals.png",
+          "sha256": "df503a324b40073275b50df173f260c84bd92a4c29f257891b77861a287ffbaa",
+          "bytes": 51051
+        },
+        {
+          "path": "chromium-light-desktop--body-and-nested-portals-inherit-theme-and-preserve-focus-ownership--portal-surface.json",
+          "sha256": "08309cb598027f0dc93d450f9ee55bf9cea2306cb5c214711ba7b42dfa2ecf2b",
+          "bytes": 674
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--foundation-states-match-current-AntD-and-the-frozen-P0-palette",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-light-phone--foundation-states-match-current-AntD-and-the-frozen-P0-palette--computed-states.json",
+          "sha256": "ac972f615a55bccd13efccf79b2c79c96f279fe01f64776c96172e782c4da183",
+          "bytes": 3502
+        },
+        {
+          "path": "chromium-light-phone--foundation-states-match-current-AntD-and-the-frozen-P0-palette--coexistence.png",
+          "sha256": "1de522902d815ae57fd469f50dfc4e70fd21502091b5f44a97379fcf103e1799",
+          "bytes": 29048
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--body-and-nested-portals-inherit-theme-and-preserve-focus-ownership",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-light-phone--body-and-nested-portals-inherit-theme-and-preserve-focus-ownership--nested-portals.png",
+          "sha256": "c9919f8b5215ebecb4f308cd777abbb6d492ee9df7a51ccec74158aec628a77b",
+          "bytes": 38062
+        },
+        {
+          "path": "chromium-light-phone--body-and-nested-portals-inherit-theme-and-preserve-focus-ownership--portal-surface.json",
+          "sha256": "4d5bf20afed969291242f3d1906cf5a573688eaf2b355ac48c175f53de33dc0f",
+          "bytes": 674
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--foundation-states-match-current-AntD-and-the-frozen-P0-palette",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-dark-desktop--foundation-states-match-current-AntD-and-the-frozen-P0-palette--computed-states.json",
+          "sha256": "1d20054dd9f5228c3edff08f521eb6a463553485376a7e0ffecb69547a0beab9",
+          "bytes": 3518
+        },
+        {
+          "path": "chromium-dark-desktop--foundation-states-match-current-AntD-and-the-frozen-P0-palette--coexistence.png",
+          "sha256": "f2a34ff8b84b23c1bcac61f1cd1306ad3f1fab9c6d02eb412e751b6d53702d5a",
+          "bytes": 28976
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--body-and-nested-portals-inherit-theme-and-preserve-focus-ownership",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-dark-desktop--body-and-nested-portals-inherit-theme-and-preserve-focus-ownership--nested-portals.png",
+          "sha256": "922b774ab76f82f8219e9825e8fb906fdf9b244715258b57883e2365d6be9c80",
+          "bytes": 48581
+        },
+        {
+          "path": "chromium-dark-desktop--body-and-nested-portals-inherit-theme-and-preserve-focus-ownership--portal-surface.json",
+          "sha256": "a9df89df22d93375452aad4943c8a5fc59b3c7689cc952ffd8859915f29799c2",
+          "bytes": 696
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--foundation-states-match-current-AntD-and-the-frozen-P0-palette",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-dark-phone--foundation-states-match-current-AntD-and-the-frozen-P0-palette--computed-states.json",
+          "sha256": "1d20054dd9f5228c3edff08f521eb6a463553485376a7e0ffecb69547a0beab9",
+          "bytes": 3518
+        },
+        {
+          "path": "chromium-dark-phone--foundation-states-match-current-AntD-and-the-frozen-P0-palette--coexistence.png",
+          "sha256": "76e10af20107798526c4fb97941537911fbc511c1b3c0c955a9d75d64c6468ae",
+          "bytes": 30165
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--body-and-nested-portals-inherit-theme-and-preserve-focus-ownership",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-dark-phone--body-and-nested-portals-inherit-theme-and-preserve-focus-ownership--nested-portals.png",
+          "sha256": "b037a6070fc176864700d3a814606293d8bc3c0d7f18ef7bfa82c7a99b5020cc",
+          "bytes": 36753
+        },
+        {
+          "path": "chromium-dark-phone--body-and-nested-portals-inherit-theme-and-preserve-focus-ownership--portal-surface.json",
+          "sha256": "097c8630c449b7fdf344307521d86a1e477ee04ede42400a65bc8a0ba60dd51d",
+          "bytes": 696
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--foundation-states-match-current-AntD-and-the-frozen-P0-palette",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-light-desktop--foundation-states-match-current-AntD-and-the-frozen-P0-palette--computed-states.json",
+          "sha256": "eddd12ad68d59093ba6e39dc3a28b3d23d2cf1c77b1f11aae619f4e11bf5d8f1",
+          "bytes": 3406
+        },
+        {
+          "path": "webkit-light-desktop--foundation-states-match-current-AntD-and-the-frozen-P0-palette--coexistence.png",
+          "sha256": "6d719c140bf837a4c3f62a9d00a5df1dc42d0d9e1b5ff253b061f6d7f0e221aa",
+          "bytes": 33434
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--body-and-nested-portals-inherit-theme-and-preserve-focus-ownership",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-light-desktop--body-and-nested-portals-inherit-theme-and-preserve-focus-ownership--nested-portals.png",
+          "sha256": "8c78652d7d5ca66aba59fd284faca884981bdf4b55a10f2a9d75d7369022db55",
+          "bytes": 61033
+        },
+        {
+          "path": "webkit-light-desktop--body-and-nested-portals-inherit-theme-and-preserve-focus-ownership--portal-surface.json",
+          "sha256": "9a318d01cd869c59c18d9716322d0dea4a007ae59d3c99fbaf25c3a9ca69ce79",
+          "bytes": 658
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--foundation-states-match-current-AntD-and-the-frozen-P0-palette",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-light-phone--foundation-states-match-current-AntD-and-the-frozen-P0-palette--computed-states.json",
+          "sha256": "eddd12ad68d59093ba6e39dc3a28b3d23d2cf1c77b1f11aae619f4e11bf5d8f1",
+          "bytes": 3406
+        },
+        {
+          "path": "webkit-light-phone--foundation-states-match-current-AntD-and-the-frozen-P0-palette--coexistence.png",
+          "sha256": "b7dba81041ea484848395da94796a33e5ba22ab1e8a6da9863cc152188de3498",
+          "bytes": 34225
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--body-and-nested-portals-inherit-theme-and-preserve-focus-ownership",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-light-phone--body-and-nested-portals-inherit-theme-and-preserve-focus-ownership--nested-portals.png",
+          "sha256": "a23f3e4e8b4cdb6a4159f0394952669e59df730c1c54609c46e93e33c2bed177",
+          "bytes": 47089
+        },
+        {
+          "path": "webkit-light-phone--body-and-nested-portals-inherit-theme-and-preserve-focus-ownership--portal-surface.json",
+          "sha256": "1d6afd1b5ac0b20ce3065b390261b201e7fc5a51999458e57b441d12804fc0fe",
+          "bytes": 658
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--foundation-states-match-current-AntD-and-the-frozen-P0-palette",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-dark-desktop--foundation-states-match-current-AntD-and-the-frozen-P0-palette--computed-states.json",
+          "sha256": "fee69a8fe976bac2b3c67b486cb7d6f3762ba1ade6dbc6c1c8614caec1e92f59",
+          "bytes": 3422
+        },
+        {
+          "path": "webkit-dark-desktop--foundation-states-match-current-AntD-and-the-frozen-P0-palette--coexistence.png",
+          "sha256": "7aa80eb13d4f3b61028cc240014d555f5bc6f2e7cf38a341243591a5ab50ea84",
+          "bytes": 33983
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--body-and-nested-portals-inherit-theme-and-preserve-focus-ownership",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-dark-desktop--body-and-nested-portals-inherit-theme-and-preserve-focus-ownership--nested-portals.png",
+          "sha256": "9700f3d68ea889f12630d169e72be95a4c4533a78afc57749f258fa842d876a7",
+          "bytes": 58997
+        },
+        {
+          "path": "webkit-dark-desktop--body-and-nested-portals-inherit-theme-and-preserve-focus-ownership--portal-surface.json",
+          "sha256": "aed14f3fb5d2c8ed44f9a169b9d57a1bb23648b6a16dc0e254c6c849e523ddbf",
+          "bytes": 680
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--foundation-states-match-current-AntD-and-the-frozen-P0-palette",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-dark-phone--foundation-states-match-current-AntD-and-the-frozen-P0-palette--computed-states.json",
+          "sha256": "fee69a8fe976bac2b3c67b486cb7d6f3762ba1ade6dbc6c1c8614caec1e92f59",
+          "bytes": 3422
+        },
+        {
+          "path": "webkit-dark-phone--foundation-states-match-current-AntD-and-the-frozen-P0-palette--coexistence.png",
+          "sha256": "6cd5b7d9d9fb3cb6a2b457bc99e9750cfe18043ac80fbf8a01c93240f1d7faf7",
+          "bytes": 34952
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--body-and-nested-portals-inherit-theme-and-preserve-focus-ownership",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-dark-phone--body-and-nested-portals-inherit-theme-and-preserve-focus-ownership--nested-portals.png",
+          "sha256": "e478c003316330be15aa35a8c3bc47a25304661dae7adeafe273106c6347f72a",
+          "bytes": 45159
+        },
+        {
+          "path": "webkit-dark-phone--body-and-nested-portals-inherit-theme-and-preserve-focus-ownership--portal-surface.json",
+          "sha256": "de2f55c40ce69ff1bc31ab502fa7b0edf72665940151bf57e905903f0ef06c7e",
+          "bytes": 680
+        }
+      ]
+    }
+  ],
+  "screenshots": 48,
+  "jsonAttachments": 48
+}

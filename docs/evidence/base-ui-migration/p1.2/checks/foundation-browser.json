@@ -1,0 +1,5 @@
+{
+  "command": "npm run test:ui-foundation -w @orbit/web",
+  "exitCode": 0,
+  "durationSeconds": 89.46278691291809
+}
