@@ -111,9 +111,10 @@ Keystore/private storage replaces Keychain. UI alignment and additional account-
 flows are outside this slice. HTTPS-only production address policy must be included in
 the final supported-server matrix.
 
-The current server `ClientVersionInterceptor` only records web/ios/macos; it ignores the
-correctly emitted Android header. Backend Android version observability is an integration
-follow-up for A14/the coordinator, not evidence that this slice's header is missing.
+The server `ClientVersionInterceptor` records authenticated Android requests alongside
+web/ios/macos in `client_version`, keyed by user and client kind. An unchanged version
+is written at most hourly; a changed version is recorded immediately. Login requests
+are unauthenticated, so version observation begins with the next authenticated request.
 
 Primary implementation references:
 [AndroidKeyStore](https://developer.android.com/privacy-and-security/keystore),

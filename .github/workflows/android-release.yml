@@ -1,0 +1,77 @@
+# S1 internal distribution: a reviewed manual run produces a signed APK artifact only.
+# Configure environment-scoped credentials and required reviewers before enabling runs.
+# No tag, pull_request, store upload, GitHub Release, or Apple signing path belongs here.
+name: Android internal APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: 'Version name (for example 0.1.0-internal.1)'
+        required: true
+        type: string
+      version_code:
+        description: 'Version code (positive integer greater than the last distributed APK)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-internal
+  cancel-in-progress: false
+
+jobs:
+  apk:
+    name: Android · signed internal APK
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: android-internal
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21.0.9+10.0.LTS'
+      - name: Verify release trigger isolation
+        run: node --test scripts/ci/release-workflows.test.mjs
+      - name: Install Android SDK packages
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'cmdline-tools;22.0'
+          "$ANDROID_HOME/cmdline-tools/22.0/bin/sdkmanager" 'platforms;android-36' 'build-tools;36.0.0'
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+      - name: Verify Android
+        run: bash src/android/scripts/verify.sh "$RUNNER_TEMP/android-verification"
+      - name: Build and verify signed APK
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ORBIT_ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ORBIT_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ORBIT_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ORBIT_ANDROID_APPLICATION_ID: ${{ vars.ANDROID_APPLICATION_ID }}
+          ORBIT_ANDROID_CERT_SHA256: ${{ vars.ANDROID_CERT_SHA256 }}
+          ORBIT_ANDROID_VERSION_NAME: ${{ inputs.version_name }}
+          ORBIT_ANDROID_VERSION_CODE: ${{ inputs.version_code }}
+          ORBIT_ANDROID_SIGNING_PURPOSE: release
+        run: |
+          set -euo pipefail
+          umask 077
+          : "${ANDROID_KEYSTORE_BASE64:?Configure signing in the protected android-internal environment}"
+          export ORBIT_ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/android-internal-signing.jks"
+          trap 'rm -f "$ORBIT_ANDROID_KEYSTORE_PATH"' EXIT
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$ORBIT_ANDROID_KEYSTORE_PATH"
+          bash src/android/scripts/build-release.sh "$RUNNER_TEMP/android-internal-apk"
+      - name: Remove signing material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/android-internal-signing.jks"
+      - name: Keep signed APK and identity
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: android-internal-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/android-internal-apk
+          if-no-files-found: error
+          retention-days: 14

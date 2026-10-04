@@ -5,6 +5,7 @@
 # Trigger: pushing a `v*` tag runs BOTH jobs. `workflow_dispatch` also builds, with a `platform`
 # choice (both / macos / ios) so a single client can be rebuilt without a tag (a dispatch with no tag
 # uses each build's default version). The build/test CI gate lives in client.yml.
+# Android internal APKs use android-release.yml, which never uploads either Apple client.
 #
 # The tag drives the version. macOS uses it verbatim (vX.Y.Z → stable channel; vX.Y.Z-beta.N →
 # Sparkle beta channel). iOS strips any -beta.N to a numeric marketing version
@@ -37,7 +38,7 @@ jobs:
   dmg:
     name: macOS · signed + notarized DMG
     # A tag push builds both; a manual run honours the platform choice.
-    if: github.event_name != 'workflow_dispatch' || inputs.platform != 'ios'
+    if: (github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')) || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'both' || inputs.platform == 'macos'))
     runs-on: macos-15
     permissions:
       contents: write          # create the GitHub Release + push the gh-pages appcast
@@ -116,7 +117,7 @@ jobs:
 
       # ---- Release publishing (tag pushes only) ------------------------------------------------
       - name: Create GitHub Release
-        if: github.ref_type == 'tag'
+        if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -127,7 +128,7 @@ jobs:
             "src/macos/build/Orbit-v$ver-arm64.zip"
 
       - name: Generate Sparkle appcast
-        if: github.ref_type == 'tag'
+        if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')
         env:
           SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
         run: |
@@ -149,7 +150,7 @@ jobs:
           cp "$work/appcast.xml" "$work/out/appcast.xml"
 
       - name: Publish appcast to GitHub Pages
-        if: github.ref_type == 'tag'
+        if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ github.token }}
@@ -161,7 +162,7 @@ jobs:
   # ---- iOS: TestFlight --------------------------------------------------------------------------
   testflight:
     name: iOS · TestFlight
-    if: github.event_name != 'workflow_dispatch' || inputs.platform != 'macos'
+    if: (github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')) || (github.event_name == 'workflow_dispatch' && (inputs.platform == 'both' || inputs.platform == 'ios'))
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
