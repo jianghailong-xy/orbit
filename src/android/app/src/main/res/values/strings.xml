@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Orbit Android</string>
+    <string name="foundation_title">Android foundation</string>
+    <string name="foundation_description">Application shell</string>
+    <string name="build_information">Build information</string>
+    <string name="back">Back</string>
+    <string name="package_label">Package</string>
+    <string name="build_label">Build</string>
+    <string name="source_sha_label">Source SHA</string>
+    <string name="source_tree_label">Source tree</string>
+    <string name="source_clean">clean</string>
+    <string name="source_modified">modified</string>
+    <string name="device_label">Device</string>
+    <string name="android_label">Android</string>
+    <string name="os_build_label">OS build</string>
+    <string name="android_version">%1$s (API %2$d)</string>
+</resources>
