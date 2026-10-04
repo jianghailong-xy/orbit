@@ -1,12 +1,26 @@
 # Antigravity Google 登录：web 与 macOS/iOS 客户端证据
 
 任务 `34ZogkzPnQ44ODj72jrYb`，对应项目验收条目 2（`4q7GDYg6GzChkJE0bfhFGV`）。
-分支：`orbit/web-macos-ios-antigravity-google-b47365`。
-控制面契约来自第 3 步提交 `7cd0d809be5052ef1eadd2738a2217403767eeb9`；本分支以项目线上的 `8725dd57d` 为起点。
+分支：`orbit/web-macos-ios-antigravity-google-683266`。
+控制面契约来自第 3 步提交 `7cd0d809be5052ef1eadd2738a2217403767eeb9`，已以 `8725dd57d` 落在项目线上。
+
+## 2026-10-04 集成冲突后的复验
+
+上一轮分支 `orbit/web-macos-ios-antigravity-google-b47365` 在集成时被退回。本轮从项目当前 HEAD `b0eb14060` 建立新分支，只重放三个客户端提交（原 `bf28fc0d9`、`e212ac862`、`af6b0f652`，现 `5141039a9`、`597b5c1cf`、`91da7f22b`）。Git 自动合并无遗留冲突；项目控制面、Google 会话与网络探测修复全部保留在祖先历史中，两个曾冲突文件保留已验收的客户端实现。没有重新 rebase 包含上游提交的旧分支。
+
+| 当前基线检查 | 本任务本轮 Orbit 后台工具行 | 结果 |
+| --- | --- | --- |
+| `npm test -w @orbit/web` | `bgj_9de97c4efb8e` | 退出码 0；294 文件、3615 用例通过；没有需要豁免的 web 失败 |
+| `npm run build -w @orbit/web` | `bgj_c29a11fe628a` | 退出码 0；TypeScript 与生产构建通过 |
+| Swift 6.1 Docker 中 OrbitKit `swift test --jobs 2` | `bgj_a20f7e913859` | 退出码 0；2780 用例、5 跳过、0 失败；6 个 Antigravity 用例实际执行并通过 |
+| 当前生产构建的 Chromium 截图 | `bgj_6a8e8e74e1aa` | 退出码 0；1280px / 443px 共 16 张；无浏览器异常或页面横向溢出 |
+| 原始截图总览 | `bgj_c2c2641db991` | 退出码 0；桌面与手机各一张，展示对应 8 个状态 |
+
+本轮对上述新分支重新 dispatch `client.yml`，须确认 macOS 的 `Test OrbitKit (macOS)`、`Build OrbitApp` 和 iOS 的 `Build for iOS Simulator` 真正运行并通过；新 HEAD 与 CI 链接由本轮证据信封记录。下方旧 CI 与工具行仅保留为上一轮历史。
 
 本次实现复用粘贴授权码中继，为支持的 Linux runner 提供 Google 登录/重新登录、条款链接、Google 账号标记、各额度桶的剩余百分比和重置时间。macOS runner 与旧 runner 显示对应限制；保留 env key 和配置 Gemini key 的路径。新建会话选择器与未登录错误卡使用同一状态；`auth=unknown` 不宣称已登录，`auth=no` 会阻止 Google 账号选择。
 
-## 本会话已记录的检查
+## 上一轮已记录的检查
 
 | 检查 | Orbit 后台工具行 | 结果 |
 | --- | --- | --- |
@@ -19,7 +33,7 @@
 | 原始截图总览 `node docs/evidence/antigravity-google-login/clients/contact-sheets.mjs` | `bgj_54121c744d84` | 退出码 0；两张总览 |
 | `AccountPauseAPIClientTests`（包含 body stream 回归） | `bgj_947cd2fb277e` | 退出码 0；4 用例、0 失败 |
 
-客户端 CI：由协调会话对上述分支 dispatch `.github/workflows/client.yml`，必须确认 macOS 的 `Test OrbitKit`、`Build OrbitApp` 和 iOS 的 `Build for iOS Simulator` 真正运行并通过。最终 CI 链接记入任务的证据信封。
+上一轮客户端 CI：[37176765769](https://github.com/jianghailong-xy/orbit/actions/runs/37176765769)，HEAD `af6b0f65208ce35f6b012e9c4ac0c864e9c73ca2` 的 macOS OrbitKit 测试、OrbitApp 编译与 iOS Simulator 编译全部实际运行并通过。该结果不代替本轮新基线 CI。
 
 首次 [client CI](https://github.com/jianghailong-xy/orbit/actions/runs/37176072114) 在 `e212ac8625e1efca08a4dc99eab020ccd084dc60` 上：iOS Simulator 真编译通过；macOS OrbitKit 编译通过，但既有 `AccountPauseAPIClientTests.testPausesTheNamedRunnerSlot` 直接解包 nil `httpBody` 崩溃，OrbitApp 编译被跳过。main 上该测试相同：macOS URLSession 将请求体移到 `httpBodyStream`，测试没有读取流。本分支让测试 stub 在收到请求时读取流、保留请求体，再断言 duration 和显式 null；增加流式请求回归测试。这只修复测试取证，不改客户端网络行为。需对修复后的 SHA 重跑 client CI。
 
