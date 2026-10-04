@@ -192,6 +192,8 @@ class ComposerDeviceTest {
             compose.waitUntil(5000) { compose.onNodeWithText("Share",useUnmergedTree=true).fetchSemanticsNode().config.getOrNull(SemanticsProperties.Disabled)==null }
             appClick("Share")
             capture("system-share")
+            compose.waitUntil(10000) { systemNode("A07 receiver")!=null }
+            instrument.uiAutomation.waitForIdle(500,5000)
             systemFind { it.viewIdResourceName?.endsWith(":id/chooser_header")==true }?.let { header ->
                 val bounds=android.graphics.Rect();header.getBoundsInScreen(bounds)
                 if (!bounds.isEmpty && bounds.top>100) {
@@ -221,11 +223,13 @@ class ComposerDeviceTest {
             selectFilesRoot("Downloads")
             var filename:AccessibilityNodeInfo?=null
             compose.waitUntil(5000) { filename=systemFind { it.isEditable };filename!=null }
-            filename!!.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,"a07-export.txt") })
+            val exportName="a07-export-${java.util.UUID.randomUUID()}.txt"
+            filename!!.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,exportName) })
             systemClick("Save")
-            compose.waitUntil(5000) { shellBytes("cat /sdcard/Download/a07-export.txt").contentEquals(bytes) }
+            compose.waitUntil(5000) { shellBytes("cat /sdcard/Download/$exportName").contentEquals(bytes) }
             File(evidence,"download-sha256.txt").writeText(sha(bytes))
-            shellBytes("rm /sdcard/Download/a07-export.txt")
+            File(evidence,"download-path.txt").writeText(exportName)
+            shellBytes("rm /sdcard/Download/$exportName")
             // A real external process reads the temporary grant and publishes its digest in the UI.
             File(evidence,"attachment-digest.txt").writeText(sha(bytes)+"\n")
             appClick("Close attachment")
