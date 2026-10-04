@@ -5,7 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastViewport } from '../components/ToastViewport';
 import { useToast } from './toast';
-import { clearToasts } from './toastStore';
+import { clearToasts, showToast } from './toastStore';
 
 /**
  * Every toast says what happened to what, and what it asks of you decides its shape
@@ -48,7 +48,7 @@ afterEach(async () => {
 });
 
 const viewport = (): HTMLElement | null => document.querySelector('.toast-viewport');
-const toasts = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>('.toast')];
+const toasts = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>('.toast-slot:not(.toast-slot--leaving) .toast')];
 
 describe('a toast says what happened to what', () => {
   it('draws a confirmation as a pill with the thing it happened to under the outcome', async () => {
@@ -102,6 +102,8 @@ describe('a toast says what happened to what', () => {
     await act(async () => {
       document.querySelector<HTMLButtonElement>('button[aria-label="Dismiss"]')!.click();
     });
+    expect(toasts()).toHaveLength(0);
+    await act(async () => { vi.advanceTimersByTime(250); });
     expect(viewport()).toBeNull();
   });
 
@@ -148,7 +150,7 @@ describe('a session result', () => {
       card.querySelector<HTMLButtonElement>('button[aria-label="Undo completing Fix login redirect"]')!.click();
     });
     expect(onUndo).toHaveBeenCalledOnce();
-    expect(viewport()).toBeNull();
+    expect(toasts()).toHaveLength(0);
   });
 
   it('is a pill you click through to the session when there is nothing else to do', async () => {
@@ -161,7 +163,7 @@ describe('a session result', () => {
       pill.click();
     });
     expect(document.querySelector('.where')?.textContent).toBe('session');
-    expect(viewport()).toBeNull();
+    expect(toasts()).toHaveLength(0);
   });
 
   it("puts the operation's next result where its last one stood, and clears its failure", async () => {
@@ -180,5 +182,55 @@ describe('a session result', () => {
       toast.sessionNotice({ sessionId: SESSION, sessionTitle: 'Fix login redirect', event: 'merge-result', headline: 'Merged into main' });
     });
     expect(toasts().map((one) => one.querySelector('.toast-head')?.textContent)).toEqual(['Merged into main']);
+  });
+});
+
+describe('a toast leaving', () => {
+  it('keeps a dismissed card for the 250ms exit, with its actions inert, then removes it', async () => {
+    vi.useFakeTimers();
+    await act(async () => { toast.error("Couldn't save the schedule", 'revision 12 is stale'); });
+    const card = document.querySelector('.toast')!;
+    await act(async () => { document.querySelector<HTMLButtonElement>('button[aria-label="Dismiss"]')!.click(); });
+    const slot = card.parentElement!;
+    expect(slot.classList.contains('toast-slot--leaving')).toBe(true);
+    expect(slot.hasAttribute('inert')).toBe(true);
+    expect(slot.getAttribute('aria-hidden')).toBe('true');
+    await act(async () => { vi.advanceTimersByTime(249); });
+    expect(card.isConnected).toBe(true);
+    await act(async () => { vi.advanceTimersByTime(1); });
+    expect(viewport()).toBeNull();
+  });
+
+  it('animates an expired confirmation while a new toast arrives without restarting its exit', async () => {
+    vi.useFakeTimers();
+    await act(async () => { toast.success('Link copied'); });
+    const pill = document.querySelector('.toast')!;
+    await act(async () => { vi.advanceTimersByTime(3000); });
+    expect(pill.parentElement!.classList.contains('toast-slot--leaving')).toBe(true);
+    await act(async () => { vi.advanceTimersByTime(100); toast.success('Schedule saved'); });
+    await act(async () => { vi.advanceTimersByTime(150); });
+    expect(pill.isConnected).toBe(false);
+    expect(toasts().map((one) => one.querySelector('.toast-head')?.textContent)).toEqual(['Schedule saved']);
+  });
+
+  it.each(['result', 'attention'] as const)('updates progress to a %s card in the same animation container', async (kind) => {
+    await act(async () => {
+      showToast({ sessionId: SESSION, key: 'merge', message: 'Merging into main…', inProgress: true, tone: 'info' });
+    });
+    const pill = document.querySelector('.toast')!;
+    const slot = pill.parentElement!;
+    await act(async () => {
+      showToast({
+        sessionId: SESSION, key: 'merge',
+        message: kind === 'result' ? 'Merged into main' : "Couldn't merge into main",
+        detail: kind === 'result' ? 'Merged 2 commits' : 'CONFLICT (content)',
+        tone: kind === 'result' ? 'success' : 'error',
+      });
+    });
+    const card = toasts()[0];
+    expect(card.classList.contains('toast--card')).toBe(true);
+    expect(card.parentElement).toBe(slot);
+    expect(document.querySelector('.toast-slot--leaving')).toBeNull();
+    expect(card.querySelector('.toast-head')?.textContent).toBe(kind === 'result' ? 'Merged into main' : "Couldn't merge into main");
   });
 });

@@ -11,7 +11,7 @@ import {
   SyncOutlined,
   UndoOutlined,
 } from '@ant-design/icons';
-import { useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { encodeId } from '../lib/idCodec';
@@ -46,33 +46,80 @@ export function ToastViewport() {
     navigate(`/sessions/${encodeId(toast.sessionId)}`);
   };
 
-  const pinned = !narrow && allPinned ? [...feed.pinned].reverse() : feed.pinned.slice(-1);
-  const passing = narrow ? feed.transient.slice(-1) : feed.transient;
-  if (pinned.length === 0 && passing.length === 0) return null;
+  const visible = useMemo(() => {
+    const pinned = !narrow && allPinned ? [...feed.pinned].reverse() : feed.pinned.slice(-1);
+    const passing = narrow ? feed.transient.slice(-1) : feed.transient;
+    return [
+      ...pinned.map((toast) => ({ toast, folded: narrow && feed.expanded !== toast.id, behind: feed.pinned.length - 1 })),
+      ...passing.map((toast) => ({ toast, folded: false, behind: 0 })),
+    ];
+  }, [feed, narrow, allPinned]);
+  const [previous, setPrevious] = useState(visible);
+  const [shown, setShown] = useState(visible);
+  // Keep a departing toast in its slot for the 250ms exit, including its last card/pill shape.
+  // Updating during render keeps the new feed and its presentation in the same commit.
+  if (previous !== visible) {
+    setPrevious(visible);
+    const next = [...visible];
+    shown.forEach((entry, index) => {
+      if (!visible.some((one) => identityOf(one.toast) === identityOf(entry.toast))) next.splice(index, 0, entry);
+    });
+    setShown(next);
+  }
+  const remove = useCallback((id: string) => setShown((items) => items.filter((one) => identityOf(one.toast) !== id)), []);
+  if (shown.length === 0) return null;
 
   return createPortal(
     <section className={narrow ? 'toast-viewport toast-viewport--narrow' : 'toast-viewport'} aria-label="Notifications">
-      {pinned.map((toast) =>
-        narrow && feed.expanded !== toast.id ? (
-          <Pill key={toast.id} toast={toast} behind={feed.pinned.length - 1} onClick={() => openToast(toast.id)} />
-        ) : (
-          <AttentionCard key={toast.id} toast={toast} onOpen={openSession} />
-        ),
-      )}
+      {shown.map(({ toast, folded, behind }) => (
+        <ToastPresence
+          key={identityOf(toast)}
+          id={identityOf(toast)}
+          leaving={!visible.some((one) => identityOf(one.toast) === identityOf(toast))}
+          onExit={remove}
+        >
+          {folded ? (
+            <Pill toast={toast} behind={behind} onClick={() => openToast(toast.id)} />
+          ) : levelOf(toast) === 'attention' ? (
+            <AttentionCard toast={toast} onOpen={openSession} />
+          ) : levelOf(toast) === 'result' ? (
+            <ResultCard toast={toast} onOpen={openSession} />
+          ) : (
+            <Pill toast={toast} onClick={toast.sessionId ? () => openSession(toast) : undefined} />
+          )}
+        </ToastPresence>
+      ))}
       {!narrow && feed.pinned.length > 1 && (
         <button type="button" className="toast-more" onClick={() => setAllPinned((all) => !all)}>
           {allPinned ? 'Show less' : `+${feed.pinned.length - 1} more`}
         </button>
       )}
-      {passing.map((toast) =>
-        levelOf(toast) === 'result' ? (
-          <ResultCard key={toast.id} toast={toast} onOpen={openSession} />
-        ) : (
-          <Pill key={toast.id} toast={toast} onClick={toast.sessionId ? () => openSession(toast) : undefined} />
-        ),
-      )}
     </section>,
     document.body,
+  );
+}
+
+// A keyed operation keeps its presentation when the feed moves it between transient and pinned.
+function identityOf(toast: ToastItem): string {
+  return toast.key ?? toast.id;
+}
+
+/** Exit is visual only: dismissed actions immediately stop accepting clicks or keyboard focus. */
+function ToastPresence({ id, leaving, onExit, children }: {
+  id: string;
+  leaving: boolean;
+  onExit: (id: string) => void;
+  children: ReactNode;
+}) {
+  useEffect(() => {
+    if (!leaving) return;
+    const timer = setTimeout(() => onExit(id), 250);
+    return () => clearTimeout(timer);
+  }, [id, leaving, onExit]);
+  return (
+    <div className={`toast-slot${leaving ? ' toast-slot--leaving' : ''}`} inert={leaving} aria-hidden={leaving || undefined}>
+      {children}
+    </div>
   );
 }
 
@@ -211,10 +258,10 @@ function AttentionCard({ toast, onOpen }: { toast: ToastItem; onOpen: (toast: To
               {action.label}
             </button>
           )}
-          {toast.sessionId && (
+          {toast.sessionId && !action && (
             <button
               type="button"
-              className={action ? 'toast-action' : 'toast-action toast-action--primary'}
+              className="toast-action toast-action--primary"
               onClick={() => onOpen(toast)}
             >
               Open session

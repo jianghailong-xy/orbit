@@ -85,7 +85,20 @@ public enum WikiCopy {
     public static let settingsSaved = "Wiki settings saved"
     public static let superseded = "Superseded"
     public static let retired = "Retired"
-    public static let refused = "The server refused it"
+    /// Failed writes name the action; the server's reason stays on the line below.
+    public static let entrySaveFailed = "Couldn't save the entry"
+    public static let entrySupersedeFailed = "Couldn't supersede the entry"
+    public static let entryRetireFailed = "Couldn't retire the entry"
+    public static let entryConfirmFailed = "Couldn't confirm the entry"
+    public static let entryRejectFailed = "Couldn't reject the entry"
+    public static let settingsSaveFailed = "Couldn't save the wiki settings"
+    public static let runRevertFailed = "Couldn't revert the run"
+    public static let planDraftFailed = "Couldn't draft the plan"
+    public static let planRedraftFailed = "Couldn't redraft the plan"
+    public static let planConfirmFailed = "Couldn't confirm the plan"
+    public static let changeAcceptFailed = "Couldn't accept the change"
+    public static let changeEditFailed = "Couldn't edit the change"
+    public static let changeRejectFailed = "Couldn't reject the change"
     /// The rationale an owner's write is recorded with, in the web's words.
     public static func editedRationale(_ title: String) -> String { "the owner edited “\(title)”" }
     public static func replacedRationale(_ title: String) -> String { "the owner replaced “\(title)”" }
