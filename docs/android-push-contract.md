@@ -145,10 +145,24 @@ per registration. FCM requests restrict the receiving Android package. The
 registration snapshot is checked before each send/retry; invalidation deletes
 only that snapshot, never a binding replaced meanwhile.
 
-FCM has at most three attempts, each HTTP request with a 10s timeout. A 401 may
-refresh OAuth once; network errors and 429/500/503 use backoff with jitter.
-429 waits at least 60s. Retry-After is honored; a requested wait above 60s ends
-best-effort delivery rather than retrying early. This is not a durable retry queue.
+FCM has at most three attempts within one 15s delivery budget, including waiting
+for OAuth, the registration check, HTTP headers/body and backoff. Each HTTP
+request also has a 10s limit. This leaves room in runner notify/MCP's 20s timeout
+for the business queries and allows an already accepted APNs result to return
+even when FCM is slow. At expiry, FCM reports `DEADLINE_EXCEEDED`, aborts the send
+and retry sleep, and ignores late results; these cannot increment the accepted
+device count, start another send or invalidate a registration. The shared OAuth
+exchange keeps its own 10s limit and may populate the credential cache later,
+but an expired caller cannot use it to send. Aborting an in-flight request cannot
+recall a notification Google already accepted; `eventId` deduplication still applies.
+
+A 401 may refresh OAuth once. Network failures, including interrupted response
+bodies after HTTP 200 headers, and HTTP 500/503 use backoff with jitter. Retry-After
+headers apply even when the body cannot be read. A requested wait must fit the
+remaining budget; otherwise delivery ends without an early or detached retry.
+HTTP 429's minimum 60s wait never fits, so quota failures end without waiting for a retry.
+This is best-effort delivery, not a durable retry queue. Retries keep the exact
+same payload and `eventId`.
 Only HTTP 404 with typed FCM `UNREGISTERED` prunes a token. Generic 404,
 `INVALID_ARGUMENT`, sender mismatch, auth/quota/server errors, and oversized
 payloads retain it. A payload error must not erase all otherwise healthy devices.

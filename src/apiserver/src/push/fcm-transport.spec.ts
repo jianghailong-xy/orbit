@@ -7,6 +7,8 @@ import * as jwt from 'jsonwebtoken';
 import { ConfigService } from '@nestjs/config';
 import { FcmTransport } from './fcm-transport';
 import { fcmData } from './fcm-payload';
+import { PushService } from './push.service';
+import { RunnerNotifyController } from '../runner-api/runner-notify.controller';
 
 // Ephemeral, test-only key. No Firebase project, device token or credential leaves this process.
 const key = generateKeyPairSync('rsa', { modulusLength: 2048 });
@@ -23,13 +25,14 @@ const error = (status: number, code?: string, headers?: Record<string, string>) 
   error: { status: 'ERROR', details: code ? [{ '@type': 'type.googleapis.com/google.firebase.fcm.v1.FcmError', errorCode: code }] : [] },
 }), { status, headers });
 
-function harness(responses: Array<Response | Error> = [ok()]) {
+function harness(responses: Array<Response | Error | ((init: RequestInit) => Promise<Response>)> = [ok()], authWait?: Promise<void>) {
   const calls: Array<{ url: string; init: RequestInit }> = [];
   const waits: number[] = [];
   let authCalls = 0;
   const request = (async (url: string, init: RequestInit) => {
     calls.push({ url, init });
     if (url === 'https://oauth2.googleapis.com/token') {
+      await authWait;
       authCalls++;
       const form = init.body as URLSearchParams;
       assert.equal(form.get('grant_type'), 'urn:ietf:params:oauth:grant-type:jwt-bearer');
@@ -42,6 +45,7 @@ function harness(responses: Array<Response | Error> = [ok()]) {
     const response = responses.shift();
     if (response instanceof Error) throw response;
     assert.ok(response, 'unexpected send/retry');
+    if (typeof response === 'function') return response(init);
     return response;
   }) as typeof fetch;
   const transport = new FcmTransport(config, request, async (ms) => { waits.push(ms); });
@@ -80,14 +84,179 @@ test('retry keeps the exact event/payload and honors Retry-After; sync has norma
   assert.deepEqual(JSON.parse(message.data.payload), { clearSessions: ['session-1'], badge: 0 });
 });
 
-test('quota backoff is at least a minute and excessive Retry-After stops without an early retry', async () => {
-  const quota = harness([error(429), ok()]);
-  assert.equal((await quota.transport.send('fcm', data, async () => true)).accepted, true);
-  assert.ok(quota.waits[0] >= 60_000);
+test('quota backoff cannot fit the synchronous budget and never retries before Retry-After', async () => {
+  const quota = harness([error(429)]);
+  assert.deepEqual(await quota.transport.send('fcm', data, async () => true),
+    { accepted: false, invalidToken: false, reason: 'HTTP_429' });
+  assert.equal(quota.messages().length, 1);
+  assert.deepEqual(quota.waits, []);
   const later = harness([error(503, undefined, { 'retry-after': '120' })]);
   assert.equal((await later.transport.send('fcm', data, async () => true)).accepted, false);
   assert.equal(later.messages().length, 1);
   assert.deepEqual(later.waits, []);
+});
+
+function brokenResponse(status = 200, headers?: Record<string, string>) {
+  return new Response(new ReadableStream({ start(controller) {
+    controller.enqueue(new TextEncoder().encode('{"name":'));
+    controller.error(new TypeError('response stream interrupted'));
+  } }), { status, headers });
+}
+
+test('interrupted HTTP 200 body retries the same logical message and can recover', async () => {
+  const h = harness([brokenResponse(), ok()]);
+  assert.deepEqual(await h.transport.send('fcm', data, async () => true), { accepted: true, invalidToken: false });
+  assert.equal(h.messages().length, 2);
+  assert.equal(h.messages()[0].init.body, h.messages()[1].init.body);
+  assert.equal(h.waits.length, 1);
+});
+
+test('response read failures exhaust three attempts without invalidating a healthy token', async () => {
+  const h = harness([brokenResponse(), brokenResponse(), brokenResponse()]);
+  assert.deepEqual(await h.transport.send('fcm', data, async () => true),
+    { accepted: false, invalidToken: false, reason: 'TRANSPORT_ERROR' });
+  assert.equal(h.messages().length, 3);
+  assert.equal(new Set(h.messages().map((c) => c.init.body)).size, 1);
+  assert.equal(h.waits.length, 2);
+});
+
+test('a broken error body still respects known quota and Retry-After headers', async () => {
+  for (const status of [429, 503]) {
+    const h = harness([brokenResponse(status, { 'retry-after': '120' })]);
+    assert.equal((await h.transport.send('fcm', data, async () => true)).accepted, false);
+    assert.equal(h.messages().length, 1);
+    assert.deepEqual(h.waits, []);
+  }
+});
+
+function notifier(transport: FcmTransport) {
+  const removed: unknown[] = [];
+  let apnsSends = 0;
+  const ios = { id: 'ios', userId: 'owner', platform: 'ios', bundleId: 'io.orbitd.app',
+    token: 'apns', environment: 'production', updatedAt: new Date(0) };
+  const android = { ...ios, id: 'android', platform: 'android', bundleId: values.FCM_ANDROID_PACKAGE, token: 'fcm' };
+  const service = new PushService({
+    user: { findUnique: async () => ({ preferences: {} }) },
+    deviceToken: {
+      findMany: async () => [ios, android], findFirst: async () => ({ id: 'current' }),
+      deleteMany: async (q: unknown) => { removed.push(q); },
+    },
+  } as any, { get: (k: string) => values[k] ?? ({ APNS_KEY_ID: 'test', APNS_TEAM_ID: 'test',
+    APNS_KEY: Buffer.from('test-only').toString('base64') } as Record<string, string>)[k] } as ConfigService);
+  (service as any).fcm = transport;
+  (service as any).authToken = () => 'test';
+  (service as any).send = async () => { apnsSends++; return { status: 200 }; };
+  const controller = new RunnerNotifyController(service);
+  return { removed, apnsSends: () => apnsSends,
+    notify: () => controller.notify({ ownerId: 'owner', name: 'runner' } as any, undefined, { message: 'Ready' }) };
+}
+
+test('runner notify returns the accepted APNs count when FCM is rate limited', async () => {
+  const h = harness([error(429, undefined, { 'retry-after': '60' })]);
+  const n = notifier(h.transport);
+  assert.deepEqual(await n.notify(), { delivered: true, devices: 1 });
+  assert.equal(n.apnsSends(), 1);
+  assert.equal(h.messages().length, 1);
+  assert.deepEqual(h.waits, []);
+  assert.deepEqual(n.removed, []);
+});
+
+const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+for (const late of ['accepted', 'unregistered', 'body'] as const) {
+  test(`runner notify bounds a slow FCM ${late} response and ignores late results`, async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+    let release!: () => void;
+    const waiting = new Promise<void>((resolve) => { release = resolve; });
+    const h = harness([async () => {
+      if (late === 'body') return new Response(new ReadableStream({ async start(controller) {
+        await waiting;
+        controller.enqueue(new TextEncoder().encode(JSON.stringify({ name: 'accepted-too-late' })));
+        controller.close();
+      } }));
+      await waiting;
+      return late === 'accepted' ? ok() : error(404, 'UNREGISTERED');
+    }]);
+    const n = notifier(h.transport);
+    let result: unknown;
+    const sent = n.notify().then((r) => { result = r; });
+    try {
+      await flush();
+      assert.equal(n.apnsSends(), 1);
+      assert.equal(h.messages().length, 1);
+      t.mock.timers.tick(15_000);
+      await flush();
+      assert.deepEqual(result, { delivered: true, devices: 1 });
+      assert.equal(h.messages()[0].init.signal?.aborted, true);
+    } finally {
+      release();
+      await sent;
+    }
+    await flush();
+    t.mock.timers.tick(120_000);
+    await flush();
+    assert.deepEqual(result, { delivered: true, devices: 1 });
+    assert.deepEqual(n.removed, []);
+    assert.equal(h.messages().length, 1);
+    assert.deepEqual(h.waits, []);
+  });
+}
+
+for (const phase of ['OAuth', 'registration read']) {
+  test(`the total budget includes ${phase} and cannot send after it finishes late`, async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+    let release!: () => void;
+    const waiting = new Promise<void>((resolve) => { release = resolve; });
+    const h = harness([], phase === 'OAuth' ? waiting : undefined);
+    let result: unknown;
+    const sent = h.transport.send('fcm', data, async () => {
+      if (phase === 'registration read') await waiting;
+      return true;
+    }).then((r) => { result = r; });
+    try {
+      await flush();
+      t.mock.timers.tick(15_000);
+      await flush();
+      assert.deepEqual(result, { accepted: false, invalidToken: false, reason: 'DEADLINE_EXCEEDED' });
+    } finally {
+      release();
+      await sent;
+    }
+    await flush();
+    assert.equal(h.messages().length, 0);
+    assert.deepEqual(h.waits, []);
+  });
+}
+
+test('OAuth time is deducted from the send budget instead of starting another full timeout', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  let authReady!: () => void;
+  let responseReady!: () => void;
+  const authWait = new Promise<void>((resolve) => { authReady = resolve; });
+  const responseWait = new Promise<void>((resolve) => { responseReady = resolve; });
+  const h = harness([async () => { await responseWait; return ok(); }], authWait);
+  let result: unknown;
+  const sent = h.transport.send('fcm', data, async () => true).then((r) => { result = r; });
+  try {
+    await flush();
+    t.mock.timers.tick(8_000);
+    authReady();
+    await flush();
+    assert.equal(h.messages().length, 1);
+    t.mock.timers.tick(6_999);
+    await flush();
+    assert.equal(result, undefined);
+    t.mock.timers.tick(1);
+    await flush();
+    assert.deepEqual(result, { accepted: false, invalidToken: false, reason: 'DEADLINE_EXCEEDED' });
+    assert.equal(h.messages()[0].init.signal?.aborted, true);
+  } finally {
+    authReady();
+    responseReady();
+    await sent;
+  }
+  await flush();
+  assert.equal(h.messages().length, 1);
 });
 
 test('401 refreshes OAuth once; sender mismatch, invalid payload and generic 404 never delete tokens', async () => {
