@@ -70,7 +70,9 @@ Cleanup completes with cancellation masked; a cancelled caller cannot leave half
 Refresh is never automatically retried. The server consumes a token once and replay can
 revoke the account's entire live refresh family. Even a network failure might mean the
 rotation succeeded but its response was lost, so Android signs out on **any** failed refresh.
-A repeated 401 after the single explicit retry also signs out. Offline ordinary requests
+A repeated 401 after the single explicit retry signs out only if the retry's token version
+is still current. A delayed rejection after another committed rotation fails only that
+request, without clearing the newer session or retrying again. Offline ordinary requests
 do not sign out. Logout revocation is best-effort with a captured old server/token and a
 five-second limit; local cleanup does not depend on it. A lost refresh response cannot
 guarantee remote revocation of the newly issued token, but cannot restore local credentials.
