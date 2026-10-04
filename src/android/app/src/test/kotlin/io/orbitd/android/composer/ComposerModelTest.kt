@@ -224,4 +224,14 @@ class ComposerModelTest {
         assertFalse("auto" in catalog.permissions("claude","claude-opus-5"))
         assertFalse("bypassPermissions" in catalog.permissions("claude","claude-opus-5"))
     }
+
+    @Test fun shellUsesSameSwiftPostContractIncludingCarriedAttachments() = runTest {
+        val rig=Rig(this);val model=rig.start()
+        model.importAttachment(StagedAttachment("a","file.txt","text/plain"),{ StagedAttachment("a","file.txt","text/plain",1) to byteArrayOf(1) },{})
+        model.state.first { it.uploads.isEmpty() }
+        model.edit("! echo 你好",0,0);model.send();runCurrent()
+        val body=Wire.json.parseToJsonElement(rig.sends.values.single()).jsonObject
+        assertEquals("shell",body.text("kind"));assertEquals("echo 你好",body.text("content"))
+        assertEquals(1,body["attachmentIds"]!!.jsonArray.size)
+    }
 }

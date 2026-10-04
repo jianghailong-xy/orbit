@@ -147,7 +147,7 @@ class ComposerDeviceTest {
             compose.waitUntil(15000) { model.state.value.draft.attachments.singleOrNull()?.remoteId!=null }
             val staged=model.state.value.draft.attachments.single()
             assertArrayEquals(bytes,runBlocking { model.attachmentBytes(staged.id) })
-            ready();compose.onNodeWithTag("composer-send").performClick()
+            ready();clickSendWhenEnabled()
             compose.waitUntil(10000) { !model.state.value.busy && model.state.value.draft.pending==null && model.state.value.draft.attachments.isEmpty() }
             // The outbox's private copy is now removed: every action below must fetch the
             // transcript attachment through authenticated GET, not reuse the staged bytes.
@@ -265,7 +265,11 @@ class ComposerDeviceTest {
         assertNull(request["clientTurnId"])
         capture("created-session")
     }
-    private fun ready() { compose.waitUntil(10000) { app.realtime.state.value.session?.fresh==true && !model.state.value.busy } }
+    private fun clickSendWhenEnabled() {
+        compose.waitUntil(10000) { compose.onNodeWithTag("composer-send").fetchSemanticsNode().config.getOrNull(SemanticsProperties.Disabled)==null }
+        compose.onNodeWithTag("composer-send").performClick()
+    }
+    private fun ready() { compose.waitUntil(10000) { app.realtime.state.value.session?.fresh==true && !model.state.value.busy };compose.waitForIdle() }
     private fun awaitText(text:String) { compose.waitUntil(15000) { compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() } }
     private fun request(path:String,body:String?=null):String = (URL(server+path).openConnection() as HttpURLConnection).run {
         connectTimeout=5000;readTimeout=5000

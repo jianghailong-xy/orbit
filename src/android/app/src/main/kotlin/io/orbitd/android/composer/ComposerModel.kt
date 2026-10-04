@@ -139,7 +139,6 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                 val shell = raw.startsWith("!")
                 val content = if (shell) raw.drop(1).trim() else raw
                 if (content.isEmpty() && (shell || draft.attachments.isEmpty())) return@launch
-                check(!shell || draft.attachments.isEmpty()) { "Remove attachments before running a shell command." }
                 val id = UUID.randomUUID().toString()
                 val body = buildJsonObject {
                     if (endpoint in setOf("resume", "create")) draft.resumeConfig.filterKeys { it != "account" }.forEach { (k, v) -> put(k, v) }
