@@ -16,6 +16,12 @@ import { taskLanding, readLandingBranches } from './project-criterion-landing';
 import { LIVE_PROMOTION_STATES } from './project-promotion';
 import type { PrismaService } from '../prisma/prisma.service';
 
+/** Nest token for the post-commit delivery edge, kept structural to avoid a service import cycle. */
+export const PROJECT_OPEN_ITEM_DELIVERY = 'PROJECT_OPEN_ITEM_DELIVERY';
+export interface ProjectOpenItemDelivery {
+  deliverForTasks(taskIds: ReadonlyArray<string | null | undefined>): Promise<void>;
+}
+
 /**
  * Exception items: what a project owes somebody a decision about
  * (`docs/project-integration-line-contract.md` §4).
@@ -33,7 +39,9 @@ import type { PrismaService } from '../prisma/prisma.service';
 
 /** What an item is about (§4.2), and a coordinator's request to start its project
  *  (`START_REQUEST`, `project-start-request.ts`; migration 0333) or to have it recorded done
- *  (`DONE_REQUEST`, `project-done-request.ts`; migration 0345). */
+ *  (`DONE_REQUEST`, `project-done-request.ts`; migration 0345). `DELIVERY_REVIEW` (0375) is a
+ *  finished delivery whose landing somebody has to decide — files outside its declaration, or a
+ *  branch git refused — put to the coordinator first. */
 export const OPEN_ITEM_KINDS = [
   'INTEGRATION_CONFLICT',
   'INTEGRATION_CHECK_FAILED',
@@ -44,6 +52,7 @@ export const OPEN_ITEM_KINDS = [
   'FUSE_PAUSED',
   'START_REQUEST',
   'DONE_REQUEST',
+  'DELIVERY_REVIEW',
 ] as const;
 export type OpenItemKind = (typeof OPEN_ITEM_KINDS)[number];
 
@@ -511,6 +520,11 @@ export function openItemOwed(alias: string): Prisma.Sql {
          WHERE owed_task."id" = ${item}."task_id"
            AND owed_task."status" <> 'CANCELLED'
            AND owed_task."superseded_by_task_id" IS NULL)
+      WHEN ${item}."task_id" IS NOT NULL AND ${item}."kind" = 'DELIVERY_REVIEW' THEN EXISTS (
+        SELECT 1 FROM "task" owed_task
+         WHERE owed_task."id" = ${item}."task_id"
+           AND owed_task."status" = 'DONE'
+           AND owed_task."superseded_by_task_id" IS NULL)
       ELSE true
     END)`;
 }
@@ -772,6 +786,93 @@ export async function resolveIntegrationItemsOnLanding(
       resolvedBy: 'PLATFORM' satisfies OpenItemResolvedBy,
     },
   });
+}
+
+/** What a finished delivery whose landing somebody has to decide is filed under (0375). */
+export const DELIVERY_REVIEW_KIND = 'DELIVERY_REVIEW' satisfies OpenItemKind;
+
+/** The two readings answered by the bounded task-landing decision. */
+export type DeliveryReviewReason = 'OUTSIDE_DECLARED_SCOPE' | 'MERGE_REFUSED_BY_GIT';
+
+/** A finished delivery the platform could not settle, with the observations shown to its reviewer. */
+export interface DeliveryReview {
+  projectId: string;
+  taskId: string;
+  sessionId: string | null;
+  reason: DeliveryReviewReason;
+  paths: readonly string[];
+  declaredPaths: readonly string[];
+  criterionKey: string | null;
+}
+
+const DELIVERY_REVIEW_TITLE: Readonly<Record<DeliveryReviewReason, string>> = {
+  OUTSIDE_DECLARED_SCOPE: 'Changed files it didn’t declare',
+  MERGE_REFUSED_BY_GIT: 'Git refused to merge it',
+};
+
+/** One open question per task and reading. */
+export function deliveryReviewKey(reason: DeliveryReviewReason, taskId: string): string {
+  return `DR:${reason}:${taskId}`;
+}
+
+/** File a landing decision and assign it using the same coordinator-first rule as integrations. */
+export async function recordDeliveryReview(
+  tx: Prisma.TransactionClient,
+  review: DeliveryReview,
+): Promise<RecordedOpenItem | null> {
+  const task = await tx.task.findUnique({
+    where: { id: review.taskId },
+    select: { ownerId: true, projectId: true, title: true },
+  });
+  if (!task || task.projectId !== review.projectId) return null;
+  const project = await tx.project.findUnique({
+    where: { id: review.projectId },
+    select: {
+      coordinatorEnabled: true,
+      coordinatorSessionId: true,
+      exceptionEscalationSeconds: true,
+      coordinatorSession: { select: SESSION_ENDING_SELECT },
+    },
+  });
+  if (!project) return null;
+
+  const coordinator = project.coordinatorEnabled && project.coordinatorSessionId
+    ? project.coordinatorSession
+    : null;
+  const [assignee, assigneeReason]: [OpenItemAssignee, OpenItemAssigneeReason] =
+    !coordinator ? ['OWNER', 'NO_COORDINATOR']
+      : conversationIsOver(coordinator) ? ['OWNER', 'COORDINATOR_ENDED']
+        : ['COORDINATOR', 'DEFAULT'];
+  const now = new Date();
+  const [created] = await tx.projectOpenItem.createManyAndReturn({
+    data: [{
+      projectId: review.projectId,
+      ownerId: task.ownerId,
+      kind: DELIVERY_REVIEW_KIND,
+      state: 'OPEN' satisfies OpenItemState,
+      assignee,
+      assigneeReason,
+      taskId: review.taskId,
+      sessionId: review.sessionId,
+      dedupeKey: deliveryReviewKey(review.reason, review.taskId),
+      title: `${DELIVERY_REVIEW_TITLE[review.reason]}: ${task.title}`,
+      payload: {
+        reason: review.reason,
+        paths: [...review.paths],
+        declaredPaths: [...review.declaredPaths],
+        criterionKey: review.criterionKey,
+      },
+      waitingSince: now,
+      assignedAt: now,
+      escalateAt: assignee === 'COORDINATOR'
+        ? new Date(now.getTime() + project.exceptionEscalationSeconds * 1_000)
+        : null,
+    }],
+    skipDuplicates: true,
+    select: { id: true },
+  });
+  if (!created) return null;
+  return { itemId: created.id, projectId: review.projectId, taskId: review.taskId, assignee };
 }
 
 /** What the coordinator's rerun of a failure carries onto the items it is handling (§4.7 H1). */
@@ -1265,23 +1366,23 @@ export function openItemFacts(
   payload: unknown,
   task: { id: string; title: string } | null,
 ): OpenItemFacts | null {
-  if (!(INTEGRATION_ITEM_KINDS as readonly string[]).includes(kind) && kind !== 'TASK_FAILED') {
+  if (!(INTEGRATION_ITEM_KINDS as readonly string[]).includes(kind) && kind !== 'TASK_FAILED'
+      && kind !== DELIVERY_REVIEW_KIND) {
     return null;
   }
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
-  const row = payload as IntegrationItemPayload & {
+  const row = payload as IntegrationItemPayload & DeliveryReviewPayload & {
     how?: string;
     exitCode?: number;
     expectedExitCode?: number;
     chain?: { failuresInChain?: number; limit?: number };
   };
+  const review = kind === DELIVERY_REVIEW_KIND ? deliveryReviewOf(row) : null;
   return {
     task,
     targetRef: filled(row.targetRef),
     targetSha: filled(row.targetSha),
-    files: Array.isArray(row.files)
-      ? row.files.filter((file): file is string => typeof file === 'string' && file !== '')
-      : [],
+    files: review ? review.paths : paths(row.files),
     nothingLanded: row.nothingLanded === true,
     check: checkResult(row.check),
     branchUnchanged: row.branchUnchanged === true,
@@ -1295,11 +1396,34 @@ export function openItemFacts(
           limit: typeof row.chain?.limit === 'number' ? row.chain.limit : TASK_FAILURE_CHAIN_LIMIT,
         }
       : null,
+    review: review ? { reason: review.reason, declaredPaths: review.declaredPaths } : null,
   };
 }
 
 function filled(value: unknown): string | null {
   return typeof value === 'string' && value !== '' ? value : null;
+}
+
+function paths(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((file): file is string => typeof file === 'string' && file !== '')
+    : [];
+}
+
+interface DeliveryReviewPayload {
+  reason?: string;
+  paths?: unknown;
+  declaredPaths?: unknown;
+  criterionKey?: string | null;
+}
+
+function deliveryReviewOf(row: DeliveryReviewPayload): {
+  reason: DeliveryReviewReason;
+  paths: string[];
+  declaredPaths: string[];
+} | null {
+  if (row.reason !== 'OUTSIDE_DECLARED_SCOPE' && row.reason !== 'MERGE_REFUSED_BY_GIT') return null;
+  return { reason: row.reason, paths: paths(row.paths), declaredPaths: paths(row.declaredPaths) };
 }
 
 /** The check that disagreed, complete enough to draw: a payload that names no command is not one. */
@@ -1371,6 +1495,9 @@ export function openItemMessage(item: OpenItemMessageSource): string {
           + `${handling('重跑检查', '检查通过了')}你不用回报。${handClose}\n`)
       + `\n${notice}`;
   }
+  if (item.kind === DELIVERY_REVIEW_KIND && item.taskId) {
+    return deliveryReviewMessage(item, projectId, payload, notice);
+  }
   if (item.kind !== 'TASK_FAILED' || !item.taskId) {
     return `【例外待办】${item.title}\n\n`
       + `项目 ${projectId} 有一条需要你处理的例外。待办编号 ${uuidToBase62(item.id)}。\n\n`
@@ -1395,6 +1522,78 @@ export function openItemMessage(item: OpenItemMessageSource): string {
     + `失败原因先用 task_get（taskId 传 ${taskId}）读任务评论与它的会话，不要照着这条消息猜。\n`
     + `任务重新跑起来、被取代、被取消或完成之后，这条待办由平台自己关闭，你不用回报。`
     + `${handClose}\n\n`
+    + notice;
+}
+
+const MAX_REVIEW_PATHS_IN_MESSAGE = 40;
+
+/** The list-card summary for a delivery review. */
+export function deliveryReviewDetailLine(payload: unknown): string {
+  const review = deliveryReviewOf((payload ?? {}) as DeliveryReviewPayload);
+  if (!review) return '';
+  const count = review.paths.length;
+  const files = `${count} file${count === 1 ? '' : 's'}`;
+  const first = review.paths[0];
+  const rest = count > 1 ? ` · +${count - 1}` : '';
+  const named = first ? ` · ${first}${rest}` : '';
+  return review.reason === 'MERGE_REFUSED_BY_GIT'
+    ? `Git refused ${files}${named}`
+    : `${files} outside its declaration${named}`;
+}
+
+/** Explain the mechanical observation and the bounded coordinator choices. */
+function deliveryReviewMessage(
+  item: OpenItemMessageSource,
+  projectId: string,
+  payload: unknown,
+  notice: string,
+): string {
+  const review = deliveryReviewOf((payload ?? {}) as DeliveryReviewPayload);
+  const taskId = uuidToBase62(item.taskId!);
+  const itemId = uuidToBase62(item.id);
+  const listed = (label: string, all: readonly string[]): string => {
+    if (all.length === 0) return `${label}：无\n`;
+    const shown = all.slice(0, MAX_REVIEW_PATHS_IN_MESSAGE).map((file) => `- ${file}`).join('\n');
+    const more = all.length > MAX_REVIEW_PATHS_IN_MESSAGE
+      ? `\n- ……另有 ${all.length - MAX_REVIEW_PATHS_IN_MESSAGE} 个`
+      : '';
+    return `${label}（${all.length} 个）：\n${shown}${more}\n`;
+  };
+  const resolve = `open_item_resolve（projectId 传 ${projectId}，itemId 传 ${itemId}）`;
+  const retry = `integration_retry（projectId 传 ${projectId}，taskId 传 ${taskId}，`
+    + 'reason 写明这次为什么会不同）';
+  const conflict = review?.reason === 'MERGE_REFUSED_BY_GIT';
+  const observed = conflict
+    ? `项目 ${projectId} 的任务 ${taskId} 有一条合并回执说 git 拒绝了合并。\n`
+      + listed('git 报告冲突的文件', review?.paths ?? [])
+    : `项目 ${projectId} 的任务 ${taskId} 的交付改了它自己的声明里没有提到的文件。`
+      + '这是一条机械的范围告警：平台只拿任务标题、描述和验收标准里写到的路径，去比这次交付实际改动的'
+      + '文件，不判断这些改动对不对。\n'
+      + listed('声明里写到的路径', review?.declaredPaths ?? [])
+      + listed('声明之外改动的文件', review?.paths ?? []);
+  const answers = conflict
+    ? [
+        `退回：task_comment 写清冲突在哪，再 task_reopen（taskId 传 ${taskId}），让它在任务分支上解决；`,
+        '取代：task_update 置 CANCELLED，再 task_create 带 supersedesTaskId，另起一个能合进去的任务；',
+        `已经手工解决并合入：用 merge_receipt 记下那次合并（成果落地后这条待办自己关闭），或用 ${resolve} 写明你是怎么处理的；`,
+        '不要原样重跑：同样的提交再合一次还会冲突，integration_retry 也不接受冲突。',
+      ]
+    : [
+        `接受范围：这些文件属于这份交付该做的事——用 ${resolve} 写明你的判断，理由会留在待办上。接受只记下判断、本身不合并；`,
+        `退回：交付里有不该改的部分——task_comment 写清要撤回或拆出的改动，再 task_reopen（taskId 传 ${taskId}）让它按原任务重做；`,
+        '取代：任务的范围本身就写错了——task_update 置 CANCELLED，再 task_create 带 supersedesTaskId，新任务把要改的路径写进声明；',
+        `重跑落地：交付没问题，是落地检查失败、超时或集成出错——用 ${retry} 重排一次落地；冲突不能重跑。`,
+      ];
+  return `【例外待办】${item.title}\n\n`
+    + `${observed}\n`
+    + '这个项目开着 Automatic：这份交付的落地去留由你判，不先交给账号所有者。'
+    + `先读任务的声明（task_get，taskId 传 ${taskId}）、它服务的那条判据（project_get 的 `
+    + 'acceptanceCriteriaItems）和它实际的改动，再选一条：\n'
+    + `${answers.map((line) => `- ${line}`).join('\n')}\n`
+    + '任务被退回、取消或被取代之后，这条待办由平台自己关闭；这条会话停着不处理超过项目的 '
+    + 'exceptionEscalationSeconds，它会交给账号所有者。\n'
+    + '这不是验收标准的问题，不要为它 ask_owner：改验收标准、确认标准集仍然只有账号所有者能做；'
+    + '交付声称某条判据不适用、或判据在它开工之后被改过，那两种情况是账号所有者的 blocker。\n\n'
     + notice;
 }
 
@@ -1457,7 +1656,11 @@ export async function readOpenItemDeliveryCard(
     kind: item.kind as OpenItemKind,
     title: item.title,
     task: task ? { id: task.id, title: task.title, sessionId: item.sessionId } : null,
-    files: item.kind === 'INTEGRATION_CONFLICT' ? payload.files ?? [] : [],
+    files: item.kind === 'INTEGRATION_CONFLICT'
+      ? payload.files ?? []
+      : item.kind === DELIVERY_REVIEW_KIND
+        ? deliveryReviewOf(payload as DeliveryReviewPayload)?.paths ?? []
+        : [],
     targetRef: payload.targetRef ?? null,
     check: payload.check?.name
       ? {

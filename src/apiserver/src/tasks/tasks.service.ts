@@ -2207,8 +2207,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     });
     // A delivery that could not be made says nothing about whether this completion is one somebody
     // has to look at, and reading a logged failure as "stopped" would let a transient conflict
-    // hold a project's next task. So only a delivery that ANSWERED with a blocker stops anything.
-    return delivered.some((delivery) => !!delivery.blockerKind);
+    // hold a project's next task. So only a delivery that ANSWERED with a question stops anything:
+    // an owner blocker or a coordinator-first delivery review.
+    return delivered.some((delivery) => !!delivery.blockerKind || !!delivery.review);
   }
 
   /**

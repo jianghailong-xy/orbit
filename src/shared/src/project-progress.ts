@@ -236,7 +236,8 @@ export interface ProjectIntegrationBuckets {
 /**
  * What opened an exception item, as §4.2's closed set spells it — and `START_REQUEST`, a
  * coordinator asking its owner to start the project (`project_request_start`, `project-start.ts`),
- * and `DONE_REQUEST`, one asking its owner to record the project done (`project-done.ts`).
+ * and `DONE_REQUEST`, one asking its owner to record the project done (`project-done.ts`), plus
+ * `DELIVERY_REVIEW`, a finished delivery whose landing needs a bounded decision.
  * The set is closed in the database too (`project_open_item_kind_chk`): a new kind is a migration.
  */
 export type OpenItemKind =
@@ -248,10 +249,11 @@ export type OpenItemKind =
   | 'COORDINATOR_QUESTION'
   | 'FUSE_PAUSED'
   | 'START_REQUEST'
-  | 'DONE_REQUEST';
+  | 'DONE_REQUEST'
+  | 'DELIVERY_REVIEW';
 
 /**
- * The kinds a project's coordinator can be handling (§7.1 V1/V2): `OpenItemKind` minus the four
+ * The kinds a project's coordinator can be handling (§7.1 V1/V2): `OpenItemKind` minus the owner-only
  * that are the owner's from birth.
  *
  * A merge approval, a question to the owner, a pause and a request to start are asked OF the owner
@@ -269,6 +271,7 @@ export const COORDINATOR_LEAD_KINDS = [
   'INTEGRATION_CHECK_FAILED',
   'INTEGRATION_ERROR',
   'TASK_FAILED',
+  'DELIVERY_REVIEW',
 ] as const;
 export type CoordinatorLeadKind = (typeof COORDINATOR_LEAD_KINDS)[number];
 
@@ -346,7 +349,7 @@ export interface OpenItemFacts {
   /** The branch an integration was moving work into, and the tip it was moving (INTEGRATION_*). */
   targetRef: string | null;
   targetSha: string | null;
-  /** The paths a conflicting merge could not reconcile (INTEGRATION_CONFLICT). */
+  /** The paths a conflicting merge could not reconcile, or a delivery review is about. */
   files: string[];
   /** Whether the target branch is where it was — the first thing a reader asks a conflict. */
   nothingLanded: boolean;
@@ -366,6 +369,11 @@ export interface OpenItemFacts {
      *  (§4.5): the last one is the owner's rather than the coordinator's. */
     attempt: number;
     limit: number;
+  } | null;
+  /** The landing question and the declaration used for a DELIVERY_REVIEW item. */
+  review?: {
+    reason: 'OUTSIDE_DECLARED_SCOPE' | 'MERGE_REFUSED_BY_GIT';
+    declaredPaths: string[];
   } | null;
 }
 
