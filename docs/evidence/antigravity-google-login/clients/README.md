@@ -1,8 +1,16 @@
 # Antigravity Google 登录：web 与 macOS/iOS 客户端证据
 
 任务 `34ZogkzPnQ44ODj72jrYb`，对应项目验收条目 2（`4q7GDYg6GzChkJE0bfhFGV`）。
-分支：`orbit/web-macos-ios-antigravity-google-683266`。
+当前复验分支：`orbit/web-macos-ios-antigravity-google-54a1c0`。
 控制面契约来自第 3 步提交 `7cd0d809be5052ef1eadd2738a2217403767eeb9`，已以 `8725dd57d` 落在项目线上。
+
+## 当前执行会话复核
+
+本轮从项目基线 `80e7ad8fd` 复核既有实现，补回上一轮 `db37c8031` 的 workspace key 与失效 Google 登录兼容、旧 runner 升级提示、macOS env key 行的登录平台限制和缺 CLI 的状态优先级。另同步 web runner 页的旧 runner 行、行内提示与原生引擎详情页状态，并补充首次登录和重新登录粘贴授权码的提交测试。没有重放旧分支的上游历史，原控制面与 runner 改动仍保留。
+
+本轮 Node 26 全量 web 验收、最终生产构建、当前分支 `client.yml` 链接与完整日志由本任务会话的最终证据信封记录。首次 web 全量发现本轮行内提示误用页脚 `.rd-hint` 类，导致 `RunnerDetailPage.layout.test.tsx` 的页脚检查失败；已改用既有 `.re-panel-hint` 并重新运行全量，未作为 main 既有失败豁免。
+
+OrbitKit Swift 6.1 全量工具行 `bgj_3b6ea6f2b5d2`：退出码 0，2783 用例、5 个默认跳过的性能基线、0 失败，Antigravity 专项 9 项均实际执行并通过。生产路由的 1280px / 443px 各 8 场景与两张总览已重新生成，保留全部原图；选择器截图等待入场动画结束，取证检查浏览器异常与横向溢出。原图及原生测试日志通过 Orbit runner 附件接口保存，附件回执与最终 CI 的分支 / HEAD / job / step 状态由本任务会话提交。
 
 ## 2026-10-04 集成冲突后的复验
 
@@ -39,7 +47,7 @@
 
 ## 原生同源数据证明
 
-`AntigravityGoogleClientTests.swift` 的 6 个测试读取此目录 `fixtures.json`，与 web 测试、截图共用脱敏控制面数据。覆盖 Google 身份、weekly/5h 剩余量（72%/18%）与重置时间、零额度、未知/失效认证、Linux/macOS/旧 runner 登录入口、选择器、两种 API key 路径、`awaiting_code` DTO 和 SwiftUI 接线。macOS 与 iOS 共享这些 OrbitKit / OrbitApp 源码。该测试在最终全量中实际执行并通过；不以语法检查代替 SwiftUI 编译。
+`AntigravityGoogleClientTests.swift` 的 9 个测试使用此目录 `fixtures.json`，与 web 测试、截图共用脱敏控制面数据。覆盖 Google 身份、weekly/5h 剩余量（72%/18%）与重置时间、零额度、未知/失效认证、Linux/macOS/旧 runner 登录入口、选择器、两种 API key 路径、`awaiting_code` DTO 和 SwiftUI 接线。macOS 与 iOS 共享这些 OrbitKit / OrbitApp 源码。该测试在最终全量中实际执行并通过；不以语法检查代替 SwiftUI 编译。
 
 ## 既有失败的复验与同步
 

@@ -107,7 +107,7 @@ private struct RunnerEngineContent: View {
             if health?.auth == "yes" {
                 Text(health?.authSource == "google" ? "Google account" : "env key · runs on your Gemini key")
             }
-            if let status = health.flatMap({ RunnerPageFormat.engineStatus($0) }), health?.auth != "yes" {
+            if let status = health.flatMap({ RunnerPageFormat.engineStatus($0, runner: runner) }), health?.auth != "yes" {
                 Text(status.text).foregroundStyle(RunnerInk.status(status.tone))
             }
             ForEach(RunnerPageFormat.engineWindows(runner, engine: engine)) { row in

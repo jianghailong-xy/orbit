@@ -315,6 +315,10 @@ struct RunnerEngineRow: View {
                         if RunnerPageFormat.antigravityCanSignIn(runner) {
                             RunnerCapsule(enabled: !offline) { Text(health.auth == "yes" && health.authSource == "google" ? "Re-sign in" : "Sign in with Google") }
                             GoogleSignInTermsView()
+                        } else if let hint = EngineAuth.antigravityLoginHint(runner.antigravity?.googleLogin) {
+                            Text(hint)
+                                .font(.orbitLabel)
+                                .foregroundStyle(Color.secondary)
                         }
                     } else if RunnerPageFormat.needsSignIn(health) {
                         RunnerCapsule(enabled: !offline) { Text(RunnerPageCopy.RUNNER_SIGN_IN) }

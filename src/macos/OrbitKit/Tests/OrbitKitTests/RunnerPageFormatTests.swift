@@ -204,10 +204,10 @@ final class RunnerPageFormatTests: XCTestCase {
     // MARK: Engines
 
     func testEnginesAreListedInThePagesOrder() throws {
-        XCTAssertEqual(RunnerPageFormat.engines(try wikova()).map(\.engine), ["claude", "codex", "kimi", "opencode"])
+        XCTAssertEqual(RunnerPageFormat.engines(try wikova()).map(\.engine), ["claude", "codex", "kimi", "opencode", "antigravity"])
         let extra = try runner(Self.macMiniJSON, ["engines": [["engine": "gemini", "installed": true],
                                                              ["engine": "codex", "installed": false]]])
-        XCTAssertEqual(RunnerPageFormat.engines(extra).map(\.engine), ["codex", "gemini"],
+        XCTAssertEqual(RunnerPageFormat.engines(extra).map(\.engine), ["codex", "antigravity", "gemini"],
                        "an engine the page doesn't know yet comes after the ones it does")
         XCTAssertEqual(RunnerPageFormat.engineName("claude"), "Claude Code")
         XCTAssertEqual(RunnerPageFormat.engineName("kimi"), "Kimi Code")
