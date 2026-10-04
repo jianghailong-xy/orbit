@@ -56,6 +56,8 @@ main 的新增单测原样保留，另加入没有 mouse boundary event 时关�
 
 `*-raw/` 保存每轮原始报告与失败 trace/error-context，采集器不覆盖旧目录。`checks/` 保存 argv、开始/结束提交、时间、退出码和原始stdout；[tool-call-refs.json](checks/tool-call-refs.json)引用本任务会话实际 CommandExecution 行。参考命令的 cwd 是任务树，但真实测试源位于 `/tmp/...-reference`，以各 [main](main-reference-source.json)/[project](project-reference-source.json)/[mechanical](mechanical-reference-source.json) 清单中的源码哈希为准。main参考来自58c，最终静态参考来自2a；审计断言58c→d22及2a→d6的整个Web目录与锁文件均无差异，因此保留这些原始对照，同时在最终d6组合重新执行完整规定矩阵。
 
+归档的浏览器error-context、命令输出、补丁和复现源码含原生尾空格/末尾空行，因此全证据`git diff --check`会报告格式提示；[记录](raw-format-preservation.json)列出原件路径。保留原始字节，不以格式化改写诊断或源码哈希；生产源码及正式测试的差异检查通过。
+
 ## 截图与计算样式处置
 
 [审查脚本](audit.py)读取全部RGBA像素，不修改、覆盖、缩放、遮蔽原图，不设置截图容差。双方固定提交各24组静态通知分别与最终组合比较，字体、颜色、渐变、边框、阴影、圆角、尺寸及坐标按原样JSON核对。原P0的252张图及全部P2.3历史证据同时按项目tip逐字节验证。
