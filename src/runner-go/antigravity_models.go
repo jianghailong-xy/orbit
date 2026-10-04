@@ -193,10 +193,52 @@ func antigravityCatalogModels() []ModelInfo {
 // no real key — and a runner has none of its own anyway: keys arrive per session, with a provider.
 const antigravityModelCatalogPlaceholderKey = "orbit-model-catalog"
 
-// fetchAntigravityModelCatalog runs `agy models` in a runner-owned Gemini directory, never the
+// fetchAntigravityModelCatalog runs `agy models`. On a runner that keeps a Google sign-in it is the
+// account's list (contract §16.7), which adds the Claude and GPT-OSS models a sign-in brings to
+// Gemini's; when the sign-in cannot give one — refused, or no network — the API-key list stands in,
+// which every Gemini provider's sessions still run on.
+func fetchAntigravityModelCatalog(ctx context.Context) ([]ModelInfo, error) {
+	if antigravityGoogleSignInSaved() {
+		models, err := fetchAntigravityGoogleModelCatalog(ctx)
+		if err == nil {
+			return models, nil
+		}
+		logln("antigravity: the Google account's model list is unavailable, so the API-key list is reported:", err)
+	}
+	return fetchAntigravityAPIModelCatalog(ctx)
+}
+
+// fetchAntigravityGoogleModelCatalog is `agy models` on the runner's Google sign-in, through the entry
+// its login and status probe use (antigravityGoogleCommand).
+func fetchAntigravityGoogleModelCatalog(ctx context.Context) ([]ModelInfo, error) {
+	cctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	cmd, cleanup, err := antigravityGoogleCommand(cctx, agyExecutable, nil, "models")
+	if err != nil {
+		return nil, err
+	}
+	defer cleanup()
+	// A real pipe: on /dev/null agy waits for a person to sign in instead of answering (§16.5).
+	cmd.Stdin = strings.NewReader("")
+	out, err := cmd.Output()
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && len(exitErr.Stderr) > 0 {
+			return nil, fmt.Errorf("agy models: %w: %s", err, lastLine(string(exitErr.Stderr)))
+		}
+		return nil, fmt.Errorf("agy models: %w", err)
+	}
+	models := parseAntigravityModels(out)
+	if len(models) == 0 {
+		return nil, fmt.Errorf("agy models listed no models")
+	}
+	return models, nil
+}
+
+// fetchAntigravityAPIModelCatalog runs `agy models` in a runner-owned Gemini directory, never the
 // user's ~/.gemini: the directory needs `modelProvider: gemini`, or agy asks for a Google sign-in
 // instead of listing anything.
-func fetchAntigravityModelCatalog(ctx context.Context) ([]ModelInfo, error) {
+func fetchAntigravityAPIModelCatalog(ctx context.Context) ([]ModelInfo, error) {
 	geminiDir, err := prepareAntigravityCatalogDir()
 	if err != nil {
 		return nil, fmt.Errorf("prepare the agy catalog directory: %w", err)

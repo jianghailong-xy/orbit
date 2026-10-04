@@ -559,8 +559,9 @@ type agyHookAction struct {
 
 // installAntigravityApprovalGate writes Orbit's hooks and the policy they read into the session's
 // Gemini directory, and returns once agy itself has confirmed it loads them — or an error, on which
-// the session must not start.
-func installAntigravityApprovalGate(ctx context.Context, job *ClaimedSession, execDir, geminiDir, orbitExe string) (*agyApprovalGate, error) {
+// the session must not start. google is a session on the runner's Google sign-in, which agy checks
+// before it lists anything.
+func installAntigravityApprovalGate(ctx context.Context, job *ClaimedSession, execDir, geminiDir, orbitExe string, google bool) (*agyApprovalGate, error) {
 	exe := orbitCLIPermissionExecutable(orbitExe)
 	if exe == "" {
 		return nil, errors.New("Orbit's approval hook cannot be installed: the runner's own executable path is not usable in a hook command")
@@ -627,7 +628,7 @@ func installAntigravityApprovalGate(ctx context.Context, job *ClaimedSession, ex
 	if err := os.WriteFile(hooksPath, hooksBody, 0o600); err != nil {
 		return nil, fmt.Errorf("write hooks.json: %w", err)
 	}
-	if err := verifyAntigravityApprovalGate(ctx, job, execDir, geminiDir, hooksPath, want); err != nil {
+	if err := verifyAntigravityApprovalGate(ctx, job, execDir, geminiDir, hooksPath, want, google); err != nil {
 		return nil, err
 	}
 	return &agyApprovalGate{hooksPath: hooksPath, hooks: hooksBody, beatPath: beatPath, token: token, execDir: execDir, responses: map[int]bool{}}, nil
@@ -647,23 +648,41 @@ func agyHeartbeatToken() (string, error) {
 // agy failing, a hook missing or changed, another hook beside them, a repository's .agents/hooks.json —
 // is a refusal: a hook nobody reviewed could answer "allow" for Orbit, and a missing one leaves the
 // flag in charge alone.
-func verifyAntigravityApprovalGate(ctx context.Context, job *ClaimedSession, execDir, geminiDir, hooksPath string, want []agyHookAction) error {
+func verifyAntigravityApprovalGate(ctx context.Context, job *ClaimedSession, execDir, geminiDir, hooksPath string, want []agyHookAction, google bool) error {
 	cctx, cancel := context.WithTimeout(ctx, agyHooksCheckTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(cctx, agyExecutable, "--gemini_dir="+geminiDir, "--print=/hooks", "--output-format", "json")
-	cmd.Dir = execDir
-	cmd.Env = antigravityEnv(job, execDir)
-	// Listing hooks reads no model, but agy will not start in API-key mode without a key: a session
-	// that has none fails on its own first start, with agy's own words, rather than here.
-	if strings.TrimSpace(envValue(cmd.Env, "GEMINI_API_KEY")) == "" {
-		cmd.Env = envWithValue(cmd.Env, "GEMINI_API_KEY", antigravityModelCatalogPlaceholderKey)
+	args := []string{"--gemini_dir=" + geminiDir, "--print=/hooks", "--output-format", "json"}
+	env := antigravityEnv(job, execDir)
+	var stdin io.Reader
+	if google {
+		// On the Google sign-in agy checks it before it lists anything, in the environment and with the
+		// log the session's own process gets (startAgyProcess). And from a real pipe: on /dev/null agy
+		// waits for a person to sign in instead of refusing at once (contract §16.5).
+		args = append(args, "--log-file="+antigravityGoogleLogFile(geminiDir))
+		env = antigravityGoogleEnv(env, geminiDir)
+		stdin = strings.NewReader("")
+	} else if strings.TrimSpace(envValue(env, "GEMINI_API_KEY")) == "" {
+		// Listing hooks reads no model, but agy will not start in API-key mode without a key: a session
+		// that has none fails on its own first start, with agy's own words, rather than here.
+		env = envWithValue(env, "GEMINI_API_KEY", antigravityModelCatalogPlaceholderKey)
 	}
-	cmd.Stdin = nil
+	cmd := exec.CommandContext(cctx, agyExecutable, args...)
+	cmd.Dir = execDir
+	cmd.Env = env
+	cmd.Stdin = stdin
 	cmd.WaitDelay = 5 * time.Second
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
+		if google && cctx.Err() == nil && cmd.ProcessState != nil {
+			switch classifyAgyAuthEnd(cmd.ProcessState.ExitCode(), false, stderr.String(), readAgyLog(antigravityGoogleLogFile(geminiDir))) {
+			case agyAuthEndRefused:
+				return errAgySignInRefused
+			case agyAuthEndNetwork:
+				return errAgySignInUnchecked
+			}
+		}
 		detail := strings.TrimSpace(lastLine(stderr.String()))
 		if detail == "" {
 			detail = err.Error()

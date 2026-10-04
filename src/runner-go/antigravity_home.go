@@ -8,9 +8,10 @@ package main
 // names its own, under the session's scratch directory, so nothing Orbit configures ever lands in
 // the user's ~/.gemini, and HOME stays the user's: git, ssh and the caches an agent's commands use
 // keep working. Unlike the Kimi overlay (kimi_home.go) nothing is borrowed back from the real
-// directory. API-key mode needs no sign-in state, and what the user set up for their own agy —
-// rules, skills, MCP servers — is theirs, not the agent's: the agent's configuration is the whole
-// of what the session sees.
+// directory. API-key mode needs no sign-in state, and Google mode brings the runner's own (a copy of
+// its token, antigravity_google_session.go); what the user set up for their own agy — rules, skills,
+// MCP servers, a sign-in — is theirs, not the agent's: the agent's configuration is the whole of what
+// the session sees.
 //
 // The directory outlives each agy process. agy keeps the conversation in it
 // (antigravity-cli/conversations/<id>.db, brain/<id>/), and `--conversation <id>` finds a
@@ -19,7 +20,8 @@ package main
 //
 // Layout (what Orbit writes; agy adds the rest):
 //
-//	<dir>/antigravity-cli/settings.json   modelProvider, telemetry, permission rules
+//	<dir>/antigravity-cli/settings.json   modelProvider or useG1Credits, telemetry, permission rules
+//	<dir>/antigravity-cli/antigravity-oauth-token   Google mode: the runner's sign-in, while an agy runs on it
 //	<dir>/config/mcp_config.json          the MCP servers: Orbit's own and the agent's
 //	<dir>/GEMINI.md                       the agent's instructions, which agy loads as user rules
 //	<dir>/antigravity-cli/bin -> <runner>/antigravity/bin
@@ -43,8 +45,9 @@ func antigravityGeminiDir(scratchDir string) (string, error) {
 
 // prepareAntigravityGeminiDir writes what Orbit owns in a session's Gemini directory, from the
 // session as it is now: every spawn rewrites it, so a reload's new permission mode or rules reach
-// the next process. What agy wrote there itself is left alone.
-func prepareAntigravityGeminiDir(scratchDir string, job *ClaimedSession, orbitExe string) (string, error) {
+// the next process. What agy wrote there itself is left alone. google is a spawn on the runner's
+// Google sign-in, which gets its copy of it here.
+func prepareAntigravityGeminiDir(scratchDir string, job *ClaimedSession, orbitExe string, google bool) (string, error) {
 	dir, err := antigravityGeminiDir(scratchDir)
 	if err != nil {
 		return "", err
@@ -60,7 +63,7 @@ func prepareAntigravityGeminiDir(scratchDir string, job *ClaimedSession, orbitEx
 			return "", err
 		}
 	}
-	if err := writeAntigravityJSON(filepath.Join(dir, "antigravity-cli", "settings.json"), antigravitySettings(job, orbitExe)); err != nil {
+	if err := writeAntigravityJSON(filepath.Join(dir, "antigravity-cli", "settings.json"), antigravitySettings(job, orbitExe, google)); err != nil {
 		return "", fmt.Errorf("write settings.json: %w", err)
 	}
 	mcp := map[string]interface{}{"mcpServers": antigravityMCPServers(job.Agent, orbitExe)}
@@ -75,6 +78,16 @@ func prepareAntigravityGeminiDir(scratchDir string, job *ClaimedSession, orbitEx
 	} else if err := os.Remove(rules); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return "", err
 	}
+	// Last, so nothing after it can fail and strand the copy. A copy outlives its agy only when the
+	// runner did not see it exit (a crash, a restart): whatever this spawn runs on, that one goes.
+	if err := removeAntigravityToken(dir); err != nil {
+		return "", fmt.Errorf("remove a leftover Google sign-in copy: %w", err)
+	}
+	if google {
+		if err := placeAntigravityToken(dir); err != nil {
+			return "", fmt.Errorf("copy the runner's Google sign-in into the session: %w", err)
+		}
+	}
 	linkAntigravitySharedBin(dir)
 	return dir, nil
 }
@@ -87,17 +100,21 @@ func writeAntigravityJSON(path string, value interface{}) error {
 	return os.WriteFile(path, append(body, '\n'), 0o600)
 }
 
-// antigravitySettings is the session's settings.json (contract §3.1, §5.1, §7):
+// antigravitySettings is the session's settings.json (contract §3.1, §5.1, §7, §16):
 //
 //   - modelProvider "gemini" is API-key mode. Without it agy wants a Google sign-in, and
-//     GEMINI_API_KEY alone changes nothing.
+//     GEMINI_API_KEY alone changes nothing — which is Google mode (google): no modelProvider, and
+//     useG1Credits false, so a turn spends the account's own quota and never the paid AI credits
+//     beyond it (§16.6).
 //   - enableTelemetry false stops agy's error reports. It is the only switch that does anything,
 //     and it does not stop the usage statistics agy sends regardless (§7.1).
 //   - permissions carries Orbit's rules in agy's grammar.
-func antigravitySettings(job *ClaimedSession, orbitExe string) map[string]interface{} {
-	settings := map[string]interface{}{
-		"modelProvider":   "gemini",
-		"enableTelemetry": false,
+func antigravitySettings(job *ClaimedSession, orbitExe string, google bool) map[string]interface{} {
+	settings := map[string]interface{}{"enableTelemetry": false}
+	if google {
+		settings["useG1Credits"] = false
+	} else {
+		settings["modelProvider"] = "gemini"
 	}
 	allow, deny := antigravityPermissionRules(job, orbitExe)
 	permissions := map[string]interface{}{}
