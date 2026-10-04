@@ -119,4 +119,33 @@ describe('owner project settlement card', () => {
     expect(html).toContain(PROJECT_DONE_COPY.coordinatorIsOnIt);
     expect(html).not.toContain('Ask the coordinator to handle it');
   });
+
+  it('keeps unmet codeless work in Waiting on work instead of treating it as settled', () => {
+    const html = renderToStaticMarkup(
+      <ProjectWhyNotDoneCard
+        project={{
+          ...project,
+          derivedDone: {
+            ...project.derivedDone,
+            done: false,
+            criteria: [{
+              definitionId: 'c2',
+              satisfied: false,
+              landing: 'UNKNOWN' as const,
+              landingReason: 'CODELESS' as const,
+            }],
+            counts: {
+              criteria: 1,
+              met: 0,
+              landed: 0,
+              onMain: 0,
+              byReason: { IN_FLIGHT: 0, ON_PROJECT_BRANCH: 0, NOTHING_TO_LAND: 0, NO_RECEIPT: 0, CODELESS: 1 },
+            },
+          },
+        }}
+      />,
+    );
+    expect(html).toContain(PROJECT_DONE_COPY.waitingOnWork);
+    expect(html).not.toContain(PROJECT_DONE_COPY.thisProjectIsDone);
+  });
 });

@@ -1275,8 +1275,16 @@ export function ProjectWhyNotDoneCard({
 }: ProjectWhyNotDoneCardProps): JSX.Element {
   const criteria = project.derivedDone?.criteria ?? [];
   const byKey = new Map((project.acceptanceCriteriaItems ?? []).map((item) => [item.id, item]));
-  const waiting = criteria.filter((criterion) => criterion.landingReason === 'IN_FLIGHT' || criterion.landingReason === 'ON_PROJECT_BRANCH');
-  const needsCall = criteria.filter((criterion) => criterion.landingReason === 'NO_RECEIPT');
+  // An unmet criterion is still work even when its landing lane says CODELESS or
+  // NOTHING_TO_LAND.  Those two reasons are excluded only once the criterion itself is met: a
+  // zero-commit task is then a harmless "nothing to land" outcome, not an item to hand back as a
+  // fake merge repair.  A satisfied criterion with NO_RECEIPT is the genuine owner judgment lane.
+  const waiting = criteria.filter((criterion) => (
+    !criterion.satisfied
+      || criterion.landingReason === 'IN_FLIGHT'
+      || criterion.landingReason === 'ON_PROJECT_BRANCH'
+  ));
+  const needsCall = criteria.filter((criterion) => criterion.satisfied && criterion.landingReason === 'NO_RECEIPT');
   // An in-flight landing already has an owner in the integration lane. Even when the open-items
   // poll has not caught up, asking the reader to “Ask the coordinator” would be a duplicate door.
   const onlyInFlight = waiting.length > 0 && waiting.every((criterion) => criterion.landingReason === 'IN_FLIGHT');
