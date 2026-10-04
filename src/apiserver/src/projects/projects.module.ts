@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { PushModule } from '../push/push.module';
 import { SessionsModule } from '../sessions/sessions.module';
 import { ProjectsController } from './projects.controller';
+import { ProjectDoneNotYetController } from './project-done-not-yet.controller';
 import { ProjectPromotionController } from './project-promotion.controller';
 import { ProjectPromotionService } from './project-promotion.service';
 import { AttemptBudgetMeterService } from './attempt-budget-meter.service';
@@ -30,7 +31,7 @@ import { ProjectsService } from './projects.service';
     CoordinatorJudgmentModule,
     ProjectAcceptanceModule,
   ],
-  controllers: [ProjectsController, ProjectPromotionController],
+  controllers: [ProjectsController, ProjectPromotionController, ProjectDoneNotYetController],
   providers: [
     ProjectsService,
     ConvergenceLedgerService,
