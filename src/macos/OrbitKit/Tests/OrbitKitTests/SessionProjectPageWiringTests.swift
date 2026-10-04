@@ -248,12 +248,22 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(pin.contains("app.setPinned(coordinator, pinned: !pinned)"))
     }
 
+    func testTheProjectSessionsLoadAvoidsAsyncLets() throws {
+        let app = code(try appSource("AppModel.swift"))
+        let load = try slice(app, from: "func loadProjectSessions(_ address: SessionProjectAddress) async {", to: "\n    }")
+        XCTAssertFalse(load.contains("async let"), "project session reads must avoid async-let teardown")
+        XCTAssertTrue(load.contains("let openRead = Task { try await api.listSessions(view: .open,"))
+        XCTAssertTrue(load.contains("let completedRead = Task { try await api.listSessions(view: .completed,"))
+        XCTAssertTrue(load.contains("defer {\n                openRead.cancel()\n                completedRead.cancel()\n            }"))
+        XCTAssertTrue(load.contains("let rows = try await openRead.value + completedRead.value"))
+    }
+
     func testThePageLoadsOpenAndCompletedAcrossAllWorkspacesAndDeduplicates() throws {
         let app = code(try appSource("AppModel.swift"))
         let load = try slice(app, from: "func loadProjectSessions(_ address: SessionProjectAddress) async {", to: "\n    }")
         XCTAssertTrue(load.contains("api.listSessions(view: .open, projectId: address.projectID)"))
         XCTAssertTrue(load.contains("api.listSessions(view: .completed, projectId: address.projectID)"))
-        XCTAssertTrue(load.contains("let rows = try await open + completed"))
+        XCTAssertTrue(load.contains("let rows = try await openRead.value + completedRead.value"))
         XCTAssertTrue(load.contains("var seen = Set<String>()"))
         XCTAssertTrue(load.contains("seen.insert($0.id).inserted"))
         XCTAssertTrue(load.contains("$0.effectiveLifecycleState != .trash"))
