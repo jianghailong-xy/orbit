@@ -18,6 +18,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
+import io.orbitd.android.cards.SessionCards
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.*
@@ -150,6 +151,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                         }
                     }
                     item(key = "newer") { if (displayedWindow.newerAfter != null) TextButton(enabled = !displayedLoading, onClick = model::newer) { Text("Load newer messages") } }
+                    item(key = "interaction-cards") { SessionCards(openLink) }
                     item(key = "tail") { Spacer(Modifier.height(1.dp).testTag("transcript-tail")) }
                 }
                 if (!follow || state.window.newerAfter != null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {

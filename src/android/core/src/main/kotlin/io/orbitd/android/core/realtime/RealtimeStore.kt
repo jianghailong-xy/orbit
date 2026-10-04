@@ -73,6 +73,14 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
     }
     fun refreshDirectory() { directoryRevision.update { it + 1 } }
     fun refreshSession() { sessionRevision.update { it + 1 } }
+    /** Mutations check the live inputs too: collectors may not yet have withdrawn `fresh`. */
+    fun canAct(handle: SessionHandle, sessionId: String): Boolean {
+        val focus = selection.value
+        val live = state.value
+        return current(handle) && foreground.value && network.value.available &&
+            focus.handle === handle && focus.id == sessionId && live.handle === handle &&
+            live.session?.let { it.id == sessionId && it.fresh && !it.accessDenied && it.snapshot != null } == true
+    }
     /** A reader's REST denial is authority too; invalidate pending snapshots and live content. */
     suspend fun reportReadDenial(handle: SessionHandle, id: String, error: ApiError) {
         require(error.status == 403 || error.status == 404)
