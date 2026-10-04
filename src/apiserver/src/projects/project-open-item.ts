@@ -1270,10 +1270,12 @@ function failureClassLines(payload: IntegrationItemPayload, aboutTask: boolean):
  */
 function landingNextStep(
   projectId: string,
+  itemId: string,
   taskId: string,
   payload: IntegrationItemPayload,
   doors: {
     retryMcp: string;
+    handOverMcp: string;
     taskCommentMcp: string;
     taskReopenMcp: string;
     taskCreateMcp: string;
@@ -1284,20 +1286,24 @@ function landingNextStep(
 ): string {
   const read = `先读这条任务（${doors.taskGetMcp}，taskId 传 ${taskId}，评论与它的会话都在上面）。任务本身已经是 DONE，`
     + `落地失败不改它的状态；${doors.taskStartMcp} 只会再跑一遍任务、开一条新分支，不会重新排这次落地。\n`;
-  const rework = `用 ${doors.taskReopenMcp} 把任务退回返工、另起一个取代它的任务（${doors.taskCreateMcp} 带 supersedesTaskId），`
-    + `或者取消（${doors.taskUpdateMcp} 置 CANCELLED）`;
+  const rework = `用 ${doors.taskReopenMcp} 把任务退回返工，或者取消（${doors.taskUpdateMcp} 置 CANCELLED）`;
+  const repair = `若判断是代码/交付问题，${doors.taskCreateMcp} 新建修复任务，并把 fixesOpenItemId 传 ${itemId}`
+    + '挂到这条待办；这是修复工作，不是改写已经 DONE 的任务。';
+  const handOver = `如果你无法判断或处理，用 ${doors.handOverMcp}（projectId 传 ${projectId}，itemId 传 ${itemId}，note 说明原因）`
+    + '把待办交给账号所有者。';
   if (payload.phase === 'MAIN_SYNC') return read + mainSyncNextStep(payload, doors);
   if (payload.failureClass === 'CONFLICT' || (payload.files?.length ?? 0) > 0) {
     return read
       + `冲突只有改过的分支才能解开：原样重跑会再冲突一次，${doors.retryMcp} 也不接受冲突。`
-      + `${rework}。`;
+      + `${rework}；${repair}\n${handOver}`;
   }
   return read
-    + '先判断红的是谁。是交付本身的问题，就' + `${rework}。`
+    + '先判断红的是谁。是交付本身的问题，就' + `${rework}；${repair}\n`
     + `不是交付的问题——合并检查的基线后来修好了、检查超时、集成机器出错——就用 ${doors.retryMcp}`
     + `（projectId 传 ${projectId}，taskId 传 ${taskId}，reason 写明这次为什么会不同）重排一次落地：`
     + '它入队这项任务的下一代落地，成了就进项目分支、继续往后的合并检查，没成会再开一条待办给你。'
-    + '这类落地去留由你判，不拿去问账号所有者。';
+    + '这类落地去留由你判，不拿去问账号所有者。\n'
+    + handOver;
 }
 
 /**
@@ -1343,8 +1349,9 @@ function mainSyncNextStep(
 function promotionNextStep(
   projectId: string,
   promotionId: string | null,
+  itemId: string,
   payload: IntegrationItemPayload,
-  doors: { retryMcp: string; taskCreateMcp: string },
+  doors: { retryMcp: string; taskCreateMcp: string; askOwnerMcp: string; handOverMcp: string },
 ): string {
   const about = '这条待办身后没有任务：它来自一次晋升（把项目分支合入 main）的作业，那种作业不为任何单个'
     + '任务做事。\n';
@@ -1352,16 +1359,23 @@ function promotionNextStep(
     return about
       + `冲突只有改过的项目分支才能解开：原样重跑会再冲突一次，${doors.retryMcp} 也不接受冲突。`
       + `用 ${doors.taskCreateMcp} 新建一条同步任务，从项目分支 tip 出发把 upstream tip 合进它的源分支，解掉冲突并提交；`
+      + `把 fixesOpenItemId 传 ${itemId} 挂到这条待办；`
       + '那个任务落地后，平台会为新的分支尖端开一个新的候选并重新检查，'
-      + '这个候选和这条待办随之由平台关闭。';
+      + '这个候选和这条待办随之由平台关闭。\n'
+      + `如果这不是你能处理的代码问题，用 ${doors.handOverMcp}（projectId 传 ${projectId}，itemId 传 ${itemId}，note 说明原因）`
+      + '交给账号所有者。';
   }
   const candidate = promotionId ? uuidToBase62(promotionId) : '这个候选的编号';
   const retry = `（projectId 传 ${projectId}，promotionId 传 ${candidate}，reason 写明这次为什么会不同）`;
   return about
-    + '先判断红的是谁。是项目分支上的工作有问题，就另起一个任务修它，它落地后平台会开新的候选。'
-    + `不是工作的问题——合并检查的基线后来修好了、检查超时、集成机器出错——就用 ${doors.retryMcp}`
+    + '先判断红的是谁。是项目分支上的代码问题，就用 ' + `${doors.taskCreateMcp}`
+    + ` 新建修复任务，并把 fixesOpenItemId 传 ${itemId} 挂到这条待办；它落地后平台会开新的候选。\n`
+    + `不是工作的问题——合并检查的基线后来修好了、检查超时（例如 go test 撞上默认 10 分钟时限）、集成机器出错——就用 ${doors.retryMcp}`
     + `${retry}把这个候选的检查重跑一次。检查通过之后，合并照旧由账号所有者在卡上确认，或由 Automatic `
-    + '设置按原来的规则自动合并：这扇门只让候选回到可以合并的状态，不替任何人合并。';
+    + '设置按原来的规则自动合并：这扇门只让候选回到可以合并的状态，不替任何人合并。\n'
+    + `如果需要改合并检查命令、时限或其他只有所有者能决定的取舍，用 ${doors.askOwnerMcp}`
+    + ' 带至少两个选项提问，并在推荐选项里写明理由；如果你处理不了，用 '
+    + `${doors.handOverMcp}（projectId 传 ${projectId}，itemId 传 ${itemId}，note 说明原因）。`;
 }
 
 /**
@@ -1519,12 +1533,14 @@ export function openItemMessage(item: OpenItemMessageSource): string {
       + '这条待办的负责人是你。平台不会自己重试一次没有落地的集成，所以不会有第二次作业自己出现；'
       + '要判断的是下一步。\n'
       + (taskId
-        ? `${landingNextStep(projectId, taskId, payload, doorNames)}\n`
+        ? `${landingNextStep(projectId, uuidToBase62(item.id), taskId, payload, doorNames)}\n`
           + '任务落地、被取消或被取代之后，这条待办由平台自己关闭。'
           + `${handling('重排', '落地了')}你不用回报。${handClose}\n`
-        : `${promotionNextStep(projectId, item.promotionId ?? null, payload, {
+        : `${promotionNextStep(projectId, item.promotionId ?? null, uuidToBase62(item.id), payload, {
           retryMcp: doorNames.retryMcp,
           taskCreateMcp: doorNames.taskCreateMcp,
+          askOwnerMcp: doorNames.askOwnerMcp,
+          handOverMcp: doorNames.handOverMcp,
         })}\n`
           + '这个候选被新的落地取代、被拒绝或已经合并之后，这条待办由平台自己关闭。'
           + `${handling('重跑检查', '检查通过了')}你不用回报。${handClose}\n`)

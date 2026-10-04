@@ -3169,8 +3169,11 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"say why. This is a deliberate decision, not the escalation clock: the item becomes OWNER " +
 				"/ HANDED_OVER, the explanation and this coordinator session stay on the row, and the owner " +
 				"is notified after the compare-and-set commits. Only the conversation coordinating this " +
-				"project may call it; an item that is already closed, already the owner's, or has another " +
-				"door is refused. The note is required and is limited to 2000 characters.",
+				"project may call it; an item that is already closed, already the owner's, or has no hand-over " +
+				"door in the open-item matrix is refused. Use integration_retry for a retryable task landing or promotion " +
+				"check, and ask_owner when the owner must choose; use this door when the coordinator cannot " +
+				"settle the item and needs to hand it over. It does not rerun or close the item. The note is " +
+				"required and is limited to 2000 characters.",
 			"inputSchema": obj(map[string]interface{}{
 				"projectId": map[string]interface{}{
 					"type":        "string",
@@ -3210,7 +3213,10 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"about the failure stay open and " +
 				"read as being handled until that job reports — if it lands or passes they are marked " +
 				"handled in your name with your reason, and if it fails again they are marked superseded " +
-				"by the new item its failure opens. Refused with the reason when the task's landing or the " +
+				"by the new item its failure opens. If the coordinator cannot settle the item, use " +
+				"open_item_hand_over with an explanation; if changing a merge-check command, time limit or " +
+				"another owner-only choice is required, use ask_owner with options. This tool never hands " +
+				"an item to the owner and never answers that choice. Refused with the reason when the task's landing or the " +
 				"candidate is already queued or running, when the failure's item is the account owner's " +
 				"(escalated, or a project that is not Automatic), when the owner has an open blocker on " +
 				"the task, or when the task or candidate is not this project's. Only the conversation the " +

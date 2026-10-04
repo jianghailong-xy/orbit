@@ -15,6 +15,11 @@ export const OPEN_ITEM_DOOR_TODO_TYPES = [
   'INTEGRATION_ERROR',
   'TASK_FAILED',
   'PROMOTION_APPROVAL',
+  'COORDINATOR_QUESTION',
+  'FUSE_PAUSED',
+  'START_REQUEST',
+  'DONE_REQUEST',
+  'DELIVERY_REVIEW',
 ] as const;
 export type OpenItemDoorTodoType = (typeof OPEN_ITEM_DOOR_TODO_TYPES)[number];
 
@@ -24,6 +29,7 @@ export const OPEN_ITEM_DOOR_SOURCE_JOBS = [
   'CHECK_PROMOTION',
   'LAND_PROMOTION',
   'TASK_FAILURE',
+  'DIRECT',
 ] as const;
 export type OpenItemDoorSourceJob = (typeof OPEN_ITEM_DOOR_SOURCE_JOBS)[number];
 
@@ -51,6 +57,7 @@ export const KNOWN_GAP_DESCRIPTIONS: Readonly<Record<OpenItemDoorKnownGap, strin
 export type OpenItemDoorKind = 'MCP' | 'ROUTE';
 export type OpenItemDoorCapability =
   | 'ANSWER'
+  | 'ASK_OWNER'
   | 'CANCEL'
   | 'DECIDE'
   | 'HANDOFF'
@@ -171,6 +178,39 @@ const handOver = (holder: OpenItemDoorAssignee): OpenItemDoor => door(
     implemented: true,
     resolving: false,
   },
+);
+
+/** Ask the account owner only when the next step is genuinely their decision. */
+const askOwner = (holder: OpenItemDoorAssignee): OpenItemDoor => door(
+  holder,
+  'ask-owner',
+  'ask_owner',
+  'MCP',
+  'ASK_OWNER',
+  [],
+  { mcp: 'ask_owner', resolving: false },
+);
+
+/** The owner's press that answers a coordinator's request to start the project. */
+const startProject = (holder: OpenItemDoorAssignee): OpenItemDoor => door(
+  holder,
+  'project-start',
+  'project_start',
+  'ROUTE',
+  'DECIDE',
+  ['APPROVED'],
+  { route: '/projects/:id/start' },
+);
+
+/** The owner's press that records a coordinator's request to finish the project. */
+const finishProject = (holder: OpenItemDoorAssignee): OpenItemDoor => door(
+  holder,
+  'project-done',
+  'project_done',
+  'ROUTE',
+  'DECIDE',
+  ['APPROVED'],
+  { route: '/projects/:id/done' },
 );
 
 /** File concrete repair work against this item. The item deliberately stays open: linking the
@@ -371,6 +411,9 @@ export function sourceJobForOpenItem(input: OpenItemDoorInput): OpenItemDoorSour
     return input.sourceJob as OpenItemDoorSourceJob;
   }
   if (input.kind === 'TASK_FAILED') return 'TASK_FAILURE';
+  if (input.kind === 'COORDINATOR_QUESTION' || input.kind === 'FUSE_PAUSED'
+      || input.kind === 'START_REQUEST' || input.kind === 'DONE_REQUEST') return 'DIRECT';
+  if (input.kind === 'DELIVERY_REVIEW') return 'LAND_TASK';
   if (jobKind === 'CHECK_PROMOTION' || jobKind === 'PROMOTION_CHECK') return 'CHECK_PROMOTION';
   if (jobKind === 'LAND_PROMOTION' || jobKind === 'PROMOTION_LAND') return 'LAND_PROMOTION';
   // A promotion can also report that it was in MAIN_SYNC, but its source job is still the
@@ -410,6 +453,35 @@ export function doorsForCell(cell: Pick<OpenItemDoorCell,
   const doors: OpenItemDoor[] = [];
   const promotionFailure = isIntegration(todoType) && isPromotionSource(sourceJob);
 
+  if (todoType === 'COORDINATOR_QUESTION') {
+    doors.push(answer(assignee));
+    return doors;
+  }
+  if (todoType === 'FUSE_PAUSED') {
+    doors.push(resume(assignee));
+    return doors;
+  }
+  if (todoType === 'START_REQUEST') {
+    // Requests are owner-owned from birth.  The coordinator row is kept out of the table (see
+    // buildTable) rather than inventing a hand-over path for a card that is already the owner's.
+    doors.push(startProject(assignee));
+    return doors;
+  }
+  if (todoType === 'DONE_REQUEST') {
+    doors.push(finishProject(assignee));
+    return doors;
+  }
+  if (todoType === 'DELIVERY_REVIEW') {
+    // An unlanded delivery is a task-shaped review.  Its source is represented as LAND_TASK so the
+    // same retry/rework distinctions remain visible in the matrix, while its todoType stays
+    // explicit and therefore cannot disappear from the census when a new kind is added.
+    if (assignee === 'COORDINATOR') doors.push(openCoordinator(assignee), openTaskSession(assignee));
+    else doors.push(askAgain(assignee), openTaskSession(assignee));
+    if (failureClass !== 'CONFLICT') doors.push(...retryTask(assignee, true));
+    doors.push(...taskRepair(assignee), cancelTask(assignee, false), handClose(assignee));
+    return doors;
+  }
+
   if (todoType === 'PROMOTION_APPROVAL') {
     // A READY candidate is decided by its own promotion card.  It is not an integration retry, but
     // the confirm/decline/cancel route is a real resolving door for this row.
@@ -432,6 +504,7 @@ export function doorsForCell(cell: Pick<OpenItemDoorCell,
   if (promotionFailure) {
     doors.push(...retryPromotion(assignee, failureClass !== 'CONFLICT'));
     doors.push(review(assignee, false));
+    if (assignee === 'COORDINATOR') doors.push(askOwner(assignee));
     if (assignee === 'OWNER') doors.push(askAgain(assignee));
     if (failureClass === 'CONFLICT') doors.push(createSyncTask(assignee));
     doors.push(createFixTask(assignee), handClose(assignee), handOver(assignee));
@@ -472,7 +545,7 @@ function buildTable(): OpenItemDoorCell[] {
   const cells: OpenItemDoorCell[] = [];
   const integrationKinds = OPEN_ITEM_DOOR_TODO_TYPES.filter(isIntegration);
   for (const todoType of integrationKinds) {
-    for (const sourceJob of OPEN_ITEM_DOOR_SOURCE_JOBS.filter((job) => job !== 'TASK_FAILURE')) {
+    for (const sourceJob of OPEN_ITEM_DOOR_SOURCE_JOBS.filter((job) => job !== 'TASK_FAILURE' && job !== 'DIRECT')) {
       for (const failureClass of OPEN_ITEM_DOOR_FAILURE_CLASSES) {
         for (const assignee of OPEN_ITEM_DOOR_ASSIGNEES) {
           cells.push({ todoType, sourceJob, failureClass, assignee,
@@ -490,6 +563,23 @@ function buildTable(): OpenItemDoorCell[] {
           doors: doorsForCell({ todoType: 'PROMOTION_APPROVAL', sourceJob, failureClass, assignee }) });
       }
     }
+  }
+  // These kinds are not integration failures, but they are still open items and must participate
+  // in the same census.  They have one meaningful source/failure sentinel because neither
+  // dimension exists on the row itself.  Owner-only request cards are registered only for OWNER;
+  // the direct table above remains the compatibility lookup for their action projection.
+  for (const todoType of ['COORDINATOR_QUESTION', 'FUSE_PAUSED', 'START_REQUEST', 'DONE_REQUEST'] as const) {
+    const assignees = todoType === 'START_REQUEST' || todoType === 'DONE_REQUEST'
+      ? (['OWNER'] as const)
+      : OPEN_ITEM_DOOR_ASSIGNEES;
+    for (const assignee of assignees) {
+      cells.push({ todoType, sourceJob: 'DIRECT', failureClass: 'ERROR', assignee,
+        doors: doorsForCell({ todoType, sourceJob: 'DIRECT', failureClass: 'ERROR', assignee }) });
+    }
+  }
+  for (const assignee of OPEN_ITEM_DOOR_ASSIGNEES) {
+    cells.push({ todoType: 'DELIVERY_REVIEW', sourceJob: 'LAND_TASK', failureClass: 'ERROR', assignee,
+      doors: doorsForCell({ todoType: 'DELIVERY_REVIEW', sourceJob: 'LAND_TASK', failureClass: 'ERROR', assignee }) });
   }
   return cells;
 }
@@ -572,6 +662,8 @@ export function openItemActionsFromDoors(input: OpenItemDoorInput): OpenItemActi
 export function openItemDoorMessageNames(input: OpenItemDoorInput): {
   retryMcp: string;
   resolveMcp: string;
+  askOwnerMcp: string;
+  handOverMcp: string;
   taskCommentMcp: string;
   taskStartMcp: string;
   taskCreateMcp: string;
@@ -584,9 +676,13 @@ export function openItemDoorMessageNames(input: OpenItemDoorInput): {
     doors.find((candidate) => candidate.mcp === mcp)?.mcp ?? fallback;
   const retry = doors.find((candidate) => candidate.mcp === 'integration_retry');
   const resolve = doors.find((candidate) => candidate.mcp === 'open_item_resolve');
+  const ask = doors.find((candidate) => candidate.mcp === 'ask_owner');
+  const handOverDoor = doors.find((candidate) => candidate.mcp === 'open_item_hand_over');
   return {
     retryMcp: retry?.mcp ?? 'integration_retry',
     resolveMcp: resolve?.mcp ?? 'open_item_resolve',
+    askOwnerMcp: ask?.mcp ?? 'ask_owner',
+    handOverMcp: handOverDoor?.mcp ?? 'open_item_hand_over',
     taskCommentMcp: named('task_comment', 'task_comment'),
     taskStartMcp: named('task_start', 'task_start'),
     taskCreateMcp: named('task_create', 'task_create'),

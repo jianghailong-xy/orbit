@@ -152,10 +152,11 @@ test('a classified landing failure reaches its coordinator as its own decision, 
       generation: 1,
     },
   });
-  for (const want of ['失败分类：CHECK_FAILED', 'integration_retry', 'task_reopen', 'supersedesTaskId',
+  for (const want of ['失败分类：CHECK_FAILED', 'integration_retry', 'task_reopen', 'fixesOpenItemId',
     '这类落地去留由你判，不拿去问账号所有者']) {
     assert.ok(message.includes(want), `the failed-landing message does not say ${JSON.stringify(want)}`);
   }
+  assert.ok(!message.includes('supersedesTaskId'), 'a DONE landing must not suggest a successor field');
   assert.ok(!message.includes('ask_owner'), 'a failed landing was put to the owner');
 });
 
@@ -184,4 +185,3 @@ test('a delivery review reads back as the rows its card draws and one line under
   assert.deepEqual(landing?.files, ['a.ts']);
   assert.equal(landing?.review, null);
 });
-
