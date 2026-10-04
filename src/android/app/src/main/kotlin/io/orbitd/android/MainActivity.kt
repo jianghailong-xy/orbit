@@ -117,7 +117,8 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
         }
         ModalNavigationDrawer(drawerState = drawer,
             drawerContent = {
-                ModalDrawerSheet(drawerContainerColor = LocalOrbitColors.current.drawer) {
+                ModalDrawerSheet(drawerContainerColor = LocalOrbitColors.current.drawer,
+                    drawerContentColor = MaterialTheme.colorScheme.onSurface) {
                     Column(Modifier.fillMaxHeight().widthIn(max = 360.dp).verticalScroll(rememberScrollState()).imePadding().padding(12.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Text("Orbit", style = MaterialTheme.typography.headlineMedium)
