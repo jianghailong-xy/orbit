@@ -255,7 +255,8 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
                     check()
                     val event = RunEvent.decode(frame)
                     if (event.type == "resync") throw Resync()
-                    policy.healthy()
+                    // An opening heartbeat alone does not prove that the replay window works.
+                    if (event.type != "ping") policy.healthy()
                     updateSession(handle, focus) { it.copy(transcript = it.transcript.apply(event)) }
                     if (event.durable) save()
                     if (event.type in SNAPSHOT_EVENTS) refreshSession()

@@ -151,6 +151,24 @@ class RealtimeStoreTest {
         assertEquals(listOf(2001L), store.state.value.session!!.transcript.events.map { it.seq })
     }
 
+    @Test fun openingPingCannotResetRepeatedResyncBackoff() = runTest {
+        val rig = Rig(this)
+        rig.start()
+        suspend fun rejectWindow() {
+            rig.streams.session().emit("""{"type":"ping","seq":0}""")
+            rig.streams.session().emit("""{"type":"resync","seq":0}""")
+            runCurrent()
+        }
+        rejectWindow()
+        advanceTimeBy(1001); runCurrent()
+        val connections = rig.streams.all.size
+        rejectWindow()
+        advanceTimeBy(1100); runCurrent()
+        assertEquals(connections, rig.streams.all.size)
+        advanceTimeBy(1000); runCurrent()
+        assertEquals(connections + 1, rig.streams.all.size)
+    }
+
     @Test fun emptySessionIdNudgesRefetchAndDirectoryErrorRetainsRows() = runTest {
         val rig = Rig(this)
         val (_, store) = rig.start()
@@ -213,6 +231,37 @@ class RealtimeStoreTest {
         assertNull(store.state.value.session)
         assertTrue(rig.data.values.isEmpty())
         assertTrue(rig.streams.all.all { it.closed })
+    }
+
+    @Test fun accountAndServerSwitchFenceOldEventsRestAndCache() = runTest {
+        for (server in listOf(serverA, serverB)) {
+            val rig = Rig(this)
+            val (auth, store) = rig.start()
+            advanceTimeBy(101); runCurrent()
+            val oldHandle = store.state.value.handle!!
+            val oldStreams = rig.streams.all.toList()
+            val held = CompletableDeferred<Unit>()
+            rig.heldDirectory = held
+            store.refreshDirectory(); runCurrent()
+            val next = auth.login(server, "bob@example.test", "fixture-password")
+            rig.heldDirectory = null
+            rig.title = "new account only"
+            held.complete(Unit)
+            runCurrent()
+            store.selectSession("s2"); runCurrent()
+            oldStreams.last().emit("""{"seq":99,"type":"assistant","payload":{"text":"old account secret"}}""")
+            advanceTimeBy(201); runCurrent()
+            assertNotSame(oldHandle, next)
+            assertSame(next, store.state.value.handle)
+            assertTrue(oldStreams.all { it.closed })
+            assertEquals("new account only", store.state.value.directory!!.sessions["open"]!![0].text("title"))
+            assertEquals("s2", store.state.value.session!!.id)
+            assertFalse(store.state.value.session!!.transcript.events.any { it.seq == 99L })
+            assertFalse(rig.data.values.values.any { it.decodeToString().contains("old account secret") })
+            assertTrue(runCatching { auth.readData(oldHandle, DataKind.CACHE, "realtime-v1") }.isFailure)
+            assertNotNull(auth.readData(next, DataKind.CACHE, "realtime-v1"))
+            store.close(); auth.logout(); runCurrent()
+        }
     }
 
     @Test fun corruptOrVersionedCacheRestoresAsColdOpen() = runTest {
