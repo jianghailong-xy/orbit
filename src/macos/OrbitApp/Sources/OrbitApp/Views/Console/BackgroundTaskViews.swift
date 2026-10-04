@@ -14,6 +14,7 @@ struct TaskActivityLookup: Equatable {
     let progress: (String) -> TaskProgress?
     let isRunning: (String) -> Bool
     let subagentItems: (String) -> [TranscriptItem]
+    var fullPayload: (@MainActor (Int) async -> JSONValue?)? = nil
 
     static func == (lhs: TaskActivityLookup, rhs: TaskActivityLookup) -> Bool {
         lhs.consoleID == rhs.consoleID
@@ -36,6 +37,7 @@ extension EnvironmentValues {
 /// web's TaskProgressBlock draws from.
 struct TaskProgressView: View {
     let progress: TaskProgress
+    var fullPayload: (@MainActor (Int) async -> JSONValue?)? = nil
 
     var body: some View {
         let groups = TaskProgressCopy.phaseGroups(progress)
@@ -52,7 +54,7 @@ struct TaskProgressView: View {
                     .padding(.top, 6)
                 }
                 ForEach(group.agents) { agent in
-                    TaskAgentRow(agent: agent)
+                    TaskAgentRow(agent: agent, workflowToolUseID: progress.toolUseId, fullPayload: fullPayload)
                 }
             }
             if !footer.isEmpty {
@@ -67,22 +69,83 @@ struct TaskProgressView: View {
 /// One agent of a workflow: where it stands, its label, what it is on right now, and its count.
 private struct TaskAgentRow: View {
     let agent: TaskProgress.Agent
+    let workflowToolUseID: String
+    var fullPayload: (@MainActor (Int) async -> JSONValue?)? = nil
+    @State private var expanded = false
+    @Environment(\.taskActivity) private var taskActivity
 
     var body: some View {
         let now = TaskProgressCopy.now(agent)
         let detail = TaskProgressCopy.detail(agent)
-        HStack(spacing: 8) {
-            glyph.frame(width: 16)
-            Text(agent.label).font(.orbitMono).lineLimit(1).truncationMode(.tail).layoutPriority(1)
-            if !now.isEmpty {
-                Text(now).font(.orbitMonoFine).foregroundStyle(.secondary)
-                    .lineLimit(1).truncationMode(.tail)
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                expanded.toggle()
+            } label: {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "chevron.right")
+                            .font(.orbitMeta.weight(.semibold)).foregroundStyle(.tertiary)
+                            .rotationEffect(.degrees(expanded ? 90 : 0))
+                        glyph.frame(width: 16)
+                        Text(agent.label).font(.orbitMono).foregroundStyle(.primary)
+                            .lineLimit(expanded ? nil : 1).truncationMode(.tail).layoutPriority(1)
+                        Spacer(minLength: 4)
+                        if !detail.isEmpty {
+                            Text(detail).font(.orbitMeta).foregroundStyle(.secondary).fixedSize()
+                        }
+                    }
+                    if !expanded, !now.isEmpty {
+                        Text(now).font(.orbitMonoFine).foregroundStyle(.secondary)
+                            .lineLimit(1).truncationMode(.tail).padding(.leading, 24)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 5)
+                .contentShape(Rectangle())
             }
-            Spacer(minLength: 4)
-            if !detail.isEmpty {
-                Text(detail).font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1)
+            .buttonStyle(.plain)
+            .accessibilityLabel(agent.label)
+            .accessibilityValue(expanded ? "Expanded" : "Collapsed")
+            .accessibilityHint("Show agent activity")
+            if expanded {
+                activity
             }
         }
+        .animation(nil, value: expanded)
+    }
+
+    @ViewBuilder private var activity: some View {
+        let items = agent.transcriptKey.flatMap { taskActivity?.subagentItems($0) } ?? []
+        if let model = agent.model, !model.isEmpty {
+            Text(model).font(.orbitMeta).foregroundStyle(.secondary)
+        }
+        if let error = agent.error, !error.isEmpty {
+            Text(error).font(.orbitProseAside).foregroundStyle(.red).textSelection(.enabled)
+        }
+        if let card = agentCard, !items.isEmpty || card.result != nil {
+            // The wrapper's result is the workflow journal's final answer. Its children are the
+            // actual calls; the shared detail renderer keeps both, including clipped payloads.
+            ToolCardView(card: card, fullPayload: fullPayload ?? taskActivity?.fullPayload, showsHeader: false)
+        } else if !items.isEmpty {
+            SubagentTranscriptView(items: items, fullPayload: fullPayload ?? taskActivity?.fullPayload)
+        } else {
+            let latest = [agent.lastToolName, agent.lastToolSummary]
+                .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "\n")
+            if !latest.isEmpty {
+                Text("Latest tool").font(.orbitSectionLabel).foregroundStyle(.secondary)
+                CollapsibleMono(text: latest)
+            }
+            Text(agent.transcriptKey == nil ? "Detailed activity is not available for this agent." : "No activity received yet.")
+                .font(.orbitMeta).foregroundStyle(.secondary)
+        }
+    }
+
+    private var agentCard: ToolCard? {
+        guard let key = agent.transcriptKey else { return nil }
+        return taskActivity?.subagentItems(workflowToolUseID).compactMap {
+            if case .toolCall(let card) = $0, card.id == key { return card }
+            return nil
+        }.first
     }
 
     @ViewBuilder private var glyph: some View {
