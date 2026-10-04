@@ -79,6 +79,7 @@ public enum CoordinatorLeadKind: String, Codable, Sendable, CaseIterable {
     case integrationCheckFailed = "INTEGRATION_CHECK_FAILED"
     case integrationError = "INTEGRATION_ERROR"
     case taskFailed = "TASK_FAILED"
+    case deliveryReview = "DELIVERY_REVIEW"
     /// Forward-compatibility floor: the chip then says only that the coordinator is on something.
     case unknown = "UNKNOWN"
 
@@ -218,7 +219,20 @@ public struct ProjectListIntegration: Codable, Equatable, Sendable {
     }
 }
 
-/// One row of `GET /projects`.
+/// Stored task progress from `GET /projects/sidebar`, excluding CANCELLED from the total.
+public struct ProjectSidebarTaskCounts: Codable, Equatable, Sendable {
+    public let done: Int
+    public let failed: Int
+    public let total: Int
+
+    public init(done: Int, failed: Int, total: Int) {
+        self.done = done
+        self.failed = failed
+        self.total = total
+    }
+}
+
+/// One row of `GET /projects` or the slimmer `GET /projects/sidebar` read.
 public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
     public let id: String
     public let title: String
@@ -236,12 +250,15 @@ public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
     /// Nil when nobody has decided a line and nothing has integrated yet.
     public let integration: ProjectListIntegration?
     public let coordinatorActivity: ProjectCoordinatorPulse?
+    /// Stored task progress from `GET /projects/sidebar`; absent on older servers and the index.
+    public let taskCounts: ProjectSidebarTaskCounts?
 
     public init(id: String, title: String, status: ProjectStatus = .open, goal: String? = nil,
                 createdAt: String = "", updatedAt: String? = nil, taskCount: Int = 0,
                 buckets: ProjectBuckets = ProjectBuckets(), lastActivityAt: String? = nil,
                 attention: ProjectListAttention? = nil, integration: ProjectListIntegration? = nil,
-                coordinatorActivity: ProjectCoordinatorPulse? = nil) {
+                coordinatorActivity: ProjectCoordinatorPulse? = nil,
+                taskCounts: ProjectSidebarTaskCounts? = nil) {
         self.id = id
         self.title = title
         self.status = status
@@ -254,6 +271,7 @@ public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
         self.attention = attention
         self.integration = integration
         self.coordinatorActivity = coordinatorActivity
+        self.taskCounts = taskCounts
     }
 
     private struct Counts: Codable {
@@ -262,7 +280,7 @@ public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
 
     enum CodingKeys: String, CodingKey {
         case id, title, status, goal, createdAt, updatedAt, buckets, lastActivityAt, attention,
-             integration, coordinatorActivity
+             integration, coordinatorActivity, taskCounts
         case counts = "_count"
     }
 
@@ -280,6 +298,7 @@ public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
         attention = try c.decodeIfPresent(ProjectListAttention.self, forKey: .attention)
         integration = try c.decodeIfPresent(ProjectListIntegration.self, forKey: .integration)
         coordinatorActivity = try c.decodeIfPresent(ProjectCoordinatorPulse.self, forKey: .coordinatorActivity)
+        taskCounts = try c.decodeIfPresent(ProjectSidebarTaskCounts.self, forKey: .taskCounts)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -296,5 +315,6 @@ public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
         try c.encodeIfPresent(attention, forKey: .attention)
         try c.encodeIfPresent(integration, forKey: .integration)
         try c.encodeIfPresent(coordinatorActivity, forKey: .coordinatorActivity)
+        try c.encodeIfPresent(taskCounts, forKey: .taskCounts)
     }
 }

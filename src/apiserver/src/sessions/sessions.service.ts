@@ -24,8 +24,10 @@ import { linkNotFound } from '../share-links/share-link';
 import { freshRunningBgJobs } from './background-job-activity';
 import { CLEARED_RUNNING_WORK } from './running-work';
 import { resolveLegacyArtifactPath } from './legacy-artifact-path';
+import { isWorktreeArtifactPath, readWorktreeArtifactRequest } from './worktree-artifact';
 import { isOrbitAuthoredTurn } from './orbit-authored-turn';
 import { readSessionMessageCard } from './session-message';
+import { readSessionProjectMembership, sessionProjectMembershipSql } from './session-project-membership';
 import {
   closeRequestsTheRetryWillNotResend,
   isSessionReplyTurn,
@@ -81,6 +83,7 @@ import {
   type SessionTurnPlacement,
   SessionRunState,
   SessionState,
+  type SessionProjectMembership,
   type SessionSearchHit,
   supportsMidTurnSteer,
   supportsTargetBoundCurrentWorkSteer,
@@ -2694,6 +2697,7 @@ export class SessionsService {
       runnerId?: string;
       workspaceId?: string;
       tagId?: string;
+      projectId?: string;
       view?: 'open' | 'completed' | 'trash' | 'active' | 'archived' | 'deleted' | 'system';
       limit?: number;
     },
@@ -2735,6 +2739,13 @@ export class SessionsService {
           WHERE stl.session_id = s.id AND stl.tag_id = ${filters.tagId}::uuid
         )`
       : Prisma.empty;
+    const projectFilter = filters.projectId
+      ? Prisma.sql`AND EXISTS (
+          SELECT 1 FROM project p
+          WHERE p.id = ${filters.projectId}::uuid AND p.owner_id = ${ownerId}::uuid
+        )
+        AND (${sessionProjectMembershipSql('s')} ->> 'projectId')::uuid = ${filters.projectId}::uuid`
+      : Prisma.empty;
     // Paging is opt-in: a caller that omits `limit` (the native clients, any older web build)
     // still gets the whole list, so this can only ever shrink a response.
     const pageLimit =
@@ -2754,7 +2765,7 @@ export class SessionsService {
         ? Prisma.sql`COALESCE(s.completed_at, s.archived_at) DESC NULLS LAST, s.created_at DESC`
         : Prisma.sql`(s.pinned_at IS NOT NULL) DESC, COALESCE(s.last_turn_at, s.created_at) DESC, s.created_at DESC`;
     return this.listRows(ownerId, {
-      scope: Prisma.sql`${runnerFilter} ${workspaceFilter} ${tagFilter}`,
+      scope: Prisma.sql`${runnerFilter} ${workspaceFilter} ${tagFilter} ${projectFilter}`,
       visibility,
       orderBy,
       pageLimit,
@@ -2847,6 +2858,7 @@ export class SessionsService {
       taskTitle: string | null;
       projectId: string | null;
       projectTitle: string | null;
+      projectMembership: SessionProjectMembership | null;
       cancelRequestedAt: Date | null;
       runtimeSessionId: string | null;
       retryAt: Date | null;
@@ -2950,6 +2962,7 @@ export class SessionsService {
         t.title   AS "taskTitle",
         cp.id     AS "projectId",
         cp.title  AS "projectTitle",
+        ${sessionProjectMembershipSql('s')} AS "projectMembership",
         q.reason  AS "queuedReason",
         q.active  AS "queuedActive",
         q."limit" AS "queuedLimit"
@@ -3084,6 +3097,7 @@ export class SessionsService {
         taskTitle: r.taskTitle,
         projectId: r.projectId,
         projectTitle: r.projectTitle,
+        projectMembership: r.projectMembership,
         // Null unless the row is queued behind a cap — "waiting its turn" is not a gate.
         queuedReason: r.queuedReason,
         queuedActive: r.queuedActive == null ? null : Number(r.queuedActive),
@@ -3287,6 +3301,7 @@ export class SessionsService {
       runningBgJobCount: freshRunningBgJobs(session.runningBgJobs, runningBgJobActivity).length,
       projectId: coordinatorForProject?.id ?? null,
       projectTitle: coordinatorForProject?.title ?? null,
+      projectMembership: await readSessionProjectMembership(this.prisma, session.id),
       shareToken: shareLinks?.[0]?.token ?? null,
       sharedAt: shareLinks?.[0]?.createdAt ?? null,
     });
@@ -3987,6 +4002,81 @@ export class SessionsService {
       ORDER BY seq ASC
     `;
     return [...calls, ...results].sort((a, b) => a.seq - b.seq);
+  }
+
+  async getWorktreeFileForOwner(
+    ownerId: string,
+    id: string,
+    filePath: string | undefined,
+  ): Promise<{ data: Buffer; mimeType: string; disposition: string }> {
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId },
+      select: {
+        id: true, changedFiles: true,
+        assignedRunner: { select: { status: true, lastHeartbeatAt: true } },
+      },
+    });
+    if (!session) throw new NotFoundException('Session not found.');
+    if (!isWorktreeArtifactPath(filePath) || !Array.isArray(session.changedFiles)
+      || !session.changedFiles.some((file) => file && typeof file === 'object' && !Array.isArray(file)
+        && file.path === filePath && typeof file.status === 'string' && file.status !== 'D')) {
+      throw new NotFoundException('File is no longer available.');
+    }
+    if (!session.assignedRunner || !runnerIsOnline(session.assignedRunner)) {
+      throw new HttpException('The runner is offline. Try again when it is online.', HttpStatus.SERVICE_UNAVAILABLE);
+    }
+
+    // A new request always reads fresh bytes, including two files with the same basename.
+    const content = { source: 'worktree' as const, path: filePath };
+    const turn = await this.insertTurn(id, {
+      kind: 'artifact', content: JSON.stringify(content), clientTurnId: `worktree-file-${randomUUID()}`,
+    });
+    const deadline = Date.now() + 40_000;
+    while (true) {
+      const result = await this.prisma.conversationTurn.findFirst({
+        where: { id: turn.id, sessionId: id, kind: 'artifact' },
+        select: {
+          status: true, content: true,
+          attachments: {
+            where: { ownerId, sessionId: id }, take: 1,
+            select: { id: true, data: true, mimeType: true },
+          },
+        },
+      });
+      if (!result) throw new NotFoundException('File is no longer available.');
+      if (result.status === 'ANSWERED') {
+        const receipt = readWorktreeArtifactRequest(result.content)?.result;
+        const attachment = result.attachments[0];
+        if (receipt?.status === 'uploaded' && attachment) {
+          // Preview bytes are transient; do not retain a new blob for every file opening.
+          await this.prisma.attachment.deleteMany({
+            where: { id: attachment.id, turnId: turn.id, ownerId, sessionId: id },
+          });
+          return {
+            data: Buffer.from(attachment.data), mimeType: attachment.mimeType,
+            disposition: legacyArtifactDisposition(path.posix.basename(filePath)),
+          };
+        }
+        if (receipt?.status === 'missing') throw new NotFoundException('File is no longer available.');
+        if (receipt?.status === 'error' && receipt.errorCode === 'too_large') {
+          throw new HttpException('This file is too large to preview or download.', HttpStatus.PAYLOAD_TOO_LARGE);
+        }
+        throw new HttpException('The runner could not read this file. Please try again.', HttpStatus.BAD_GATEWAY);
+      }
+      if (Date.now() >= deadline) {
+        // A late callback cannot restart the request. If a result won this race, read it.
+        const expired = await this.prisma.conversationTurn.updateMany({
+          where: { id: turn.id, sessionId: id, kind: 'artifact', status: 'PENDING' },
+          data: {
+            status: 'ANSWERED', answeredAt: new Date(),
+            content: JSON.stringify({ ...content, result: { status: 'timeout' } }),
+          },
+        });
+        if (expired.count === 0) continue;
+        throw new HttpException('The file request timed out. Please try again.', HttpStatus.GATEWAY_TIMEOUT);
+      }
+      await sleep(1_000);
+    }
   }
 
   async getLegacyArtifactForOwner(

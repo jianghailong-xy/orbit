@@ -19,6 +19,7 @@ struct ToastRequest: Equatable {
     var tone: ToastTone = .success
     var key: String?
     var inProgress = false
+    var mergeConflict: ToastMergeConflict?
 }
 
 /// Top-level app state: instance + auth + the Open session list. All UI-driving state lives
@@ -496,6 +497,7 @@ final class AppModel {
         consoleRegistry?.onToast = { [weak self] request, sessionID in
             self?.showToast(request.message, sessionID: sessionID,
                             detail: request.detail, tone: request.tone,
+                            mergeConflict: request.mergeConflict,
                             key: request.key.map { "\($0):\(sessionID ?? "")" }, inProgress: request.inProgress)
         }
         // The permission posture a session inherits when it stores none, and where a Mode picked in
@@ -727,6 +729,9 @@ final class AppModel {
         jobWorkspaceIDs = []
         projectCoordinators = [:]
         sessionFolders = []
+        projectSessions = []
+        projectSessionsAddress = nil
+        projectSessionsError = nil
         #endif
         sessionDetails.removeAll()
         resetNavigation()
@@ -972,7 +977,7 @@ final class AppModel {
             break
         }
         // A project's lanes move when one of its tasks does, and an owner item rides the approval
-        // count; no event names projects, so a loaded index refetches shortly after either.
+        // count, so a loaded index refetches shortly after either.
         switch ev.type {
         case .taskChanged, .taskListChanged, .approvalRequested, .approvalResolved:
             projects?.nudge()
@@ -1014,6 +1019,9 @@ final class AppModel {
                 scheduleLibraryRefresh(.tasks)
                 scheduleControlRefresh()
             }
+        // A project changed — including its title or progress — so refresh its summaries.
+        case .projectChanged:
+            projects?.nudge()
         // A wiki space changed — a proposal filed, ops decided, a binding moved. The event names the
         // space and nothing else, so the loaded Wiki re-reads what it shows (the drawer's number
         // included). It moves no session row: falling through to the snapshot below would be the web's
@@ -1040,6 +1048,12 @@ final class AppModel {
             }
         case .sessionCreated, .sessionUpdated:
             if let summary = ev.payload(ControlSessionSummary.self) {
+                // Progress comes from the sidebar read rather than the session summary. Include
+                // a former member too, so removing its relation refreshes that project at once.
+                if summary.projectMembership.flatMap({ $0 }) != nil
+                    || sessions.contains(where: { $0.id == summary.id && $0.projectMembership != nil }) {
+                    projects?.nudge()
+                }
                 // Session state is the authority for a task row's running/queued overlays. The
                 // summary names that task on current servers, so starting, claiming and settling a
                 // run update one lightweight row instead of waiting for the minute reconciliation.
@@ -1121,7 +1135,7 @@ final class AppModel {
     /// every loaded copy before the ordinary Open-only summary gate, using the payload's
     /// absent/null/value distinction so an older server preserves rather than clears the relation.
     private func patchSessionProjectRelation(_ summary: ControlSessionSummary) {
-        guard summary.projectId != nil || summary.projectTitle != nil else { return }
+        guard summary.projectId != nil || summary.projectTitle != nil || summary.projectMembership != nil else { return }
         if let index = sessions.firstIndex(where: { $0.id == summary.id }) {
             let merged = sessions[index].applyingProjectRelation(summary)
             if merged != sessions[index] {
@@ -1708,6 +1722,7 @@ final class AppModel {
     /// trash state).
     private(set) var toasts = ToastFeed()
     @ObservationIgnored private var toastExpiry: Task<Void, Never>?
+    @ObservationIgnored private var heldToastID: ToastItem.ID?
     @ObservationIgnored private var toastFold: Task<Void, Never>?
 
     /// Refresh whichever session lists are on screen (Open always; the agent list if
@@ -1716,6 +1731,9 @@ final class AppModel {
         await loadSessions()
         await agents?.reloadCurrentSessions()
         sessionDetails.reconcile(with: agents?.agentSessions ?? [])
+        #if os(iOS)
+        if let address = nav.projectSessionsColumn { await loadProjectSessions(address) }
+        #endif
     }
 
     /// Float a result as a toast. What it asks of you decides how long it stays (`ToastItem.dwell`),
@@ -1733,16 +1751,17 @@ final class AppModel {
     func showToast(_ message: String, subtitle: String? = nil, sessionID: String? = nil,
                    sessionTitle: String? = nil, detail: String? = nil, tone: ToastTone = .success,
                    icon: String? = nil, canUndo: Bool = false, awaitsApproval: Bool = false,
+                   mergeConflict: ToastMergeConflict? = nil,
                    key: String? = nil, inProgress: Bool = false) {
         let line = subtitle ?? sessionTitle ?? sessionID.flatMap(toastSessionTitle)
         let item = ToastItem(message: message, subtitle: line, detail: detail, tone: tone, icon: icon,
                              sessionID: sessionID, canUndo: canUndo, awaitsApproval: awaitsApproval,
-                             key: key, inProgress: inProgress)
+                             key: key, inProgress: inProgress, mergeConflict: mergeConflict)
         guard let id = toasts.post(item, at: Date()), let shown = toasts.item(id) else { return }
         announce(shown)
         if shown.level == .attention {
             foldToastLater(id)
-        } else if let dwell = shown.dwell {
+        } else if let dwell = shown.dwell, heldToastID != id {
             expireToastLater(id, after: dwell)
         }
     }
@@ -1794,12 +1813,15 @@ final class AppModel {
         foldToastLater(id)
     }
 
-    /// The pointer resting on a toast keeps it; its dwell starts over when the pointer leaves.
+    /// A finger or pointer resting on a toast keeps it; its dwell starts over when released.
     func holdToast(_ id: ToastItem.ID) {
-        if toasts.transient?.id == id { toastExpiry?.cancel() }
+        guard toasts.transient?.id == id else { return }
+        heldToastID = id
+        toastExpiry?.cancel()
     }
 
     func releaseToast(_ id: ToastItem.ID) {
+        if heldToastID == id { heldToastID = nil }
         guard let toast = toasts.transient, toast.id == id, let dwell = toast.dwell else { return }
         expireToastLater(id, after: dwell)
     }
@@ -1820,6 +1842,18 @@ final class AppModel {
         guard let sessionID = toasts.item(id)?.sessionID else { return }
         toasts.dismiss(id)
         route(to: .session(sessionID))
+    }
+
+    /// The conflict card hands the same branch and target to the session as the worktree bar does.
+    func resolveToastConflict(_ id: ToastItem.ID) {
+        guard let toast = toasts.item(id), let sessionID = toast.sessionID,
+              let conflict = toast.mergeConflict, let registry = consoleRegistry else { return }
+        toasts.dismiss(id)
+        route(to: .session(sessionID))
+        Task {
+            await registry.resolveInSession(sessionID: sessionID,
+                                            branch: conflict.branch, target: conflict.target)
+        }
     }
 
     /// Complete a session, drop it from any open pane and offer Undo.
@@ -2012,6 +2046,53 @@ final class AppModel {
     // MARK: session folders (iOS — docs/session-folders-move-design.md §3–4)
 
     #if os(iOS)
+    private(set) var projectSessions: [Session] = []
+    private(set) var projectSessionsLoading = false
+    private(set) var projectSessionsError: String?
+    private var projectSessionsAddress: SessionProjectAddress?
+
+    var projectSessionsColumn: SessionProjectAddress? { nav.projectSessionsColumn }
+
+    func openProjectSessions(_ address: SessionProjectAddress) {
+        nav.enterProjectSessions(address)
+    }
+
+    func leaveProjectSessions(_ projectID: String? = nil) {
+        nav.leaveProjectSessions(projectID)
+    }
+
+    /// Project membership spans Workspaces; this request deliberately has no runner/agent filter.
+    func loadProjectSessions(_ address: SessionProjectAddress) async {
+        guard let api else { return }
+        if projectSessionsAddress != address {
+            projectSessionsAddress = address
+            projectSessions = []
+            projectSessionsError = nil
+        }
+        projectSessionsLoading = true
+        defer { if projectSessionsAddress == address { projectSessionsLoading = false } }
+        do {
+            let rows = try await api.listSessions(view: address.view, projectId: address.projectID)
+            guard projectSessionsAddress == address, !Task.isCancelled else { return }
+            // An older server may ignore projectId. It must never put unrelated sessions here.
+            projectSessions = rows.filter { $0.projectMembership?.projectId == address.projectID }
+            projectSessionsError = nil
+            for row in projectSessions { sessionDetails.store(row) }
+        } catch {
+            guard projectSessionsAddress == address, !Task.isCancelled else { return }
+            projectSessionsError = APIClient.failureReason(error)
+        }
+    }
+
+    /// A member may belong to another Workspace. Carry its record into the console's cache and
+    /// change the Workspace without replacing the project page underneath that console.
+    func openProjectMember(_ session: Session, push: Bool) {
+        sessionDetails.store(session)
+        if let agentID = session.agent?.id ?? session.agentId { selectedAgentID = agentID }
+        let node = NavNode.console(sessionID: session.id, origin: .list)
+        if push { self.push(node) } else { nav.selectConsole(node) }
+    }
+
     /// Load the owner's folder library: when a workspace's session list appears, and again when
     /// `folder.changed` says one was created, renamed or deleted, here or on another device.
     /// Best-effort like the tag library — an older server without the endpoint leaves it empty, and

@@ -24,8 +24,10 @@ import {
 import {
   ProjectStatus,
   type AcceptedGap,
+  type DoneRequestGap,
   type ProjectDoneRequestBody,
   type ProjectStartRequestBody,
+  type RequestProjectDoneBody,
   type StartProjectRequestBody,
 } from '@orbit/shared';
 import { IsPublicId } from '../common/public-id';
@@ -34,6 +36,14 @@ import { MAX_BLOCKER_RESOLUTION_REASON_CHARS } from './project-blocker-resolutio
 import { MAX_OPEN_ITEM_RESOLUTION_NOTE, MAX_QUESTION_CHARS } from './project-open-item';
 import { MAX_INTEGRATION_RETRY_REASON } from './project-integration-retry';
 import { MAX_START_REQUEST_WHY } from './project-start-request';
+import {
+  MAX_DONE_REQUEST_EVIDENCE_REF,
+  MAX_DONE_REQUEST_EVIDENCE_REFS,
+  MAX_DONE_REQUEST_GAPS,
+  MAX_DONE_REQUEST_GAP_TEXT,
+  MAX_DONE_REQUEST_GAP_TITLE,
+  MAX_DONE_REQUEST_JUDGMENT,
+} from './project-done-request';
 import type { IntegrationLine, IntegrationSettings } from './project-integration-line';
 
 const PROJECT_STATUSES = Object.values(ProjectStatus);
@@ -495,6 +505,35 @@ export class RequestProjectStartDto implements ProjectStartRequestBody {
   mergeCheckCommand?: string | null;
   /** Shown to the owner on the card, as written. */
   @IsString() @MinLength(1) @MaxLength(MAX_START_REQUEST_WHY) why!: string;
+}
+
+/**
+ * One gap a project's coordinator names when it asks for the project to be recorded done
+ * (`@orbit/shared` `DoneRequestGap`): the criterion by the key `project_get` gives it, why Orbit
+ * cannot prove it, what the coordinator checked instead and where that evidence is, and optionally a
+ * few words naming it. The service restates every rule, which is where both doors meet.
+ */
+export class DoneRequestGapDto implements DoneRequestGap {
+  [key: string]: unknown;
+  @IsString() @MinLength(1) @MaxLength(64) criterionKey!: string;
+  @IsOptional() @IsString() @MaxLength(MAX_DONE_REQUEST_GAP_TITLE) title?: string;
+  @IsString() @MinLength(1) @MaxLength(MAX_DONE_REQUEST_GAP_TEXT) whyNotProven!: string;
+  @IsString() @MinLength(1) @MaxLength(MAX_DONE_REQUEST_GAP_TEXT) coordinatorChecked!: string;
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(MAX_DONE_REQUEST_EVIDENCE_REFS)
+  @IsString({ each: true }) @MaxLength(MAX_DONE_REQUEST_EVIDENCE_REF, { each: true })
+  evidenceRefs!: string[];
+}
+
+/**
+ * `POST /runner/projects/:id/done-requests` (`@orbit/shared` `RequestProjectDoneBody`): the
+ * coordinator's call on whether its project is done, and every criterion Orbit cannot prove.
+ */
+export class RequestProjectDoneDto implements RequestProjectDoneBody {
+  /** Shown to the owner first on the card, as written. */
+  @IsString() @MinLength(1) @MaxLength(MAX_DONE_REQUEST_JUDGMENT) judgment!: string;
+  @IsArray() @ArrayMaxSize(MAX_DONE_REQUEST_GAPS)
+  @ValidateNested({ each: true }) @Type(() => DoneRequestGapDto)
+  gaps!: DoneRequestGapDto[];
 }
 
 /** The two spellings a criteria decision can have. `REJECT` settles the proposal and applies

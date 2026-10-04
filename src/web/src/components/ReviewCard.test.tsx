@@ -132,6 +132,11 @@ async function enter(ctrlKey = false) {
   await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey, bubbles: true })); });
 }
 
+async function focusSettlesOn(element: HTMLElement) {
+  // Base UI moves initial focus on the next animation frame, across the portal boundary.
+  await act(async () => { await vi.waitFor(() => expect(document.activeElement).toBe(element)); });
+}
+
 async function type(field: HTMLInputElement, value: string) {
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(field, value);
@@ -140,6 +145,38 @@ async function type(field: HTMLInputElement, value: string) {
 }
 
 describe('compact review dialogs', () => {
+  it.each(['Escape', 'Close button'])('returns focus to the preview after %s without resetting the question', async (dismissal) => {
+    const decide = vi.fn();
+    await render(<ApprovalPanel approval={question} onDecide={decide} />);
+    const trigger = preview();
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    await act(async () => trigger.focus());
+    await click(trigger);
+    const popup = dialog()!;
+    expect(host.contains(popup)).toBe(false);
+    expect(popup.getAttribute('role')).toBe('dialog');
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    await focusSettlesOn(popup);
+    const field = popup.querySelector<HTMLInputElement>('.chat-q-custom')!;
+    await act(async () => field.focus());
+    await type(field, 'Keep this draft after dismissal');
+    if (dismissal === 'Escape') {
+      await act(async () => {
+        field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      });
+    } else {
+      await click(close());
+    }
+    expect(dialog()).toBeNull();
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    await focusSettlesOn(trigger);
+    expect(decide).not.toHaveBeenCalled();
+    await click(trigger);
+    await focusSettlesOn(dialog()!);
+    expect(dialog()!.querySelector<HTMLInputElement>('.chat-q-custom')).toBe(field);
+    expect(field.value).toBe('Keep this draft after dismissal');
+  });
+
   it('keeps approval actions out of the conversation until the reader opens the plan', async () => {
     const decide = vi.fn();
     await render(<ApprovalPanel approval={plan} active onDecide={decide} />);
@@ -213,6 +250,50 @@ describe('compact review dialogs', () => {
     await click(preview());
     await enter();
     expect(decide.mock.calls).toEqual([['ExitPlanMode', 'allow']]);
+  });
+
+  it('leaves Enter to a focused action and ignores repeated or composing shortcuts inside the dialog', async () => {
+    const decide = vi.fn();
+    await render(<><ApprovalPanel approval={background} active onDecide={decide} />
+      <ApprovalPanel approval={plan} active onDecide={decide} /></>);
+    await click(preview());
+    const popup = dialog()!;
+    await focusSettlesOn(popup);
+    const reject = popup.querySelector<HTMLButtonElement>('.approval-actions button:last-child')!;
+    await act(async () => reject.focus());
+    await enter();
+    expect(decide).not.toHaveBeenCalled();
+    await act(async () => popup.focus());
+    for (const state of [{ repeat: true }, { isComposing: true }]) {
+      await act(async () => {
+        popup.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, ...state }));
+      });
+    }
+    expect(decide).not.toHaveBeenCalled();
+    await enter();
+    expect(decide.mock.calls).toEqual([['ExitPlanMode', 'allow']]);
+  });
+
+  it('keeps a plan that becomes stale open while suspending both its keys and background keys', async () => {
+    const decide = vi.fn();
+    const cards = (answerable: boolean) => <><ApprovalPanel approval={background} active onDecide={decide} />
+      <ApprovalPanel approval={plan} active answerable={answerable} onDecide={decide} /></>;
+    await render(cards(true));
+    await click(preview());
+    const popup = dialog()!;
+    await render(cards(false));
+    expect(dialog()).toBe(popup);
+    expect(preview().textContent).toContain('No longer waiting');
+    expect(popup.querySelector('.approval-stale')).not.toBeNull();
+    expect(popup.querySelector('.approval-kbd')).toBeNull();
+    expect([...popup.querySelectorAll<HTMLButtonElement>('.approval-actions button')].every((button) => button.disabled)).toBe(true);
+    await enter();
+    await enter(true);
+    expect(decide).not.toHaveBeenCalled();
+    await click(close());
+    await act(async () => preview().blur());
+    await enter();
+    expect(decide.mock.calls).toEqual([['Bash', 'allow']]);
   });
 
   it('closes the dialog before moving a question to the conversation composer', async () => {

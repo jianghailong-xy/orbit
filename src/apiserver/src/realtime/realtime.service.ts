@@ -29,10 +29,12 @@ import { Observable, Subject, filter, map, mergeMap } from 'rxjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { deriveSessionCapabilities } from '../sessions/session-state';
+import { readWorktreeArtifactRequest } from '../sessions/worktree-artifact';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { isSessionGenerating } from '../common/session-generating';
 import { countLiveApprovals } from '../sessions/abandoned-approvals';
 import { readOpenRequestPeers } from '../sessions/session-request';
+import { readSessionProjectMembership } from '../sessions/session-project-membership';
 import { readConfirmationsUnderReview } from '../tasks/owner-confirmation-read';
 import { WORKTREE_OPERATION_STALE_MS } from '../common/session-inbox-fence';
 import { latestAcceptedCheckpoint } from '../projects/task-checkpoint.service';
@@ -940,6 +942,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       folderId: s.folderId ?? null,
       projectId: s.coordinatorForProject?.id ?? null,
       projectTitle: s.coordinatorForProject?.title ?? null,
+      projectMembership: await readSessionProjectMembership(this.prisma, sessionId),
       pendingApprovals,
       waitingKind: sessionWaitingKind(approvals, decisions),
       confirmationUnderReview: underReview
@@ -1272,6 +1275,13 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     });
     return turns
       .filter((t) => t.content)
-      .map((t) => ({ requestId: t.id, sessionId: t.sessionId, path: t.content! }));
+      .map((t) => {
+        const request = readWorktreeArtifactRequest(t.content);
+        return {
+          requestId: t.id, sessionId: t.sessionId,
+          path: request?.path ?? t.content!,
+          ...(request ? { source: 'worktree' as const } : {}),
+        };
+      });
   }
 }

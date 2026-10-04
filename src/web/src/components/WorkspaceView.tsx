@@ -1,4 +1,4 @@
-import { type MergeRecoveryAction } from '@orbit/shared';
+import { type MergeRecoveryAction, type ProjectSidebarTaskCounts } from '@orbit/shared';
 import {
   ArrowDownOutlined,
   ArrowLeftOutlined,
@@ -94,11 +94,13 @@ import {
   swipeActionsOnScreen,
   swipeGeometry,
   swipeWidths,
+  SWIPE_ACTION_WIDTH,
   type SwipeAction,
   type SwipeGeometry,
   type SwipeSide,
 } from '../lib/sessionSwipe';
 import { useControlPlaneLive } from '../lib/useControlPlane';
+import { useSessionProjectData } from '../lib/useSessionProjectData';
 import {
   workspacesQuery,
   type Me,
@@ -111,6 +113,10 @@ import {
   sessionsQuery,
   sessionTagsQuery,
   ownerConfirmationQuery,
+  openProjectsQuery,
+  projectDetailsQuery,
+  projectSessionsQuery,
+  PROJECT_SESSION_REFRESH_MS,
   pendingCriteriaDecisionsQuery,
   pendingDecisionsQuery,
   projectMergedPromotionsQuery,
@@ -128,10 +134,16 @@ import {
   folderNameDraft,
   folderNameFailure,
   listShowsFolders,
-  sessionFolderListing,
-  sessionsInFolder,
   type SessionFolderRow,
 } from '../lib/sessionFolders';
+import {
+  SESSION_PROJECT_COPY,
+  listShowsProjects,
+  sessionProjectListing,
+  type SessionProjectRow,
+  type SessionProjectEntry,
+} from '../lib/sessionProjects';
+import { SidebarNavIcon } from './SidebarNavIcon';
 import {
   type SessionTagRef,
   sessionTagSections,
@@ -253,6 +265,7 @@ import {
   restoreSession,
   resumeSession,
   type SessionFolder,
+  type SessionListItem,
   sendTurn,
   sessionEventsUrl,
   unpinSession,
@@ -512,6 +525,7 @@ interface LocalStatusCard {
 interface SessionToastTarget {
   id: string;
   title: string;
+  projectId?: string;
 }
 
 type PendingSessionOperation =
@@ -1109,6 +1123,135 @@ export function SessionTitleRow({
   );
 }
 
+function SessionProjectProgressBar({ counts, runningCount }: { counts: ProjectSidebarTaskCounts; runningCount: number }) {
+  const total = counts.total;
+  const done = Math.min(counts.done, total);
+  const failed = Math.min(counts.failed, total - done);
+  const running = Math.min(runningCount, total - done - failed);
+  const width = (count: number) => `${total > 0 ? count / total * 100 : 0}%`;
+  return (
+    <span className="session-project-progress-bar" aria-hidden="true">
+      <span className="done" style={{ width: width(done) }} />
+      <span className="running" style={{ width: width(running) }} />
+      <span className="failed" style={{ width: width(failed) }} />
+    </span>
+  );
+}
+
+/** A project occupies the coordinator's row, using the same two lines as a session. */
+export function SessionProjectListRow({
+  project,
+  active,
+  onOpen,
+  onSessions,
+  menu,
+  menuOpen,
+  onMenuOpenChange,
+  swipe,
+}: {
+  project: SessionProjectRow<any>;
+  active: boolean;
+  onOpen: () => void;
+  onSessions: () => void;
+  menu: MenuProps;
+  menuOpen: boolean;
+  onMenuOpenChange: (open: boolean) => void;
+  swipe?: {
+    offset: number;
+    dragging: boolean;
+    onStart: (e: ReactTouchEvent) => void;
+    onMove: (e: ReactTouchEvent) => void;
+    onEnd: () => void;
+    onCancel: () => void;
+    onAction: (action: 'pin' | 'move') => void;
+  };
+}) {
+  const counts = project.taskCounts;
+  return (
+    <div
+      className={`session-row session-project-row${active ? ' active' : ''}${menuOpen ? ' menu-open' : ''}`}
+      data-project-id={project.projectId}
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onTouchStart={swipe?.onStart}
+      onTouchMove={swipe?.onMove}
+      onTouchEnd={swipe?.onEnd}
+      onTouchCancel={swipe?.onCancel}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
+        e.preventDefault();
+        onOpen();
+      }}
+    >
+      {swipe && (['leading', 'trailing'] as const).map((side) => {
+        const action = side === 'leading' ? 'pin' : 'move';
+        const label = action === 'pin' && project.coordinator?.pinnedAt ? 'Unpin' : action === 'pin' ? 'Pin' : 'Move';
+        return (
+          <div key={side} className={`session-swipe-actions ${side}${swipe.dragging ? ' dragging' : ''}`}
+            style={{ width: Math.max(0, side === 'leading' ? swipe.offset : -swipe.offset) }}>
+            <button type="button" className={`session-swipe-action ${action}`} aria-label={label} tabIndex={-1}
+              onClick={(e) => { e.stopPropagation(); swipe.onAction(action); }}>
+              {action === 'move' ? <FolderOutlined /> : project.coordinator?.pinnedAt ? <PushpinFilled /> : <PushpinOutlined />}
+            </button>
+          </div>
+        );
+      })}
+      <div className={`session-swipe${swipe?.dragging ? ' dragging' : ''}`}
+        style={swipe?.offset ? { transform: `translateX(${swipe.offset}px)` } : undefined}>
+        <span className="session-icon session-project-icon">
+          <SidebarNavIcon name="projects" />
+          {project.indicator && (
+            <span
+              className={`session-project-status ${project.indicator}`}
+              data-state={project.indicator}
+              aria-label={project.indicator === 'needs-you' ? 'Waiting for you'
+                : project.indicator === 'running' ? 'Running' : 'Background jobs'}
+            />
+          )}
+        </span>
+        <div className="session-main">
+          <div className="session-title-row">
+            <div className="session-title">{project.title}</div>
+            <span className="session-time">{fmtTime(project.lastTurnAt ?? project.createdAt ?? undefined)}</span>
+          </div>
+          <div className="session-sub">
+            <button
+              type="button"
+              className={`session-project-progress${project.status === 'DONE' ? ' done' : ''}`}
+              title={SESSION_PROJECT_COPY.progressHint(project.sessionCount, project.runningCount)}
+              aria-label={`Sessions for ${project.title}`}
+              onClick={(e) => { e.stopPropagation(); onSessions(); }}
+            >
+              {counts ? (
+                <>
+                  <SessionProjectProgressBar counts={counts} runningCount={project.runningCount} />
+                  {SESSION_PROJECT_COPY.progress(counts.done, counts.total)}
+                </>
+              ) : project.status}
+            </button>
+            <div
+              className={`session-preview${project.line.tone === 'preview' ? '' : ` tone-${project.line.tone}`}`}
+              title={project.line.text}
+            >
+              {project.line.text}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="session-right">
+        <div className="session-actions" onClick={(e) => e.stopPropagation()}>
+          <Dropdown trigger={['click']} placement="bottomRight" menu={menu} open={menuOpen} onOpenChange={onMenuOpenChange}>
+            <button type="button" className="session-kebab" aria-label="Project actions" aria-haspopup="menu" aria-expanded={menuOpen}>
+              <MoreOutlined />
+            </button>
+          </Dropdown>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** Compact tag summary for a session-list row. The first tag is the one users can scan; the
  * fixed count survives when that name has to ellipsize, and a container query swaps to the total
  * count when the resizable session column becomes too narrow to show a useful name. */
@@ -1598,6 +1741,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // it deep-links and survives a refresh; selecting a session = navigation.
   // Decode once here; everything downstream works with the raw session UUID.
   const selectedId = routeId(useMatch('/sessions/:id')?.params.id);
+  const openProjectId = routeId(searchParams.get('project'));
+  const projectView = openProjectId ? (searchParams.get('view') === 'completed' ? 'completed' : 'open') : null;
   // Latest selectedId, readable from async callbacks (loadOlder) to bail if the user has
   // switched sessions since the request was issued — so a late page never lands in the wrong
   // transcript. Assigning during render is safe for a "current value" ref.
@@ -1743,6 +1888,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // continuous touchmove state, so swipeDrag state can be stale when discrete touchend fires.
   const swipeRef = useRef<{
     session: any;
+    id: string;
     x: number;
     y: number;
     axis: '' | 'h' | 'v';
@@ -1755,7 +1901,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // A row's Share action opens the share dialog for that row rather than for the open session.
   const [shareRowId, setShareRowId] = useState<string | null>(null);
   // The session the Move dialog is open for: a row's, or the open conversation's.
-  const [moveTarget, setMoveTarget] = useState<MoveDialogSession | null>(null);
+  const [moveTarget, setMoveTarget] = useState<(MoveDialogSession & {
+    workspace?: { id: string; name: string };
+  }) | null>(null);
   // New Folder… and Rename…'s inline name field (`id` null for a new folder), and the folder row
   // whose ⋯ menu is open — it keeps the row's hover look while it is.
   const [folderEdit, setFolderEdit] = useState<{
@@ -1923,18 +2071,23 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const listRef = useRef<HTMLDivElement>(null); // the left session-list column, for arrow-key scrolling
 
   // Every row in a list shares one swipe layout, so the edges' actions and widths are per view.
-  const swipeActions = sessionSwipeActions(view);
-  const swipeSizes = swipeWidths(view);
-  const onRowTouchStart = (e: ReactTouchEvent, session: any, canFullSwipe: boolean): void => {
+  const rowView = projectView ?? view;
+  const swipeActions = sessionSwipeActions(rowView);
+  const swipeSizes = swipeWidths(rowView);
+  const onRowTouchStart = (e: ReactTouchEvent, session: any, canFullSwipe: boolean, projectId?: string): void => {
     if (!isMobile) return;
     const t = e.touches[0];
     // Clear any guard left set by a prior swipe that fired no trailing click, so the next
     // genuine tap isn't swallowed.
     swipeClickGuard.current = false;
-    const from = swipeOpen && swipeOpen.id === session.id ? swipeOpen.side : null;
-    const geometry = swipeGeometry(view, e.currentTarget.getBoundingClientRect().width, canFullSwipe);
+    const id = projectId ?? session.id;
+    const from = swipeOpen && swipeOpen.id === id ? swipeOpen.side : null;
+    const geometry = projectId
+      ? { leadingWidth: SWIPE_ACTION_WIDTH, trailingWidth: SWIPE_ACTION_WIDTH, fullSwipeAt: null, maxOffset: SWIPE_ACTION_WIDTH + 20 }
+      : swipeGeometry(rowView, e.currentTarget.getBoundingClientRect().width, canFullSwipe);
     swipeRef.current = {
       session,
+      id,
       x: t.clientX,
       y: t.clientY,
       axis: '',
@@ -1955,12 +2108,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       if (Math.abs(mx) < 8 && Math.abs(my) < 8) return;
       st.axis = Math.abs(mx) > Math.abs(my) ? 'h' : 'v';
       if (st.axis === 'h') {
-        setSwipeOpen((cur) => (cur && cur.id !== st.session.id ? null : cur)); // starting a swipe shuts any other open row
+        setSwipeOpen((cur) => (cur && cur.id !== st.id ? null : cur)); // starting a swipe shuts any other open row
       }
     }
     if (st.axis !== 'h') return;
     st.offset = dragOffset(st.from, mx, st.geometry); // synchronous truth for the touchend decision
-    setSwipeDrag({ id: st.session.id, dx: st.offset, armed: isFullSwipe(st.offset, st.geometry) });
+    setSwipeDrag({ id: st.id, dx: st.offset, armed: isFullSwipe(st.offset, st.geometry) });
   };
   const onRowTouchEnd = (): void => {
     const st = swipeRef.current;
@@ -1973,7 +2126,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     // Reading st.offset (a ref) avoids the stale swipeDrag state that React's deferred touchmove
     // updates would otherwise leave at touchend.
     const { open, fullSwipe } = settleSwipe(st.from, st.offset, st.geometry);
-    setSwipeOpen(open ? { id: st.session.id, side: open } : null);
+    setSwipeOpen(open ? { id: st.id, side: open } : null);
     setSwipeDrag(null);
     if (fullSwipe) runSwipeAction(swipeActions.leading[0], st.session);
   };
@@ -2264,7 +2417,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
 
   // The list is scoped by `view`. Keep Completed loaded while one of its transcripts is
   // open; every other open session resolves from Open, where live sessions live.
-  const effectiveView = selectedId ? (view === 'completed' ? 'completed' : 'open') : view;
+  const effectiveView = projectView ?? (selectedId ? (view === 'completed' ? 'completed' : 'open') : view);
   // The workspace whose conversation list this column is. The route names it on /workspaces/<id>;
   // a /sessions/<id> deep link doesn't, so it's latched from the open session once that
   // resolves (see the effect below) — the query itself is scoped by it, so it can't be
@@ -2285,6 +2438,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // without folders keeps paging as before.
   const listByTag = !!tagFilter || groupByTag;
   const foldersShown = listShowsFolders(effectiveView, listByTag) && workspaceFolders.length > 0;
+  const projectScope = `${runner.id}:${scopeWorkspaceId}:${effectiveView}:${tagFilter ?? ''}`;
+  const [membershipScope, setMembershipScope] = useState<string | null>(null);
+  const projectsQ = useQuery({
+    ...openProjectsQuery(),
+    enabled: !!openProjectId || membershipScope === projectScope,
+  });
+  const projectsShown = listShowsProjects(effectiveView, listByTag) &&
+    ((projectsQ.data?.length ?? 0) > 0 || membershipScope === projectScope);
   // One factory call drives both the list query and the optimistic-update key below, so
   // they can never drift apart; it's also the exact key the BootGate splash pre-warms.
   const sessionsOpts = sessionsQuery({
@@ -2292,7 +2453,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     workspaceId: scopeWorkspaceId,
     view: effectiveView,
     tagId: tagFilter,
-    limit: foldersShown ? null : sessionLimit,
+    limit: scopeWorkspaceId && (foldersShown || projectsShown) ? null : sessionLimit,
   });
   const sessionsKey = sessionsOpts.queryKey;
   // While the control-plane stream is connected it pushes list changes (a coalesced refetch per
@@ -2300,7 +2461,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const controlLive = useControlPlaneLive();
   const sessionsQ = useQuery({
     ...sessionsOpts,
-    refetchInterval: controlLive ? false : 4000,
+    enabled: !openProjectId,
+    refetchInterval: controlLive || openProjectId ? false : 4000,
     // Widening the window re-keys the query, so hold the rows already on screen while the
     // larger page loads instead of blanking the list. Only within one scope (every key part
     // but the page size): another scope's rows must never stand in for this one's, even for
@@ -2311,6 +2473,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       return prev;
     },
   });
+  useEffect(() => {
+    if (sessionsQ.data?.some((s) => s.projectMembership)) setMembershipScope(projectScope);
+  }, [sessionsQ.data, projectScope]);
   // Capabilities include heartbeat-derived runner availability. Refresh both list and detail when
   // this runner crosses online/offline so a cached RUNNER_OFFLINE denial cannot outlive recovery.
   const previousRunnerAvailability = useRef({ id: runner.id, online: runner.online });
@@ -2520,9 +2685,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             sessionId: operation.id,
             sessionTitle: operation.title,
             event: 'merge-result',
-            headline: `Merge conflict in ${target}`,
-            detail: 'Merge aborted; your branch is unchanged. Resolve it from the status bar.',
-            tone: 'warning',
+            headline: `Couldn't merge into ${target}`,
+            detail: d.mergeError ?? 'Merge aborted; your branch is unchanged.',
+            tone: 'error',
+            action: d.branch ? {
+              label: 'Resolve in session',
+              ariaLabel: `Resolve the conflict in ${operation.title}`,
+              onClick: () => resolveMut.mutate({
+                id: operation.id,
+                title: operation.title,
+                branch: d.branch!,
+                target,
+              }),
+            } : undefined,
           });
         } else {
           message.sessionNotice({
@@ -2627,19 +2802,52 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     if (tagFilter) list = sessionsWithTag(list, tagFilter);
     return list;
   }, [sessions, resolvedWorkspaceId, tagFilter]);
+  // Other workspaces may contain only workers. Read the project's words across workspaces,
+  // keeping this view's activity and folder count scoped to its own members.
+  const projectData = useSessionProjectData({
+    sessions: visibleSessions, view: effectiveView, enabled: projectsShown && !openProjectId,
+    controlLive, needsYou: (s) => sessionLine(s, true, sessionWatching(watchingBySession, s.id)).tone === 'approval',
+  });
+  const projectSessionsQ = useQuery({
+    ...projectSessionsQuery({ projectId: openProjectId ?? '', view: effectiveView }),
+    enabled: !!openProjectId,
+    refetchInterval: controlLive ? PROJECT_SESSION_REFRESH_MS : 4000,
+  });
+  const projectMembers = projectSessionsQ.data ?? [];
+  const pageCoordinator = projectMembers.find((s) => s.projectMembership?.role === 'COORDINATOR') ?? null;
+  const pageCoordinatorQ = useQuery({
+    ...projectSessionsQuery({ projectId: openProjectId ?? '', view: effectiveView === 'completed' ? 'open' : 'completed' }),
+    enabled: !!openProjectId && projectSessionsQ.isSuccess && !pageCoordinator,
+    refetchInterval: controlLive ? PROJECT_SESSION_REFRESH_MS : 4000,
+  });
+  const pageMenuCoordinator = pageCoordinator ?? pageCoordinatorQ.data?.find((s) => s.projectMembership?.role === 'COORDINATOR') ?? null;
+  const pageProject = projectsQ.data?.find((p) => p.id === openProjectId);
+  const pageProjectDetailsQ = useQuery({
+    ...projectDetailsQuery(openProjectId ?? ''),
+    enabled: !!openProjectId && projectsQ.isSuccess && !pageProject,
+    refetchInterval: PROJECT_SESSION_REFRESH_MS,
+  });
+  const pageTasksByStatus = pageProjectDetailsQ.data?.tasksByStatus;
+  const pageTaskCounts = pageProject?.taskCounts ?? (pageTasksByStatus ? {
+    done: pageTasksByStatus.DONE ?? 0,
+    failed: pageTasksByStatus.FAILED ?? 0,
+    total: Object.entries(pageTasksByStatus).reduce((total, [status, count]) => status === 'CANCELLED' ? total : total + count, 0),
+  } : undefined);
+  const pageProjectTitle = pageProject?.title ?? pageProjectDetailsQ.data?.title ?? projectMembers[0]?.projectMembership?.projectTitle ?? pageMenuCoordinator?.projectMembership?.projectTitle ?? 'Project';
+  const pageRunningCount = pageProject?.buckets.running ?? projectMembers.filter((s) => statusGlyphMotion(s) === 'spinner').length;
   // The folder page the list is on: `?folder=<id>` on whichever route the console is at, so it
   // survives a reload and Back leaves it. Only a folder of this workspace, and only where the list
   // shows folders at all.
   const folderParam = searchParams.get('folder');
   const openFolder = useMemo(() => {
     const id = routeId(folderParam);
-    return foldersShown && id ? (workspaceFolders.find((f) => f.id === id) ?? null) : null;
-  }, [folderParam, foldersShown, workspaceFolders]);
+    return !openProjectId && foldersShown && id ? (workspaceFolders.find((f) => f.id === id) ?? null) : null;
+  }, [folderParam, foldersShown, workspaceFolders, openProjectId]);
   // A folder page whose folder is gone — deleted here or on another client, or a link into another
   // workspace's — goes back to the list. Only once both the folders and the list's workspace are
   // known: before that a missing folder is one not loaded yet.
   useEffect(() => {
-    if (!folderParam || openFolder || !foldersQ.isSuccess || !scopeWorkspaceId) return;
+    if (openProjectId || !folderParam || openFolder || !foldersQ.isSuccess || !scopeWorkspaceId) return;
     if (!listShowsFolders(effectiveView, listByTag)) return;
     setSearchParams(
       (current) => {
@@ -2649,39 +2857,45 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       },
       { replace: true },
     );
-  }, [folderParam, openFolder, foldersQ.isSuccess, scopeWorkspaceId, effectiveView, listByTag, setSearchParams]);
+  }, [folderParam, openFolder, foldersQ.isSuccess, scopeWorkspaceId, effectiveView, listByTag, setSearchParams, openProjectId]);
   // The list split into its folder rows and the sessions in no folder — the ones the Pinned and
   // time sections below are made of. A folder's page lists the sessions filed in it instead.
   const folderListing = useMemo(
-    () =>
-      foldersShown && !openFolder
-        ? sessionFolderListing(visibleSessions, workspaceFolders, {
-            view: effectiveView,
-            byTag: false,
-            runnerOffline: runner.online === false,
-            needsYou: sessionNeedsYou,
-            motion: (s) => statusGlyphMotion(s, sessionWatching(watchingBySession, s.id)?.word),
-          })
-        : null,
-    [foldersShown, openFolder, visibleSessions, workspaceFolders, effectiveView, runner.online, watchingBySession],
+    () => sessionProjectListing(visibleSessions, workspaceFolders, projectsQ.data ?? [], {
+      view: effectiveView,
+      byTag: listByTag,
+      folderId: openFolder?.id,
+      coordinators: projectData.coordinators,
+      contentSessions: projectData.contentSessions,
+      runnerOffline: runner.online === false,
+      needsYou: sessionNeedsYou,
+      motion: (s) => statusGlyphMotion(s, sessionWatching(watchingBySession, s.id)?.word),
+      line: (s) => sessionLine(selectedSession?.id === s.id ? selectedSession : s,
+        effectiveView !== 'trash', sessionWatching(watchingBySession, s.id)),
+    }),
+    [openFolder, visibleSessions, workspaceFolders, projectsQ.data, projectData.coordinators, projectData.contentSessions,
+      effectiveView, listByTag, runner.online, watchingBySession, selectedSession],
   );
   const listedSessions = useMemo(
-    () => (openFolder ? sessionsInFolder(visibleSessions, openFolder.id) : (folderListing?.sessions ?? visibleSessions)),
-    [openFolder, folderListing, visibleSessions],
+    () => openProjectId ? projectMembers : folderListing.entries.flatMap((entry) => entry.kind === 'project'
+      ? entry.coordinator ? [entry.coordinator] : [] : [entry]),
+    [folderListing, openProjectId, projectMembers],
   );
   // Where a session opened from this list lives. On a folder's page the page goes along, so the
   // list stays on it while the conversations it lists are opened one after another.
   const folderSearch = openFolder ? `?folder=${encodeId(openFolder.id)}` : '';
-  const sessionPath = useCallback((id: string) => `/sessions/${encodeId(id)}${folderSearch}`, [folderSearch]);
+  const listSearch = openProjectId
+    ? `?project=${encodeId(openProjectId)}${effectiveView === 'completed' ? '&view=completed' : ''}${folderParam ? `&folder=${encodeURIComponent(folderParam)}` : ''}` : folderSearch;
+  const sessionPath = useCallback((id: string) => `/sessions/${encodeId(id)}${listSearch}`, [listSearch]);
 
   // Paging. The server answered with a full page, so there is probably more behind it; a short
   // answer means this scope is exhausted.
-  const hasMoreSessions = !foldersShown && (sessionsQ.data?.length ?? 0) >= sessionLimit;
+  const hasMoreSessions = !openProjectId && !foldersShown && !projectsShown && (sessionsQ.data?.length ?? 0) >= sessionLimit;
   // The column has nothing to show yet for this scope (a switch to a workspace not in cache), or
   // is widening its window — `isPlaceholderData` is exactly that, since the guard above only
   // keeps rows within one scope. Neither is the ordinary background refresh, which must not
   // flash anything over rows that are already correct.
-  const loadingSessions = sessionsQ.isPending || sessionsQ.isPlaceholderData;
+  const loadingSessions = openProjectId ? projectSessionsQ.isPending : sessionsQ.isPending || sessionsQ.isPlaceholderData;
   const loadMoreSessions = useCallback(() => {
     if (!hasMoreSessions || sessionsQ.isFetching) return;
     setSessionLimit((n) => n + SESSION_PAGE_SIZE);
@@ -2714,16 +2928,23 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // a "Pinned" section would fight an active tag filter, so it's suppressed there (as on iOS).
   // Note the Completed view is server-ordered by completed_at while bucketing reads last activity,
   // so its rows are grouped by when they last ran, not by when they moved — same as iOS.
-  const sections = useMemo(
+  const sections = useMemo<Array<{ key: string; title: string; tag: SessionTagRef | null; sessions: SessionProjectEntry<SessionListItem>[] }>>(
     () =>
-      groupByTag
-        ? sessionTagSections(listedSessions).map((s) => ({
+      openProjectId
+        ? [
+            ...(pageCoordinator ? [{ key: 'Coordinator', title: SESSION_PROJECT_COPY.coordinatorSection, tag: null,
+              sessions: [{ ...pageCoordinator, kind: 'session' as const }] }] : []),
+            ...sessionTimeSections(projectMembers.filter((s) => s.id !== pageCoordinator?.id), { pinnedFirst: false })
+              .map((s) => ({ ...s, key: s.title, tag: null, sessions: s.sessions.map((row) => ({ ...row, kind: 'session' as const })) })),
+          ]
+        : groupByTag
+        ? sessionTagSections(folderListing.entries).map((s) => ({
             key: s.tag?.id ?? '__untagged__',
             tag: s.tag,
             title: s.tag?.name ?? 'Untagged',
             sessions: s.sessions,
           }))
-        : sessionTimeSections(listedSessions, {
+        : sessionTimeSections(folderListing.entries, {
             pinnedFirst: view === 'open' && !tagFilter,
           }).map((s) => ({
             key: s.title,
@@ -2732,14 +2953,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             // Folded, Pinned keeps its heading but none of its rows — on screen or in the order below.
             sessions: s.title === 'Pinned' && pinnedCollapsed ? [] : s.sessions,
           })),
-    [listedSessions, groupByTag, view, tagFilter, pinnedCollapsed],
+    [folderListing, groupByTag, view, tagFilter, pinnedCollapsed, openProjectId, pageCoordinator, projectMembers],
   );
 
   // The rows in the order they're actually on screen. Sectioning can reorder relative to the
   // server sort — Completed arrives ordered by completion time but buckets by last activity,
   // and tag grouping regroups outright — so anything that moves the cursor by a row (Up/Down,
   // "open the next one after completing") has to walk this, not the pre-section list.
-  const orderedSessions = useMemo(() => sections.flatMap((s) => s.sessions), [sections]);
+  const orderedSessions = useMemo(() => sections.flatMap((s) => s.sessions.flatMap((entry) =>
+    entry.kind === 'project' ? entry.coordinator ? [entry.coordinator] : [] : [entry],
+  )), [sections]);
 
   // Right-pane mode. A real session (/sessions/<id>) shows its conversation; with
   // none selected we're composing a new session — explicitly (/workspaces/<id>/new),
@@ -2778,7 +3001,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   useEffect(() => {
     // On mobile the list is its own full screen — auto-opening would trap the back
     // button (it returns here, which would immediately redirect into a session again).
-    if (isMobile || selectedId || composingRoute || view !== 'open' || !sessionsQ.isSuccess)
+    if (openProjectId || isMobile || selectedId || composingRoute || view !== 'open' || !sessionsQ.isSuccess)
       return;
     // Not before the folders are known: the session opened is one the list shows, and until then a
     // session filed in a folder could be picked from under it. A server without folders answers
@@ -2789,6 +3012,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     if (target) navigate(sessionPath(target.id), { replace: true });
   }, [
     isMobile,
+    openProjectId,
     selectedId,
     composingRoute,
     view,
@@ -5398,10 +5622,17 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     });
   };
   // Lifecycle actions happen immediately and offer Undo; Complete also ends a live run.
+  const refreshProjectSession = (id: string, knownProjectId?: string): void => {
+    const projectId = knownProjectId ?? projectMembers.find((s) => s.id === id)?.projectMembership?.projectId ??
+      visibleSessions.find((s) => s.id === id)?.projectMembership?.projectId ??
+      projectData.coordinators.find((s) => s.id === id)?.projectMembership?.projectId;
+    if (projectId) void qc.invalidateQueries({ queryKey: ['project-sessions', projectId] });
+  };
   const restoreMut = useMutation({
     mutationFn: (session: SessionToastTarget & { notify: boolean }) => restoreSession(session.id),
     onSuccess: (_d, session) => {
       setView('open');
+      refreshProjectSession(session.id, session.projectId);
       qc.invalidateQueries({ queryKey: ['sessions'] });
       qc.invalidateQueries({ queryKey: ['session', session.id] });
       if (session.notify) {
@@ -5432,7 +5663,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         message.info('This session cannot be moved to Open right now.');
         return;
       }
-      restoreMut.mutate({ id: session.id, title: session.title, notify: true });
+      restoreMut.mutate({ id: session.id, title: session.title, projectId: source.projectMembership?.projectId, notify: true });
     },
     [message, restoreMut, selectedSession],
   );
@@ -5460,23 +5691,27 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       return;
     }
     const a = scopeWorkspaceId ?? workspacesForRunner[0]?.id;
-    navigate(a ? `/workspaces/${encodeId(a)}${folderSearch}` : `/runners/${encodeId(runner.id)}`);
+    navigate(a ? `/workspaces/${encodeId(a)}${listSearch}` : `/runners/${encodeId(runner.id)}${listSearch}`);
   };
   // After leaveIfOpen re-scopes to the workspace, the auto-open effect picks that workspace's
   // next session — but it reads the cached list, which still holds the row we just
   // completed/trashed until the refetch lands. Drop it now so auto-open can't re-select
   // the removed session (which would null out `selected`, collapse the workspace scope, and
   // leak every workspace's sessions into the list). The invalidate below still reconciles.
-  const dropFromLists = (id: string): void => {
+  const dropFromLists = (id: string, projectId?: string): void => {
     qc.setQueriesData<any[]>({ queryKey: ['sessions'] }, (old) =>
       Array.isArray(old) ? old.filter((s) => s.id !== id) : old,
     );
+    qc.setQueriesData<any[]>({ queryKey: ['project-sessions'] }, (old) =>
+      Array.isArray(old) ? old.filter((s) => s.id !== id) : old,
+    );
+    refreshProjectSession(id, projectId);
   };
   const completeMut = useMutation({
     mutationFn: (session: SessionToastTarget) => completeSession(session.id),
     onSuccess: (_d, session) => {
       leaveIfOpen(session.id);
-      dropFromLists(session.id);
+      dropFromLists(session.id, session.projectId);
       qc.invalidateQueries({ queryKey: ['sessions'] });
       showUndo(session, 'complete');
     },
@@ -5497,7 +5732,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         message.info('This session cannot be completed right now.');
         return;
       }
-      completeMut.mutate({ id: session.id, title: session.title });
+      completeMut.mutate({ id: session.id, title: session.title, projectId: source.projectMembership?.projectId });
     },
     [completeMut, message, selectedSession],
   );
@@ -5526,8 +5761,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         const row = orderedSessions.find((s) => s.id === menuOpenId);
         const source = selectedSession?.id === menuOpenId ? selectedSession : row;
         if (
-          !row || view !== 'open' || !source ||
-          !isCompleteShortcutEligible(source, sessionLifecycleStateOf(source, { listView: view }))
+          !row || rowView !== 'open' || !source ||
+          !isCompleteShortcutEligible(source, sessionLifecycleStateOf(source, { listView: rowView }))
         ) return;
         setMenuOpenId(null);
         requestComplete(row);
@@ -5544,15 +5779,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [menuOpenId, orderedSessions, view, selected, selectedSession, selectedLifecycleState, requestComplete]);
+  }, [menuOpenId, orderedSessions, rowView, selected, selectedSession, selectedLifecycleState, requestComplete]);
   useEffect(() => {
-    if (menuOpenId && !orderedSessions.some((s) => s.id === menuOpenId)) setMenuOpenId(null);
-  }, [menuOpenId, orderedSessions]);
+    if (menuOpenId && !orderedSessions.some((s) => s.id === menuOpenId) &&
+      !folderListing.projects.some((p) => p.id === menuOpenId)) setMenuOpenId(null);
+  }, [menuOpenId, orderedSessions, folderListing.projects]);
   const deleteMut = useMutation({
     mutationFn: (session: SessionToastTarget) => deleteSession(session.id),
     onSuccess: (_d, session) => {
       leaveIfOpen(session.id);
-      dropFromLists(session.id);
+      dropFromLists(session.id, session.projectId);
       qc.invalidateQueries({ queryKey: ['sessions'] });
       showUndo(session, 'trash');
     },
@@ -5570,7 +5806,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // saying before the move: whoever has the link loses it now, and has it again if the session is
   // restored. A session nobody shared moves straight to Trash, with its Undo, as before.
   const requestTrash = (session: any): void => {
-    const target = { id: session.id, title: session.title };
+    const target = { id: session.id, title: session.title, projectId: session.projectMembership?.projectId };
     const shared = session.id === selectedId ? selectedShared : session.shared === true;
     if (!shared) {
       deleteMut.mutate(target);
@@ -5668,19 +5904,24 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // Pin/unpin a session to the top of the list. Optimistically flip pinnedAt in every cached
   // list (mirrors renameMut) so the row jumps immediately; reconcile on settle.
   const pinMut = useMutation({
-    mutationFn: ({ id, pin }: { id: string; pin: boolean }) =>
+    mutationFn: ({ id, pin }: { id: string; pin: boolean; projectId?: string }) =>
       pin ? pinSession(id) : unpinSession(id),
-    onMutate: ({ id, pin }) =>
-      qc.setQueriesData<any[]>({ queryKey: ['sessions'] }, (old) =>
+    onMutate: ({ id, pin, projectId }) => {
+      const patch = (old: any[] | undefined) =>
         Array.isArray(old)
           ? old.map((s) =>
               s.id === id ? { ...s, pinnedAt: pin ? new Date().toISOString() : null } : s,
             )
-          : old,
-      ),
+          : old;
+      qc.setQueriesData<any[]>({ queryKey: ['sessions'] }, patch);
+      if (projectId) qc.setQueriesData<any[]>({ queryKey: ['project-sessions', projectId] }, patch);
+    },
     onError: (e: Error, { pin }) =>
       message.error(pin ? "Couldn't pin the session" : "Couldn't unpin the session", e.message),
-    onSettled: () => qc.invalidateQueries({ queryKey: ['sessions'] }),
+    onSettled: (_data, _error, { projectId }) => {
+      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      if (projectId) void qc.invalidateQueries({ queryKey: ['project-sessions', projectId] });
+    },
   });
   // A tapped swipe button (or a full swipe) runs the same request as the row's menu
   // action; the row settles closed either way.
@@ -5688,7 +5929,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     setSwipeOpen(null);
     if (action === 'complete') requestComplete(s);
     else if (action === 'restore') requestRestore(s);
-    else if (action === 'pin') pinMut.mutate({ id: s.id, pin: !s.pinnedAt });
+    else if (action === 'pin') pinMut.mutate({ id: s.id, pin: !s.pinnedAt, projectId: s.projectMembership?.projectId });
     else if (action === 'share') setShareRowId(s.id);
     else if (action === 'move') openMove(s);
     else if (action === 'delete') requestTrash(s);
@@ -7155,6 +7396,26 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     setFolderEdit(null);
     setFolderParam(null, replace);
   };
+  const enterProjectSessions = (projectId: string): void => {
+    setSwipeOpen(null);
+    setMenuOpenId(null);
+    navigateWithPaneSlide('push', () => setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.set('project', encodeId(projectId));
+      if (effectiveView === 'completed') next.set('view', 'completed');
+      else next.delete('view');
+      return next;
+    }), { swapsPane: false });
+  };
+  const leaveProjectSessions = (): void => {
+    setView(effectiveView);
+    navigateWithPaneSlide('pop', () => setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete('project');
+      next.delete('view');
+      return next;
+    }), { swapsPane: false });
+  };
   const startNewFolder = (): void => setFolderEdit({ id: null, draft: '', error: null, saving: false });
   // New Folder… and Rename… save on Return (or when the field is left with a name in it); an empty
   // or unchanged name just closes the field. A name the workspace already has is said under it.
@@ -7252,7 +7513,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     setSwipeOpen(null);
     setMenuOpenId(null);
     setHeaderMenuOpen(false);
-    setMoveTarget({ id: s.id, title: s.title, folderId: s.folderId ?? null });
+    setMoveTarget({ id: s.id, title: s.title, folderId: s.folderId ?? null, workspace: s.workspace,
+      projectId: s.projectMembership?.projectId });
   };
   // A folder row: the folder, who in it waits on you, how many sessions it holds. Activity sits on
   // the folder itself as on the sidebar's Workspace rows: a still dot while a session runs, a
@@ -7975,8 +8237,30 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
 
   return (
     <div className={`workspace-split${selectedId || composingRoute ? ' show-conversation' : ''}`}>
-      <aside className="session-col" style={{ width: colWidth }}>
-        {openFolder ? (
+      <aside className={`session-col${openProjectId ? ' session-project-page' : ''}`} style={{ width: colWidth }}>
+        {openProjectId ? (
+          <div className="session-col-head session-folder-head session-project-page-header">
+            <button type="button" className="session-folder-back" aria-label={FOLDER_COPY.back(headWorkspaceName)}
+              title={FOLDER_COPY.back(headWorkspaceName)} onClick={leaveProjectSessions}>
+              <LeftOutlined />
+            </button>
+            <span className="session-folder-titles">
+              <span className="session-folder-title">{pageProjectTitle}</span>
+              <span className="session-folder-workspace">{SESSION_PROJECT_COPY.pageSubtitle(projectMembers.length)}</span>
+            </span>
+            <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: [
+              { key: 'project', label: SESSION_PROJECT_COPY.openProject,
+                onClick: () => navigate(`/projects/${encodeId(openProjectId)}`) },
+              { key: 'coordinator', label: SESSION_PROJECT_COPY.openCoordinator, disabled: !pageMenuCoordinator,
+                onClick: () => pageMenuCoordinator && navigateWithPaneSlide('push', () =>
+                  navigate(sessionPath(pageMenuCoordinator.id), { state: stampFromList() })) },
+            ] }}>
+              <button type="button" className="session-kebab session-folder-head-more" aria-label="Project actions">
+                <MoreOutlined />
+              </button>
+            </Dropdown>
+          </div>
+        ) : openFolder ? (
           // A folder's page: back to the workspace's list, the folder (and the workspace it is in),
           // and the folder's own two entries. It lists the view it was opened from.
           <div className="session-col-head session-folder-head">
@@ -8036,11 +8320,23 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         {openFolder && folderEdit?.id === openFolder.id && folderEdit.error && (
           <div className="session-folder-error">{folderEdit.error}</div>
         )}
-        <div className={`session-new ${composing ? 'active' : ''}`} onClick={goNew}>
+        {openProjectId && (
+          <div className="session-project-page-progress">
+            {pageTaskCounts && (
+              <>
+                <SessionProjectProgressBar counts={pageTaskCounts} runningCount={pageRunningCount} />
+                <span>{SESSION_PROJECT_COPY.pageProgress(pageTaskCounts.done, pageTaskCounts.total, pageRunningCount)}</span>
+              </>
+            )}
+            <a href={`/projects/${encodeId(openProjectId)}`} aria-label={SESSION_PROJECT_COPY.openProject}
+              onClick={(e) => { e.preventDefault(); navigate(`/projects/${encodeId(openProjectId)}`); }}>↗</a>
+          </div>
+        )}
+        {!openProjectId && <div className={`session-new ${composing ? 'active' : ''}`} onClick={goNew}>
           <PlusOutlined />
           <span>New session</span>
           {isStandalone && !isMobile && <kbd className="session-new-kbd">{NEW_SESSION_HINT}</kbd>}
-        </div>
+        </div>}
         {/* The palette's click target, shaped like the field it opens rather than a bare glyph in
             the header. ⌘K stays the primary way in; this is the only one on a touch device, where
             there's no keyboard to press it with and a `title` tooltip never shows — so the label
@@ -8065,7 +8361,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           ref={listRef}
           onScroll={onSessionListScroll}
         >
-          {openFolder
+          {openProjectId
+            ? projectMembers.length === 0 && !loadingSessions &&
+              <div className="chat-note">{projectSessionsQ.isError ? 'Couldn’t load project sessions.' : 'No sessions in this project.'}</div>
+            : openFolder
             ? listedSessions.length === 0 &&
               !loadingSessions && <div className="chat-note">No sessions in this folder.</div>
             : visibleSessions.length === 0 &&
@@ -8083,12 +8382,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           {/* The workspace's folders on top (§3.3), New Folder…'s field above them while it is
               open. A folder row reports for the sessions filed in it, which the time sections
               below leave out. */}
-          {!openFolder && folderEdit?.id === null && folderEditRow(null)}
-          {folderListing?.folders.map((row) =>
+          {!openProjectId && !openFolder && folderEdit?.id === null && folderEditRow(null)}
+          {!openProjectId && folderListing?.folders.map((row) =>
             folderEdit?.id === row.folder.id ? folderEditRow(row.folder.id) : folderRowView(row),
           )}
           {sections.map((sec) => (
-            <Fragment key={sec.key}>
+            <section key={sec.key} className={openProjectId && sec.key === 'Coordinator' ? 'session-project-coordinator' : undefined}>
               {sec.key === 'Pinned' ? (
                 <button
                   type="button"
@@ -8111,12 +8410,72 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 </div>
               )}
               {sec.sessions.map((s) => {
+                if (s.kind === 'project') {
+                  const coordinator = s.coordinator;
+                  const openCoordinator = () => {
+                    if (!coordinator) return;
+                    navigateWithPaneSlide('push', () =>
+                      navigate(sessionPath(coordinator.id), { state: stampFromList() }),
+                    );
+                  };
+                  const openTarget = () => {
+                    if (swipeClickGuard.current) { swipeClickGuard.current = false; return; }
+                    if (swipeOpen) { setSwipeOpen(null); return; }
+                    setMenuOpenId(null);
+                    if (s.target.kind === 'project') enterProjectSessions(s.target.id);
+                    else navigateWithPaneSlide('push', () =>
+                      navigate(sessionPath(s.target.id), { state: stampFromList() }));
+                  };
+                  const drag = swipeDrag?.id === s.id ? swipeDrag : null;
+                  const offset = drag?.dx ?? restingOffset(swipeOpen?.id === s.id ? swipeOpen.side : null,
+                    { leadingWidth: SWIPE_ACTION_WIDTH, trailingWidth: SWIPE_ACTION_WIDTH });
+                  return (
+                    <SessionProjectListRow
+                      key={s.id}
+                      project={s}
+                      active={s.members.some((member) => member.id === selectedId) ||
+                        selectedSession?.projectMembership?.projectId === s.projectId}
+                      onOpen={openTarget}
+                      onSessions={() => {
+                        if (swipeClickGuard.current) { swipeClickGuard.current = false; return; }
+                        if (swipeOpen) { setSwipeOpen(null); return; }
+                        enterProjectSessions(s.projectId);
+                      }}
+                      menuOpen={menuOpenId === s.id}
+                      onMenuOpenChange={(open) => { setMenuOpenId(open ? s.id : null); if (open) setSwipeOpen(null); }}
+                      swipe={isMobile && coordinator ? {
+                        offset, dragging: !!drag,
+                        onStart: (e) => onRowTouchStart(e, coordinator, false, s.id),
+                        onMove: onRowTouchMove, onEnd: onRowTouchEnd, onCancel: onRowTouchCancel,
+                        onAction: (action) => runSwipeAction(action, coordinator),
+                      } : undefined}
+                      menu={{
+                        items: [
+                          { key: 'coordinator', label: SESSION_PROJECT_COPY.openCoordinator, disabled: !coordinator },
+                          { key: 'sessions', label: SESSION_PROJECT_COPY.sessions },
+                          { key: 'project', label: SESSION_PROJECT_COPY.openProject },
+                          { type: 'divider' as const },
+                          { key: 'pin', label: coordinator?.pinnedAt ? SESSION_PROJECT_COPY.unpin : SESSION_PROJECT_COPY.pin, disabled: !coordinator },
+                          { key: 'move', label: SESSION_PROJECT_COPY.move, disabled: !coordinator },
+                        ],
+                        onClick: ({ key, domEvent }) => {
+                          domEvent.stopPropagation();
+                          setMenuOpenId(null);
+                          if (key === 'coordinator') openCoordinator();
+                          else if (key === 'sessions') enterProjectSessions(s.projectId);
+                          else if (key === 'project') navigate(`/projects/${encodeId(s.projectId)}`);
+                          else if (coordinator) runSwipeAction(key as SwipeAction, coordinator);
+                        },
+                      }}
+                    />
+                  );
+                }
                 const actionSession = selectedSession?.id === s.id ? selectedSession : s;
                 const canCompleteRow = sessionCapabilityOf(actionSession, 'canComplete', true);
                 const canRestoreRow = sessionCapabilityOf(actionSession, 'canRestore', true);
                 // Open and Completed rows open their transcript; only
                 // Trash rows stay closed.
-                const openable = view !== 'trash';
+                const openable = rowView !== 'trash';
                 // The selected row may have a fresher detail payload than the list poll. Use the
                 // merged row for both status surfaces so the banner and its list warning point at
                 // the same canonical obligation during that refresh gap.
@@ -8127,7 +8486,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   ? drag.dx
                   : restingOffset(swipeOpen?.id === s.id ? swipeOpen.side : null, swipeSizes);
                 // As on iOS, a full swipe runs the leading edge's first action only when it can run.
-                const canFullSwipe = view === 'open' ? canCompleteRow : canRestoreRow;
+                const canFullSwipe = rowView === 'open' ? canCompleteRow : canRestoreRow;
                 const swipeButtons = {
                   complete: { label: 'Complete', icon: <CheckOutlined />, disabled: !canCompleteRow },
                   restore: { label: 'Move to Open', icon: <UndoOutlined />, disabled: !canRestoreRow },
@@ -8158,13 +8517,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                       : isSessionLive(actionSession) ? 'Ends the run and moves to Completed' : undefined
                     : action === 'restore' && !canRestoreRow ? 'Move to Open unavailable right now' : undefined,
                 });
-                const menuItems: MenuProps['items'] = view === 'trash'
+                const menuItems: MenuProps['items'] = rowView === 'trash'
                   ? [menuItem('restore'), { type: 'divider' }, menuItem('purge')]
                   : [
                       ...swipeActions.leading.map(menuItem),
                       { type: 'divider' },
                       menuItem('share'),
-                      menuItem('move'),
+                      ...(!s.projectMembership || s.projectMembership.role === 'COORDINATOR' ? [menuItem('move')] : []),
                       { type: 'divider' },
                       menuItem('delete'),
                     ];
@@ -8288,7 +8647,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   </div>
                 );
               })}
-            </Fragment>
+            </section>
           ))}
           {/* Foot of the loaded window while a page is in flight, so a scroll that outruns the
               fetch (or a switch to a workspace not yet cached) shows progress rather than an
@@ -8329,7 +8688,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               aria-label="Back to sessions"
               onClick={() => {
                 const a = scopeWorkspaceId ?? workspacesForRunner[0]?.id;
-                const list = a ? `/workspaces/${encodeId(a)}` : `/runners/${encodeId(runner.id)}`;
+                const list = a ? `/workspaces/${encodeId(a)}${listSearch}` : `/runners/${encodeId(runner.id)}${listSearch}`;
                 // A real back when the list is the entry behind this one, so returning unwinds
                 // the push instead of stacking a third entry on top of it. A deep-linked
                 // conversation has no such entry: replace it, which still lands on the list —
@@ -8634,8 +8993,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         <SessionMoveModal
           open={!!moveTarget}
           session={moveTarget}
-          workspace={scopeWorkspaceId ? { id: scopeWorkspaceId, name: headWorkspaceName } : null}
-          folders={workspaceFolders}
+          workspace={moveTarget?.workspace ?? (scopeWorkspaceId ? { id: scopeWorkspaceId, name: headWorkspaceName } : null)}
+          folders={moveTarget?.workspace
+            ? (foldersQ.data ?? []).filter((f) => f.workspaceId === moveTarget.workspace!.id)
+            : workspaceFolders}
           onClose={() => setMoveTarget(null)}
         />
 

@@ -72,7 +72,8 @@ struct ConsoleView: View {
             consoleID: ObjectIdentifier(console),
             progress: { console.state.taskProgress[$0] },
             isRunning: { id in console.state.background.contains { $0.id == id && $0.status == "running" } },
-            subagentItems: { console.state.subagentItems[$0] ?? [] })
+            subagentItems: { console.state.subagentItems[$0] ?? [] },
+            fullPayload: { await console.fullPayload(seq: $0) })
     }
 
     private func sessionImagePreview(_ console: ConsoleModel) -> SessionImagePreview {

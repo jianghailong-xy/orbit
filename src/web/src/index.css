@@ -259,6 +259,17 @@ body {
   max-width: none;
   align-items: center;
 }
+.toast-slot {
+  width: fit-content;
+  max-width: 100%;
+  animation: orbit-toast-enter 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.toast-slot:has(.toast--card) {
+  width: 100%;
+}
+.toast-slot--leaving .toast {
+  pointer-events: none;
+}
 .toast {
   box-sizing: border-box;
   display: flex;
@@ -273,7 +284,6 @@ body {
   font-size: 14px;
   line-height: 20px;
   text-align: start;
-  animation: orbit-toast-enter 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 :root[data-theme='dark'] .toast {
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4);
@@ -519,8 +529,20 @@ button.toast--pill:focus-visible {
     transform: none;
   }
 }
-.toast-viewport--narrow .toast {
+.toast-viewport--narrow .toast-slot {
   animation-name: orbit-toast-drop;
+}
+.toast-viewport .toast-slot--leaving {
+  animation: orbit-toast-exit 250ms ease-in forwards;
+}
+
+@keyframes orbit-toast-exit {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translate3d(0, -12px, 0); }
+}
+@keyframes orbit-toast-fade {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 
 @media (pointer: coarse) {
@@ -530,8 +552,11 @@ button.toast--pill:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .toast {
+  .toast-viewport .toast-slot {
     animation: none;
+  }
+  .toast-viewport .toast-slot--leaving {
+    animation: orbit-toast-fade 250ms ease-in forwards;
   }
 }
 
@@ -3322,6 +3347,9 @@ button.toast--pill:focus-visible {
 .session-section-head:first-child {
   padding-top: 2px;
 }
+.session-col-list > section:not(:first-child) > .session-section-head {
+  padding-top: 12px;
+}
 /* The Pinned heading folds its rows away, as Notes' Pinned does: the whole heading is the button,
    and the chevron at its end points down while the rows show, right once they are folded. */
 .session-section-fold {
@@ -4836,6 +4864,93 @@ html[data-theme='dark'] .session-tag-chip {
   flex: none;
   font-size: 12.5px;
   color: var(--text-4);
+}
+.session-project-row .session-title {
+  font-weight: 600;
+}
+.session-project-icon {
+  position: relative;
+  color: var(--brand);
+  font-size: 16px;
+}
+.session-project-status {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--brand);
+  box-shadow: 0 0 0 2px var(--session-menu-surface);
+}
+.session-project-status.needs-you {
+  background: var(--warning);
+}
+.session-project-status.jobs {
+  animation: status-glyph-breathe 2.4s ease-in-out infinite;
+}
+.session-project-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  height: 18px;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-3);
+  font-size: 10px;
+  line-height: 1;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+}
+.session-project-progress.done {
+  color: var(--success);
+  border-color: var(--success-border);
+  background: var(--success-bg);
+}
+.session-project-progress:hover,
+.session-project-progress:focus-visible {
+  border-color: var(--brand);
+}
+.session-project-page-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-3);
+}
+.session-project-page-progress a {
+  margin-left: auto;
+  font-size: 16px;
+  color: var(--text-3);
+}
+.session-project-page-progress a:hover {
+  color: var(--brand);
+}
+.session-project-page-header .session-kebab {
+  border: 0;
+  background: transparent;
+}
+.session-project-progress-bar {
+  display: flex;
+  width: 32px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--text-4);
+}
+.session-project-progress-bar .done {
+  background: var(--success);
+}
+.session-project-progress-bar .running {
+  background: var(--brand);
+}
+.session-project-progress-bar .failed {
+  background: var(--error);
 }
 /* A public link opens this session (the list row's `shared`): a globe beside the time. */
 .session-shared {
@@ -13572,6 +13687,18 @@ button.chat-jump-start:hover {
 /* ============================================================================
    Provider onboarding — logo gallery + guided add flow (ProvidersPage).
    ========================================================================== */
+.prov-page-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px 12px;
+}
+.prov-page-sub {
+  flex-basis: 100%;
+  color: var(--text-3);
+  font-size: 12px;
+}
 .provider-gallery {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -13807,17 +13934,21 @@ button.chat-jump-start:hover {
 }
 .re-sec-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 10px;
   margin-bottom: 10px;
 }
 .re-sec-head h3 {
+  flex: none;
   margin: 0;
   font-size: 14px;
   font-weight: 650;
   color: var(--text-1);
 }
 .re-sec-sub {
+  order: 1;
+  flex-basis: 100%;
   font-size: 12px;
   color: var(--text-3);
 }
@@ -14100,9 +14231,10 @@ button.chat-jump-start:hover {
 }
 @media (max-width: 700px) {
   /* Keep the name and its actions together. Status and quota get their own lines so Add account
-     and Sign in can both remain visible without squeezing the account's state. */
+     and Sign in can both remain visible without squeezing the account's state. Reserve room for
+     the engine name and let the action column shrink so its buttons can wrap on a small phone. */
   .re-runner-card .re-row {
-    grid-template-columns: minmax(0, 1fr) max-content;
+    grid-template-columns: minmax(112px, 1fr) minmax(0, max-content);
     gap: 8px 10px;
   }
   .re-runner-card .re-row > .re-act {
@@ -20871,6 +21003,32 @@ a.wkctx-title:hover { text-decoration: underline; }
   gap: 8px;
   padding: 2px 0;
   font-size: 12px;
+}
+button.agent-progress-agent {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+button.agent-progress-agent:hover {
+  background: var(--bg-hover);
+}
+.agent-progress-caret {
+  flex: none;
+  font-size: 10px;
+  color: var(--text-3);
+}
+.agent-progress-transcript {
+  margin: 4px 0 8px 8px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border-subtle);
+}
+.chat-workflow-source > summary {
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--text-3);
+  cursor: pointer;
 }
 .agent-progress-label {
   flex: none;

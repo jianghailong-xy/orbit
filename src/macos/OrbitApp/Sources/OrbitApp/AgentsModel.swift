@@ -50,6 +50,10 @@ final class AgentsModel {
 
     // The selected agent's sessions for the current Open/Completed/Trash view.
     private(set) var agentSessions: [Session] = []
+    #if os(iOS)
+    /// The same scope across every Workspace, for project wording and coordinator placement.
+    private(set) var allSessions: [Session] = []
+    #endif
     private(set) var sessionsLoading = false
     /// The last (agent, view) `loadSessions` ran for, so a row action can silently refresh the same
     /// list without the view having to thread the agent id / tab back in.
@@ -325,6 +329,9 @@ final class AgentsModel {
         defer { sessionsLoading = false }
         do {
             let all = try await api.listSessions(view: view)
+            #if os(iOS)
+            allSessions = all
+            #endif
             agentSessions = SessionFilter.forAgent(all, agentID: agentID, view: view)
         } catch { errorText = friendly(error) }
     }
@@ -351,6 +358,9 @@ final class AgentsModel {
     func applyOpenSnapshot(_ all: [Session]) {
         openSnapshot = all
         guard let q = lastSessionQuery, q.view == .open else { return }
+        #if os(iOS)
+        allSessions = all
+        #endif
         agentSessions = SessionFilter.forAgent(all, agentID: q.agentID, view: q.view)
     }
 
