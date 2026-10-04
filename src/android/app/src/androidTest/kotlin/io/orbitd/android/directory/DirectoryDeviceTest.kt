@@ -164,11 +164,18 @@ class DirectoryDeviceTest {
         compose.onNode(hasText(text) and hasAnyAncestor(hasTestTag("directory-list"))).assertIsDisplayed()
     }
 
-    private fun awaitIme(visible: Boolean) = compose.waitUntil(8_000) {
-        ViewCompat.getRootWindowInsets(compose.activity.window.decorView)?.isVisible(WindowInsetsCompat.Type.ime()) == visible
+    private fun awaitIme(visible: Boolean) {
+        compose.waitUntil(8_000) {
+            ViewCompat.getRootWindowInsets(compose.activity.window.decorView)?.isVisible(WindowInsetsCompat.Type.ime()) == visible
+        }
+        instrumentation.waitForIdleSync()
+        instrumentation.uiAutomation.waitForIdle(500, 5_000)
     }
     private fun tap(node: SemanticsNodeInteraction, requireAboveIme: Boolean) {
+        compose.waitForIdle()
+        node.assertIsDisplayed()
         val bounds = node.fetchSemanticsNode().boundsInWindow
+        assertTrue("Touch target must have non-empty visible bounds: $bounds", bounds.width > 0 && bounds.height > 0)
         val location = IntArray(2)
         compose.activity.window.decorView.getLocationOnScreen(location)
         val ime = ViewCompat.getRootWindowInsets(compose.activity.window.decorView)!!
@@ -180,14 +187,15 @@ class DirectoryDeviceTest {
                 putString("a05_ime_geometry", "node=$bounds imeTop=$imeTop screenHeight=${compose.activity.window.decorView.height}")
             })
         }
-        val x = location[0] + bounds.center.x; val y = location[1] + bounds.center.y
+        val touchX = location[0] + bounds.center.x; val touchY = location[1] + bounds.center.y
         val time = SystemClock.uptimeMillis()
         val pointer = MotionEvent.PointerProperties().apply { id = 0; toolType = MotionEvent.TOOL_TYPE_FINGER }
-        val coordinates = MotionEvent.PointerCoords().apply { this.x = x; this.y = y; pressure = 1f; size = 1f }
+        val coordinates = MotionEvent.PointerCoords().apply { x = touchX; y = touchY; pressure = 1f; size = 1f }
         listOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP).forEach { action ->
             val event = MotionEvent.obtain(time, SystemClock.uptimeMillis(), action, 1, arrayOf(pointer), arrayOf(coordinates),
                 0, 0, 1f, 1f, 0, 0, android.view.InputDevice.SOURCE_TOUCHSCREEN, 0)
             assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true)); event.recycle()
+            if (action == MotionEvent.ACTION_DOWN) SystemClock.sleep(50)
         }
         compose.waitForIdle()
     }

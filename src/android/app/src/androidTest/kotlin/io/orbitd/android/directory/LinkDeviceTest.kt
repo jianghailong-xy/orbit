@@ -86,7 +86,7 @@ class LinkDeviceTest {
                         val lifecycle = scenario.state
                         scenario.onActivity {
                             val insets = androidx.core.view.ViewCompat.getRootWindowInsets(it.window.decorView)
-                            File(evidence, "back-trace.txt").appendText("beforeBack lifecycle=$lifecycle focus=$focused callbacks=${it.onBackPressedDispatcher.hasEnabledCallbacks()} ime=${insets?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime())} toolbarBack=$toolbarBack\n")
+                            File(evidence, "back-trace.txt").appendText("beforeBack activity=${it.lifecycle.currentState} scenarioMonitor=$lifecycle focus=$focused callbacks=${it.onBackPressedDispatcher.hasEnabledCallbacks()} ime=${insets?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime())} toolbarBack=$toolbarBack\n")
                         }
                         compose.waitForIdle()
                         instrumentation.waitForIdleSync()

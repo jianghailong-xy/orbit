@@ -31,6 +31,13 @@ cleanup() {
     "$adb" -s "$serial" shell wm density "${old_density:-reset}" >/dev/null || true
     "$adb" -s "$serial" shell cmd uimode night "$old_night" >/dev/null || true
   fi
+  if [[ -n "${old_handwriting:-}" ]]; then
+    if [[ "$old_handwriting" == null ]]; then
+      "$adb" -s "$serial" shell settings delete secure stylus_handwriting_enabled >/dev/null || true
+    else
+      "$adb" -s "$serial" shell settings put secure stylus_handwriting_enabled "$old_handwriting" >/dev/null || true
+    fi
+  fi
   if [[ -n "$emulator_pid" ]]; then
     kill "$emulator_pid" 2>/dev/null || true
     wait "$emulator_pid" 2>/dev/null || true
@@ -90,13 +97,19 @@ if [[ "$("$adb" -s "$serial" shell getprop ro.kernel.qemu | tr -d '\r')" == 1 ]]
   "$adb" -s "$serial" shell wm density 320
   "$adb" -s "$serial" shell settings put system font_scale "${A05_FONT_SCALE:-1.0}"
   "$adb" -s "$serial" shell cmd uimode night "${A05_NIGHT:-no}"
+  if (( api >= 34 )); then
+    old_handwriting="$("$adb" -s "$serial" shell settings get secure stylus_handwriting_enabled | tr -d '\r')"
+    "$adb" -s "$serial" shell settings put secure stylus_handwriting_enabled 0
+  fi
 fi
 {
+  printf 'input_scope=phone touchscreen keyboard; stylus handwriting not tested\noriginal_stylus_handwriting_enabled=%s\n' "${old_handwriting:-unchanged}"
   "$adb" -s "$serial" shell wm size
   "$adb" -s "$serial" shell wm density
   "$adb" -s "$serial" shell settings get system font_scale
   "$adb" -s "$serial" shell cmd uimode night
   "$adb" -s "$serial" shell ime list -s
+  "$adb" -s "$serial" shell settings get secure stylus_handwriting_enabled
   "$adb" -s "$serial" shell settings get secure enabled_accessibility_services
   "$adb" -s "$serial" shell pm list packages --show-versioncode com.google.android.marvin.talkback
 } > "$output/conditions.txt"

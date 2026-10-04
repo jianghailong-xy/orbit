@@ -190,6 +190,9 @@ The driver holds `/var/lib/orbit/android/ui.lock` throughout, uses a signed-out 
 synthetic loopback HTTP accounts, captures device/APK identities, screenshots, request paths,
 IME geometry and process logs, and restores emulator settings. Captures live in app-private
 storage and are extracted with `run-as`, including on API30's restricted external storage.
+For the emulator phone-keyboard case, API34+ stylus handwriting is temporarily disabled and
+its original value is restored and recorded. The input is explicitly a finger touchscreen
+event; a hidden or empty touch target fails before injection. This does not test pen input.
 Physical devices supplied
 by serial keep their configuration. Input reaches the system input dispatcher, not only
 Compose's semantic click action. This fixture proves the client/HTTP boundary and observed
