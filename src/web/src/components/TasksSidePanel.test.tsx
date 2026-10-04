@@ -632,11 +632,18 @@ describe('TasksSidePanel project rows', () => {
   });
 
   it('breathes the dot for a running task or a working coordinator alike', () => {
-    expect(row({ buckets: { running: 1 } })).toContain('class="tp-list-dot running" title="Running"');
+    expect(row({ buckets: { running: 1 } })).toContain('class="tp-list-dot running" title="Work in flight"');
     expect(row({ coordinatorActivity: { working: true, lastTurnAt: null } })).toContain(
       'class="tp-list-dot running"',
     );
     expect(row({ coordinatorActivity: { working: false, lastTurnAt: null } })).not.toContain('running');
+  });
+
+  it('keeps the project active while a landing or project merge is queued or running', () => {
+    expect(row({ integration: { line: 'PROJECT_BRANCH', ref: 'project/x', activeJobCount: 1 } }))
+      .toContain('class="tp-list-dot running" title="Work in flight"');
+    expect(row({ integration: { line: 'PROJECT_BRANCH', ref: 'project/x', activeJobCount: 0 } }))
+      .not.toContain('tp-list-dot running');
   });
 
   it('counts what waits on you in the workspace rows’ amber pill, beside the dot', () => {

@@ -98,6 +98,8 @@ public struct SharedPoolKey: Codable, Equatable, Sendable, Identifiable {
     /// `Out of budget · resets …` (`pool-key-select.ts` spent). Nil when it is not, which is what the
     /// server sends once the mark is behind us too.
     public let spentUntil: String?
+    /// Temporarily skipped until this time, without changing authentication or quota.
+    public let pausedUntil: String?
     public let contributor: PoolKeyContributor
     /// This month's use of it; `othersCostUsd` is what its cap counts.
     public let usage: PoolSpend
@@ -110,7 +112,7 @@ public struct SharedPoolKey: Codable, Equatable, Sendable, Identifiable {
     public init(id: String, label: String, fingerprint: String, state: PoolKeyState = .active,
                 enabled: Bool = true, shareCap: Int? = nil, spentUntil: String? = nil,
                 contributor: PoolKeyContributor,
-                usage: PoolSpend = PoolSpend(), running: Bool = false, next: Bool = false) {
+                usage: PoolSpend = PoolSpend(), running: Bool = false, next: Bool = false, pausedUntil: String? = nil) {
         self.id = id
         self.label = label
         self.fingerprint = fingerprint
@@ -118,6 +120,7 @@ public struct SharedPoolKey: Codable, Equatable, Sendable, Identifiable {
         self.enabled = enabled
         self.shareCap = shareCap
         self.spentUntil = spentUntil
+        self.pausedUntil = pausedUntil
         self.contributor = contributor
         self.usage = usage
         self.running = running
@@ -133,6 +136,7 @@ public struct SharedPoolKey: Codable, Equatable, Sendable, Identifiable {
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
         shareCap = (try? c.decodeIfPresent(Int.self, forKey: .shareCap)) ?? nil
         spentUntil = (try? c.decodeIfPresent(String.self, forKey: .spentUntil)) ?? nil
+        pausedUntil = try c.decodeIfPresent(String.self, forKey: .pausedUntil)
         contributor = try c.decode(PoolKeyContributor.self, forKey: .contributor)
         usage = (try? c.decodeIfPresent(PoolSpend.self, forKey: .usage)) ?? PoolSpend()
         running = (try? c.decodeIfPresent(Bool.self, forKey: .running)) ?? false

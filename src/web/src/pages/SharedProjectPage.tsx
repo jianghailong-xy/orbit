@@ -105,7 +105,10 @@ function projectTask(row: SharedProjectTaskRow): ProjectTask {
  */
 function SharedProjectTaskRow({ task }: { task: ProjectTask }) {
   const workLabel = projectTaskWorkLabel(task);
-  const landing = projectTaskIntegrationTag(task, { ref: null, upstreamRef: null });
+  // The public INTEGRATING value includes queued and stopped work; it does not prove a live job.
+  const landing = task.integration?.state === 'RUNNING'
+    ? { text: 'Pending landing', color: 'default' }
+    : projectTaskIntegrationTag(task, { ref: null, upstreamRef: null });
   return (
     <List.Item
       className="project-task-row"

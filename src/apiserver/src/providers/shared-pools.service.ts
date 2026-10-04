@@ -53,6 +53,7 @@ const KEY_VIEW_SELECT = {
   enabled: true,
   shareCap: true,
   spentUntil: true,
+  pausedUntil: true,
   createdAt: true,
 } satisfies Prisma.PoolApiKeySelect;
 
@@ -71,6 +72,7 @@ const LOGIN_VIEW_SELECT = {
   expiresAt: true,
   createdAt: true,
   spentUntil: true,
+  pausedUntil: true,
   usage: true,
 } satisfies Prisma.PoolCodexLoginSelect;
 
@@ -180,6 +182,7 @@ function poolView(
         fingerprint: maskedKey(key.keyHint),
         state: key.state,
         enabled: key.enabled,
+        pausedUntil: key.pausedUntil && key.pausedUntil > now ? key.pausedUntil.toISOString() : null,
         shareCap: key.shareCap,
         // Out of budget until then — OpenAI said so (the page's "Out of budget · resets …"); null when not.
         spentUntil: key.spentUntil && key.spentUntil > now ? key.spentUntil : null,

@@ -790,8 +790,11 @@ export async function enqueueForDoneTask(
   if (!codebase) return { enqueued: false, reason: 'INTEGRATION_REPOSITORY_UNKNOWN', projectId };
 
   const session = { id: work.id, branch: work.branch, runnerId: work.assignedRunnerId };
-  // L3 step 4. Only on the beat the line started: afterwards every DONE queues itself.
-  const onTheStartingBeat = first.startedAt.getTime() >= Date.now() - 1_000;
+  // L3 step 4. Only on the beat the line started: afterwards every DONE queues itself. Asked of the
+  // transaction, not of the clock: a later DONE inside a "started within the last second" window
+  // back-filled the project's other DONE tasks, and re-queued a landing that had come back red —
+  // a retry the platform never makes on its own (J5).
+  const onTheStartingBeat = first.startedNow;
 
   const queued = await queueLandingForWork(tx, {
     ownerId, projectId, taskId, codebase, session, line: first.line,

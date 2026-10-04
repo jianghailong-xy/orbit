@@ -269,9 +269,10 @@ describe('the "On your runners" section', () => {
   ] as const)('adds an Antigravity installation row without sign-in or quota: %s', (state, label) => {
     const box = runner({ antigravity: state, engines: [health({ engine: 'kimi' })] });
     const html = render([box], { path: `/providers?runner=${encodeId(box.id)}&engine=antigravity` });
-    const row = html.slice(html.indexOf('data-engine="antigravity"'));
+    const row = html.slice(html.indexOf('data-engine="antigravity"'), html.indexOf('>Kimi Code<'));
+    expect(html.indexOf('>Antigravity<')).toBeLessThan(html.indexOf('>Kimi Code<'));
     expect(html.match(/re-row focused/g)).toHaveLength(1);
-    expect(row).toContain('Antigravity CLI');
+    expect(row).toContain('>Antigravity<');
     expect(row).toContain(label);
     expect(row).toContain('No sign-in · runs on your Gemini key');
     expect(row).not.toContain('>Sign in<');
@@ -292,7 +293,7 @@ describe('the "On your runners" section', () => {
 
   it('shows the Antigravity row even before an older runner reports its engines', () => {
     const html = render([runner({ engines: null, antigravity: { supported: false, installed: null, version: null, envKeyAvailable: false } })]);
-    expect(html).toContain('Antigravity CLI');
+    expect(html).toContain('>Antigravity<');
     expect(html).toContain('Update runner');
   });
 

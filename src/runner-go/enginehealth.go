@@ -45,10 +45,12 @@ func probeEngines(specs []engineSpec, servicePath string) []EngineHealthReport {
 	for _, spec := range specs {
 		h := checkEngine(spec, servicePath)
 		report := EngineHealthReport{
-			Engine:    spec.bin,
-			Installed: h.installed,
-			Version:   h.version,
-			Auth:      authWord(h.auth),
+			Engine:     spec.bin,
+			Installed:  h.installed,
+			Version:    h.version,
+			Auth:       authWord(h.auth),
+			AuthSource: h.authSource,
+			PlanUsage:  h.planUsage,
 		}
 		// An engine that isn't here has no update state worth reporting — the record is about
 		// a binary, and a stale one left by an uninstall would describe something gone.

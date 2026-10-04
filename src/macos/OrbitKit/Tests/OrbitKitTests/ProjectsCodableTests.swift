@@ -67,6 +67,18 @@ final class ProjectsCodableTests: XCTestCase {
         XCTAssertNil(row.goal)
     }
 
+    func testIntegrationActivityDecodesAndRoundTrips() throws {
+        let row = try XCTUnwrap(try decode("""
+        [{"id":"p4","title":"Merging","status":"OPEN",
+          "integration":{"line":"PROJECT_BRANCH","ref":"project/x","activeJobCount":2},
+          "coordinatorActivity":{"working":true,"lastTurnAt":null}}]
+        """).first)
+        XCTAssertEqual(row.integration?.activeJobCount, 2)
+        XCTAssertEqual(row.coordinatorActivity?.working, true)
+        let data = try JSONEncoder().encode([row])
+        XCTAssertEqual(try JSONDecoder().decode([ProjectSummary].self, from: data), [row])
+    }
+
     func testValuesThisBuildDoesNotKnowDecodeToTheirFloor() throws {
         let row = try XCTUnwrap(try decode("""
         [{ "id": "p2", "title": "New", "status": "ARCHIVED", "createdAt": "2026-01-01T00:00:00.000Z",

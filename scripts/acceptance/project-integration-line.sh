@@ -933,6 +933,88 @@ case_automatic_hands_back_when_main_moved() {
     "$(sql "SELECT count(*) FROM session_merge_receipt WHERE task_id = '$task' AND target_branch = 'main'" | tr -d '[:space:]')"
 }
 
+# ── case 15: the absorb resolved on the task's own branch lands by MERGE (§3.1 M2, M3) ─────────
+#
+# Case 11's conflict, resolved the way M3 says: the conflicted task's source branch gets the merge of
+# the project branch's tip and main's tip, conflict resolved by hand, and the task is completed again.
+# Its next landing is claimed although the item is still open — M2 holds the OTHER tasks' landings,
+# not the conflicted task's own — and J-S2 finds both tips in the source, so it does not absorb main
+# again: the source lands by J-S4 MERGE with exactly its own tree. Before this, J-S2 merged main into
+# the line's tip first and met the conflict the branch had already resolved (2026-10-03, project
+# 34Y7My8sqhKLWtmCQYv1l). The landing closes the item, and the landing it held goes next.
+
+case_main_sync_resolved_on_the_source_lands_by_merge() {
+  local work origin ws project
+  work="$(new_repo absorbed)"
+  origin="$(repo_origin_of absorbed)"
+  ws="$(new_workspace 'absorbed' "$work" "$origin")"
+  project="$(new_project absorbed "$ws" "$origin")"
+  local base; base="$(git -C "$work" rev-parse main)"
+
+  git -C "$work" checkout --quiet -b project/absorbed main
+  printf 'line\n' > "$work/contested.txt"
+  git -C "$work" add contested.txt
+  git -C "$work" commit --quiet -m 'project branch: contested'
+  git -C "$work" push --quiet origin project/absorbed
+  git -C "$work" checkout --quiet main
+  local line_tip; line_tip="$(origin_tip "$origin" refs/heads/project/absorbed)"
+
+  new_task_branch "$work" task/absorbed-a a.txt 'from a' >/dev/null
+  new_task_branch "$work" task/absorbed-b b.txt 'from b' >/dev/null
+  local task_a task_b
+  task_a="$(new_code_task "$project" 'absorbed A' "$ws" task/absorbed-a "$base")"
+  task_b="$(new_code_task "$project" 'absorbed B' "$ws" task/absorbed-b "$base")"
+  printf 'upstream\n' > "$work/contested.txt"
+  git -C "$work" add contested.txt
+  git -C "$work" commit --quiet -m 'main: contested'
+  git -C "$work" push --quiet origin main
+  local main_tip; main_tip="$(git -C "$work" rev-parse main)"
+
+  confirm_task_done "$task_a"
+  wait_for_job_state "$task_a" CONFLICT 240
+  assert_eq 'the absorb is what conflicted' 'MAIN_SYNC' "$(job_column_of "$task_a" phase)"
+  confirm_task_done "$task_b"
+  wait_for_job_row "$task_b"
+
+  # M3: A's source branch takes the absorb and nothing else — the line's tip, then main's tip, with
+  # the contested file resolved by hand — and A is completed again.
+  git -C "$work" checkout --quiet task/absorbed-a
+  git -C "$work" merge --quiet --no-edit "$line_tip"
+  git -C "$work" merge --quiet --no-edit main >/dev/null 2>&1 && fail 'main merged into A without the conflict'
+  printf 'line\nupstream\n' > "$work/contested.txt"
+  git -C "$work" add contested.txt
+  git -C "$work" commit --quiet --no-edit
+  git -C "$work" push --quiet origin task/absorbed-a
+  git -C "$work" checkout --quiet main
+  local source; source="$(git -C "$work" rev-parse task/absorbed-a)"
+
+  api PATCH "/tasks/$task_a" '{"status":"IN_PROGRESS"}' >/dev/null
+  [ "$(api_status)" = "200" ] || fail "sending A back answered $(api_status)"
+  confirm_task_done "$task_a"
+  wait_for_sql "a second landing of A to be queued" 60 \
+    "SELECT count(*) FROM project_integration_job WHERE task_id = '$task_a'" 2
+  wait_for_job_state "$task_a" LANDED 240
+
+  fetch_all "$work"
+  local tip; tip="$(origin_tip "$origin" refs/heads/project/absorbed)"
+  assert_eq 'the job made no absorb of its own' '' "$(job_column_of "$task_a" main_sync_sha)"
+  assert_eq 'what landed is the source merged onto the line'"'"'s tip' "$line_tip $source" \
+    "$(git -C "$work" rev-list --parents -n 1 "$tip" | cut -d' ' -f2-)"
+  assert_eq 'the tree that landed is the source'"'"'s own' \
+    "$(git -C "$work" rev-parse "$source^{tree}")" "$(git -C "$work" rev-parse "$tip^{tree}")"
+  assert_eq "main's tip is on the line now" 'yes' "$(is_ancestor_in "$work" "$main_tip" "$tip")"
+  assert_eq 'the landing answered the conflict item' 'LANDED' \
+    "$(sql1 "SELECT resolution FROM project_open_item
+              WHERE task_id = '$task_a' AND kind = 'INTEGRATION_CONFLICT'")"
+
+  # The landing M2 held goes next, onto a line that already has main: nothing to absorb, no conflict.
+  wait_for_job_state "$task_b" LANDED 240
+  assert_eq 'the held landing absorbed nothing either' '' "$(job_column_of "$task_b" main_sync_sha)"
+  fetch_all "$work"
+  assert_eq 'and carries its own work onto the line' 'from b' \
+    "$(git -C "$work" show "$(origin_tip "$origin" refs/heads/project/absorbed):b.txt" | tr -d '\n')"
+}
+
 # ── the register ───────────────────────────────────────────────────────────────────────────────
 # One function per case, listed here. Later tasks append their own (§9.2) and do not edit these.
 CASES=(
@@ -950,6 +1032,7 @@ CASES=(
   case_js_check_runs_on_the_prepared_tree
   case_automatic_merges_a_clean_branch_by_itself
   case_automatic_hands_back_when_main_moved
+  case_main_sync_resolved_on_the_source_lands_by_merge
 )
 
 main() {

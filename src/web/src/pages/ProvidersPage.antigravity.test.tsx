@@ -22,7 +22,7 @@ const runner = (over: Partial<Runner> = {}): Runner => ({
   ...over,
 });
 
-describe('Gemini readiness on the Providers page', () => {
+describe('Antigravity identity and readiness on the Providers page', () => {
   let root: Root;
   let container: HTMLDivElement;
   let client: QueryClient;
@@ -74,6 +74,9 @@ describe('Gemini readiness on the Providers page', () => {
       runner({ id: 'missing', antigravity: { supported: true, installed: false, version: null, envKeyAvailable: false } }),
     ]);
     const key = container.querySelector('.prov-runtime')!;
+    expect(container.querySelector('.prov-cell-name')?.textContent).toBe('Antigravity');
+    expect(container.querySelector('a[href="/providers/new/gemini"] .pc-name')?.textContent).toBe('Antigravity');
+    expect(container.querySelector('[data-engine="antigravity"] .re-name')?.textContent).toBe('Antigravity');
     expect(key.textContent).toContain('Runs on the Antigravity CLI');
     expect(key.textContent).toContain('Ready on 1 runner');
     scroll.mockClear();

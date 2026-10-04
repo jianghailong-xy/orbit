@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { PauseAccountDto } from '../common/account-pause';
 import { PublicIdPipe } from '../common/public-id';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
@@ -97,6 +98,16 @@ export class ProvidersController {
     @Body() dto: AddProviderPoolMemberDto,
   ) {
     return this.providers.addPoolMember(user.userId, id, dto.providerId);
+  }
+
+  @Post('pools/:id/members/:memberId/pause')
+  pausePoolMember(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('memberId', PublicIdPipe.allowingPrefixed('login:')) memberId: string,
+    @Body() dto: PauseAccountDto,
+  ) {
+    return this.providers.pausePoolMember(user.userId, id, memberId, dto.durationMinutes);
   }
 
   @Delete('pools/:id/members/:providerId')

@@ -4958,6 +4958,19 @@ html[data-theme='dark'] .session-tag-chip {
   font-size: 16px;
   cursor: pointer;
 }
+/* Keep the slot stable and the button reachable by keyboard when hidden from the mouse. */
+@media (hover: hover) and (pointer: fine) {
+  .session-actions > .session-kebab {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .session-row:hover .session-actions > .session-kebab,
+  .session-row:focus-within .session-actions > .session-kebab,
+  .session-row.menu-open .session-actions > .session-kebab {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
 .session-actions > .session-kebab:hover,
 .session-row.menu-open .session-actions > .session-kebab {
   background: var(--bg-hover-strong);
@@ -4978,10 +4991,6 @@ html[data-theme='dark'] .session-tag-chip {
 }
 .session-row-menu .session-menu-label kbd {
   flex: none;
-  padding: 1px 5px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--bg-sunken);
   color: var(--text-3);
   font: inherit;
   font-size: 12px;
@@ -20693,3 +20702,68 @@ a.wkctx-title:hover { text-decoration: underline; }
 .wt-recovery-repair-hint { margin: 5px 0 0 !important; font-size: 11px; }
 .wt-recovery-repair-error { color: var(--error) !important; }
 @media (max-width: 680px) { .wt-recovery-histories { grid-template-columns: 1fr; } }
+
+/* Timed pauses keep identity and quota visible while showing when the account returns. */
+.re-row.account-paused {
+  background: color-mix(in srgb, var(--warning, #d89614) 7%, transparent);
+}
+.account-pause-remaining {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.re-act:has(.account-pause-actions) {
+  flex-wrap: wrap;
+}
+.account-pause-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.account-pause-name {
+  margin: 14px 0 10px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.account-pause-copy {
+  color: var(--text-2);
+  line-height: 1.65;
+}
+.account-pause-scope {
+  padding: 10px 12px;
+  margin: 12px 0;
+  background: color-mix(in srgb, var(--warning, #d89614) 10%, transparent);
+  border-radius: 8px;
+  font-size: 13px;
+}
+.account-pause-durations {
+  display: flex;
+  margin: 20px 0 16px;
+}
+.account-pause-durations .ant-radio-button-wrapper {
+  flex: 1;
+  text-align: center;
+}
+.account-pause-custom {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.account-pause-custom > span,
+.account-pause-preview {
+  font-size: 12px;
+  color: var(--text-3);
+}
+@media (max-width: 700px) {
+  .re-row:has(.account-pause-actions) > .re-act {
+    grid-column: 1 / -1;
+    grid-row: auto;
+    justify-content: flex-start;
+    margin-left: 38px;
+  }
+  .re-runner-card .re-row:has(.account-pause-actions) {
+    grid-template-columns: minmax(96px, 1fr) minmax(0, max-content);
+  }
+}

@@ -399,12 +399,14 @@ function rankAccounts(
         (w) => w.utilization >= EXHAUSTED_UTILIZATION && !(Date.parse(w.resetsAt ?? '') <= now.getTime()),
       );
       const resets = spent.map((w) => Date.parse(w.resetsAt ?? ''));
+      const pause = Date.parse(account.pausedUntil ?? '');
+      const spentUntil = spent.length === 0 ? null : resets.some(Number.isNaN) ? Number.POSITIVE_INFINITY : Math.max(...resets);
       return {
         id: account.id,
         nearLimit: quotaNearLimit(snapshot, now),
         expiresAt: quotaExpiresAt(snapshot, now),
         tightest: windows.length > 0 ? Math.max(...windows.map((w) => w.utilization)) : Number.POSITIVE_INFINITY,
-        spentUntil: spent.length === 0 ? null : resets.some(Number.isNaN) ? Number.POSITIVE_INFINITY : Math.max(...resets),
+        spentUntil: pause > now.getTime() ? Math.max(pause, spentUntil ?? 0) : spentUntil,
       };
     })
     // Two accounts expiring at Infinity, or unread, subtract to NaN, which falls through to the next

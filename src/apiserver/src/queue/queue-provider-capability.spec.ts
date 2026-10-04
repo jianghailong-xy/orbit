@@ -49,6 +49,7 @@ async function capturedClaimCapability(supportedProviders: AgentProvider[]): Pro
     },
   };
   const prisma = {
+    session: { findMany: async () => [] },
     $transaction: async (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),
   } as never;
   const queue = new QueueService(prisma, { publishSessionUpdated() {} } as never);

@@ -50,9 +50,9 @@ import { TaskCheckpointService } from './task-checkpoint.service';
  *   bash scripts/run-pg-spec.sh src/apiserver/src/projects/project-integration-ref.pg.spec.ts
  *
  * Project acceptance criterion 4, cases as `docs/project-integration-line-contract.md` §1.7 lists
- * them, plus §8.8's C1 compatibility case and L5's owner-only door. The last three cases are L3
+ * them, plus §8.8's C1 compatibility case and L5's owner-only door. The last four cases are L3
  * step 4's back-fill (J-T1d): which finished code tasks a line that has just started still owes a
- * landing to.
+ * landing to, and that only the transaction starting it owes them one.
  *
  * WHAT IS REAL
  * ============
@@ -971,5 +971,35 @@ test('a project’s integration line is recorded, defaulted, locked, read for la
     assert.deepEqual(await jobsFor(stack, pair.other), [
       { kind: 'LAND_TASK', state: 'QUEUED', target_ref: `refs/heads/project/${f.publicId}` },
     ], 'a receipt into some other project’s branch was read as landing on this project’s line');
+  });
+
+  // And ONLY the transaction that starts the line. That was once read off the clock — "the line
+  // started within the last second" — so on a fast host the very next DONE back-filled too, and
+  // re-queued a landing that had already come back red: a retry the platform never makes on its own
+  // (J5). The DONE below follows the start by milliseconds, well inside that second.
+  await t.test('a DONE right after another transaction started the line back-fills nothing, and '
+    + 'never re-queues a landing that came back red', async () => {
+    const f = await project(stack, 'after');
+    const { trigger } = await finishedPair(stack, f, 'after');
+    const started = await enqueue(stack, f, trigger);
+    assert.equal(started.enqueued, true, `the line never started: ${JSON.stringify(started)}`);
+    await stack.sql.query(
+      `UPDATE "project_integration_job" SET "state" = 'CHECK_FAILED', "finished_at" = now()
+        WHERE "task_id" = $1::uuid`,
+      [trigger],
+    );
+    const late = await codeTask(stack, f, 'after: a task finished once the line was running');
+    await workSession(stack, f, late, `after-${f.publicId}-late`);
+    await done(stack, late);
+
+    const outcome = await enqueue(stack, f, late);
+
+    assert.equal(outcome.enqueued, true, `the late task was not queued: ${JSON.stringify(outcome)}`);
+    assert.deepEqual(outcome.enqueued && outcome.alsoQueuedTaskIds, [],
+      'a DONE written after the line started back-filled the project’s other finished tasks');
+    assert.deepEqual(await jobsFor(stack, trigger), [
+      { kind: 'LAND_TASK', state: 'CHECK_FAILED', target_ref: `refs/heads/project/${f.publicId}` },
+    ], 'another task’s DONE queued a red landing again — only its coordinator’s rerun may (J-T1b)');
+    assert.deepEqual((await jobsFor(stack, late)).map((job) => job.kind), ['LAND_TASK']);
   });
 });

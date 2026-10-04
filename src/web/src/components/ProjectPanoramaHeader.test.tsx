@@ -8,6 +8,7 @@ import type { ProjectIntegrationView } from '@orbit/shared';
 import {
   PANORAMA_BUCKETS,
   ProjectPanoramaHeader,
+  integrationLanes,
   landingClock,
   landingLine,
   stalledOnReady,
@@ -214,6 +215,33 @@ describe('ProjectPanoramaHeader', () => {
     expect(render(qc, 'DONE')).not.toContain('Ready to wrap up');
   });
 
+  it.each(['integrating', 'onIntegrationLine'] as const)('does not offer wrap-up with work still in %s', (lane) => {
+    const qc = newClient();
+    qc.setQueryData(panoramaKey, panorama({
+      running: 0, ready: 0, blocked: 0, done: 1,
+      integrating: 0, onIntegrationLine: 0, onUpstream: 0, [lane]: 1,
+    }));
+    expect(render(qc, 'OPEN')).not.toContain('Ready to wrap up');
+  });
+
+  it('does not offer wrap-up while a promotion job is in flight', () => {
+    const qc = newClient();
+    qc.setQueryData(panoramaKey, panorama({ ready: 0, blocked: 0, done: 1 }));
+    qc.setQueryData(integrationKey, integration());
+    expect(render(qc, 'OPEN')).not.toContain('Ready to wrap up');
+  });
+
+  it('describes pending receipts without claiming checks are running, and counts only actual landing waits', () => {
+    const lanes = integrationLanes(panorama({
+      blocked: 17, waitingForLanding: 1, integrating: 1,
+    }).buckets, 'PROJECT_BRANCH');
+    expect(lanes.find((lane) => lane.key === 'blocked')?.footnote)
+      .toBe('1 waiting for a prerequisite to land');
+    expect(lanes.find((lane) => lane.key === 'integrating')).toMatchObject({
+      label: 'Pending landing', value: 1, footnote: 'finished work without a landing receipt', glyph: 'hourglass',
+    });
+  });
+
   it('renders the loading and error states, and neither throws', () => {
     // Loading: nothing seeded, so the query is pending with its fetch not yet dispatched.
     const loading = render(newClient());
@@ -265,7 +293,7 @@ const integration = (over: Partial<ProjectIntegrationView> = {}): ProjectIntegra
   queuedCount: 0,
   mergeCheckOnTip: 'PASSING',
   // The report this card was specified against: T2, claimed at 13:58:00.
-  inFlight: { taskTitle: 'T2 wiki 契約、迁移与共享类型', state: 'RUNNING', startedAt: '2026-09-25T13:58:00Z' },
+  inFlight: { taskTitle: 'T2 wiki 契約、迁移与共享类型', state: 'RUNNING', kind: 'LAND_TASK', phase: 'CHECK', startedAt: '2026-09-25T13:58:00Z' },
   ...over,
 });
 
@@ -349,8 +377,8 @@ describe('the landing row', () => {
     expect(html).toContain('>0m 0s<');
     expect(html).not.toContain('NaN');
     // A job that names no task — a promotion, a merge check — keeps the row's word and state.
-    expect(html).toContain('>Landing<');
-    expect(html).toContain('>checking<');
+    expect(html).toContain('>Integration<');
+    expect(html).toContain('>running<');
   });
 });
 
@@ -376,6 +404,7 @@ describe('landingLine', () => {
   it('carries the running job as checking and the queued one as queued', () => {
     const now = Date.parse('2026-09-25T13:59:20Z');
     expect(landingLine(integration(), now)).toEqual({
+      word: 'Landing',
       what: 'T2 wiki 契約、迁移与共享类型',
       running: true,
       state: 'checking',
@@ -386,7 +415,27 @@ describe('landingLine', () => {
         integration({ inFlight: { taskTitle: 'T1', state: 'QUEUED', startedAt: '2026-09-25T13:58:40Z' } }),
         now,
       ),
-    ).toEqual({ what: 'T1', running: false, state: 'queued', clock: '0m 40s' });
+    ).toEqual({ word: 'Integration', what: 'T1', running: false, state: 'queued', clock: '0m 40s' });
+  });
+
+  it.each([
+    ['LAND_TASK', 'FETCH', 'Landing', 'fetching'],
+    ['LAND_TASK', 'MAIN_SYNC', 'Landing', 'syncing main'],
+    ['LAND_TASK', 'REBASE', 'Landing', 'rebasing'],
+    ['CHECK_PROMOTION', 'MERGE', 'Merge check', 'merging'],
+    ['CHECK_PROMOTION', 'CHECK', 'Merge check', 'checking'],
+    ['LAND_PROMOTION', 'VERIFY', 'Merge to main', 'verifying'],
+    ['LAND_PROMOTION', 'PUSH', 'Merge to main', 'pushing'],
+  ] as const)('describes %s at %s from its actual job facts', (kind, phase, word, state) => {
+    expect(landingLine(integration({ inFlight: {
+      taskTitle: null, state: 'RUNNING', kind, phase, startedAt: '2026-09-25T13:58:00Z',
+    } }), Date.parse('2026-09-25T13:59:20Z'))).toMatchObject({ word, state, running: true });
+  });
+
+  it('keeps a merge queued even if it carries an earlier check phase', () => {
+    expect(landingLine(integration({ inFlight: {
+      taskTitle: null, state: 'QUEUED', kind: 'LAND_PROMOTION', phase: 'CHECK', startedAt: '2026-09-25T13:58:00Z',
+    } }), Date.parse('2026-09-25T13:59:20Z'))).toMatchObject({ word: 'Merge to main', state: 'queued', running: false });
   });
 });
 
@@ -408,4 +457,3 @@ describe('the landing row’s styles', () => {
     expect(css).toMatch(/\.project-landing-what \{[\s\S]*?text-overflow: ellipsis;/);
   });
 });
-

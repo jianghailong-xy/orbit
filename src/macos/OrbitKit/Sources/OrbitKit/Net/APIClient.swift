@@ -1097,6 +1097,11 @@ public final class APIClient: @unchecked Sendable {
     /// sign-in goes from the server with it.
     public func deleteProviderPool(_ id: String) async throws { try await deleteRaw("providers/pools/\(id)") }
 
+    public func pausePoolMember(poolID: String, memberID: String, durationMinutes: Int?) async throws {
+        try await postRaw("providers/pools/\(poolID)/members/\(memberID)/pause",
+                          body: AccountPauseRequest(durationMinutes: durationMinutes))
+    }
+
     // MARK: a Codex pool of one's own — its ChatGPT account (migration 0323)
 
     /// Start "Sign in with ChatGPT": the server runs the official codex CLI's device flow and answers
@@ -1248,6 +1253,12 @@ public final class APIClient: @unchecked Sendable {
     public func removeRunnerAccount(_ id: String, engine: LoginEngine,
                                     account: String) async throws -> RunnerAccountRemoveState {
         try await delete("runners/\(id)/accounts/\(engine.rawValue)/\(account)")
+    }
+
+    public func pauseRunnerAccount(_ id: String, engine: LoginEngine, account: String,
+                                   durationMinutes: Int?) async throws {
+        try await postRaw("runners/\(id)/accounts/\(engine.rawValue)/\(account)/pause",
+                          body: AccountPauseRequest(durationMinutes: durationMinutes))
     }
 
     /// Rename one of the runner's accounts, Default included; answers with the account as the runner

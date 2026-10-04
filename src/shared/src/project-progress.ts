@@ -11,7 +11,7 @@
  * as `Date`, everything downstream of JSON holds them as ISO strings. Parameterising it is what
  * lets both sides name the same interface instead of keeping two that drift.
  */
-import type { IntegrationCheckResult } from './dto';
+import type { IntegrationCheckResult, IntegrationJobKind, IntegrationJobPhase } from './dto';
 import type { ProjectStartRequest, ProjectStartSettingKey, ProjectStartSettings } from './project-start';
 
 /** Where this project's finished tasks land: straight onto main, or onto a branch of its own. */
@@ -21,8 +21,8 @@ export type IntegrationLine = 'MAIN' | 'PROJECT_BRANCH';
  *  integration (§1.2 L1 / L2). */
 export type IntegrationRefSource = 'EXPLICIT' | 'DEFAULT_RULE';
 
-/** Whether the merge check passed the last time the platform ran it on the line's tip (§1.6).
- *  `UNKNOWN` is the absence of a finished job, never a failure it forgot about. */
+/** The check results of the latest finished task landing attempt (§1.6).
+ *  `UNKNOWN` means that attempt has no complete check verdict. */
 export type MergeCheckTipState = 'PASSING' | 'FAILING' | 'UNKNOWN';
 
 /**
@@ -59,7 +59,7 @@ export interface ProjectIntegrationSettings<Instant = string> {
  * that synced at the epoch.
  */
 export interface ProjectIntegrationView<Instant = string> extends ProjectIntegrationSettings<Instant> {
-  /** How far the line is ahead of upstream, from the newest finished `LAND_TASK`. */
+  /** Distance measured by the last successful `LAND_TASK` that reported it; a historical snapshot. */
   commitsAheadOfUpstream: number | null;
   commitsAheadOfUpstreamAbsentReason: 'NO_LANDING_YET' | null;
   /** When upstream was last absorbed into the line (§3.1). */
@@ -68,9 +68,11 @@ export interface ProjectIntegrationView<Instant = string> extends ProjectIntegra
   /** Jobs this project has RUNNING and QUEUED right now. */
   integratingCount: number;
   queuedCount: number;
+  /** Legacy field name: checks of the last landing attempt, which may never have reached the tip. */
   mergeCheckOnTip: MergeCheckTipState;
   /**
-   * The OLDEST of those jobs, described — or null when there is none, which is also the answer a
+   * The oldest RUNNING job, or oldest QUEUED job when none is running — or null when there is none,
+   * which is also the answer a
    * project with no line gives.
    *
    * The two counts above say how much is in flight; a project page whose only live signal was a
@@ -78,8 +80,8 @@ export interface ProjectIntegrationView<Instant = string> extends ProjectIntegra
    * four minutes a landing takes), so the Work overview card draws what the queue is actually
    * doing from this: which task, whether it is checking or still queued, and since when.
    *
-   * The OLDEST rather than the newest, because that is the one the counts are waiting on: a row
-   * that named the job that just started would reset its own clock every time another landed.
+   * Running work takes precedence over queued work so the row names what the platform is doing.
+   * Within that state the oldest job keeps the clock from resetting when another job starts.
    */
   inFlight: ProjectIntegrationInFlight<Instant> | null;
 }
@@ -93,7 +95,11 @@ export interface ProjectIntegrationView<Instant = string> extends ProjectIntegra
  */
 export interface ProjectIntegrationInFlight<Instant = string> {
   taskTitle: string | null;
-  /** `RUNNING` while the combined-tree checks are running; `QUEUED` while it waits its turn. */
+  /** Absent on older servers, which cannot describe the operation more specifically. */
+  kind?: IntegrationJobKind;
+  /** The runner's reported step; null before its first report, absent on older servers. */
+  phase?: IntegrationJobPhase | null;
+  /** `RUNNING` while the runner performs the job; `QUEUED` while it waits its turn. */
   state: 'RUNNING' | 'QUEUED';
   /** What "for how long" counts from: the claim for a running job, the enqueue for a queued one. */
   startedAt: Instant;
@@ -128,7 +134,7 @@ export interface TaskIntegrationView<Instant = string> {
   handler: TaskIntegrationHandler | null;
   openItemId: string | null;
   jobId: string | null;
-  /** How long the combined-tree checks have been running, for the row that says so. */
+  /** Elapsed job time while it is in CHECK; not the duration of the check phase itself. */
   checksRunningForMs: number | null;
 }
 
@@ -607,6 +613,13 @@ export interface ProjectPromotionView<Instant = string> {
    * able to say "2m so far" when the platform has neither rather than print a zero it made up.
    */
   recheck: { upstreamMovedBy: number | null; startedAt: Instant; typicalMs: number | null } | null;
+  /** The active job for this candidate's own confirmed merge, never another project job.
+   * Confirmation authorizes a merge; it does not mean a runner has started it. */
+  execution?: {
+    state: 'QUEUED' | 'RUNNING';
+    phase: IntegrationJobPhase | null;
+    startedAt: Instant;
+  } | null;
   /**
    * The merge, once it happened (state C). `byUserId` is who pressed Merge; `automatic` is true when
    * nobody did — the project's Automatic setting merged its own branch because the check was clean
@@ -709,6 +722,8 @@ export interface ProjectListIntegration {
   line: IntegrationLine;
   /** The branch's name, spelled as a merge receipt spells it (no `refs/heads/`). */
   ref: string;
+  /** QUEUED or RUNNING jobs, including project merges and checks. Exceptions are not activity. */
+  activeJobCount?: number;
 }
 
 /**

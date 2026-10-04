@@ -434,7 +434,7 @@ describe('a project link’s public page', { timeout: 60_000 }, () => {
     expect(header).toContain('Last activity 1m ago');
 
     const overview = container.querySelector('[data-project-block="work-overview"]')!.textContent!;
-    for (const lane of ['Running', 'Ready', 'Waiting', 'Integrating', 'On project branch', 'On main']) {
+    for (const lane of ['Running', 'Ready', 'Waiting', 'Pending landing', 'On project branch', 'On main']) {
       expect(overview).toContain(lane);
     }
     expect(overview).toContain('4 tasks · 3 dependencies');

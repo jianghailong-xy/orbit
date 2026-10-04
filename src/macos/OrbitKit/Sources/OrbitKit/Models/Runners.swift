@@ -249,16 +249,19 @@ public struct RunnerEngineAccount: Codable, Equatable, Sendable, Identifiable {
     /// `cxa1_` and the first 8 hex digits of the account's fingerprint; absent until the runner has
     /// read one. Two accounts showing the same one are the same account.
     public let fingerprintPrefix: String?
+    /// Temporarily skipped until this time, without changing authentication or quota.
+    public let pausedUntil: String?
 
     public init(id: String, name: String? = nil, auth: String? = nil,
                 home: String? = nil, codexHome: String? = nil,
-                fingerprintPrefix: String? = nil) {
+                fingerprintPrefix: String? = nil, pausedUntil: String? = nil) {
         self.id = id
         self.name = name
         self.auth = auth
         self.home = home
         self.codexHome = codexHome
         self.fingerprintPrefix = fingerprintPrefix
+        self.pausedUntil = pausedUntil
     }
 }
 

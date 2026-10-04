@@ -68,11 +68,13 @@ public struct PoolMember: Codable, Equatable, Sendable, Identifiable {
     /// In a Codex pool of one's own each member is one of its ChatGPT accounts (web's `member.login`):
     /// added by the adapter (`CodexLoginPool.drawn`) off the pool's `logins`, never decoded.
     public let login: CodexLogin?
+    /// Temporarily skipped until this time, without changing authentication or quota.
+    public let pausedUntil: String?
 
     public init(id: String, slug: String, label: String, presetSlug: String? = nil,
                 enabled: Bool = true, planUsage: PlanUsageSnapshot? = nil,
                 state: PoolMemberState, resetsAt: String? = nil, next: Bool = false,
-                key: SharedPoolKey? = nil, login: CodexLogin? = nil) {
+                key: SharedPoolKey? = nil, login: CodexLogin? = nil, pausedUntil: String? = nil) {
         self.id = id
         self.slug = slug
         self.label = label
@@ -84,6 +86,7 @@ public struct PoolMember: Codable, Equatable, Sendable, Identifiable {
         self.next = next
         self.key = key
         self.login = login
+        self.pausedUntil = pausedUntil
     }
 
     public init(from decoder: Decoder) throws {
@@ -96,6 +99,7 @@ public struct PoolMember: Codable, Equatable, Sendable, Identifiable {
         planUsage = (try? c.decodeIfPresent(PlanUsageSnapshot.self, forKey: .planUsage)) ?? nil
         state = try c.decodeIfPresent(PoolMemberState.self, forKey: .state) ?? .unknown
         resetsAt = try c.decodeIfPresent(String.self, forKey: .resetsAt)
+        pausedUntil = try c.decodeIfPresent(String.self, forKey: .pausedUntil)
         next = try c.decodeIfPresent(Bool.self, forKey: .next) ?? false
         // Not on the wire: a shared pool's key is attached by the adapter that draws it as a member,
         // and so is a Codex pool's ChatGPT account.

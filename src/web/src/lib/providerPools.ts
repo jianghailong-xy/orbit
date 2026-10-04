@@ -1,6 +1,7 @@
 import { queryOptions } from '@tanstack/react-query';
 import { AgentProvider, type PlanUsageSnapshot } from '@orbit/shared';
 import { api } from '../api';
+import { accountIsPaused, pauseResumeTime } from './accountPause';
 import { withLogin, type CodexLogin } from './codexLogin';
 import { routeId } from './idCodec';
 import { planUsageRows, type PlanUsageDisplayRow } from './planUsage';
@@ -43,6 +44,7 @@ export interface PoolMember {
   label: string;
   presetSlug: string | null;
   enabled: boolean;
+  pausedUntil?: string | null;
   /** This account's own quota, read with its own credential. Null when it reports none. */
   planUsage: PlanUsageSnapshot | null;
   state: PoolMemberState;
@@ -99,10 +101,10 @@ export const providerPoolsQuery = () =>
  *  quota counts: the claim still picks it, just last. So does one whose quota could not be read at all
  *  (USAGE_UNKNOWN): the key is not refused, and with nothing better in the pool the run goes to it. */
 export const canTakeWork = (member: PoolMember): boolean =>
-  member.state === 'AVAILABLE' ||
+  !accountIsPaused(member.pausedUntil) && (member.state === 'AVAILABLE' ||
   member.state === 'RUNNING' ||
   member.state === 'NO_QUOTA' ||
-  member.state === 'USAGE_UNKNOWN';
+  member.state === 'USAGE_UNKNOWN');
 
 /**
  * Why the pool would no longer admit each of the user's keys, by key id: the verdict the server puts on
@@ -174,7 +176,7 @@ export function sessionPoolAccount(
     const member = pool.members.find((m) => routeId(m.id) === id);
     return member ? { member, current: true } : null;
   }
-  const next = pool.members.find((m) => m.next);
+  const next = pool.members.find((m) => m.next && !accountIsPaused(m.pausedUntil));
   return next ? { member: next, current: false } : null;
 }
 
@@ -215,6 +217,7 @@ export function memberStatus(
 ): { label: string; color: string } {
   // Out, however the view reads it. The refusal's own words go on a line of the row's: they run
   // longer than a status has room for.
+  if (accountIsPaused(member.pausedUntil, now)) return { label: `Paused until ${pauseResumeTime(member.pausedUntil!, now)}`, color: 'orange' };
   if (refusal) return { label: 'Unavailable', color: 'red' };
   switch (member.state) {
     case 'RUNNING':
@@ -273,10 +276,15 @@ export type PoolHeadline =
   | { kind: 'none'; reason: string };
 
 export function poolHeadline(pool: ProviderPool): PoolHeadline {
-  const next = pool.members.find((m) => m.next);
+  const next = pool.members.find((m) => m.next && !accountIsPaused(m.pausedUntil));
   if (next) return { kind: 'next', member: next, quota: memberQuota(next) };
   // The server's word before any reading of the members: no reset will help this pool, even one a
   // member it no longer admits still reports a spent window for.
+  const paused = pool.members.filter((member) => accountIsPaused(member.pausedUntil));
+  if (paused.length === pool.members.length && paused.length > 0) {
+    const until = paused.map((member) => member.pausedUntil!).sort()[0];
+    return { kind: 'none', reason: `Paused until ${pauseResumeTime(until)}` };
+  }
   if (pool.unavailable) return { kind: 'none', reason: pool.unavailable };
   if (pool.members.some((m) => m.state === 'SPENT')) return { kind: 'spent', resetsAt: pool.resetsAt };
   // A pool holding ChatGPT accounts is spent rather than capped: the accounts come back by the hour,

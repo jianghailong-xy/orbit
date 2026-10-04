@@ -1,15 +1,30 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { checkLocalLinks, publicFiles } from '../scripts/check-docs.mjs';
+import { checkLocalLinks, formatIssue, lintMarkdown, publicFiles } from '../scripts/check-docs.mjs';
 
 test('scope includes tracked public guides and excludes evidence, mocks, and agent instructions', () => {
   const files = ['README.md', 'CONTRIBUTING.md', 'AGENTS.md', 'CLAUDE.md', '.github/pull_request_template.md',
     'docs/first-run.md', 'docs/design.md', 'docs/evidence/result.md', 'docs/mocks/demo.md', 'data/private.md'];
   assert.deepEqual(publicFiles(files, ['docs/first-run.md']), [
     'README.md', 'CONTRIBUTING.md', '.github/pull_request_template.md', 'docs/first-run.md',
+  ]);
+});
+
+test('lint applies the repository rules and prints issues in the markdownlint-cli2 format', async (t) => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'orbit-doc-lint-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const file = path.join(root, 'guide.md');
+  // MD041 (heading first), MD033 (inline HTML) and MD013 (line length) are off in the repository config.
+  writeFileSync(file, `Intro with <b>HTML</b> ${'and a long line '.repeat(10)}end.\n\n# Title\n\n### Skipped\n\n` +
+    'Trailing   \n\n#No space\n');
+  const { config } = JSON.parse(readFileSync(new URL('../.markdownlint-cli2.jsonc', import.meta.url), 'utf8'));
+  assert.deepEqual((await lintMarkdown([file], config)).map(formatIssue), [
+    `${file}:5 error MD001/heading-increment Heading levels should only increment by one level at a time [Expected: h2; Actual: h3]`,
+    `${file}:7:9 error MD009/no-trailing-spaces Trailing spaces [Expected: 0 or 2; Actual: 3]`,
+    `${file}:9:1 error MD018/no-missing-space-atx No space after hash on atx style heading [Context: "#No space"]`,
   ]);
 });
 

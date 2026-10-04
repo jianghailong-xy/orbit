@@ -5,6 +5,8 @@ import {
   type ProjectIntegrationSettings as SharedProjectIntegrationSettings,
   type ProjectIntegrationView as SharedProjectIntegrationView,
   type ProjectListIntegration,
+  type IntegrationJobKind,
+  type IntegrationJobPhase,
 } from '@orbit/shared';
 
 import type { PrismaService } from '../prisma/prisma.service';
@@ -140,13 +142,21 @@ export async function readProjectIntegrationLines(
   if (projectIds.length === 0) return new Map();
   const rows = await prisma.projectCodebase.findMany({
     where: { projectId: { in: [...projectIds] }, slot: 'primary' },
-    select: { ...LINE_COLUMNS, projectId: true },
+    select: {
+      ...LINE_COLUMNS,
+      projectId: true,
+      _count: { select: { integrationJobs: { where: { state: { in: ['QUEUED', 'RUNNING'] } } } } },
+    },
   });
   const lines = new Map<string, ProjectListIntegration>();
   for (const row of rows) {
     const line = decidedLine(row);
     if (!line) continue;
-    lines.set(row.projectId, { line, ref: branchName(row.integrationRef) });
+    lines.set(row.projectId, {
+      line,
+      ref: branchName(row.integrationRef),
+      activeJobCount: row._count.integrationJobs,
+    });
   }
   return lines;
 }
@@ -207,7 +217,7 @@ export function projectIntegrationView(
 /**
  * The settings, plus what the integration queue has done with them (§1.6).
  *
- * Two statements on top of the binding the caller already read, and they are the reason this is its
+ * The queue facts are read on top of the binding the caller already read, which is why this is its
  * own endpoint rather than four more fields on the project document: `project-get-query-count`
  * holds that document to a budget, and the row that reads this polls.
  *
@@ -226,12 +236,21 @@ export async function readProjectIntegrationView(
            (count(*) FILTER (WHERE "state" = 'QUEUED'))::int AS "queued"
       FROM "project_integration_job"
      WHERE "project_id" = ${projectId}::uuid`);
-  // The newest FINISHED landing attempt, which is what "the tip" means: how far ahead it left the
-  // line, and whether the check that ran on it passed. A job still running describes no tip yet.
+  // The last finished attempt's checks may have failed on a tree that never landed. Keep its
+  // verdict separate from the last successful landing's measured distance from upstream.
   const [newest] = await prisma.$queryRaw<Array<{
-    state: string; aheadOfUpstream: number | null;
+    checks: unknown; aheadOfUpstream: number | null;
   }>>(Prisma.sql`
-    SELECT "state", "ahead_of_upstream" AS "aheadOfUpstream"
+    SELECT "checks",
+           (SELECT landed."ahead_of_upstream"
+              FROM "project_integration_job" landed
+             WHERE landed."project_id" = ${projectId}::uuid
+               AND landed."kind" = 'LAND_TASK'
+               AND landed."state" IN ('LANDED', 'ALREADY_LANDED')
+               AND landed."finished_at" IS NOT NULL
+               AND landed."ahead_of_upstream" IS NOT NULL
+             ORDER BY landed."finished_at" DESC, landed."id" DESC
+             LIMIT 1) AS "aheadOfUpstream"
       FROM "project_integration_job"
      WHERE "project_id" = ${projectId}::uuid
        AND "kind" = 'LAND_TASK'
@@ -246,25 +265,27 @@ export async function readProjectIntegrationView(
        AND "main_sync_sha" IS NOT NULL
      ORDER BY "finished_at" DESC, "id" DESC
      LIMIT 1`);
-  // The oldest job in flight, which is the one the two counts above are waiting on and the one the
-  // Work overview card's live line names. Not filtered by kind, deliberately: it is the same rows
-  // the counts count, so the line and the numbers can never be about different sets of jobs.
+  // Running work takes precedence over queued work: an older queued job must not hide the work
+  // the runner is doing. Within either state, name the oldest job. Kind and phase distinguish a
+  // promotion check from a landing, and checks from the git steps around them.
   //
   // Its clock starts at the claim for a running job and at the enqueue for a queued one — a QUEUED
   // job has never been claimed, so the two spellings are one COALESCE and no job reports the age of
   // the wrong wait. `id` breaks a tie between two jobs created in the same millisecond; uuid v7
   // sorts by time.
   const [oldest] = await prisma.$queryRaw<Array<{
-    state: string; taskTitle: string | null; startedAt: Date;
+    state: string; kind: IntegrationJobKind; phase: IntegrationJobPhase | null;
+    taskTitle: string | null; startedAt: Date;
   }>>(Prisma.sql`
-    SELECT j."state",
+    SELECT j."state", j."kind", j."phase",
            t."title" AS "taskTitle",
            COALESCE(j."claimed_at", j."created_at") AS "startedAt"
       FROM "project_integration_job" j
       LEFT JOIN "task" t ON t."id" = j."task_id"
      WHERE j."project_id" = ${projectId}::uuid
        AND j."state" IN ('RUNNING', 'QUEUED')
-     ORDER BY COALESCE(j."claimed_at", j."created_at") ASC, j."id" ASC
+     ORDER BY (j."state" = 'RUNNING') DESC,
+              COALESCE(j."claimed_at", j."created_at") ASC, j."id" ASC
      LIMIT 1`);
 
   const ahead = newest?.aheadOfUpstream ?? null;
@@ -276,10 +297,12 @@ export async function readProjectIntegrationView(
     lastUpstreamSyncAbsentReason: synced ? null : 'NEVER_SYNCED',
     integratingCount: counts?.integrating ?? 0,
     queuedCount: counts?.queued ?? 0,
-    mergeCheckOnTip: mergeCheckOnTip(newest?.state ?? null),
+    mergeCheckOnTip: lastLandingCheck(newest?.checks),
     inFlight: oldest
       ? {
         taskTitle: oldest.taskTitle,
+        kind: oldest.kind,
+        phase: oldest.phase,
         state: oldest.state === 'RUNNING' ? 'RUNNING' : 'QUEUED',
         startedAt: oldest.startedAt,
       }
@@ -287,13 +310,19 @@ export async function readProjectIntegrationView(
   };
 }
 
-/** What the newest finished landing says about the line's tip (§1.6). Anything that did not run
- *  its checks to a verdict — a conflict, an error, a cancellation — leaves the tip UNKNOWN rather
- *  than failing: nothing was tested, so nothing failed. */
-function mergeCheckOnTip(state: string | null): 'PASSING' | 'FAILING' | 'UNKNOWN' {
-  if (state === 'LANDED' || state === 'ALREADY_LANDED') return 'PASSING';
-  if (state === 'CHECK_FAILED') return 'FAILING';
-  return 'UNKNOWN';
+/** The last attempt's check evidence, not the success of its push or the state of the current tip.
+ *  Empty checks (including already-landed jobs) provide no passing verdict. */
+export function lastLandingCheck(checks: unknown): 'PASSING' | 'FAILING' | 'UNKNOWN' {
+  if (!Array.isArray(checks) || checks.length === 0) return 'UNKNOWN';
+  let complete = true;
+  for (const check of checks) {
+    if (!check || typeof check !== 'object') { complete = false; continue; }
+    if (check.timedOut === true) return 'FAILING';
+    if (typeof check.expectedExitCode !== 'number' || typeof check.exitCode !== 'number'
+      || check.timedOut !== false) { complete = false; continue; }
+    if (check.exitCode !== check.expectedExitCode) return 'FAILING';
+  }
+  return complete ? 'PASSING' : 'UNKNOWN';
 }
 
 /** What a request may set (L5). Each field is written only when sent; null clears the merge check. */
@@ -646,7 +675,9 @@ export type FirstIntegration =
       integrationRef: string;
       upstreamRef: string;
       source: IntegrationRefSource;
-      startedAt: Date;
+      /** Whether THIS call wrote `integration_started_at` (L3 step 3), rather than finding the line
+       *  already started by an earlier transaction. */
+      startedNow: boolean;
     }
   | { started: false; refusal: 'INTEGRATION_REPOSITORY_UNKNOWN' };
 
@@ -660,7 +691,8 @@ export type FirstIntegration =
  * and never again.
  *
  * What L3 also asks of this transaction — queueing the project's other finished code tasks onto
- * the line that just started — is the caller's: it owns the integration queue.
+ * the line that just started — is the caller's: it owns the integration queue. `startedNow` is how
+ * it knows it is that transaction.
  */
 export async function startOnFirstIntegration(
   tx: Prisma.TransactionClient,
@@ -674,7 +706,8 @@ export async function startOnFirstIntegration(
     row = await bind(tx, { ownerId: first.ownerId, projectId: first.projectId, canonicalRepoUrl: repository });
   }
 
-  if (!row.integrationStartedAt) {
+  const startedNow = !row.integrationStartedAt;
+  if (startedNow) {
     let integrationRef = row.integrationRef;
     if (row.integrationRefSource !== 'EXPLICIT') {
       integrationRef = await projectDefaultLine(tx, first.projectId) === 'PROJECT_BRANCH'
@@ -694,6 +727,6 @@ export async function startOnFirstIntegration(
     integrationRef: row.integrationRef,
     upstreamRef: row.upstreamRef,
     source: row.integrationRefSource as IntegrationRefSource,
-    startedAt: row.integrationStartedAt!,
+    startedNow,
   };
 }
