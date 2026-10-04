@@ -102,7 +102,7 @@ class ComposerDeviceTest {
         login()
         compose.onNodeWithText("Context: 0 tokens · Usage").performClick()
         awaitText("Primary: 23%");compose.onNodeWithText("Close").performClick()
-        compose.onNodeWithText("fixture-model").performClick()
+        systemClick("fixture-model")
         awaitText("Fixture Two"); compose.onNodeWithText("Fixture Two").performClick()
         compose.waitUntil(5000) { stats()["config"]!!.jsonObject["model"]?.jsonPrimitive?.content == "fixture-model-2" }
         ready()
