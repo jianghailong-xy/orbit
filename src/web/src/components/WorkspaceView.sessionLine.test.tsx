@@ -77,6 +77,18 @@ describe('sessionLine', () => {
     });
   });
 
+  it('names the project closing signals in the session row', () => {
+    const parked = { status: 'AWAITING_INPUT', pendingApprovals: 1, projectId: 'p_1' };
+    expect(sessionLine({ ...parked, waitingKind: 'DONE_REQUEST' }, true)).toEqual({
+      text: 'Ready to close',
+      tone: 'approval',
+    });
+    expect(sessionLine({ ...parked, waitingKind: 'RECORD_AS_DONE' }, true)).toEqual({
+      text: 'Record as done…',
+      tone: 'approval',
+    });
+  });
+
   it('surfaces live state before any reply preview', () => {
     expect(sessionLine({ status: 'RUNNING', pendingApprovals: 2 }, true)).toEqual({
       text: 'Waiting for approval',

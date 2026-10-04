@@ -345,6 +345,7 @@ import {
   confirmedChangesProjectKey,
   type SettlementQuestion,
 } from '../lib/projectStart';
+import { PROJECT_DONE_COPY } from '../lib/projectDone';
 import { SessionProjectSettlementCard } from './ProjectSettlementCard';
 import {
   OWNER_SEND_BACK_LABEL,
@@ -1023,6 +1024,8 @@ const waitingLabel = (s: any): string => {
   // A project its coordinator asked to start: the row says what the card in it asks, not an
   // approval nobody is being asked for.
   if (s.waitingKind === 'START_REQUEST') return READY_TO_START;
+  if (s.waitingKind === 'DONE_REQUEST') return PROJECT_DONE_COPY.readyToClose;
+  if (s.waitingKind === 'RECORD_AS_DONE') return PROJECT_DONE_COPY.recordAsDoneRow;
   return 'Waiting for approval';
 };
 
@@ -9460,6 +9463,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                     selectedSession?.projectMembership?.role === undefined
                       || selectedSession?.projectMembership?.role === 'COORDINATOR'
                   }
+                  waitingKind={selectedSession?.waitingKind ?? null}
                   onDelegate={delegateProjectSettlement}
                 />
               )}

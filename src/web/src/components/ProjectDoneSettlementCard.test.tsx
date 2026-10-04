@@ -3,7 +3,13 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { DoneRequest } from '@orbit/shared';
 import { ProjectDoneCard, ProjectWhyNotDoneCard } from './ProjectSettlementCard';
-import { PROJECT_DONE_COPY, projectDoneTally } from '../lib/projectDone';
+import {
+  PROJECT_DONE_COPY,
+  projectDoneCardTally,
+  projectDoneReceiptTally,
+  projectDoneTally,
+  projectWhyNotDoneTally,
+} from '../lib/projectDone';
 
 const project = {
   id: 'p1',
@@ -73,6 +79,18 @@ describe('owner project settlement card', () => {
   it('uses only the unified counts for the tally', () => {
     expect(projectDoneTally(project.derivedDone.counts)).toBe(
       '2 criteria · 2 met · 1 landed on main · 1 nothing to land',
+    );
+  });
+
+  it('keeps the card and receipt count copy to the three effect counts', () => {
+    expect(projectDoneCardTally(project.derivedDone.counts)).toBe(
+      '2 met · 1 landed on main · 1 nothing to land',
+    );
+    expect(projectDoneReceiptTally(project.derivedDone.counts, 1)).toBe(
+      '2 criteria met · 1 landed on main · 1 nothing to land · 1 gaps accepted',
+    );
+    expect(projectWhyNotDoneTally(project.derivedDone.counts)).toBe(
+      '2 criteria · 2 met · 1 on main · 1 nothing to land',
     );
   });
 

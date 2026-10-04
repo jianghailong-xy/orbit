@@ -32,6 +32,7 @@ export const DONE_CARD_THIS_PROJECT_IS_DONE = 'This project is done';
 export const WHY_NOT_DONE_HEADING = 'Why is this project not done?';
 export const WHY_NOT_DONE_WAITING_ON_WORK = 'Waiting on work';
 export const WHY_NOT_DONE_NEEDS_YOUR_CALL = 'Needs your call';
+export const WHY_NOT_DONE_ON_MAIN = 'on main';
 export const WHY_NOT_DONE_REVIEW = 'Review “Is this project done?”';
 export const WHY_NOT_DONE_COORDINATOR_IS_ON_IT = 'the coordinator is on it';
 export const WHY_NOT_DONE_ON_PROJECT_BRANCH = 'On the project branch';
@@ -90,6 +91,7 @@ export const PROJECT_DONE_COPY = {
   askCoordinator: WHY_NOT_DONE_ASK_COORDINATOR,
   waitingDetail: WHY_NOT_DONE_WAITING_DETAIL,
   needsCallDetail: WHY_NOT_DONE_NEEDS_CALL_DETAIL,
+  onMain: WHY_NOT_DONE_ON_MAIN,
   whyHeading: WHY_NOT_DONE_HEADING,
   landedOnMain: 'landed on main',
 } as const;
@@ -170,6 +172,13 @@ function reasonParts(counts: ProjectDoneCounts): string[] {
   });
 }
 
+function nothingToLandCount(counts: ProjectDoneCounts): number {
+  // CODELESS has the same user-facing outcome as a zero-commit task: there is no branch or
+  // receipt to land. Keep the server's two reasons distinct in the read model, but present the
+  // three compact card counts from the wording in the effect.
+  return (counts.byReason?.NOTHING_TO_LAND ?? 0) + (counts.byReason?.CODELESS ?? 0);
+}
+
 /** Counts are deliberately read from `derivedDone.counts`; this function never inspects tasks. */
 export function projectDoneTally(counts: ProjectDoneCounts | undefined): string {
   if (!counts) return '';
@@ -184,7 +193,11 @@ export function projectDoneTally(counts: ProjectDoneCounts | undefined): string 
 /** The compact tally in the request card: the heading already states the number of criteria. */
 export function projectDoneCardTally(counts: ProjectDoneCounts | undefined): string {
   if (!counts) return '';
-  return [`${counts.met} met`, `${counts.onMain} ${PROJECT_DONE_COPY.landedOnMain}`, ...reasonParts(counts)].join(' · ');
+  return [
+    `${counts.met} met`,
+    `${counts.onMain} ${PROJECT_DONE_COPY.landedOnMain}`,
+    `${nothingToLandCount(counts)} ${PROJECT_DONE_COPY.nothingToLand}`,
+  ].join(' · ');
 }
 
 /** The receipt's first phrase says how many criteria were met, rather than repeating the heading. */
@@ -196,8 +209,19 @@ export function projectDoneReceiptTally(
   return [
     `${counts.criteria} criteria met`,
     `${counts.onMain} ${PROJECT_DONE_COPY.landedOnMain}`,
-    ...reasonParts(counts),
+    `${nothingToLandCount(counts)} ${PROJECT_DONE_COPY.nothingToLand}`,
     `${acceptedGaps} ${PROJECT_DONE_COPY.gapsAccepted}`,
+  ].join(' · ');
+}
+
+/** The Why-not-done tally uses the mock's shorter "on main" wording. */
+export function projectWhyNotDoneTally(counts: ProjectDoneCounts | undefined): string {
+  if (!counts) return '';
+  return [
+    `${counts.criteria} criteria`,
+    `${counts.met} met`,
+    `${counts.onMain} ${PROJECT_DONE_COPY.onMain}`,
+    ...reasonParts(counts),
   ].join(' · ');
 }
 

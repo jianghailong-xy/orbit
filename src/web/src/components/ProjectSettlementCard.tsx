@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type JSX, type Ref } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Input, Modal } from 'antd';
-import type { DoneRequest, ProjectDoneRecord, ProjectOpenItemRow } from '@orbit/shared';
+import type { DoneRequest, ProjectDoneRecord, ProjectOpenItemRow, SessionWaitingKind } from '@orbit/shared';
 import { api } from '../api';
 import {
   acceptanceConfirmationKey,
@@ -31,7 +31,7 @@ import {
   landingReasonLabel,
   projectDoneCardTally,
   projectDoneReceiptTally,
-  projectDoneTally,
+  projectWhyNotDoneTally,
   type ProjectDerivedDone,
   type ProjectDoneCounts,
   type ProjectDoneDocument,
@@ -619,6 +619,7 @@ export function SessionProjectSettlementCard({
   projectId,
   onDelegate,
   coordinator = true,
+  waitingKind = null,
 }: {
   /** The project this session coordinates. Ordinary sessions have none and get no card. */
   projectId: string | null | undefined;
@@ -629,6 +630,8 @@ export function SessionProjectSettlementCard({
   onDelegate?: (talk: { facts: string }) => void;
   /** WorkspaceView supplies the membership role; omitted keeps the legacy standalone behavior. */
   coordinator?: boolean;
+  /** The server's owner-decision signal, used to distinguish a requested card from D5's reminder. */
+  waitingKind?: SessionWaitingKind | null;
 }): JSX.Element | null {
   const qc = useQueryClient();
   const project = projectId ?? '';
@@ -652,12 +655,14 @@ export function SessionProjectSettlementCard({
   const doneRequest = doneRequestRow?.doneRequest ?? null;
   const [doneDelivered, setDoneDelivered] = useState(false);
   const [doneReceipt, setDoneReceipt] = useState<ProjectDoneRecord | null>(null);
+  const hasDoneSignal = waitingKind === 'RECORD_AS_DONE'
+    || (waitingKind === 'DONE_REQUEST' && Boolean(doneRequestRow?.itemId));
   useEffect(() => {
     if (!coordinator) {
       setDoneDelivered(false);
       return;
     }
-    if (doneRequestRow?.itemId) {
+    if (doneRequestRow?.itemId || hasDoneSignal) {
       setDoneDelivered(true);
     } else if (!doneReceipt) {
       // A request that was answered or superseded must not leave a stale card behind.  Keep the
@@ -665,7 +670,7 @@ export function SessionProjectSettlementCard({
       // promised to leave in place.
       setDoneDelivered(false);
     }
-  }, [coordinator, doneRequestRow?.itemId, doneReceipt]);
+  }, [coordinator, doneRequestRow?.itemId, doneReceipt, hasDoneSignal]);
   const held = settlementHeldOnProject(document);
   const settled = document?.derivedDone?.done === true;
   useEffect(() => {
@@ -677,7 +682,8 @@ export function SessionProjectSettlementCard({
   // is the one a person clears — the same key and door the start card uses.
   const needsStanding = (shown && (document?.derivedDone?.withheld.includes(CONFIRMATION_CLAUSE) ?? false))
     || doneDelivered
-    || doneRequest !== null;
+    || doneRequest !== null
+    || hasDoneSignal;
   const standingRead = useQuery({
     queryKey: acceptanceConfirmationKey(project),
     queryFn: () => readAcceptanceConfirmation(project),
@@ -749,7 +755,7 @@ export function SessionProjectSettlementCard({
   };
   const offersConfirmation = document?.derivedDone?.withheld.includes(CONFIRMATION_CLAUSE) ?? false;
   const confirmable = standing != null && standing.state !== 'CONFIRMED';
-  const asking = shown && document !== null && !settled;
+  const asking = (shown || doneDelivered) && document !== null && !settled;
   const anchor = useRef<HTMLDivElement>(null);
   const keys = useCardKeyClaim(asking, anchor);
   useApproveHotkey(keys && offersConfirmation && confirmable && !confirm.isPending, confirmSet, { requireMod: false, anchor });
@@ -785,7 +791,7 @@ export function SessionProjectSettlementCard({
         receipt={doneReceipt}
         keys={keys}
         busy={done.isPending || !(doneRequest?.criteriaDigest ?? standing?.currentVersion.digest)}
-        error={done.error}
+        error={done.error ?? decline.error}
         notYetBusy={decline.isPending}
         openItemsCount={(openItemsRead.data?.needsYou?.length ?? 0) + (openItemsRead.data?.withCoordinator?.length ?? 0) + (doneRequestRow ? 1 : 0)}
         runningCount={doneProject.derivedDone?.counts?.byReason?.IN_FLIGHT ?? 0}
@@ -1030,7 +1036,10 @@ export function ProjectDoneCard({
   const accepted = receipt?.acceptedGaps ?? project.acceptedGaps ?? [];
   const receiptDateTime = formatDoneDateTime(receipt?.doneAt ?? project.doneAt);
   const ownerRecorded = receipt != null || project.doneBy === 'OWNER';
-  const recorded = ownerRecorded || project.status === 'DONE';
+  // A derived DONE is still a durable read-model state, even when this card was reached through
+  // a stale OPEN project document during a refresh.  Keep the provenance line honest instead of
+  // reopening the question while the server is already saying DONE.
+  const recorded = ownerRecorded || project.status === 'DONE' || project.derivedDone?.done === true;
   const canRecord = Boolean(onRecordDone) && !busy;
 
   if (recorded) {
@@ -1274,7 +1283,7 @@ export function ProjectWhyNotDoneCard({
   const coordinatorOnIt = onlyInFlight || (openItems?.withCoordinator?.length ?? 0) > 0;
   const hasGaps = waiting.length > 0 || needsCall.length > 0;
   const counts = project.derivedDone?.counts;
-  if (!hasGaps) {
+  if (!hasGaps && project.derivedDone?.done === true) {
     return (
       <div className="approval-card project-settlement project-why-not-done is-settled">
         <div className="approval-head project-settlement-head">
@@ -1282,7 +1291,7 @@ export function ProjectWhyNotDoneCard({
           <span className="criteria-provenance">{project.doneBy === 'OWNER' ? PROJECT_DONE_COPY.recordedByYou : PROJECT_DONE_COPY.recordedByOrbit}</span>
         </div>
         <div className="approval-body is-questions project-settlement-body">
-          <p className="project-done-tally">{projectDoneTally(counts)}</p>
+          <p className="project-done-tally">{projectWhyNotDoneTally(counts)}</p>
         </div>
       </div>
     );
@@ -1322,7 +1331,7 @@ export function ProjectWhyNotDoneCard({
       <div className="approval-body is-questions project-settlement-body">
         {group(PROJECT_DONE_COPY.waitingOnWork, waiting, true)}
         {group(PROJECT_DONE_COPY.needsYourCall, needsCall, false)}
-        <p className="project-done-tally">{projectDoneTally(counts)}</p>
+        <p className="project-done-tally">{projectWhyNotDoneTally(counts)}</p>
       </div>
       <div className="approval-actions project-settlement-actions">
         {openItems?.doneRequest && onReview ? (
