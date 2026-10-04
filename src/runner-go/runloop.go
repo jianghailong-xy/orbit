@@ -1454,6 +1454,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					login.start(*lr, report)
 				case "code":
 					login.submitCode(*lr, report)
+				case "cancel":
+					login.cancelLogin(*lr)
 				}
 			}
 			// Install an engine CLI the user asked for from the web. Idempotent for the same
