@@ -141,7 +141,8 @@ function Samples() {
         <SampleBody />
       </Drawer>
       <AntDrawer open={current === `AntD ${placement} drawer`} onClose={close} title="Edit workspace" placement={placement}
-        size={378} footer={legacyFooter} classNames={{ ...classNames, section: 'reference-surface', wrapper: 'reference-drawer-wrapper' }}>
+        size={378} footer={legacyFooter} rootClassName="reference-drawer-root"
+        classNames={{ ...classNames, section: 'reference-surface', wrapper: 'reference-drawer-wrapper' }}>
         <SampleBody legacy />
       </AntDrawer>
     </div>)}

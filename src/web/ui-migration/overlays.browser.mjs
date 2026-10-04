@@ -56,24 +56,77 @@ async function locked(page) {
 
 test('dialog and drawers match current surfaces, geometry, typography and actions', async ({ page }, info) => {
   const measurements = {};
+  const settleState = (locator) => locator.evaluate(async (el) => {
+    await Promise.all(el.getAnimations({ subtree: true })
+      .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity)
+      .map((animation) => animation.finished.catch(() => {})));
+  });
+  const inputState = (input) => input.evaluate((el) => {
+    const style = getComputedStyle(el);
+    return { hovered: el.matches(':hover'), focused: el.matches(':focus'), focusVisible: el.matches(':focus-visible'),
+      borderColor: style.borderColor, borderWidth: style.borderWidth, borderStyle: style.borderStyle, boxShadow: style.boxShadow };
+  });
   const measure = async (system, kind) => {
     await page.getByRole('button', { name: `${system} ${kind}`, exact: true }).click();
     const overlay = page.getByRole(system === 'Orbit' && kind === 'confirm' ? 'alertdialog' : 'dialog');
     await settled(overlay);
+    // Sample the same neutral state. Opening buttons can leave the pointer over
+    // a newly positioned input, and the two libraries choose different autofocus.
+    await page.mouse.move(0, 0);
+    const focusRoot = system === 'AntD' && kind.includes('drawer') ? page.locator('.reference-drawer-root').filter({ has: overlay }) : overlay;
+    await focusRoot.focus();
+    await expect(focusRoot).toBeFocused();
+    await settleState(overlay);
     const root = system === 'Orbit' ? overlay : page.locator('.reference-surface:visible');
     const result = await root.evaluate((el) => {
       const s = getComputedStyle(el), r = el.getBoundingClientRect();
       const keys = ['fontFamily', 'fontSize', 'lineHeight', 'color', 'backgroundColor', 'borderRadius', 'padding', 'boxShadow'];
       const text = [...el.querySelectorAll('button, input')].map((node) => {
         const rect = node.getBoundingClientRect();
-        return { name: node.getAttribute('aria-label') ?? node.textContent, x: rect.x - r.x, y: rect.y - r.y, width: rect.width, height: rect.height };
+        const style = getComputedStyle(node);
+        return { name: node.getAttribute('aria-label') ?? node.textContent, x: rect.x - r.x, y: rect.y - r.y, width: rect.width, height: rect.height,
+          hovered: node.matches(':hover'), focused: node.matches(':focus'), focusVisible: node.matches(':focus-visible'),
+          ...(node.tagName === 'INPUT' ? { borderColor: style.borderColor, borderWidth: style.borderWidth, borderStyle: style.borderStyle, boxShadow: style.boxShadow } : {}) };
       });
       return { x: r.x, y: r.y, width: r.width, height: r.height, ...Object.fromEntries(keys.map((key) => [key, s[key]])), controls: text };
     });
     if (system === 'AntD' && kind.includes('drawer')) {
       result.boxShadow = await page.locator('.reference-drawer-wrapper:visible').evaluate((el) => getComputedStyle(el).boxShadow);
     }
+    if (kind.includes('drawer')) {
+      result.separators = {};
+      for (const [part, edge] of [['header', 'Bottom'], ['footer', 'Top']]) {
+        const region = root.locator(system === 'AntD' ? `.reference-${part}` : `:scope > .orbit-overlay-${part}`);
+        result.separators[part] = await region.evaluate((el, edge) => {
+          const style = getComputedStyle(el);
+          return { color: style[`border${edge}Color`], width: style[`border${edge}Width`], style: style[`border${edge}Style`] };
+        }, edge);
+      }
+    }
+    for (const control of result.controls) {
+      expect(control.hovered, `${system} ${kind}: ${control.name} is not hovered`).toBe(false);
+      expect(control.focused, `${system} ${kind}: ${control.name} is not focused`).toBe(false);
+      expect(control.focusVisible, `${system} ${kind}: ${control.name} has no focus ring`).toBe(false);
+    }
     await shot(page, info, `${system}-${kind}`, root);
+    if (kind === 'bottom drawer') {
+      const input = overlay.getByRole('textbox', { name: 'Workspace name' });
+      await input.hover();
+      await settleState(input);
+      const hover = await inputState(input);
+      expect(hover.hovered).toBe(true);
+      expect(hover.focused).toBe(false);
+      await shot(page, info, `${system}-${kind}-input-hover`, root);
+      await page.mouse.move(0, 0);
+      await input.focus();
+      await expect(input).toBeFocused();
+      await settleState(input);
+      const focus = await inputState(input);
+      expect(focus.hovered).toBe(false);
+      expect(focus.focusVisible).toBe(true);
+      await shot(page, info, `${system}-${kind}-input-focus`, root);
+      result.inputStates = { hover, focus };
+    }
     await overlay.getByRole('button', { name: 'Cancel', exact: true }).click();
     await expect(overlay).not.toBeVisible();
     return result;

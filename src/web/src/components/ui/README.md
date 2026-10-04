@@ -87,6 +87,8 @@ useOverlayChild 按受控 open 登记旧子层，Esc 先交给最上层旧弹层
 
 颜色优先直接用现有 `--bg-base/raised`、`--text-1/2/3`、`--border`、`--brand` 和状态变量。新增 `--orbit-*` 仅补足控件真实角色；**品牌色与主控件填充不是同一值**：暗色 `--brand=#5b8cff`，主控件实测为 `#2e62dc`，hover 为 `#5585e8`。禁用色和焦点轮廓也来自计算样式，不能从 seed 推测。
 
+`--orbit-border-split` 保留旧 Drawer 的半透明分隔线计算值：light 为 `rgba(17, 42, 80, 0.08)`，dark 为 `rgba(223, 223, 226, 0.05)`。标题底边和 footer 顶边均为1px solid；透明色在 elevated 表面上的合成结果也纳入真实截图对照。
+
 基础尺寸为 32px、圆角 6px，文字 14px/22px，按钮水平 padding 15px、gap 8px；小号为 24px/4px/7px，弹窗圆角 10px，菜单圆角 8px。保留以下局部差异，不新增全局手机控件高度规则：任务头部 <=600px 的主按钮与图标按钮 40px，小号 Save schedule 仍是 24px；设置卡片 8px；开关 44×22px；分享链接使用 12.5px 等宽字体。完整来源为 [P0.2](../../../../../docs/evidence/base-ui-migration/p0.2/README.md) 和 [P1.1 证据](../../../../../docs/evidence/base-ui-migration/p1.1/README.md)。
 
 ## 新旧组件共存
