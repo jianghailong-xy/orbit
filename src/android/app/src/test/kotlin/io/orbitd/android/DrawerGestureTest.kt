@@ -9,6 +9,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import io.orbitd.android.ui.OrbitTheme
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -21,7 +22,10 @@ import org.robolectric.annotation.Config
 class DrawerGestureTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
 
-    @Test fun slowDragPastHalfwayOpensDrawerWithoutAFling() {
+    @Test fun slowDragPastHalfwayOpensDrawerWithoutAFling() = slowDrag(0.9f, shouldOpen = true)
+    @Test fun slowDragBeforeHalfwayKeepsDrawerClosed() = slowDrag(0.45f, shouldOpen = false)
+
+    private fun slowDrag(endFraction: Float, shouldOpen: Boolean) {
         lateinit var drawer: DrawerState
         compose.activityRule.scenario.onActivity { activity -> activity.setContent {
             OrbitTheme {
@@ -34,10 +38,13 @@ class DrawerGestureTest {
         } }
         compose.onRoot().performTouchInput {
             down(Offset(width * 0.1f, height * 0.5f))
-            moveTo(Offset(width * 0.9f, height * 0.5f), delayMillis = 1_500)
+            moveTo(Offset(width * endFraction, height * 0.5f), delayMillis = 1_500)
             advanceEventTime(500)
             up()
         }
-        compose.runOnIdle { assertTrue("Crossing the midpoint must open even with no fling velocity", drawer.isOpen) }
+        compose.runOnIdle {
+            if (shouldOpen) assertTrue("Crossing the midpoint must open even with no fling velocity", drawer.isOpen)
+            else assertFalse("Releasing before the midpoint must keep the drawer closed", drawer.isOpen)
+        }
     }
 }
