@@ -53,7 +53,8 @@ func antigravityCredentialEnvKey(key string) bool {
 // antigravityGoogleCommand is the shared entry for login, auth/usage, and Google model reads.
 // HOME, XDG and the empty working directory last only for this invocation; the Gemini directory
 // persists. An unreachable private D-Bus socket keeps agy away from the system's shared keyring.
-func antigravityGoogleCommand(ctx context.Context, binPath string, env []string, args ...string) (*exec.Cmd, func(), error) {
+// Only the usage probe keeps agy's log, in this invocation's private temporary directory.
+func antigravityGoogleCommand(ctx context.Context, binPath string, env []string, probeLog bool, args ...string) (*exec.Cmd, func(), error) {
 	dir, err := filepath.Abs(antigravityGoogleDir())
 	if err != nil {
 		return nil, nil, err
@@ -119,7 +120,11 @@ func antigravityGoogleCommand(ctx context.Context, binPath string, env []string,
 		"DBUS_SESSION_BUS_ADDRESS":    "unix:path=" + filepath.Join(root, "absent-dbus"),
 		"AGY_CLI_DISABLE_AUTO_UPDATE": "true",
 	})
-	argv := append([]string{"--gemini_dir=" + dir, "--log-file=/dev/null"}, args...)
+	logFile := "/dev/null"
+	if probeLog {
+		logFile = filepath.Join(root, "probe.log")
+	}
+	argv := append([]string{"--gemini_dir=" + dir, "--log-file=" + logFile}, args...)
 	cmd := exec.CommandContext(ctx, binPath, argv...)
 	cmd.Env = cleanEnv
 	cmd.Dir = filepath.Join(root, "cwd")
@@ -133,7 +138,7 @@ type antigravityGoogleProbe struct {
 }
 
 func probeAntigravityGoogle(ctx context.Context, binPath string, env []string) antigravityGoogleProbe {
-	cmd, cleanup, err := antigravityGoogleCommand(ctx, binPath, env, "--print=/usage", "--output-format", "stream-json")
+	cmd, cleanup, err := antigravityGoogleCommand(ctx, binPath, env, true, "--print=/usage", "--output-format", "stream-json")
 	if err != nil {
 		return antigravityGoogleProbe{auth: authUnknown}
 	}
@@ -151,7 +156,12 @@ func probeAntigravityGoogle(ctx context.Context, binPath string, env []string) a
 	if cmd.ProcessState != nil {
 		exitCode = cmd.ProcessState.ExitCode()
 	}
-	return parseAntigravityGoogleProbe(stdout.Bytes(), stderr.String(), exitCode)
+	probe := parseAntigravityGoogleProbe(stdout.Bytes(), stderr.String(), exitCode)
+	if probe.auth == authNo && classifyAgyAuthEnd(exitCode, false, stderr.String(),
+		readAgyLog(filepath.Join(filepath.Dir(cmd.Dir), "probe.log"))) == agyAuthEndNetwork {
+		return antigravityGoogleProbe{auth: authUnknown}
+	}
+	return probe
 }
 
 // parseAntigravityGoogleProbe only retains the usage command's four public bucket fields.

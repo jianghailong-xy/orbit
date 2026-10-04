@@ -213,7 +213,7 @@ func fetchAntigravityModelCatalog(ctx context.Context) ([]ModelInfo, error) {
 func fetchAntigravityGoogleModelCatalog(ctx context.Context) ([]ModelInfo, error) {
 	cctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
-	cmd, cleanup, err := antigravityGoogleCommand(cctx, agyExecutable, nil, "models")
+	cmd, cleanup, err := antigravityGoogleCommand(cctx, agyExecutable, nil, false, "models")
 	if err != nil {
 		return nil, err
 	}
