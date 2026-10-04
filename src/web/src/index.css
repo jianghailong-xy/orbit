@@ -13572,6 +13572,18 @@ button.chat-jump-start:hover {
 /* ============================================================================
    Provider onboarding — logo gallery + guided add flow (ProvidersPage).
    ========================================================================== */
+.prov-page-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px 12px;
+}
+.prov-page-sub {
+  flex-basis: 100%;
+  color: var(--text-3);
+  font-size: 12px;
+}
 .provider-gallery {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -13807,17 +13819,21 @@ button.chat-jump-start:hover {
 }
 .re-sec-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 10px;
   margin-bottom: 10px;
 }
 .re-sec-head h3 {
+  flex: none;
   margin: 0;
   font-size: 14px;
   font-weight: 650;
   color: var(--text-1);
 }
 .re-sec-sub {
+  order: 1;
+  flex-basis: 100%;
   font-size: 12px;
   color: var(--text-3);
 }
@@ -14100,9 +14116,10 @@ button.chat-jump-start:hover {
 }
 @media (max-width: 700px) {
   /* Keep the name and its actions together. Status and quota get their own lines so Add account
-     and Sign in can both remain visible without squeezing the account's state. */
+     and Sign in can both remain visible without squeezing the account's state. Reserve room for
+     the engine name and let the action column shrink so its buttons can wrap on a small phone. */
   .re-runner-card .re-row {
-    grid-template-columns: minmax(0, 1fr) max-content;
+    grid-template-columns: minmax(112px, 1fr) minmax(0, max-content);
     gap: 8px 10px;
   }
   .re-runner-card .re-row > .re-act {

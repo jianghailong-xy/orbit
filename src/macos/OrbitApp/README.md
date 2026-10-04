@@ -14,6 +14,10 @@ here is a change to both clients — and the CI compile gate runs both.
   interrupt), the three **approval cards** (tool-permission with "allow & remember",
   AskUserQuestion form, ExitPlanMode), the **worktree bar** (changed-file count, diff sheet,
   Commit / Merge) and a **background-process tray**.
+  Long decision cards (plans, questions, project start/criteria, completion reviews, batch tasks,
+  dependencies, and project merges) appear as compact previews. Opening one shows a live review
+  with scrollable details and pinned actions; closing and reopening preserves unsubmitted answers
+  and project settings. iOS uses a full-height sheet.
 - **Native shell** — a **MenuBarExtra** (glanceable summary + jump into "needs you"),
   **actionable notifications** (Allow / Deny / Reply right on the banner — the killer feature:
   fire a session, close the window, get pinged to approve), a **Dock badge**, **`orbit://`
