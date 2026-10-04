@@ -147,7 +147,11 @@ class ComposerDeviceTest {
             compose.waitUntil(15000) { model.state.value.draft.attachments.singleOrNull()?.remoteId!=null }
             val staged=model.state.value.draft.attachments.single()
             assertArrayEquals(bytes,runBlocking { model.attachmentBytes(staged.id) })
-            compose.onNodeWithText("${staged.name} · ${staged.size/1024} KB").performClick()
+            ready();compose.onNodeWithTag("composer-send").performClick()
+            compose.waitUntil(10000) { !model.state.value.busy && model.state.value.draft.pending==null && model.state.value.draft.attachments.isEmpty() }
+            // The outbox's private copy is now removed: every action below must fetch the
+            // transcript attachment through authenticated GET, not reuse the staged bytes.
+            awaitText(staged.name);compose.onNodeWithText(staged.name).performClick()
             val oldClip = app.getSystemService(ClipboardManager::class.java).primaryClip?.getItemAt(0)?.uri
             compose.onNodeWithText("Copy",useUnmergedTree=true).performClick()
             compose.waitUntil(5000) { app.getSystemService(ClipboardManager::class.java).primaryClip?.getItemAt(0)?.uri?.let { it != oldClip } == true }
@@ -179,11 +183,10 @@ class ComposerDeviceTest {
             // A real external process reads the temporary grant and publishes its digest in the UI.
             File(evidence,"attachment-digest.txt").writeText(sha(bytes)+"\n")
             compose.onNodeWithText("Close attachment").performClick()
-            compose.onNodeWithTag("composer-send").performClick()
-            compose.waitUntil(10000) { !model.state.value.busy && model.state.value.draft.pending==null }
             val att=stats()["attachments"]!!.jsonObject.values.single().jsonObject
             assertEquals(sha(bytes),att["sha256"]!!.jsonPrimitive.content)
             assertEquals(1,att["references"]!!.jsonArray.size)
+            assertEquals(4,stats()["downloads"]!!.jsonArray.size)
             assertTrue(resolver.persistedUriPermissions.none { it.uri==uri })
         } finally { resolver.delete(uri,null,null) }
     }

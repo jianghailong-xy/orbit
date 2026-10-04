@@ -18,7 +18,7 @@ class State:
     def reset(self):
         self.rows=[]; self.turns={}; self.attachments={}; self.calls=[]; self.attempts={}; self.controls=[]
         self.losses=0; self.uploadFailures=0; self.uploadDelay=0; self.denial=0; self.config={}; self.expired=False; self.rotation=0
-        self.status='AWAITING_INPUT'; self.revision=0; self.creations=[]
+        self.status='AWAITING_INPUT'; self.revision=0; self.creations=[]; self.downloads=[]
     def detail(self):
         return {'id':SESSION,'title':'Composer conversation','workspaceId':WORKSPACE,'assignedRunnerId':RUNNER,
             'status':self.status,'runState':self.status,'lifecycleState':'OPEN','provider':'codex','model':'fixture-model',
@@ -26,7 +26,7 @@ class State:
     def stats(self):
         return {'scope':'controlled HTTP fixture; not deployed backend','uniqueTurns':len(self.turns),'attempts':self.attempts,
             'turns':self.turns,'attachments':{k:{a:b for a,b in v.items() if a!='bytes'} for k,v in self.attachments.items()},
-            'calls':self.calls,'controls':self.controls,'config':self.config,'rotations':self.rotation,'creations':self.creations}
+            'calls':self.calls,'controls':self.controls,'config':self.config,'rotations':self.rotation,'creations':self.creations,'downloads':self.downloads}
 state=State()
 class Handler(BaseHTTPRequestHandler):
     protocol_version='HTTP/1.1'
@@ -130,7 +130,9 @@ class Handler(BaseHTTPRequestHandler):
         if path.endswith('/turns'): return self.reply([{'id':v['turnId'],'turnId':v['turnId'],'content':v['request']['content'],'kind':v['kind']} for v in state.turns.values() if v['kind']!='steer'])
         if path.endswith('/retry-message'): return self.reply({'text':'last failed message'})
         if path.startswith('/api/attachments/'):
-            att=state.attachments.get(path.split('/')[-1]); return self.reply(att['bytes'],mime=att['mime']) if att else self.reply({},404)
+            att=state.attachments.get(path.split('/')[-1])
+            if att: state.downloads.append({'path':path,'sha256':att['sha256']})
+            return self.reply(att['bytes'],mime=att['mime']) if att else self.reply({},404)
         if path=='/api/runners': return self.reply([{'id':RUNNER,'name':'Fixture runner','online':True,'runsAsRoot':False,'capabilities':['codex-account-move/v1'],
             'modelCatalog':{'codex':[{'value':'fixture-model','label':'Fixture One','reasoningLevels':['low','high'],'serviceTiers':['priority'],'permissionModes':['default','plan']},{'value':'fixture-model-2','label':'Fixture Two'}]},
             'engines':[{'engine':'codex','installed':True,'auth':'yes','accounts':[{'id':'default','name':'Default','auth':'yes'},{'id':'second','name':'Second account','auth':'yes'},{'id':'expired','name':'Expired account','auth':'no'}]}]}])
