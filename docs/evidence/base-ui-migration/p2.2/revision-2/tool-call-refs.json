@@ -1,0 +1,274 @@
+{
+  "r2-mobile-before": {
+    "kind": "TOOL_CALL",
+    "ref": "exec-59f62682-0e78-45d0-9792-84e677d656e7",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r2-mobile-before npm run test:ui-choices -w @orbit/web -- --project=chromium-light-phone --grep 'attachment matches'",
+    "exitCode": 1,
+    "record": "../checks/r2-mobile-before.json",
+    "output": "../checks/r2-mobile-before.txt"
+  },
+  "r2-mobile-layout": {
+    "kind": "TOOL_CALL",
+    "ref": "exec-9f6f9c4e-88d6-40db-8617-172ac9efed9f",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r2-mobile-layout npm run test:ui-choices -w @orbit/web -- --grep 'attachment matches'",
+    "exitCode": 0,
+    "record": "../checks/r2-mobile-layout.json",
+    "output": "../checks/r2-mobile-layout.txt"
+  },
+  "r2-motion-first": {
+    "kind": "TOOL_CALL",
+    "ref": "exec-bbd28746-2e12-40c1-b291-ba9d04f7dcd6",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r2-motion-first npm run test:ui-choices -w @orbit/web -- --project=chromium-light-desktop --grep 'normal entrance'",
+    "exitCode": 0,
+    "record": "../checks/r2-motion-first.json",
+    "output": "../checks/r2-motion-first.txt"
+  },
+  "r2-motion-directions": {
+    "kind": "TOOL_CALL",
+    "ref": "exec-886e6dc9-db27-4f17-b20d-502db6e42d19",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r2-motion-directions npm run test:ui-choices -w @orbit/web -- choices-motion.browser.mjs --project=chromium-light-desktop --max-failures=1",
+    "exitCode": 0,
+    "record": "../checks/r2-motion-directions.json",
+    "output": "../checks/r2-motion-directions.txt"
+  },
+  "r2-lifecycle-first": {
+    "kind": "TOOL_CALL",
+    "ref": "exec-1a5a489e-c36f-43cf-86fc-038d6297675d",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r2-lifecycle-first npm run test:ui-choices -w @orbit/web -- choices-lifecycle.browser.mjs --project=chromium-light-desktop --project=webkit-dark-phone --max-failures=1",
+    "exitCode": 1,
+    "record": "../checks/r2-lifecycle-first.json",
+    "output": "../checks/r2-lifecycle-first.txt"
+  },
+  "r2-lifecycle-correct-query": {
+    "kind": "TOOL_CALL",
+    "ref": "exec-d6491ebc-fff9-4392-ae0c-3055fc0cd369",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r2-lifecycle-correct-query npm run test:ui-choices -w @orbit/web -- choices-lifecycle.browser.mjs --project=chromium-light-desktop --project=webkit-dark-phone --max-failures=1",
+    "exitCode": 0,
+    "record": "../checks/r2-lifecycle-correct-query.json",
+    "output": "../checks/r2-lifecycle-correct-query.txt"
+  },
+  "r2-full-matrix": {
+    "kind": "TOOL_CALL",
+    "ref": "exec-3e607510-3f44-4c25-b275-321a9a8ab71e",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r2-full-matrix npm run test:ui-choices -w @orbit/web",
+    "exitCode": 130,
+    "record": "../checks/r2-full-matrix.json",
+    "output": "../checks/r2-full-matrix.txt"
+  },
+  "r2-shadow-reproduction": {
+    "kind": "TOOL_CALL",
+    "ref": "exec-c82075ac-5560-4260-b1f5-580a06ca31f4",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r2-shadow-reproduction npm run test:ui-choices -w @orbit/web -- choices-motion.browser.mjs --project=chromium-light-desktop --grep 'normal bottom.*(popover|tooltip)'",
+    "exitCode": 1,
+    "record": "../checks/r2-shadow-reproduction.json",
+    "output": "../checks/r2-shadow-reproduction.txt"
+  },
+  "r2-shadow-and-focus": {
+    "kind": "TOOL_CALL",
+    "ref": "exec-14d97422-1956-46bd-a4c9-2a74f48cd4c3",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r2-shadow-and-focus npm run test:ui-choices -w @orbit/web -- --project=chromium-light-desktop --project=webkit-dark-phone --grep 'normal bottom|popover matches|tooltip matches|Dialog Popover Select|normal popover can reopen' --max-failures=1",
+    "exitCode": 1,
+    "record": "../checks/r2-shadow-and-focus.json",
+    "output": "../checks/r2-shadow-and-focus.txt"
+  },
+  "r2-fixture-types": {
+    "kind": "TOOL_CALL",
+    "ref": "exec-54bf46f2-b304-46b3-b0a5-74228de067f6",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r2-fixture-types node node_modules/typescript/bin/tsc -p src/web/ui-migration/choices.tsconfig.json --noEmit",
+    "exitCode": 0,
+    "record": "../checks/r2-fixture-types.json",
+    "output": "../checks/r2-fixture-types.txt"
+  },
+  "r2-motion-cross-browser": {
+    "kind": "TOOL_CALL",
+    "ref": "exec-5c277b0c-2a65-4486-bf04-0b30ae0f5e86",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r2-motion-cross-browser npm run test:ui-choices -w @orbit/web -- --project=chromium-light-desktop --project=webkit-dark-phone --grep 'normal bottom|normal top|normal flipped|popover matches|tooltip matches|Dialog Popover Select|normal popover can reopen' --max-failures=1",
+    "exitCode": 1,
+    "record": "../checks/r2-motion-cross-browser.json",
+    "output": "../checks/r2-motion-cross-browser.txt"
+  },
+  "r2-flipped-search-diagnostic": {
+    "kind": "TOOL_CALL",
+    "ref": "exec-823a11bd-6703-4c95-baf6-b91286b8c646",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r2-flipped-search-diagnostic npm run test:ui-choices -w @orbit/web -- choices-motion.browser.mjs --project=webkit-dark-phone --grep 'normal flipped.*search' --repeat-each=5 --max-failures=1",
+    "exitCode": 0,
+    "record": "../checks/r2-flipped-search-diagnostic.json",
+    "output": "../checks/r2-flipped-search-diagnostic.txt"
+  },
+  "r2-webkit-motion": {
+    "kind": "TOOL_CALL",
+    "ref": "exec-87eb63a6-10bf-4e58-bc30-202411d6ef2b",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r2-webkit-motion npm run test:ui-choices -w @orbit/web -- choices-motion.browser.mjs --project=webkit-dark-phone --max-failures=1",
+    "exitCode": 0,
+    "record": "../checks/r2-webkit-motion.json",
+    "output": "../checks/r2-webkit-motion.txt"
+  },
+  "r2-unit-regressions": {
+    "kind": "TOOL_CALL",
+    "ref": "exec-f09bdef3-7b81-4a5d-aa20-d8b28a5e1a06",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r2-unit-regressions npm test -w @orbit/web -- src/lib/theme.test.tsx src/components/ui/boundary.test.ts src/components/ShareModal.test.tsx src/components/WorkspaceView.composerMenu.test.tsx",
+    "exitCode": 0,
+    "record": "../checks/r2-unit-regressions.json",
+    "output": "../checks/r2-unit-regressions.txt"
+  },
+  "r2-final-types": {
+    "kind": "TOOL_CALL",
+    "ref": "exec-98988929-2c08-4ca3-b050-f9b3a20056a7",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r2-final-types node node_modules/typescript/bin/tsc -p src/web/ui-migration/choices.tsconfig.json --noEmit",
+    "exitCode": 0,
+    "record": "../checks/r2-final-types.json",
+    "output": "../checks/r2-final-types.txt"
+  },
+  "r2-production-build": {
+    "kind": "TOOL_CALL",
+    "ref": "exec-32ccd1ab-d117-45c2-b56f-7ade1eb0027c",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r2-production-build npm run build -w @orbit/web",
+    "exitCode": 0,
+    "record": "../checks/r2-production-build.json",
+    "output": "../checks/r2-production-build.txt"
+  },
+  "r2-final-full-matrix": {
+    "kind": "TOOL_CALL",
+    "ref": "exec-6092a788-2046-4e81-b38d-3a2e383d016b",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r2-final-full-matrix npm run test:ui-choices -w @orbit/web",
+    "exitCode": 1,
+    "record": "../checks/r2-final-full-matrix.json",
+    "output": "../checks/r2-final-full-matrix.txt"
+  },
+  "r2-final-motion": {
+    "kind": "TOOL_CALL",
+    "ref": "exec-1247126c-4799-4f3b-874e-1b13a96d148b",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r2-final-motion npm run test:ui-choices -w @orbit/web -- choices-motion.browser.mjs",
+    "exitCode": 0,
+    "record": "../checks/r2-final-motion.json",
+    "output": "../checks/r2-final-motion.txt"
+  },
+  "r2-network-repeat": {
+    "kind": "TOOL_CALL",
+    "ref": "exec-302d7871-9100-4bee-a640-f324de5ebd7e",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r2-network-repeat npm run test:ui-choices -w @orbit/web -- choices.browser.mjs --project=chromium-light-phone --grep '(account|search) matches the current surface' --repeat-each=3",
+    "exitCode": 0,
+    "record": "../checks/r2-network-repeat.json",
+    "output": "../checks/r2-network-repeat.txt"
+  },
+  "r2-pixel-audit": {
+    "kind": "TOOL_CALL",
+    "ref": "exec-76d36977-b8ce-4a01-9723-a5d1ac69306a",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r2-pixel-audit python3 docs/evidence/base-ui-migration/p2.2/revision-2/audit-pixels.py",
+    "exitCode": 0,
+    "record": "../checks/r2-pixel-audit.json",
+    "output": "../checks/r2-pixel-audit.txt"
+  },
+  "r2-open-value-before": {
+    "kind": "TOOL_CALL",
+    "ref": "exec-236395e8-6c06-4d51-8af0-54fbaea86a6b",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r2-open-value-before npm run test:ui-choices -w @orbit/web -- choices-open-value.browser.mjs --project=chromium-light-desktop --grep expiry",
+    "exitCode": 1,
+    "record": "../checks/r2-open-value-before.json",
+    "output": "../checks/r2-open-value-before.txt"
+  },
+  "r2-open-value-reproduction": {
+    "kind": "TOOL_CALL",
+    "ref": "exec-c5ea969c-59e5-4318-9a34-e879c8b095f6",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r2-open-value-reproduction npm run test:ui-choices -w @orbit/web -- choices-open-value.browser.mjs --project=chromium-light-desktop",
+    "exitCode": 1,
+    "record": "../checks/r2-open-value-reproduction.json",
+    "output": "../checks/r2-open-value-reproduction.txt"
+  },
+  "r2-open-value-final": {
+    "kind": "TOOL_CALL",
+    "ref": "exec-ea22cd60-2d16-48ef-b1a1-2f56f2bb18eb",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r2-open-value-final npm run test:ui-choices -w @orbit/web -- --grep 'matches (expiry|search)$|(expiry|account|search) matches the current surface|empty, disabled|dims the current value'",
+    "exitCode": 0,
+    "record": "../checks/r2-open-value-final.json",
+    "output": "../checks/r2-open-value-final.txt"
+  },
+  "r2-final-production-build": {
+    "kind": "TOOL_CALL",
+    "ref": "exec-11622df0-4caa-4923-bfad-1cf81cd6b562",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r2-final-production-build npm run build -w @orbit/web",
+    "exitCode": 0,
+    "record": "../checks/r2-final-production-build.json",
+    "output": "../checks/r2-final-production-build.txt"
+  },
+  "r2-final-pixel-audit": {
+    "kind": "TOOL_CALL",
+    "ref": "exec-4e5d5452-6716-4ab4-ae63-54f67cc00595",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r2-final-pixel-audit python3 docs/evidence/base-ui-migration/p2.2/revision-2/audit-pixels.py --final",
+    "exitCode": 0,
+    "record": "../checks/r2-final-pixel-audit.json",
+    "output": "../checks/r2-final-pixel-audit.txt"
+  },
+  "r2-evidence-integrity": {
+    "kind": "TOOL_CALL",
+    "ref": "exec-7a0b1d48-c1cf-403b-8a05-90aa43e37304",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r2-evidence-integrity python3 docs/evidence/base-ui-migration/p2.2/revision-2/verify-evidence.py",
+    "exitCode": 0,
+    "record": "../checks/r2-evidence-integrity.json",
+    "output": "../checks/r2-evidence-integrity.txt"
+  },
+  "r2-open-value-settled": {
+    "kind": "TOOL_CALL",
+    "ref": "exec-60b2a970-b808-43d8-a6fe-9c0a4b776248",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r2-open-value-settled npm run test:ui-choices -w @orbit/web -- choices-open-value.browser.mjs",
+    "exitCode": 0,
+    "record": "../checks/r2-open-value-settled.json",
+    "output": "../checks/r2-open-value-settled.txt"
+  },
+  "r2-settled-pixel-audit": {
+    "kind": "TOOL_CALL",
+    "ref": "exec-7ac14bf0-eca2-4cf4-acaf-6f64f9fcc207",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r2-settled-pixel-audit python3 docs/evidence/base-ui-migration/p2.2/revision-2/audit-settled-pixels.py",
+    "exitCode": 0,
+    "record": "../checks/r2-settled-pixel-audit.json",
+    "output": "../checks/r2-settled-pixel-audit.txt"
+  },
+  "r2-open-border-before": {
+    "kind": "TOOL_CALL",
+    "ref": "exec-aa55fdc6-e081-4640-80e6-c213cb170ca2",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r2-open-border-before npm run test:ui-choices -w @orbit/web -- choices-open-value.browser.mjs --project=chromium-light-desktop",
+    "exitCode": 1,
+    "record": "../checks/r2-open-border-before.json",
+    "output": "../checks/r2-open-border-before.txt"
+  },
+  "r2-open-state-final": {
+    "kind": "TOOL_CALL",
+    "ref": "exec-d5c2bf51-9d18-47f3-979b-f8b0de981d76",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r2-open-state-final npm run test:ui-choices -w @orbit/web -- --grep 'matches (expiry|search)$|(expiry|account|search) matches the current surface|empty, disabled|dims the current value'",
+    "exitCode": 0,
+    "record": "../checks/r2-open-state-final.json",
+    "output": "../checks/r2-open-state-final.txt"
+  },
+  "r2-final-open-types": {
+    "kind": "TOOL_CALL",
+    "ref": "exec-eb4a1b9b-3ded-448e-b038-5ac611b4561a",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r2-final-open-types node node_modules/typescript/bin/tsc -p src/web/ui-migration/choices.tsconfig.json --noEmit",
+    "exitCode": 0,
+    "record": "../checks/r2-final-open-types.json",
+    "output": "../checks/r2-final-open-types.txt"
+  },
+  "r2-final-open-build": {
+    "kind": "TOOL_CALL",
+    "ref": "exec-20b13e45-4e7f-402d-a777-e9d34dac536d",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r2-final-open-build npm run build -w @orbit/web",
+    "exitCode": 0,
+    "record": "../checks/r2-final-open-build.json",
+    "output": "../checks/r2-final-open-build.txt"
+  },
+  "r2-final-state-pixel-audit": {
+    "kind": "TOOL_CALL",
+    "ref": "exec-31947334-0a88-44c8-b12f-57a025a68174",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r2-final-state-pixel-audit python3 docs/evidence/base-ui-migration/p2.2/revision-2/audit-final-state-pixels.py",
+    "exitCode": 0,
+    "record": "../checks/r2-final-state-pixel-audit.json",
+    "output": "../checks/r2-final-state-pixel-audit.txt"
+  },
+  "r2-final-evidence-integrity": {
+    "kind": "TOOL_CALL",
+    "ref": "exec-b371059d-b1a2-4726-a01d-cf39433fec1f",
+    "command": "python3 docs/evidence/base-ui-migration/p2.2/run-check.py r2-final-evidence-integrity python3 docs/evidence/base-ui-migration/p2.2/revision-2/verify-final-evidence.py",
+    "exitCode": 0,
+    "record": "../checks/r2-final-evidence-integrity.json",
+    "output": "../checks/r2-final-evidence-integrity.txt"
+  }
+}

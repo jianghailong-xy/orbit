@@ -1,0 +1,43 @@
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs --grep attachment matches
+
+[WebServer] (node:2831194) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 8 tests using 1 worker
+
+(node:2831367) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [chromium-light-desktop] › ui-migration/choices.browser.mjs:83:3 › attachment matches the current surface, density and option states (11.2s)
+(node:2834559) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  2 [chromium-light-phone] › ui-migration/choices.browser.mjs:83:3 › attachment matches the current surface, density and option states (9.2s)
+(node:2837039) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  3 [chromium-dark-desktop] › ui-migration/choices.browser.mjs:83:3 › attachment matches the current surface, density and option states (4.1s)
+(node:2838314) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  4 [chromium-dark-phone] › ui-migration/choices.browser.mjs:83:3 › attachment matches the current surface, density and option states (5.3s)
+(node:2838908) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  5 [webkit-light-desktop] › ui-migration/choices.browser.mjs:83:3 › attachment matches the current surface, density and option states (3.4s)
+(node:2839344) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  6 [webkit-light-phone] › ui-migration/choices.browser.mjs:83:3 › attachment matches the current surface, density and option states (4.8s)
+(node:2839912) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  7 [webkit-dark-desktop] › ui-migration/choices.browser.mjs:83:3 › attachment matches the current surface, density and option states (6.0s)
+(node:2841906) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  8 [webkit-dark-phone] › ui-migration/choices.browser.mjs:83:3 › attachment matches the current surface, density and option states (8.2s)
+
+  8 passed (1.1m)

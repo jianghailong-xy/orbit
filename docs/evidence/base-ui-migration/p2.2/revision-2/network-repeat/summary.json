@@ -1,0 +1,210 @@
+{
+  "stats": {
+    "startTime": "2026-10-04T09:36:14.542Z",
+    "duration": 19497.726,
+    "expected": 6,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-light-phone--account-matches-the-current-surface-density-and-option-states",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3359
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--account-matches-the-current-surface-density-and-option-states--antd-account-closed.png",
+          "sha256": "a26d9542e65529a267f661dbabf4c7f27d6da5ffbf0ef163851756a001759273"
+        },
+        {
+          "file": "chromium-light-phone--account-matches-the-current-surface-density-and-option-states--antd-account-open.png",
+          "sha256": "de45f0c3a0db3275cfad2b7f80be82e44742b45d1ee69a7814c619e34aef29b4"
+        },
+        {
+          "file": "chromium-light-phone--account-matches-the-current-surface-density-and-option-states--orbit-account-closed.png",
+          "sha256": "a26d9542e65529a267f661dbabf4c7f27d6da5ffbf0ef163851756a001759273"
+        },
+        {
+          "file": "chromium-light-phone--account-matches-the-current-surface-density-and-option-states--orbit-account-open.png",
+          "sha256": "1c9e756ef2ca14957d516f2f7b6398a9164650fc3155aad6bfa5e8ecd4ee5c3c"
+        },
+        {
+          "file": "chromium-light-phone--account-matches-the-current-surface-density-and-option-states--appearance.json",
+          "sha256": "b25cac7f7f37d8f18d9715b477ea7136f2a2a1c1707a0bcf2a40f48e1674d9e2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--search-matches-the-current-surface-density-and-option-states",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2907
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--search-matches-the-current-surface-density-and-option-states--antd-search-closed.png",
+          "sha256": "9648b902e29077e4dc15462bd16625ffa27c03203db2b2313deac836950425c0"
+        },
+        {
+          "file": "chromium-light-phone--search-matches-the-current-surface-density-and-option-states--antd-search-open.png",
+          "sha256": "685bc0603233982c28276fd9e0120e93f88e76b7ba17f0485461daf72c0ab2f5"
+        },
+        {
+          "file": "chromium-light-phone--search-matches-the-current-surface-density-and-option-states--orbit-search-closed.png",
+          "sha256": "ea8d344dc9954b434fd480e16e1df58e5d2a04979ddb1cc5d74b3330a98fd12b"
+        },
+        {
+          "file": "chromium-light-phone--search-matches-the-current-surface-density-and-option-states--orbit-search-open.png",
+          "sha256": "685bc0603233982c28276fd9e0120e93f88e76b7ba17f0485461daf72c0ab2f5"
+        },
+        {
+          "file": "chromium-light-phone--search-matches-the-current-surface-density-and-option-states--appearance.json",
+          "sha256": "93d19dec74febe91294795f00abeeb0fe04d4879823abe643e6de6911c3109d4"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--account-matches-the-current-surface-density-and-option-states--repeat-1",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3061
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--account-matches-the-current-surface-density-and-option-states--repeat-1--antd-account-closed.png",
+          "sha256": "a26d9542e65529a267f661dbabf4c7f27d6da5ffbf0ef163851756a001759273"
+        },
+        {
+          "file": "chromium-light-phone--account-matches-the-current-surface-density-and-option-states--repeat-1--antd-account-open.png",
+          "sha256": "de45f0c3a0db3275cfad2b7f80be82e44742b45d1ee69a7814c619e34aef29b4"
+        },
+        {
+          "file": "chromium-light-phone--account-matches-the-current-surface-density-and-option-states--repeat-1--orbit-account-closed.png",
+          "sha256": "a26d9542e65529a267f661dbabf4c7f27d6da5ffbf0ef163851756a001759273"
+        },
+        {
+          "file": "chromium-light-phone--account-matches-the-current-surface-density-and-option-states--repeat-1--orbit-account-open.png",
+          "sha256": "1c9e756ef2ca14957d516f2f7b6398a9164650fc3155aad6bfa5e8ecd4ee5c3c"
+        },
+        {
+          "file": "chromium-light-phone--account-matches-the-current-surface-density-and-option-states--repeat-1--appearance.json",
+          "sha256": "b25cac7f7f37d8f18d9715b477ea7136f2a2a1c1707a0bcf2a40f48e1674d9e2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--search-matches-the-current-surface-density-and-option-states--repeat-1",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2890
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--search-matches-the-current-surface-density-and-option-states--repeat-1--antd-search-closed.png",
+          "sha256": "9648b902e29077e4dc15462bd16625ffa27c03203db2b2313deac836950425c0"
+        },
+        {
+          "file": "chromium-light-phone--search-matches-the-current-surface-density-and-option-states--repeat-1--antd-search-open.png",
+          "sha256": "685bc0603233982c28276fd9e0120e93f88e76b7ba17f0485461daf72c0ab2f5"
+        },
+        {
+          "file": "chromium-light-phone--search-matches-the-current-surface-density-and-option-states--repeat-1--orbit-search-closed.png",
+          "sha256": "ea8d344dc9954b434fd480e16e1df58e5d2a04979ddb1cc5d74b3330a98fd12b"
+        },
+        {
+          "file": "chromium-light-phone--search-matches-the-current-surface-density-and-option-states--repeat-1--orbit-search-open.png",
+          "sha256": "685bc0603233982c28276fd9e0120e93f88e76b7ba17f0485461daf72c0ab2f5"
+        },
+        {
+          "file": "chromium-light-phone--search-matches-the-current-surface-density-and-option-states--repeat-1--appearance.json",
+          "sha256": "93d19dec74febe91294795f00abeeb0fe04d4879823abe643e6de6911c3109d4"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--account-matches-the-current-surface-density-and-option-states--repeat-2",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2940
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--account-matches-the-current-surface-density-and-option-states--repeat-2--antd-account-closed.png",
+          "sha256": "a26d9542e65529a267f661dbabf4c7f27d6da5ffbf0ef163851756a001759273"
+        },
+        {
+          "file": "chromium-light-phone--account-matches-the-current-surface-density-and-option-states--repeat-2--antd-account-open.png",
+          "sha256": "de45f0c3a0db3275cfad2b7f80be82e44742b45d1ee69a7814c619e34aef29b4"
+        },
+        {
+          "file": "chromium-light-phone--account-matches-the-current-surface-density-and-option-states--repeat-2--orbit-account-closed.png",
+          "sha256": "a26d9542e65529a267f661dbabf4c7f27d6da5ffbf0ef163851756a001759273"
+        },
+        {
+          "file": "chromium-light-phone--account-matches-the-current-surface-density-and-option-states--repeat-2--orbit-account-open.png",
+          "sha256": "1c9e756ef2ca14957d516f2f7b6398a9164650fc3155aad6bfa5e8ecd4ee5c3c"
+        },
+        {
+          "file": "chromium-light-phone--account-matches-the-current-surface-density-and-option-states--repeat-2--appearance.json",
+          "sha256": "b25cac7f7f37d8f18d9715b477ea7136f2a2a1c1707a0bcf2a40f48e1674d9e2"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--search-matches-the-current-surface-density-and-option-states--repeat-2",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2978
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--search-matches-the-current-surface-density-and-option-states--repeat-2--antd-search-closed.png",
+          "sha256": "9648b902e29077e4dc15462bd16625ffa27c03203db2b2313deac836950425c0"
+        },
+        {
+          "file": "chromium-light-phone--search-matches-the-current-surface-density-and-option-states--repeat-2--antd-search-open.png",
+          "sha256": "685bc0603233982c28276fd9e0120e93f88e76b7ba17f0485461daf72c0ab2f5"
+        },
+        {
+          "file": "chromium-light-phone--search-matches-the-current-surface-density-and-option-states--repeat-2--orbit-search-closed.png",
+          "sha256": "ea8d344dc9954b434fd480e16e1df58e5d2a04979ddb1cc5d74b3330a98fd12b"
+        },
+        {
+          "file": "chromium-light-phone--search-matches-the-current-surface-density-and-option-states--repeat-2--orbit-search-open.png",
+          "sha256": "685bc0603233982c28276fd9e0120e93f88e76b7ba17f0485461daf72c0ab2f5"
+        },
+        {
+          "file": "chromium-light-phone--search-matches-the-current-surface-density-and-option-states--repeat-2--appearance.json",
+          "sha256": "93d19dec74febe91294795f00abeeb0fe04d4879823abe643e6de6911c3109d4"
+        }
+      ]
+    }
+  ]
+}

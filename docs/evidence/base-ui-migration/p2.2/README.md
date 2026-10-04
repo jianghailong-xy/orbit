@@ -1,5 +1,7 @@
 # P2.2 菜单、浮层与选择控件
 
+**当前交付以[第二版返工证据](revision-2/README.md)为准。** 本页的结果表保留首版记录。独立审查发现首版遗漏正常动效，并未经授权改变手机附件菜单布局；第二版补齐动效、恢复实测布局，原截图和失败记录不覆盖。
+
 服务于任务 `34Za394q2ZEgr7TKprjkF`，起点 `67e62c0b4028eefe2c619dac80d3fac312cea601`。开工读取了任务完整信息/历史评论、项目目标/验收/作业指导，以及已完成的 P2.1 第二版交付。项目验收条目 key `1BvO6hYrlFnU60JqxQPUHt`，原文：**P2：Orbit 自有弹层、选择及反馈组件保持现有键盘、焦点、通知和确认行为。** 本任务承担菜单、Popover、Tooltip、Select/Combobox；通知与确认不凭本证据宣称完成。
 
 实现、公共用法与测试提交：`1a70fbb902d6b24453a57994f782a40546d67c94`。本目录在后续独立证据提交中保留，便于代码回退与历史复核。
@@ -31,7 +33,7 @@ WebKit 手机实际 `tap()` 曾暴露 Base UI 1.8 Combobox 取消 pointerdown �
 
 ## 明示差异与既有缺陷
 
-- **手机附件菜单字号以任务的17px为准。** 原 P0 实测虽然有42.4px行高和26px圆角，AntD 高优先级样式把已有17px规则覆盖成14px、分隔线也不是设计值。新实现明确使用17px、42.4px、26px、图标19px与间距16px，并按已有规则保留分隔线24px内缩。浏览器量化单行42.390625px，5行加边距/分隔为251.953125px。测试保留旧/新原始测量，只精确声明这些请求指定的差异，其余字段仍严格相等；未改历史基线。
+- **手机附件菜单字号以任务的17px为准，其他布局按旧界面实测。** 首版把被覆盖的 CSS 设计意图误作授权，还修改了 padding、分隔线留白/内缩和行圆角，导致总高251.953125px、图标x=31px；这里原先称其为“请求指定差异”是不正确的。第二版恢复5px/12px行padding、4px行圆角、原分隔线，总高240.953125px、图标x=12px，仅字号及相应文字行高与旧14px实测不同。原42.390625px量化行高、26px外圆角保留；删除了额外布局差异的测试豁免。
 - **旧 AntD 6 Modal 的最后一次 Tab 会移到浏览器界面。** 用纯 AntD Modal+Select+Button 对照可同样复现，下一次 Tab 返回 Close。新控件组合与该基线一致。新 Dialog 的完整正反 Tab 循环单独验证；旧 Modal 的本地切换/子层Esc/返回焦点仍检查。早期失败报告保留，未将宿主缺陷说成已修复。下游替换旧 Modal 时应使用新 Dialog 的完整循环检查。
 - 前置 P2.1 已记录 P0 的8项桌面3像素截图差异及旧分享焦点缺陷；本任务不覆盖原图或顺手修改它们。
 
@@ -51,7 +53,7 @@ npm test -w @orbit/web -- src/lib/theme.test.tsx src/components/ui/boundary.test
 npm run build -w @orbit/web
 ```
 
-## 最终结果与直接证据
+## 首版结果与直接证据（已退回）
 
 | 检查 | 结果 | 原始记录 |
 | --- | --- | --- |
@@ -70,6 +72,6 @@ npm run build -w @orbit/web
 
 代表原件：手机附件菜单 [Chromium 明色](final-surfaces/chromium-light-phone--attachment-matches-the-current-surface-density-and-option-states--orbit-attachment-open.png) 与 [原始测量](final-surfaces/chromium-light-phone--attachment-matches-the-current-surface-density-and-option-states--appearance.json)；[WebKit 暗色 Dialog 内组合](full-matrix/webkit-dark-phone--Dialog-owns-choices-top-layer-Escape-Tab-and-theme--choices-in-dialog.png)；[多选标签](full-matrix/chromium-light-desktop--multiple-chip-appearance-matches-current-labels-and-email-fields--orbit-multiple-default.png)；[Tooltip 含触发器/箭头上下文](final-surfaces/chromium-dark-phone--tooltip-matches-the-current-surface-density-and-option-states--orbit-tooltip-context.png)。键盘、触摸、远端搜索及邮件标签的逐项行为结果在各环境的 JSON 附件中。
 
-[像素复核](pixel-audit.json) 合并最终外观复验与未受这两处改动影响的完整矩阵原图，共184对：114对逐像素相同，4对为明确要求的手机附件字号/间距差异，66对同尺寸但仍有像素差异。后者每对最多77像素，主要在圆角边缘、SVG或半透明图标，几何、颜色和 SVG path 严格相等；例如暗色搜索控件77像素最大通道差2，WebKit 权限菜单的差异位于圆角和 y=75.625px 的地球图标，原件及坐标/路径保留供复核。基于这些数据判断是栅格化差异，不宣称全部截图零差异。修正后的 Tooltip 上下文8对均逐像素相同。
+[首版像素复核](pixel-audit.json) 合并最终外观复验与未受这两处改动影响的完整矩阵原图，共184对：114对逐像素相同，4对含未经授权的手机附件布局差异，66对同尺寸但仍有像素差异。前4对已由第二版修复，原统计保留。后66对每对最多77像素，主要在圆角边缘、SVG或半透明图标，几何、颜色和 SVG path 严格相等；例如暗色搜索控件77像素最大通道差2，WebKit 权限菜单的差异位于圆角和 y=75.625px 的地球图标，原件及坐标/路径保留供复核。基于这些数据判断是栅格化差异，不宣称全部截图零差异。首版修正后的 Tooltip 上下文8对均逐像素相同。
 
 本阶段没有重跑全量 Vitest 或 P0 正式页面矩阵，不宣称整站验收。本证据不确立真机 iOS 软键盘/原生输入法/手势滚动、真实后端远端搜索、业务页面批量替换或所有未声明拥有关系的浮层组合。旧 Modal 最后一次 Tab 的边界按上文单列；P0/P2.1既有问题未覆盖基线或改成通过。回退实现提交即可撤销功能变化，证据提交可独立保留；没有数据迁移、部署或发布。
