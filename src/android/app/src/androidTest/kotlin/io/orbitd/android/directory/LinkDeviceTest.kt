@@ -59,6 +59,7 @@ class LinkDeviceTest {
                         path.startsWith("/api/wiki/entries/") -> """{"id":"01a0cca7-8609-70ed-a0e2-d4b55b832b60","title":"Linked wiki"}"""
                         path.endsWith("/events/page") -> """{"events":[],"hasMore":false,"lastSeq":0,"latestSeq":0}"""
                         path.endsWith("/events") -> return MockResponse().setHeader("Content-Type", "text/event-stream").setBody(": connected\n\n")
+                        path.startsWith("/api/sessions/") && path.substringAfterLast('/') in setOf("approvals", "turns", "background") -> "[]"
                         path.startsWith("/api/sessions/") -> """{"id":"${path.substringAfterLast('/')}","title":"${if (token?.endsWith("-2") == true) "Second session" else "Linked session"}","status":"ENDED","lifecycleState":"OPEN"}"""
                         path == "/api/auth/logout" -> "{}"
                         else -> "[]"
