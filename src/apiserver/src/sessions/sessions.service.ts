@@ -27,6 +27,7 @@ import { resolveLegacyArtifactPath } from './legacy-artifact-path';
 import { isWorktreeArtifactPath, readWorktreeArtifactRequest } from './worktree-artifact';
 import { isOrbitAuthoredTurn } from './orbit-authored-turn';
 import { readSessionMessageCard } from './session-message';
+import { readSessionProjectMembership, sessionProjectMembershipSql } from './session-project-membership';
 import {
   closeRequestsTheRetryWillNotResend,
   isSessionReplyTurn,
@@ -82,6 +83,7 @@ import {
   type SessionTurnPlacement,
   SessionRunState,
   SessionState,
+  type SessionProjectMembership,
   type SessionSearchHit,
   supportsMidTurnSteer,
   supportsTargetBoundCurrentWorkSteer,
@@ -2695,6 +2697,7 @@ export class SessionsService {
       runnerId?: string;
       workspaceId?: string;
       tagId?: string;
+      projectId?: string;
       view?: 'open' | 'completed' | 'trash' | 'active' | 'archived' | 'deleted' | 'system';
       limit?: number;
     },
@@ -2736,6 +2739,13 @@ export class SessionsService {
           WHERE stl.session_id = s.id AND stl.tag_id = ${filters.tagId}::uuid
         )`
       : Prisma.empty;
+    const projectFilter = filters.projectId
+      ? Prisma.sql`AND EXISTS (
+          SELECT 1 FROM project p
+          WHERE p.id = ${filters.projectId}::uuid AND p.owner_id = ${ownerId}::uuid
+        )
+        AND (${sessionProjectMembershipSql('s')} ->> 'projectId')::uuid = ${filters.projectId}::uuid`
+      : Prisma.empty;
     // Paging is opt-in: a caller that omits `limit` (the native clients, any older web build)
     // still gets the whole list, so this can only ever shrink a response.
     const pageLimit =
@@ -2755,7 +2765,7 @@ export class SessionsService {
         ? Prisma.sql`COALESCE(s.completed_at, s.archived_at) DESC NULLS LAST, s.created_at DESC`
         : Prisma.sql`(s.pinned_at IS NOT NULL) DESC, COALESCE(s.last_turn_at, s.created_at) DESC, s.created_at DESC`;
     return this.listRows(ownerId, {
-      scope: Prisma.sql`${runnerFilter} ${workspaceFilter} ${tagFilter}`,
+      scope: Prisma.sql`${runnerFilter} ${workspaceFilter} ${tagFilter} ${projectFilter}`,
       visibility,
       orderBy,
       pageLimit,
@@ -2848,6 +2858,7 @@ export class SessionsService {
       taskTitle: string | null;
       projectId: string | null;
       projectTitle: string | null;
+      projectMembership: SessionProjectMembership | null;
       cancelRequestedAt: Date | null;
       runtimeSessionId: string | null;
       retryAt: Date | null;
@@ -2951,6 +2962,7 @@ export class SessionsService {
         t.title   AS "taskTitle",
         cp.id     AS "projectId",
         cp.title  AS "projectTitle",
+        ${sessionProjectMembershipSql('s')} AS "projectMembership",
         q.reason  AS "queuedReason",
         q.active  AS "queuedActive",
         q."limit" AS "queuedLimit"
@@ -3085,6 +3097,7 @@ export class SessionsService {
         taskTitle: r.taskTitle,
         projectId: r.projectId,
         projectTitle: r.projectTitle,
+        projectMembership: r.projectMembership,
         // Null unless the row is queued behind a cap — "waiting its turn" is not a gate.
         queuedReason: r.queuedReason,
         queuedActive: r.queuedActive == null ? null : Number(r.queuedActive),
@@ -3288,6 +3301,7 @@ export class SessionsService {
       runningBgJobCount: freshRunningBgJobs(session.runningBgJobs, runningBgJobActivity).length,
       projectId: coordinatorForProject?.id ?? null,
       projectTitle: coordinatorForProject?.title ?? null,
+      projectMembership: await readSessionProjectMembership(this.prisma, session.id),
       shareToken: shareLinks?.[0]?.token ?? null,
       sharedAt: shareLinks?.[0]?.createdAt ?? null,
     });
