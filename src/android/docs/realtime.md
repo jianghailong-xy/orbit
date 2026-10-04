@@ -86,9 +86,11 @@ The SSE transport parses fragmented UTF-8, BOM, CR/LF/CRLF, multiline data,
 comments and IDs. Unterminated EOF frames are discarded, and frames are bounded
 at 4 MiB. Credentials are headers only, with `X-Orbit-Client: android/<version>`;
 redirects are disabled. This GET-only transport allows OkHttp connection
-recovery across stale sockets or alternate addresses of the same origin;
-otherwise cancelling one connection can strand a reachable IPv4 service behind
-an unavailable IPv6 address. Body failures return to the store's sinceSeq and
+recovery across stale sockets or alternate addresses of the same origin, and
+OkHttp 4.12.0 also permits eligible GET 408 follow-ups with this option. The
+hostname reconnect regression uses an IPv4 server reached through localhost;
+its old failure does not record the order of individual address attempts.
+Body failures return to the store's sinceSeq and
 backoff policy. A03's REST mutation retry policy is unchanged. AuthSession owns both
 streams and REST requests, including their shared refresh flight and epoch.
 A delayed stream retry-401 cannot revoke newer credentials. Errors originating
@@ -134,8 +136,9 @@ there is no separate connectivity probe. A change of network
 identity reconnects even without an intermediate offline callback. No service
 or job keeps SSE alive in the background.
 
-The transport has a 10-second connect and 45-second byte-read timeout, paired
-with the server's 20-second ping. Cancellation closes even a blocked header or
+The transport has a 10-second timeout for each connect attempt and a 45-second
+idle byte-read timeout, paired with the server's 20-second ping. There is no
+overall call/stream timeout. Cancellation closes even a blocked header or
 body read. Failed connections use jittered 1/2/4/8/15-second bounded backoff;
 clean EOF uses 300 ms. A ping preceding repeated resync does not reset that
 failure ramp. REST reconciliation has its own retry state, so a directory
@@ -178,6 +181,10 @@ shared emulator or starts `orbit-ui-api29` through `orbit-ui-api35`, and restore
 network/rotation settings on exit. Supply a new evidence directory each run.
 It records APK hash/signature, device build, source SHA/dirty flag, JSON state,
 screenshots, request/cursor history, per-process logs and command exit codes.
+Connection-count checks allow five seconds to converge and require both counts
+to remain at one for 750 ms; server socket closure is observed on the next
+write. Their samples and each server stream's lifetime are recorded, so ongoing
+duplicate connections still fail instead of being hidden by a fixed delay.
 Probe records live in the app's internal files directory and are read through
 `run-as` on debuggable builds. API30 denies shell access to the external app
 directory; this is a harness access issue, not an application crash or lost cache.

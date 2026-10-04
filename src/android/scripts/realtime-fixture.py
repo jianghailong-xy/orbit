@@ -1,6 +1,7 @@
 """Loopback-only controlled REST/SSE server for the A04 device probe. No production accounts."""
 import json
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -18,7 +19,7 @@ class Fixture:
         self.live = []
         self.generation = 0
         self.stats = {"controlConnections": 0, "sessionConnections": 0, "activeControl": 0,
-                      "activeSession": 0, "sinceSeqs": [], "reads": [], "errors": []}
+                      "activeSession": 0, "sinceSeqs": [], "reads": [], "errors": [], "streams": []}
 
     def advance(self, seq, text):
         with self.condition:
@@ -111,6 +112,9 @@ class Fixture:
                 with fixture.condition:
                     fixture.stats[total] += 1
                     fixture.stats[active] += 1
+                    connection = {"kind": "control" if control else "session", "number": fixture.stats[total],
+                                  "opened": time.monotonic(), "closed": None}
+                    fixture.stats["streams"].append(connection)
                     generation = fixture.generation
                     offset = len(fixture.control if control else fixture.live)
                     replay = [] if control else [row for row in fixture.rows if row["seq"] > since]
@@ -148,6 +152,7 @@ class Fixture:
                 finally:
                     with fixture.condition:
                         fixture.stats[active] -= 1
+                        connection["closed"] = time.monotonic()
 
         server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         server.daemon_threads = True

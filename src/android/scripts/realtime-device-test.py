@@ -31,7 +31,7 @@ def main():
     package = "io.orbitd.android.debug"
     component = package + "/io.orbitd.android.realtime.RealtimeFixtureActivity"
     state_path = "files/a04-realtime/state.json"
-    commands, phases = [], []
+    commands, phases, connection_checks = [], [], []
     gaps = (["Wi-Fi/cellular switch unavailable in this run; only a cellular network replacement is exercised"]
             if args.network_mode == "cellular-reconnect" else [])
     started = time.time()
@@ -69,6 +69,24 @@ def main():
     def ready(state):
         return state["control"] == state["sessionConnection"] == "CONNECTED" and state["directoryFresh"] and state["sessionFresh"]
 
+    def single_connections(name):
+        # A cancelled client socket is observed by this server on its next write.
+        # Require stable convergence, retaining every sample rather than checking
+        # one unsynchronised counter during a default-network transition.
+        samples = []
+        connection_checks.append({"phase": name, "samples": samples})
+        deadline, stable_since = time.monotonic() + 5, None
+        while time.monotonic() < deadline:
+            now = time.monotonic()
+            with fixture.condition:
+                counts = [fixture.stats["activeControl"], fixture.stats["activeSession"]]
+            samples.append({"monotonic": now, "activeControl": counts[0], "activeSession": counts[1]})
+            stable_since = (stable_since or now) if counts == [1, 1] else None
+            if stable_since is not None and now - stable_since >= 0.75:
+                return
+            time.sleep(0.1)
+        raise AssertionError(f"Two SSE connections did not settle in 5s: {samples}")
+
     original = {key: adb("shell", "settings", "get", area, key) for area, key in
                 (("system", "accelerometer_rotation"), ("system", "user_rotation"), ("global", "wifi_on"), ("global", "mobile_data"))}
     status, error = "FAILED", None
@@ -92,7 +110,7 @@ def main():
         adb("shell", "am", "start", "-W", "-n", component, "--ez", "reset_fixture", "true")
         first = phase("01-initial", lambda s: ready(s) and s["maxSeq"] == 2 and s["approvals"] == 1 and
                       s["networkTransport"] == ("WIFI" if not gaps else "CELLULAR"), timeout=60)
-        assert fixture.stats["activeControl"] == fixture.stats["activeSession"] == 1
+        single_connections("01-initial")
         old_connections = fixture.stats["sessionConnections"]
         fixture.drop()
         fixture.advance(3, "caught up after socket loss")
@@ -104,7 +122,7 @@ def main():
         adb("shell", "settings", "put", "system", "user_rotation", "0" if original["user_rotation"] == "1" else "1")
         rotated = phase("03-rotation", lambda s: ready(s) and s["activityInstance"] > first["activityInstance"] and s["seqs"] == [1, 2, 3])
         assert rotated["pid"] == first["pid"]
-        assert fixture.stats["activeControl"] == fixture.stats["activeSession"] == 1
+        single_connections("03-rotation")
 
         if gaps:
             adb("shell", "svc", "data", "disable")
@@ -179,6 +197,7 @@ def main():
             if any(secret in content for secret in ("a04-fixture-access", "a04-fixture-refresh", "a04-fixture-password")):
                 status, error = "FAILED", "Fixture credential found in " + log.name
         (output / "report.json").write_text(json.dumps({"status": status, "error": error, "phases": phases, "gaps": gaps,
+            "connectionChecks": connection_checks,
             "networkMode": args.network_mode,
             "started": started, "finished": time.time(), "scope": "Controlled debug fixture; no physical-phone or production-server claim"}, ensure_ascii=False, indent=2))
         print(f"Result: {status}; gaps={gaps}", flush=True)
