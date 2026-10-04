@@ -2,6 +2,7 @@ package io.orbitd.android
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -74,6 +75,8 @@ class MainActivityTest {
         compose.onNodeWithText("Password").performTextInput("fixture-password")
         compose.onAllNodesWithText("Sign in")[1].performScrollTo().performClick()
         compose.waitUntil(5_000) { appSession().state.value is AuthState.SignedIn }
+        compose.onNodeWithContentDescription("Open navigation").performClick()
+        compose.onNodeWithText("Settings").performScrollTo().performClick()
         compose.onNodeWithText("Signed in").assertIsDisplayed()
         compose.activityRule.scenario.recreate()
         compose.onNodeWithText("Signed in").assertIsDisplayed()
@@ -93,7 +96,7 @@ class MainActivityTest {
 
 class TestOrbitApplication : OrbitApplication() {
     override fun createSession(): AuthSession = AuthSession(
-        HttpTransport { ApiResponse(200, """{"accessToken":"fixture-access","refreshToken":"fixture-refresh","user":{"id":"u1","email":"fixture@example.test","name":"Fixture"}}""".encodeToByteArray()) },
+        HttpTransport { request -> ApiResponse(200, (if (request.api.path == listOf("auth", "login")) """{"accessToken":"fixture-access","refreshToken":"fixture-refresh","user":{"id":"u1","email":"fixture@example.test","name":"Fixture"}}""" else "[]").encodeToByteArray()) },
         object : CredentialStore {
             private var value: StoredSession? = null
             override suspend fun load() = value
