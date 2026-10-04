@@ -125,10 +125,21 @@ jobs:
       - name: Build for iOS Simulator
         working-directory: src/ios
         run: |
+          set -o pipefail
           xcodebuild \
             -project Orbit.xcodeproj \
             -scheme Orbit \
             -destination 'generic/platform=iOS Simulator' \
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
-            build
+            build 2>&1 | tee /tmp/orbit-ios-projects-xcodebuild.log
+      - name: Publish compiler diagnostics
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          for line in Path('/tmp/orbit-ios-projects-xcodebuild.log').read_text().splitlines():
+              if 'error:' in line:
+                  message = line.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+                  print(f'::error::{message}')
+          PY
