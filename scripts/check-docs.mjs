@@ -1,10 +1,11 @@
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import GithubSlugger from 'github-slugger';
 import MarkdownIt from 'markdown-it';
 import markdownLinkCheck from 'markdown-link-check';
+import { lint } from 'markdownlint/promise';
 
 const markdown = new MarkdownIt({ html: true });
 const external = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i;
@@ -14,6 +15,21 @@ export function publicFiles(tracked, guides) {
     (!file.includes('/') && !['AGENTS.md', 'CLAUDE.md'].includes(file)) ||
     file.startsWith('.github/') || guides.includes(file)
   ));
+}
+
+// The engine markdownlint-cli2 wraps, called directly: the CLI's globby -> micromatch -> braces chain
+// carries GHSA-vfj7-8cjw-p6xm (docs/dependency-security.md). Issues sort and print as the CLI's did.
+export async function lintMarkdown(files, config) {
+  const results = await lint({ files, config, handleRuleFailures: true });
+  return Object.entries(results).flatMap(([fileName, issues]) => issues.map((issue) => ({ fileName, ...issue })))
+    .sort((a, b) => a.fileName.localeCompare(b.fileName) || a.lineNumber - b.lineNumber ||
+      a.ruleNames[0].localeCompare(b.ruleNames[0]));
+}
+
+export function formatIssue({ fileName, lineNumber, ruleNames, ruleDescription, errorDetail, errorContext, errorRange, severity }) {
+  return `${fileName}:${lineNumber}${errorRange?.[0] ? `:${errorRange[0]}` : ''}${severity ? ` ${severity}` : ''} ` +
+    `${ruleNames.join('/')} ${ruleDescription}${errorDetail ? ` [${errorDetail}]` : ''}` +
+    `${errorContext ? ` [Context: "${errorContext}"]` : ''}`;
 }
 
 function anchorsFor(source, isMarkdown) {
@@ -84,8 +100,12 @@ async function main() {
   const missing = guides.filter((file) => !tracked.includes(file));
   if (missing.length) throw new Error(`Public guides must be tracked: ${missing.join(', ')}`);
   const files = publicFiles(tracked, guides);
-  const lintBin = path.join(path.dirname(fileURLToPath(import.meta.resolve('markdownlint-cli2'))), 'markdownlint-cli2-bin.mjs');
-  const lint = spawnSync(process.execPath, [lintBin, '--config', '.markdownlint-cli2.jsonc', ...files], { stdio: 'inherit' });
+  const count = (n, noun) => `${n} ${noun}${n === 1 ? '' : 's'}`;
+  console.log(`Linting: ${count(files.length, 'file')}`);
+  // Only the `config` object of the (plain JSON) markdownlint-cli2 options file is used.
+  const issues = await lintMarkdown(files, JSON.parse(readFileSync('.markdownlint-cli2.jsonc', 'utf8')).config);
+  console.log(`Summary: ${count(issues.length, 'issue')} in ${count(new Set(issues.map((issue) => issue.fileName)).size, 'file')}`);
+  for (const issue of issues) console.error(formatIssue(issue));
   const config = JSON.parse(readFileSync('.markdown-link-check.json', 'utf8'));
   const errors = [];
   const trackedSet = new Set(tracked);
@@ -94,7 +114,7 @@ async function main() {
   }
   for (const error of errors) console.error(error);
   console.log(`Checked ${files.length} public Markdown files; ${errors.length} local link/anchor errors.`);
-  process.exitCode = lint.status === 0 && errors.length === 0 ? 0 : 1;
+  process.exitCode = issues.every((issue) => issue.severity === 'warning') && errors.length === 0 ? 0 : 1;
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {

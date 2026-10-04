@@ -344,6 +344,36 @@ test('the tasks page route keeps the listId=none sentinel intact', () => {
   assert.equal(pipe.transform('none', { type: 'query', data: 'listId' }), 'none');
 });
 
+// The other declared exemption, by prefix rather than by value. An account of a pool is a provider
+// or a key, addressed by its public id, or a ChatGPT login, addressed as `login:` and its masked
+// fingerprint (`login:…AB12`); `:` is not base62, so the prefix can never shadow an id.
+test('PublicIdPipe hands a declared prefix through and still decodes ids', () => {
+  const pipe = PublicIdPipe.allowingPrefixed('login:');
+  const asMember = { type: 'param', data: 'memberId' } as const;
+  assert.equal(pipe.transform('login:…AB12', asMember), 'login:…AB12');
+  assert.equal(pipe.transform(B62, asMember), UUID);
+  assert.equal(pipe.transform(UUID, asMember), UUID);
+  // Only a value that STARTS with the prefix is exempt, and a param is still required.
+  assert.throws(() => pipe.transform('x-login:…AB12', asMember), { message: 'invalid memberId' });
+  assert.throws(() => pipe.transform('', asMember), { message: 'invalid memberId' });
+});
+
+// Guarded at the route the pause button reaches: the web puts a login's handle in the path
+// (`/members/login%3A%E2%80%A6AB12/pause`), so a plain PublicIdPipe there would answer 400 to every
+// ChatGPT-login pause.
+test('the pool pause route decodes a member id and keeps a login handle intact', () => {
+  const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, ProvidersController, 'pausePoolMember') as Record<
+    string,
+    { data?: unknown; pipes?: unknown[] }
+  >;
+  const arg = Object.values(args).find((a) => a.data === 'memberId');
+  const pipe = (arg?.pipes ?? []).find((p) => p instanceof PublicIdPipe) as PublicIdPipe | undefined;
+  assert.ok(pipe, 'memberId must bind a PublicIdPipe instance that exempts the login: handle');
+  const asMember = { type: 'param', data: 'memberId' } as const;
+  assert.equal(pipe.transform('login:…AB12', asMember), 'login:…AB12');
+  assert.equal(pipe.transform(B62, asMember), UUID);
+});
+
 // The one behaviour that differs by position, and the reason it isn't a caller's choice: a
 // missing PARAM must fail. Handing `undefined` to Prisma drops the id from the WHERE clause
 // entirely, so `findFirst({ id: undefined, ownerId })` would answer with an arbitrary row of

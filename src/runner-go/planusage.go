@@ -805,6 +805,11 @@ func mergeCodexPlanUsage(current, update *PlanUsage) *PlanUsage {
 	if update == nil {
 		return current
 	}
+	// An authoritative read that started before the cached one must not restore pre-reset
+	// windows alongside the newer reset credits. Rolling notifications carry no reset block.
+	if update.RateLimitReset != nil && !codexResetBlockSupersedes(update.RateLimitReset, current.RateLimitReset) {
+		return current
+	}
 	merged := *update
 	merged.Provider = providerCodex
 	if merged.LimitName == "" {

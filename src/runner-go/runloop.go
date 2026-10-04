@@ -1122,7 +1122,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// stopped only once the heartbeat has: nothing can be delivered to this process after that.
 	resetCtx, stopResets := context.WithCancel(context.Background())
 	defer stopResets()
-	resets := newCodexResetRelay(resetCtx, t, newCodexResetConsumer(codexUsageProbe).execute, &heartbeatOps)
+	resetConsumer := newCodexResetConsumer(codexUsageProbe)
+	resetConsumer.wakeHeartbeat = beatNow
+	resets := newCodexResetRelay(resetCtx, t, resetConsumer.execute, &heartbeatOps)
 	go func() {
 		defer close(hbDone)
 		ticker := time.NewTicker(heartbeatInterval)

@@ -104,7 +104,7 @@ export class ProvidersController {
   pausePoolMember(
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
-    @Param('memberId') memberId: string,
+    @Param('memberId', PublicIdPipe.allowingPrefixed('login:')) memberId: string,
     @Body() dto: PauseAccountDto,
   ) {
     return this.providers.pausePoolMember(user.userId, id, memberId, dto.durationMinutes);

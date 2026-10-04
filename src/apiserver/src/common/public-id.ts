@@ -46,6 +46,9 @@ export class PublicIdPipe implements PipeTransform<unknown, unknown> {
   /** Values this pipe hands through untouched instead of decoding — see `allowing`. */
   private sentinels?: ReadonlySet<string>;
 
+  /** Prefixes whose values this pipe hands through untouched — see `allowingPrefixed`. */
+  private prefixes?: readonly string[];
+
   /** Body form: `@Body(PublicIdPipe.forFields('workspaceId'))`. */
   static forFields(...fields: string[]): PublicIdPipe {
     const pipe = new PublicIdPipe();
@@ -67,6 +70,20 @@ export class PublicIdPipe implements PipeTransform<unknown, unknown> {
     return pipe;
   }
 
+  /** Param form for an address that is either a public id or a handle of another kind, told apart
+   *  by a prefix no public id can carry: `@Param('memberId', PublicIdPipe.allowingPrefixed('login:'))`.
+   *
+   *  An account of a pool is a provider or a key, addressed by its public id, or a ChatGPT login,
+   *  which has no id of its own and is addressed as `login:` and its masked account fingerprint.
+   *  `:` is not in base62's alphabet, so the two cannot be confused: the id is decoded here like any
+   *  other, and the handle is handed through for the service to match — decoding it would answer
+   *  400 to a request the service serves. */
+  static allowingPrefixed(...prefixes: string[]): PublicIdPipe {
+    const pipe = new PublicIdPipe();
+    pipe.prefixes = prefixes;
+    return pipe;
+  }
+
   transform(value: unknown, metadata?: ArgumentMetadata): unknown {
     if (this.fields) return this.normalizeFields(value);
     // A route param is part of the address: `undefined` here would reach Prisma as "no filter"
@@ -77,6 +94,7 @@ export class PublicIdPipe implements PipeTransform<unknown, unknown> {
       throw new BadRequestException(`invalid ${metadata?.data ?? 'id'}`);
     }
     if (this.sentinels?.has(value)) return value;
+    if (this.prefixes?.some((prefix) => value.startsWith(prefix))) return value;
     return resolve(value, metadata?.data);
   }
 
