@@ -1,0 +1,13 @@
+
+> @orbit/web@0.1.0 build
+> tsc -b && vite build
+
+src/components/ui/__fixtures__/FoundationFixture.tsx(2,24): error TS2307: Cannot find module '@base-ui/react/button' or its corresponding type declarations.
+src/components/ui/__fixtures__/FoundationFixture.tsx(3,24): error TS2307: Cannot find module '@base-ui/react/dialog' or its corresponding type declarations.
+npm error Lifecycle script `build` failed with error:
+npm error code 1
+npm error path /tmp/orbit-p11-before-aa737ee0/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /tmp/orbit-p11-before-aa737ee0/src/web
+npm error command failed
+npm error command sh -c tsc -b && vite build
