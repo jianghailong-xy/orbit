@@ -90,12 +90,14 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // an address a reader follows to the job, the session or the item.
   'retryOfJobId',
   'retryRequestedBySessionId',
+  'retryRequestedByUserId',
   'handlingItemIds',
   // How the coordinator handled an item (migration 0368): the job its rerun queued, the conversation
   // that asked, and the job whose terminal state ended the item. Addresses a reader follows to the
   // job or the session — history with no foreign key, never a fence.
   'handlingJobId',
   'handlingSessionId',
+  'handlingUserId',
   'resolvedByJobId',
   // What a promotion is made of (migration 0285). Every one of them is an address a reader of the
   // card follows: the tasks the merge would carry, the two jobs that checked and landed it, the

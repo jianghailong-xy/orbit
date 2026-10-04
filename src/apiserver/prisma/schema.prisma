@@ -2524,15 +2524,16 @@ model ProjectIntegrationJob {
   /// as well as on the promotion because the job is the record of what was sent out to be pushed.
   confirmedAutomatically Boolean @default(false) @map("confirmed_automatically")
 
-  /// A LAND_TASK generation a coordinator asked for through `integration_retry` (migration 0344,
-  /// contract §2.3 J-T1b): the failed generation it runs again, what that one failed of
-  /// (CHECK_FAILED, CHECK_TIMED_OUT or ERROR), the reason given, and the conversation that asked.
-  /// All four or none, held by a CHECK. `retryOfJobId` is a history reference with no relation: a
-  /// terminal job is never rewritten, so nothing may SET NULL it.
+  /// A LAND_TASK or CHECK_PROMOTION generation a coordinator or account owner asked for through
+  /// `integration_retry` (migrations 0344/0380, contract §2.3 J-T1b): the failed generation it runs
+  /// again, what that one failed of (CHECK_FAILED, CHECK_TIMED_OUT or ERROR), the reason given, and
+  /// exactly one requester (the coordinator session or owner user). `retryOfJobId` is a history
+  /// reference with no relation: a terminal job is never rewritten, so nothing may SET NULL it.
   retryOfJobId              String? @map("retry_of_job_id") @db.Uuid
   retryFailureClass         String? @map("retry_failure_class")
   retryReason               String? @map("retry_reason")
   retryRequestedBySessionId String? @map("retry_requested_by_session_id") @db.Uuid
+  retryRequestedByUserId    String? @map("retry_requested_by_user_id") @db.Uuid
 
   /// `ij:v1:<kind>:<taskId or promotionId>:<generation>` — enqueue is idempotent on the fact. The one
   /// exception is the landing J-T1e owes the work, keyed by the work's generation instead
@@ -2716,11 +2717,13 @@ model ProjectOpenItem {
   remindAt     DateTime? @map("remind_at") @db.Timestamptz(3)
   remindedAt   DateTime? @map("reminded_at") @db.Timestamptz(3)
 
-  /// The coordinator's rerun of the failure this item is about (`integration_retry`, migration 0368):
-  /// the job it queued, the conversation that asked, why, and when. History rather than foreign keys.
-  /// The item stays OPEN — being handled, not closed — while that job is QUEUED or RUNNING.
+  /// The coordinator's or owner's rerun of the failure this item is about (`integration_retry`,
+  /// migrations 0368/0380): the job it queued, the coordinator conversation or owner user that
+  /// asked, why, and when. History rather than foreign keys. The item stays OPEN — being handled,
+  /// not closed — while that job is QUEUED or RUNNING.
   handlingJobId     String?   @map("handling_job_id") @db.Uuid
   handlingSessionId String?   @map("handling_session_id") @db.Uuid
+  handlingUserId    String?   @map("handling_user_id") @db.Uuid
   handlingReason    String?   @map("handling_reason")
   handlingStartedAt DateTime? @map("handling_started_at") @db.Timestamptz(3)
 

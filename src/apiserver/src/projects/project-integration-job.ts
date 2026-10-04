@@ -601,7 +601,9 @@ export interface LandingRetryRequest {
   ofJobId: string;
   failureClass: RetryableLandingFailureClass;
   reason: string;
-  requestedBySessionId: string;
+  /** Exactly one requester is recorded by migration 0380. */
+  requestedBySessionId?: string;
+  requestedByUserId?: string;
 }
 
 /**
@@ -949,7 +951,8 @@ async function queueLandTask(
             retryOfJobId: input.retry.ofJobId,
             retryFailureClass: input.retry.failureClass,
             retryReason: input.retry.reason,
-            retryRequestedBySessionId: input.retry.requestedBySessionId,
+            retryRequestedBySessionId: input.retry.requestedBySessionId ?? null,
+            retryRequestedByUserId: input.retry.requestedByUserId ?? null,
           }
         : {}),
     }],
@@ -1198,7 +1201,8 @@ export async function queuePromotionJob(
             retryOfJobId: input.retry.ofJobId,
             retryFailureClass: input.retry.failureClass,
             retryReason: input.retry.reason,
-            retryRequestedBySessionId: input.retry.requestedBySessionId,
+            retryRequestedBySessionId: input.retry.requestedBySessionId ?? null,
+            retryRequestedByUserId: input.retry.requestedByUserId ?? null,
           }
         : {}),
     }],

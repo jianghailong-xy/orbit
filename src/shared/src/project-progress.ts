@@ -397,8 +397,10 @@ export interface OpenItemFacts {
  * then would be saying something nobody knows yet.
  */
 export interface OpenItemHandling<Instant = string> {
-  /** The coordinator conversation that asked for the rerun. */
-  sessionId: string;
+  /** The coordinator conversation that asked for the rerun, or null when the owner did. */
+  sessionId: string | null;
+  /** The account owner that asked for the rerun, or null when the coordinator did. */
+  userId: string | null;
   /** Why it said the rerun would come out differently, as it said it. */
   reason: string;
   startedAt: Instant;
@@ -421,10 +423,11 @@ export interface OpenItemHandling<Instant = string> {
 export interface OpenItemOutcome<Instant = string> {
   state: 'RESOLVED' | 'SUPERSEDED';
   resolution: 'HANDLED' | 'RETRIED';
-  resolvedBy: 'COORDINATOR';
-  /** The coordinator conversation it is attributed to: the one that asked for the rerun, or the one
-   *  that closed the item. */
+  resolvedBy: 'COORDINATOR' | 'USER';
+  /** The coordinator conversation it is attributed to, when a coordinator asked. */
   resolvedBySessionId: string | null;
+  /** The account owner it is attributed to, when the owner asked. */
+  resolvedByUserId: string | null;
   resolvedAt: Instant;
   /** The reason the coordinator gave — for its rerun, or for closing the item by hand. */
   note: string | null;

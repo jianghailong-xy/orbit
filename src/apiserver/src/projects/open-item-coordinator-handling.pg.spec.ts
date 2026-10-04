@@ -581,7 +581,7 @@ test('task landing, rerun lands: handling while it is queued and running, then H
       const queued = read.withCoordinator.find((r) => r.itemId === red.itemId);
       assert.deepEqual(
         queued?.handling && { ...queued.handling, startedAt: undefined },
-        { sessionId: w.coordinatorSessionId, reason: REASON, startedAt: undefined, jobId: retried.jobId,
+        { sessionId: w.coordinatorSessionId, userId: null, reason: REASON, startedAt: undefined, jobId: retried.jobId,
           jobKind: 'LAND_TASK', generation: 2, state: 'QUEUED' },
         'the read says it is being handled, by which job, and that the job is queued',
       );
@@ -628,6 +628,7 @@ test('task landing, rerun lands: handling while it is queued and running, then H
         state: 'RESOLVED',
         resolution: 'HANDLED',
         resolvedBy: 'COORDINATOR',
+        resolvedByUserId: null,
         resolvedBySessionId: w.coordinatorSessionId,
         resolvedAt: undefined,
         note: REASON,
@@ -1120,7 +1121,7 @@ test('escalated merge into main: the owner\'s card offers "Ask the coordinator a
       assert.equal(owners!.promotionId, blocked.promotionId);
       assert.equal(owners!.taskId, null, 'about the candidate, and about no task');
       assert.equal(owners!.assigneeReason, 'ESCALATED');
-      assert.deepEqual(owners!.actions, ['ASK_COORDINATOR_AGAIN', 'REVIEW']);
+      assert.deepEqual(owners!.actions, ['ASK_COORDINATOR_AGAIN', 'RETRY', 'REVIEW']);
       const before = await denied(() => retryCandidate(stack, w, blocked.promotionId));
       assert.equal(before.code, 'INTEGRATION_RETRY_OWNER_ITEM', 'until the press, the re-check is the owner\'s');
 
@@ -1148,7 +1149,7 @@ test('escalated merge into main: the owner\'s card offers "Ask the coordinator a
       assert.match(fresh[0]!.content ?? '', new RegExp(`promotionId 传 ${uuidToBase62(blocked.promotionId)}`));
       read = await stack.openItems.list(w.ownerId, w.projectId);
       assert.equal(read.needsYou.some((row) => row.itemId === blocked.itemId), false);
-      assert.deepEqual(read.withCoordinator.find((row) => row.itemId === blocked.itemId)?.actions, ['REVIEW'],
+      assert.deepEqual(read.withCoordinator.find((row) => row.itemId === blocked.itemId)?.actions, ['RETRY', 'REVIEW'],
         'the coordinator\'s own item is not asked again');
 
       // The coordinator's re-check door takes it, on the authority it had before the item escalated.
@@ -1184,7 +1185,7 @@ test('not Automatic: asked again, the coordinator re-checks the blocked merge, a
       let read = await stack.openItems.list(w.ownerId, w.projectId);
       const born = read.needsYou.find((row) => row.itemId === blocked.itemId);
       assert.equal(born?.assigneeReason, 'NO_COORDINATOR', 'the owner\'s from birth');
-      assert.deepEqual(born?.actions, ['ASK_COORDINATOR_AGAIN', 'REVIEW'],
+      assert.deepEqual(born?.actions, ['ASK_COORDINATOR_AGAIN', 'RETRY', 'REVIEW'],
         'the conversation exists, so the press is offered whatever the switch says');
 
       await stack.openItems.returnToCoordinator(w.ownerId, w.projectId, blocked.itemId);
@@ -1248,7 +1249,7 @@ test('no conversation left to ask: an escalated merge-into-main item offers "Rev
         data: { completedAt: new Date() },
       });
       const read = await stack.openItems.list(w.ownerId, w.projectId);
-      assert.deepEqual(read.needsYou.find((row) => row.itemId === blocked.itemId)?.actions, ['REVIEW']);
+      assert.deepEqual(read.needsYou.find((row) => row.itemId === blocked.itemId)?.actions, ['RETRY', 'REVIEW']);
       const pressed = await denied(() => stack.openItems.returnToCoordinator(w.ownerId, w.projectId, blocked.itemId));
       assert.equal(pressed.status, 409);
       assert.equal(pressed.code, 'OPEN_ITEM_NO_COORDINATOR');

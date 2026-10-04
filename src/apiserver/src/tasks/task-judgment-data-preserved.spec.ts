@@ -1883,7 +1883,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // Open-item hand-over history (0378): three nullable columns and two checks on
       // project_open_item only. No existing rows are rewritten, and the session id deliberately
       // has no foreign key so purging a conversation cannot erase the owner's explanation.
-      '0378_open_item_hand_over'],
+      '0378_open_item_hand_over',
+      // Owner integration retry attribution (0380): one nullable requester column on
+      // project_integration_job and one nullable owner-attribution column on project_open_item;
+      // the two existing all-or-none CHECKs are replaced with XOR checks. Existing coordinator
+      // retries satisfy the widened constraints, and no task, project, acceptance, DONE fence,
+      // trigger or function is rewritten; nothing is backfilled.
+      '0380_owner_integration_retry'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
