@@ -194,8 +194,9 @@ class ComposerDeviceTest {
             capture("system-share")
             compose.waitUntil(10000) { systemNode("A07 receiver")!=null }
             instrument.uiAutomation.waitForIdle(500,5000)
-            systemFind { it.viewIdResourceName?.endsWith(":id/chooser_header")==true }?.let { header ->
+            systemFind(refresh=true) { it.viewIdResourceName?.endsWith(":id/chooser_header")==true }?.let { header ->
                 val bounds=android.graphics.Rect();header.getBoundsInScreen(bounds)
+                File(evidence,"system-share-gesture.txt").writeText("header=$bounds\n")
                 if (!bounds.isEmpty && bounds.top>100) {
                     val time=SystemClock.uptimeMillis()
                     for (step in 0..16) {
@@ -209,7 +210,7 @@ class ComposerDeviceTest {
             }
             instrument.uiAutomation.waitForIdle(1000,10000)
             capture("system-share-expanded")
-            systemClick("A07 receiver")
+            systemClick("A07 receiver",touch=true)
             systemClick("Received file")
             assertEquals(sha(bytes),systemNode("Received file")!!.contentDescription.toString())
             capture("share-recipient-read")
@@ -365,12 +366,14 @@ class ComposerDeviceTest {
             .filter { it.type==android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION }
             .maxByOrNull { it.layer }?.root
     }
-    private fun systemFind(predicate:(AccessibilityNodeInfo)->Boolean):AccessibilityNodeInfo? {
+    private fun systemFind(refresh:Boolean=false,last:Boolean=false,predicate:(AccessibilityNodeInfo)->Boolean):AccessibilityNodeInfo? {
         fun find(n:AccessibilityNodeInfo?):AccessibilityNodeInfo? {
             if(n==null)return null
-            if(predicate(n))return n
-            for(i in 0 until n.childCount)find(n.getChild(i))?.let { return it }
-            return null
+            if(refresh && !n.refresh())return null
+            var found=if(predicate(n)) n else null
+            if(found!=null && !last)return found
+            for(i in 0 until n.childCount)find(n.getChild(i))?.let { if(!last)return it;found=it }
+            return found
         }
         return find(systemRoot())
     }
@@ -384,28 +387,35 @@ class ComposerDeviceTest {
         }
         clickNode(root!!)
     }
-    private fun systemClick(text:String) {
+    private fun systemClick(text:String,touch:Boolean=false) {
         var found:AccessibilityNodeInfo?=null
         compose.waitUntil(10000) { found=systemNode(text); found!=null }
-        found!!.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SHOW_ON_SCREEN.id)
+        if (!touch) found!!.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SHOW_ON_SCREEN.id)
         SystemClock.sleep(300)
         compose.waitUntil(10000) {
-            found=systemFind { node ->
+            // Prefer the installed-app entry after live Sharesheet suggestions.
+            found=systemFind(refresh=touch,last=touch) { node ->
                 val bounds=android.graphics.Rect();node.getBoundsInScreen(bounds)
                 node.isVisibleToUser && !bounds.isEmpty &&
                     (node.text?.toString()?.equals(text,ignoreCase=true)==true || node.contentDescription?.toString()==text)
             }
             found!=null
         }
-        clickNode(found!!)
+        clickNode(found!!,touch)
     }
-    private fun clickNode(node:AccessibilityNodeInfo) {
+    private fun clickNode(node:AccessibilityNodeInfo,touch:Boolean=false) {
         var n=node
         while(!n.isClickable && n.parent!=null)n=n.parent
-        if (n.isClickable) assertTrue(n.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+        if (n.isClickable && !touch) assertTrue(n.performAction(AccessibilityNodeInfo.ACTION_CLICK))
         else {
-            val target=generateSequence(node) { it.parent }.firstOrNull { it.viewIdResourceName?.endsWith(":id/item_root")==true } ?: node
+            val target=if(touch && n.isClickable) n else generateSequence(node) { it.parent }.firstOrNull { it.viewIdResourceName?.endsWith(":id/item_root")==true } ?: node
             val bounds=android.graphics.Rect();target.getBoundsInScreen(bounds)
+            if (touch) {
+                File(evidence,"system-touches.txt").appendText("${node.text} ${target.viewIdResourceName} $bounds\n")
+                shellBytes("input touchscreen tap ${bounds.centerX()} ${bounds.centerY()}")
+                SystemClock.sleep(300)
+                return
+            }
             val time=SystemClock.uptimeMillis()
             for (action in listOf(MotionEvent.ACTION_DOWN,MotionEvent.ACTION_UP)) {
                 val pointer=MotionEvent.PointerProperties().apply { id=0;toolType=MotionEvent.TOOL_TYPE_FINGER }

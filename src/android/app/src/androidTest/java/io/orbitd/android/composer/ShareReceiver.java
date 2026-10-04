@@ -29,7 +29,7 @@ public class ShareReceiver extends Activity {
             view.setText("Received file"); view.setContentDescription(hash.toString()); view.setTextSize(20);
             view.setOnClickListener(v -> {}); setContentView(view);
             try (FileOutputStream output = openFileOutput("a07-received.txt", MODE_PRIVATE)) {
-                output.write((hash + "\n" + data.length + "\n" + getIntent().getType() + "\nuid=" + android.os.Process.myUid()).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                output.write((hash + "\n" + data.length + "\n" + getIntent().getType() + "\nuid=" + android.os.Process.myUid() + "\naction=" + getIntent().getAction()).getBytes(java.nio.charset.StandardCharsets.UTF_8));
             }
         } catch (Exception error) { throw new IllegalStateException("URI recipient failed", error); }
     }
