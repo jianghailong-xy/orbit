@@ -20,6 +20,36 @@ import org.junit.Test
 class HttpTransportTest {
     private fun MockWebServer.address() = ServerAddress.parse(url("/prefix").toString(), true)
 
+    @Test fun uploadProgressReportsChunkWritesWithoutChangingBytesOrRetrying503() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setResponseCode(503))
+            val bytes = ByteArray(240_123) { (it % 251).toByte() }
+            val progress = java.util.concurrent.CopyOnWriteArrayList<Pair<Long, Long>>()
+            val response = OkHttpTransport().execute(HttpRequest(server.address(), ApiRequest(listOf("attachments"),
+                HttpMethod.POST, body = bytes, contentType = "application/octet-stream", onUploadProgress = { sent, total -> progress += sent to total }), "test"))
+            assertEquals(503, response.status); assertEquals(1, server.requestCount)
+            assertArrayEquals(bytes, server.takeRequest().body.readByteArray())
+            assertEquals(0L, progress.first().first); assertEquals(bytes.size.toLong(), progress.last().first)
+            assertTrue(progress.size > 3); assertTrue(progress.all { it.second == bytes.size.toLong() })
+            assertTrue(progress.zipWithNext().all { (a, b) -> a.first < b.first })
+        }
+    }
+
+    @Test fun readingLimitsBoundBothDeclaredAndChunkedBinaryResponses() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("x".repeat(100)))
+            server.enqueue(MockResponse().setChunkedBody("x".repeat(100), 5))
+            server.enqueue(MockResponse().setBody("12345678"))
+            val transport = OkHttpTransport()
+            val request = HttpRequest(server.address(), ApiRequest(listOf("attachments", "id"), maxResponseBytes = 8), "test")
+            repeat(2) {
+                try { transport.execute(request); fail("Oversized resource must not be buffered") }
+                catch (_: NetworkException) { }
+            }
+            assertEquals("12345678", transport.execute(request).body.decodeToString())
+        }
+    }
+
     @Test fun loginRefreshRetryAndLogoutUseTheWireContractAndIdenticalMutationBody() = runBlocking {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setBody(Wire.json.encodeToString(tokens())))

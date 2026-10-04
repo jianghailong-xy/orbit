@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -18,7 +19,6 @@ import io.orbitd.android.core.net.me
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.storage.AndroidCredentialStore
 import java.io.File
-import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
 import okhttp3.mockwebserver.MockResponse
@@ -38,16 +38,30 @@ class AuthFlowDeviceTest {
         compose.waitUntil(10_000) { session.state.value !is AuthState.Restoring }
         assertTrue("Use a signed-out dedicated debug installation", session.state.value is AuthState.SignedOut)
         MockWebServer().use { server ->
-            server.enqueue(MockResponse().setBody(Wire.json.encodeToString(fixtureTokens())))
-            server.enqueue(MockResponse().setResponseCode(401))
-            server.enqueue(MockResponse().setBody(Wire.json.encodeToString(fixtureTokens(1))))
-            server.enqueue(MockResponse().setBody(Wire.json.encodeToString(fixtureTokens().user)))
-            server.enqueue(MockResponse().setBody("{\"success\":true}"))
+            val requests = java.util.concurrent.CopyOnWriteArrayList<okhttp3.mockwebserver.RecordedRequest>()
+            var rejected = false
+            server.dispatcher = object : okhttp3.mockwebserver.Dispatcher() {
+                override fun dispatch(request: okhttp3.mockwebserver.RecordedRequest): MockResponse {
+                    requests += request
+                    val path = request.requestUrl!!.encodedPath
+                    return when (path) {
+                        "/api/auth/login" -> MockResponse().setBody(Wire.json.encodeToString(fixtureTokens()))
+                        "/api/auth/refresh" -> MockResponse().setBody(Wire.json.encodeToString(fixtureTokens(1)))
+                        "/api/users/me" -> if (!rejected) { rejected = true; MockResponse().setResponseCode(401) }
+                            else MockResponse().setBody(Wire.json.encodeToString(fixtureTokens().user))
+                        "/api/events" -> MockResponse().setHeader("Content-Type", "text/event-stream").setBody(": connected\n\n")
+                        "/api/auth/logout" -> MockResponse().setBody("{\"success\":true}")
+                        else -> MockResponse().setBody("[]")
+                    }
+                }
+            }
             compose.onNodeWithText("Instance address").performTextReplacement(server.url("/").toString())
             compose.onNodeWithText("Email").performTextInput("a03@example.test")
             compose.onNodeWithText("Password").performTextInput("a03-device-password")
             compose.onAllNodesWithText("Sign in")[1].performScrollTo().performClick()
             compose.waitUntil(10_000) { session.state.value is AuthState.SignedIn }
+            compose.onNodeWithContentDescription("Open navigation").performClick()
+            compose.onNodeWithText("Settings").performScrollTo().performClick()
             compose.onNodeWithText("Signed in").assertIsDisplayed()
             val handle = (session.state.value as AuthState.SignedIn).handle
             runBlocking {
@@ -63,7 +77,6 @@ class AuthFlowDeviceTest {
             compose.onNodeWithText("Instance address").assertIsDisplayed()
             compose.onNodeWithText("Signed in").assertDoesNotExist()
             capture("signed-out.png")
-            val requests = List(5) { server.takeRequest(5, TimeUnit.SECONDS)!! }
             assertEquals(1, requests.count { it.path == "/api/auth/refresh" })
             assertTrue(requests.all { it.getHeader("X-Orbit-Client")?.startsWith("android/") == true })
         }
