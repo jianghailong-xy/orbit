@@ -2,8 +2,10 @@
 
 A02 establishes the native Android build, module boundary and verification entry points.
 A03 adds instance selection, login/logout, rotating authentication, a reusable REST interface
-and AndroidKeyStore credential storage. Business navigation, iOS visual alignment,
-notifications and release signing belong to later tasks. The iOS installed version is still being established by A01; no repository revision or
+and AndroidKeyStore credential storage. A04 supplies foreground realtime/cache recovery;
+A05 adds the semantic theme, authenticated directory and object navigation. Full conversation,
+task/project/wiki/watch pages, notifications and release signing belong to their feature tasks.
+The iOS installed version is still being established by A01; no repository revision or
 "latest beta" is treated as that frozen baseline.
 
 ## Modules and supported range
@@ -26,6 +28,7 @@ notifications and release signing belong to later tasks. The iOS installed versi
 | Kotlin / Compose compiler plugin | 2.2.21 / 2.2.21 | Matched compiler versions; supports Gradle 8.13 and AGP 8.11.1. |
 | Android SDK / Build Tools | platform 36 / 36.0.0 | Covers the S1 upper API and reuses the prepared host SDK. |
 | Compose BOM | 2025.08.01 | Fixed stable UI family; no dynamic versions or automatic "latest" upgrades. |
+| Material 3 | 1.4.0 | Explicit stable override: 1.3.2's internal negative-anchor threshold closes a slowly dragged drawer even after its midpoint. The 1.4 drawer uses Foundation; the same slow-drag regression fails on 1.3.2 and passes on 1.4.0. |
 | Activity / Navigation Compose | 1.10.1 / 2.9.3 | Small stable activity and back-stack shell, compatible with this SDK/compiler. |
 | JUnit / Robolectric | 4.13.2 / 4.16.1 | Real JVM assertions and local execution of the Compose activity. |
 | Coroutines / serialization | 1.10.2 / 1.9.0 | Session-owned cancellation and JSON with the existing Kotlin 2.2.21 compiler. |
@@ -90,3 +93,140 @@ Final business/quality matrix execution belongs to A15; feature tasks add their 
 
 See [authentication.md](docs/authentication.md) for the network/storage interfaces, fixed
 contract provenance, auth device tests and physical-phone evidence requirements.
+
+## Directory and navigation (A05)
+
+The production shell consumes `OrbitApplication.session` and the A04 `RealtimeStore`. The
+process registers `RealtimeLifecycle` in `Application.onCreate`, before any Activity starts.
+UI requires `RealtimeState.handle === SignedIn.handle`. A04 owns snapshots, network gates,
+SSE and cache; `app/directory/RealtimeDirectory.kt` projects its full JSON into UI fields.
+The shell also waits until navigation is bound to the current account before issuing object
+requests or selecting a session. It re-applies the route when the matching realtime handle
+arrives. A04's scoped selection fix is included at `237eeef3` (public API unchanged).
+Cached rows remain readable; mutations require a fresh directory and still pass through
+the captured A03 `SessionHandle`. HTTP 403/404/409, failed snapshots and empty/loading data
+have distinct presentations. A session's filing scope is independent of its execution state.
+
+The phone drawer contains Projects/Tasks/Wiki, globally ordered Workspaces, open projects,
+New session and Settings. Workspace/folder lists provide Open/Completed/Trash, server-side
+title/message search (all workspaces/scopes, matching iOS), tags, pinned/time and primary-tag
+grouping. Open includes empty folders; Completed omits empty folders; Trash/tag views are
+flat. Folder sessions appear once, and a vanished folder never hides its sessions. Folder
+navigation preserves the selected filing scope. Search keeps the server's snippets,
+`contentSearched` notice and total count; cancellation discards old queries.
+Group keys use tag IDs and distinct bucket IDs, independently of display names; a real
+tag named `Untagged` can coexist with the untagged bucket and retain its identity on rename.
+
+Metadata/lifecycle requests use the existing authenticated endpoints: rename, pin/unpin,
+complete/restore, Trash + Undo, confirmed permanent purge, folder create/rename/delete,
+tag assignment/creation, same-workspace folder moves, and server-described cross-workspace
+moves. End-before-move and branch/conversation consequences have separate confirmations.
+Public sharing reads the existing share endpoint and changes access only on an explicit
+button press; Android's chooser shares the resulting public link. No directory is seeded
+or login bypassed in the production app.
+
+`OrbitRoute` is the common route contract: session (with optional record), task, project,
+wiki entry, watch, runner, named task list, folder and draft. `OrbitNavigation` keeps a stack
+per drawer section and a source (`Origin`); pushing an object link retains its calling
+page. Cold unsigned links remain pending until login; logout/account/instance changes
+discard previous stacks. Activity saved state restores navigation, list scroll/filter and
+search state. IDs normalize public Base62/UUID aliases; HTTP links must match the selected
+instance, including a reverse-proxy prefix. Unsupported/foreign/API/share URLs stay outside
+object routing. Only the iOS-defined `orbit://` hosts are accepted; project/wiki use their
+`orbit-project:` / `orbit-wiki:` references. No unverified HTTPS App Links are declared.
+
+`ObjectDestination` resolves real object overviews and related links as the attachment point
+for A06/A11/A12/A13. It is not their full detail implementation.
+On a subsequent authoritative 403/404, the overview removes old content, links and actions.
+Transient failures retain explicitly marked stale content with overview links and server
+mutations disabled until a successful read. An already-open Share dialog can still share
+an existing public link; it does not change server access. Focused rendering regressions
+cover both failure cases and subsequent recovery.
+The draft route retains
+workspace/folder context for A07; it never creates an empty server session. A06 must consume
+`recordId`, implement transcript positioning and missing-record feedback. A07 supplies the
+composer/model selection/send flow. These future pages must call `navigation.push` and use
+the current handle, not replace the caller's stack or retain another account's object.
+
+Theme values follow `Views/Typography.swift`'s semantic iOS ramp using Android `sp` without
+a font-scale cap. Light/dark colors are explicit, without wallpaper-based dynamic colors.
+Controls use Material touch/role semantics; headings are marked; state is named in text,
+not only in color. Small action icons are original vectors; the launcher vector is adapted
+from the repository's existing `src/web/public/favicon.svg`, with no SF Symbols assets.
+System/IME insets are consumed once; login scrolls and offers Next/Done IME actions. System
+Back first belongs to Android's IME/dialog, then the drawer/route, then the hosting Activity.
+The route Back callback is not gated on Compose IME visibility; Android retains IME priority.
+Drawer gestures also remain enabled. Material 3 is pinned to the stable
+[1.4.0 release](https://developer.android.com/jetpack/androidx/releases/compose-material3#1.4.0)
+for slow-drag settling; this does not opt into expressive or predictive-animation features.
+Its NavigationDrawer uses Foundation's anchored-drag implementation; Material 3's internal
+copy still has the old negative-anchor threshold formula. The 1.3.2 regression crosses the
+midpoint then returns Closed, while the same slow input opens on 1.4.0; input below the
+midpoint stays Closed on both. Debug runtime and unit-test runtime resolution comparisons
+keep BOM 2025.08.01 and Foundation/layout, UI, runtime, animation and ripple at 1.9.0.
+Material3/material3-android resolve from 1.3.2 to 1.4.0, while material-icons-core and its
+Android artifact at 1.7.8 leave the graph; no new external module is added. The evidence
+retains both full graphs, selection reasons and artifact hashes, rather than inferring
+binary scope from the one version declaration.
+Directory filters scroll with rows so landscape/large text retains usable space.
+Content adapts to the current window and has a maximum reading width; this does not add an
+unapproved tablet/foldable multicolumn commitment to S1.
+
+Reference inputs: A01 `a01-ios-matrix-v1.md` at 946b7352b83c1c7251d1a386997310366d3f833b,
+UI-C01/C02/C03/C10/C11 and object-link matrix. The specified CompactShell/Typography/
+Navigation/AppSection/iOS entry files are unchanged at A05's initial 72246fe2a source;
+AgentsView's later changes concern new-session provider fixes and workspace model routing,
+which remain A07/A13 responsibilities. The actual installed iOS version, D01/D08 final
+matrix and additional platform exceptions remain unfrozen. S1 and D09 are already approved;
+their physical-device, API29–36 and cross-platform requirements are not reduced here.
+
+Primary Android references: [insets and IME](https://developer.android.com/develop/ui/compose/system/insets-ui),
+[default accessibility semantics and targets](https://developer.android.com/develop/ui/compose/accessibility/api-defaults).
+
+The original project gate plus `:app:assembleDebugAndroidTest` builds the test APK. The
+directory device driver takes `API APP_APK TEST_APK NEW_EVIDENCE_DIR [SERIAL]`:
+
+```sh
+env A05_FONT_SCALE=2.0 A05_NIGHT=no bash src/android/scripts/directory-device-test.sh 36 \
+  src/android/app/build/outputs/apk/debug/app-debug.apk \
+  src/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk /absolute/new/evidence
+```
+
+The two device cases cover directory/search/folders/lifecycle/403/IME/rotation and cold
+ACTION_VIEW → unsigned recreation → login → selected session, plus warm links and system Back.
+Set `A05_COLD_LINK=task` for the original cold-task/first-Back regression; the default is
+`session`, which also checks that the explicit session wins over cache restoration.
+The real MainActivity is also tested with a rapid A → B account change, explicit B session
+selection and socket-failure/recovery. These are production-entry tests, separate from A04's
+debug probe. Back diagnostics retain lifecycle, focus, IME and callback state, and assert
+that the old detail disappears. Failures are saved before cleanup to preserve their cause.
+The directory case also checks drawer swipe/open/close, Build → Settings → directory one
+level at a time, and root search: first Back dismisses the keyboard and retains the query,
+then Back leaves the Activity. Android may stop rather than destroy a root Activity.
+`A05_BACK_INPUT=key` (default) sends KEYCODE_BACK. `A05_BACK_INPUT=gesture` instead injects
+an actual right-edge touchscreen swipe and requires the device's navigation mode to be
+gestural. Each input and its coordinates are recorded separately; these runs do not assert
+predictive animation. The drawer swipe starts beyond the system gesture inset, in app content,
+to avoid confusing Android edge Back with an app drawer gesture.
+It uses recorded native finger DOWN/MOVE/UP events and advances the Compose test clock
+between them; a midpoint capture pauses before release to exercise slow settling.
+The device's internal release velocity is not directly recorded. `DrawerGestureTest`
+independently protects both sides of the threshold using a delayed move and held release.
+ActivityScenario filters lifecycle callbacks by its launch Intent; tests restore that monitor
+identity after receiving a new Intent, without changing Orbit's received route or saved stack.
+See [AndroidX ActivityScenario](https://github.com/android/android-test/blob/main/core/java/androidx/test/core/app/ActivityScenario.java).
+
+The driver holds `/var/lib/orbit/android/ui.lock` throughout, uses a signed-out debug install and
+synthetic loopback HTTP accounts, captures device/APK identities, screenshots, request paths,
+IME geometry and process logs, and restores emulator settings. Captures live in app-private
+storage and are extracted with `run-as`, including on API30's restricted external storage.
+For the emulator phone-keyboard case, API34+ stylus handwriting is temporarily disabled and
+its original value is restored and recorded. The input is explicitly a finger touchscreen
+event; a hidden or empty touch target fails before injection. This does not test pen input.
+Physical devices supplied
+by serial keep their configuration. Input reaches the system input dispatcher, not only
+Compose's semantic click action. This fixture proves the client/HTTP boundary and observed
+emulator behavior; it is not a deployed-server login, physical-phone or iOS comparison.
+Evidence must retain those distinctions, including any failing exploratory runs. Real
+TalkBack traversal and spoken feedback, agreed physical devices, same-data iOS captures and approved deployment
+accounts still require direct evidence before A05's alignment criterion can be confirmed.
