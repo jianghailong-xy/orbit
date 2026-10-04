@@ -50,7 +50,7 @@ class CardsDeviceTest {
         compose.waitUntil(15_000) { app.session.state.value is AuthState.SignedIn && app.realtime.state.value.directoryFresh }
         compose.onNodeWithTag("workspace:01a0cca7-8609-70ed-a0e2-d4b55b832b61").performClick()
         compose.onNodeWithText("Card verification").performClick()
-        await("Decisions and requests")
+        await(if (kind == "attachment-only") "Review the Orbit card below." else "Decisions and requests")
     }
     private fun press(tag: String) {
         compose.waitUntil(15_000) { compose.onAllNodes(hasTestTag(tag) and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
@@ -68,6 +68,13 @@ class CardsDeviceTest {
         val sent = journal.objects("journal").last().obj("body")!!
         val expected = http("/__corpus").objects("requests").single { it.text("key") == "approval:a1" && it.text("verb") == "REMEMBER" }.obj("body")!!
         assertEquals(expected["rememberRules"], sent["rememberRules"]); capture("remember-recorded")
+    }
+    @Test fun attachmentOnlyMessageKeepsAttachmentWithoutRawJson() = journey("attachment-only") {
+        login("attachment-only")
+        compose.onNodeWithTag("transcript-list").performScrollToNode(hasTestTag("event:1"))
+        compose.onNodeWithText("card-notes.txt").assertIsDisplayed()
+        compose.onAllNodesWithText("\"attachments\"", substring = true).assertCountEquals(0)
+        capture("attachment-only-readable")
     }
     @Test fun questionKeepsCustomAnswerThroughActivityRecreation() = journey("question") {
         login("a2")

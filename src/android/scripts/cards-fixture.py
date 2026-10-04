@@ -91,7 +91,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/api/sessions': return self.reply([value['detail']] if query.get('view',['open'])[0] == 'open' else [])
         if path == '/api/sessions/' + SID: return self.reply(value['detail'])
         if path.endswith('/events/page'):
-            return self.reply({'events':[{'seq':1,'type':'user','payload':{'text':'Controlled card verification'}},{'seq':2,'type':'assistant','payload':{'text':'Review the Orbit card below.'}},{'seq':3,'type':'turn_end','payload':{}}], 'hasMore':False,'after':None})
+            attachment_only = {'text':'','attachments':[{'id':'01a0cca7-8609-70ed-a0e2-d4b55b832b65','mime':'text/plain','name':'card-notes.txt'}]}
+            return self.reply({'events':[{'seq':1,'type':'user','payload':attachment_only if state['case'] == 'attachment-only' else {'text':'Controlled card verification'}},{'seq':2,'type':'assistant','payload':{'text':'Review the Orbit card below.'}},{'seq':3,'type':'turn_end','payload':{}}], 'hasMore':False,'after':None})
         if path.endswith('/approvals'): return self.reply(value['approvals'])
         if path == '/api/tasks/evidence-decisions/pending': return self.reply(stand['evidenceDecisions'])
         if path == '/api/tasks/' + TID + '/owner-confirmation': return self.reply(stand['ownerConfirmation'])

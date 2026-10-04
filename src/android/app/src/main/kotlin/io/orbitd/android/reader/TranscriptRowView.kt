@@ -101,10 +101,11 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
             if (expanded) MarkdownText(shown.body(), open = open)
         } else {
             cards.forEach { TranscriptCardView(it, open) }
-            if (cards.isEmpty()) MarkdownText(shown.body().ifBlank { shown.payload.toString() }, open = open)
+            val atts = (shown.fields["attachments"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
+            val attachmentOnly = shown.type == "user" && shown.body().isBlank() && atts.isNotEmpty()
+            if (cards.isEmpty() && !attachmentOnly) MarkdownText(shown.body().ifBlank { shown.payload.toString() }, open = open)
             else if (shown.body().isNotBlank()) DetailFold("Orbit attached") { MarkdownText(shown.body(), open = open) }
             shown.fields.string("controlPlaneNote")?.let { note -> DetailFold("Orbit context") { MarkdownText(note, open = open) } }
-            val atts = (shown.fields["attachments"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
             atts.forEach { attachment -> attachment.string("id")?.let { id ->
                 val name = attachment.string("name") ?: "Attachment"
                 if (attachment.string("mime")?.startsWith("image/") == true) TranscriptImage("orbit-attachment:$id", name, open)
