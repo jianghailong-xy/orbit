@@ -11,13 +11,14 @@ import {
   SyncOutlined,
   UndoOutlined,
 } from '@ant-design/icons';
-import { useState, type ReactNode } from 'react';
+import { useLayoutEffect, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { encodeId } from '../lib/idCodec';
 import { levelOf, type ToastGlyph, type ToastItem } from '../lib/toastFeed';
 import { closeToast, holdToasts, openToast, releaseToasts, useToastFeed } from '../lib/toastStore';
 import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
+import { useFeedbackPortal } from './ui/feedbackPortal';
 
 /**
  * Every toast on screen (docs/mocks/toast-system): what waits for you, pinned, above what passes.
@@ -33,6 +34,22 @@ import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
  */
 export function ToastViewport() {
   const feed = useToastFeed();
+  const portal = useFeedbackPortal();
+  const [viewportWidth, setViewportWidth] = useState<number>();
+  useLayoutEffect(() => {
+    if (!portal) return;
+    // WebKit sizes fixed descendants of an absolute drawer against its wider
+    // scroll viewport. Keep the same layout width as a body-mounted notification.
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:fixed;inset:0;visibility:hidden;pointer-events:none';
+    probe.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(probe);
+    const measure = () => setViewportWidth(probe.getBoundingClientRect().width);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(probe);
+    return () => { observer.disconnect(); probe.remove(); };
+  }, [portal]);
   const narrow = useMediaQuery(PHONE_QUERY);
   const navigate = useNavigate();
   const [allPinned, setAllPinned] = useState(false);
@@ -51,7 +68,11 @@ export function ToastViewport() {
   if (pinned.length === 0 && passing.length === 0) return null;
 
   return createPortal(
-    <section className={narrow ? 'toast-viewport toast-viewport--narrow' : 'toast-viewport'} aria-label="Notifications">
+    <section className={narrow ? 'toast-viewport toast-viewport--narrow' : 'toast-viewport'} aria-label="Notifications"
+      style={portal && viewportWidth ? narrow
+        ? { width: `calc(${viewportWidth}px - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px))` }
+        : { left: `calc(${viewportWidth}px - max(16px, env(safe-area-inset-right, 0px)) - 360px)`, right: 'auto' }
+        : undefined}>
       {pinned.map((toast) =>
         narrow && feed.expanded !== toast.id ? (
           <Pill key={toast.id} toast={toast} behind={feed.pinned.length - 1} onClick={() => openToast(toast.id)} />
@@ -72,7 +93,7 @@ export function ToastViewport() {
         ),
       )}
     </section>,
-    document.body,
+    portal ?? document.body,
   );
 }
 

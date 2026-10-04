@@ -60,6 +60,10 @@ return <><Button onClick={() => void remove()}>Delete</Button>{confirmation}</>;
 
 弹层以1000为根层级，每个拥有者内递增100；现有 toast 为2050。每层有自己的遮罩，Base UI 管理模态焦点、Tab/Shift+Tab、IME期间Esc和文档滚动锁。长 Dialog 由 viewport 滚动，Drawer 正文单独滚动。主题仍来自 html 的 data-theme；没有第二套主题状态。不要给 portal 宿主增加 transform 或裁切样式。
 
+通知继续使用 `useToast` / `toastFeed` / `toastStore` 和唯一的 `ToastViewport`。打开的 Orbit 弹层通过自有 ref 登记反馈挂载点，最上层接收通知，使已有通知与后到通知都留在可访问树和 Tab 范围内；关闭后回到父层或 body，keepMounted 的关闭层不接收通知。通知不会因移动挂载点而重建队列或重置计时。通知容器保留原 body 字体规则；弹层内用 body 下不可见的固定定位测量节点保持原布局视口宽度，避免 WebKit 抽屉中丢失滚动条预留宽度。测量节点随弹层关闭清理，不读取库的内部 DOM。短通知仍穿透点击，通知动作不关闭拥有它的弹层。
+
+通知行为与集成矩阵：`npm run test:ui-toasts -w @orbit/web`；固定端口14377，沿用 P0 浏览器/字体环境。正常动画检查针对完成入场/退场后的几何；可访问检查证明 live region 的优先级、内容和可见性，不代替真实读屏软件听测。P0 生产通知链路的单独复跑为 `npm run test:ui-migration -w @orbit/web -- feedback-production.browser.mjs`，原 P0 截图断言保持不变。
+
 混用时显式标出拥有关系，不查询 `.ant-*`：
 
 ```tsx

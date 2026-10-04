@@ -240,6 +240,9 @@ body {
    they float over the header band, whose controls stay live. Toasts that do something opt back in
    (`.toast--live`). */
 .toast-viewport {
+  /* A modal may own the portal; keep the body's typography for stack controls. */
+  font-size: 1rem;
+  line-height: 1.15;
   position: fixed;
   z-index: 2050;
   top: calc(env(safe-area-inset-top, 0px) + 16px);
