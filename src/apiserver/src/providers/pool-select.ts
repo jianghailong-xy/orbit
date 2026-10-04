@@ -11,6 +11,7 @@ export interface PoolMemberRow {
 
 export interface PoolCandidate<Row extends PoolMemberRow> {
   row: Row;
+  pausedUntil?: Date | null;
   /** The member's quota as ProviderPlanUsageService reads it; null when it has none to report. */
   usage: PlanUsageSnapshot | null;
   /** The endpoint refused this credential itself (401): no run can go to it, whatever it last said. */
@@ -73,14 +74,17 @@ export function selectPoolMember<Row extends PoolMemberRow>(
   stickyId: string | null,
   now: Date,
 ): PoolSelection<Row> {
-  const usable = candidates.filter((c) => !c.refused && spentResets(c.usage, now).length === 0);
+  const usable = candidates.filter((c) => !c.refused && !(c.pausedUntil && c.pausedUntil > now) && spentResets(c.usage, now).length === 0);
   const chosen = usable.find((c) => c.row.id === stickyId) ?? usable.sort((a, b) => byChoice(a, b, now))[0];
   if (chosen) return { kind: 'SELECTED', row: chosen.row };
 
   const members = candidates.map((c) => ({
     row: c.row,
     refused: c.refused,
-    resetsAt: c.refused ? null : latestReset(spentResets(c.usage, now)),
+    resetsAt: c.refused ? null : latestReset([
+      ...spentResets(c.usage, now),
+      ...(c.pausedUntil && c.pausedUntil > now ? [c.pausedUntil.getTime()] : []),
+    ]),
   }));
   // Nothing is usable, so every member that is not refused is spent.
   if (members.every((m) => m.refused)) return { kind: 'UNAVAILABLE', members };
@@ -93,14 +97,16 @@ export function selectPoolMember<Row extends PoolMemberRow>(
  * one of the pool's own accounts — the session's member if it is one of them, else the one that frees
  * up first. The run then meets the limit, and the retry it arms waits out the reset, exactly as a
  * session on a single account does, rather than moving onto the runner's own login. Null only when no
- * member can run at all (UNAVAILABLE), which dispatches as a deleted provider does.
+ * member can run at all (UNAVAILABLE), or each remaining member is manually paused. Manual pauses
+ * are held by dispatch before its usual unavailable-pool fallback.
  */
 export function choosePoolMember<Row extends PoolMemberRow>(
   candidates: readonly PoolCandidate<Row>[],
   stickyId: string | null,
   now: Date,
 ): Row | null {
-  const selection = selectPoolMember(candidates, stickyId, now);
+  const eligible = candidates.filter((c) => !(c.pausedUntil && c.pausedUntil > now));
+  const selection = selectPoolMember(eligible, stickyId, now);
   if (selection.kind === 'SELECTED') return selection.row;
   if (selection.kind === 'UNAVAILABLE') return null;
   const spent = selection.members.filter((m) => !m.refused);
@@ -121,7 +127,7 @@ export function poolResumesAt<Row extends PoolMemberRow>(
   candidates: readonly PoolCandidate<Row>[],
   now: Date,
 ): Date | null {
-  if (candidates.every((c) => c.refused || c.usage === null)) return null;
+  if (candidates.every((c) => c.refused || (c.usage === null && !(c.pausedUntil && c.pausedUntil > now)))) return null;
   const selection = selectPoolMember(candidates, null, now);
   if (selection.kind === 'SELECTED') return now;
   return selection.kind === 'EXHAUSTED' ? selection.resetsAt : null;
@@ -129,6 +135,7 @@ export function poolResumesAt<Row extends PoolMemberRow>(
 
 /** What saying why a session left a member needs to know about that member. */
 export interface PoolSwitchFrom {
+  pausedUntil?: Date | null;
   label: string;
   enabled: boolean;
   usage: PlanUsageSnapshot | null;
@@ -160,6 +167,7 @@ export function poolFallbackNotice(pool: { label: string }): string {
 function whyLeft(from: PoolSwitchFrom, now: Date): string {
   if (from.refused) return `the key for ${from.label} was refused`;
   if (!from.enabled) return `${from.label} is disabled`;
+  if (from.pausedUntil && from.pausedUntil > now) return `${from.label} is paused`;
   const spent = spentWindow(from.usage, now);
   return spent ? `the ${spent} window on ${from.label} is spent` : `${from.label} is unavailable`;
 }

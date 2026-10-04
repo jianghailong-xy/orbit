@@ -1,3 +1,4 @@
+import { accountIsPaused } from './accountPause';
 import type { PlanUsageSnapshot } from '@orbit/shared';
 import { encodeId } from './idCodec';
 import { planUsageRows } from './planUsage';
@@ -21,6 +22,7 @@ export interface CodexLogin {
   /** ACTIVE, or SIGNED_OUT once OpenAI refused it — which only the sign-in again of the person who
    *  signed it in undoes (migration 0371; the pool owner's alone before that). */
   state: string;
+  pausedUntil?: string | null;
   email: string | null;
   /** Who signed it in — a person of the pool. They alone may sign it in again; with the pool's admins
    *  they may take it out. The pool's `people` name them. */
@@ -144,7 +146,8 @@ function loginMember(pool: ProviderPool, login: CodexLogin, index: number, now: 
     planUsage: login.usage,
     state,
     resetsAt: state === 'SPENT' ? (loginSpentUntil(login, now) ?? null) : null,
-    next: index === 0 && state === 'AVAILABLE',
+    next: index === 0 && state === 'AVAILABLE' && !accountIsPaused(login.pausedUntil, now),
+    pausedUntil: login.pausedUntil,
     login,
   };
 }

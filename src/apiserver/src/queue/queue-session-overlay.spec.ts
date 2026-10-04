@@ -12,6 +12,7 @@ function fixture(buildError?: Error) {
     $queryRaw: async () => [{ id: SESSION_ID }],
   };
   const prisma = {
+    session: { findMany: async () => [] },
     $transaction: async (fn: (client: typeof tx) => Promise<unknown>) => {
       order.push('transaction:start');
       const result = await fn(tx);

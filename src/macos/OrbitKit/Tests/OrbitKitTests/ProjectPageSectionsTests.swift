@@ -23,6 +23,10 @@ final class ProjectPageSectionsTests: XCTestCase {
         XCTAssertFalse(ProjectPage.wrappingUp(status: .done, settled))
         XCTAssertFalse(ProjectPage.wrappingUp(status: .open, ProjectPanoramaBuckets(ready: 1, done: 12)))
         XCTAssertFalse(ProjectPage.wrappingUp(status: .open, ProjectPanoramaBuckets()))
+        XCTAssertFalse(ProjectPage.wrappingUp(status: .open, ProjectPanoramaBuckets(done: 1, integrating: 1)))
+        XCTAssertFalse(ProjectPage.wrappingUp(status: .open, ProjectPanoramaBuckets(done: 1, onIntegrationLine: 1)))
+        XCTAssertFalse(ProjectPage.wrappingUp(status: .open, settled,
+                                             inFlight: .init(state: "QUEUED", startedAt: "")))
         XCTAssertEqual(ProjectPage.wrapUpSentence(settled: 13),
                        "All 13 tasks are settled. The project stays open until its outcome is confirmed.")
     }

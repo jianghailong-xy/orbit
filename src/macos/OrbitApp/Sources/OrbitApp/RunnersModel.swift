@@ -121,6 +121,13 @@ final class RunnersModel {
         await press { _ = try await self.api.renameRunnerAccount(id, engine: engine, account: account, name: name) }
     }
 
+    func pauseAccount(_ id: String, engine: LoginEngine, account: String, durationMinutes: Int?) async -> String? {
+        await press {
+            try await self.api.pauseRunnerAccount(id, engine: engine, account: account,
+                                                  durationMinutes: durationMinutes)
+        }
+    }
+
     /// One account off the machine. A refusal the machine makes itself (a session is running on it)
     /// comes back as its own words.
     @discardableResult

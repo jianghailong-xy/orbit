@@ -176,6 +176,8 @@ type engineHealth struct {
 	path          string // where the binary was found (dir used for the PATH check)
 	version       string
 	auth          authState
+	authSource    string
+	planUsage     *PlanUsage
 	onServicePath bool // found on the background service's baked PATH (not just the shell's)
 }
 
@@ -230,7 +232,13 @@ func checkEngine(spec engineSpec, servicePath string) engineHealth {
 	h.path = abs
 	h.onServicePath = onSvc
 	h.version = engineVersion(abs)
-	h.auth = probeAuth(spec.bin, abs)
+	if spec.bin == providerAntigravity {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		h.auth, h.authSource, h.planUsage = probeAntigravityAuth(ctx, abs, nil)
+	} else {
+		h.auth = probeAuth(spec.bin, abs)
+	}
 	return h
 }
 
@@ -354,15 +362,8 @@ func probeAuthIn(ctx context.Context, bin, binPath string, env []string) authSta
 		}
 		return authUnknown
 	case providerAntigravity:
-		// Orbit runs agy on a Gemini API key alone (docs/antigravity-runtime-contract.md §1.1): the
-		// key in the environment is all there is to being signed in, and agy has nothing to ask.
-		if env == nil {
-			env = os.Environ()
-		}
-		if strings.TrimSpace(envValue(env, "GEMINI_API_KEY")) != "" {
-			return authYes
-		}
-		return authNo
+		auth, _, _ := probeAntigravityAuth(ctx, binPath, env)
+		return auth
 	}
 	return authUnknown
 }

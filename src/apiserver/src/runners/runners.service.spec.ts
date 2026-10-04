@@ -134,6 +134,7 @@ test('reorderRunners handles workspaceless runners, filters invalid ids, and app
       engines: true,
       // The names its accounts were given in Orbit, laid over the report (namedRunnerEngines).
       accountNames: true,
+      accountPauses: true,
       installStatus: true,
       installEngine: true,
       installCommand: true,

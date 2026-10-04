@@ -183,13 +183,13 @@ export function integrationLanes(
     { key: 'ready', label: 'Ready', value: buckets.ready, footnote: 'can start now',
       glyph: 'triangle' as BucketGlyph, color: 'var(--warning-solid)' },
     { key: 'blocked', label: 'Waiting', value: buckets.blocked,
-      // What it is waiting FOR, once a landing is the thing holding it: nobody has to act on that
-      // one, so a reader who sees this footnote can stop looking for somebody to chase.
-      footnote: at(buckets.waitingForLanding) > 0 ? 'for a prerequisite to land' : 'waiting on dependencies',
+      footnote: at(buckets.waitingForLanding) > 0
+        ? `${buckets.waitingForLanding} waiting for a prerequisite to land`
+        : 'waiting on dependencies',
       glyph: 'square' as BucketGlyph, color: 'var(--text-3)' },
-    { key: 'integrating', label: 'Integrating', value: at(buckets.integrating),
-      footnote: 'checks running on the combined tree',
-      glyph: 'spinner' as BucketGlyph, color: 'var(--brand)' },
+    { key: 'integrating', label: 'Pending landing', value: at(buckets.integrating),
+      footnote: 'finished work without a landing receipt',
+      glyph: 'hourglass' as BucketGlyph, color: 'var(--text-3)' },
     ...(line === 'MAIN' ? [] : [{
       key: 'onIntegrationLine', label: 'On project branch', value: at(buckets.onIntegrationLine),
       footnote: 'not on main yet', glyph: 'branch' as BucketGlyph, color: 'var(--success)',
@@ -247,21 +247,35 @@ export function stalledOnReady(buckets: ProjectPanoramaBuckets): boolean {
  * project had stopped.
  */
 export interface LandingLine {
+  word: string;
   /** The task being landed, `N jobs` when more than one is in flight, or null when the job names no
    *  single task (a promotion, a merge check) — the row then draws its word and state alone. */
   what: string | null;
-  /** Whether the combined-tree checks are running, as opposed to the job still waiting its turn.
+  /** Whether the job is running, as opposed to still waiting its turn.
    *  What the ring's spin and the two brand-blue words are drawn from; the `state` word is what
    *  carries the same fact to a reader who cannot use motion. */
   running: boolean;
-  /** "checking" or "queued". */
+  /** The runner's current phase, or "queued". */
   state: string;
   /** "1m 20s". See `landingClock`. */
   clock: string;
 }
 
-/** The row's first word, and the whole of what the line is about. */
-export const LANDING_WORD = 'Landing';
+const JOB_WORDS = {
+  LAND_TASK: 'Landing',
+  CHECK_PROMOTION: 'Merge check',
+  LAND_PROMOTION: 'Merge to main',
+};
+
+const JOB_PHASES = {
+  FETCH: 'fetching',
+  MAIN_SYNC: 'syncing main',
+  REBASE: 'rebasing',
+  MERGE: 'merging',
+  CHECK: 'checking',
+  VERIFY: 'verifying',
+  PUSH: 'pushing',
+};
 
 /**
  * "1m 20s" — the landing clock, minutes and seconds ALWAYS, at every length.
@@ -296,9 +310,10 @@ export function landingLine(view: ProjectIntegrationView, now: number): LandingL
   const jobs = view.integratingCount + view.queuedCount;
   const startedAt = Date.parse(inFlight.startedAt);
   return {
+    word: inFlight.kind ? JOB_WORDS[inFlight.kind] ?? 'Integration' : 'Integration',
     what: jobs > 1 ? `${jobs} jobs` : inFlight.taskTitle,
     running,
-    state: running ? 'checking' : 'queued',
+    state: running ? (inFlight.phase ? JOB_PHASES[inFlight.phase] ?? 'running' : 'running') : 'queued',
     // An instant this clock cannot read is no elapsed time rather than `NaN` on the page: the row
     // stays up and counts from zero, which is the one thing it can still say truthfully.
     clock: landingClock(Number.isFinite(startedAt) ? now - startedAt : 0),
@@ -309,7 +324,7 @@ export function landingLine(view: ProjectIntegrationView, now: number): LandingL
  * The live line itself: a ring, what is being landed, which half of the wait it is in, and how long
  * it has been there.
  *
- * The ring SPINS while the checks run and stands still while the job is queued, and its colour
+ * The ring SPINS while the job runs and stands still while it is queued, and its colour
  * follows the same two states — but neither is the only channel: `checking` and `queued` are the
  * words, and `prefers-reduced-motion` takes the spin away without touching them.
  */
@@ -319,7 +334,7 @@ function LandingRow({ line }: { line: LandingLine }) {
       <span className="project-landing-ring">
         <Glyph shape="spinner" color="currentColor" size={13} />
       </span>
-      <span className="project-landing-word">{LANDING_WORD}</span>
+      <span className="project-landing-word">{line.word}</span>
       {/* Always drawn, even empty: it is the row's flexible middle, and the one that keeps the state
           and the clock against the right edge whether or not the job has a name. */}
       <span className="project-landing-what">{line.what}</span>
@@ -735,6 +750,9 @@ export function ProjectPanoramaCard({
     && loaded.blocked === 0
     && awaitingVerification === 0
     && failed === 0
+    && (loaded.integrating ?? 0) === 0
+    && (loaded.onIntegrationLine ?? 0) === 0
+    && landing === null
     && settled > 0;
   const footnotes: Record<BucketKey, string> = {
     running: 'active sessions',

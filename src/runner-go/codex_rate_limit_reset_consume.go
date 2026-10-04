@@ -53,8 +53,10 @@ type codexResetConsumer struct {
 	consumeTimeout time.Duration
 	attemptTimeout time.Duration
 	callFreshness  time.Duration
-	now            func() time.Time
-	wait           func(ctx context.Context, d time.Duration) bool
+	// Prompt the heartbeat that publishes the authoritative read before success is reported.
+	wakeHeartbeat func()
+	now           func() time.Time
+	wait          func(ctx context.Context, d time.Duration) bool
 }
 
 func newCodexResetConsumer(probe *planUsageProbe) *codexResetConsumer {
@@ -95,7 +97,23 @@ func (c *codexResetConsumer) execute(ctx context.Context, cmd CodexRateLimitRese
 		cmd.Phase, cmd.ProviderIdempotencyKey = codexResetPhaseRefresh, ""
 	}
 	attempt := 0
-	c.repeat(ctx, report, func() CodexRateLimitResetResultRequest {
+	c.repeat(ctx, func(result CodexRateLimitResetResultRequest) (CodexRateLimitResetResultResponse, error) {
+		if result.Kind == "REFRESHED" {
+			// REFRESHED carries the reset-credit block only. Publish the windows through a
+			// heartbeat first: the control plane stores its usage before redelivering this
+			// claim. A heartbeat sent before the read finished cannot acknowledge it.
+			after := c.now()
+			if c.wakeHeartbeat != nil {
+				c.wakeHeartbeat()
+			}
+			if !deliveries.next(ctx, after, after.Add(c.attemptTimeout)) {
+				// A draining process or a lost claim receives no more commands. Leave the
+				// confirmed consume for its successor's REFRESH instead of reading again.
+				return CodexRateLimitResetResultResponse{}, context.DeadlineExceeded
+			}
+		}
+		return report(result)
+	}, func() CodexRateLimitResetResultRequest {
 		attempt++
 		return c.refresh(ctx, cmd, attempt)
 	}, func(result CodexRateLimitResetResultRequest, receipt CodexRateLimitResetResultResponse) bool {

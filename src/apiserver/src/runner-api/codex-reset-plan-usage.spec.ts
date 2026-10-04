@@ -65,7 +65,7 @@ function jsonEqual(left: unknown, right: unknown): boolean {
 }
 
 function harness(initial: unknown = null) {
-  const row = { planUsage: clone(initial), writes: 0, misses: 0, updates: [] as Record<string, unknown>[] };
+  const row = { planUsage: clone(initial), writes: 0, misses: 0, updates: [] as Record<string, unknown>[], dispatchReads: [] as unknown[] };
   let interleave: { write: () => void; times: number } | undefined;
   const prisma = {
     runner: {
@@ -93,6 +93,12 @@ function harness(initial: unknown = null) {
         row.planUsage = clone(data.planUsage);
         row.writes += 1;
         return { count: 1 };
+      },
+    },
+    codexRateLimitResetOperation: {
+      findMany: async () => {
+        row.dispatchReads.push(clone(row.planUsage));
+        return [];
       },
     },
     session: { findMany: async () => [], updateMany: async () => ({ count: 0 }) },
@@ -239,6 +245,41 @@ test('a writer that keeps losing gives up after PLAN_USAGE_CAS_ATTEMPTS attempts
   assert.equal(h.row.misses, PLAN_USAGE_CAS_ATTEMPTS);
   assert.equal(h.row.writes, 0);
   assert.equal(blockOf(h.row.planUsage)!.generation, B, 'what the other writer stored stays');
+});
+
+test('a reset claim is only renewed after the heartbeat stores its refreshed usage', async () => {
+  for (const failure of ['cas', 'error']) {
+    const h = harness(FIXTURES.heartbeats.nestedReset.planUsage);
+    const refreshed = beat(A, { fetchedAt: new Date().toISOString(), sequence: 9 }, 0);
+    const updateMany = h.prisma.runner.updateMany;
+    if (failure === 'cas') {
+      let step = 0;
+      h.interleave(() => {
+        h.row.planUsage = beat(A, { sequence: ++step }, 99).planUsage;
+      }, PLAN_USAGE_CAS_ATTEMPTS);
+    } else {
+      h.prisma.runner.updateMany = async (args) => {
+        if ('planUsage' in args.data) throw new Error('usage write failed');
+        return updateMany(args);
+      };
+    }
+
+    const response = await h.heartbeat(refreshed);
+    assert.equal(response.codexRateLimitResetRequest, undefined, `${failure}: the heartbeat still succeeds`);
+    assert.equal(h.row.writes, 0);
+    assert.deepEqual(h.row.dispatchReads, [], `${failure}: failed usage is not acknowledged by renewing a reset claim`);
+
+    h.prisma.runner.updateMany = updateMany;
+    await h.heartbeat(refreshed);
+    assert.equal(h.row.writes, 1);
+    assert.deepEqual(h.row.dispatchReads, [refreshed.planUsage], `${failure}: the next heartbeat renews only after storing the fresh windows`);
+  }
+});
+
+test('a heartbeat without a usage report still dispatches reset operations for deadline settlement', async () => {
+  const h = harness();
+  await h.heartbeat({ status: RunnerStatus.ONLINE, idleCapacity: 1 });
+  assert.deepEqual(h.row.dispatchReads, [null]);
 });
 
 test('an override context never opens reset on the stored default-account block, and unsupported auth is refused on its own', async () => {

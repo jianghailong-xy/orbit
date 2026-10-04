@@ -80,11 +80,21 @@ type PlanUsageRateLimit struct {
 	Credits   *CreditsSnapshot `json:"credits,omitempty"`
 }
 
+// PlanUsageBucket preserves agy's public Google quota values; a fraction is remaining, not used.
+type PlanUsageBucket struct {
+	ID                string  `json:"id"`
+	Window            string  `json:"window"`
+	RemainingFraction float64 `json:"remainingFraction"`
+	ResetTime         string  `json:"resetTime,omitempty"`
+}
+
 // PlanUsage is a provider usage snapshot. For compatibility, a single-provider
 // heartbeat can still be flat; when the runner has multiple providers active, Claude
 // and Codex snapshots are nested under claude/codex.
 type PlanUsage struct {
 	Provider string `json:"provider,omitempty"`
+	// Antigravity Google account buckets from the independent /usage command.
+	Buckets []PlanUsageBucket `json:"buckets,omitempty"`
 
 	// Claude windows.
 	FiveHour       *PlanUsageWindow `json:"fiveHour,omitempty"`
@@ -793,6 +803,11 @@ func mergeCodexPlanUsage(current, update *PlanUsage) *PlanUsage {
 		return update
 	}
 	if update == nil {
+		return current
+	}
+	// An authoritative read that started before the cached one must not restore pre-reset
+	// windows alongside the newer reset credits. Rolling notifications carry no reset block.
+	if update.RateLimitReset != nil && !codexResetBlockSupersedes(update.RateLimitReset, current.RateLimitReset) {
 		return current
 	}
 	merged := *update

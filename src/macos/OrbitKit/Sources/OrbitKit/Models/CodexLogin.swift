@@ -30,11 +30,13 @@ public struct CodexLogin: Codable, Equatable, Sendable {
     /// Who signed it in — a person of the pool (migration 0371). They alone may sign it in again, and with
     /// the pool's admins they may take it out; an older server sends none, which no page reads as anybody.
     public let userId: String?
+    /// Temporarily skipped until this time, without changing authentication or quota.
+    public let pausedUntil: String?
 
     public init(state: String = "ACTIVE", email: String?, plan: String? = nil, fingerprint: String,
                 lastError: String? = nil, expiresAt: String? = nil, linkedAt: String? = nil,
                 usage: PlanUsageSnapshot? = nil, usageUnavailable: String? = nil, next: Bool = false,
-                userId: String? = nil) {
+                userId: String? = nil, pausedUntil: String? = nil) {
         self.state = state
         self.email = email
         self.plan = plan
@@ -46,6 +48,7 @@ public struct CodexLogin: Codable, Equatable, Sendable {
         self.usageUnavailable = usageUnavailable
         self.next = next
         self.userId = userId
+        self.pausedUntil = pausedUntil
     }
 
     public init(from decoder: Decoder) throws {
@@ -63,6 +66,7 @@ public struct CodexLogin: Codable, Equatable, Sendable {
         // Absent from an owner's own read, and from an older server: no mark.
         next = (try? c.decodeIfPresent(Bool.self, forKey: .next)) ?? false
         userId = try c.decodeIfPresent(String.self, forKey: .userId)
+        pausedUntil = try c.decodeIfPresent(String.self, forKey: .pausedUntil)
     }
 
     /// Whether OpenAI still takes it.

@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
-import type { PromotionTask } from '@orbit/shared';
+import type { IntegrationJobPhase, PromotionTask } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
@@ -391,9 +391,10 @@ export class ProjectPromotionService {
    * merge differently, and the card the owner pressed has to be the card they get back.
    */
   private async view(row: PromotionRow): Promise<ProjectPromotionView> {
-    const [tasks, upstreamSyncedAt] = await Promise.all([
+    const [tasks, upstreamSyncedAt, execution] = await Promise.all([
       this.tasksOf(row),
       this.lastUpstreamSync(row.projectId),
+      this.mergeExecution(row),
     ]);
     // Only a re-check in flight is measured, which keeps the poll of a card nobody is acting on to
     // the two reads above.
@@ -404,7 +405,23 @@ export class ProjectPromotionService {
         typicalMs: medianMs(await this.recentCheckDurations(row.projectId)),
       }
       : null;
-    return promotionView(row, { tasks, upstreamSyncedAt, recheck });
+    return promotionView(row, { tasks, upstreamSyncedAt, recheck, execution });
+  }
+
+  private async mergeExecution(row: PromotionRow): Promise<ProjectPromotionView['execution']> {
+    if (!row.landJobId || (row.state !== 'CONFIRMED' && row.state !== 'RECHECKING')) return null;
+    const job = await this.prisma.projectIntegrationJob.findFirst({
+      where: {
+        id: row.landJobId, projectId: row.projectId, promotionId: row.id,
+        kind: 'LAND_PROMOTION', state: { in: ['QUEUED', 'RUNNING'] },
+      },
+      select: { state: true, phase: true, startedAt: true, createdAt: true },
+    });
+    return job ? {
+      state: job.state as 'QUEUED' | 'RUNNING',
+      phase: job.phase as IntegrationJobPhase | null,
+      startedAt: job.state === 'RUNNING' ? job.startedAt ?? job.createdAt : job.createdAt,
+    } : null;
   }
 
   /** What this merge would carry, in the order the row lists it, with the titles the card shows. */
@@ -576,7 +593,10 @@ async function applyCancel(tx: Prisma.TransactionClient, row: PromotionRow): Pro
   }
   if (row.landJobId) {
     const asked = await tx.projectIntegrationJob.updateMany({
-      where: { id: row.landJobId, state: { in: ['QUEUED', 'RUNNING'] }, phase: { not: 'PUSH' } },
+      where: {
+        id: row.landJobId, state: { in: ['QUEUED', 'RUNNING'] },
+        OR: [{ phase: null }, { phase: { not: 'PUSH' } }],
+      },
       data: { cancelRequestedAt: new Date() },
     });
     if (asked.count === 0) {

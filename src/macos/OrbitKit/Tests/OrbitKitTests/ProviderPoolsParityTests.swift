@@ -99,7 +99,7 @@ final class ProviderPoolsParityTests: XCTestCase {
     private let fullMember = PoolMember(
         id: "m", slug: "anthropic", label: "Work", presetSlug: "anthropic", enabled: true,
         planUsage: PlanUsageSnapshot(fiveHour: PlanUsageWindow(utilization: 1)), state: .available,
-        resetsAt: "2026-09-25T10:00:00.000Z", next: true)
+        resetsAt: "2026-09-25T10:00:00.000Z", next: true, pausedUntil: "2026-10-04T10:50:00.000Z")
 
     // MARK: - the payload
 
@@ -141,7 +141,7 @@ final class ProviderPoolsParityTests: XCTestCase {
         let account = CodexLogin(state: "ACTIVE", email: "e", plan: "plus", fingerprint: "…AB12", lastError: "x",
                                  expiresAt: "2026-10-07T09:12:00.000Z", linkedAt: "2026-09-28T09:12:00.000Z",
                                  usage: PlanUsageSnapshot(provider: "codex", primary: PlanUsageWindow(utilization: 1)),
-                                 usageUnavailable: "y", userId: "u")
+                                 usageUnavailable: "y", userId: "u", pausedUntil: "2026-10-04T10:50:00.000Z")
         // `next` is the one field this client's account carries beyond web's: what a pool read as one of its
         // people marks (web's `SharedPoolLogin extends CodexLogin`), absent from an owner's own read.
         XCTAssertEqual(try encodedKeys(account),
@@ -217,7 +217,7 @@ final class ProviderPoolsParityTests: XCTestCase {
                                 contributor: PoolKeyContributor(userId: "u", name: "Wikova", you: false),
                                 usage: PoolSpend(inputTokens: 10, outputTokens: 20, costUsd: 1.5,
                                                  othersCostUsd: 1.25),
-                                running: true, next: true)
+                                running: true, next: true, pausedUntil: "2026-10-04T10:50:00.000Z")
         // The mark a key is out of budget until is one of the fields web declares, mirrored here — the
         // tripwire this file used to carry ("web does not carry `spentUntil` yet") has fired, and the
         // mark in the fixture above is what makes the two sets of fields line up.

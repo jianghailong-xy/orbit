@@ -12,10 +12,9 @@ import { isCodeTaskSql, lineStartedSql, taskLandingSql } from './project-criteri
  *  1. **A receipt.** If one exists, the work is THERE — on main, or on the project's own branch —
  *     and nothing a job says afterwards changes that. Read first for that reason: a job row that
  *     was superseded, cancelled or re-queued after the landing must not un-land it.
- *  2. **An open exception item.** A conflict, a failed check or an integration error that somebody
- *     still owes an answer for. Read before the job's own state because it carries the thing the
- *     job does not: WHO has it, which is the difference between "being worked on" and "waiting for
- *     you".
+ *  2. **An open exception item, unless its retry is in flight.** A conflict, a failed check or an
+ *     integration error that somebody still owes an answer for. Read before the job's state because
+ *     it names WHO has it, which distinguishes "being worked on" from "waiting for you".
  *  3. **The newest job.** Queued, running, or stopped at a terminal state nobody filed an item for.
  *
  * `NOT_APPLICABLE` covers everything else and is the ordinary answer: a codeless task, a task in a
@@ -31,11 +30,13 @@ const INTEGRATION_ITEM_KINDS = ['INTEGRATION_CONFLICT', 'INTEGRATION_CHECK_FAILE
 
 interface TaskIntegrationRow {
   taskId: string;
+  taskStatus: string;
   landing: string;
   isCode: boolean;
   lineStarted: boolean;
   jobId: string | null;
   jobState: string | null;
+  jobPhase: string | null;
   jobStartedAt: Date | null;
   jobCreatedAt: Date | null;
   jobFinishedAt: Date | null;
@@ -43,6 +44,7 @@ interface TaskIntegrationRow {
   itemKind: string | null;
   itemAssignee: string | null;
   itemCreatedAt: Date | null;
+  itemHandlingJobId: string | null;
   landedAt: Date | null;
 }
 
@@ -96,7 +98,12 @@ export function taskIntegrationOf(row: TaskIntegrationRow, now: Date): TaskInteg
   if (!row.isCode || !row.lineStarted) return NOT_APPLICABLE;
 
   const itemState = row.itemKind ? stateForItem(row.itemKind) : null;
-  if (itemState) {
+  // A retry leaves the old failure OPEN until it succeeds or fails again. Its explicit handling
+  // link is the evidence that the new queued/running job is answering that failure; an unrelated
+  // job must not hide an outstanding exception.
+  const retryInFlight = row.itemHandlingJobId !== null && row.itemHandlingJobId === row.jobId
+    && (row.jobState === 'QUEUED' || row.jobState === 'RUNNING');
+  if (itemState && !retryInFlight) {
     return {
       state: itemState,
       since: row.itemCreatedAt,
@@ -109,6 +116,7 @@ export function taskIntegrationOf(row: TaskIntegrationRow, now: Date): TaskInteg
 
   const jobState = row.jobState ? stateForJob(row.jobState) : null;
   if (!jobState) {
+    if (row.taskStatus !== 'DONE') return NOT_APPLICABLE;
     // Done code work on a started line with no job yet: the enqueue is the next thing that happens
     // to it (§2.3 J-T1d backfills the ones that predate the line). Queued is what it IS about to
     // be, and the lane it belongs in either way — the alternative, filing it under "Landed", would
@@ -125,7 +133,8 @@ export function taskIntegrationOf(row: TaskIntegrationRow, now: Date): TaskInteg
     openItemId: null,
     jobId: row.jobId,
     checksRunningForMs:
-      jobState === 'RUNNING' && startedAt ? Math.max(0, now.getTime() - startedAt.getTime()) : null,
+      jobState === 'RUNNING' && row.jobPhase === 'CHECK' && startedAt
+        ? Math.max(0, now.getTime() - startedAt.getTime()) : null,
   };
 }
 
@@ -142,7 +151,7 @@ export async function readTaskIntegrationViews(
   const ids = Prisma.join(taskIds.map((id) => Prisma.sql`${id}::uuid`));
   const rows = await prisma.$queryRaw<TaskIntegrationRow[]>(Prisma.sql`
     WITH scoped AS (
-      SELECT t."id" AS "taskId",
+      SELECT t."id" AS "taskId", t."status"::text AS "taskStatus",
              (${landing})::text AS "landing",
              (${isCode}) AS "isCode",
              (${lineStarted}) AS "lineStarted"
@@ -155,7 +164,7 @@ export async function readTaskIntegrationViews(
     -- or the task branch moved (§2.1), and an older one says nothing about where the work is now.
     newest_job AS (
       SELECT DISTINCT ON (j."task_id")
-             j."task_id", j."id", j."state", j."created_at", j."started_at", j."finished_at"
+             j."task_id", j."id", j."state", j."phase", j."created_at", j."started_at", j."finished_at"
         FROM "project_integration_job" j
        WHERE j."task_id" IN (${ids})
          AND j."owner_id" = ${ownerId}::uuid
@@ -165,7 +174,8 @@ export async function readTaskIntegrationViews(
     -- The newest OPEN exception of the three integration kinds. Newest rather than oldest: a task
     -- whose second attempt conflicted is described by that conflict, not by the one before it.
     open_item AS (
-      SELECT DISTINCT ON (i."task_id") i."task_id", i."id", i."kind", i."assignee", i."created_at"
+      SELECT DISTINCT ON (i."task_id") i."task_id", i."id", i."kind", i."assignee", i."created_at",
+             i."handling_job_id"
         FROM "project_open_item" i
        WHERE i."task_id" IN (${ids})
          AND i."owner_id" = ${ownerId}::uuid
@@ -181,12 +191,14 @@ export async function readTaskIntegrationViews(
          AND r."result" IN ('MERGED', 'ALREADY_MERGED')
        GROUP BY r."task_id"
     )
-    SELECT scoped."taskId", scoped."landing", scoped."isCode", scoped."lineStarted",
+    SELECT scoped."taskId", scoped."taskStatus", scoped."landing", scoped."isCode", scoped."lineStarted",
            newest_job."id" AS "jobId", newest_job."state" AS "jobState",
+           newest_job."phase" AS "jobPhase",
            newest_job."started_at" AS "jobStartedAt", newest_job."created_at" AS "jobCreatedAt",
            newest_job."finished_at" AS "jobFinishedAt",
            open_item."id" AS "itemId", open_item."kind" AS "itemKind",
            open_item."assignee" AS "itemAssignee", open_item."created_at" AS "itemCreatedAt",
+           open_item."handling_job_id" AS "itemHandlingJobId",
            landed_at."at" AS "landedAt"
       FROM scoped
       LEFT JOIN newest_job ON newest_job."task_id" = scoped."taskId"

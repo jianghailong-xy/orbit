@@ -77,6 +77,54 @@ final class ProjectAttentionTests: XCTestCase {
 
     // MARK: classification
 
+    func testAWorkingCoordinatorKeepsTheIndexAndDrawerActive() {
+        let row = ProjectSummary(id: "coordinating", title: "Coordinating", taskCount: 1,
+                                 buckets: ProjectBuckets(done: 1),
+                                 lastActivityAt: at(2 * Self.quiet),
+                                 coordinatorActivity: ProjectCoordinatorPulse(working: true,
+                                                                               lastTurnAt: at(Self.minute)))
+        XCTAssertEqual(section(row), .running)
+        XCTAssertNil(reason(row))
+        XCTAssertEqual(ProjectAttention.drawerMark(row), .running)
+        XCTAssertEqual(ProjectAttention.drawerMark(row,
+                           coordinator: ProjectCoordinatorPulse(working: false, lastTurnAt: at(0))), .idle,
+                       "The live session pulse outranks the fetched snapshot")
+    }
+
+    func testLandingAndMergingKeepTheProjectActiveAfterTaskWorkFinishes() {
+        for blocked in [0, 17] {
+            let row = project(blocked: blocked, done: 1,
+                              lastActivityAt: .some(at(2 * Self.quiet)),
+                              integration: ProjectListIntegration(line: .projectBranch,
+                                  ref: "project/x", activeJobCount: 1))
+            XCTAssertEqual(section(row), .running)
+            XCTAssertNil(reason(row))
+            XCTAssertEqual(ProjectAttention.drawerMark(row), .running)
+        }
+    }
+
+    func testIntegrationActivityKeepsOwnerAndControlPlaneAttentionVisible() {
+        for attention in [
+            ProjectListAttention(ownerItems: [ownerItem(.promotionApproval, 1, waited: Self.hour)]),
+            ProjectListAttention(coordinatorBlockers: 1),
+        ] {
+            let row = project(done: 1, attention: attention,
+                              integration: ProjectListIntegration(line: .projectBranch,
+                                  ref: "project/x", activeJobCount: 1))
+            XCTAssertEqual(section(row), .attention)
+        }
+    }
+
+    func testAnIntegrationExceptionAndAnOlderServerDoNotCountAsActivity() {
+        for count in [Int?(0), nil] {
+            let row = project(blocked: 1, done: 1,
+                              integration: ProjectListIntegration(line: .projectBranch,
+                                  ref: "project/x", activeJobCount: count))
+            XCTAssertEqual(section(row), .waiting)
+            XCTAssertEqual(ProjectAttention.drawerMark(row), .idle)
+        }
+    }
+
     func testCoordinatorOrSystemBlockerRoutesFreshRunningWorkToAutoRemediation() {
         for (coordinator, system) in [(1, 0), (0, 1)] {
             let row = project(running: 1, ready: 2, attention: ProjectListAttention(
@@ -275,7 +323,7 @@ final class ProjectAttentionTests: XCTestCase {
 
     func testSettledWorkThatStillNeedsClosing() {
         XCTAssertEqual(chip(project(done: 5, cancelled: 7)),
-                       ProjectAttentionChip(tone: .brand, text: "12/12 settled · still open"))
+                       ProjectAttentionChip(tone: .brand, text: "12/12 tasks settled · project still open"))
     }
 
     func testQuietThresholdIsExact() {
@@ -385,6 +433,20 @@ final class ProjectAttentionTests: XCTestCase {
                                attention: ProjectListAttention(
                                 coordinatorItems: coordinatorItems(kind, waited: 3 * Self.hour)))
             XCTAssertEqual(chip(held), ProjectAttentionChip(tone: .brand, text: text))
+        }
+    }
+
+    func testLandingExceptionOutranksAllTasksDoneAndWaitsUntilARetryStarts() {
+        for activeJobCount in [0, 1] {
+            let row = project(done: 4,
+                              attention: ProjectListAttention(coordinatorItems:
+                                  coordinatorItems(.integrationCheckFailed, waited: 3 * Self.hour)),
+                              integration: ProjectListIntegration(line: .projectBranch,
+                                  ref: "project/x", activeJobCount: activeJobCount))
+            XCTAssertEqual(reason(row), .coordinatorHandling)
+            XCTAssertEqual(section(row), activeJobCount == 0 ? .waiting : .running)
+            XCTAssertEqual(chip(row)?.text, "Coordinator · checks failed · 3h")
+            XCTAssertEqual(ProjectAttention.drawerMark(row), activeJobCount == 0 ? .idle : .running)
         }
     }
 

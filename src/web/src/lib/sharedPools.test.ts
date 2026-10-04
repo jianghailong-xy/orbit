@@ -276,6 +276,21 @@ describe('a Codex pool of one’s own, its ChatGPT accounts read beside its peop
     expect(stopped.resetsAt).toBe(SOON);
   });
 
+  it('uses the server NEXT choice when the oldest account is paused, without guessing another', () => {
+    const pausedUntil = new Date(Date.now() + 3600000).toISOString();
+    const first = account('ann@example.com', 6, { pausedUntil });
+    const second = account('work@example.com', 18);
+    const ownView = own(first, second);
+    const server = access([]);
+    server.logins = [{ ...first, next: false }, { ...second, next: true }];
+    const drawn = ownPoolWithAccess(ownView, server);
+    expect(drawn.members.map((member) => member.next)).toEqual([false, true]);
+    expect(poolHeadline(drawn)).toMatchObject({ kind: 'next', member: { label: 'work@example.com' } });
+    // If the server chooses no login, the frontend does not promote an available-looking row.
+    server.logins[1].next = false;
+    expect(ownPoolWithAccess(ownView, server).members.some((member) => member.next)).toBe(false);
+  });
+
   it('says why nothing can run when waiting brings nothing back', () => {
     const out = ownPoolWithAccess(own(account('ann@example.com', 6, { state: 'SIGNED_OUT' })), access([key(1, ANN, { state: 'INVALID' })]));
     expect(out.unavailable).toBe('Signed out');

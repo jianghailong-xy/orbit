@@ -34,6 +34,16 @@ final class SharedPoolsModel {
     /// Who can use the account's own pool with this id, once read.
     func access(_ id: String) -> SharedPool? { ownAccess[PublicID.storageKey(id)] }
 
+    func pauseMember(_ pool: SharedPool, member: PoolMember, durationMinutes: Int?) async -> String? {
+        do {
+            try await api.pausePoolMember(poolID: pool.id, memberID: member.id, durationMinutes: durationMinutes)
+            adopt(try await api.sharedPool(pool.id))
+            return nil
+        } catch {
+            return APIClient.failureReason(error)
+        }
+    }
+
     /// Best-effort, like the providers beside it: a failed read keeps the last good list. The pools of the
     /// account's own read so far are read again with it.
     func load() async {
