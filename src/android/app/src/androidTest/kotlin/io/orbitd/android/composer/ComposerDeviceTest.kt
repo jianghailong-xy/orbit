@@ -406,6 +406,7 @@ class ComposerDeviceTest {
         compose.onNodeWithTag("composer-input").assertTextContains("正文过大，拒绝后可以缩短")
         assertEquals(attachment,model.state.value.draft.attachments.single())
         assertEquals(0,stats()["uniqueTurns"]!!.jsonPrimitive.int)
+        ready(); compose.onNodeWithTag("composer-input").performScrollTo().assertIsDisplayed()
         capture("413-restored")
         compose.onNodeWithTag("composer-input").performTextReplacement("缩短正文")
         ready(); clickSendWhenEnabled()
