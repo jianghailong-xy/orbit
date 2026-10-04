@@ -170,7 +170,7 @@ if [[ "${A07_COLD_PROCESS:-0}" == 1 ]]; then
   "$adb" -s "$serial" logcat -d -v threadtime --pid="$after_pid" -T "$start" >> "$output/logcat.txt"
 fi
 "$adb" -s "$serial" logcat -d -v threadtime -T "$start" AndroidRuntime:E '*:S' > "$output/process-crashes.txt"
-"$adb" -s "$serial" logcat -d -v threadtime -T "$start" MediaProvider:W DocumentsUI:W '*:S' > "$output/media-provider.txt"
+"$adb" -s "$serial" logcat -d -v threadtime -T "$start" MediaProvider:W DocumentsUI:W DatabaseUtils:E SQLiteLog:E '*:S' > "$output/media-provider.txt"
 "$adb" -s "$serial" exec-out run-as io.orbitd.android.debug.test cat files/a07-received.txt > "$output/recipient.txt" 2>/dev/null || true
 curl --fail --silent http://127.0.0.1:18767/__stats > "$output/server-stats.json"
 "$adb" -s "$serial" shell run-as "$package" tar -cf files/a07-captures.tar -C files a07-composer > "$output/capture-create.txt" 2>&1

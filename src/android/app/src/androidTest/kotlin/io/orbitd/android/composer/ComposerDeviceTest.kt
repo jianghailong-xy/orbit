@@ -117,7 +117,7 @@ class ComposerDeviceTest {
         clickSendWhenEnabled()
         compose.waitUntil(10000) { model.state.value.draft.pending==null && !model.state.value.busy && !model.state.value.waiting }
         compose.onNodeWithText("+").performClick(); awaitText("Queued messages (1)")
-        compose.onNodeWithText("Queued messages (1)").performClick(); compose.onNodeWithText("Withdraw").performClick()
+        compose.onNodeWithText("Queued messages (1)").performClick(); appClick("Withdraw")
         compose.waitUntil(5000) { stats()["controls"]!!.jsonArray.any { it.jsonObject["action"]?.jsonPrimitive?.content=="withdraw" } }
         compose.onNodeWithText("Close").performClick()
         control("""{"expired":true}""")
@@ -210,6 +210,15 @@ class ComposerDeviceTest {
             }
             instrument.uiAutomation.waitForIdle(1000,10000)
             capture("system-share-expanded")
+            compose.waitUntil(20000) {
+                systemFind(refresh=true) { node ->
+                    val bounds=android.graphics.Rect();node.getBoundsInScreen(bounds)
+                    node.viewIdResourceName=="android:id/text1" && node.text.isNullOrBlank() &&
+                        node.isVisibleToUser && !bounds.isEmpty
+                }==null && systemNode("A07 receiver")!=null
+            }
+            instrument.uiAutomation.waitForIdle(500,5000)
+            capture("system-share-ready")
             systemClick("A07 receiver",touch=true)
             systemClick("Received file")
             assertEquals(sha(bytes),systemNode("Received file")!!.contentDescription.toString())
@@ -281,14 +290,25 @@ class ComposerDeviceTest {
             appClick("${photo.name} · ${photo.size/1024} KB")
             compose.waitUntil(5000) { compose.onAllNodesWithContentDescription("photo.png").fetchSemanticsNodes().isNotEmpty() }
             capture("photo-preview")
-            appClick("Save image")
-            var saved:Uri?=null
-            compose.waitUntil(5000) {
-                resolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,arrayOf("_id"),"_display_name=? AND relative_path=?",arrayOf("photo.png","Pictures/Orbit/"),null)?.use { c->
-                    if(c.moveToFirst())saved=ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,c.getLong(0))
-                };saved!=null
+            fun savedImages():Set<Long> = resolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,arrayOf("_id"),
+                "is_pending=0 AND relative_path IN (?,?)",arrayOf("Pictures/Orbit","Pictures/Orbit/"),null)!!.use { c ->
+                buildSet { while(c.moveToNext())add(c.getLong(0)) }
             }
-            assertArrayEquals(bytes,resolver.openInputStream(saved!!)!!.use { it.readBytes() });resolver.delete(saved!!,null,null)
+            repeat(2) {
+                val savedBefore=savedImages()
+                compose.waitUntil(5000) { compose.onNodeWithText("Save image").fetchSemanticsNode().config.getOrNull(SemanticsProperties.Disabled)==null }
+                appClick("Save image")
+                var saved:Uri?=null
+                compose.waitUntil(5000) {
+                    (savedImages()-savedBefore).singleOrNull()?.let { saved=ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,it) }
+                    saved!=null
+                }
+                assertArrayEquals(bytes,resolver.openInputStream(saved!!)!!.use { it.readBytes() })
+                resolver.query(saved!!,arrayOf(MediaStore.Images.Media.DISPLAY_NAME),null,null,null)!!.use { c ->
+                    assertTrue(c.moveToFirst());File(evidence,"photo-save-retries.txt").appendText("$saved ${c.getString(0)}\n")
+                }
+                resolver.delete(saved!!,null,null)
+            }
             File(evidence,"photo-save-sha256.txt").writeText(sha(bytes))
             appClick("Close attachment")
             app.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newUri(resolver,"test photo",uri))

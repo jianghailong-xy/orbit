@@ -113,7 +113,11 @@ fun AttachmentActions(name: String, mime: String, bytes: suspend () -> ByteArray
             put(MediaStore.Images.Media.IS_PENDING, 1)
         }
         val resolver = context.contentResolver
-        val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: error("Can't save image")
+        val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: kotlin.run {
+            // A provider may refuse to reserve a reused name even after deletion.
+            values.put(MediaStore.Images.Media.DISPLAY_NAME, "${UUID.randomUUID()}-$name")
+            resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: error("Can't save image")
+        }
         try {
             resolver.openOutputStream(uri)?.use { it.write(data) } ?: error("Can't save image")
             resolver.update(uri, ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) }, null, null)
