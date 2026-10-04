@@ -2696,6 +2696,7 @@ export class SessionsService {
       runnerId?: string;
       workspaceId?: string;
       tagId?: string;
+      projectId?: string;
       view?: 'open' | 'completed' | 'trash' | 'active' | 'archived' | 'deleted' | 'system';
       limit?: number;
     },
@@ -2737,6 +2738,13 @@ export class SessionsService {
           WHERE stl.session_id = s.id AND stl.tag_id = ${filters.tagId}::uuid
         )`
       : Prisma.empty;
+    const projectFilter = filters.projectId
+      ? Prisma.sql`AND EXISTS (
+          SELECT 1 FROM project p
+          WHERE p.id = ${filters.projectId}::uuid AND p.owner_id = ${ownerId}::uuid
+        )
+        AND (${sessionProjectMembershipSql('s')} ->> 'projectId')::uuid = ${filters.projectId}::uuid`
+      : Prisma.empty;
     // Paging is opt-in: a caller that omits `limit` (the native clients, any older web build)
     // still gets the whole list, so this can only ever shrink a response.
     const pageLimit =
@@ -2756,7 +2764,7 @@ export class SessionsService {
         ? Prisma.sql`COALESCE(s.completed_at, s.archived_at) DESC NULLS LAST, s.created_at DESC`
         : Prisma.sql`(s.pinned_at IS NOT NULL) DESC, COALESCE(s.last_turn_at, s.created_at) DESC, s.created_at DESC`;
     return this.listRows(ownerId, {
-      scope: Prisma.sql`${runnerFilter} ${workspaceFilter} ${tagFilter}`,
+      scope: Prisma.sql`${runnerFilter} ${workspaceFilter} ${tagFilter} ${projectFilter}`,
       visibility,
       orderBy,
       pageLimit,

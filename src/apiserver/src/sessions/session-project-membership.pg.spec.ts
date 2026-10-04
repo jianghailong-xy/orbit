@@ -24,7 +24,7 @@ import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
 
 /**
- * The membership contract in docs/session-list-projects-design.md §2/§3.1, against the migrated
+ * The membership contract in docs/session-list-projects-design.md §2/§3.1/§3.2, against the migrated
  * PostgreSQL and the real list/detail HTTP routes and session.updated summary builder:
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/sessions/session-project-membership.pg.spec.ts
@@ -325,4 +325,78 @@ test('projectStatus is the current project status on every surface', { skip }, a
     where: { id: w.project.id }, data: { status: ProjectStatus.CANCELLED },
   });
   await assertEverywhere(w, id, 'CONTEXT');
+});
+
+test('projectId lists every membership role across workspaces with the ordinary row shape, order and limit', { skip }, async () => {
+  const w = await world('project-list');
+  const first = await w.h.db.workspace.create({ data: { ownerId: w.ownerId, name: 'first workspace' } });
+  const second = await w.h.db.workspace.create({ data: { ownerId: w.ownerId, name: 'second workspace' } });
+  const coordinator = await directSession(w, 'COORDINATOR', {
+    workspaceId: first.id, pinnedAt: new Date('2026-01-01'), lastTurnAt: new Date('2026-01-01'),
+  });
+  const memberIds = [coordinator];
+  for (const [index, role] of (['TASK', 'CONTEXT', 'JUDGMENT'] as const).entries()) {
+    memberIds.push(await directSession(w, role, {
+      workspaceId: second.id, lastTurnAt: new Date(`2026-01-0${index + 2}`),
+    }));
+  }
+  memberIds.push(await session(w, {
+    workspaceId: second.id, rootSessionId: coordinator, parentSessionId: coordinator,
+    spawnDepth: 1, lastTurnAt: new Date('2026-01-05'),
+  }));
+  await session(w, { workspaceId: second.id, pinnedAt: new Date(), lastTurnAt: new Date() });
+  const other = await w.h.db.project.create({ data: { ownerId: w.ownerId, title: 'other project' } });
+  await directSession({ ...w, project: other }, 'TASK', {
+    workspaceId: first.id, rootSessionId: coordinator, parentSessionId: coordinator, spawnDepth: 1,
+  });
+
+  const ids = memberIds.map(uuidToBase62);
+  const ordinary = await read(w, '/sessions?view=open') as SessionRow[];
+  const expected = ordinary.filter((row) => ids.includes(row.id));
+  assert.deepEqual(expected.map((row) => row.id), [ids[0], ...ids.slice(1).reverse()]);
+  for (const projectId of [w.project.id, uuidToBase62(w.project.id)]) {
+    assert.deepEqual(await read(w, `/sessions?projectId=${projectId}&view=open`), expected);
+    assert.deepEqual(await read(w, `/sessions?projectId=${projectId}&view=open&limit=2`), expected.slice(0, 2));
+  }
+});
+
+test('projectId keeps open and completed lifecycle filters and completed ordering', { skip }, async () => {
+  const w = await world('project-list-views');
+  const coordinator = await directSession(w, 'COORDINATOR');
+  const completed = await directSession(w, 'TASK', {
+    completedAt: new Date('2026-01-03'), lastTurnAt: new Date('2026-01-01'),
+  });
+  const archived = await directSession(w, 'CONTEXT', {
+    archivedAt: new Date('2026-01-02'), lastTurnAt: new Date('2026-01-05'), pinnedAt: new Date(),
+  });
+  await directSession(w, 'JUDGMENT', { deletedAt: new Date() });
+  await directSession(w, 'TASK', { completedAt: new Date(), deletedAt: new Date() });
+  await session(w);
+  await session(w, { completedAt: new Date() });
+
+  const path = `/sessions?projectId=${uuidToBase62(w.project.id)}`;
+  const open = await read(w, `${path}&view=open`) as SessionRow[];
+  assert.deepEqual(open.map((row) => row.id), [uuidToBase62(coordinator)]);
+  assert.deepEqual(await read(w, path), open);
+  const done = await read(w, `${path}&view=completed`) as SessionRow[];
+  assert.deepEqual(done.map((row) => row.id), [completed, archived].map(uuidToBase62));
+  const ordinary = await read(w, '/sessions?view=completed') as SessionRow[];
+  assert.deepEqual(done, ordinary.filter((row) => row.projectMembership?.projectId === uuidToBase62(w.project.id)));
+  assert.deepEqual(await read(w, `${path}&view=completed&limit=1`), done.slice(0, 1));
+});
+
+test('projectId returns an empty list for another owner or an unknown project', { skip }, async () => {
+  const w = await world('project-list-owner');
+  const other = await world('project-list-other-owner');
+  await directSession(w, 'COORDINATOR');
+  await directSession(other, 'COORDINATOR');
+  const ownSession = await session(w);
+  // A session owner's filter alone is insufficient: membership links can name another owner's project.
+  await wake({ ...w, project: other.project }, ownSession);
+  for (const projectId of [other.project.id, uuidToBase62(other.project.id), randomUUID()]) {
+    for (const view of ['open', 'completed']) {
+      assert.deepEqual(await read(w, `/sessions?projectId=${projectId}&view=${view}`), []);
+    }
+  }
+  assert.equal((await read(other, `/sessions?projectId=${uuidToBase62(other.project.id)}`) as SessionRow[]).length, 1);
 });
