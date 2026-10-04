@@ -4,11 +4,12 @@
  * on — and for every other Orbit user it does not exist, at each of those doors and at the sign-in's own.
  *
  * "Does not exist" is what the shared pools answer a person who is not in them (migration 0321,
- * docs/codex-shared-pool-design.md §2.5), and it is the same answer here for a different reason: a login
- * pool has no membership table at all, because the account it runs on belongs to one person and is shared
- * with nobody. What the doors are asserted on is what they RESOLVED — the row written, the list it appears
- * in — before whether they refused, and every refusal is paired with the same request made by the pool's
- * owner, which has to go through.
+ * docs/codex-shared-pool-design.md §2.5), and it is the same answer here for the same reason: who a pool
+ * is for is its `provider_pool_person` rows (0358), and this pool's are its owner's alone — nobody else was
+ * added to it. Whoever its owner adds sees it and may run on it (0371 included, on an account of their
+ * own), so the doors are asserted against a user the pool holds no person row for. What they are asserted
+ * on is what they RESOLVED — the row written, the list it appears in — before whether they refused, and
+ * every refusal is paired with the same request made by the pool's owner, which has to go through.
  *
  * The last case is the one a quota could get wrong: an account whose quota nobody has read is ACTIVE and
  * runnable, and its view says the reading is missing rather than that the credential was refused.
@@ -27,7 +28,7 @@ import { Module, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
-import { toUuid } from '@orbit/shared';
+import { toUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -166,7 +167,7 @@ async function openDoors() {
 
 const suite = PG_URL ? test : test.skip;
 
-suite("a pool of one's own ChatGPT login, at every door — its owner's, and nobody else's", { timeout: 300_000 }, async (t) => {
+suite("a pool of one's own ChatGPT login, at every door — its owner's, and nobody it does not hold's", { timeout: 300_000 }, async (t) => {
   const url = PG_URL!;
   assertCoordinatorPgUrlIsIsolated(url);
   const client = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
@@ -251,7 +252,7 @@ suite("a pool of one's own ChatGPT login, at every door — its owner's, and nob
         slug: pool.slug,
         engine: 'codex',
         login: null,
-        unavailable: 'the pool "My ChatGPT" has no ChatGPT account signed in — sign in on its page, or pick another provider',
+        unavailable: 'the pool "My ChatGPT" has no ChatGPT account signed in — sign one in on its page, or pick another provider',
         members: [],
       },
     );
@@ -374,6 +375,9 @@ suite("a pool of one's own ChatGPT login, at every door — its owner's, and nob
       lastError: null,
       expiresAt: page.login.expiresAt,
       linkedAt: page.login.linkedAt,
+      // Who signed it in (migration 0371): the owner — served in both spellings, like every public id.
+      userId: uuidToBase62(owner.id),
+      userPublicId: uuidToBase62(owner.id),
       // Nothing has read this account's quota: that is what the null says, and the pool is runnable.
       usage: null,
       usageUnavailable: 'no quota has been read for this account yet',
@@ -388,7 +392,7 @@ suite("a pool of one's own ChatGPT login, at every door — its owner's, and nob
 
     // Only the credential's fate moves the account: the gateway's 401 marks it out, the owner is the only
     // one who can sign it in again, and the page says which of the two it is.
-    assert.equal(await login.markSignedOut(pool.id, 'your authentication token has been invalidated'), true);
+    assert.equal(await login.markSignedOut(pool.id, ACCOUNT_ID, 'your authentication token has been invalidated'), true);
     const out = (await call(200, owner.id, 'GET', at)).json;
     assert.deepEqual(
       { state: out.login.state, lastError: out.login.lastError, unavailable: out.unavailable },
@@ -400,18 +404,55 @@ suite("a pool of one's own ChatGPT login, at every door — its owner's, and nob
       },
     );
     assert.match(String(await queue.accountPoolRefusal(owner.id, pool.slug)), /was rejected by OpenAI/u);
-    assert.equal(await login.markSignedOut(pool.id, 'second refusal'), false, 'a signed-out account moved twice');
+    assert.equal(await login.markSignedOut(pool.id, ACCOUNT_ID, 'second refusal'), false, 'a signed-out account moved twice');
   });
 
   await t.test('the sign-in doors are the owner’s: a stranger’s poll of a pool they cannot see is that pool not existing', async () => {
     // The account is still there and still signed out — nothing the stranger did reached it.
     const rows = await db.poolCodexLogin.findMany({ where: { poolId: pool.id } });
     assert.deepEqual(rows.map((row) => [row.accountId, row.state]), [[ACCOUNT_ID, 'SIGNED_OUT']]);
+    // The route names the account by the fingerprint every response names it by: a stranger naming it
+    // reaches no pool, and one the pool holds no account by takes nothing out.
+    const signOut = (fingerprint: string) => `${at}/codex-login/account?fingerprint=${encodeURIComponent(fingerprint)}`;
+    await call(404, stranger.id, 'DELETE', signOut(`…${ACCOUNT_ID.slice(-4)}`));
+    assert.deepEqual((await call(200, owner.id, 'DELETE', signOut('…none'))).json, { removed: 0 });
     // Its owner signs the account out of the pool entirely; the tokens go with it.
-    assert.deepEqual(await login.signOut(owner.id, pool.id), { removed: 1 });
+    assert.deepEqual((await call(200, owner.id, 'DELETE', signOut(`…${ACCOUNT_ID.slice(-4)}`))).json, { removed: 1 });
     assert.equal(await db.poolCodexLogin.count({ where: { poolId: pool.id } }), 0);
     const page = (await call(200, owner.id, 'GET', at)).json;
     assert.equal(page.login, null);
+    assert.deepEqual(page.logins, []);
     assert.match(String(page.unavailable), /no ChatGPT account signed in/u);
+  });
+
+  await t.test('a pool holding several accounts reads them all — `logins`, oldest first — and `login` is the first of them', async () => {
+    const older = randomUUID();
+    const newer = randomUUID();
+    for (const [accountId, email, createdAt] of [
+      [older, 'first@example.invalid', new Date(Date.now() - 60_000)],
+      [newer, 'second@example.invalid', new Date()],
+    ] as const) {
+      await db.poolCodexLogin.create({
+        data: {
+          poolId: pool.id, userId: owner.id, accountId, email, plan: 'plus', createdAt,
+          accessTokenEnc: encryptSecret('access-token-not-a-real-one'),
+          refreshTokenEnc: encryptSecret('refresh-token-not-a-real-one'),
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        },
+      });
+    }
+    const page = (await call(200, owner.id, 'GET', at)).json;
+    assert.deepEqual(
+      page.logins.map((login: { email: string; fingerprint: string; state: string }) => [login.email, login.fingerprint, login.state]),
+      [
+        ['first@example.invalid', `…${older.slice(-4)}`, 'ACTIVE'],
+        ['second@example.invalid', `…${newer.slice(-4)}`, 'ACTIVE'],
+      ],
+    );
+    assert.deepEqual(page.login, page.logins[0]);
+    // The pools' list reads the same accounts, and neither read names an account by its id.
+    const listed = (await call(200, owner.id, 'GET', 'providers/pools')).json as Array<{ slug: string; logins: unknown }>;
+    assert.deepEqual(listed.find((entry) => entry.slug === pool.slug)?.logins, page.logins);
+    for (const id of [older, newer]) assert.equal(JSON.stringify(listed).includes(id), false, 'a read carried an account id');
   });
 });

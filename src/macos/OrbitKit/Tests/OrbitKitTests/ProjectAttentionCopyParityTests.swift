@@ -114,7 +114,7 @@ final class ProjectAttentionCopyParityTests: XCTestCase {
         }
         for literal in ["'Coordinator'", "'Needs you'", "'Auto-remediation'", "'Coordinator-owned'",
                         "CRITICAL: 'Critical'", "WARNING: 'Warning'", "INFO: 'Info'",
-                        "settled · still open`", "`Running · no activity ${days}d`",
+                        "tasks settled · project still open`", "`Running · no activity ${days}d`",
                         "`Ready · no activity ${days}d`"] {
             XCTAssertTrue(web.contains(literal), "the web no longer says \(literal)")
         }

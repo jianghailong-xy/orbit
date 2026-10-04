@@ -501,6 +501,8 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
     public let landsAs: String?
     public let askedAt: String?
     public let recheckedAt: String?
+    /// This candidate's own merge job. Confirmation alone does not mean it is running.
+    public let execution: Execution?
     /// When this candidate stopped being live: the instant a check blocked it (state D), the owner's
     /// decline, the cancel or the supersede that ended it — and, on a row that merged, the merge's
     /// own instant, which is also in `merged.at` (mirrors `@orbit/shared`'s field of the same name,
@@ -512,6 +514,18 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
     /// older than the rule — both are "no moment", never an error.
     public let decidedAt: String?
     public let merged: Merged?
+
+    public struct Execution: Codable, Equatable, Sendable {
+        public let state: String
+        public let phase: String?
+        public let startedAt: String
+
+        public init(state: String, phase: String? = nil, startedAt: String) {
+            self.state = state
+            self.phase = phase
+            self.startedAt = startedAt
+        }
+    }
 
     public struct Merged: Codable, Equatable, Sendable {
         public let sha: String
@@ -530,7 +544,7 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
                 taskIds: [String] = [], checks: [IntegrationCheckResult] = [],
                 conflicts: [String] = [], landsAs: String? = "MERGE_COMMIT",
                 askedAt: String? = nil, recheckedAt: String? = nil, decidedAt: String? = nil,
-                merged: Merged? = nil) {
+                merged: Merged? = nil, execution: Execution? = nil) {
         self.promotionId = promotionId
         self.state = state
         self.sourceRef = sourceRef
@@ -544,6 +558,7 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
         self.landsAs = landsAs
         self.askedAt = askedAt
         self.recheckedAt = recheckedAt
+        self.execution = execution
         self.decidedAt = decidedAt
         self.merged = merged
     }
@@ -563,6 +578,7 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
         landsAs = try c.decodeIfPresent(String.self, forKey: .landsAs)
         askedAt = try c.decodeIfPresent(String.self, forKey: .askedAt)
         recheckedAt = try c.decodeIfPresent(String.self, forKey: .recheckedAt)
+        execution = try c.decodeIfPresent(Execution.self, forKey: .execution)
         decidedAt = try c.decodeIfPresent(String.self, forKey: .decidedAt)
         merged = try c.decodeIfPresent(Merged.self, forKey: .merged)
     }

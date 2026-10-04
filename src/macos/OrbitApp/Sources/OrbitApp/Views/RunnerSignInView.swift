@@ -21,6 +21,9 @@ struct RunnerSignInView: View {
     /// Sign in a NEW account, which the runner adds under this name. The button waits for one: a
     /// blank name would read as no account at all, which is the runner's own login.
     var accountName: String? = nil
+    /// Start signing in as the card appears, not on its button: the press that raised it — Add Account
+    /// — already asked for the sign-in.
+    var autoStart = false
     /// Offered the moment the sign-in lands: re-send whatever the failure ate. Nil where there is
     /// nothing to re-send (a proactive sign-in from the Runners screen).
     var onDone: (() async -> Void)?
@@ -41,11 +44,17 @@ struct RunnerSignInView: View {
         }
         .task(id: runnerID) {
             guard let baseURL = app.baseURL else { return }
+            let fresh = model == nil
             let m = model ?? RunnerSignInModel(runnerID: runnerID, engine: engine, account: account,
                                                adding: accountName != nil,
                                                baseURL: baseURL, tokenStore: app.tokenStore)
             model = m
-            await m.refresh()
+            // Started by the card's first appearance only: a later one picks the relay back up.
+            if autoStart, fresh {
+                await m.begin(accountName: accountName)
+            } else {
+                await m.refresh()
+            }
         }
         // The card can go off-screen while a sign-in runs (the transcript scrolls, the sheet
         // closes). Stop the poll with it; the `task` above picks the relay back up on return.
@@ -233,8 +242,9 @@ private struct PasteBackForm: View {
 ///
 /// The remedy depends on where the credentials live (see `EngineAuth.remedy`): a built-in engine
 /// signs in on the runner itself, OpenCode's provider-specific login can only be run on that
-/// machine, and any other slug is a configured API key — which these clients can't edit, so the
-/// card says where it lives instead of offering a button that goes nowhere.
+/// machine, Antigravity connects Gemini in Providers, and any other slug is a configured
+/// API key — which these clients can't edit, so the card says where it lives instead of offering a
+/// button that goes nowhere.
 struct AuthErrorCardView: View {
     let console: ConsoleModel
     let message: String
@@ -243,6 +253,15 @@ struct AuthErrorCardView: View {
     private var retryText: String { console.lastUserMessageText }
 
     var body: some View {
+        if console.executesAntigravity,
+           remedy == .connectGemini || EngineAuth.antigravityRepair(message) == .needsKey {
+            AntigravityRepairCardView(console: console, repair: .needsKey)
+        } else {
+            ordinaryCard
+        }
+    }
+
+    private var ordinaryCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             Label(title, systemImage: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange).font(.orbitProse.bold())
@@ -261,6 +280,8 @@ struct AuthErrorCardView: View {
             return "Sign-in expired on “\(name)”"
         case .runCommand:
             return "Sign-in expired"
+        case .connectGemini:
+            return EngineAuth.antigravityTitle(.needsKey, runnerName: console.runnerName)
         case .apiKey:
             return "Provider authentication failed"
         }
@@ -282,6 +303,8 @@ struct AuthErrorCardView: View {
         case .runCommand(let command):
             Text("Run \(Text(command).font(.orbitMono)) on that machine and choose the provider there — OpenCode's sign-in is provider-specific, so it can't be driven from here.")
                 .font(.orbitLabel).foregroundStyle(.secondary)
+        case .connectGemini:
+            EmptyView()
         case .apiKey(let slug):
             Text("The API key for \(Text(slug).font(.orbitMono)) was rejected. Update it in Providers on the Orbit web app, then send your message again.")
                 .font(.orbitLabel).foregroundStyle(.secondary)
@@ -301,11 +324,72 @@ struct AuthErrorCardView: View {
                 .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
             Button("Retry — re-send my last message") { Task { await retry() } }
                 .buttonStyle(.bordered)
-                .disabled(console.sending)
+                // A press already in flight is not offered a second one (criterion 19).
+                .disabled(console.sending || console.retryInFlight)
         }
     }
 
     private func retry() async {
         await console.retryLastMessage()
+    }
+}
+
+
+/// Antigravity's key, CLI install, and runner-version repairs, shared by transcript and queue state.
+struct AntigravityRepairCardView: View {
+    let console: ConsoleModel
+    let repair: EngineAuth.AntigravityRepair
+    @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(EngineAuth.antigravityTitle(repair, runnerName: console.runnerName),
+                  systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange).font(.orbitProse.bold())
+            Text(EngineAuth.antigravityBody(repair, runnerName: console.runnerName,
+                                           runnerVersion: console.runnerVersion))
+                .font(.orbitLabel).foregroundStyle(.secondary)
+            HStack {
+                if repair == .needsKey {
+                    Button("Connect Gemini") { Task { openURL(await console.connectGeminiURL()) } }
+                        .buttonStyle(.borderedProminent)
+                    Button("Switch to Gemini") {
+                        if let choice = console.geminiSwitchChoice {
+                            Task { await console.selectProvider(choice.slug) }
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(console.geminiSwitchChoice == nil)
+                } else {
+                    if repair == .notInstalled {
+                        Button("Install") { Task { await console.installAntigravity() } }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(!console.canInstallAntigravity)
+                    }
+                    Button("Open in Providers") {
+                        if let url = console.antigravityProvidersURL { openURL(url) }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(console.antigravityProvidersURL == nil)
+                }
+            }
+            .font(.orbitLabel)
+        }
+        .padding(10)
+        .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        .task { await console.refreshAntigravityRepairContext() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await console.refreshAntigravityRepairContext() } }
+        }
+        // Follow this runner's one install relay only while the repair card remains visible.
+        .task(id: console.runnerInstall?.inFlight == true) {
+            while console.runnerInstall?.inFlight == true {
+                do { try await Task.sleep(nanoseconds: 2_000_000_000) }
+                catch { return }
+                guard !Task.isCancelled else { return }
+                await console.refreshAntigravityRunner()
+            }
+        }
     }
 }

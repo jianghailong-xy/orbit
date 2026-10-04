@@ -122,9 +122,15 @@ final class LaunchSnapshotTests: XCTestCase {
     }
 
     func testOtherwiseLandsOnTheFirstWorkspaceInSidebarOrder() {
+        #if os(macOS)
         // Runners r1, r2, then host-level: a2 (on r1) leads, though a1 is listed first.
         XCTAssertEqual(snapshot().landingAgentID(lastAgentID: "gone"), "a2")
         XCTAssertEqual(snapshot().landingAgentID(lastAgentID: nil), "a2")
+        #else
+        // iOS keeps the saved workspace order, independent of the runner directory's order.
+        XCTAssertEqual(snapshot().landingAgentID(lastAgentID: "gone"), "a1")
+        XCTAssertEqual(snapshot().landingAgentID(lastAgentID: nil), "a1")
+        #endif
     }
 
     func testRememberedWorkspaceMatchesAcrossIdSpellings() {

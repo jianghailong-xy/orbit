@@ -110,8 +110,8 @@ async function fixture(db: PrismaClient, label: string): Promise<Fixture> {
   await db.project.create({
     data: {
       id: projectId, ownerId, title: label,
-      // LEGACY dispatch authority, which is what puts these presses through `execute` rather than
-      // through the Coordinator — the doors this unit is about.
+      // No Coordinator on this Project, which is what puts these presses through `execute` rather
+      // than through the Coordinator — the doors this unit is about.
       coordinatorEnabled: false,
     },
   });
@@ -442,7 +442,7 @@ test('a plan this binary cannot read is refused, not guessed at', { skip, timeou
   const services = connect();
   try {
     const target = await fixture(services.db, 'unreadable');
-    for (const bogus of ['{"v":2,"kind":"RUN"}', '{"v":1,"kind":"SOMETHING_ELSE"}', '{}']) {
+    for (const bogus of ['{"v":3,"kind":"RUN"}', '{"v":1,"kind":"SOMETHING_ELSE"}', '{}']) {
       const press = randomUUID();
       await services.db.$executeRaw`
         INSERT INTO "task_run_request" ("owner_id", "action_kind", "request_token", "fingerprint",

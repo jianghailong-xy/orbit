@@ -1,0 +1,178 @@
+{
+  "agy_version": "1.2.16",
+  "directory_results": [
+    {
+      "probe": "usage-after-concurrency",
+      "agy_version": "1.2.16",
+      "method": "official /logout via private PTY",
+      "dbus": "nonexistent isolated socket",
+      "steps": [
+        "theme Enter",
+        "disabled interaction data opt-in checkbox",
+        "selected Done using two Tab keys, with interaction opt-in disabled",
+        "trusted only the empty temporary directory",
+        "typed /logout + Enter"
+      ],
+      "token_exists_after": false,
+      "exit_code": 0,
+      "forced_process_stop": true,
+      "duration_seconds": 16.214
+    },
+    {
+      "probe": "print-logout",
+      "agy_version": "1.2.16",
+      "method": "official /logout via private PTY",
+      "dbus": "nonexistent isolated socket",
+      "steps": [
+        "theme Enter",
+        "disabled interaction data opt-in checkbox",
+        "selected Done using two Tab keys, with interaction opt-in disabled",
+        "trusted only the empty temporary directory",
+        "typed /logout + Enter"
+      ],
+      "token_exists_after": false,
+      "exit_code": 0,
+      "forced_process_stop": true,
+      "duration_seconds": 16.238
+    },
+    {
+      "probe": "print-credits",
+      "agy_version": "1.2.16",
+      "method": "official /logout via private PTY",
+      "dbus": "nonexistent isolated socket",
+      "steps": [
+        "theme Enter",
+        "disabled interaction data opt-in checkbox",
+        "selected Done using two Tab keys, with interaction opt-in disabled",
+        "trusted only the empty temporary directory",
+        "typed /logout + Enter"
+      ],
+      "token_exists_after": false,
+      "exit_code": 0,
+      "forced_process_stop": true,
+      "duration_seconds": 16.174
+    },
+    {
+      "probe": "concurrency-3",
+      "agy_version": "1.2.16",
+      "method": "official /logout via private PTY",
+      "dbus": "nonexistent isolated socket",
+      "steps": [
+        "theme Enter",
+        "disabled interaction data opt-in checkbox",
+        "selected Done using two Tab keys, with interaction opt-in disabled",
+        "trusted only the empty temporary directory",
+        "typed /logout + Enter"
+      ],
+      "token_exists_after": false,
+      "exit_code": 0,
+      "forced_process_stop": true,
+      "duration_seconds": 16.279
+    },
+    {
+      "probe": "print-usage",
+      "agy_version": "1.2.16",
+      "method": "official /logout via private PTY",
+      "dbus": "nonexistent isolated socket",
+      "steps": [
+        "theme Enter",
+        "disabled interaction data opt-in checkbox",
+        "selected Done using two Tab keys, with interaction opt-in disabled",
+        "trusted only the empty temporary directory",
+        "typed /logout + Enter"
+      ],
+      "token_exists_after": false,
+      "exit_code": 0,
+      "forced_process_stop": true,
+      "duration_seconds": 16.256
+    },
+    {
+      "probe": "owner-login",
+      "agy_version": "1.2.16",
+      "method": "official /logout via private PTY",
+      "dbus": "nonexistent isolated socket",
+      "steps": [
+        "theme Enter",
+        "disabled interaction data opt-in checkbox",
+        "selected Done using two Tab keys, with interaction opt-in disabled",
+        "trusted only the empty temporary directory",
+        "typed /logout + Enter"
+      ],
+      "token_exists_after": false,
+      "exit_code": 0,
+      "forced_process_stop": true,
+      "duration_seconds": 16.275
+    },
+    {
+      "probe": "signedin-models",
+      "agy_version": "1.2.16",
+      "method": "official /logout via private PTY",
+      "dbus": "nonexistent isolated socket",
+      "steps": [
+        "theme Enter",
+        "disabled interaction data opt-in checkbox",
+        "selected Done using two Tab keys, with interaction opt-in disabled",
+        "trusted only the empty temporary directory",
+        "typed /logout + Enter"
+      ],
+      "token_exists_after": false,
+      "exit_code": 0,
+      "forced_process_stop": true,
+      "duration_seconds": 16.208
+    },
+    {
+      "probe": "forced-expiry",
+      "agy_version": "1.2.16",
+      "method": "official /logout via private PTY",
+      "dbus": "nonexistent isolated socket",
+      "steps": [
+        "theme Enter",
+        "disabled interaction data opt-in checkbox",
+        "selected Done using two Tab keys, with interaction opt-in disabled",
+        "trusted only the empty temporary directory",
+        "typed /logout + Enter"
+      ],
+      "token_exists_after": false,
+      "exit_code": 0,
+      "forced_process_stop": true,
+      "duration_seconds": 16.263
+    },
+    {
+      "probe": "concurrency-2",
+      "agy_version": "1.2.16",
+      "method": "official /logout via private PTY",
+      "dbus": "nonexistent isolated socket",
+      "steps": [
+        "theme Enter",
+        "disabled interaction data opt-in checkbox",
+        "selected Done using two Tab keys, with interaction opt-in disabled",
+        "trusted only the empty temporary directory",
+        "typed /logout + Enter"
+      ],
+      "token_exists_after": false,
+      "exit_code": 0,
+      "forced_process_stop": true,
+      "duration_seconds": 16.175
+    },
+    {
+      "probe": "concurrency-1",
+      "agy_version": "1.2.16",
+      "method": "official /logout via private PTY",
+      "dbus": "nonexistent isolated socket",
+      "steps": [
+        "theme Enter",
+        "disabled interaction data opt-in checkbox",
+        "selected Done using two Tab keys, with interaction opt-in disabled",
+        "trusted only the empty temporary directory",
+        "typed /logout + Enter"
+      ],
+      "token_exists_after": false,
+      "exit_code": 0,
+      "forced_process_stop": true,
+      "duration_seconds": 16.242
+    }
+  ],
+  "remaining_private_token_files": [
+    "runs/invalid-refresh/gemini/antigravity-cli/antigravity-oauth-token"
+  ]
+}

@@ -45,9 +45,15 @@ public enum TaskReopen {
     /// conditional because the two facts are — and an empty string reads as absent, so a server
     /// that spells "none" that way does not produce a sentence about nothing.
     public static func paragraphs(_ task: TaskItem?) -> [String] {
+        paragraphs(projectId: task?.projectId, terminalReason: task?.terminalReason)
+    }
+
+    /// The same question from the two facts it turns on, for a surface that holds no task row — a
+    /// confirmation receipt's Reopen task (docs/owner-confirmation-review-contract.md §9 L4).
+    public static func paragraphs(projectId: String?, terminalReason: String?) -> [String] {
         var out = [TaskReopenCopy.modalBody]
-        if task?.projectId?.isEmpty == false { out.append(TaskReopenCopy.modalProject) }
-        if task?.terminalReason?.isEmpty == false { out.append(TaskReopenCopy.modalRetired) }
+        if projectId?.isEmpty == false { out.append(TaskReopenCopy.modalProject) }
+        if terminalReason?.isEmpty == false { out.append(TaskReopenCopy.modalRetired) }
         return out
     }
 

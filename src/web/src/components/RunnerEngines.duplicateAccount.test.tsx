@@ -6,6 +6,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
 import { RunnerEngines } from './RunnerEngines';
+import { openRunnerMenu, runnerMenuItem } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
 /**
@@ -91,9 +92,12 @@ let host: HTMLDivElement | null = null;
 // Tells React this is a test that drives updates through act(), so it flushes them there.
 beforeAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  // Remove asks in an antd popup, which measures itself with a ResizeObserver jsdom does not have.
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
 });
 afterAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+  vi.unstubAllGlobals();
 });
 
 afterEach(() => {
@@ -132,9 +136,11 @@ function mount(runners: Runner[]) {
 }
 
 const rows = (el: ParentNode, selector: string) => [...el.querySelectorAll<HTMLElement>(selector)];
-const labels = (el: ParentNode) => rows(el, 'button').map((b) => b.textContent?.trim());
+/** A button's words, or the name of a mark that has none (Re-sign in, Remove). */
+const labelOf = (b: Element) => b.textContent?.trim() || b.getAttribute('aria-label');
+const labels = (el: ParentNode) => rows(el, 'button').map(labelOf);
 const button = (el: ParentNode, label: string) => {
-  const found = rows(el, 'button').find((b) => b.textContent?.trim() === label);
+  const found = rows(el, 'button').find((b) => labelOf(b) === label);
   if (!found) throw new Error(`no "${label}" button in ${el.textContent}`);
   return found as HTMLButtonElement;
 };
@@ -142,6 +148,22 @@ const click = async (el: HTMLElement) => {
   await act(async () => {
     el.click();
   });
+};
+/** The confirmation's own Remove, once its popup is drawn (a portal, a few frames late on a slow host). */
+const confirmation = async () => {
+  let ok: HTMLButtonElement | undefined;
+  await act(async () => {
+    await vi.waitFor(
+      () => {
+        ok = [...document.querySelectorAll<HTMLButtonElement>('.ant-popconfirm button')].find(
+          (b) => b.textContent?.trim() === 'Remove',
+        );
+        expect(ok).toBeDefined();
+      },
+      { timeout: 20_000, interval: 20 },
+    );
+  });
+  return ok!;
 };
 
 /** The account rows, in the order the page drew them. */
@@ -192,14 +214,14 @@ describe('one Codex account signed into two slots', () => {
     }
   });
 
-  it('still draws the second slot its own row, sign-in and quota', () => {
+  it('still draws the second slot its own row, sign-in and quota', async () => {
     const page = mount([runner([DEFAULT, { ...WORK, fingerprintPrefix: DEFAULT.fingerprintPrefix }])]);
     const [, workRow] = accountsOf(page);
 
     // The note is a note: the row keeps saying what it is, and stays the way back into that slot.
     expect(workRow.querySelector('.re-name')?.textContent).toBe('Work');
     expect(workRow.querySelector('.re-meta')?.textContent).toContain('~/.orbit/codex-accounts/3fa91c2e');
-    expect(button(workRow, 'Re-sign in')).toBeTruthy();
+    expect(await runnerMenuItem(workRow, 'Re-sign in')).toBeTruthy();
   });
 
   it('takes the slot off the machine, which is what the note is offering', async () => {
@@ -207,6 +229,7 @@ describe('one Codex account signed into two slots', () => {
     const [, workRow] = accountsOf(page);
 
     await click(button(workRow, 'Remove'));
+    await click(await confirmation());
 
     // One request, for this slot and no other: the note is about THIS account being the second copy
     // of one already signed in, so it is this slot that goes (RunnerEngines.removeAccount.test.tsx).
@@ -219,14 +242,14 @@ describe('one Codex account signed into two slots', () => {
 });
 
 describe('two slots that are two accounts', () => {
-  it('says nothing about a repeat, and still offers each added one a way off the machine', () => {
+  it('says nothing about a repeat, and still offers each added one a way off the machine', async () => {
     const page = mount([runner([DEFAULT, WORK])]);
     const [defaultRow, workRow] = accountsOf(page);
 
     expect(rows(page, '.re-dup')).toHaveLength(0);
     expect(accountsOf(page)).toHaveLength(2);
-    expect(labels(defaultRow)).not.toContain('Remove');
-    expect(labels(workRow)).toContain('Remove');
+    expect((await openRunnerMenu(defaultRow)).textContent).not.toContain('Remove account');
+    expect(await runnerMenuItem(workRow, 'Remove account')).toBeTruthy();
   });
 });
 
@@ -241,13 +264,13 @@ describe('a fingerprint nobody has read', () => {
     // ...and the other way round: the only fingerprint here has nothing above it to match.
     ['only the slot signed in second, read', [DEFAULT_UNREAD, WORK]],
   ] as [string, RunnerEngineAccount[]][]) {
-    it(`is not a repeat: ${what}`, () => {
+    it(`is not a repeat: ${what}`, async () => {
       const page = mount([runner(accounts)]);
       const [defaultRow, addedRow] = accountsOf(page);
 
       expect(rows(page, '.re-dup')).toHaveLength(0);
-      expect(labels(defaultRow)).not.toContain('Remove');
-      expect(labels(addedRow)).toContain('Remove');
+      expect((await openRunnerMenu(defaultRow)).textContent).not.toContain('Remove account');
+      expect(await runnerMenuItem(addedRow, 'Remove account')).toBeTruthy();
     });
   }
 });

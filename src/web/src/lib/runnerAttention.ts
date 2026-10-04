@@ -170,6 +170,7 @@ const LOGIN_NAME: Record<LoginEngine, string> = {
   claude: RUNNER_LOGIN_CLAUDE,
   codex: RUNNER_LOGIN_CODEX,
   kimi: RUNNER_LOGIN_KIMI,
+  antigravity: 'Antigravity',
 };
 /** Every engine a runner reports on, in the order its page lists them. */
 const REPORTED_ENGINES = Object.keys(ENGINE_CLI_NAME) as ReportedEngine[];

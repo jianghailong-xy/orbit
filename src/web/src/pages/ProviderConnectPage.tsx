@@ -13,7 +13,7 @@ import {
   type ProviderRow,
 } from '../lib/providerAdmin';
 import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
-import { runtimeSummary } from '../lib/sessionProviderChoices';
+import { providerDisplayLabel, runtimeSummary } from '../lib/sessionProviderChoices';
 import { useToast } from '../lib/toast';
 
 // A model row while it's being edited in the form. contextWindow is a free InputNumber (null when
@@ -23,6 +23,9 @@ interface DraftModel {
   label: string;
   contextWindow: number | null;
 }
+
+/** The runtime CLI a provider borrows (ProviderPreset.runtime, and apiserver providers/dto.ts). */
+type Runtime = NonNullable<ProviderPreset['runtime']>;
 
 /**
  * Step 1 of adding a provider (/providers/new): pick a vendor. Its own page rather than a modal
@@ -160,8 +163,11 @@ function ProviderForm({
 
   const [advOpen, setAdvOpen] = useState(isCustom && !editing);
   const [label, setLabel] = useState(
-    editing?.label ??
-      (preset ? suggestProviderName(preset.label, siblings.map((s) => s.label)) : ''),
+    editing
+      ? editing.label
+      : preset
+        ? suggestProviderName(providerDisplayLabel(preset.label, preset.slug), siblings.map((s) => providerDisplayLabel(s.label, s.presetSlug)))
+        : '',
   );
   const [baseUrl, setBaseUrl] = useState(editing?.baseUrl ?? preset?.baseUrl ?? '');
   const [apiKey, setApiKey] = useState('');
@@ -179,12 +185,13 @@ function ProviderForm({
     })),
   );
   // Which runtime CLI this endpoint is driven by, and with it the dialect it has to speak:
-  // Anthropic-compatible (claude), OpenAI-compatible (codex), or Moonshot's own API (kimi). A
-  // preset knows its own, so only a custom provider is asked — and only about the two dialects a
-  // hand-typed endpoint can implement.
-  const [runtime, setRuntime] = useState<'claude' | 'codex' | 'kimi'>(
+  // Anthropic-compatible (claude), OpenAI-compatible (codex), Moonshot's own API (kimi), or
+  // Google's Gemini API (antigravity). A preset knows its own, so only a custom provider is asked —
+  // and only about the two dialects a hand-typed endpoint can implement. An edit sends the row's
+  // runtime back as it is, so every one of them has to survive the round trip.
+  const [runtime, setRuntime] = useState<Runtime>(
     editing
-      ? editing.runtime === 'codex' || editing.runtime === 'kimi'
+      ? editing.runtime === 'codex' || editing.runtime === 'kimi' || editing.runtime === 'antigravity'
         ? editing.runtime
         : 'claude'
       : (preset?.runtime ?? 'claude'),
@@ -271,7 +278,8 @@ function ProviderForm({
       message.success(editing ? 'Provider updated' : 'Provider created');
       navigate('/providers');
     },
-    onError: (e: Error) => message.error(e.message || 'Failed'),
+    onError: (e: Error) =>
+      message.error(editing ? "Couldn't save the provider" : "Couldn't connect the provider", e.message),
   });
 
   // Create needs a key; edit keeps the stored one when left blank. label/baseUrl always required.
@@ -299,7 +307,7 @@ function ProviderForm({
       setApiKey(r.apiKey);
       setKeyVisible(true);
     } catch (e) {
-      message.error((e as Error).message || 'Could not load the key');
+      message.error("Couldn't load the key", (e as Error).message);
     } finally {
       setRevealing(false);
     }
@@ -335,12 +343,17 @@ function ProviderForm({
     saveMut.mutate();
   };
 
-  const title = editing ? `Edit ${editing.label}` : preset ? `Connect ${preset.label}` : 'Add a custom provider';
+  const title = editing
+    ? `Edit ${providerDisplayLabel(editing.label, editing.presetSlug)}`
+    : preset
+      ? `Connect ${providerDisplayLabel(preset.label, preset.slug)}`
+      : 'Add a custom provider';
   // The hero above the form: the row being edited, or the vendor being connected. A blank custom
   // provider has no identity yet, so it gets none.
   const identity = editing
     ? {
         ...editing,
+        label: providerDisplayLabel(editing.label, editing.presetSlug),
         // The logo follows the vendor, not the row's identifier — a second Anthropic key sits on
         // "anthropic-2" and is still Anthropic.
         slug: editing.presetSlug ?? editing.slug,
@@ -348,7 +361,7 @@ function ProviderForm({
         counted: 'configured',
       }
     : preset
-      ? { ...preset, runtime: preset.runtime ?? 'claude', count: presetModels.length, counted: 'included' }
+      ? { ...preset, label: providerDisplayLabel(preset.label, preset.slug), runtime: preset.runtime ?? 'claude', count: presetModels.length, counted: 'included' }
       : null;
 
   return (
@@ -405,7 +418,7 @@ function ProviderForm({
       {isCustom && (
         <Step num={2} title="Endpoint" hideNum={!!editing}>
           <Space direction="vertical" size={8} style={{ width: '100%' }}>
-            <Select<'claude' | 'codex' | 'kimi'>
+            <Select<Runtime>
               value={runtime}
               onChange={(v) => {
                 setRuntime(v);
@@ -478,6 +491,15 @@ function ProviderForm({
           )}
           {newKey ? ` ${editing ? 'Saving' : 'Connecting'} sends one tiny test request first.` : ''}
         </div>
+        {/* What agy does with the key, which the owner should know before handing it over
+            (docs/antigravity-runtime-contract.md §3.2 and §7). */}
+        {runtime === 'antigravity' && (
+          <div className="ps-hint">
+            Sessions hand this key to the Antigravity CLI in its environment, where commands the agent
+            runs can read it. agy also sends usage statistics (not your conversations) to Google; it
+            has no setting that turns them off.
+          </div>
+        )}
       </Step>
 
       <div className="provider-adv" style={{ marginTop: 20 }}>
@@ -511,7 +533,9 @@ function ProviderForm({
                           ? `${preset.label}'s OpenAI-compatible endpoint.`
                           : preset.runtime === 'kimi'
                             ? `${preset.label}'s own API, which the Kimi CLI speaks natively.`
-                            : `The endpoint ${preset.label} documents for Claude Code.`)}
+                            : preset.runtime === 'antigravity'
+                              ? `${preset.label}'s own API, which the Antigravity CLI speaks natively.`
+                              : `The endpoint ${preset.label} documents for Claude Code.`)}
                     </div>
                   </Field>
                 </>
@@ -524,8 +548,10 @@ function ProviderForm({
                 {maintained ? (
                   preset!.modelsFromRuntime ? (
                     <div style={{ color: 'var(--text-3)', fontSize: 12 }}>
-                      Provided by the {runtime === 'codex' ? 'Codex' : 'Claude Code'} CLI on each
-                      runner, refreshed automatically — new models appear without any change here.
+                      Provided by the{' '}
+                      {runtime === 'codex' ? 'Codex' : runtime === 'antigravity' ? 'Antigravity' : 'Claude Code'}{' '}
+                      CLI on each runner, refreshed automatically — new models appear without any
+                      change here.
                     </div>
                   ) : (
                     <>

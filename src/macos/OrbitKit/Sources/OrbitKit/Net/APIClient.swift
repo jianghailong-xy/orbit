@@ -332,10 +332,11 @@ public final class APIClient: @unchecked Sendable {
     /// Re-send that message now, the way the automatic retry does — the Retry's door when the words are
     /// another Orbit session's (`RetryMessage.sessionMessage`, `RetryRoute`): the server sends them as
     /// that session's, signed and with the request they were, instead of this client sending them again
-    /// in the owner's name (docs/session-request-reply-contract.md §2.1). Web parity:
-    /// `resendSessionRetryMessage`.
-    public func resendRetryMessage(sessionID: String, clientTurnId: String) async throws -> TurnAccepted {
-        try await post("sessions/\(sessionID)/retry-message", body: RetryResendRequest(clientTurnId: clientTurnId))
+    /// in the owner's name (docs/session-request-reply-contract.md §2.1). No key is sent: the server
+    /// derives one from the failed message, so a second press — a double tap, a response lost and sent
+    /// again — is the turn already queued (criterion 19). Web parity: `resendSessionRetryMessage`.
+    public func resendRetryMessage(sessionID: String) async throws -> TurnAccepted {
+        try await post("sessions/\(sessionID)/retry-message", body: RetryResendRequest())
     }
 
     /// Turn off / put back the retry a spent quota or a transient provider error armed on this
@@ -355,6 +356,43 @@ public final class APIClient: @unchecked Sendable {
         f.formatOptions = [.withInternetDateTime]
         return f
     }()
+
+    // MARK: session folders (docs/session-folders-move-design.md §3)
+
+    /// Every folder the caller has, in every workspace, by name. An older server without the
+    /// endpoint 404s; the caller treats that as "no folders", which leaves the lists flat.
+    public func listSessionFolders() async throws -> [SessionFolder] { try await get("session-folders") }
+    /// Create a folder in one of the caller's workspaces; a name already used there is a 409.
+    public func createSessionFolder(workspaceID: String, name: String) async throws -> SessionFolder {
+        try await post("session-folders", body: CreateSessionFolderRequest(workspaceId: workspaceID, name: name))
+    }
+    /// Rename a folder; returns it as renamed. A name its workspace already has is a 409.
+    public func renameSessionFolder(_ id: String, name: String) async throws -> SessionFolder {
+        try await patch("session-folders/\(id)", body: RenameSessionFolderRequest(name: name))
+    }
+    /// Delete the folder and nothing else: the sessions in it go back to their workspace's list.
+    public func deleteSessionFolder(_ id: String) async throws { try await deleteRaw("session-folders/\(id)") }
+    /// File a session in one of its workspace's folders, or in none (`folderID` nil). Allowed for
+    /// any session outside Trash, a running one included. The server broadcasts `session.updated`,
+    /// whose summary carries the new `folderId`, so the owner's other clients follow.
+    public func moveSession(_ id: String, folderID: String?) async throws {
+        _ = try await postRaw("sessions/\(id)/move", body: MoveSessionRequest(folderId: folderID))
+    }
+    /// What the Move panel's Move to Another Workspace group lists, and what its confirmation says
+    /// (docs/session-folders-move-design.md §5.4): each of the owner's other workspaces with whether
+    /// the session can go there and why not, whether it has to be ended first, and the branch its
+    /// changes stay on.
+    public func sessionMoveTargets(_ id: String) async throws -> SessionMoveTargets {
+        try await get("sessions/\(id)/move-targets")
+    }
+    /// Move an ended session to another workspace, filed in one of that workspace's folders or in
+    /// none (`folderID` nil). A move the rules refuse as they stand now — the session woke up, the
+    /// workspace was disabled — is a 409 whose message says why. The server broadcasts
+    /// `session.updated`, whose summary names the new workspace.
+    public func moveSession(_ id: String, toWorkspace workspaceID: String, folderID: String?) async throws {
+        _ = try await postRaw("sessions/\(id)/move",
+                              body: MoveSessionRequest(folderId: folderID, workspaceId: workspaceID))
+    }
 
     // MARK: public links — one per session, task or project (docs/share-links-design.md §5)
 
@@ -451,11 +489,17 @@ public final class APIClient: @unchecked Sendable {
     /// "not recorded" — needs the code rather than the prose. Nil for anything that is not a refusal
     /// with a code: a transport error, an HTML error page, a body from something that is not Orbit.
     public static func refusalCode(_ error: Error) -> String? {
+        refusalString(error, "code")
+    }
+
+    /// One of a refusal's own fields, when the error carries it as a string — `code`, or what a door
+    /// names beside it, such as the account a duplicate sign-in turned out to be (`email`).
+    public static func refusalString(_ error: Error, _ field: String) -> String? {
         guard case APIError.http(_, let body) = error, let body,
               let data = body.data(using: .utf8),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return nil }
-        return object["code"] as? String
+        return object[field] as? String
     }
 
     /// Why a request didn't go through, as the tail of one English sentence — the prose half of
@@ -1039,6 +1083,7 @@ public final class APIClient: @unchecked Sendable {
     /// Control-plane–configured model providers (GET /api/providers): enabled only, de-sensitized
     /// (no key/baseUrl). Merged into the composer and agent Runtime picker alongside built-ins.
     public func providers() async throws -> [ConfiguredProvider] { try await get("providers") }
+    public func personalProviders() async throws -> [ConfiguredProvider] { try await get("providers/mine") }
 
     /// The caller's account pools (GET /api/providers/pools), which the catalogue above doesn't
     /// list: each with its members, their own quota and where each stands. A pool this build can't
@@ -1051,6 +1096,11 @@ public final class APIClient: @unchecked Sendable {
     /// Delete one of the caller's own pools: its members stay as they are, and a Codex pool's ChatGPT
     /// sign-in goes from the server with it.
     public func deleteProviderPool(_ id: String) async throws { try await deleteRaw("providers/pools/\(id)") }
+
+    public func pausePoolMember(poolID: String, memberID: String, durationMinutes: Int?) async throws {
+        try await postRaw("providers/pools/\(poolID)/members/\(memberID)/pause",
+                          body: AccountPauseRequest(durationMinutes: durationMinutes))
+    }
 
     // MARK: a Codex pool of one's own — its ChatGPT account (migration 0323)
 
@@ -1068,10 +1118,12 @@ public final class APIClient: @unchecked Sendable {
     public func cancelCodexLogin(poolID: String) async throws -> CodexLoginPoll {
         try await delete("providers/pools/\(poolID)/codex-login")
     }
-    /// Sign the pool's account out: the server deletes the sign-in it held.
+    /// Sign one of the pool's accounts out, named by its fingerprint (`…AB12`, as every response names
+    /// it): the server deletes the sign-in it held, and the pool's other accounts stay.
     @discardableResult
-    public func signOutCodexLogin(poolID: String) async throws -> CodexLoginSignOut {
-        try await delete("providers/pools/\(poolID)/codex-login/account")
+    public func signOutCodexLogin(poolID: String, fingerprint: String) async throws -> CodexLoginSignOut {
+        try await delete("providers/pools/\(poolID)/codex-login/account",
+                         query: [URLQueryItem(name: "fingerprint", value: fingerprint)])
     }
 
     // MARK: shared pools (GET/POST/PATCH/DELETE /api/providers/shared-pools)
@@ -1082,6 +1134,9 @@ public final class APIClient: @unchecked Sendable {
         let pools: [LossyDecodable<SharedPool>] = try await get("providers/shared-pools")
         return pools.compactMap(\.value)
     }
+    /// One pool as the caller reads it — how a Codex pool of their own, which the list above leaves out
+    /// (it is on their providers), has its people and keys read (migration 0358).
+    public func sharedPool(_ id: String) async throws -> SharedPool { try await get("providers/shared-pools/\(id)") }
     public func updateSharedPool(_ id: String, _ req: UpdateSharedPoolRequest) async throws -> SharedPool {
         try await patch("providers/shared-pools/\(id)", body: req)
     }
@@ -1161,6 +1216,11 @@ public final class APIClient: @unchecked Sendable {
         try await postEmpty("runners/\(id)/engine-update")
     }
 
+    public func installAntigravity(_ runnerID: String) async throws -> RunnerInstallState {
+        struct Request: Encodable { let engine = "antigravity" }
+        return try await post("runners/\(runnerID)/install", body: Request())
+    }
+
     @discardableResult
     public func refreshRunnerModels(_ id: String) async throws -> RunnerModelRefresh {
         try await postEmpty("runners/\(id)/refresh-models")
@@ -1193,6 +1253,21 @@ public final class APIClient: @unchecked Sendable {
     public func removeRunnerAccount(_ id: String, engine: LoginEngine,
                                     account: String) async throws -> RunnerAccountRemoveState {
         try await delete("runners/\(id)/accounts/\(engine.rawValue)/\(account)")
+    }
+
+    public func pauseRunnerAccount(_ id: String, engine: LoginEngine, account: String,
+                                   durationMinutes: Int?) async throws {
+        try await postRaw("runners/\(id)/accounts/\(engine.rawValue)/\(account)/pause",
+                          body: AccountPauseRequest(durationMinutes: durationMinutes))
+    }
+
+    /// Rename one of the runner's accounts, Default included; answers with the account as the runner
+    /// list now shows it.
+    @discardableResult
+    public func renameRunnerAccount(_ id: String, engine: LoginEngine, account: String,
+                                    name: String) async throws -> RunnerEngineAccount {
+        try await patch("runners/\(id)/accounts/\(engine.rawValue)/\(account)",
+                        body: RenameRunnerAccountRequest(name: name))
     }
 
     // MARK: runner enrollment (Phase 4 — one-app device flow)
@@ -1415,8 +1490,8 @@ public final class APIClient: @unchecked Sendable {
     }
 
     /// DELETE with a decoded response (e.g. cancelling a sign-in, which answers with the cleared state).
-    private func delete<T: Decodable>(_ path: String) async throws -> T {
-        let data = try await send(makeRequest(path, method: "DELETE", body: Optional<Empty>.none))
+    private func delete<T: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> T {
+        let data = try await send(makeRequest(path, method: "DELETE", query: query, body: Optional<Empty>.none))
         return try decoder.decode(T.self, from: data)
     }
 

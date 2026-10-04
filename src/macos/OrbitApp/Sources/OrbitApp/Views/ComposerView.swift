@@ -88,10 +88,14 @@ extension CGFloat {
 }
 
 struct ComposerView: View {
+    @Environment(\.openURL) private var openURL
     @Environment(AppModel.self) private var app
     @Bindable var console: ConsoleModel
+    /// On the phone's console a page this conversation opens is pushed over it (`OpensPagesOverConsoleKey`).
+    @Environment(\.opensPagesOverConsole) private var opensPagesOverConsole
     /// Focus the field as soon as it appears — used by the draft "new session" composer, where the
     /// user came here to type. A live console leaves it false so opening a session doesn't grab focus.
+    /// Turning it on later focuses too: an iPad's draft appears unasked with it off, and ✎ turns it on.
     var autoFocus = false
     @State private var slashIndex = 0
     @State private var slashDismissed: String?
@@ -104,8 +108,10 @@ struct ComposerView: View {
     #endif
     #if os(iOS)
     // The iOS editor is a UITextView (GrowingTextEditor), not a @FocusState-bound SwiftUI field, so
-    // its first-responder state rides this flag: set it to focus, read it for the box's focus ring.
-    @State private var iosEditing = false
+    // its first-responder state rides the console's `composerEditing`: set it to focus, read it for
+    // the box's focus ring. It lives on the console because a phone's console folds its chrome on it,
+    // and it changes under this animation so the bars move with the keyboard.
+    private static let editingChange = Animation.easeInOut(duration: 0.25)
     @State private var showPhotoPicker = false
     @State private var showFileImporter = false
     @State private var pickedPhotos: [PhotosPickerItem] = []
@@ -127,7 +133,8 @@ struct ComposerView: View {
         if !models.contains(where: { $0.id == console.modelID }) {
             models.insert(ModelOption(
                 id: console.modelID,
-                name: AgentDefaults.friendlyName(console.modelID, catalog: console.modelCatalog,
+                name: AgentDefaults.friendlyName(console.modelID, for: console.provider,
+                                                  catalog: console.modelCatalog,
                                                   configured: console.configuredProviders)), at: 0)
         }
         return models
@@ -179,10 +186,10 @@ struct ComposerView: View {
     }
 
     // Whether the composer box should draw its focused ring/shadow. macOS keys off the field's
-    // @FocusState; iOS off the UITextView editor's begin/end-editing (mirrored into `iosEditing`).
+    // @FocusState; iOS off the UITextView editor's begin/end-editing (mirrored into `composerEditing`).
     private var boxFocused: Bool {
         #if os(iOS)
-        iosEditing
+        console.composerEditing
         #else
         inputFocused
         #endif
@@ -192,7 +199,7 @@ struct ComposerView: View {
     /// sets the flag the UITextView editor observes to become first responder.
     private func requestFocus() {
         #if os(iOS)
-        iosEditing = true
+        withAnimation(Self.editingChange) { console.composerEditing = true }
         #else
         inputFocused = true
         #endif
@@ -326,6 +333,9 @@ struct ComposerView: View {
             }
             #endif
         }
+        .onChange(of: autoFocus) { _, now in
+            if now { requestFocus() }
+        }
         // The app-level session list refreshes from control-plane activity and carries capability
         // changes (including runner heartbeat recovery). Feed that newer snapshot into the open
         // console; a direct send still re-fetches immediately before a terminal /resume.
@@ -353,7 +363,7 @@ struct ComposerView: View {
     private var inputField: some View {
         #if os(iOS)
         GrowingTextEditor(text: $console.composerText, placeholder: placeholder,
-                          maxLines: 6, isEditing: $iosEditing)
+                          maxLines: 6, isEditing: $console.composerEditing.animation(Self.editingChange))
             .frame(maxWidth: .infinity)
         #else
         TextField(placeholder, text: $console.composerText, axis: .vertical)
@@ -556,6 +566,31 @@ struct ComposerView: View {
     /// menu does, whichever way the system opens it.
     private var modelMenu: some View {
         Menu {
+            // A task run on smart selection's pick opens on why it is this model, and on where to fix
+            // the model for every run (model routing §9; web parity: the `smart-route` group).
+            if let route = smartRoute {
+                Section {
+                    Text("✦ " + TaskDetailCopy.pickedBySmartSelection(tier: route.level ?? ""))
+                    #if os(macOS)
+                    // A Mac menu draws each item on one line however long: the sentences come as the
+                    // lines of a paragraph instead.
+                    let lines = (route.reasons.first.map { ComposerLogic.menuLines($0) } ?? [])
+                        + ComposerLogic.menuLines(TaskDetailCopy.modelChangeAppliesToThisRun)
+                    ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                        Text(line)
+                    }
+                    #else
+                    if let reason = route.reasons.first {
+                        Text(reason)
+                    }
+                    // An iOS menu item ends at its third line: the note's two sentences are two items.
+                    ForEach(ComposerLogic.sentences(TaskDetailCopy.modelChangeAppliesToThisRun), id: \.self) {
+                        Text($0)
+                    }
+                    #endif
+                }
+                Divider()
+            }
             // Only when there is somewhere to go: a second account with the same vendor, another
             // endpoint on the same CLI, or another of the runner's accounts of this engine. One entry
             // means no switch is possible, and the row is left out rather than shown inert.
@@ -579,19 +614,20 @@ struct ComposerView: View {
                         // that, so it is greyed out with its reason instead.
                         let fixable = blocked && choice.fixEngine != nil
                         let reason = choice.unavailable ?? ""
-                        let fix = fixable ? ", sign in →" : ""
+                        let fix = fixable ? (choice.fixEngine == "antigravity" ? " →" : ", sign in →") : ""
                         Button {
                             // Picking a blocked row isn't a switch — it's a request for the
                             // sign-in that would make it one, so go to that runner's Engines
                             // section rather than doing nothing.
                             if fixable {
-                                if let rid = console.runnerID { app.route(to: .runner(rid)) }
+                                if choice.fixEngine == "antigravity", let url = console.antigravityProvidersURL { openURL(url) }
+                                else if let rid = console.runnerID { app.route(to: .runner(rid)) }
                             } else if !blocked {
                                 Task { await console.selectProvider(choice.slug) }
                             }
                         } label: {
                             menuItemLabel(
-                                blocked ? "\(choice.label) — \(reason)\(fix)" : choice.label,
+                                blocked ? "\(choice.label) — \(reason)\(fix)" : [choice.label, choice.labelDetail].compactMap { $0 }.joined(separator: " · "),
                                 selected: choice.slug == console.provider && !listsAccounts)
                         }
                         .disabled(blocked && !fixable)
@@ -674,11 +710,38 @@ struct ComposerView: View {
                     menuSubmenuLabel("Speed", value: console.fastMode ? "Fast" : "Standard")
                 }
             }
+            if smartRoute != nil, let taskID = console.taskID {
+                Divider()
+                Button(TaskDetailCopy.openTask) {
+                    app.openFromConversation(.task(taskID), overConsole: opensPagesOverConsole)
+                }
+            }
         } label: {
             modelChipLabel
         }
         .menuOrder(.fixed)
         .footerMenuChrome()
+        #if os(macOS)
+        // A borderless menu draws its label as a title and drops a ground under it: on the Mac the
+        // light blue of a routed model goes on the control itself.
+        .padding(.horizontal, smartRoute != nil ? 6 : 0)
+        .padding(.vertical, smartRoute != nil ? 2 : 0)
+        .background(smartRoute != nil ? Color.accentColor.opacity(0.12) : Color.clear, in: Capsule())
+        #endif
+        .accessibilityLabel(chipAccessibilityLabel)
+    }
+
+    /// What the chip is called aloud — web parity, the chip's `aria-label`.
+    private var chipAccessibilityLabel: String {
+        let base = "Model \(modelDisplayName), effort \(console.effort.label)"
+        return smartRoute == nil ? base : base + TaskDetailCopy.chipPickedBySmartSelection
+    }
+
+    /// The decision behind this task run, while the chip still shows the model it picked
+    /// (`ComposerLogic.smartRoute`); nil on a session opened by hand and on a shadow-only run.
+    private var smartRoute: TaskRunRoute? {
+        ComposerLogic.smartRoute(taskID: console.taskID, route: console.worktree.detail?.route,
+                                 modelID: console.modelID)
     }
 
     /// The model's name as the chip shows it: "Runtime default" for a draft whose provider has not
@@ -696,10 +759,17 @@ struct ComposerView: View {
     /// Explicit `Color`s rather than the hierarchical `.primary` / `.secondary`, which inside an
     /// iOS menu label resolve against the control's tint. On iOS the name truncates and the effort
     /// never does; macOS draws a borderless menu's label as one title, so it gets one `Text`.
+    /// A model smart selection picked for this task run carries a ✦ on a light blue ground.
     @ViewBuilder
     private var modelChipLabel: some View {
+        let smart = smartRoute != nil
         #if os(iOS)
         HStack(alignment: .firstTextBaseline, spacing: 5) {
+            if smart {
+                Text("✦")
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityHidden(true)
+            }
             Text(modelDisplayName)
                 .fontWeight(.semibold)
                 .foregroundStyle(Color.primary)
@@ -710,9 +780,13 @@ struct ComposerView: View {
                 .lineLimit(1)
                 .fixedSize()
         }
+        .padding(.horizontal, smart ? 7 : 0)
+        .padding(.vertical, smart ? 2 : 0)
+        .background(smart ? Color.accentColor.opacity(0.12) : Color.clear, in: Capsule())
         .contentShape(Rectangle())
         #else
-        (Text(modelDisplayName).fontWeight(.semibold).foregroundStyle(Color.primary)
+        (Text(smart ? "✦ " : "").foregroundStyle(Color.accentColor)
+            + Text(modelDisplayName).fontWeight(.semibold).foregroundStyle(Color.primary)
             + Text(" ")
             + Text(chipEffortLabel).foregroundStyle(Color.secondary))
             .lineLimit(1)
@@ -1388,7 +1462,7 @@ private struct PlanUsageIndicator: View {
     }
 
     var body: some View {
-        if let pct = usage.primaryPercent {
+        if let pct = usage.bindingRow()?.percent {
             Button { showDetail.toggle() } label: {
                 HStack(spacing: 5) {
                     UsageBar(percent: pct).frame(width: gaugeShowsNumber ? 26 : 20, height: 4)
@@ -1635,7 +1709,7 @@ private struct PlanUsageDetailPresentation: ViewModifier {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Plan usage").font(.headline)
                 if let account { PlanUsageAccountRow(account: account, compact: true) }
-                PlanUsageDetailRows(rows: usage.rows, compact: true)
+                PlanUsageDetailRows(rows: usage.currentRows(), compact: true)
             }
             .padding(14)
             .frame(width: 260)
@@ -1650,7 +1724,7 @@ private struct PlanUsageDetailPresentation: ViewModifier {
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Plan usage").font(.headline)
                     if let account { PlanUsageAccountRow(account: account) }
-                    PlanUsageDetailRows(rows: usage.rows)
+                    PlanUsageDetailRows(rows: usage.currentRows())
                     if let resetConsole, resetConsole.codexResetCardVisible {
                         CodexResetCreditCard(console: resetConsole)
                     }
@@ -1670,7 +1744,7 @@ private struct PlanUsageDetailPresentation: ViewModifier {
                     if let account {
                         PlanUsageAccountRow(account: account).padding(.bottom, 18)
                     }
-                    PlanUsageDetailRows(rows: usage.rows)
+                    PlanUsageDetailRows(rows: usage.currentRows())
                     if let resetConsole, resetConsole.codexResetCardVisible {
                         CodexResetCreditCard(console: resetConsole)
                             .padding(.top, 18)

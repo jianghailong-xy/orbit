@@ -106,9 +106,13 @@ type HeartbeatRequest struct {
 // a directory on this machine, and whether it sits inside a git work tree (the precondition for
 // per-session worktree isolation). Mirrors @orbit/shared AgentDirProbe.
 type AgentDirProbe struct {
-	AgentID   string `json:"agentId"`
+	AgentID string `json:"agentId"`
+	// Original target spelling, before expanding ~ or cleaning paths, for stale-probe checks.
+	WorkDir   string `json:"workDir,omitempty"`
 	Exists    bool   `json:"exists"`
 	IsGitRepo bool   `json:"isGitRepo"`
+	// Local origin URL without credentials. Missing origin or failed probe leaves this empty.
+	RepoURL string `json:"repoUrl,omitempty"`
 	// Free/total bytes of the filesystem holding WorkDir. Per directory, not per machine: one
 	// runner's agents can sit on different mounts, and the only figure that can gate a run is
 	// the one for the filesystem it will actually write to. Omitted when the path is missing or
@@ -131,6 +135,9 @@ type EngineHealthReport struct {
 	Installed bool   `json:"installed"`
 	Version   string `json:"version,omitempty"`
 	Auth      string `json:"auth"` // "yes" | "no" | "unknown"
+	// Antigravity only: selected credentials and the quota read made with its Google auth probe.
+	AuthSource string     `json:"authSource,omitempty"` // "google" | "env_key"
+	PlanUsage  *PlanUsage `json:"planUsage,omitempty"`
 	// What the updater last did to this engine. Nil until it has run once — which the UI shows
 	// as "not reported yet", never as a problem.
 	Update *EngineUpdateReport `json:"update,omitempty"`
@@ -255,10 +262,11 @@ type SlashCommandInfo struct {
 }
 
 type ModelCatalog struct {
-	Codex    []ModelInfo `json:"codex,omitempty"`
-	Claude   []ModelInfo `json:"claude,omitempty"`
-	Kimi     []ModelInfo `json:"kimi,omitempty"`
-	OpenCode []ModelInfo `json:"opencode,omitempty"`
+	Codex       []ModelInfo `json:"codex,omitempty"`
+	Claude      []ModelInfo `json:"claude,omitempty"`
+	Kimi        []ModelInfo `json:"kimi,omitempty"`
+	OpenCode    []ModelInfo `json:"opencode,omitempty"`
+	Antigravity []ModelInfo `json:"antigravity,omitempty"`
 }
 
 type ModelInfo struct {

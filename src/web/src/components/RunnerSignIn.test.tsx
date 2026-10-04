@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { RunnerLoginState } from '@orbit/shared';
-import { probeReportsSignedIn, RunnerSignIn } from './RunnerSignIn';
+import { ENGINE_NAME, probeReportsSignedIn, RunnerSignIn } from './RunnerSignIn';
 
 const RUNNER = 'runner-1';
 
@@ -25,6 +25,33 @@ function open(state: RunnerLoginState, onUseApiKey?: () => void) {
     </QueryClientProvider>,
   );
 }
+
+describe('the name each login engine signs in under', () => {
+  it('has one for every login engine, Antigravity included', () => {
+    expect(ENGINE_NAME).toEqual({
+      claude: 'Claude Code',
+      codex: 'Codex',
+      kimi: 'Kimi Code',
+      antigravity: 'Antigravity',
+    });
+  });
+
+  it.each([
+    ['claude', 'Sign in to Claude Code'],
+    ['codex', 'Sign in to Codex'],
+    ['kimi', 'Sign in to Kimi Code'],
+  ] as const)('still offers %s the sign-in it had', (engine, label) => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    qc.setQueryData(['runner-login', RUNNER], loginState({}));
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={qc}>
+        <RunnerSignIn runnerId={RUNNER} engine={engine} />
+      </QueryClientProvider>,
+    );
+
+    expect(html).toContain(label);
+  });
+});
 
 describe('RunnerSignIn on a runner with an earlier sign-in on record', () => {
   it("doesn't call a signed-out runner ready because an older sign-in succeeded", () => {

@@ -9,20 +9,21 @@ import { RunnerEngines, summaryOf } from './RunnerEngines';
 import type { Runner } from './TasksSidePanel';
 
 /**
- * One Codex account on a runner: the Providers page is the page it was before accounts, plus the
- * way to a second one.
+ * One Codex account on a runner: the Providers page draws the same row it draws for any engine,
+ * plus the way to a second account.
  *
  * The group head and the account rows under it are for two accounts or more. One account is what
  * every machine had before accounts, so none of that may show for it: the card keeps one row per
- * engine, and the Codex row keeps its name, sub-line, status tag, quota bar and button. What it
- * adds is `+ Account`, ahead of that button — without it a machine with Default alone could never
- * get to two. A runner too old to report accounts has one account, not none, and reads the same.
+ * engine, and the Codex row keeps its name, sub-line, status tag, quota and button. What it adds is
+ * `Add account`, ahead of that button — without it a machine with Default alone could never get to
+ * two. A runner too old to report accounts has one account, not none, and reads the same.
  *
- * Every BEFORE value is what the page rendered for the same fixture before accounts existed, and
- * the Codex row is held to it less `+ Account`, which has a test of its own: RunnerEngines.tsx at
- * 864cad31c passes every BEFORE comparison here as it stands. RunnerEngines.test.tsx keeps its own
- * assertions, and this guard sits beside them. Red here means the page changed for one account —
- * fix the page, not these values.
+ * Every ROW value is that engine row for the same fixture, held less `Add account`, which has a test
+ * of its own. It was first the page before accounts existed (RunnerEngines.tsx at 864cad31c); since
+ * 2026-10-02 every engine's row says whether its login can take a session ("Available", where it said
+ * "Signed in"), lists each quota window with its reset, gives its version as a number, and offers
+ * account maintenance in More. RunnerEngines.test.tsx keeps its own assertions, and this guard sits
+ * beside them so single-account rows keep the same information as other engine rows.
  */
 
 vi.mock('../api', () => ({ api: vi.fn() }));
@@ -87,8 +88,8 @@ interface CodexRow {
   buttons: string[];
 }
 
-/** Each state of the one account, and what the page said for it before accounts. */
-const BEFORE: {
+/** Each state of the one account, and what its engine row says for it. */
+const ROW: {
   state: string;
   auth: Auth;
   over?: Partial<Runner>;
@@ -100,10 +101,10 @@ const BEFORE: {
     state: 'signed in',
     auth: 'yes',
     codex: {
-      text: ['Codex', 'codex 0.156.0', 'Signed in', '5h limit', '62%', 'Re-sign in'],
+      text: ['Codex', '0.156.0', 'Available', '5h limit', '62%'],
       tag: 'green',
       bar: '62%',
-      buttons: ['Re-sign in · text'],
+      buttons: ['More actions · text'],
     },
     count: '1 runner · 3 signed in',
     folded: 'All signed in',
@@ -112,7 +113,7 @@ const BEFORE: {
     state: 'signed out',
     auth: 'no',
     codex: {
-      text: ['Codex', 'codex 0.156.0', 'Signed out', 'Sign in to see quota', 'Sign in'],
+      text: ['Codex', '0.156.0', 'Signed out', 'Sign in to see quota', 'Sign in'],
       tag: 'orange',
       bar: null,
       buttons: ['Sign in · primary'],
@@ -124,7 +125,7 @@ const BEFORE: {
     state: "the CLI wouldn't say",
     auth: 'unknown',
     codex: {
-      text: ['Codex', "codex 0.156.0 · the CLI wouldn't say", 'Unknown', '—', 'Sign in'],
+      text: ['Codex', "0.156.0 · the CLI wouldn't say", 'Unknown', '—', 'Sign in'],
       tag: 'default',
       bar: null,
       buttons: ['Sign in · primary'],
@@ -137,10 +138,10 @@ const BEFORE: {
     auth: 'yes',
     over: { online: false },
     codex: {
-      text: ['Codex', 'codex 0.156.0', 'Signed in', '5h limit', '62%', 'Sign in'],
+      text: ['Codex', '0.156.0', 'Available', '5h limit', '62%'],
       tag: 'green',
       bar: '62%',
-      buttons: ['Sign in · default · disabled'],
+      buttons: ['More actions · text'],
     },
     count: '1 runner · 3 signed in',
     folded: 'All signed in',
@@ -204,10 +205,11 @@ const strings = (scope: Element) =>
 const preset = (el: Element, pattern: RegExp) =>
   [...el.classList].map((c) => pattern.exec(c)?.[1]).find(Boolean) ?? null;
 
-/** A button as `label · antd type`, with `· disabled` when it is. */
+/** A button as `label · antd type`, with `· disabled` when it is — the label being the name of a
+ *  mark that has no words (Re-sign in). */
 const described = (button: HTMLButtonElement) =>
   [
-    button.textContent?.trim(),
+    button.textContent?.trim() || button.getAttribute('aria-label'),
     preset(button, /^ant-btn-(primary|default|dashed|text|link)$/),
     button.disabled && 'disabled',
   ]
@@ -215,7 +217,7 @@ const described = (button: HTMLButtonElement) =>
     .join(' · ');
 
 const addAccount = (row: Element) =>
-  [...row.querySelectorAll('button')].find((button) => button.textContent?.trim() === '+ Account');
+  [...row.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Add account');
 
 function codexRowOf(page: HTMLElement): HTMLElement {
   const row = [...page.querySelectorAll<HTMLElement>('.re-row')].find(
@@ -225,7 +227,7 @@ function codexRowOf(page: HTMLElement): HTMLElement {
   return row;
 }
 
-/** The Codex row as it reads less `+ Account`: one button taken out of a copy, and only that one. */
+/** The Codex row as it reads less `Add account`: one button taken out of a copy, and only that one. */
 function codexRow(page: HTMLElement): CodexRow {
   const row = codexRowOf(page).cloneNode(true) as HTMLElement;
   addAccount(row)?.remove();
@@ -239,8 +241,8 @@ function codexRow(page: HTMLElement): CodexRow {
 }
 
 describe.each(ONE_ACCOUNT)('one Codex account — %s', (_, accountsOf) => {
-  it.each(BEFORE)(
-    '$state: the page is what it was before accounts',
+  it.each(ROW)(
+    '$state: the Codex row is the row every engine has, and nothing of a group',
     ({ auth, over, codex, count, folded }) => {
       const box = runner({ auth, ...accountsOf(auth) }, over);
       const page = mount([box]);
@@ -253,8 +255,9 @@ describe.each(ONE_ACCOUNT)('one Codex account — %s', (_, accountsOf) => {
         're-row',
         're-row',
         're-row',
+        're-row',
       ]);
-      // The Codex row itself, string for string.
+      // Pause is available inside More and adds no visible button or text to this row.
       expect(codexRow(page)).toEqual(codex);
       // One account counts once, as the engine always did: on the section, and on a folded card.
       expect(page.querySelector('.re-sec-count')?.textContent).toBe(count);
@@ -262,8 +265,8 @@ describe.each(ONE_ACCOUNT)('one Codex account — %s', (_, accountsOf) => {
     },
   );
 
-  it.each(BEFORE)(
-    '$state: + Account leads the Codex row, and opens the name for a second account',
+  it.each(ROW)(
+    '$state: Add account leads the Codex row, and opens the name for a second account',
     async ({ auth, over, codex }) => {
       const page = mount([runner({ auth, ...accountsOf(auth) }, over)]);
       const row = codexRowOf(page);
@@ -272,7 +275,7 @@ describe.each(ONE_ACCOUNT)('one Codex account — %s', (_, accountsOf) => {
       // The group head's button, ahead of the row's own — and, like that one, not pressable while
       // the machine is offline.
       expect([...row.querySelectorAll<HTMLButtonElement>('.re-act button')].map(described)).toEqual([
-        offline ? '+ Account · default · disabled' : '+ Account · default',
+        offline ? 'Add account · default · disabled' : 'Add account · default',
         ...codex.buttons,
       ]);
       if (offline) return;

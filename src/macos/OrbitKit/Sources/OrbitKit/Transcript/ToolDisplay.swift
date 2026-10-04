@@ -105,10 +105,13 @@ public struct ToolDisplay: Equatable, Sendable {
         case "Edit":
             let hunk = collapseCtx(lineDiff(input["old_string"]?.stringValue ?? "",
                                             input["new_string"]?.stringValue ?? ""), ctx: 3)
+            // Antigravity names the file it edited and nothing else — agy's stream carries no diff
+            // (contract §2.2) — so an Edit without either side is just the file, not an empty diff.
+            let noSides = input["old_string"] == nil && input["new_string"] == nil
             return ToolDisplay(label: "Edit", symbol: "pencil", tone: .write,
                                summary: nil, summaryMono: false,
                                path: input["file_path"]?.stringValue.map(splitPath), meta: nil,
-                               body: .diff([hunk]), autoOpen: false)
+                               body: noSides ? .none : .diff([hunk]), autoOpen: false)
 
         case "apply_patch":
             let files: [String]

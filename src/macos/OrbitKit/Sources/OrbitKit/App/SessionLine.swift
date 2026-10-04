@@ -14,6 +14,7 @@ public struct SessionLine: Equatable, Sendable {
         case queued      // waiting for a slot
         case background  // a process the agent left up — outlives the turn, but isn't work
         case watching    // parked on a watch that will resume it — not a process, not waiting on you
+        case review      // its report is with its reviewer — drawn, not counted, never amber
     }
     public let text: String
     public let tone: Tone
@@ -44,6 +45,12 @@ public struct SessionLine: Equatable, Sendable {
         if live && (s.pendingApprovals ?? 0) > 0 {
             return SessionLine(text: SessionHeader.waitingWord(for: s), tone: .approval)
         }
+        // The same place for a run whose report is still with its reviewer (contract §5 N3): who has
+        // it, in the quiet tone — the card is drawn and can be pressed, but nobody is asking the owner
+        // yet, so the row neither lights nor counts. Web parity: `sessionLine`'s `review` tone.
+        if live, let review = s.confirmationUnderReview {
+            return SessionLine(text: OwnerConfirmations.underReviewLine(review.reviewerTitle), tone: .review)
+        }
         if live && s.isGenerating {
             if let t = s.lastToolUse, !t.isEmpty { return SessionLine(text: "Running \(fmtTool(t))…", tone: .running) }
             // A sub-agent or workflow in flight: its launch result cleared the tool line at once, so
@@ -69,9 +76,10 @@ public struct SessionLine: Equatable, Sendable {
             return SessionLine(text: "\(subagentRunningLabel(n))…", tone: .running)
         }
         // Parked on a live watch that will resume it: not idle, not waiting on you, and — whatever
-        // else it left running — not a background process (contract §9.2). Said in the watch's words.
+        // else it left running — not a background process (contract §9.2). Said in the strip's own
+        // line, so the row and the strip above its composer read the same (web parity).
         if live, let watching, s.effectiveRunState == .awaitingInput {
-            return SessionLine(text: "\(watching.word) · \(watching.progress)", tone: .watching)
+            return SessionLine(text: watching.rowLine, tone: .watching)
         }
         // Parked (AWAITING_INPUT) but a background process is still running — not idle, though
         // not the agent working either (see the glyph): muted, not the working blue.

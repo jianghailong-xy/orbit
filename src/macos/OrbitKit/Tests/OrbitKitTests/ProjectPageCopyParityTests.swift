@@ -60,7 +60,11 @@ final class ProjectPageCopyParityTests: XCTestCase {
             + ProjectPage.overviewCells(ProjectPanoramaBuckets(), taskCount: 0, line: nil, started: false)
         for cell in cells {
             assertSays(web, "label: '\(cell.label)'", in: Self.panorama)
-            assertSays(web, "'\(cell.footnote)'", in: Self.panorama)
+            if cell.key == "blocked", cell.footnote.hasPrefix("1 waiting") {
+                assertSays(web, "`${buckets.waitingForLanding} waiting for a prerequisite to land`", in: Self.panorama)
+            } else {
+                assertSays(web, "'\(cell.footnote)'", in: Self.panorama)
+            }
         }
         assertSays(web, "'waiting on dependencies'", in: Self.panorama)
         assertSays(web, "% complete`", in: Self.panorama)
@@ -151,15 +155,15 @@ final class ProjectPageCopyParityTests: XCTestCase {
 
     func testIntegrationLineWords() throws {
         let web = try source(Self.integration)
-        for phrase in ["PASSING: { text: '✓ passing'", "FAILING: { text: '✕ failing'", "UNKNOWN: { text: 'not run yet'",
-                       "ahead of main", "synced with main", "' on the branch tip'", "Merge check"] {
+        for phrase in ["PASSING: { text: '✓ passing'", "FAILING: { text: '✕ failing'", "UNKNOWN: { text: 'not checked'",
+                       "ahead of main", "synced with main", "at last measurement", "Last landing check", "Running jobs"] {
             assertSays(web, phrase, in: Self.integration)
         }
     }
 
     func testTaskBandAndTagWords() throws {
         let web = try source(Self.page)
-        for heading in ["Running", "Integrating · checks run on the combined tree", "Ready · can start now",
+        for heading in ["Running", "Pending landing", "Ready · can start now",
                         "Awaiting verification · subject work must not be started",
                         "Failed · coordinated continuation", "Waiting · for a prerequisite to land",
                         "Landed", "Done / Cancelled"] {
@@ -174,7 +178,7 @@ final class ProjectPageCopyParityTests: XCTestCase {
                        "'Awaiting verification'", "text: 'Failed'", "text: 'Blocked'",
                        "'Queued for integration'", "`Conflict · ${who}`", "`Checks failed · ${who}`",
                        "`Integration error · ${who}`", "'Awaiting your approval'",
-                       "`Integrating · checks ${formatSpan(integration.checksRunningForMs)}`",
+                       "'Integrating · checking'",
                        "`On ${branches.ref ?? 'the project branch'}`", "`On ${branches.upstreamRef ?? 'main'}`",
                        "`Waits for ${n} task${n === 1 ? '' : 's'} to land`"] {
             assertSays(web, phrase, in: Self.page)

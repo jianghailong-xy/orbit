@@ -508,13 +508,15 @@ new_code_task() {
                             'USER', '$FIX_OWNER_UUID', 'OWNER_CONFIRMED', false,
                             $acceptance_sql, now(), now())
                     RETURNING id")"
+  # Finished, as a SUCCEEDED session is: the queue does not hand out a landing while a work session
+  # of its task has no `finished_at` (J-T1e), so a session seeded without one is never landed at all.
   session_uuid="$(sql1 "INSERT INTO session (id, owner_id, creator_id, workspace_id, task_id, title, prompt,
                          status, starts_task_work, isolation_status, branch, base_sha, assigned_runner_id,
-                         created_at, updated_at)
+                         finished_at, created_at, updated_at)
                        VALUES (gen_random_uuid(), '$FIX_OWNER_UUID', '$FIX_OWNER_UUID', '$workspace_uuid',
                                '$task_uuid', '$title', 'integration line acceptance', 'SUCCEEDED',
                                true, 'worktree', '$branch',
-                               '$base_sha', '$FIX_RUNNER_UUID', now(), now())
+                               '$base_sha', '$FIX_RUNNER_UUID', now(), now(), now())
                        RETURNING id")"
   [ -n "$session_uuid" ] || fail "no work session for $title"
   printf '%s\n' "$task_uuid"

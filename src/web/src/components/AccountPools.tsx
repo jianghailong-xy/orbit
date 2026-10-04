@@ -1,9 +1,17 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { DeleteOutlined, LogoutOutlined, PauseCircleOutlined, PlayCircleOutlined } from '@ant-design/icons';
-import { Button, Checkbox, Input, Modal, Popconfirm, Radio, Segmented, Select, Tag, Tooltip } from 'antd';
+import {
+  DeleteOutlined,
+  LogoutOutlined,
+  PauseCircleOutlined,
+  PlayCircleOutlined,
+  TeamOutlined,
+} from '@ant-design/icons';
+import { Button, Checkbox, Input, Modal, Popconfirm, Radio, Segmented, Select, Tooltip } from 'antd';
 import { api } from '../api';
+import { accountIsPaused, usePauseClock } from '../lib/accountPause';
+import { AccountPauseActions, AccountPauseStatus } from './AccountPause';
 import { isLoginPool, loginLine, type CodexLogin } from '../lib/codexLogin';
 import { encodeId, routeId } from '../lib/idCodec';
 import { planUsageRows } from '../lib/planUsage';
@@ -20,11 +28,18 @@ import {
   type ProviderPool,
 } from '../lib/providerPools';
 import type { ProviderRow } from '../lib/providerAdmin';
+import { compactWindowLabel } from '../lib/sessionProviderChoices';
 import {
   allOutOfBudget,
+  canAddAccount,
   canRemoveKey,
   canReplaceKey,
+  canSignInAgain,
+  canSignOutAccount,
   formatCapReset,
+  hasPeople,
+  ownsPool,
+  poolOwner,
   SHARED_POOLS_BASE,
   type SharedPool,
   type SharedPoolKey,
@@ -49,11 +64,22 @@ function readFold(): Record<string, boolean> {
   }
 }
 
-/** What a pool's members are: a shared pool holds keys, an account pool of one's own accounts. */
-const memberNoun = (pool: ProviderPool, n: number) => `${pool.shared ? 'key' : 'account'}${n === 1 ? '' : 's'}`;
+/** Whether `pool` is drawn for one of the people its owner added rather than for its owner. */
+const readByMember = (pool: ProviderPool): boolean => !!pool.shared && !ownsPool(pool.shared);
 
-/** "2 of 3 accounts available" — "2 of 5 keys available" on a shared pool: the members a session could
- *  start on right now. */
+/** What a pool's members are to whoever reads it: to its owner, accounts — each ChatGPT account and API
+ *  key of a Codex pool, each subscription of a Claude one — and to the people they added, what they can
+ *  run on: the pool's ChatGPT accounts and its keys, whichever of the two it holds. */
+const memberNoun = (pool: ProviderPool, n: number) => {
+  if (!readByMember(pool)) return `account${n === 1 ? '' : 's'}`;
+  const accounts = pool.members.some((member) => member.login);
+  const keys = pool.members.some((member) => member.key);
+  if (accounts && keys) return `account${n === 1 ? '' : 's'} and key${n === 1 ? '' : 's'} you can run on`;
+  return (keys ? `key${n === 1 ? '' : 's'}` : `account${n === 1 ? '' : 's'}`) + ' you can run on';
+};
+
+/** "2 of 3 accounts available" — "2 of 2 accounts and keys you can run on available" for somebody the
+ *  owner added: the members a session could start on right now. */
 export const availabilityOf = (pool: ProviderPool, refusals: PoolRefusals): string =>
   `${availableCount(pool, refusals)} of ${pool.members.length} ${memberNoun(pool, pool.members.length)} available`;
 
@@ -79,24 +105,26 @@ export function PoolEngineMark({ pool, size = 18 }: { pool: ProviderPool; size?:
 }
 
 /**
- * The head's gauge: the member the next session runs on, by name, with its own 5-hour bar — the
- * pool's real answer, where an average would show half a quota no account has. With no member to
- * run on it says when the first one frees up (the earliest reset, not the latest), and with none
- * that can run at all, why (the server's `unavailable`).
+ * The head's gauge: the member the next session runs on, by name, with the bar of its tightest window
+ * and that window's name ("Weekly 97%") — the pool's real answer, where an average would show half a
+ * quota no account has. With no member to run on it says when the first one frees up (the earliest
+ * reset, not the latest), and with none that can run at all, why (the server's `unavailable`).
  */
 export function PoolGauge({ pool }: { pool: ProviderPool }) {
   const head = poolHeadline(pool);
+  // Only a pool of nothing but keys is capped: a ChatGPT account in it is spent, and comes back by the hour.
+  const keysOnly = !!pool.shared && !pool.members.some((member) => member.login);
   if (head.kind === 'spent') {
     // A shared pool's keys are capped rather than spent, and come back with the month — unless what
     // stopped them is OpenAI's own out-of-budget mark, which comes back at a date of its own.
-    const spent = !pool.shared ? 'All spent' : allOutOfBudget(pool.shared) ? 'All out of budget' : 'All at cap';
+    const spent = !keysOnly ? 'All spent' : allOutOfBudget(pool.shared!) ? 'All out of budget' : 'All at cap';
     return (
       <span className="pool-gauge spent">
         {head.resetsAt ? (
           // One inline run, so the gauge's flex gap doesn't open up inside the sentence.
           <span>
             <span className="pool-wide">{spent} · </span>resets{' '}
-            {pool.shared ? formatCapReset(head.resetsAt) : formatResetTime(head.resetsAt)}
+            {keysOnly ? formatCapReset(head.resetsAt) : formatResetTime(head.resetsAt)}
           </span>
         ) : (
           spent
@@ -108,53 +136,73 @@ export function PoolGauge({ pool }: { pool: ProviderPool }) {
   const { member, quota } = head;
   return (
     <span className="pool-gauge" title={`The next session starts on ${member.label}`}>
-      {/* A pool of one's own ChatGPT account has one account to start on: it is named, not "next". */}
-      <span className="pool-gauge-name">{member.login ? member.label : `Next: ${member.label}`}</span>
+      {/* A pool of one's own ChatGPT account with one account has nothing to choose between, so it is
+          named; holding several, "Next:" says which of them the next session starts on — and once other
+          people use the pool, that it is the viewer's next session, theirs running elsewhere. */}
+      <span className="pool-gauge-name">
+        {pool.shared && hasPeople(pool.shared)
+          ? `Next for you: ${member.label}`
+          : member.login && pool.members.length === 1
+            ? member.label
+            : `Next: ${member.label}`}
+      </span>
       {quota ? (
         <>
           <span className={`runner-util ${quota.nearLimit ? 'full' : ''}`}>
             <span className="runner-util-fill" style={{ width: `${quota.percent}%` }} />
           </span>
-          <span className="pool-gauge-pct">{quota.percent}%</span>
+          <span className={`pool-gauge-pct${quota.nearLimit ? ' near-limit' : ''}`}>
+            {`${compactWindowLabel(quota.label)} ${quota.percent}%`}
+          </span>
         </>
-      ) : member.key ? null : (
+      ) : (
         // A key with no cap has nothing to fill; an account that reports no quota says so.
-        <span className="pool-gauge-none">No quota reported</span>
+        <span className="pool-gauge-none">{member.key ? 'No limit' : 'No quota reported'}</span>
       )}
     </span>
   );
 }
 
+const poolPauseEndpoint = (poolId: string, memberId: string) =>
+  `/providers/pools/${encodeId(poolId)}/members/${memberId.startsWith('login:') ? encodeURIComponent(memberId) : encodeId(memberId)}/pause`;
+
+function PoolPauseActions({ pool, member }: { pool: ProviderPool; member: PoolMember }) {
+  const permitted = !pool.shared || (member.login
+    ? canSignOutAccount(pool.shared, member.login)
+    : member.key && canRemoveKey(pool.shared, member.key));
+  if (!permitted) return null;
+  return <AccountPauseActions pool shared={!!pool.shared && hasPeople(pool.shared)} name={member.label} until={member.pausedUntil} endpoint={poolPauseEndpoint(pool.id, member.id)} />;
+}
+
 /** One account in a pool: who it is, where it stands, its own gauge, and what can be done about it.
  *  `refusal` is why the pool would no longer admit it (memberRefusal). */
 function MemberRow({
+  pool,
   member,
   refusal,
   onRemove,
 }: {
+  pool: ProviderPool;
   member: PoolMember;
   refusal: string | null;
   onRemove?: () => void;
 }) {
   const navigate = useNavigate();
-  const status = memberStatus(member, undefined, refusal);
+  const now = usePauseClock(member.pausedUntil);
+  const status = memberStatus({ ...member, pausedUntil: null }, now, refusal);
   const quota = memberQuota(member);
   return (
-    <div className="re-row pool-row" data-member={member.id}>
+    <div className={`re-row pool-row${accountIsPaused(member.pausedUntil, now) ? ' account-paused' : ''}`} data-member={member.id}>
       <div className="re-id">
         <ProviderTile slug={member.presetSlug ?? member.slug} label={member.label} size={28} />
         <div style={{ minWidth: 0 }}>
           <div className="re-name" title={member.label}>
             <span className="pool-member-label">{member.label}</span>
-            {member.next && <span className="re-chip">NEXT</span>}
+            {member.next && !accountIsPaused(member.pausedUntil, now) && <span className="re-chip">NEXT</span>}
           </div>
         </div>
       </div>
-      <div className="pool-status">
-        <Tag color={status.color} title={status.label}>
-          {status.label}
-        </Tag>
-      </div>
+      <AccountPauseStatus className="pool-status" until={member.pausedUntil} now={now} detail={member.login?.state === 'ACTIVE' ? 'Signed in' : undefined} status={status} />
       <div className="re-quota">
         {quota ? (
           <>
@@ -171,6 +219,7 @@ function MemberRow({
         )}
       </div>
       <div className="re-act">
+        <PoolPauseActions pool={pool} member={member} />
         {/* A refused key is final for the key, not for the account: a new one is the way back, and
             it is pasted on the provider's own page. */}
         {member.state === 'REFUSED' && (
@@ -206,11 +255,36 @@ export interface KeyActions {
   onRemove?: (key: SharedPoolKey) => void;
 }
 
+/** Whose sessions a credential of a pool shared with people runs, said on its owner's page: since
+ *  2026-10-03 a ChatGPT account runs everybody's as a key does (pool-credential-select.ts), so the one
+ *  mark says the one thing. What stays the owner's alone — signing an account in or out, adding one — is
+ *  said by the actions a member is not offered. */
+function RunsFor() {
+  return (
+    <span className="pool-runs-for all">
+      <TeamOutlined />
+      Everyone here
+    </span>
+  );
+}
+
 /** One key of a shared pool: whose it is and its fingerprint, where it stands, what the others spent on
- *  it this month against the cap its contributor set, and what the viewer may do about it. */
-function KeyRow({ pool, member, actions }: { pool: SharedPool; member: PoolMember; actions: KeyActions }) {
+ *  it this month against the cap its contributor set, and what the viewer may do about it. `tagged` says
+ *  it runs everybody's sessions. */
+function KeyRow({
+  pool,
+  member,
+  actions,
+  tagged = false,
+}: {
+  pool: SharedPool;
+  member: PoolMember;
+  actions: KeyActions;
+  tagged?: boolean;
+}) {
   const key = member.key!;
-  const status = memberStatus(member);
+  const now = usePauseClock(member.pausedUntil);
+  const status = memberStatus({ ...member, pausedUntil: null }, now);
   const cap = key.shareCap;
   const spent = key.usage.othersCostUsd;
   const percent = cap === null ? null : cap > 0 ? Math.min(100, Math.round((spent / cap) * 100)) : 100;
@@ -220,25 +294,27 @@ function KeyRow({ pool, member, actions }: { pool: SharedPool; member: PoolMembe
   const toggle = key.contributor.you ? actions.onSwitch : undefined;
   const remove = canRemoveKey(pool, key) ? actions.onRemove : undefined;
   return (
-    <div className="re-row pool-row pool-row-key" data-member={key.id}>
+    <div className={`re-row pool-row pool-row-key${accountIsPaused(member.pausedUntil, now) ? ' account-paused' : ''}`} data-member={key.id}>
       <div className="re-id">
         <PersonMark pool={pool} userId={key.contributor.userId} name={key.contributor.name} />
         <div style={{ minWidth: 0 }}>
           <div className="re-name" title={key.label}>
             <span className="pool-member-label">{key.label}</span>
             {key.contributor.you && <span className="pool-you">you</span>}
-            {member.next && <span className="re-chip">NEXT</span>}
+            {member.next && !accountIsPaused(member.pausedUntil, now) && <span className="re-chip">NEXT</span>}
           </div>
           <div className="pool-key-mask">
             {key.contributor.name} · {key.fingerprint}
+            {tagged && (
+              <>
+                {' · '}
+                <RunsFor />
+              </>
+            )}
           </div>
         </div>
       </div>
-      <div className="pool-status">
-        <Tag color={status.color} title={status.label}>
-          {status.label}
-        </Tag>
-      </div>
+      <AccountPauseStatus className="pool-status" until={member.pausedUntil} now={now} detail={member.login?.state === 'ACTIVE' ? 'Signed in' : undefined} status={status} />
       <div className="re-quota pool-key-money">
         {/* Short on purpose: what the others spent on it, against the cap its contributor set — the
             whole sentence is the cell's own title. */}
@@ -259,6 +335,7 @@ function KeyRow({ pool, member, actions }: { pool: SharedPool; member: PoolMembe
         )}
       </div>
       <div className="re-act">
+        {canRemoveKey(pool, key) && <AccountPauseActions pool shared={hasPeople(pool)} name={member.label} until={member.pausedUntil} endpoint={poolPauseEndpoint(pool.id, member.id)} />}
         {replace && (
           <Button size="small" type="primary" onClick={() => replace(key)}>
             Replace key
@@ -305,37 +382,68 @@ function KeyRow({ pool, member, actions }: { pool: SharedPool; member: PoolMembe
 }
 
 /** What can be done to a Codex pool's ChatGPT account where it is shown: sign it in again once OpenAI
- *  signed it out, and sign it out. The pool is its owner's alone — nobody else ever reads it — so both
- *  are theirs wherever they are offered. */
+ *  signed it out, and sign it out. Who is offered which is the row's own to say (migration 0371): the
+ *  person who signed the account in is the only one who can sign it in again — nobody, an admin
+ *  included, has a credential for it — and taking it out is theirs and the pool's admins'.
+ *  `canSignInAgain`/`canSignOut` say what this reader may do to THIS account. */
 export interface LoginActions {
-  onSignIn?: () => void;
+  onSignIn?: (login: CodexLogin) => void;
   onSignOut?: (login: CodexLogin) => void;
+  canSignInAgain?: (login: CodexLogin) => boolean;
+  canSignOut?: (login: CodexLogin) => boolean;
 }
 
-/** The ChatGPT account a Codex pool of one's own runs on: its email and plan, where it stands, each of
- *  its windows with when it resets — and, once OpenAI signed it out, why and the way back. */
-function LoginRow({ member, actions }: { member: PoolMember; actions: LoginActions }) {
+/** The ChatGPT account a Codex pool runs on: whose it is and its plan, where it stands, each of its
+ *  windows with when it resets — and, once OpenAI signed it out, why and the way back. `tagged` says it
+ *  runs everyone's sessions here. */
+function LoginRow({
+  pool,
+  member,
+  actions,
+  tagged = false,
+  contributor,
+}: {
+  pool: ProviderPool;
+  member: PoolMember;
+  actions: LoginActions;
+  tagged?: boolean;
+  /** The person who signed it in, when the pool's people are read — named on the row like a key's own. */
+  contributor?: { name: string; you: boolean };
+}) {
   const login = member.login!;
-  const status = memberStatus(member);
+  const now = usePauseClock(member.pausedUntil);
+  const status = memberStatus({ ...member, pausedUntil: null }, now);
   const windows = login.usage ? planUsageRows(login.usage) : [];
   const signedOut = member.state === 'SIGNED_OUT';
-  const { onSignIn, onSignOut } = actions;
+  const { onSignIn, onSignOut, canSignInAgain, canSignOut } = actions;
+  const signInAgain = signedOut && onSignIn && (canSignInAgain?.(login) ?? true);
+  const signOut = onSignOut && (canSignOut?.(login) ?? true);
+  // One account the pool: signing it out leaves nothing running on the pool. Holding others, it keeps
+  // running on them, and the confirmation says so in the plural when more than one stays.
+  const others = pool.members.length - 1;
   return (
-    <div className="re-row pool-row pool-row-login" data-member={member.id}>
+    <div className={`re-row pool-row pool-row-login${accountIsPaused(member.pausedUntil, now) ? ' account-paused' : ''}`} data-member={member.id}>
       <div className="re-id">
         <ProviderTile slug="openai" label="ChatGPT" size={28} />
         <div style={{ minWidth: 0 }}>
           <div className="re-name" title={member.label}>
             <span className="pool-member-label">{member.label}</span>
+            {/* With one account there is nothing to choose between, so the mark would say nothing. */}
+            {member.next && !accountIsPaused(member.pausedUntil, now) && pool.members.length > 1 && <span className="re-chip">NEXT</span>}
           </div>
-          <div className="pool-key-mask">{loginLine(login)}</div>
+          <div className="pool-key-mask">
+            {contributor && `${contributor.name} · `}
+            {loginLine(login)}
+            {tagged && (
+              <>
+                {' · '}
+                <RunsFor />
+              </>
+            )}
+          </div>
         </div>
       </div>
-      <div className="pool-status">
-        <Tag color={status.color} title={status.label}>
-          {status.label}
-        </Tag>
-      </div>
+      <AccountPauseStatus className="pool-status" until={member.pausedUntil} now={now} detail={member.login?.state === 'ACTIVE' ? 'Signed in' : undefined} status={status} />
       <div className="re-quota pool-login-quota">
         {windows.length > 0 ? (
           windows.map((row) => (
@@ -358,23 +466,29 @@ function LoginRow({ member, actions }: { member: PoolMember; actions: LoginActio
         )}
       </div>
       <div className="re-act">
-        {signedOut && onSignIn && (
-          <Button size="small" type="primary" onClick={onSignIn}>
+        <PoolPauseActions pool={pool} member={member} />
+        {signInAgain && (
+          <Button size="small" type="primary" onClick={() => onSignIn!(login)}>
             Sign in again
           </Button>
         )}
-        {onSignOut && (
+        {signOut && (
           <Popconfirm
             title={`Sign out ${member.label}?`}
-            description="Its sign-in is deleted from the Orbit server, and no session runs on this pool until you sign in again."
+            description={
+              others > 0
+                ? `Its sign-in is deleted from the Orbit server, and no session runs on it until you sign in again — ${pool.label} keeps running on its other account${others === 1 ? '' : 's'}.`
+                : 'Its sign-in is deleted from the Orbit server, and no session runs on this pool until you sign in again.'
+            }
             okText="Sign out"
             okButtonProps={{ danger: true }}
-            onConfirm={() => onSignOut(login)}
+            onConfirm={() => onSignOut!(login)}
           >
             <Button
               size="small"
               type="text"
               danger
+              className="pool-signout"
               icon={<LogoutOutlined />}
               aria-label={`Sign out ${member.label}`}
             />
@@ -382,15 +496,21 @@ function LoginRow({ member, actions }: { member: PoolMember; actions: LoginActio
         )}
       </div>
       {signedOut && (
-        <div className="pool-why">OpenAI signed this account out — sign in again to put it back in the pool.</div>
+        <div className="pool-why">
+          {signInAgain
+            ? 'OpenAI signed this account out — sign in again to put it back in the pool.'
+            : `OpenAI signed this account out — only ${contributor ? contributor.name : 'the person who signed it in'} can sign it in again.`}
+        </div>
       )}
     </div>
   );
 }
 
-/** A pool's members, with what a pool of fewer than two accounts is worth saying about itself. A shared
- *  pool's members are its keys (KeyRow), and `keyActions` what can be done to them here; a Codex pool
- *  of one's own has its ChatGPT account (LoginRow), and `loginActions` what can be done to it. */
+/** A pool's members, with what a pool of fewer than two accounts is worth saying about itself. A pool's
+ *  keys are KeyRow, with `keyActions` what can be done to them here; its ChatGPT accounts are LoginRow,
+ *  with `loginActions` the presses the page offers and — where the pool's people are read — what THIS
+ *  reader may do to each account (migration 0371: the person who signed it in signs it in again, and with
+ *  the pool's admins takes it out), and whose account each row is. */
 export function PoolMembers({
   pool,
   refusals,
@@ -407,6 +527,22 @@ export function PoolMembers({
   const [only] = pool.members;
   const { shared } = pool;
   const login = isLoginPool(pool);
+  const tagged = !!shared && ownsPool(shared) && hasPeople(shared);
+  // Whose account a row is and what this reader may do to it: the pool's people carry both (their `you`
+  // row is the reader). Without them — an own pool whose access is not read yet — the page's own presses
+  // stand as they did.
+  const actionsFor = (account: CodexLogin): LoginActions =>
+    shared
+      ? {
+          ...loginActions,
+          canSignInAgain: (row) => canSignInAgain(shared, row),
+          canSignOut: (row) => canSignOutAccount(shared, row),
+        }
+      : (loginActions ?? {});
+  const contributorOf = (account: CodexLogin) => {
+    const person = shared?.people.find((row) => row.userId === account.userId);
+    return person ? { name: person.name, you: person.you } : undefined;
+  };
   return (
     <>
       {/* Every door that takes a provider refuses a pool with nothing in it (the server's
@@ -414,7 +550,8 @@ export function PoolMembers({
       {pool.members.length === 0 &&
         (login ? (
           <div className="pool-note">
-            No account yet — no session can start on this pool until you sign in with ChatGPT.
+            No account yet — no session can start on this pool until{' '}
+            {!shared || canAddAccount(shared) ? 'you sign in' : 'its owner signs in'} with ChatGPT.
           </div>
         ) : (
           <div className="pool-note">
@@ -431,12 +568,20 @@ export function PoolMembers({
       )}
       {pool.members.map((member) =>
         shared && member.key ? (
-          <KeyRow key={member.id} pool={shared} member={member} actions={keyActions ?? {}} />
+          <KeyRow key={member.id} pool={shared} member={member} actions={keyActions ?? {}} tagged={tagged} />
         ) : member.login ? (
-          <LoginRow key={member.id} member={member} actions={loginActions ?? {}} />
+          <LoginRow
+            key={member.id}
+            pool={pool}
+            member={member}
+            actions={actionsFor(member.login)}
+            tagged={tagged}
+            contributor={contributorOf(member.login)}
+          />
         ) : (
           <MemberRow
             key={member.id}
+            pool={pool}
             member={member}
             refusal={memberRefusal(member, refusals)}
             onRemove={onRemove && (() => onRemove(member))}
@@ -462,6 +607,11 @@ function PoolCard({
   keyActions?: KeyActions;
   loginActions?: LoginActions;
 }) {
+  // Folded cards have no member rows to refresh the catalogue when a pause ends.
+  usePauseClock(pool.members.flatMap((member) => accountIsPaused(member.pausedUntil) ? [member.pausedUntil!] : []).sort()[0]);
+  const { shared } = pool;
+  const member = readByMember(pool);
+  const people = !!shared && hasPeople(shared);
   return (
     <div className={`re-card pool-card${collapsed ? ' collapsed' : ''}`} data-pool={pool.id}>
       <div className="re-head">
@@ -471,13 +621,23 @@ function PoolCard({
           </span>
           <PoolEngineMark pool={pool} />
           <span className="re-runner">{pool.label}</span>
-          {pool.shared && <span className="re-chip pool-shared-chip">SHARED</span>}
-          {/* One account is no count: what a pool of one's own ChatGPT account says here is whose it is. */}
-          {isLoginPool(pool) ? <span className="re-summary">Just me</span> : <Availability pool={pool} refusals={refusals} />}
+          {people && <span className="re-chip pool-shared-chip">SHARED</span>}
+          {/* A Codex pool its owner keeps to themselves says so, with how many of its accounts are left to
+              run on; shared, it wears SHARED and its people instead. Somebody they added reads whose it
+              is and what they can run on there — the pool's ChatGPT accounts and its keys alike. */}
+          {member ? (
+            <span className="re-summary">
+              {poolOwner(shared!)?.name}’s · {pool.members.length} {memberNoun(pool, pool.members.length)}
+            </span>
+          ) : poolRunsCodex(pool) && !people ? (
+            <span className="re-summary">Just me · {availabilityOf(pool, refusals)}</span>
+          ) : (
+            <Availability pool={pool} refusals={refusals} />
+          )}
         </button>
         <span className="re-head-sp" />
-        {pool.shared && <PeopleStack pool={pool.shared} />}
-        <PoolGauge pool={pool} />
+        {people && !member && <PeopleStack pool={shared!} />}
+        {!member && <PoolGauge pool={pool} />}
         <Link className="re-manage" to={`/providers/pools/${encodeId(pool.id)}`} aria-label={`Manage ${pool.label}`}>
           <span className="pool-wide">Manage </span>→
         </Link>
@@ -512,7 +672,8 @@ export function AccountPools({
   const isMobile = useIsMobile();
   const [creating, setCreating] = useState(false);
   const [replacing, setReplacing] = useState<{ pool: SharedPool; key: SharedPoolKey } | null>(null);
-  const [signingIn, setSigningIn] = useState<ProviderPool | null>(null);
+  /** The dialog for one of these pools: adding an account, or putting back one OpenAI signed out. */
+  const [signingIn, setSigningIn] = useState<{ pool: ProviderPool; login: CodexLogin | null } | null>(null);
   const [fold, setFold] = useState<Record<string, boolean>>(readFold);
   const toggle = (id: string, open: boolean) =>
     setFold((prev) => {
@@ -548,7 +709,7 @@ export function AccountPools({
             collapsed={!open}
             onToggle={() => toggle(pool.id, open)}
             keyActions={shared && { onReplace: (key) => setReplacing({ pool: shared, key }) }}
-            loginActions={{ onSignIn: () => setSigningIn(pool) }}
+            loginActions={{ onSignIn: (login) => setSigningIn({ pool, login }) }}
           />
         );
       })}
@@ -556,7 +717,9 @@ export function AccountPools({
       {replacing && (
         <ReplaceKeyModal pool={replacing.pool} poolKey={replacing.key} onClose={() => setReplacing(null)} />
       )}
-      {signingIn && <CodexSignInModal pool={signingIn} onClose={() => setSigningIn(null)} />}
+      {signingIn && (
+        <CodexSignInModal pool={signingIn.pool} login={signingIn.login} onClose={() => setSigningIn(null)} />
+      )}
     </div>
   );
 }
@@ -612,7 +775,7 @@ export function PoolAccountsModal({
     onError: (e: Error) => {
       // A partial add still changed the pool.
       void qc.invalidateQueries({ queryKey: ['providers'] });
-      message.error(e.message || 'Failed');
+      message.error(pool ? "Couldn't add the account" : "Couldn't create the pool", e.message);
     },
   });
 
@@ -683,8 +846,8 @@ function AccountPickList({
 
 /**
  * "New pool": the engine it runs, its name, and who can use it. A Codex pool for "Just me" runs on the
- * user's own ChatGPT account: it is theirs alone, and its account goes in by "Sign in with ChatGPT" on
- * its page, which opens the moment the pool exists (migration 0323). Shared, a Codex pool holds OpenAI
+ * user's own ChatGPT account: it is theirs alone, and its accounts go in from "Add account" on its page,
+ * whose dialog opens the moment the pool exists (migration 0323). Shared, a Codex pool holds OpenAI
  * API keys that each person pastes on its page once it exists: whoever makes it adds people by the email
  * of their Orbit account, and says whether they may put keys of their own in. A Claude pool is the
  * user's own Claude subscriptions, picked here the way "Create a pool" picks them.
@@ -746,7 +909,7 @@ export function NewPoolModal({ rows, onClose }: { rows: ProviderRow[]; onClose: 
     },
     onError: (e: Error) => {
       void qc.invalidateQueries({ queryKey: ['providers'] });
-      message.error(e.message || 'Failed');
+      message.error("Couldn't create the pool", e.message);
     },
   });
 

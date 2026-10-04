@@ -75,6 +75,7 @@ public enum AgentDefaults {
         ProviderOption(id: "codex", name: "Codex"),
         ProviderOption(id: "kimi", name: "Kimi"),
         ProviderOption(id: "opencode", name: "OpenCode"),
+        ProviderOption(id: "antigravity", name: "Antigravity"),
     ]
 
     /// Provider-picker options with the control-plane–configured providers appended after the
@@ -100,12 +101,20 @@ public enum AgentDefaults {
     }
 
     /// The built-in runtime whose live catalog describes a `modelsFromRuntime` provider — the vendor
-    /// IS that CLI's own endpoint (Anthropic→claude, OpenAI→codex), so the runner's probe of the
-    /// installed CLI leads and the stored `models` list is only the fallback. Read under this key,
-    /// never the slug, so an OpenAI provider reads Codex models and can't land in Claude's namespace.
-    /// Mirrors web's `custom.runtime === CODEX ? CODEX : CLAUDE`.
+    /// IS that CLI's own endpoint (Anthropic→claude, OpenAI→codex, Gemini→antigravity), so the
+    /// runner's probe of the installed CLI leads and the stored `models` list is only the fallback.
+    /// Read under this key, never the slug, so an OpenAI provider reads Codex models (and a Gemini
+    /// one agy's) and can't land in Claude's namespace. Mirrors web's `runtimeForProvider`.
     private static func runtimeCatalogKey(for custom: ConfiguredProvider) -> String {
-        custom.runtime == "codex" ? "codex" : "claude"
+        borrowedRuntime(custom)
+    }
+
+    /// The runtime a configured provider borrows: Claude, Codex, Kimi or Antigravity. Invalid legacy
+    /// values, and a provider row that names no runtime at all, use the same safe Claude fallback as
+    /// the backend.
+    private static func borrowedRuntime(_ custom: ConfiguredProvider) -> String {
+        let borrowed = custom.runtime ?? ""
+        return ["codex", "kimi", "antigravity"].contains(borrowed) ? borrowed : "claude"
     }
 
     /// Kimi's list comes from the runner too (`kimi provider list --json`, which also carries each
@@ -122,6 +131,18 @@ public enum AgentDefaults {
         ModelOption(id: "", name: "Managed by OpenCode"),
     ]
 
+    /// Antigravity's models ship inside the agy binary and come from the runner (`agy models`, one
+    /// row per model with its thinking levels folded out of the slug). Until a runner reports them,
+    /// the one choice that is true on every agy is passing no `--model` and letting agy pick its
+    /// own. Unlike OpenCode's sentinel this row is only the fallback, like Kimi's managed default:
+    /// once there is a catalogue, dispatch runs a model-less session on the reported default (the
+    /// Runtime's own, else the catalogue's first row), so the row would offer a choice dispatch no
+    /// longer makes. The fallback names Gemini's preset default without changing the empty
+    /// dispatch value. Mirrors web's ANTIGRAVITY_MODEL_OPTIONS.
+    public static let antigravityModels: [ModelOption] = [
+        ModelOption(id: "", name: "Gemini 3.8 Flash"),
+    ]
+
     public static let defaultModelID = "claude-opus-5"
 
     /// The models a provider's pickers offer. Claude and Codex lists come exclusively from the
@@ -129,11 +150,13 @@ public enum AgentDefaults {
     /// There is no static fallback for them — when the catalog is unavailable the picker is empty.
     /// An unknown provider string returns an empty array too, matching apiserver's
     /// `agentProvider()`, so a stale value can't leak Claude-only options. OpenCode contributes
-    /// only its empty "managed by the runtime" sentinel ahead of the runner catalog.
+    /// only its empty "managed by the runtime" sentinel ahead of the runner catalog; Antigravity's
+    /// look-alike row is replaced by the catalog instead (see `antigravityModels`).
     public static func models(for provider: String) -> [ModelOption] {
         switch provider {
         case "kimi":     return kimiModels
         case "opencode": return opencodeModels
+        case "antigravity": return antigravityModels
         default:         return []
         }
     }
@@ -169,12 +192,15 @@ public enum AgentDefaults {
     }
 
     /// Static fallback when neither Runtime default nor catalog is available. Mirrors web's
-    /// DEFAULT_MODEL_BY_PROVIDER.
+    /// DEFAULT_MODEL_BY_PROVIDER. Antigravity's is no `--model` at all: agy's models come and go
+    /// with its releases, so any id named here could only go stale — and falling through to the
+    /// Claude default would hand agy a model it refuses to start on.
     public static func defaultModel(for provider: String) -> String {
         switch provider {
         case "codex": return "gpt-5.6-sol"
         case "kimi":     return "kimi-code/kimi-for-coding"
         case "opencode": return ""
+        case "antigravity": return ""
         default:         return defaultModelID
         }
     }
@@ -235,13 +261,17 @@ public enum AgentDefaults {
     /// are deliberately left alone: OpenCode owns its own selection, a configured third-party's
     /// list is a document rather than a live probe, an unreported catalog can retire nothing, and
     /// an id the Runtime itself names (`opus`, `opusplan`, a gateway id) is current by definition.
+    /// Antigravity's pins are judged against its own catalog, and its empty one is never kept.
     public static func livePin(_ model: String?, provider: String, catalog: RunnerModelCatalog?,
                                configured: [ConfiguredProvider]?,
                                runtimeDefaults: [String: String]?) -> String? {
         guard let model else { return nil }
-        // OpenCode's "you pick" sentinel is a choice, not a stale value.
-        if model.isEmpty { return model }
         let custom = configuredProvider(provider, in: configured)
+        // OpenCode's "you pick" sentinel is a choice, not a stale value. Antigravity's "" is not a
+        // pick that outlives anything: it stood in for a catalogue not reported yet, and dispatch
+        // runs a model-less session on the reported default — so the caller falls through to that
+        // default, which is what the pill must say. Mirrors web's livePinnedModel.
+        if model.isEmpty { return custom == nil && provider == "antigravity" ? nil : model }
         if custom == nil, provider == "opencode" { return model }
         if let custom, custom.modelsFromRuntime != true { return model }
         let key = custom.map { runtimeCatalogKey(for: $0) } ?? runtime(for: provider,
@@ -263,17 +293,15 @@ public enum AgentDefaults {
 
     /// Resolve a persisted built-in/configured provider identity to the local runtime that
     /// executes it. Missing configured providers retain the server's historical Claude fallback.
+    /// Antigravity answers for itself: its catalog and its Runtime default are keyed on its own
+    /// name, and read under "claude" a Gemini pin would be judged against Claude's models.
     public static func runtime(for provider: String,
                                configured: [ConfiguredProvider]? = nil) -> String {
         if let custom = configuredProvider(provider, in: configured) {
-            // Configured providers borrow Claude, Codex or Kimi. Invalid legacy values, and a
-            // provider row that names no runtime at all, use the same safe Claude fallback as
-            // the backend.
-            let borrowed = custom.runtime ?? ""
-            return borrowed == "codex" || borrowed == "kimi" ? borrowed : "claude"
+            return borrowedRuntime(custom)
         }
         let value = provider
-        return value == "codex" || value == "kimi" ? value : "claude"
+        return value == "codex" || value == "kimi" || value == "antigravity" ? value : "claude"
     }
 
     public static func isBuiltInProvider(_ provider: String) -> Bool {
@@ -326,7 +354,7 @@ public enum AgentDefaults {
     /// Display name for a model id, across providers. Unknown ids (an `ANTHROPIC_MODEL` env
     /// override pointing at a custom endpoint) render as the raw id.
     public static func friendlyName(_ id: String) -> String {
-        (kimiModels + opencodeModels).first { $0.id == id }?.name ?? id
+        (kimiModels + opencodeModels + antigravityModels).first { $0.id == id }?.name ?? id
     }
 
     /// Written as a loop rather than one expression chaining `??` across four optional-chained
@@ -335,7 +363,7 @@ public enum AgentDefaults {
     /// optional chains blows up combinatorially — and started failing every Swift job outright with
     /// "unable to type-check this expression in reasonable time". Same provider order, same result.
     public static func friendlyName(_ id: String, catalog: RunnerModelCatalog?) -> String {
-        for provider in ["claude", "codex", "kimi", "opencode"] {
+        for provider in ["claude", "codex", "kimi", "opencode", "antigravity"] {
             let models: [ModelOption] = catalog?.models(for: provider) ?? []
             if let name = models.first(where: { $0.id == id })?.name { return name }
         }
@@ -361,22 +389,41 @@ public enum AgentDefaults {
     public static func friendlyName(_ id: String, for provider: String,
                                     catalog: RunnerModelCatalog?,
                                     configured: [ConfiguredProvider]?) -> String {
-        models(for: provider, catalog: catalog, configured: configured).first { $0.id == id }?.name
-            ?? friendlyName(id, catalog: catalog, configured: configured)
+        if let name = models(for: provider, catalog: catalog, configured: configured)
+            .first(where: { $0.id == id })?.name {
+            return name
+        }
+        // The empty id is every model-less runtime's "it picks for itself", which the id alone
+        // cannot attribute: there OpenCode's row comes first, and an Antigravity session left on ""
+        // after its catalog replaced that row would read "Managed by OpenCode". Its own row names it.
+        if id.isEmpty, let name = models(for: provider).first(where: { $0.id == id })?.name {
+            return name
+        }
+        return friendlyName(id, catalog: catalog, configured: configured)
     }
 
-    /// Reasoning-effort levels a provider accepts. Codex, Kimi and OpenCode report levels per model,
-    /// so their static lists are only the fallback when the runner catalog does not report a model.
-    /// Mirrors web. The server and runner both coerce an illegal value, but a picker should never
-    /// offer one.
+    /// Reasoning-effort levels a provider accepts. Codex, Kimi, OpenCode and Antigravity report
+    /// levels per model, so their static lists are only the fallback when the runner catalog does
+    /// not report a model — agy's is its whole `--effort` vocabulary (contract §9.2), of which
+    /// Gemini 3.1 Pro, say, has Low and High only. Mirrors web. The server and runner both coerce an
+    /// illegal value, but a picker should never offer one.
     public static func efforts(for provider: String) -> [Effort] {
         switch provider {
         case "codex":    return [.default, .minimal, .low, .medium, .high, .xhigh, .max, .ultra]
         case "kimi":     return [.default, .low, .high, .max]
         case "opencode": return [.default, .minimal, .low, .medium, .high, .xhigh, .max]
+        case "antigravity": return [.default, .low, .medium, .high]
         default:         return [.default, .low, .medium, .high, .xhigh, .max, .ultra]
         }
     }
+
+    /// agy tops out at `high` and starts at `low`, so a level carried in from another runtime that
+    /// lies outside that range collapses onto its nearer end — `none` included, a Codex level the
+    /// string-backed `Effort` can carry in from the server or an account default. Mirrors web's
+    /// ANTIGRAVITY_EFFORT_ALIASES.
+    private static let antigravityEffortAliases: [String: Effort] = [
+        "none": .low, "minimal": .low, "xhigh": .high, "max": .high, "ultra": .high,
+    ]
 
     /// Coerce a saved/account effort when it crosses into a runtime with a smaller effort
     /// vocabulary. Mirrors the API normalization so stale sessions and synced preferences render
@@ -395,6 +442,8 @@ public enum AgentDefaults {
             case .xhigh:   return .max
             default:       return effort
             }
+        case "antigravity":
+            return antigravityEffortAliases[effort.rawValue] ?? effort
         default:
             return effort
         }
@@ -434,7 +483,7 @@ public enum AgentDefaults {
         return levels.reduce(lowest) { distance($1) <= distance($0) ? $1 : $0 }
     }
 
-    /// Codex efforts, OpenCode variants and Kimi thinking levels are model-specific. Preserve every
+    /// Codex efforts, OpenCode variants, Kimi and Antigravity levels are model-specific. Preserve every
     /// runner-reported key verbatim so a new runtime variant does not require a native-client release. An exact
     /// catalog row is authoritative even when its variant list is empty — Kimi's K2.7 Coding
     /// declares no levels and rejects every one of them — while only a model absent from the global
@@ -449,7 +498,8 @@ public enum AgentDefaults {
                 $0 == .default || declared.contains($0) || ($0 == .ultra && declared.contains(.xhigh))
             }
         }
-        guard provider == "codex" || provider == "opencode" || provider == "kimi" else {
+        guard provider == "codex" || provider == "opencode" || provider == "kimi"
+                || provider == "antigravity" else {
             return efforts(for: provider)
         }
         guard let row = catalog?.modelInfo(for: provider, model: model) else {
@@ -467,11 +517,12 @@ public enum AgentDefaults {
     /// Whether a stored/current value is valid for this provider-model pair. If an OpenCode or Kimi
     /// model is absent from the global catalog, retain the value: it may be a project-defined model
     /// and variant, or a KIMI_MODEL_* alias. An exact row, including one with no variants, is
-    /// authoritative.
+    /// authoritative. Codex and Antigravity hold a model the catalog does not report to their
+    /// runtime-wide list instead — their vocabularies are closed, so nothing outside it can be valid.
     public static func supportsEffort(_ effort: Effort, for provider: String, model: String,
                                       catalog: RunnerModelCatalog?) -> Bool {
         if effort == .default { return true }
-        if provider == "codex" {
+        if provider == "codex" || provider == "antigravity" {
             guard let row = catalog?.modelInfo(for: provider, model: model) else {
                 return efforts(for: provider).contains(effort)
             }
@@ -500,9 +551,9 @@ public enum AgentDefaults {
         }
         // Closed vocabularies: map what maps (for example Kimi medium→high), clear the rest.
         let mapped = normalizeEffort(effort, for: provider)
-        // Kimi's vocabulary is closed but per-model, so the mapped value still has to clear the
-        // model's own list: K2.7 Coding takes none of them.
-        if provider == "kimi" {
+        // Kimi's and Antigravity's vocabularies are closed but per-model, so the mapped value still
+        // has to clear the model's own list: K2.7 Coding takes none of them, Gemini 3.1 Pro no Medium.
+        if provider == "kimi" || provider == "antigravity" {
             return supportsEffort(mapped, for: provider, model: model, catalog: catalog)
                 ? mapped : .default
         }
@@ -540,7 +591,7 @@ public enum AgentDefaults {
     /// - Codex: the same row must advertise the priority tier. A row that says nothing means no —
     ///   codex drops a tier the model does not advertise without a word, so "unknown" must not draw
     ///   a control whose only possible outcome is being ignored.
-    /// - Kimi and OpenCode have no fast lane.
+    /// - Kimi, OpenCode and Antigravity have no fast lane.
     ///
     /// True means "there is a lane for this runtime and model", never "this account is allowed
     /// it": an organisation setting or data residency is the CLI's to refuse when the request goes
@@ -662,7 +713,8 @@ public enum AgentDefaults {
 
     /// Claude's Auto mode is model-specific. Every other runtime has it runtime-wide, for any
     /// model — Codex spells it `on-request` ("the model decides when to ask the user for
-    /// approval"), Kimi and OpenCode expose it as a plain mode.
+    /// approval"), Kimi and OpenCode expose it as a plain mode, and Antigravity runs it as
+    /// `--dangerously-skip-permissions`, on any model it lists.
     ///
     /// Used ONLY where the assigned runner's catalog has not answered for that model. It is a
     /// fallback and no longer a gate: the runner asks the CLI it will actually run the session

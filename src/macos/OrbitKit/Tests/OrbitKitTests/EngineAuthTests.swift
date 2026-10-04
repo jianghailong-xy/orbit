@@ -29,8 +29,42 @@ final class EngineAuthTests: XCTestCase {
         XCTAssertEqual(EngineAuth.remedy(forProvider: "kimi"), .signIn(.kimi))
         // OpenCode's login picks its provider interactively, so it can't be relayed from here.
         XCTAssertEqual(EngineAuth.remedy(forProvider: "opencode"), .runCommand("opencode auth login"))
+        // Antigravity connects the encrypted Gemini key in Providers.
+        XCTAssertEqual(EngineAuth.remedy(forProvider: "antigravity"), .connectGemini)
         // Any other slug is a control-plane–configured provider, i.e. a key to fix.
         XCTAssertEqual(EngineAuth.remedy(forProvider: "my-vendor"), .apiKey(slug: "my-vendor"))
+    }
+
+    func testAntigravityRepairsRecognizeQueueAndRuntimeFailures() {
+        XCTAssertEqual(EngineAuth.antigravityRepair("Antigravity requires a newer Orbit runner; update this runner first"), .updateRunner)
+        XCTAssertEqual(EngineAuth.antigravityRepair("Antigravity CLI isn't installed on workstation"), .notInstalled)
+        XCTAssertEqual(EngineAuth.antigravityRepair("Antigravity CLI (\"agy\") not found on this runner's PATH — run `orbit doctor` on the runner to install it and sign in."), .notInstalled)
+        XCTAssertNil(EngineAuth.antigravityRepair("Codex CLI isn't installed"))
+        XCTAssertNil(EngineAuth.antigravityRepair(nil))
+    }
+
+    func testAntigravityMissingKeyFailureKeepsItsOriginalRepairAfterSwitchingToGemini() {
+        let message = "Failed to authenticate: Antigravity runs on an API key (GEMINI_API_KEY), and neither this session nor the runner has one — set GEMINI_API_KEY in the runner's environment, or give the session a Gemini API key; Google-account sign-in is not supported."
+        XCTAssertEqual(EngineAuth.antigravityRepair(message), .needsKey,
+                       "the original missing key failure must not become a rejection of the newly connected key")
+        XCTAssertEqual(EngineAuth.remedy(forProvider: "gemini"), .apiKey(slug: "gemini"))
+        XCTAssertNil(EngineAuth.antigravityRepair("Failed to authenticate: invalid Gemini API key"),
+                     "a rejected BYOK key still earns its own key-rejection remedy")
+    }
+
+    func testAntigravityCardsNameTheRunnerAndOfferEncryptedKeys() {
+        XCTAssertEqual(EngineAuth.antigravityTitle(.needsKey, runnerName: "HPC"), "Antigravity needs a Gemini API key")
+        XCTAssertEqual(EngineAuth.antigravityBody(.needsKey, runnerName: nil, runnerVersion: nil),
+                       "Connect Gemini in Providers. Orbit stores the key encrypted, and this conversation can continue on it.")
+        XCTAssertEqual(EngineAuth.antigravityTitle(.updateRunner, runnerName: "HPC"), "Waiting for a newer runner")
+        XCTAssertEqual(EngineAuth.antigravityBody(.updateRunner, runnerName: "HPC", runnerVersion: "0.1.208"),
+                       "HPC runs Orbit runner 0.1.208; Antigravity needs 0.1.209 or newer. The runner updates itself when no session is running on it, and this session starts then.")
+        XCTAssertEqual(EngineAuth.antigravityTitle(.notInstalled, runnerName: "workstation"),
+                       "Antigravity CLI isn't installed on workstation")
+        XCTAssertEqual(EngineAuth.antigravityBody(.notInstalled, runnerName: "workstation", runnerVersion: nil),
+                       "Install it from Providers, then send your message again.")
+        XCTAssertEqual(EngineAuth.antigravityTitle(.notInstalled, runnerName: nil), "Antigravity CLI isn't installed on this runner")
+        XCTAssertTrue(EngineAuth.antigravityBody(.updateRunner, runnerName: "", runnerVersion: "").contains("this runner runs Orbit runner an unknown version"))
     }
 
     // MARK: the transcript
@@ -136,5 +170,28 @@ final class EngineAuthTests: XCTestCase {
         XCTAssertEqual(runner.engineHealth(.claude)?.signedIn, true)
         XCTAssertEqual(runner.engineHealth(.codex)?.signedIn, false)
         XCTAssertEqual(runner.engineHealth(.kimi), nil)
+    }
+
+    func testPersonalGeminiProviderDecodesItsEditorID() throws {
+        let provider = try JSONDecoder().decode(ConfiguredProvider.self, from: Data(#"{"id":"provider-id","slug":"gemini-key","label":"Gemini","runtime":"antigravity","models":[],"presetSlug":"gemini"}"#.utf8))
+        XCTAssertEqual(provider.providerID, "provider-id")
+        XCTAssertEqual(provider.id, "gemini-key", "the picker still identifies a choice by slug")
+    }
+
+    func testInstallRelayRemainsBusyAfterTheRequestReturnsUntilTheRunnerSettlesIt() throws {
+        for status in ["pending", "installing"] {
+            for engine in ["antigravity", "kimi"] {
+                let relay = try JSONDecoder().decode(RunnerInstallState.self,
+                                                     from: Data("{\"status\":\"\(status)\",\"engine\":\"\(engine)\"}".utf8))
+                XCTAssertTrue(relay.inFlight, "another engine's active install occupies the same runner relay")
+            }
+        }
+        for status in ["done", "failed", "reticulating"] {
+            let relay = try JSONDecoder().decode(RunnerInstallState.self,
+                                                 from: Data("{\"status\":\"\(status)\"}".utf8))
+            XCTAssertFalse(relay.inFlight)
+        }
+        XCTAssertFalse(try JSONDecoder().decode(RunnerInstallState.self,
+                                                from: Data("{\"status\":null}".utf8)).inFlight)
     }
 }

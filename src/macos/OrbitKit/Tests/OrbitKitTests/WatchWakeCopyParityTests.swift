@@ -364,12 +364,17 @@ final class WatchWakeCopyParityTests: XCTestCase {
                       "the line over several targets stopped writing Tasks created here's sentence "
                           + "from `stripCounts`, which this client writes through "
                           + "WatchSessionSummary.lineParts.")
-        // The middle: a lone watch's own threshold, or the targets several watches cover.
-        XCTAssertTrue(web.contains("thresholdOf(waitingOn[0].predicate, live)"),
+        // The middle: a lone watch's own threshold, or the targets several watches cover — worked out
+        // once in the shared library's `stripLine`, which the session list's rows read too.
+        XCTAssertTrue(web.contains("stripLine(waitingOn)"),
+                      "the strip stopped taking its line from \(Self.webWatches)'s `stripLine`, the one "
+                          + "the session list's rows say as well.")
+        let lib = try flat(Self.webWatches)
+        XCTAssertTrue(lib.contains("thresholdOf(waitingOn[0].predicate, live)"),
                       "the strip's middle stopped reading the lone watch's own threshold — the "
                           + "condition's count, not the target set's, is what the line states.")
-        XCTAssertTrue(web.contains("targetNoun(waitingOn, live.length)"),
-                      "how several watches are counted drifted: \(Self.webRelations) no longer "
+        XCTAssertTrue(lib.contains("targetNoun(waitingOn, live.length)"),
+                      "how several watches are counted drifted: \(Self.webWatches) no longer "
                           + "counts the distinct targets in the same noun the cards use.")
         // Which shape the line takes: one watch over one live target names it, anything else counts.
         let lone = try XCTUnwrap(WatchSessionSummary(sessionID: "S1", watches: [

@@ -253,7 +253,8 @@ test('the index buckets every project in one aggregate, not one query per projec
         bindingReads += 1;
         return [{ projectId: 'a1', upstreamRef: 'main', integrationRef: 'refs/heads/project/bg',
           integrationRefSource: 'EXPLICIT', integrationStartedAt: new Date('2026-07-30T00:00:00.000Z'),
-          mergeCheckCommand: null, mergeCheckTimeoutSeconds: null }];
+          mergeCheckCommand: null, mergeCheckTimeoutSeconds: null,
+          _count: { integrationJobs: 2 } }];
       },
     },
     $queryRaw: async (...args: unknown[]) => {
@@ -295,7 +296,7 @@ test('the index buckets every project in one aggregate, not one query per projec
   assert.equal(bindingReads, 1);
   // The line each project lands on, read through the one definition of "which line is this" and
   // stated as a branch name: null for the two bindings nobody decided a line for.
-  assert.deepEqual(rows[0].integration, { line: 'PROJECT_BRANCH', ref: 'project/bg' });
+  assert.deepEqual(rows[0].integration, { line: 'PROJECT_BRANCH', ref: 'project/bg', activeJobCount: 2 });
   assert.equal(rows[1].integration, null);
   assert.deepEqual(rows[0].buckets, {
     running: 1, ready: 2, blocked: 3, awaitingVerification: 0, done: 4, failed: 0, cancelled: 5,
@@ -338,6 +339,36 @@ test('the index buckets every project in one aggregate, not one query per projec
   // The established tally shape is kept, now sourced from the same aggregate. The missing group
   // for c3 means it has no tasks, so its explicit total is zero.
   assert.deepEqual(rows.map((row) => row._count.tasks), [15, 9, 0]);
+});
+
+test('the sidebar reads queued and running integration work once for the whole page', async () => {
+  const ids = ['a1', 'b2', 'c3'];
+  let bindingReads = 0;
+  let rawQueries = 0;
+  const service = serviceWith({
+    project: { findMany: async () => ids.map((id) => ({ id })) },
+    projectCodebase: {
+      findMany: async (args: any) => {
+        bindingReads += 1;
+        assert.deepEqual(args.where, { projectId: { in: ids }, slot: 'primary' });
+        assert.deepEqual(args.select._count, {
+          select: { integrationJobs: { where: { state: { in: ['QUEUED', 'RUNNING'] } } } },
+        });
+        return [{ projectId: ids[0], upstreamRef: 'main', integrationRef: 'refs/heads/project/bg',
+          integrationRefSource: 'EXPLICIT', integrationStartedAt: null,
+          mergeCheckCommand: null, mergeCheckTimeoutSeconds: null,
+          _count: { integrationJobs: 1 } }];
+      },
+    },
+    $queryRaw: async () => { rawQueries += 1; return []; },
+  });
+  const rows = await service.listSidebar(OWNER_ID);
+  assert.equal(bindingReads, 1);
+  assert.equal(rawQueries, 3, 'the sidebar retains its three page-wide task/attention readers');
+  assert.deepEqual(rows[0].integration,
+    { line: 'PROJECT_BRANCH', ref: 'project/bg', activeJobCount: 1 });
+  assert.deepEqual(rows[0].buckets, { running: 0 }, 'integration work is not a task session');
+  assert.equal(rows[1].integration, null);
 });
 
 // The sidebar's working dot and its order both read this, so it has to be the session list's own

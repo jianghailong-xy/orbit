@@ -1,0 +1,19 @@
+{
+  "agy_version": "1.2.16",
+  "date_local": "2026-10-04 Asia/Shanghai",
+  "installation": "official install.sh --dir <TMP>/bin, with isolated HOME/XDG; AGY_CLI_DISABLE_AUTO_UPDATE=true",
+  "binary_bytes": 209625296,
+  "binary_sha512": "fa4de3267ad38d4baaa217010757d9cadce9b4bd94ab995b81b34399ca1577758067bc9892ce498ce76345671142e3a6c949df38b07f1b3d4e2cf4cf46cf3044",
+  "installer_sha256": "62966c07365423bd4dc209355060744058fb30d60f5323e2d360e39de64e5042",
+  "os": "Linux",
+  "arch": "x86_64",
+  "identity": "root on workstation-gpu",
+  "gemini_dir": "<TMP>/runs/<probe>/gemini",
+  "cwd": "empty directory per probe",
+  "credentials_environment": "GEMINI_API_KEY and inherited OAuth vars absent; api-models only uses an invalid placeholder",
+  "dbus": "DBUS_SESSION_BUS_ADDRESS points to nonexistent <TMP>/absent-dbus; no desktop service can be reached",
+  "log_file": "/dev/null",
+  "prompt": "none sent before owner login",
+  "redaction": "submitted samples strip complete PTY authorization input-render interval, token values, account emails, dynamic OAuth query and private temp root; privacy gap in original session tool output disclosed separately",
+  "scope": "owner-authorized real OAuth plus isolated file credentials, one real turn, 3 concurrent sessions x 3 turns, forced expiry/invalid refresh, quota and model queries; see README for evidence limitations"
+}

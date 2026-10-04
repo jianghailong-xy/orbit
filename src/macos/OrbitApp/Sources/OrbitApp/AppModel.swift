@@ -9,22 +9,16 @@ import AppKit
 import UIKit
 #endif
 
-/// How loud a toast is — drives its icon, its tint, and whether it self-dismisses. Ported from
-/// web's `SessionNoticeTone` so the same outcome reads the same on every client.
-enum ToastTone: Equatable {
-    case success, neutral, info, warning, error
-
-    /// Web parity: an outcome you need to read twice — and usually paste somewhere — isn't taken
-    /// away on a timer. It stays until the ✕.
-    var isPersistent: Bool { self == .warning || self == .error }
-}
-
 /// What a console reports to the app's toast host. The session id isn't here: the registry knows
-/// which console it handed this sink to and adds it (see `ConsoleRegistry.onToast`).
+/// which console it handed this sink to and adds it (see `ConsoleRegistry.onToast`). `key` names the
+/// operation ("merge", "commit") so its result takes its progress pill's place; the app scopes it to
+/// the session. `ToastTone` lives in OrbitKit with the rest of the toast rules (`ToastFeed`).
 struct ToastRequest: Equatable {
     let message: String
     var detail: String?
     var tone: ToastTone = .success
+    var key: String?
+    var inProgress = false
 }
 
 /// Top-level app state: instance + auth + the Open session list. All UI-driving state lives
@@ -60,6 +54,12 @@ final class AppModel {
     /// `GET /session-tags`. Drives the tag picker sheet and the list's tag filter/group chips; empty
     /// on an older server without the endpoint. See `loadSessionTags` / `setSessionTags`.
     var sessionTags: [SessionTag] = []
+    #if os(iOS)
+    /// The owner's session folders, every workspace's (`GET /session-folders`, by name) — the Move
+    /// panel lists the ones in the session's own workspace. iOS only, as the panel is: macOS shows no
+    /// folders (docs/session-folders-move-design.md §1). See `loadSessionFolders`.
+    var sessionFolders: [SessionFolder] = []
+    #endif
     // Top-level nav: which AppShell section is showing, and every section's navigation stack. The
     // app lands on the Agents section (the first agent's session list); the agent is selected once
     // the list loads — see `loadAgentsThenLand`.
@@ -241,10 +241,12 @@ final class AppModel {
     var selectedAgentSessionID: String? {
         get { nav.focusedConsoleSessionID }
         set {
-            // Selecting in a three-column shell replaces the page the detail pane shows; clearing
-            // pops the console that is there — never a draft or a deeper frame.
+            // Selecting in a three-column shell replaces the page the detail pane shows — or, with a
+            // folder's page showing, is pushed over it, so the folder stays the list's page beside
+            // the console (`NavState.selectConsole`); clearing pops the console that is there —
+            // never a draft or a deeper frame.
             if let id = newValue {
-                nav.replaceTop(with: .console(sessionID: id, origin: .list))
+                nav.selectConsole(.console(sessionID: id, origin: .list))
             } else if case .console = nav.path.last {
                 nav.pop()
             }
@@ -257,6 +259,13 @@ final class AppModel {
     var composingAgentSession: Bool {
         if case .compose = nav.path.last { return true }
         return false
+    }
+    /// The folder the draft on screen was opened from — a folder page's ✎ — whose sessions it
+    /// files the one it creates in (`POST /sessions` with a `folderId`, design §3.3). Nil for a
+    /// draft opened from a list. Read off the same frame as ``composingAgentSession``.
+    var composingFolderID: String? {
+        if case .compose(_, let folderID) = nav.path.last { return folderID }
+        return nil
     }
     /// The account whose record fills the Admin pane. Compact had nowhere to put this: the section
     /// was a bare `NavigationStack` with no detail column and no push, so a selected user went
@@ -368,6 +377,10 @@ final class AppModel {
     private(set) var controlPlaneLive = false
     private var controlRefreshPending = false
     private var controlRefreshTask: Task<Void, Never>?
+    /// The earliest moment a loaded row's review is due, and the re-read scheduled for a second after
+    /// it (`scheduleReviewDueRefresh`).
+    private var reviewDueAt: Date?
+    private var reviewDueTask: Task<Void, Never>?
     private var controlRefreshGeneration = 0
     /// Dedup exact refreshes when a control nudge and the fallback poll land together.
     private var sessionDetailRefreshes: Set<String> = []
@@ -482,7 +495,8 @@ final class AppModel {
         // one toast host, not the status line above the composer — see `showToast`.
         consoleRegistry?.onToast = { [weak self] request, sessionID in
             self?.showToast(request.message, sessionID: sessionID,
-                            detail: request.detail, tone: request.tone)
+                            detail: request.detail, tone: request.tone,
+                            key: request.key.map { "\($0):\(sessionID ?? "")" }, inProgress: request.inProgress)
         }
         // The permission posture a session inherits when it stores none, and where a Mode picked in
         // the composer is remembered — both live on the account (Settings → Default permission).
@@ -712,6 +726,7 @@ final class AppModel {
         runningWorkspaceIDs = []
         jobWorkspaceIDs = []
         projectCoordinators = [:]
+        sessionFolders = []
         #endif
         sessionDetails.removeAll()
         resetNavigation()
@@ -805,6 +820,7 @@ final class AppModel {
                     await self.refreshFocusedSessionDetailIfNeeded()
                     self.consoleRegistry?.flush(self.focusedConsoleSessionID)
                     await self.refreshWatchesIfDue()
+                    await self.projects?.refreshIfDue()
                 }
                 try? await Task.sleep(nanoseconds: 4_000_000_000)
             }
@@ -884,6 +900,10 @@ final class AppModel {
                         // `wiki.changed` has no replay either, and nothing depends on it arriving:
                         // re-read what the Wiki has loaded, the drawer's number with it.
                         if let wiki { Task { await wiki.reloadLoaded() } }
+                        #if os(iOS)
+                        // Nor has `folder.changed`: re-read the folders the Move panel offers.
+                        Task { await loadSessionFolders() }
+                        #endif
                         // Runners has neither push nor poll: a list that failed while offline
                         // would otherwise stay on its error until someone pulls to refresh.
                         if let runners, runners.loadState.lastLoadFailed {
@@ -941,6 +961,16 @@ final class AppModel {
         default:
             break
         }
+        // A reviewer's own conversation moving can end the review of another row (contract §5 N5):
+        // that run's row says "Under review" until then, and nothing names it, so read the list again.
+        switch ev.type {
+        case .sessionCreated, .sessionUpdated, .sessionEnded:
+            if sessions.contains(where: { $0.confirmationUnderReview?.reviewerSessionId == ev.sessionId }) {
+                scheduleControlRefresh()
+            }
+        default:
+            break
+        }
         // A project's lanes move when one of its tasks does, and an owner item rides the approval
         // count; no event names projects, so a loaded index refetches shortly after either.
         switch ev.type {
@@ -990,6 +1020,14 @@ final class AppModel {
         // `groupsFor` default of `['sessions']`, a list refetch for an event about something else.
         case .wikiChanged:
             wiki?.nudge()
+        #if os(iOS)
+        // A folder was created, renamed or deleted, here or on another device: re-read the library
+        // the Move panel lists (docs/session-folders-move-design.md §5.6). The event names the folder
+        // and nothing else, and a session moved between folders is a `session.updated` of its own,
+        // so this refetches no list — `default` below refetched Open and left the folders stale.
+        case .folderChanged:
+            Task { await loadSessionFolders() }
+        #endif
         // AgentsModel.load() fetches the provider catalog with the list; provider edits do not
         // change task-row membership or live overlays.
         case .providerChanged:
@@ -1033,6 +1071,25 @@ final class AppModel {
         // anything a newer server adds.
         default:
             scheduleControlRefresh()
+        }
+    }
+
+    /// A row saying "Under review" stops saying it when its review's window runs out, which nothing on
+    /// the server announces (contract §5 N5): the window is read, never swept. So the list reads again
+    /// a second after the earliest such row is due — web's `reviewDueAt` effect.
+    private func scheduleReviewDueRefresh(_ list: [Session]) {
+        let due = list.compactMap { $0.confirmationUnderReview.flatMap { RelativeTime.parse($0.dueAt) } }.min()
+        guard due != reviewDueAt else { return }
+        reviewDueAt = due
+        reviewDueTask?.cancel()
+        reviewDueTask = nil
+        guard let due else { return }
+        let wait = max(0, due.timeIntervalSinceNow + 1)
+        reviewDueTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+            guard !Task.isCancelled, let self else { return }
+            self.reviewDueAt = nil
+            self.scheduleControlRefresh()
         }
     }
 
@@ -1308,6 +1365,7 @@ final class AppModel {
         // they have their own first-run rules, and a launch whose first snapshot happens to match
         // still has to reconcile whatever a silent push left on the icon.
         if list != sessions { adoptOpenList(list) }
+        scheduleReviewDueRefresh(list)
         let summary = MenuBar.summary(from: list)
         if summary != menuSummary { menuSummary = summary }
         if !didWriteBadge || lastBadge != summary.badge {
@@ -1329,9 +1387,7 @@ final class AppModel {
             // The foreground card standing in for one of those banners has to come down with them.
             // It's persistent by design, so an approval answered on web or macOS would otherwise
             // leave a card asking for something that's already been decided.
-            if let toast, toast.awaitsApproval, let sid = toast.sessionID, !needsYou.contains(sid) {
-                dismissToast()
-            }
+            toasts.clearApprovals(stillWaiting: needsYou)
         }
         #endif
     }
@@ -1411,7 +1467,14 @@ final class AppModel {
     /// nil selection (opening ~10+ sessions in a row) has nothing left to race.
     func openCreatedAgentSession(_ session: Session) {
         registerCreatedAgentSession(session)
-        nav.replaceTop(with: .console(sessionID: session.id, origin: .list))
+        if composingAgentSession {
+            nav.replaceTop(with: .console(sessionID: session.id, origin: .list))
+        } else {
+            // The draft an iPad draws at its pane's root has no frame to replace
+            // (`AgentConsoleDetail.showsDraft`): its session is selected as a row's is — over a
+            // folder's page it goes on top, so the folder stays the column's page.
+            selectedAgentSessionID = session.id
+        }
     }
 
     /// Seed every Native session store for a freshly created record. The compact compose page keeps
@@ -1434,7 +1497,7 @@ final class AppModel {
     /// Mirrors the "New session" button in `AgentPanes`.
     func newSessionInCurrentAgent() {
         guard let id = currentAgentID else { return }
-        show(.compose(agentID: id), agent: id)
+        show(.compose(agentID: id, folderID: nil), agent: id)
     }
 
     /// Open the draft composer for the agent pane already on screen (the "New session" toolbar
@@ -1442,17 +1505,27 @@ final class AppModel {
     /// Deliberately not an entry point — it leaves the pane's agent where it is (a draft for the
     /// agent you are looking at, falling back to the first one), so unlike ``show`` it does not move
     /// the section or the agent, only the page.
+    ///
     func startComposingSession() {
         guard let id = currentAgentID else { return }
-        nav.replaceTop(with: .compose(agentID: id))
+        nav.openDraft(agentID: id, folderID: nil)
+    }
+
+    /// ✎ on a folder's page (§3.3): the draft goes *over* the folder — the back swipe returns to it
+    /// — and the session it creates is filed in that folder. The workspace comes from the page's
+    /// own frame, so the draft is for the workspace the folder belongs to, whatever the pane's
+    /// selection has moved on to.
+    func startComposingSession(inFolder folderID: String, of agentID: String) {
+        nav.openDraft(agentID: agentID, folderID: folderID)
     }
 
     /// Switch the agent the new-session draft is composing for while staying on the compose page —
     /// the hero's agent switcher. Unlike `openAgent` (which pops back to the agent's session list),
     /// this swaps the draft's own frame for one naming `id`, so the pushed/inline `NewSessionView`
-    /// just rebuilds for it (a fresh draft via its `.id(agent.id)`).
+    /// just rebuilds for it (a fresh draft via its `.id(agent.id)`). A folder the draft was opened
+    /// from belongs to the old workspace, so the reborn draft files in none.
     func composeWithAgent(_ id: String) {
-        show(.compose(agentID: id), agent: id)
+        show(.compose(agentID: id, folderID: nil), agent: id)
     }
 
     /// Enter the Agents section focused on agent `id` — the one navigation transition behind the
@@ -1627,30 +1700,15 @@ final class AppModel {
 
     // MARK: session row actions (shared by the menu-bar quick items + the agent session lists)
 
-    /// A session result floated by the app's single toast host (see `toastHost()`) — the native
-    /// port of web's `sessionNotice` card: outcome first, the session it happened in second, an
-    /// optional diagnostic third. `sessionID` is that session, so the card doubles as the way into
-    /// it; `canUndo` marks the action reversible and adds the inline Undo button, where moving to
-    /// Open is the universal undo — the server's `restore` clears both completion and trash state.
-    struct Toast: Identifiable, Equatable {
-        let id = UUID()
-        let message: String
-        var sessionTitle: String?
-        var detail: String?
-        var tone: ToastTone = .success
-        /// SF Symbol overriding the tone's default — web passes an `icon` the same way, so a
-        /// neutral outcome can still say what it was ("Moved to Trash" gets a trash can).
-        var icon: String?
-        var sessionID: String?
-        var canUndo = false
-        /// Set on the card that stands in for a foreground approval banner (see
-        /// `NotificationManager.willPresent`). It's a `.warning`, so nothing takes it down on a
-        /// timer — and the approval it names can be answered anywhere, including on another
-        /// device, so the snapshot that notices has to clear it.
-        var awaitsApproval = false
-    }
-    var toast: Toast?
-    private var toastDismiss: Task<Void, Never>?
+    /// What the app's toast host draws (see `toastHost()`): the toasts that wait for you, pinned, and
+    /// the one transient toast under them, ruled by `ToastFeed` (docs/mocks/toast-system). A toast
+    /// names what happened, then what it happened to — the session, or an entry's title — then any
+    /// diagnostic; one that names a session doubles as the way into it, and `canUndo` adds Undo,
+    /// where moving to Open is the universal undo (the server's `restore` clears both completion and
+    /// trash state).
+    private(set) var toasts = ToastFeed()
+    @ObservationIgnored private var toastExpiry: Task<Void, Never>?
+    @ObservationIgnored private var toastFold: Task<Void, Never>?
 
     /// Refresh whichever session lists are on screen (Open always; the agent list if
     /// one has been opened) so a row action reflects immediately instead of waiting for the poll.
@@ -1660,31 +1718,60 @@ final class AppModel {
         sessionDetails.reconcile(with: agents?.agentSessions ?? [])
     }
 
-    /// Float a session result as a toast. One dwell time for every card — web settled on 6s for the
-    /// whole surface (see `lib/toast.tsx`'s `sessionNotice`), and the ramp keys on what the toast
-    /// asks of you rather than on which client renders it: 4s for a one-line confirmation, 6s once
-    /// there's a session name, a diagnostic or an Undo to take in, and a warning/error doesn't leave
-    /// on a timer at all (see `ToastTone.isPersistent`). Console-side outcomes arrive here too (see
-    /// `ConsoleRegistry.onToast`).
+    /// Float a result as a toast. What it asks of you decides how long it stays (`ToastItem.dwell`),
+    /// the same ramp on every client: 3s for a confirmation (web's Message layer, see `main.tsx`) —
+    /// even one that names its entry, which is still something you just did and expected — 6s for a
+    /// card with an Undo or a diagnostic (web's `sessionNotice`), and a failure or an approval
+    /// doesn't leave on a timer at all: it pins, and nothing that comes after it can replace it.
+    /// Console-side outcomes arrive here too (see `ConsoleRegistry.onToast`).
     ///
-    /// `sessionTitle` is for a result whose session has already left every loaded scope by the time
-    /// the card is built — completing one drops it from Open, so the name has to be taken before the
-    /// mutation or the line just disappears. Everything else lets it resolve here.
-    func showToast(_ message: String, sessionID: String? = nil, sessionTitle: String? = nil,
-                   detail: String? = nil, tone: ToastTone = .success, icon: String? = nil,
-                   canUndo: Bool = false, awaitsApproval: Bool = false) {
-        let title = sessionTitle ?? sessionID.flatMap(toastSessionTitle)
-        toast = Toast(message: message, sessionTitle: title,
-                      detail: detail, tone: tone, icon: icon,
-                      sessionID: sessionID, canUndo: canUndo, awaitsApproval: awaitsApproval)
-        toastDismiss?.cancel()
-        guard !tone.isPersistent else { return }
-        let isCard = title != nil || detail != nil || canUndo
-        let seconds: UInt64 = isCard ? 6 : 4
-        toastDismiss = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+    /// `subtitle` names what a confirmation happened to — a Wiki entry's title. `sessionTitle` is
+    /// for a result whose session has already left every loaded scope by the time the card is
+    /// built — completing one drops it from Open, so the name has to be taken before the mutation
+    /// or the line just disappears. Everything else lets it resolve here. `key` makes one operation
+    /// one toast: a result posted with its progress pill's key takes the pill's place.
+    func showToast(_ message: String, subtitle: String? = nil, sessionID: String? = nil,
+                   sessionTitle: String? = nil, detail: String? = nil, tone: ToastTone = .success,
+                   icon: String? = nil, canUndo: Bool = false, awaitsApproval: Bool = false,
+                   key: String? = nil, inProgress: Bool = false) {
+        let line = subtitle ?? sessionTitle ?? sessionID.flatMap(toastSessionTitle)
+        let item = ToastItem(message: message, subtitle: line, detail: detail, tone: tone, icon: icon,
+                             sessionID: sessionID, canUndo: canUndo, awaitsApproval: awaitsApproval,
+                             key: key, inProgress: inProgress)
+        guard let id = toasts.post(item, at: Date()), let shown = toasts.item(id) else { return }
+        announce(shown)
+        if shown.level == .attention {
+            foldToastLater(id)
+        } else if let dwell = shown.dwell {
+            expireToastLater(id, after: dwell)
+        }
+    }
+
+    /// A card that only paints is invisible to VoiceOver — read it out as it arrives, with what it
+    /// happened to and the diagnostic, which on a failure is the part worth hearing.
+    private func announce(_ toast: ToastItem) {
+        let spoken = [toast.message, toast.subtitle, toast.detail].compactMap { $0 }.joined(separator: ". ")
+        AccessibilityNotification.Announcement(spoken).post()
+    }
+
+    /// Takes the transient toast down when its dwell runs out — unless something replaced it first.
+    private func expireToastLater(_ id: ToastItem.ID, after seconds: TimeInterval) {
+        toastExpiry?.cancel()
+        toastExpiry = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
             guard !Task.isCancelled else { return }
-            self?.toast = nil
+            self?.toasts.expire(id)
+        }
+    }
+
+    /// On a phone an open ③ card folds into its pill after six seconds: it stops covering the top of
+    /// the page and stays one tap away. Wide layouts draw every pinned card open regardless.
+    private func foldToastLater(_ id: ToastItem.ID) {
+        toastFold?.cancel()
+        toastFold = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 6_000_000_000)
+            guard !Task.isCancelled else { return }
+            self?.toasts.fold(id)
         }
     }
 
@@ -1698,7 +1785,24 @@ final class AppModel {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    func dismissToast() { toastDismiss?.cancel(); toast = nil }
+    /// ✕ or a swipe.
+    func dismissToast(_ id: ToastItem.ID) { toasts.dismiss(id) }
+
+    /// A folded ③ pill tapped open; it folds again after six seconds.
+    func unfoldToast(_ id: ToastItem.ID) {
+        toasts.unfold(id)
+        foldToastLater(id)
+    }
+
+    /// The pointer resting on a toast keeps it; its dwell starts over when the pointer leaves.
+    func holdToast(_ id: ToastItem.ID) {
+        if toasts.transient?.id == id { toastExpiry?.cancel() }
+    }
+
+    func releaseToast(_ id: ToastItem.ID) {
+        guard let toast = toasts.transient, toast.id == id, let dwell = toast.dwell else { return }
+        expireToastLater(id, after: dwell)
+    }
 
     /// The server's own words for the card's diagnostic line, when it sent any — web shows
     /// `e.message` the same way. Falls back to nothing rather than to a restatement of the headline.
@@ -1712,9 +1816,9 @@ final class AppModel {
     /// Tapping the toast opens the session it reports on — a result you just acted on is usually the
     /// one you want to look at next, and without this the only way back was to find the row by hand.
     /// The card has done its job once it's been followed, so it goes with the navigation.
-    func openToastSession() {
-        guard let sessionID = toast?.sessionID else { return }
-        dismissToast()
+    func openToastSession(_ id: ToastItem.ID) {
+        guard let sessionID = toasts.item(id)?.sessionID else { return }
+        toasts.dismiss(id)
         route(to: .session(sessionID))
     }
 
@@ -1731,7 +1835,7 @@ final class AppModel {
             defer { filedSessions.remove(id) }
             do { try await api.completeSession(id) }
             catch {
-                showToast("Could not complete session", sessionID: id, sessionTitle: name,
+                showToast("Couldn't complete the session", sessionID: id, sessionTitle: name,
                           detail: Self.toastDetail(error), tone: .error)
                 return
             }
@@ -1753,7 +1857,7 @@ final class AppModel {
         Task { @MainActor in
             do { try await api.restoreSession(id) }
             catch {
-                showToast("Could not move to Open", sessionID: id, sessionTitle: name,
+                showToast("Couldn't move to Open", sessionID: id, sessionTitle: name,
                           detail: Self.toastDetail(error), tone: .error)
                 return
             }
@@ -1772,7 +1876,7 @@ final class AppModel {
             defer { filedSessions.remove(id) }
             do { try await api.deleteSession(id) }
             catch {
-                showToast("Could not move to Trash", sessionID: id, sessionTitle: name,
+                showToast("Couldn't move to Trash", sessionID: id, sessionTitle: name,
                           detail: Self.toastDetail(error), tone: .error)
                 return
             }
@@ -1813,7 +1917,7 @@ final class AppModel {
         Task { @MainActor in
             do { try await api.renameSession(id, title: title) }
             catch {
-                showToast("Could not rename session", sessionID: id,
+                showToast("Couldn't rename the session", sessionID: id,
                           detail: Self.toastDetail(error), tone: .error)
             }
             await reloadSessionLists()
@@ -1899,11 +2003,233 @@ final class AppModel {
         }
     }
 
-    func undoSessionAction() {
-        guard let toast, toast.canUndo, let sessionID = toast.sessionID else { return }
+    func undoSessionAction(_ id: ToastItem.ID) {
+        guard let toast = toasts.item(id), toast.canUndo, let sessionID = toast.sessionID else { return }
         moveSessionToOpen(sessionID)
-        dismissToast()
+        toasts.dismiss(id)
     }
+
+    // MARK: session folders (iOS — docs/session-folders-move-design.md §3–4)
+
+    #if os(iOS)
+    /// Load the owner's folder library: when a workspace's session list appears, and again when
+    /// `folder.changed` says one was created, renamed or deleted, here or on another device.
+    /// Best-effort like the tag library — an older server without the endpoint leaves it empty, and
+    /// the Move panel then offers No Folder and New Folder… alone.
+    func loadSessionFolders() async {
+        guard let api else { return }
+        guard let folders = try? await api.listSessionFolders() else { return }
+        sessionFolders = folders
+        // A folder deleted on another device while its page is up: the page goes back to the
+        // workspace's list (§3.3 — the folder is gone, so there is no page to be on). Only an
+        // answer that landed can say that; a failed read leaves the library as it stands.
+        if let open = nav.folderPage ?? nav.folderColumn,
+           !folders.contains(where: { $0.id == open.folderID }) {
+            nav.leaveFolder(open.folderID)
+        }
+    }
+
+    /// The folder page showing on a phone, if one is (design §3.3) — the compact stack's top frame.
+    var folderPage: SessionFolderAddress? { nav.folderPage }
+
+    /// The folder the wide shells' session column is showing, if one is — the frame the column's
+    /// list draws, with the console the detail pane follows above it. Nil on macOS, which shows no
+    /// folders (§1): nothing there ever puts one on the stack.
+    var folderColumn: SessionFolderAddress? { nav.folderColumn }
+
+    /// Open a folder's page from a folder row at the top of a workspace's session list (§3.3). One
+    /// entry point for both shells: the frame lands at the bottom of the section's stack, which is
+    /// the page on top on a phone and the list's page in a wide shell's column.
+    func openFolder(_ address: SessionFolderAddress) {
+        nav.enterFolder(address)
+    }
+
+    /// Back out of a folder's page — the wide shell's column back button. A phone's system back
+    /// pops the frame itself, and lands here all the same through `nav.path`.
+    func leaveFolder(_ folderID: String? = nil) {
+        nav.leaveFolder(folderID)
+    }
+
+    /// File a session in one of its workspace's folders, or in none (`folderID` nil) — the Move
+    /// panel's tap. The row moves at once: the folder is written into every loaded copy before the
+    /// request goes, and written back as it was if the server refuses. Either way the lists are
+    /// re-read afterwards, which settles what the server holds.
+    func moveSession(_ id: String, toFolder folderID: String?) {
+        guard let api, let row = session(id: id), row.folderId != folderID else { return }
+        let origin = row.folderId
+        let name = toastSessionTitle(id)
+        let moved = SessionMoveCopy.moved(to: sessionFolder(folderID), from: sessionFolder(origin))
+        patchSessionFolder(id, to: folderID)
+        Task { @MainActor in
+            do {
+                try await api.moveSession(id, folderID: folderID)
+                showToast(moved, sessionID: id, sessionTitle: name, tone: .info, icon: "folder")
+            } catch {
+                patchSessionFolder(id, to: origin)
+                showToast(SessionMoveCopy.moveFailed, sessionID: id, sessionTitle: name,
+                          detail: APIClient.failureReason(error), tone: .error)
+            }
+            await reloadSessionLists()
+        }
+    }
+
+    /// New Folder… in the Move panel: create the folder in the session's workspace, then move the
+    /// session into it. Nil once the folder exists and the move is under way; otherwise why the
+    /// folder wasn't created, as the sentence the panel shows (`SessionMoveCopy.createFailure` — a
+    /// name the workspace already has is said as such).
+    func createSessionFolder(named name: String, in workspace: Agent, moving sessionID: String) async -> String? {
+        guard let api else { return nil }
+        do {
+            let folder = try await api.createSessionFolder(workspaceID: workspace.id, name: name)
+            if !sessionFolders.contains(where: { $0.id == folder.id }) { sessionFolders.append(folder) }
+            moveSession(sessionID, toFolder: folder.id)
+            return nil
+        } catch {
+            return SessionMoveCopy.createFailure(error, name: name, workspace: workspace.name)
+        }
+    }
+
+    /// New Folder… in the list's ≡ menu (§3.4): make the folder in this workspace and nothing else —
+    /// the row appears at the top of the Open list, empty. Nil once it exists; otherwise why it
+    /// wasn't created, in the same words the Move panel uses (`SessionMoveCopy.createFailure`).
+    func createSessionFolder(named name: String, in workspace: Agent) async -> String? {
+        guard let api else { return nil }
+        do {
+            let folder = try await api.createSessionFolder(workspaceID: workspace.id, name: name)
+            if !sessionFolders.contains(where: { $0.id == folder.id }) { sessionFolders.append(folder) }
+            return nil
+        } catch {
+            return SessionMoveCopy.createFailure(error, name: name, workspace: workspace.name)
+        }
+    }
+
+    /// Rename… (§3.4): the folder's new name, everywhere it is read. Nil once the server has it;
+    /// otherwise why it wasn't renamed, in one sentence (`SessionFolderCopy.renameFailure` — a name
+    /// its workspace already has is said as such).
+    func renameSessionFolder(_ id: String, to name: String) async -> String? {
+        guard let api else { return nil }
+        do {
+            let renamed = try await api.renameSessionFolder(id, name: name)
+            if let index = sessionFolders.firstIndex(where: { $0.id == id }) {
+                sessionFolders[index] = renamed
+            } else {
+                sessionFolders.append(renamed)
+            }
+            return nil
+        } catch {
+            let workspace = sessionFolders.first { $0.id == id }
+                .flatMap { folder in agents?.agent(folder.workspaceId)?.name } ?? "this workspace"
+            return SessionFolderCopy.renameFailure(error, name: name, workspace: workspace)
+        }
+    }
+
+    /// Delete Folder… (§3.4): the folder goes, the sessions in it stay — the server clears their
+    /// `folder_id` (the column's `ON DELETE SET NULL`), and the list draws them loose again the
+    /// moment the folder leaves the library (`SessionFolderGrouping.listing`). Nil once it is gone;
+    /// otherwise why it wasn't deleted. The page comes down with it (§3.3).
+    func deleteSessionFolder(_ id: String) async -> String? {
+        guard let api else { return nil }
+        do {
+            try await api.deleteSessionFolder(id)
+        } catch {
+            return SessionFolderCopy.deleteFailure(error)
+        }
+        sessionFolders.removeAll { $0.id == id }
+        nav.leaveFolder(id)
+        // The rows it held were drawn behind its row a moment ago; read the lists again so they are
+        // back in the time sections even if an event from another device hasn't landed yet.
+        Task { await reloadSessionLists() }
+        return nil
+    }
+
+    private func sessionFolder(_ id: String?) -> SessionFolder? {
+        guard let id else { return nil }
+        return sessionFolders.first { $0.id == id }
+    }
+
+    /// Write a folder into every loaded copy of a row, as `patchSessionTitle` writes a title: the Open
+    /// snapshot (and through it the pane's Open list), the pane's own Completed list, and the cold-route
+    /// detail cache.
+    private func patchSessionFolder(_ id: String, to folderID: String?) {
+        if let index = sessions.firstIndex(where: { $0.id == id }) {
+            var list = sessions
+            list[index] = list[index].settingFolder(folderID)
+            applySessionSnapshot(list)
+        }
+        if let cached = sessionDetails.resolve(id) { sessionDetails.store(cached.settingFolder(folderID)) }
+        agents?.applyMovedSession(id, folderID: folderID)
+    }
+
+    // MARK: moving a session to another workspace (iOS — docs/session-folders-move-design.md §4, §5)
+
+    /// What the Move panel's second group lists and its confirmation says (`GET /sessions/:id/
+    /// move-targets`): each other workspace with whether the session can go there and why not, and
+    /// whether it has to be ended first. Throws what the server answered, for the panel to say.
+    func sessionMoveTargets(_ id: String) async throws -> SessionMoveTargets {
+        guard let api else { throw APIError.notConfigured }
+        return try await api.sessionMoveTargets(id)
+    }
+
+    /// New Folder… on a workspace's page in the Move panel: a folder in the workspace the session is
+    /// about to move to, which the confirmation then files it in. Throws the server's refusal — a name
+    /// that workspace already has is a 409 — for the page to put into words.
+    func createTargetFolder(named name: String, inWorkspace workspaceID: String) async throws -> SessionFolder {
+        guard let api else { throw APIError.notConfigured }
+        let folder = try await api.createSessionFolder(workspaceID: workspaceID, name: name)
+        if !sessionFolders.contains(where: { $0.id == folder.id }) { sessionFolders.append(folder) }
+        return folder
+    }
+
+    /// Move a session to another workspace, filed in one of its folders or in none — the
+    /// confirmation's Move, or its End and Move (§5.3–5.4): end the session, wait until it has
+    /// ended, then move it (`SessionWorkspaceMove.run`). `phase` follows those steps for the panel.
+    ///
+    /// Nil once the session is there: every loaded copy of the row names the new workspace, which
+    /// takes it out of the list it was moved from at once, the toast says where it went, and the
+    /// lists are read again behind it. Otherwise why not, as the sentence the panel shows — the lists
+    /// are read again all the same, since an End and Move stopped after the end has still ended the
+    /// session.
+    func moveSession(_ id: String, to target: SessionMoveTarget, folder folderID: String?,
+                     endingFirst: Bool,
+                     phase: @escaping (SessionWorkspaceMove.Phase) -> Void) async -> String? {
+        guard let api else { return SessionMoveCopy.moveFailed(APIError.notConfigured) }
+        let name = toastSessionTitle(id)
+        let outcome = await SessionWorkspaceMove.run(
+            endingFirst: endingFirst,
+            end: { try await api.endSession(id) },
+            status: { try await api.session(id).effectiveRunStatus },
+            move: { try await api.moveSession(id, toWorkspace: target.workspaceId, folderID: folderID) },
+            phase: { phase($0) })
+        defer { Task { await reloadSessionLists() } }
+        switch outcome {
+        case .moved:
+            patchSessionWorkspace(id, to: target, folder: folderID)
+            showToast(SessionMoveCopy.movedToWorkspace(target.name), sessionID: id, sessionTitle: name,
+                      tone: .info, icon: "folder")
+            return nil
+        case .failed(let reason):
+            return reason
+        }
+    }
+
+    /// Write a move to another workspace into every loaded copy of a row, as `patchSessionFolder`
+    /// writes a folder: the Open snapshot — whose agent filter is what takes the row out of the
+    /// workspace's Open list — the pane's own Completed rows, and the detail cache.
+    private func patchSessionWorkspace(_ id: String, to target: SessionMoveTarget, folder folderID: String?) {
+        let workspace = agents?.agent(target.workspaceId)
+        let moved = { (row: Session) in
+            row.settingWorkspace(id: target.workspaceId, name: target.name, model: workspace?.model,
+                                 effort: workspace?.effort, folder: folderID)
+        }
+        if let index = sessions.firstIndex(where: { $0.id == id }) {
+            var list = sessions
+            list[index] = moved(list[index])
+            applySessionSnapshot(list)
+        }
+        if let cached = sessionDetails.resolve(id) { sessionDetails.store(moved(cached)) }
+        agents?.applyMovedSession(id, toWorkspace: target.workspaceId)
+    }
+    #endif
 
     // MARK: routing + notification intents
 

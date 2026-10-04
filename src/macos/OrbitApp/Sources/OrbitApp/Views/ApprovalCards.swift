@@ -980,12 +980,50 @@ private struct OwnerConfirmationCardView: View {
     /// Whether the refusal behind the lead line is showing. Folded by default: it names a code the
     /// reader acts on only when reporting the problem.
     @State private var staleDetailOpen = false
+    /// The owner's answers to the review's questions, and the REVIEW record they answer: a newer
+    /// review asks its own questions, and answers chosen for the old one are not carried over.
+    @State private var choices: [String: ReviewChoice] = [:]
+    @State private var choicesFor: String?
 
     private var standing: OwnerConfirmationStanding { console.ownerStanding(taskID, requestID) }
     private var staleDetailLabel: String { staleDetailOpen ? "Hide details" : "Details" }
 
+    /// The answers so far for the review this card draws now, and the way to change one.
+    private func answers(_ review: OwnerConfirmationReviewView?) -> Binding<[String: ReviewChoice]> {
+        let recordID = review?.review?.recordId
+        return Binding(
+            get: { choicesFor == recordID ? choices : [:] },
+            set: { choices = $0; choicesFor = recordID })
+    }
+
     var body: some View {
         let standing = self.standing
+        if let returned = standing.returned {
+            returnedRecord(returned)
+        } else {
+            question(standing)
+        }
+    }
+
+    /// What the card becomes when its reviewer sent the report back (contract §8 B6): a record,
+    /// with nothing to press — the owner was not asked, so the buttons are gone, not disabled.
+    private func returnedRecord(_ returned: ReviewerReturnedRequest) -> some View {
+        VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
+            ApprovalHeader(symbol: "checkmark.seal.fill", title: OwnerConfirmations.heading,
+                           tone: .blue)
+            Text(CriteriaDecisions.provenanceLabel)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .help(OwnerConfirmations.authorshipTitle)
+            if let view = console.ownerConfirmation {
+                lead(view)
+            }
+            OwnerConfirmationReviewBarView(review: returned.review, place: .card)
+        }
+        .approvalChrome(.blue, dimmed: true)
+    }
+
+    private func question(_ standing: OwnerConfirmationStanding) -> some View {
         VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
             ApprovalHeader(symbol: "checkmark.seal.fill", title: OwnerConfirmations.heading,
                            tone: .blue)
@@ -994,11 +1032,22 @@ private struct OwnerConfirmationCardView: View {
             Text(CriteriaDecisions.provenanceLabel)
                 .font(.orbitLabel).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .help(OwnerConfirmations.authorshipTitle)
 
             if let view = console.ownerConfirmation {
                 lead(view)
                 OwnerConfirmationBoxes(acceptanceCriteria: view.acceptanceCriteria,
-                                       report: standing.waiting?.report)
+                                       report: standing.waiting?.report, foldsCriteria: true)
+                // The reviewer's box, between what the agent said and what confirming sets off
+                // (contract §6 H1): where the review stands, and its questions for the owner.
+                if let review = standing.waiting?.review {
+                    OwnerConfirmationReviewBarView(review: review, place: .card, choices: answers(review))
+                }
+                // Right above the buttons: the card is taller than a phone's screen, and this is
+                // what is in view at the press. Only while this card's report is the one waiting —
+                // the read describes the waiting run, and a card for another report must not
+                // borrow its consequences.
+                ifYouConfirm(view, standing)
             } else {
                 // The address and nothing else: a read that has not come back is not a description
                 // of anything, and this card kept no copy of an earlier one.
@@ -1061,17 +1110,33 @@ private struct OwnerConfirmationCardView: View {
         }
     }
 
+    /// What confirming sets off, or nothing — when the read says nothing, or this card's report is
+    /// no longer the one waiting.
+    @ViewBuilder
+    private func ifYouConfirm(_ view: OwnerConfirmationView,
+                              _ standing: OwnerConfirmationStanding) -> some View {
+        let rows = standing.waiting == nil ? [] : OwnerConfirmations.ifConfirmedRows(view.ifConfirmed)
+        if !rows.isEmpty {
+            OwnerConfirmationIfYouConfirm(rows: rows)
+        }
+    }
+
     // MARK: actions
     //
     // The one rule both clients are under: an action that cannot succeed is disabled rather than
     // lit and refused.
 
+    /// Disabled, besides a press in flight or a card that cannot be answered, only while one of the
+    /// review's questions is answered with an Other that has no words yet: the door would refuse it
+    /// (contract §6 H4). Nothing about the review's state holds it back.
     private func confirmButton(_ standing: OwnerConfirmationStanding) -> some View {
-        Button { decide(standing, .confirm) } label: {
+        let review = standing.waiting?.review
+        return Button { decide(standing, .confirm) } label: {
             Text(OwnerConfirmations.confirmAction).approvalActionLabel()
         }
         .buttonStyle(.borderedProminent)
-        .disabled(deciding || !standing.answerable)
+        .disabled(deciding || !standing.answerable
+                  || !OwnerConfirmations.reviewAnswersComplete(review, choices: answers(review).wrappedValue))
     }
 
     /// The reason does not get a box here: the press hands it to the main composer, which is where
@@ -1098,10 +1163,17 @@ private struct OwnerConfirmationCardView: View {
     private func decide(_ standing: OwnerConfirmationStanding, _ decision: OwnerDecision,
                         note: String? = nil) {
         guard let waiting = standing.waiting, standing.answerable, !deciding else { return }
+        let chosen = answers(waiting.review).wrappedValue
+        if decision == .confirm, !OwnerConfirmations.reviewAnswersComplete(waiting.review, choices: chosen) {
+            return
+        }
         PlatformHaptics.tap()
         deciding = true
+        // What the card drew of the review rides with the press: the record it showed, and an answer
+        // to each of its questions (contract §7 Q3).
+        let review = OwnerConfirmations.reviewAnswered(waiting.review, choices: chosen)
         Task {
-            await console.decideOwnerConfirmation(waiting, decision, note: note)
+            await console.decideOwnerConfirmation(waiting, decision, note: note, review: review)
             deciding = false
         }
     }
@@ -1113,8 +1185,12 @@ private struct OwnerConfirmationCardView: View {
 private struct OwnerConfirmationBoxes: View {
     let acceptanceCriteria: String?
     let report: OwnerConfirmationReport?
+    /// Fold the criteria to one row that opens in place — the card's, whose buttons need the
+    /// height. The receipt's own fold already stands in front of them.
+    var foldsCriteria = false
 
     @State private var reportOpen = false
+    @State private var criteriaOpen = false
 
     private var criteria: String { OwnerConfirmations.plainText(acceptanceCriteria) }
     private var said: String { OwnerConfirmations.plainText(report?.text) }
@@ -1124,8 +1200,12 @@ private struct OwnerConfirmationBoxes: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
-            box(OwnerConfirmations.whatSettlesIt) {
-                quietOrText(criteria, OwnerConfirmations.noCriteria)
+            if foldsCriteria, let items = OwnerConfirmations.criteriaItemsLabel(acceptanceCriteria) {
+                criteriaFold(items)
+            } else {
+                box(OwnerConfirmations.whatSettlesIt) {
+                    quietOrText(criteria, OwnerConfirmations.noCriteria)
+                }
             }
             // The heading carries the moment the run said it, when it said anything — a report
             // whose time is missing is still a report.
@@ -1160,6 +1240,41 @@ private struct OwnerConfirmationBoxes: View {
                     in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
     }
 
+    /// What counts as done, as one row at rest — the box's heading, how many items are behind it, a
+    /// caret — that opens in place, in the same box. The whole row is the press, a full row tall on
+    /// a phone.
+    private func criteriaFold(_ items: String) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                PlatformHaptics.tap()
+                criteriaOpen.toggle()
+            } label: {
+                HStack(spacing: 6) {
+                    Text(OwnerConfirmations.whatSettlesIt)
+                        .font(.orbitMonoFine).foregroundStyle(.secondary)
+                    Spacer(minLength: 8)
+                    Text(items).font(.orbitLabel).foregroundStyle(.secondary)
+                    Image(systemName: criteriaOpen ? "chevron.down" : "chevron.right")
+                        .font(.orbitMeta).foregroundStyle(.tertiary)
+                }
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, minHeight: ApprovalMetrics.rowMinHeight,
+                       alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(.isButton)
+            if criteriaOpen {
+                quietOrText(criteria, OwnerConfirmations.noCriteria)
+                    .padding(.bottom, 8)
+            }
+        }
+        .padding(.horizontal, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.05),
+                    in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
+    }
+
     /// A body that may be blank: the card says why rather than rendering an empty box.
     @ViewBuilder
     private func quietOrText(_ text: String, _ whenEmpty: String) -> some View {
@@ -1170,6 +1285,70 @@ private struct OwnerConfirmationBoxes: View {
             Text(text).font(.orbitProse)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+}
+
+/// What confirming sets off, right above Confirm done — web's `OwnerConfirmationIfYouConfirm`. Orbit's
+/// own facts rather than anybody's words, so it is drawn unlike the two boxes above it: white, a
+/// symbol per row, and no author. Every line is a row `OwnerConfirmations.ifConfirmedRows` made.
+private struct OwnerConfirmationIfYouConfirm: View {
+    let rows: [OwnerConfirmations.IfConfirmedRow]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(OwnerConfirmations.ifYouConfirm)
+                .font(.orbitMonoFine).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Image(systemName: Self.symbol(row.kind))
+                        .font(.orbitLabel)
+                        .foregroundStyle(row.kind == .start ? Color.accentColor : Color.secondary)
+                        .frame(width: 18)
+                    VStack(alignment: .leading, spacing: 1) {
+                        // Wraps rather than truncates: in the transcript's list a row's first line
+                        // was cut to one line (the probe's "Goes onto the integration line; mergin…").
+                        lead(row)
+                            .font(.orbitSubtext.weight(.semibold))
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        if let detail = row.detail {
+                            Text(detail)
+                                .font(.orbitLabel).foregroundStyle(.secondary)
+                                .lineLimit(1).truncationMode(.tail)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Self.fill, in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
+        .overlay {
+            RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius)
+                .strokeBorder(Color.primary.opacity(0.12))
+        }
+    }
+
+    /// The first line, with the branch's added lines after it in the diff's green.
+    private func lead(_ row: OwnerConfirmations.IfConfirmedRow) -> Text {
+        guard let added = row.added else { return Text(row.lead) }
+        return Text(row.lead) + Text(" · ") + Text(added).foregroundStyle(Color.green)
+    }
+
+    private static func symbol(_ kind: OwnerConfirmations.IfConfirmedRow.Kind) -> String {
+        switch kind {
+        case .start: return "play.fill"
+        case .branch: return "arrow.triangle.branch"
+        case .landing: return "arrow.triangle.merge"
+        case .endsSession: return "power"
+        }
+    }
+
+    /// White on the blue card in light mode, and a raised grey in dark, where white would glare.
+    private static var fill: Color {
+        Color(light: .white, dark: Color(red: 0.17, green: 0.17, blue: 0.18))
     }
 }
 
@@ -1185,6 +1364,8 @@ private struct OwnerDecisionReceiptView: View {
     let taskID: String
     let decisionID: String
     @State private var open = false
+    /// Reopen task's question, asked once before the write (the task panel's own).
+    @State private var confirmingReopen = false
 
     var body: some View {
         if let decided = console.ownerReceipt(taskID, decisionID),
@@ -1198,6 +1379,7 @@ private struct OwnerDecisionReceiptView: View {
                 Text(CriteriaDecisions.provenanceLabel)
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .help(OwnerConfirmations.authorshipTitle)
                 Text(view.title)
                     .font(.orbitProse.bold())
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1205,6 +1387,20 @@ private struct OwnerDecisionReceiptView: View {
                         decided, time: OwnerConfirmations.receiptTime(decided.decidedAt)))
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                if OwnerConfirmations.reviewCameInAfter(decided) {
+                    Text(OwnerConfirmations.beforeReview)
+                        .font(.orbitLabel).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                // The answered report's review as it stands now — including one that came in after
+                // the decision — with Reopen task once the task has settled and the review found
+                // problems (contract §9 L3–L4).
+                if let review = decided.review {
+                    OwnerConfirmationReviewBarView(
+                        review: review, place: .receipt,
+                        reopen: OwnerConfirmations.reopenOffered(view) ? { confirmingReopen = true } : nil)
+                }
+                OwnerAnswersView(lines: OwnerConfirmations.ownerAnswerLines(decided))
                 if confirmed {
                     DisclosureToggle(open: open,
                                      label: open
@@ -1221,6 +1417,335 @@ private struct OwnerDecisionReceiptView: View {
             // Dimmed for the reason the criteria card's receipt is: the question is over, and the
                 // record should not read as something still waiting to be pressed.
             .approvalChrome(.blue, dimmed: true)
+            // The task panel's own question and write (`TaskReopen`), so this is a second place to
+            // press the one door rather than a door of its own.
+            .confirmationDialog(TaskReopenCopy.modalTitle, isPresented: $confirmingReopen,
+                                titleVisibility: .visible) {
+                Button(TaskReopenCopy.modalOK) {
+                    Task { await console.reopenOwnerConfirmedTask() }
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text(TaskReopen.paragraphs(projectId: view.projectId, terminalReason: nil)
+                        .joined(separator: "\n\n"))
+            }
+        }
+    }
+}
+
+// MARK: - the review bar
+
+/// The reviewer's box — web's `OwnerConfirmationReviewBar`: on the card between what the agent said
+/// and If you confirm, and under a receipt. Every line is one `OwnerConfirmations.reviewBar` made, the
+/// same lines the browser draws (both are proved against the shared fixture). On the card it carries
+/// the answer blocks for the reviewer's questions; under a receipt it offers Reopen task.
+private struct OwnerConfirmationReviewBarView: View {
+    let review: OwnerConfirmationReviewView
+    let place: ReviewPlace
+    /// The card's answers so far; nil draws no answer controls (a receipt, a record).
+    var choices: Binding<[String: ReviewChoice]>? = nil
+    /// Reopen task, when the task has settled; the bar draws it only where it offers it.
+    var reopen: (() -> Void)? = nil
+
+    @State private var oldOpen = false
+
+    var body: some View {
+        let bar = OwnerConfirmations.reviewBar(review, place: place) { OwnerConfirmations.receiptTime($0) }
+        let items = OwnerConfirmations.reviewItemsByKey(review)
+        VStack(alignment: .leading, spacing: 6) {
+            head(bar)
+            ForEach(Array(bar.lines.enumerated()), id: \.offset) { _, line in
+                lineView(line, items: items)
+            }
+            if !bar.folded.isEmpty {
+                DisclosureToggle(open: oldOpen, label: OwnerConfirmations.showOldReview) {
+                    oldOpen.toggle()
+                }
+                if oldOpen {
+                    ForEach(Array(bar.folded.enumerated()), id: \.offset) { _, line in
+                        lineView(line, items: items)
+                    }
+                }
+            }
+            if bar.reopen, let reopen {
+                Button {
+                    PlatformHaptics.tap()
+                    reopen()
+                } label: {
+                    Text(TaskReopenCopy.actionLabel).approvalActionLabel()
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+        .padding(.horizontal, 10).padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.05),
+                    in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
+    }
+
+    /// `REVIEW · <reviewer> · <time>`, the reviewer's name giving way before the label or the time,
+    /// and the commit the record was written for at the right — struck through once out of date.
+    private func head(_ bar: ReviewBar) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 0) {
+            Text("\(OwnerConfirmations.reviewHeading) · ")
+                .font(.orbitMonoFine).foregroundStyle(.secondary)
+                .fixedSize()
+            Text(bar.reviewer)
+                .font(.orbitMonoFine).foregroundStyle(.secondary)
+                .lineLimit(1).truncationMode(.tail)
+            if let time = bar.time {
+                Text(" · \(time)")
+                    .font(.orbitMonoFine).foregroundStyle(.secondary)
+                    .fixedSize()
+            }
+            Spacer(minLength: 8)
+            if let sha = bar.sha {
+                Text(sha)
+                    .strikethrough(bar.shaStruck)
+                    .font(.orbitMonoFine).foregroundStyle(.secondary)
+                    .fixedSize()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func lineView(_ line: ReviewBar.Line, items: [String: ConfirmationReviewItem]) -> some View {
+        switch line.kind {
+        case .status:
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                if let icon = line.icon {
+                    Image(systemName: icon == .clock ? "clock" : "minus.circle")
+                        .font(.orbitLabel).foregroundStyle(.secondary)
+                }
+                Text(line.text)
+                    .font(.orbitProse.weight(.semibold))
+                    .foregroundStyle(line.warn == true ? AnyShapeStyle(Color.orange) : AnyShapeStyle(.primary))
+                Spacer(minLength: 0)
+            }
+        case .note, .footer:
+            Text(line.text)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        case .headline:
+            // Orbit's first line: one line, the whole of it in the lines below.
+            Text(line.text)
+                .font(.orbitProse.weight(.semibold))
+                .foregroundStyle(line.warn == true ? AnyShapeStyle(Color.orange) : AnyShapeStyle(.primary))
+                .lineLimit(1).truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        case .answers:
+            if let choices {
+                ReviewAnswerBlocks(questions: OwnerConfirmations.reviewQuestions(review), choices: choices)
+            }
+        case .row:
+            ReviewRowView(line: line, items: (line.keys ?? []).compactMap { items[$0] })
+        case .quote:
+            Text("“\(line.text)”")
+                .font(.orbitProse)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+/// One of the reviewer's lists: its lines joined, two lines at most, opening in place to each line
+/// with what it rests on (contract §6 H3). The whole row is the press.
+private struct ReviewRowView: View {
+    let line: ReviewBar.Line
+    let items: [ConfirmationReviewItem]
+    @State private var open = false
+
+    var body: some View {
+        Button {
+            PlatformHaptics.tap()
+            open.toggle()
+        } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(line.label ?? "")
+                    .font(.orbitLabel).foregroundStyle(labelTone)
+                    .frame(width: 84, alignment: .leading)
+                if open {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(items) { item in
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(item.text).font(.orbitSubtext)
+                                if let why = item.whyNotProven {
+                                    Text(why).font(.orbitLabel).foregroundStyle(.secondary)
+                                }
+                                if let instead = item.coordinatorChecked {
+                                    Text(instead).font(.orbitLabel).foregroundStyle(.secondary)
+                                }
+                                ForEach(item.evidenceRefs ?? [], id: \.self) { ref in
+                                    Text(ref).font(.orbitMonoFine).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    Text(line.text)
+                        .font(.orbitSubtext)
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.primary)
+        .accessibilityAddTraits(.isButton)
+    }
+
+    private var labelTone: Color {
+        switch line.row {
+        case .checked?: return .green
+        case .notChecked?, .problem?: return .orange
+        default: return .secondary
+        }
+    }
+}
+
+/// One block per question only the owner can decide (contract §7 Q2) — web's `ReviewAnswerBlocks`:
+/// its options with the recommendation chosen and marked, then a row for the owner's own words. The
+/// first question's words are the bar's first line already, so its block starts at its options. The
+/// rows are the question card's (`CoordinatorQuestionCardView.choiceRow`), in its words.
+private struct ReviewAnswerBlocks: View {
+    let questions: [ConfirmationNeedsYouItem]
+    @Binding var choices: [String: ReviewChoice]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(Array(questions.enumerated()), id: \.element.key) { index, item in
+                VStack(alignment: .leading, spacing: 6) {
+                    if index > 0 {
+                        Text(item.text)
+                            .font(.orbitProse.bold())
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    ReviewEvidenceFold(refs: item.evidenceRefs ?? [])
+                    ForEach(Array(item.options.enumerated()), id: \.offset) { optionIndex, option in
+                        row(selected: choice(item) == .option(optionIndex), label: option.label,
+                            why: option.description, recommended: optionIndex == item.recommendedOption) {
+                            choices[item.key] = .option(optionIndex)
+                        }
+                    }
+                    row(selected: isOther(item), label: CoordinatorQuestions.otherOption, why: nil,
+                        recommended: false) {
+                        if !isOther(item) { choices[item.key] = .other("") }
+                    }
+                    if isOther(item) {
+                        TextField(item.text, text: otherWords(item), axis: .vertical)
+                            .lineLimit(2...8)
+                            .textFieldStyle(.plain)
+                            .font(.orbitProse)
+                            .padding(.horizontal, 10).padding(.vertical, 8)
+                            .background(Color.blue.opacity(0.08),
+                                        in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
+                    }
+                }
+            }
+            Text(OwnerConfirmations.answersSentWithConfirm)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func choice(_ item: ConfirmationNeedsYouItem) -> ReviewChoice {
+        OwnerConfirmations.reviewChoice(item, in: choices)
+    }
+
+    private func isOther(_ item: ConfirmationNeedsYouItem) -> Bool {
+        if case .other = choice(item) { return true }
+        return false
+    }
+
+    private func otherWords(_ item: ConfirmationNeedsYouItem) -> Binding<String> {
+        Binding(
+            get: {
+                if case .other(let words) = choice(item) { return words }
+                return ""
+            },
+            set: { choices[item.key] = .other($0) })
+    }
+
+    private func row(selected: Bool, label: String, why: String?, recommended: Bool,
+                     pick: @escaping () -> Void) -> some View {
+        Button {
+            PlatformHaptics.tap()
+            pick()
+        } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: selected ? "largecircle.fill.circle" : "circle")
+                    .font(.orbitMeta)
+                    .foregroundStyle(selected ? Color.blue : Color.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(label).font(.orbitProse)
+                        if recommended {
+                            Text(CoordinatorQuestions.recommended)
+                                .font(.orbitLabel).foregroundStyle(Color.blue)
+                        }
+                    }
+                    if let why {
+                        Text(why).font(.orbitLabel).foregroundStyle(.secondary)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minHeight: ApprovalMetrics.rowMinHeight)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : [.isButton])
+    }
+}
+
+/// A question's evidence, folded under it (contract §7 Q2).
+private struct ReviewEvidenceFold: View {
+    let refs: [String]
+    @State private var open = false
+
+    var body: some View {
+        if !refs.isEmpty {
+            VStack(alignment: .leading, spacing: 2) {
+                DisclosureToggle(open: open, label: OwnerConfirmations.reviewEvidence) { open.toggle() }
+                if open {
+                    ForEach(refs, id: \.self) { ref in
+                        Text(ref)
+                            .font(.orbitMonoFine).foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// A receipt's `Your answers` (contract §7 Q5): each question, then what was chosen or said — and,
+/// for an answer an older app recorded, that the owner was never shown the question.
+private struct OwnerAnswersView: View {
+    let lines: [OwnerAnswerLine]
+
+    var body: some View {
+        if !lines.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(OwnerConfirmations.yourAnswers)
+                    .font(.orbitLabel.bold()).foregroundStyle(.secondary)
+                ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(line.text).font(.orbitSubtext)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if line.notShown {
+                            Text(OwnerConfirmations.answerNotShown)
+                                .font(.orbitLabel).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
@@ -3028,14 +3553,14 @@ private struct PromotionApprovalCardView: View {
             }
         case .merging:
             ApprovalActions {
-                Button {} label: { Text(PromotionCards.merging).approvalActionLabel() }
+                Button {} label: { Text(PromotionCards.mergingActionLabel(view)).approvalActionLabel() }
                     .buttonStyle(.borderedProminent)
                     .disabled(true)
                 Button(role: .cancel) { act { await console.cancelMergeToMain(view) } } label: {
                     Text(PromotionCards.cancel).approvalActionLabel()
                 }
                 .buttonStyle(.bordered)
-                .disabled(acting)
+                .disabled(acting || view.execution?.phase == "PUSH")
             }
         case .merged, .none:
             EmptyView()

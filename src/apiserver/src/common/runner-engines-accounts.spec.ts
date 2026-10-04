@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
-import { ENGINE_ACCOUNTS_MAX, sanitizeRunnerEngines } from './runner-engines';
+import { ENGINE_ACCOUNTS_MAX, namedRunnerEngines, sanitizeRunnerEngines } from './runner-engines';
 
 // The heartbeat's `engines` are rebuilt field by field on the way into the runner row and again on
 // the way out to the page (runner-api.controller, runners.service): whatever this drops never
@@ -183,4 +183,54 @@ test('a Codex account keeps reporting its directory under the codex-named field 
     { engine: 'claude', installed: true, auth: 'yes', accounts: [{ id: 'default', home: '/home/ada/.claude', auth: 'yes' }] },
   ])![0].accounts!;
   assert.equal('codexHome' in claude, false);
+});
+
+// The names given accounts in Orbit (runner.account_names, RunnersService.renameAccount) ride on the
+// report on its way to every reader that names an account: the Providers page, the switch notice,
+// the sign-in refusal.
+
+/** The Codex accounts one report lists, named the way namedRunnerEngines names them. */
+const namedAccountsOf = (accountNames: unknown, accounts: unknown = [DEFAULT, WORK]) =>
+  namedRunnerEngines({ engines: [codex(accounts)], accountNames })?.[0]?.accounts;
+
+test('a name given in Orbit is laid over the one the runner reports, and Default gets one at all', () => {
+  assert.deepEqual(namedAccountsOf({ codex: { default: 'Main', [WORK.id]: 'Clients' } }), [
+    { ...DEFAULT, name: 'Main' },
+    { ...WORK, name: 'Clients' },
+  ]);
+  // One renamed, the other as reported.
+  assert.deepEqual(namedAccountsOf({ codex: { default: '  Main  ' } }), [{ ...DEFAULT, name: 'Main' }, WORK]);
+});
+
+test('nothing renamed reads exactly as reported', () => {
+  for (const none of [null, undefined, 'Main', [], {}, { codex: null }, { codex: ['Main'] }, { codex: {} }]) {
+    assert.deepEqual(namedAccountsOf(none), [DEFAULT, WORK], `account names ${JSON.stringify(none)}`);
+  }
+});
+
+test('a name renameAccount could not have written, or for an account this report does not list, is not shown', () => {
+  const stray = {
+    // Another engine's accounts, and an engine that keeps none.
+    claude: { default: 'Claude main' },
+    kimi: { default: 'Kimi main' },
+    codex: {
+      // A slot this runner does not list (removed, or never its own), and ids no account has.
+      '0b05070e': 'Gone',
+      DEFAULT: 'Upper',
+      '../default': 'Path',
+      // Not a name: blank, too long for the DTO, not a string.
+      default: '   ',
+      [WORK.id]: 42,
+    },
+  };
+  assert.deepEqual(namedAccountsOf(stray), [DEFAULT, WORK]);
+  assert.deepEqual(namedAccountsOf({ codex: { default: 'x'.repeat(61) } }), [DEFAULT, WORK]);
+  assert.deepEqual(namedAccountsOf({ codex: { default: 'x'.repeat(60) } })?.[0], { ...DEFAULT, name: 'x'.repeat(60) });
+});
+
+test('a runner that never reported stays unreported, whatever its accounts were called', () => {
+  assert.equal(namedRunnerEngines({ engines: null, accountNames: { codex: { default: 'Main' } } }), null);
+  // And an engine that reports no account list is not given one by a name.
+  const [engine] = namedRunnerEngines({ engines: [codex(undefined)], accountNames: { codex: { default: 'Main' } } })!;
+  assert.equal('accounts' in engine, false);
 });

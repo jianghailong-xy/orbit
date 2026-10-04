@@ -1,3 +1,4 @@
+import { PauseAccountDto } from '../common/account-pause';
 import {
   BadRequestException,
   Body,
@@ -16,6 +17,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import {
   CreateEnrollmentTokenDto,
+  RenameAccountDto,
   ReorderRunnersDto,
   StartInstallDto,
   StartLoginDto,
@@ -106,6 +108,33 @@ export class RunnersController {
   ) {
     if (!isLoginEngine(engine)) throw new BadRequestException('Unknown engine');
     return this.runners.removeAccount(user.userId, id, engine, account);
+  }
+
+  // Renaming one account of `engine` on a runner — Default included. Only a label, and Orbit's own:
+  // the service keeps it beside the runner's report rather than on the machine, so nothing there
+  // changes and the runner need not be online. Owner-scoped like the removal above.
+  @Patch(':id/accounts/:engine/:account')
+  renameAccount(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('engine') engine: string,
+    @Param('account') account: string,
+    @Body() dto: RenameAccountDto,
+  ) {
+    if (!isLoginEngine(engine)) throw new BadRequestException('Unknown engine');
+    return this.runners.renameAccount(user.userId, id, engine, account, dto.name);
+  }
+
+  @Post(':id/accounts/:engine/:account/pause')
+  pauseAccount(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('engine') engine: string,
+    @Param('account') account: string,
+    @Body() dto: PauseAccountDto,
+  ) {
+    if (!isLoginEngine(engine)) throw new BadRequestException('Unknown engine');
+    return this.runners.pauseAccount(user.userId, id, engine, account, dto.durationMinutes);
   }
 
   // The same removal on Codex's own route, which is what a client older than accounts-per-engine

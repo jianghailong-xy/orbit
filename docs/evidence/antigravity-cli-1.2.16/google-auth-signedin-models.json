@@ -1,0 +1,20 @@
+{
+  "probe": "signedin-models",
+  "agy_version": "1.2.16",
+  "authentication": "copy of owner-authorized token file within private temp root; same account, not second account",
+  "argv": [
+    "<TMP>/bin/agy",
+    "--gemini_dir=<TMP>/runs/signedin-models/gemini",
+    "--log-file=/dev/null",
+    "models"
+  ],
+  "stdin_is_tty": false,
+  "stdout_is_tty": false,
+  "dbus": "nonexistent isolated socket",
+  "useG1Credits": false,
+  "duration_seconds": 1.743,
+  "forced_stop": false,
+  "exit_code": 0,
+  "stdout": "gemini-3.8-flash-high\tGemini 3.8 Flash (High)\ngemini-3.8-flash-medium\tGemini 3.8 Flash (Medium)\ngemini-3.8-flash-low\tGemini 3.8 Flash (Low)\ngemini-3.7-flash-high\tGemini 3.7 Flash (High)\ngemini-3.7-flash-medium\tGemini 3.7 Flash (Medium)\ngemini-3.7-flash-low\tGemini 3.7 Flash (Low)\ngemini-3.6-flash-high\tGemini 3.6 Flash (High)\ngemini-3.6-flash-medium\tGemini 3.6 Flash (Medium)\ngemini-3.6-flash-low\tGemini 3.6 Flash (Low)\ngemini-3.1-pro-high\tGemini 3.1 Pro (High)\ngemini-3.1-pro-low\tGemini 3.1 Pro (Low)\nclaude-opus-5-5-low\tClaude Opus 5.5 (Low)\nclaude-opus-5-5-medium\tClaude Opus 5.5 (Medium)\nclaude-opus-5-5-high\tClaude Opus 5.5 (High)\nclaude-sonnet-5-5-low\tClaude Sonnet 5.5 (Low)\nclaude-sonnet-5-5-medium\tClaude Sonnet 5.5 (Medium)\nclaude-sonnet-5-5-high\tClaude Sonnet 5.5 (High)\ngpt-oss-120b-medium\tGPT-OSS 120B (Medium)\n",
+  "stderr": "Fetching available models...\n"
+}

@@ -10,6 +10,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CoordinatorStatus } from '../components/ProjectCoordinatorCard';
 import { encodeId } from '../lib/idCodec';
 import { ProjectCoordinatorSection } from './ProjectsPage';
+import { ToastViewport } from '../components/ToastViewport';
+import { clearToasts } from '../lib/toastStore';
 
 /**
  * What each press on the coordinator card COSTS — the half of this surface the card itself cannot
@@ -216,7 +218,10 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  await act(async () => root.unmount());
+  await act(async () => {
+    clearToasts();
+    root.unmount();
+  });
   container.remove();
   document.body.innerHTML = '';
   vi.unstubAllGlobals();
@@ -238,6 +243,7 @@ async function mount(node: ReactElement): Promise<void> {
               <Route path="*" element={node} />
             </Routes>
             <Probe />
+            <ToastViewport />
           </MemoryRouter>
         </AntApp>
       </QueryClientProvider>,

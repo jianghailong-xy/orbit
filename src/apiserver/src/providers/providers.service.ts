@@ -1,11 +1,13 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AgentProvider, providerPreset, RunEventType, type PlanUsageSnapshot, type ProviderPreset } from '@orbit/shared';
 import { CLAUDE_EFFORT_ORDER } from '../common/runtime-provider';
 import { GENERATING_SESSION_FILTER } from '../common/session-generating';
+import { accountPauseUntil } from '../common/account-pause';
+import { PublicIdPipe } from '../common/public-id';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
-import { codexLoginUnavailableReason, codexLoginView } from './codex-login';
+import { codexLoginView, codexPoolUnavailableReason, maskedAccount } from './codex-login';
 import { CreateModelProviderDto, CreateProviderPoolDto, UpdateModelProviderDto } from './dto';
 import { decryptSecret, encryptSecret } from './provider-crypto';
 import { catalogDefaultModel, catalogModels, presetCatalog } from './model-catalog';
@@ -20,6 +22,31 @@ import {
 import { selectPoolMember, spentUntil } from './pool-select';
 import { withPreset } from './preset-overlay';
 import { pickFreeSlug, slugBase } from './provider-slug';
+
+/**
+ * The Gemini API model agy calls for one of its own model names, which is what the connection test
+ * has to ask for to probe the model a session runs. agy names a model by family and thinking level
+ * (`gemini-3.8-flash-high`, or the base name and `--effort`) and maps it onto an API id itself;
+ * measured on agy 1.2.16 that id is the base name for every model it lists except 3.1 Pro, which the
+ * API still serves only as a preview (docs/antigravity-runtime-contract.md §9.2). A name agy does
+ * not list is asked for as it is.
+ */
+function geminiApiModel(model: string): string {
+  const base = model.replace(/-(low|medium|high|xhigh|max)$/, '');
+  return base === 'gemini-3.1-pro' ? 'gemini-3.1-pro-preview' : base;
+}
+
+/**
+ * The slugs whose `model_provider` row is a compatibility guard, not a provider: migrations 0080 and
+ * 0367 parked one on `opencode` and one on `antigravity` when each became a built-in runtime, to
+ * fence an older control plane through a rolling deploy (and to keep it from creating a provider
+ * under the name). The built-in runtime is what answers to the slug, so no list, lookup or write
+ * here ever treats either row as a provider.
+ */
+export const COMPATIBILITY_GUARD_SLUGS: string[] = [
+  AgentProvider.OPENCODE,
+  AgentProvider.ANTIGRAVITY,
+];
 
 /**
  * One entry of ProvidersService.listUsable. The last three are absent on a built-in engine
@@ -79,9 +106,31 @@ function assertReasoningLevels(runtime: string, models: unknown): void {
 type PoolEditRow = PoolAdmissionRow & { id: string; label: string };
 
 /** A pool as its owner reads it: the providers in it, keyless and endpointless, in the order the
- *  provider lists use — and, for a Codex pool of the caller's own, the ChatGPT account it runs on
+ *  provider lists use — and, for a Codex pool of the caller's own, the ChatGPT accounts it holds
  *  (migration 0323). Only the columns `codexLoginView` reads are selected, and no token is among them:
  *  the encrypted pair is never selected on any path that builds a response. */
+/** A pool's ChatGPT logins, read beside the pool itself: a login belongs to a person of the pool
+ *  (migration 0371), so it is no relation of the pool row. Each by its email and `…AB12`, oldest first. */
+const POOL_LOGIN_SELECT = {
+  poolId: true,
+  accountId: true,
+  // Who signed it in — the person whose sign-in again brings it back, and who may take it out with the
+  // pool's admins.
+  userId: true,
+  email: true,
+  plan: true,
+  state: true,
+  lastError: true,
+  expiresAt: true,
+  createdAt: true,
+  // What the pool gateway last read off the backend's answers, and the reset it named (migration 0324).
+  usage: true,
+  spentUntil: true,
+  pausedUntil: true,
+} satisfies Prisma.PoolCodexLoginSelect;
+
+type PoolLoginRow = Prisma.PoolCodexLoginGetPayload<{ select: typeof POOL_LOGIN_SELECT }>;
+
 const POOL_SELECT = {
   id: true,
   slug: true,
@@ -89,42 +138,49 @@ const POOL_SELECT = {
   createdAt: true,
   updatedAt: true,
   engine: true,
-  logins: {
-    orderBy: [{ createdAt: 'asc' }, { accountId: 'asc' }],
-    select: {
-      accountId: true,
-      email: true,
-      plan: true,
-      state: true,
-      lastError: true,
-      expiresAt: true,
-      createdAt: true,
-      // What the pool gateway last read off the backend's answers, and the reset it named (migration 0324).
-      usage: true,
-      spentUntil: true,
-    },
-  },
   members: {
     orderBy: [
       { provider: { position: { sort: 'asc', nulls: 'last' } } },
       { provider: { createdAt: 'asc' } },
       { providerId: 'asc' },
     ],
-    select: { provider: { select: { id: true, slug: true, label: true } } },
+    select: { pausedUntil: true, provider: { select: { id: true, slug: true, label: true } } },
   },
 } satisfies Prisma.ProviderPoolSelect;
 
-function poolView({ members, logins, ...pool }: Prisma.ProviderPoolGetPayload<{ select: typeof POOL_SELECT }>) {
-  return { ...pool, members: members.map((member) => member.provider), login: loginOf(logins) };
+function poolView(
+  { members, ...pool }: Prisma.ProviderPoolGetPayload<{ select: typeof POOL_SELECT }>,
+  logins: PoolLoginRow[],
+) {
+  return { ...pool, members: members.map((member) => ({ ...member.provider, pausedUntil: member.pausedUntil && member.pausedUntil > new Date() ? member.pausedUntil : null })), ...loginsOf(logins) };
 }
 
-/** A pool's account as every read of it carries it: the email and `…AB12` of the one login it holds
- *  (a Codex pool of its owner's own), or null — which is every Claude pool, and a Codex one nobody has
- *  signed into yet. Built by `codexLoginView`, which cannot see a token: none is selected. */
-function loginOf(logins: { accountId: string; email: string | null; plan: string | null; state: string;
-  lastError: string | null; expiresAt: Date; createdAt: Date; usage: Prisma.JsonValue; spentUntil: Date | null }[]) {
-  const login = logins[0] ?? null;
-  return codexLoginView(login, (login?.usage as PlanUsageSnapshot | null | undefined) ?? null);
+/** A pool's accounts as every read of it carries them, each by its email and `…AB12`: `logins`, every
+ *  ChatGPT account a Codex pool holds — whoever in the pool signed it in (migration 0371) — oldest first,
+ *  none for every Claude pool and for a Codex one nobody has signed into yet — and `login`, the first of
+ *  them or null, which is the one its sessions run on. Built by `codexLoginView`, which cannot see a
+ *  token: none is selected. */
+function loginsOf(rows: PoolLoginRow[]) {
+  const logins = rows.map((row) => codexLoginView(row, row.usage as PlanUsageSnapshot | null)!);
+  return { login: logins[0] ?? null, logins };
+}
+
+/** The ChatGPT logins of each pool given, oldest first, read beside the pools themselves — a login is a
+ *  person of the pool's (migration 0371), so it hangs off no relation of the pool's row. */
+async function loginsByPool(
+  db: Prisma.TransactionClient | PrismaService,
+  poolIds: string[],
+): Promise<Map<string, PoolLoginRow[]>> {
+  const rows = poolIds.length
+    ? await db.poolCodexLogin.findMany({
+        where: { poolId: { in: poolIds } },
+        orderBy: [{ createdAt: 'asc' }, { accountId: 'asc' }],
+        select: POOL_LOGIN_SELECT,
+      })
+    : [];
+  const byPool = new Map<string, PoolLoginRow[]>();
+  for (const row of rows) byPool.set(row.poolId, [...(byPool.get(row.poolId) ?? []), row]);
+  return byPool;
 }
 
 /** The same pools, read with what asking each member's credential for its quota takes (poolViews). The key
@@ -135,6 +191,7 @@ const POOL_QUOTA_SELECT = {
   members: {
     ...POOL_SELECT.members,
     select: {
+      pausedUntil: true,
       provider: {
         select: {
           ...POOL_SELECT.members.select.provider.select,
@@ -188,7 +245,7 @@ export class ProvidersService {
   async listPublic(userId: string) {
     const rows = await this.prisma.modelProvider.findMany({
       where: {
-        slug: { not: AgentProvider.OPENCODE },
+        slug: { notIn: COMPATIBILITY_GUARD_SLUGS },
         enabled: true,
         OR: [{ ownerId: null }, { ownerId: userId }],
       },
@@ -234,14 +291,16 @@ export class ProvidersService {
    * The caller's own account pools are listed too, by name alone: which members a pool holds, and
    * their keys, are nothing a caller needs to dispatch with it. A pool none of whose accounts can run
    * is still listed, and the doors refuse it with the reason (QueueService.accountPoolRefusal). So are
-   * the shared pools the caller is in (migration 0321), on Codex; one they are not in is not named.
+   * the Codex pools the caller is one of the people of: a shared pool (migration 0321), or somebody
+   * else's own pool its owner added them to (migration 0358), which runs them on its API keys; one they
+   * are not in is not named.
    */
   async listUsable(ownerId: string): Promise<UsableProvider[]> {
     const rows = await this.prisma.modelProvider.findMany({
       where: {
-        // The built-in entry below already names `opencode`; the compatibility guard row that
-        // holds that slug is not a second provider to choose between.
-        slug: { not: AgentProvider.OPENCODE },
+        // The built-in entries below already name `opencode` and `antigravity`; the compatibility
+        // guard rows that hold those slugs are not second providers to choose between.
+        slug: { notIn: COMPATIBILITY_GUARD_SLUGS },
         enabled: true,
         OR: [{ ownerId: null }, { ownerId }],
       },
@@ -257,7 +316,9 @@ export class ProvidersService {
       },
     });
     const pools = await this.prisma.providerPool.findMany({
-      where: { OR: [{ ownerId, shared: false }, { shared: true, people: { some: { userId: ownerId } } }] },
+      where: {
+        OR: [{ ownerId, shared: false }, { engine: AgentProvider.CODEX, people: { some: { userId: ownerId } } }],
+      },
       orderBy: { createdAt: 'asc' },
       select: { slug: true, label: true, shared: true, engine: true },
     });
@@ -288,7 +349,7 @@ export class ProvidersService {
    *  user's personal rows. Every field except the encrypted key (→ hasApiKey). */
   async listShared() {
     const rows = await this.prisma.modelProvider.findMany({
-      where: { ownerId: null, slug: { not: AgentProvider.OPENCODE } },
+      where: { ownerId: null, slug: { notIn: COMPATIBILITY_GUARD_SLUGS } },
       orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
     });
     return rows.map((r) => this.desensitize(r));
@@ -307,7 +368,7 @@ export class ProvidersService {
    *  the only way the pool form can say which rows it will turn away, and why, before anyone asks. */
   async listMine(ownerId: string) {
     const rows = await this.prisma.modelProvider.findMany({
-      where: { ownerId, slug: { not: AgentProvider.OPENCODE } },
+      where: { ownerId, slug: { notIn: COMPATIBILITY_GUARD_SLUGS } },
       orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
     });
     return rows.map((r) => {
@@ -432,7 +493,7 @@ export class ProvidersService {
    *  shared row, or another user's, reads as not-found. */
   async idOfMine(ownerId: string, slug: string): Promise<string> {
     const row = await this.prisma.modelProvider.findFirst({
-      where: { ownerId, slug: { equals: slug, not: AgentProvider.OPENCODE } },
+      where: { ownerId, slug: { equals: slug, notIn: COMPATIBILITY_GUARD_SLUGS } },
       select: { id: true },
     });
     if (!row) throw new NotFoundException('provider not found');
@@ -461,10 +522,12 @@ export class ProvidersService {
   /** An account pool of the caller's own providers: one more slug to dispatch with, taken from the
    *  namespace the providers' slugs come from. Its members keep theirs.
    *
-   *  A pool may instead be created on Codex (migration 0323): a pool of the caller's own that holds one
-   *  ChatGPT login this server signs in and keeps, and starts with no members at all — its account is
+   *  A pool may instead be created on Codex (migration 0323): a pool of the caller's own that holds the
+   *  ChatGPT logins this server signs in and keeps, and starts with no members at all — each account is
    *  added by the sign-in (CodexLoginService), never as a provider, so one that names providers is
-   *  refused rather than quietly emptied of them. */
+   *  refused rather than quietly emptied of them. It starts with its owner among its people, as its ADMIN
+   *  (migration 0358): the row the pool page's doors find them by when they add people and API keys to it
+   *  (SharedPoolsService). */
   async createPool(ownerId: string, dto: CreateProviderPoolDto) {
     const providerIds = [...new Set(dto.providerIds ?? [])];
     const engine = dto.engine ?? AgentProvider.CLAUDE;
@@ -483,12 +546,14 @@ export class ProvidersService {
           ownerId,
           engine,
           members: { createMany: { data: providerIds.map((providerId) => ({ providerId })) } },
+          ...(engine === AgentProvider.CODEX ? { people: { create: { userId: ownerId, role: 'ADMIN' } } } : {}),
         },
         select: POOL_SELECT,
       }),
     );
     this.publishChanged(ownerId, pool.id);
-    return poolView(pool);
+    // A pool is made with no ChatGPT login in it: every one is signed in afterwards (CodexLoginService).
+    return poolView(pool, []);
   }
 
   /** One of the caller's pools, as its page reads it — the members it holds and where each of them
@@ -523,6 +588,64 @@ export class ProvidersService {
     return this.getScopedPool(ownerId, poolId);
   }
 
+  /** Pause just this pool membership; signing in and quota are independent of this control. */
+  async pausePoolMember(userId: string, poolId: string, memberId: string, durationMinutes: number | null) {
+    accountPauseUntil(durationMinutes); // Validate before looking up any account.
+    const result = await this.prisma.$transaction(async (tx) => {
+      const pool = await tx.providerPool.findFirst({
+        where: { id: poolId, OR: [{ ownerId: userId }, { people: { some: { userId } } }] },
+        select: { ownerId: true, engine: true, people: { select: { userId: true, role: true } } },
+      });
+      if (!pool) throw new NotFoundException('pool not found');
+      const admin = pool.ownerId === userId || pool.people.some((person) => person.userId === userId && person.role === 'ADMIN');
+      type PauseRow = { pausedAt: Date | null; pausedUntil: Date | null };
+      // Set the cutoff only AFTER acquiring the row lock: a turn delivered while this write waited
+      // belongs to the active turn, and must still finish. Extending a live pause keeps its cutoff.
+      const dataFor = (rows: PauseRow[]) => {
+        const row = rows[0];
+        if (!row) throw new NotFoundException('account not found');
+        const now = new Date();
+        const pausedUntil = accountPauseUntil(durationMinutes, now);
+        return {
+          pausedAt: pausedUntil ? (row.pausedUntil && row.pausedUntil > now ? row.pausedAt ?? now : now) : null,
+          pausedUntil,
+        };
+      };
+      let data: PauseRow;
+      if (memberId.startsWith('login:')) {
+        const rows = await tx.poolCodexLogin.findMany({ where: { poolId }, select: { accountId: true, userId: true } });
+        const named = rows.filter((row) => maskedAccount(row.accountId) === memberId.slice(6));
+        if (named.length > 1) throw new ConflictException('More than one account has this fingerprint');
+        if (!named.length) throw new NotFoundException('account not found');
+        if (!admin && named[0].userId !== userId) throw new ForbiddenException('Only the contributor or a pool admin can pause this account');
+        data = dataFor(await tx.$queryRaw<PauseRow[]>`
+          SELECT "paused_at" AS "pausedAt", "paused_until" AS "pausedUntil" FROM "pool_codex_login"
+          WHERE "pool_id" = ${poolId}::uuid AND "account_id" = ${named[0].accountId} FOR UPDATE`);
+        await tx.poolCodexLogin.update({ where: { poolId_accountId: { poolId, accountId: named[0].accountId } }, data });
+      } else {
+        const id = new PublicIdPipe().transform(memberId, { type: 'param', data: 'memberId' }) as string;
+        if (pool.engine === AgentProvider.CLAUDE) {
+          if (pool.ownerId !== userId) throw new NotFoundException('pool not found');
+          data = dataFor(await tx.$queryRaw<PauseRow[]>`
+            SELECT "paused_at" AS "pausedAt", "paused_until" AS "pausedUntil" FROM "provider_pool_member"
+            WHERE "pool_id" = ${poolId}::uuid AND "provider_id" = ${id}::uuid AND "owner_id" = ${userId}::uuid FOR UPDATE`);
+          await tx.providerPoolMember.update({ where: { poolId_providerId: { poolId, providerId: id } }, data });
+        } else {
+          const key = await tx.poolApiKey.findFirst({ where: { id, poolId }, select: { contributorId: true } });
+          if (!key) throw new NotFoundException('account not found');
+          if (!admin && key.contributorId !== userId) throw new ForbiddenException('Only the contributor or a pool admin can pause this account');
+          data = dataFor(await tx.$queryRaw<PauseRow[]>`
+            SELECT "paused_at" AS "pausedAt", "paused_until" AS "pausedUntil" FROM "pool_api_key"
+            WHERE "pool_id" = ${poolId}::uuid AND "id" = ${id}::uuid FOR UPDATE`);
+          await tx.poolApiKey.update({ where: { id }, data });
+        }
+      }
+      return { pausedUntil: data.pausedUntil?.toISOString() ?? null, people: [pool.ownerId, ...pool.people.map((person) => person.userId)] };
+    });
+    for (const id of new Set(result.people)) this.publishChanged(id, poolId);
+    return { pausedUntil: result.pausedUntil };
+  }
+
   /** Delete a pool. Its members are providers in their own right and stay as they are. */
   async removePool(ownerId: string, id: string) {
     await this.getScopedPool(ownerId, id);
@@ -540,8 +663,10 @@ export class ProvidersService {
 
   /**
    * Probe a provider before it's saved: one minimal request on the endpoint the borrowed runtime
-   * will actually call, with the same `Bearer` auth that runtime injects — POST {baseUrl}/v1/messages
-   * for claude, POST {baseUrl}/responses for codex, POST {baseUrl}/chat/completions for kimi.
+   * will actually call, with the same auth that runtime injects — POST {baseUrl}/v1/messages for
+   * claude, POST {baseUrl}/responses for codex, POST {baseUrl}/chat/completions for kimi, each with
+   * a `Bearer` key, and POST {baseUrl}/v1beta/models/{model}:generateContent with `x-goog-api-key`
+   * for antigravity: the Gemini API's own method, whose streaming twin is what agy calls.
    * Stateless — the browser passes the freshly-typed key, nothing is persisted. Never throws on a
    * network/HTTP failure; returns a structured verdict the picker renders inline.
    */
@@ -560,28 +685,35 @@ export class ProvidersService {
     // runner configures it with wire_api="responses"), so a codex probe that asked /chat/completions
     // would pass an endpoint — Gemini's OpenAI-compatible one is exactly this — that every session
     // on it then fails against.
+    const isGemini = dto.runtime === 'antigravity';
     const isResponses = dto.runtime === 'codex';
     const isOpenAIDialect = isResponses || dto.runtime === 'kimi';
-    const endpoint = isResponses
-      ? `${base}/responses`
-      : isOpenAIDialect
-        ? `${base}/chat/completions`
-        : `${base}/v1/messages`;
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${dto.apiKey}`,
-    };
-    if (!isOpenAIDialect) headers['anthropic-version'] = '2023-06-01';
+    const isAnthropic = !isGemini && !isOpenAIDialect;
+    const endpoint = isGemini
+      ? `${base}/v1beta/models/${encodeURIComponent(geminiApiModel(model))}:generateContent`
+      : isResponses
+        ? `${base}/responses`
+        : isOpenAIDialect
+          ? `${base}/chat/completions`
+          : `${base}/v1/messages`;
+    // The Gemini API takes its key in a header of its own, which is the one agy sends.
+    const headers: Record<string, string> = isGemini
+      ? { 'Content-Type': 'application/json', 'x-goog-api-key': dto.apiKey }
+      : { 'Content-Type': 'application/json', Authorization: `Bearer ${dto.apiKey}` };
+    if (isAnthropic) headers['anthropic-version'] = '2023-06-01';
     // A subscription OAuth token (sk-ant-oat…, what `claude` stores after a browser login) is only
     // served for requests that identify as Claude Code, which the CLI does through its system
     // prompt. Without it Anthropic turns such a token away with a 429 whose message is the literal
     // string "Error" — so a key that drives sessions perfectly well failed the probe. Send what the
     // runtime sends, so the probe is no stricter than the session it is standing in for.
-    // The Responses API spells it differently and refuses a cap under 16 output tokens.
-    const body: Record<string, unknown> = isResponses
-      ? { model, input: 'ping', max_output_tokens: 16 }
-      : { model, max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] };
-    if (!isOpenAIDialect) body.system = "You are Claude Code, Anthropic's official CLI for Claude.";
+    // The Responses API spells it differently and refuses a cap under 16 output tokens; Gemini
+    // names the model in the path rather than the body.
+    const body: Record<string, unknown> = isGemini
+      ? { contents: [{ role: 'user', parts: [{ text: 'ping' }] }], generationConfig: { maxOutputTokens: 1 } }
+      : isResponses
+        ? { model, input: 'ping', max_output_tokens: 16 }
+        : { model, max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] };
+    if (isAnthropic) body.system = "You are Claude Code, Anthropic's official CLI for Claude.";
     try {
       const resp = await fetch(endpoint, {
         method: 'POST',
@@ -597,13 +729,18 @@ export class ProvidersService {
       if (resp.status === 404) {
         // For codex a 404 on /responses is usually not a typo in the URL: it is an OpenAI-compatible
         // endpoint that only serves Chat Completions, which no current Codex can use. "Check the Base
-        // URL" would send the owner looking for a mistake they did not make.
+        // URL" would send the owner looking for a mistake they did not make. Gemini's path names the
+        // model, so a 404 that comes back as Google's own error is about the model, and says which;
+        // only a bare one is a path that doesn't exist.
+        const detail = isGemini ? this.extractErr(await resp.text().catch(() => '')) : '';
         return {
           ok: false,
           status: resp.status,
           message: isResponses
             ? "Endpoint doesn't serve the OpenAI Responses API — Codex needs it, so a Chat Completions-only endpoint can't run on Codex"
-            : 'Endpoint not found — check the Base URL',
+            : detail
+              ? `HTTP ${resp.status} — ${detail}`
+              : 'Endpoint not found — check the Base URL',
         };
       }
       // Keep the status next to the vendor's own words: a body can carry a message as unhelpful as
@@ -622,7 +759,7 @@ export class ProvidersService {
 
   private async getScoped(ownerId: string | null, id: string) {
     const row = await this.prisma.modelProvider.findFirst({
-      where: { id, ownerId, slug: { not: AgentProvider.OPENCODE } },
+      where: { id, ownerId, slug: { notIn: COMPATIBILITY_GUARD_SLUGS } },
     });
     if (!row) throw new NotFoundException('provider not found');
     return row;
@@ -634,7 +771,7 @@ export class ProvidersService {
       select: POOL_SELECT,
     });
     if (!pool) throw new NotFoundException('pool not found');
-    return poolView(pool);
+    return poolView(pool, (await loginsByPool(this.prisma, [pool.id])).get(pool.id) ?? []);
   }
 
   /**
@@ -658,24 +795,45 @@ export class ProvidersService {
       ownerId,
       pools.flatMap((pool) => pool.members.map((member) => member.provider)),
     );
-    return pools.map(({ members, logins, ...pool }) => {
-      const login = loginOf(logins);
-      // A Codex pool of the owner's own runs on its ChatGPT account, not on member providers: it holds
-      // none, and what decides whether it can take a session is the account's state alone. A quota that
-      // has not been read does not decide it — that is `login.usage` being null, and the account runs.
+    // A Codex pool's API keys (migration 0358), as far as whether one can take a session: never a secret.
+    const codexIds = pools.filter((pool) => pool.engine === AgentProvider.CODEX).map((pool) => pool.id);
+    const keys = codexIds.length
+      ? await this.prisma.poolApiKey.findMany({
+          where: { poolId: { in: codexIds } },
+          select: { poolId: true, enabled: true, state: true },
+        })
+      : [];
+    const accountsByPool = await loginsByPool(this.prisma, codexIds);
+    return pools.map(({ members, ...pool }) => {
+      const { login, logins } = loginsOf(accountsByPool.get(pool.id) ?? []);
+      // A Codex pool of the owner's own runs on its ChatGPT accounts, not on member providers: it holds
+      // none, and what decides whether it can take a session is whether one of its accounts is ACTIVE,
+      // which the claim can put the session on — or, with none, whether one of its API keys can run
+      // (QueueService.accountPoolRefusal). A quota that has not been read does not decide it — that is
+      // `login.usage` being null, and the account runs.
       if (pool.engine === AgentProvider.CODEX) {
+        const account = logins.find((view) => view.state === 'ACTIVE') ?? login;
         return {
           ...pool,
           login,
+          logins,
           resetsAt: null,
-          unavailable: codexLoginUnavailableReason(pool.label, login),
+          // The owner reads this: the sentence says "sign in again" only for an account they signed in
+          // themselves — one of the pool's may be a member's (migration 0371).
+          unavailable: codexPoolUnavailableReason(
+            pool.label,
+            account,
+            keys.filter((key) => key.poolId === pool.id),
+            account?.userId === ownerId,
+          ),
           members: [],
         };
       }
-      const quota = members.map(({ provider: row }) => {
+      const quota = members.map(({ provider: row, pausedUntil }) => {
         const standing = this.planUsage.usageStanding(row);
         return {
           row,
+          pausedUntil,
           usage: this.planUsage.snapshot(row),
           refused: standing === 'KEY_REFUSED',
           usageUnreadable: standing === 'USAGE_UNKNOWN',
@@ -689,10 +847,11 @@ export class ProvidersService {
       return {
         ...pool,
         login,
+        logins,
         resetsAt: selection.kind === 'EXHAUSTED' ? (selection.resetsAt?.toISOString() ?? null) : null,
         unavailable:
           selection.kind !== 'UNAVAILABLE' ? null : members.length > 0 ? 'No account can run' : 'No accounts',
-        members: quota.map(({ row, usage, refused, usageUnreadable }) => {
+        members: quota.map(({ row, usage, refused, usageUnreadable, pausedUntil }) => {
           const spent = spentUntil(usage, now);
           const state: PoolMemberState = refused
             ? 'REFUSED'
@@ -715,6 +874,7 @@ export class ProvidersService {
             presetSlug: row.presetSlug,
             enabled: row.enabled,
             planUsage: usage,
+            pausedUntil: pausedUntil && pausedUntil > now ? pausedUntil.toISOString() : null,
             state,
             resetsAt: state === 'SPENT' ? (spent?.toISOString() ?? null) : null,
             next: selection.kind === 'SELECTED' && selection.row.id === row.id,
@@ -776,7 +936,7 @@ export class ProvidersService {
     const rows = await this.prisma.modelProvider.findMany({
       where: {
         id: { in: providerIds },
-        slug: { not: AgentProvider.OPENCODE },
+        slug: { notIn: COMPATIBILITY_GUARD_SLUGS },
         OR: [{ ownerId: null }, { ownerId }],
       },
       select: { id: true, label: true, ownerId: true, runtime: true, baseUrl: true, apiKeyEnc: true },

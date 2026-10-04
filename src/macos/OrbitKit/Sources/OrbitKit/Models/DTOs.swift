@@ -79,6 +79,8 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public let targetLabels: [String]?
     public let runnerId: String?
     public let env: [String: String]?
+    /// Server-resolved key availability on each runner. No Gemini key value is carried here.
+    public var antigravityKeyAvailableByRunner: [String: Bool]? = nil
     public let enabled: Bool?
     public let autoInitGit: Bool?
     /// Which of its runner's Codex accounts a session here runs on: a slot id or `default`. Nil is
@@ -88,6 +90,10 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public let claudeAccount: String?
 
     public let enableWorktree: Bool?
+    /// Smart model selection (docs/model-routing-design.md §7.2): on, a fresh task run here gets the
+    /// model and effort of its tier; off (the default), routing is only recorded in shadow. Only the
+    /// owner's user API writes it.
+    public let modelRouting: Bool?
     public let workDirExists: Bool?
     public let workDirIsGit: Bool?
     /// BIGINT columns are serialized as strings by the control plane; numeric fixtures and older
@@ -101,7 +107,8 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         case id, name, lastProvider, provider, model, permissionMode, effort, workDir
         case description, appendSystemPrompt, systemPrompt, allowedTools, disallowedTools
         case maxTurns, maxBudgetUsd, targetRunnerId, targetLabels, runnerId, env, enabled
-        case autoInitGit, codexAccount, claudeAccount, enableWorktree, workDirExists, workDirIsGit
+        case antigravityKeyAvailableByRunner
+        case autoInitGit, codexAccount, claudeAccount, enableWorktree, modelRouting, workDirExists, workDirIsGit
         case workDirFreeBytes, workDirTotalBytes, repoHealth, repoCleanup
     }
 
@@ -126,11 +133,14 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         targetLabels = try c.decodeIfPresent([String].self, forKey: .targetLabels)
         runnerId = try c.decodeIfPresent(String.self, forKey: .runnerId)
         env = try c.decodeIfPresent([String: String].self, forKey: .env)
+        antigravityKeyAvailableByRunner = try c.decodeIfPresent([String: Bool].self,
+                                                              forKey: .antigravityKeyAvailableByRunner)
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled)
         autoInitGit = try c.decodeIfPresent(Bool.self, forKey: .autoInitGit)
         codexAccount = try c.decodeIfPresent(String.self, forKey: .codexAccount)
         claudeAccount = try c.decodeIfPresent(String.self, forKey: .claudeAccount)
         enableWorktree = try c.decodeIfPresent(Bool.self, forKey: .enableWorktree)
+        modelRouting = try c.decodeIfPresent(Bool.self, forKey: .modelRouting)
         workDirExists = try c.decodeIfPresent(Bool.self, forKey: .workDirExists)
         workDirIsGit = try c.decodeIfPresent(Bool.self, forKey: .workDirIsGit)
         workDirFreeBytes = c.flexibleInt64(forKey: .workDirFreeBytes)
@@ -184,6 +194,8 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     /// Each engine CLI's install/sign-in state as of that heartbeat's probe (`orbit doctor`).
     /// Absent from an older server, and from a runner that hasn't reported one.
     public let engines: [RunnerEngineHealth]?
+    /// Antigravity support and CLI readiness resolved by the server from the runner's report.
+    public var antigravity: RunnerAntigravityState? = nil
     /// Whether this runner's process is root, which costs the machine one permission mode: claude
     /// refuses Bypass under root and exits before its first message. Nil from an older server or a
     /// runner too old to report it, which stays unrestricted — an unknown must not withdraw a mode
@@ -311,8 +323,13 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// are already inside `pendingApprovals`; this says which they are, so the bar can name one and
     /// open its card. Empty (or nil, from an older control plane) when none.
     public let ownerItems: [SessionOwnerItem]?
-    /// Who this conversation is waiting on for a reply, and who is waiting on it (session requests,
-    /// `SessionRequestCopy.peersLine`). Nil from an older control plane; empty when none is open.
+    /// The OWNER_CONFIRMED request on this run's session that is still with its reviewer
+    /// (docs/owner-confirmation-review-contract.md §5 N3): the row and the header say "Under review"
+    /// where they would say "Waiting for your confirmation", and it is not in `pendingApprovals`. Nil
+    /// when there is none, from an older control plane, and for a value this build cannot read.
+    public let confirmationUnderReview: ConfirmationUnderReview?
+    /// Who this conversation is waiting on for a reply, and who is waiting on it (session requests).
+    /// Nil from an older control plane; empty when none is open.
     public let awaitingReplyFrom: [SessionRequestPeer]?
     public let owesReplyTo: [SessionRequestPeer]?
     /// The task whose run this is; nil for an ordinary conversation. It is how the console finds the
@@ -395,6 +412,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// by position). Empty/absent when untagged or from an older server. Drives the row's tag dots
     /// and the list's tag filter/grouping — see `SessionFilter` / `SessionTimeGrouping`.
     public let tags: [SessionTag]?
+    /// The folder this session is filed in (`SessionFolder`), or nil when it is in none — and
+    /// from an older server, which doesn't send the key. The list groups by it
+    /// (`SessionFolderGrouping`).
+    public let folderId: String?
 
     public var effectiveRunStatus: RunStatus { runStatus ?? status }
     public var effectiveRunState: SessionRunState {
@@ -469,6 +490,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         pendingApprovals = try values.decodeIfPresent(Int.self, forKey: .pendingApprovals)
         waitingKind = try values.decodeIfPresent(SessionWaitingKind.self, forKey: .waitingKind)
         ownerItems = try values.decodeIfPresent([SessionOwnerItem].self, forKey: .ownerItems)
+        confirmationUnderReview = try? values.decodeIfPresent(ConfirmationUnderReview.self,
+                                                              forKey: .confirmationUnderReview)
         awaitingReplyFrom = try? values.decodeIfPresent([SessionRequestPeer].self, forKey: .awaitingReplyFrom)
         owesReplyTo = try? values.decodeIfPresent([SessionRequestPeer].self, forKey: .owesReplyTo)
         taskId = try values.decodeIfPresent(String.self, forKey: .taskId)
@@ -497,6 +520,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         retryAt = try values.decodeIfPresent(String.self, forKey: .retryAt)
         agent = try values.decodeIfPresent(SessionAgentRef.self, forKey: .agent)
         tags = try values.decodeIfPresent([SessionTag].self, forKey: .tags)
+        folderId = try values.decodeIfPresent(String.self, forKey: .folderId)
     }
 
     public init(id: String, title: String?, status: RunStatus, runStatus: RunStatus? = nil,
@@ -524,7 +548,9 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 poolMemberProviderId: String? = nil, poolKeyId: String? = nil,
                 codexAccount: String? = nil, codexAccountPinned: Bool? = nil,
                 claudeAccount: String? = nil, claudeAccountPinned: Bool? = nil,
-                awaitingReplyFrom: [SessionRequestPeer]? = nil, owesReplyTo: [SessionRequestPeer]? = nil) {
+                awaitingReplyFrom: [SessionRequestPeer]? = nil, owesReplyTo: [SessionRequestPeer]? = nil,
+                folderId: String? = nil,
+                confirmationUnderReview: ConfirmationUnderReview? = nil) {
         self.id = id
         self.title = title
         self.status = status
@@ -547,6 +573,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.pendingApprovals = pendingApprovals
         self.waitingKind = waitingKind
         self.ownerItems = ownerItems
+        self.confirmationUnderReview = confirmationUnderReview
         self.awaitingReplyFrom = awaitingReplyFrom
         self.owesReplyTo = owesReplyTo
         self.taskId = taskId
@@ -575,6 +602,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.lastTurnAt = lastTurnAt
         self.currentTurnStartedAt = currentTurnStartedAt
         self.tags = tags
+        self.folderId = folderId
     }
 }
 
@@ -623,6 +651,7 @@ public struct SessionAgentRef: Codable, Equatable, Sendable, Identifiable {
     /// Its environment, which can decide the account too — a config directory or a key of its own
     /// (`CodexAccounts.automaticOffered`). Carried by the detail payload's workspace row.
     public var env: [String: String]? = nil
+    public var antigravityKeyAvailableByRunner: [String: Bool]? = nil
 }
 
 /// A personal colored label (Files.app-style tag) the owner applies to their sessions. The library
@@ -696,11 +725,11 @@ public struct RetryMessage: Codable, Sendable {
 }
 
 /// POST /sessions/:id/retry-message — the failure card's Retry, asking the server to re-send another
-/// session's message as that session's (docs/session-request-reply-contract.md §2.1). Keyed like any
-/// send, so a replay after a lost response is the same re-send.
+/// session's message as that session's (docs/session-request-reply-contract.md §2.1). No idempotency
+/// key: the server derives one from the failed message (criterion 19), so there is nothing here for a
+/// second press to spell differently.
 public struct RetryResendRequest: Codable, Sendable {
-    public let clientTurnId: String
-    public init(clientTurnId: String) { self.clientTurnId = clientTurnId }
+    public init() {}
 }
 
 /// POST /sessions/:id/turns — send a user message or raw shell command.
@@ -796,6 +825,15 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     /// sent, and from a server that predates the field.
     public let sessionMessage: JSONValue?
     public var senderCard: SessionMessage? { SessionMessage.parseCard(sessionMessage) }
+    /// A confirmation review's two turns — the request a reviewer is handed and the reviewer's
+    /// return handed to the run — held raw for the readers the echo's payload is read by
+    /// (`ConfirmationReviewTurns.swift`). Nil on every other turn, and from an older server.
+    public let confirmationReviewRequest: JSONValue?
+    public var reviewRequestCard: ConfirmationReviewRequestCard? {
+        ConfirmationReviewRequestCard.parseCard(confirmationReviewRequest)
+    }
+    public let confirmationReturn: JSONValue?
+    public var reviewReturnCard: ConfirmationReturnCard? { ConfirmationReturnCard.parseCard(confirmationReturn) }
     /// The control plane wrote this turn itself — an acceptance round, a task's brief, a wake, a
     /// delivery — so nobody typed its words. Nil on every turn somebody sent, and from a server that
     /// predates the field.
@@ -804,7 +842,8 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     public init(turnId: String, kind: String? = nil, content: String,
                 attachments: [Attachment]? = nil, openItemDelivery: JSONValue? = nil,
                 projectStarted: JSONValue? = nil, sessionMessage: JSONValue? = nil,
-                authoredByOrbit: Bool? = nil) {
+                authoredByOrbit: Bool? = nil, confirmationReviewRequest: JSONValue? = nil,
+                confirmationReturn: JSONValue? = nil) {
         self.turnId = turnId
         self.kind = kind
         self.content = content
@@ -813,6 +852,8 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
         self.projectStarted = projectStarted
         self.sessionMessage = sessionMessage
         self.authoredByOrbit = authoredByOrbit
+        self.confirmationReviewRequest = confirmationReviewRequest
+        self.confirmationReturn = confirmationReturn
     }
 }
 
@@ -844,12 +885,16 @@ public struct CreateSessionRequest: Codable, Sendable {
     public let codexAccount: String?
     /// The same for a session on the built-in Claude engine: one of the runner's Claude accounts.
     public let claudeAccount: String?
+    /// The folder the new session is filed in — one started from a folder's page lands in that
+    /// folder (docs/session-folders-move-design.md §3.2). It has to be one of this workspace's
+    /// folders, else the server answers 400. Nil omits it: the session is in no folder.
+    public let folderId: String?
     public init(prompt: String, title: String? = nil, agentId: String? = nil, assignedRunnerId: String? = nil,
                 provider: String? = nil,
                 model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
                 fastMode: Bool? = nil,
                 shell: Bool? = nil, attachmentIds: [String]? = nil, codexAccount: String? = nil,
-                claudeAccount: String? = nil) {
+                claudeAccount: String? = nil, folderId: String? = nil) {
         self.prompt = prompt
         self.title = title
         self.agentId = agentId
@@ -863,6 +908,7 @@ public struct CreateSessionRequest: Codable, Sendable {
         self.attachmentIds = attachmentIds
         self.codexAccount = codexAccount
         self.claudeAccount = claudeAccount
+        self.folderId = folderId
     }
 }
 
@@ -1082,6 +1128,9 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     public let retryAt: String?
     /// Attempts already spent on the current outage — what separates "never armed" from "gave up".
     public let retryAttempts: Int?
+    /// The routing decision this task run was planned with (docs/model-routing-design.md §7.5) —
+    /// what marks the composer's model chip ✦. Nil on any other session.
+    public let route: TaskRunRoute?
 
     public var effectiveRunStatus: RunStatus? { runStatus ?? status }
     public var effectiveRunState: SessionRunState? {
@@ -1126,6 +1175,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         shareToken = try values.decodeIfPresent(String.self, forKey: .shareToken)
         retryAt = try values.decodeIfPresent(String.self, forKey: .retryAt)
         retryAttempts = try values.decodeIfPresent(Int.self, forKey: .retryAttempts)
+        route = try values.decodeIfPresent(TaskRunRoute.self, forKey: .route)
     }
 
     public init(id: String, status: RunStatus? = nil, runStatus: RunStatus? = nil,
@@ -1142,7 +1192,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
                 commitStatus: String? = nil, commitError: String? = nil,
                 commitResultMessage: String? = nil,
                 agent: SessionDetailAgent? = nil, shareToken: String? = nil,
-                retryAt: String? = nil, retryAttempts: Int? = nil) {
+                retryAt: String? = nil, retryAttempts: Int? = nil, route: TaskRunRoute? = nil) {
         self.id = id
         self.status = status
         self.runStatus = runStatus
@@ -1171,6 +1221,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         self.shareToken = shareToken
         self.retryAt = retryAt
         self.retryAttempts = retryAttempts
+        self.route = route
     }
 }
 

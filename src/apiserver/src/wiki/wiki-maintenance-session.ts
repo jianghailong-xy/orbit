@@ -3,9 +3,12 @@ import { Prisma } from '@prisma/client';
 import {
   AgentProvider,
   PermissionMode,
+  WIKI_MAINTENANCE_CATCH_UP,
   WIKI_MAINTENANCE_RUN,
+  wikiMaintenanceBehind,
   wikiMaintenanceSettings,
   type AgentExecConfig,
+  type WikiMaintenanceCatchUp,
   type WikiMaintenanceRun,
 } from '@orbit/shared';
 import { wikiMaintenanceProviderProblem, wikiMaintenanceSpaceOf } from './wiki-maintenance-settings';
@@ -104,6 +107,25 @@ export function withWikiMaintenanceRun<
 }
 
 /**
+ * What every maintenance session's task tells its model of the one Bash call that is its whole run (contract
+ * `maintenance.run.bashCall`): the timeout to give it. The clean start gives a call that names none five hours
+ * already, but a timeout the call names wins, and a model names one of its own unless told: on 2026-10-03 one
+ * gave 600000 and was cut off at ten minutes.
+ */
+export const WIKI_RUN_BASH_TIMEOUT = `Give that Bash call \`timeout: ${WIKI_MAINTENANCE_RUN.bashTimeoutMs}\` (five hours), never a shorter one`;
+
+/**
+ * …and what to do when the tool comes back before the command has ended: not run it again — the run of
+ * 2026-10-03 did, with 1800000, was cut off again, and spent its one retry on it — but report what it printed
+ * and end. `next` says what picks the work up.
+ */
+export function wikiRunCutOff(next: string): string {
+  return 'If the Bash tool comes back before the command has ended — it timed out, or was cut off — do not run it '
+    + 'again, with this timeout or any other, and spend no retry on it: report what it printed up to there, say it '
+    + `was cut off, and end; ${next}`;
+}
+
+/**
  * SQL: the session row `sessionAlias` is a maintenance session — `isWikiMaintenanceSession` in the form the
  * claim asks it, inside its locked statement, to withhold the row from a runner that cannot start it clean.
  */
@@ -122,10 +144,12 @@ export function wikiMaintenanceSessionSql(sessionAlias: string): Prisma.Sql {
  * How many maintenance tasks a space has made today (the UTC day `now` is in) against its daily limit
  * (contract `space.settings.maintenance.keys.dailyRunLimit`): every task of its maintenance list made
  * since midnight UTC, however it ended — but a plan job's (contract `plan.jobs`), which is not a
- * maintenance run and is not counted against the day. The maintenance job asks it before it makes another.
+ * maintenance run and is not counted against the day, and a run made in catch-up that is not counted either
+ * (contract `maintenance.job.catchUp.dailyLimit`): one pinned to a local endpoint, or one that failed. The
+ * maintenance job asks it before it makes another.
  */
 export async function wikiMaintenanceRunsToday(
-  db: Pick<Prisma.TransactionClient, 'wikiSpace' | 'task' | 'wikiPlanJob'>,
+  db: Pick<Prisma.TransactionClient, 'wikiSpace' | 'task' | 'wikiPlanJob' | 'wikiMaintenanceRun'>,
   ownerId: string,
   spaceId: string,
   now: Date = new Date(),
@@ -141,9 +165,23 @@ export async function wikiMaintenanceRunsToday(
     ? (await db.wikiPlanJob.findMany({ where: { ownerId, spaceId, madeAt: { gte: since }, taskId: { not: null } }, select: { taskId: true } }))
       .map((job) => job.taskId as string)
     : [];
+  // A run's row is made after its task, in the same transaction: one made since midnight covers every run of today's tasks.
+  const uncounted = settings.listId
+    ? (await db.wikiMaintenanceRun.findMany({
+      where: {
+        ownerId,
+        spaceId,
+        catchUp: 'active',
+        createdAt: { gte: since },
+        OR: [{ localEndpoint: true }, { outcome: { in: ['failed', 'truncated'] } }],
+      },
+      select: { taskId: true },
+    })).map((run) => run.taskId)
+    : [];
+  const left = [...planTasks, ...uncounted];
   const used = settings.listId
     ? await db.task.count({
-      where: { ownerId, listId: settings.listId, createdAt: { gte: since }, ...(planTasks.length > 0 ? { id: { notIn: planTasks } } : {}) },
+      where: { ownerId, listId: settings.listId, createdAt: { gte: since }, ...(left.length > 0 ? { id: { notIn: left } } : {}) },
     })
     : 0;
   return {
@@ -152,4 +190,39 @@ export async function wikiMaintenanceRunsToday(
     remaining: Math.max(0, settings.dailyRunLimit - used),
     since: since.toISOString(),
   };
+}
+
+/** Where a space stands on catch-up (contract `maintenance.job.catchUp`). */
+export interface WikiMaintenanceCatchUpRead {
+  /** The oldest fact after the cursor is older than `catchUp.rules.behindHours`. */
+  behind: boolean;
+  /** How many of the space's latest runs that ended failed in a row, counted as far as the pause. */
+  failures: number;
+  /** null — not behind; `active` — behind and catching up; `paused` — behind, and its last runs all failed. */
+  state: WikiMaintenanceCatchUp | null;
+}
+
+/**
+ * Whether a space whose oldest fact after the cursor is `oldestPendingAt` is catching up at `now` (contract
+ * `maintenance.job.catchUp`): behind is read off the facts, never waited for; paused, off the ends of its latest
+ * runs — a run whose session died before it said how is given its end by the trigger before this is asked, and
+ * counts — so a streak the cursor's own count never saw pauses it all the same.
+ */
+export async function wikiMaintenanceCatchUpOf(
+  db: Pick<Prisma.TransactionClient, 'wikiMaintenanceRun'>,
+  ownerId: string,
+  spaceId: string,
+  oldestPendingAt: Date | null,
+  now: Date,
+): Promise<WikiMaintenanceCatchUpRead> {
+  if (!wikiMaintenanceBehind(oldestPendingAt, now)) return { behind: false, failures: 0, state: null };
+  const ended = await db.wikiMaintenanceRun.findMany({
+    where: { ownerId, spaceId, outcome: { not: null } },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: WIKI_MAINTENANCE_CATCH_UP.pauseAfterFailures,
+    select: { outcome: true },
+  });
+  const succeeded = ended.findIndex((run) => run.outcome === 'succeeded');
+  const failures = succeeded < 0 ? ended.length : succeeded;
+  return { behind: true, failures, state: failures >= WIKI_MAINTENANCE_CATCH_UP.pauseAfterFailures ? 'paused' : 'active' };
 }

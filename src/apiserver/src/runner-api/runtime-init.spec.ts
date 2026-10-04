@@ -32,6 +32,24 @@ test('extracts the runtime session id from the standard OpenCode init event', ()
   );
 });
 
+test('extracts the conversation id from the init event the runner makes of agy\'s own', () => {
+  // docs/antigravity-runtime-contract.md §2.2: agy's `init` becomes a system init event whose
+  // sessionId is its conversation_id — once per process, so again after every restart.
+  assert.equal(
+    runtimeInitSessionId([
+      {
+        type: RunEventType.SYSTEM,
+        payload: {
+          subtype: 'init',
+          provider: 'antigravity',
+          sessionId: '6b0f8a52-agy-conversation',
+        },
+      },
+    ]),
+    '6b0f8a52-agy-conversation',
+  );
+});
+
 test('also matches a resumed event', () => {
   assert.equal(
     runtimeInitSessionId([{ type: RunEventType.SYSTEM, payload: { subtype: 'resumed', sessionId: 'rt-2' } }]),

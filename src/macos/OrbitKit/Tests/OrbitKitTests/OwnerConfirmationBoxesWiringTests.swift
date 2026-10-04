@@ -56,4 +56,80 @@ final class OwnerConfirmationBoxesWiringTests: XCTestCase {
         XCTAssertTrue(boxes.contains("reportOpen ? said : folded.text"),
                       "an open box shows the whole report, a closed one the fold")
     }
+
+    /// One stretch's markers, in this order — each found after the one before it.
+    private func assertOrder(_ text: String, _ markers: [String], _ what: String,
+                             line: UInt = #line) {
+        var from = text.startIndex
+        for marker in markers {
+            guard let found = text.range(of: marker, range: from..<text.endIndex) else {
+                XCTFail("\(what): \(marker.debugDescription) is missing or out of order", line: line)
+                return
+            }
+            from = found.upperBound
+        }
+    }
+
+    /// If you confirm sits right above the buttons: under the two boxes, over the buttons, with only
+    /// a stale card's explanation ever between them — and a stale card draws no block, because the
+    /// read's consequences belong to the report that is waiting, not to this one.
+    func testIfYouConfirmIsDrawnRightAboveTheButtons() throws {
+        let card = try section(try source(Self.cardPath),
+                               from: "private struct OwnerConfirmationCardView: View",
+                               to: "private struct OwnerConfirmationBoxes: View")
+        assertOrder(card, [
+            "OwnerConfirmationBoxes(acceptanceCriteria: view.acceptanceCriteria,",
+            "ifYouConfirm(view, standing)",
+            "OwnerConfirmations.staleExplanation(standing)",
+            "ApprovalActions {",
+            "confirmButton(standing)",
+        ], "the card's order")
+        XCTAssertTrue(card.contains(
+            "let rows = standing.waiting == nil ? [] : OwnerConfirmations.ifConfirmedRows(view.ifConfirmed)"),
+            "the block's rows come from the read, and only while this card's report is waiting")
+        XCTAssertTrue(card.contains("if !rows.isEmpty {\n            OwnerConfirmationIfYouConfirm(rows: rows)"),
+                      "no rows, no block")
+    }
+
+    /// The block says what `ifConfirmedRows` made and nothing else, under its own heading, with no
+    /// author on it.
+    func testTheBlockDrawsTheRowsAndNoAuthor() throws {
+        let block = try section(try source(Self.cardPath),
+                                from: "private struct OwnerConfirmationIfYouConfirm: View",
+                                to: "private struct OwnerDecisionReceiptView: View")
+        for needle in ["Text(OwnerConfirmations.ifYouConfirm)", "Text(row.lead)", "Text(added)",
+                       "Text(detail)", "case .start: return \"play.fill\""] {
+            XCTAssertTrue(block.contains(needle), "the block no longer draws \(needle)")
+        }
+        // A row's first line wraps: without this the list cut "Goes onto the integration line;
+        // merging into main asks you again" to one line on a phone.
+        XCTAssertTrue(block.contains(".font(.orbitSubtext.weight(.semibold))\n"
+                                         + "                            .fixedSize(horizontal: false, vertical: true)"),
+                      "a row's first line may be cut to one line again")
+        for author in ["whatTheRunReported", "provenanceLabel", "reportHeading"] {
+            XCTAssertFalse(block.contains(author), "the block names an author: \(author)")
+        }
+    }
+
+    /// What counts as done is folded to one row on the card and opens in place; the receipt keeps it
+    /// open behind its own fold, so a reader who asked to see it is not asked again.
+    func testTheCardFoldsWhatCountsAsDoneAndTheReceiptDoesNot() throws {
+        let file = try source(Self.cardPath)
+        let card = try section(file, from: "private struct OwnerConfirmationCardView: View",
+                               to: "private struct OwnerConfirmationBoxes: View")
+        let boxes = try section(file, from: "private struct OwnerConfirmationBoxes: View",
+                                to: "private struct OwnerConfirmationIfYouConfirm: View")
+        let receipt = try section(file, from: "private struct OwnerDecisionReceiptView: View",
+                                  to: "struct PlanCard: View")
+        XCTAssertTrue(card.contains("report: standing.waiting?.report, foldsCriteria: true)"),
+                      "the card folds its criteria")
+        XCTAssertTrue(receipt.contains("OwnerConfirmationBoxes(acceptanceCriteria: view.acceptanceCriteria,"),
+                      "the receipt still opens to the boxes")
+        XCTAssertFalse(receipt.contains("foldsCriteria"), "the receipt folds nothing a second time")
+        XCTAssertTrue(boxes.contains(
+            "if foldsCriteria, let items = OwnerConfirmations.criteriaItemsLabel(acceptanceCriteria) {"),
+            "the row counts what the fixture counts, and nothing written is the box saying so")
+        XCTAssertTrue(boxes.contains("if criteriaOpen {\n                quietOrText(criteria, "),
+                      "the criteria open in place, inside the row's own box")
+    }
 }

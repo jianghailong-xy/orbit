@@ -212,7 +212,14 @@ final class RunnerPageFormatTests: XCTestCase {
         XCTAssertEqual(RunnerPageFormat.engineName("claude"), "Claude Code")
         XCTAssertEqual(RunnerPageFormat.engineName("kimi"), "Kimi Code")
         XCTAssertEqual(RunnerPageFormat.engineName("opencode"), "OpenCode")
+        XCTAssertEqual(RunnerPageFormat.engineName("antigravity"), "Antigravity CLI")
         XCTAssertEqual(RunnerPageFormat.engineName("gemini"), "gemini")
+        let agy = try runner(Self.macMiniJSON, ["engines": [["engine": "gemini", "installed": true],
+                                                           ["engine": "antigravity", "installed": true],
+                                                           ["engine": "opencode", "installed": true],
+                                                           ["engine": "claude", "installed": true]]])
+        XCTAssertEqual(RunnerPageFormat.engines(agy).map(\.engine), ["claude", "opencode", "antigravity", "gemini"],
+                       "Antigravity is a known engine, listed after OpenCode")
     }
 
     func testAnEnginesVersionLosesWhatItsCLIPrintedAroundIt() {
@@ -251,6 +258,16 @@ final class RunnerPageFormatTests: XCTestCase {
         XCTAssertTrue(RunnerPageFormat.needsSignIn(oneOut))
         let unsure = RunnerEngineHealth(engine: "kimi", installed: true, auth: "unknown")
         XCTAssertNil(RunnerPageFormat.engineStatus(unsure), "a CLI that wouldn't say is neither")
+
+        // agy runs on a Gemini API key from its environment: never a sign-in row, whatever its
+        // probe says — but a missing CLI is still news.
+        let agy = RunnerEngineHealth(engine: "antigravity", installed: true, auth: "no")
+        XCTAssertNil(RunnerPageFormat.loginEngine("antigravity"))
+        XCTAssertNil(RunnerPageFormat.engineStatus(agy), "Antigravity has no sign-in to say anything about")
+        XCTAssertFalse(RunnerPageFormat.needsSignIn(agy))
+        XCTAssertEqual(RunnerPageFormat.engineStatus(RunnerEngineHealth(engine: "antigravity", installed: false,
+                                                                        auth: "unknown")),
+                       RunnerPageFormat.Status(text: "Not installed", tone: .muted))
     }
 
     func testTheRowShowsDefaultsQuotaAndEachAccountHasItsOwn() throws {
@@ -305,6 +322,37 @@ final class RunnerPageFormatTests: XCTestCase {
                                          accounts: [RunnerEngineAccount(id: "default", auth: "yes"),
                                                     RunnerEngineAccount(id: "9f00", auth: "yes")])
         XCTAssertEqual(RunnerPageFormat.accountLines(unnamed).map(\.name), ["Default", "Account 9f00"])
+    }
+
+    /// Add Account names the account it adds by its number on the machine, Default being the first,
+    /// and skips a number an account already goes by (web `defaultAccountName`).
+    func testAddAccountNamesTheNewAccountByItsNumber() {
+        XCTAssertEqual(RunnerPageFormat.defaultAccountName([]), "Account 2", "a runner listing none has Default alone")
+        XCTAssertEqual(RunnerPageFormat.defaultAccountName([RunnerEngineAccount(id: "default")]), "Account 2")
+        XCTAssertEqual(RunnerPageFormat.defaultAccountName([RunnerEngineAccount(id: "default"),
+                                                            RunnerEngineAccount(id: "3fa91c2e", name: "Work")]),
+                       "Account 3")
+        XCTAssertEqual(RunnerPageFormat.defaultAccountName([RunnerEngineAccount(id: "default"),
+                                                            RunnerEngineAccount(id: "3fa91c2e", name: "Account 3")]),
+                       "Account 4")
+        XCTAssertEqual(RunnerPageFormat.defaultAccountName([RunnerEngineAccount(id: "default", name: "Account 2")]),
+                       "Account 3", "a renamed Default's name is taken too")
+    }
+
+    func testARenamedDefaultSaysUnderItsNameThatItIsStillTheMachinesOwnLogin() throws {
+        let health = RunnerEngineHealth(engine: "claude", installed: true, auth: "yes", accounts: [
+            RunnerEngineAccount(id: "default", name: "jianghailong.main", auth: "yes", home: "/root/.claude"),
+            RunnerEngineAccount(id: "29e631a9", name: "jianghailong.orbit", auth: "yes",
+                                home: "/root/.orbit/claude-accounts/29e631a9"),
+        ])
+        let lines = RunnerPageFormat.accountLines(health)
+        XCTAssertEqual(lines.map(\.name), ["jianghailong.main", "jianghailong.orbit"])
+        XCTAssertEqual(lines.map(\.subtitle), ["~/.claude · Default", "~/.orbit/claude-accounts/29e631a9"])
+        XCTAssertEqual(lines.map(\.isDefault), [true, false])
+
+        // Default as it was says nothing more than where it lives.
+        let plain = RunnerPageFormat.accountLines(try engine(try wikova(), "codex"))
+        XCTAssertEqual(plain.map(\.subtitle), ["~/.codex", "~/.orbit/codex-accounts/1fda3f43"])
     }
 
     func testARemovalIsTheAccountsItWasAskedFor() {

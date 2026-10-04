@@ -1,14 +1,23 @@
-import type {
-  LoginEngine,
-  ReportedEngine,
-  RunnerEngineAccount,
-  RunnerEngineHealth,
-  RunnerEngineUpdate,
+import {
+  AgentProvider,
+  type InstallEngine,
+  type LoginEngine,
+  type PlanUsageBucket,
+  type PlanUsageSnapshot,
+  type ReportedEngine,
+  type RunnerEngineAccount,
+  type RunnerEngineHealth,
+  type RunnerEngineUpdate,
 } from '@orbit/shared';
 import { ACCOUNT_ID_PATTERN } from '../runners/dto';
+import { runnerAccountPausedUntil } from './account-pause';
 
-/** The engines a runner can sign into (LoginEngine's full set), in the order they're shown. */
-export const LOGIN_ENGINES: readonly LoginEngine[] = ['claude', 'codex', 'kimi'];
+/**
+ * The engines a runner can sign into (LoginEngine's full set), in the order they're shown.
+ * Antigravity signs in one Google account per runner, like Kimi's one login: it is not in
+ * ACCOUNT_ENGINES, and only a runner that can relay it is asked to (antigravityGoogleLogin).
+ */
+export const LOGIN_ENGINES: readonly LoginEngine[] = ['claude', 'codex', 'kimi', 'antigravity'];
 
 /**
  * The engines whose CLI keeps one login per config directory, so one machine can sign in several
@@ -27,15 +36,26 @@ export function isLoginEngine(value: unknown): value is LoginEngine {
   return typeof value === 'string' && LOGIN_ENGINES.includes(value as LoginEngine);
 }
 
+export function isInstallEngine(value: unknown): value is InstallEngine {
+  return isLoginEngine(value);
+}
+
 /**
- * Every engine a runner reports health for, in the order they're shown.
+ * Every engine a runner reports health for, in the order they're shown — Antigravity still last,
+ * where it was listed before it could be signed into.
  *
  * Wider than LOGIN_ENGINES on purpose: OpenCode can't be signed into from the browser, but it is
- * installed on the machine and updated by the same periodic pass. Filtering it out here is what used
- * to make the runner's own update summary mention an engine the control plane had no record of.
- * Sign-in stays gated on isLoginEngine, where that question actually belongs.
+ * installed on the machine and updated by the same periodic pass. Filtering it out here is what
+ * used to make the runner's own update summary mention an engine the control plane had no record
+ * of. Sign-in stays gated on isLoginEngine, where that question actually belongs.
  */
-export const REPORTED_ENGINES: readonly ReportedEngine[] = [...LOGIN_ENGINES, 'opencode'];
+export const REPORTED_ENGINES: readonly ReportedEngine[] = [
+  'claude',
+  'codex',
+  'kimi',
+  'opencode',
+  'antigravity',
+];
 
 export function isReportedEngine(value: unknown): value is ReportedEngine {
   return typeof value === 'string' && REPORTED_ENGINES.includes(value as ReportedEngine);
@@ -65,15 +85,26 @@ export function sanitizeRunnerEngines(value: unknown): RunnerEngineHealth[] | nu
     const accounts = engineKeepsAccounts(entry.engine)
       ? sanitizeEngineAccounts(entry.accounts)
       : undefined;
+    // Only the CLI's own yes/no counts; everything else is the third state, which exists so
+    // an engine that wouldn't answer is never shown as signed in.
+    const auth = entry.auth === 'yes' || entry.auth === 'no' ? entry.auth : 'unknown';
+    // Antigravity alone says which credential `auth` is about, and carries the quota its Google
+    // sign-in reads (docs/antigravity-runtime-contract.md §16.6).
+    const authSource =
+      entry.engine === 'antigravity' && (entry.authSource === 'google' || entry.authSource === 'env_key')
+        ? entry.authSource
+        : undefined;
+    const planUsage =
+      authSource === 'google' && auth === 'yes' ? sanitizeGooglePlanUsage(entry.planUsage) : undefined;
     byEngine.set(entry.engine, {
       engine: entry.engine,
       installed: entry.installed === true,
       ...(version ? { version } : {}),
-      // Only the CLI's own yes/no counts; everything else is the third state, which exists so
-      // an engine that wouldn't answer is never shown as signed in.
-      auth: entry.auth === 'yes' || entry.auth === 'no' ? entry.auth : 'unknown',
+      auth,
       ...(update ? { update } : {}),
       ...(accounts ? { accounts } : {}),
+      ...(authSource ? { authSource } : {}),
+      ...(planUsage ? { planUsage } : {}),
     });
   }
   if (!byEngine.size) return null;
@@ -85,13 +116,53 @@ export function sanitizeRunnerEngines(value: unknown): RunnerEngineHealth[] | nu
 /** How many accounts one report may carry. Each is a sign-in somebody made by hand, so a real
  *  machine sits far below this: what it bounds is a runaway report, not a user. */
 export const ENGINE_ACCOUNTS_MAX = 16;
-/** StartLoginDto's limit on a new account's name, the way a name reaches a runner from here. */
+/** StartLoginDto's limit on a new account's name, the way a name reaches a runner from here — and
+ *  RenameAccountDto's, the way one reaches `runner.account_names`. */
 const ACCOUNT_NAME_MAX = 60;
 /** A config directory is shown, not followed; this is room for any real home directory, not a log
  *  line. */
 const ACCOUNT_PATH_MAX = 400;
 /** `cxa1_` and 8 hex digits: the start of the fingerprint the rate-limit reset reports. */
 const FINGERPRINT_PREFIX = /^cxa1_[0-9a-f]{8}$/;
+/** How many quota buckets one report may carry. agy 1.2.16 reports four — a weekly and a 5-hour
+ *  limit for each of two model groups — so this bounds a runaway report, not an account. */
+export const PLAN_USAGE_BUCKETS_MAX = 16;
+/** A bucket's id and window are agy's own lowercase identifiers (`gemini-weekly`, `3p-5h`, `5h`),
+ *  never prose: one that isn't shaped like that is not a bucket this was built to read. Dropping it
+ *  is also what keeps an address or a token from riding in on one — an email has its `@`, a refresh
+ *  token its `/`, and an access token or a JWT its capitals. */
+const BUCKET_LABEL = /^[a-z0-9][a-z0-9._-]{0,47}$/;
+
+/**
+ * Normalize the quota an Antigravity Google sign-in reported, the way an account is normalized:
+ * rebuilt from the four fields of each bucket the contract names, so nothing else the report carried
+ * — an email, a token, agy's descriptions — is stored or served. A bucket that can't be read is
+ * dropped whole rather than repaired; with none left there is no quota to show, and the engine's
+ * row reads as one that has not reported any.
+ */
+function sanitizeGooglePlanUsage(value: unknown): PlanUsageSnapshot | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const raw = value as Record<string, unknown>;
+  if (!Array.isArray(raw.buckets)) return undefined;
+  const buckets: PlanUsageBucket[] = [];
+  const seen = new Set<string>();
+  for (const item of raw.buckets) {
+    if (buckets.length === PLAN_USAGE_BUCKETS_MAX) break;
+    if (!item || typeof item !== 'object') continue;
+    const bucket = item as Record<string, unknown>;
+    const { id, window, remainingFraction } = bucket;
+    if (typeof id !== 'string' || !BUCKET_LABEL.test(id) || seen.has(id)) continue;
+    if (typeof window !== 'string' || !BUCKET_LABEL.test(window)) continue;
+    // What is LEFT, as agy reports it: zero is a spent bucket, not a missing one.
+    if (typeof remainingFraction !== 'number' || !(remainingFraction >= 0 && remainingFraction <= 1)) continue;
+    const resetTime = isoOrUndefined(bucket.resetTime);
+    seen.add(id);
+    buckets.push({ id, window, remainingFraction, ...(resetTime ? { resetTime } : {}) });
+  }
+  if (!buckets.length) return undefined;
+  const fetchedAt = isoOrUndefined(raw.fetchedAt);
+  return { provider: AgentProvider.ANTIGRAVITY, ...(fetchedAt ? { fetchedAt } : {}), buckets };
+}
 
 /**
  * Normalize the accounts one engine report lists.
@@ -144,6 +215,59 @@ function sanitizeEngineAccounts(value: unknown): RunnerEngineAccount[] | undefin
     });
   }
   return out.length ? out : undefined;
+}
+
+/** The names the user gave a runner's accounts in Orbit, by engine and then account id. */
+export type AccountNames = Partial<Record<LoginEngine, Record<string, string>>>;
+
+/**
+ * Read `runner.account_names` (which RunnersService.renameAccount writes) the way a report is read:
+ * an engine that keeps accounts, an id an account can have, a name renameAccount could have written.
+ * Anything else is dropped rather than shown.
+ */
+export function sanitizeAccountNames(value: unknown): AccountNames {
+  const out: AccountNames = {};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return out;
+  for (const [engine, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (!engineKeepsAccounts(engine) || !raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+    const names: Record<string, string> = {};
+    for (const [id, name] of Object.entries(raw as Record<string, unknown>)) {
+      if (!ACCOUNT_ID_PATTERN.test(id) || typeof name !== 'string') continue;
+      const trimmed = name.trim();
+      if (trimmed && trimmed.length <= ACCOUNT_NAME_MAX) names[id] = trimmed;
+    }
+    if (Object.keys(names).length) out[engine] = names;
+  }
+  return out;
+}
+
+/**
+ * A runner's engines as everything that NAMES an account has to read them: the report
+ * (sanitizeRunnerEngines) with the name the user gave each account in Orbit laid over the one the
+ * machine reports. Default is never named by the machine, so this is the only name it can have.
+ *
+ * `accountNames` is required on purpose: a select that forgets the column would otherwise compile, and
+ * name every account the way the runner does whatever it was renamed to.
+ */
+export function namedRunnerEngines(runner: { engines: unknown; accountNames: unknown; accountPauses?: unknown }): RunnerEngineHealth[] | null {
+  const engines = sanitizeRunnerEngines(runner.engines);
+  const names = sanitizeAccountNames(runner.accountNames);
+  if (!engines) return engines;
+  return engines.map((entry) => {
+    const own = engineKeepsAccounts(entry.engine) ? names[entry.engine] : undefined;
+    if (!entry.accounts) return entry;
+    return {
+      ...entry,
+      accounts: entry.accounts.map((account) => {
+        const pausedUntil = runnerAccountPausedUntil(runner.accountPauses, entry.engine, account.id);
+        return {
+          ...account,
+          ...(own?.[account.id] ? { name: own[account.id] } : {}),
+          ...(pausedUntil ? { pausedUntil: pausedUntil.toISOString() } : {}),
+        };
+      }),
+    };
+  });
 }
 
 /** How long a message from the runner may be. Long enough for an installer's last words plus the

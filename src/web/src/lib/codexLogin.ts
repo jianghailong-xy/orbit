@@ -1,24 +1,32 @@
+import { accountIsPaused } from './accountPause';
 import type { PlanUsageSnapshot } from '@orbit/shared';
 import { encodeId } from './idCodec';
 import { planUsageRows } from './planUsage';
 import type { PoolMember, PoolMemberState, ProviderPool } from './providerPools';
 
 /**
- * A Codex pool of the user's own (migration 0323): it runs on ONE ChatGPT account of theirs, which this
- * server signed in with the official codex CLI's device flow and keeps encrypted — never a runner, never
- * a response. What the pages read of it is `login` on the pool (ProvidersService.poolViews): the email,
- * the plan, `…AB12`, whether OpenAI still takes it, and its quota once something has read it.
+ * A Codex pool's ChatGPT accounts (migrations 0323, 0371): each is signed in by a person of the pool with
+ * the official codex CLI's device flow, held encrypted by this server — never a runner, never a response.
+ * What the pages read of a pool is `logins` (ProvidersService.poolViews, SharedPoolsService.poolView),
+ * every account it holds, oldest first: each one's email, plan, `…AB12`, whether OpenAI still takes it, its
+ * quota once something has read it, and `userId` — who signed it in, the one person who may sign it in
+ * again. `login` is the first of them — the account its sessions run on.
  *
- * The pages draw such a pool the way they draw every other one: its account is the pool's one member
+ * The pages draw such a pool the way they draw every other one: each account is one of the pool's members
  * (`withLogin`), carrying `login` the way a shared pool's member carries its `key` — so the Providers
  * card, the session picker and the composer take it as they take any pool.
  */
 
-/** The account a Codex pool of one's own runs on, as the server reads it (codex-login.ts). */
+/** The account a Codex pool runs on, as the server reads it (codex-login.ts). */
 export interface CodexLogin {
-  /** ACTIVE, or SIGNED_OUT once OpenAI refused it — which only its owner's sign-in again undoes. */
+  /** ACTIVE, or SIGNED_OUT once OpenAI refused it — which only the sign-in again of the person who
+   *  signed it in undoes (migration 0371; the pool owner's alone before that). */
   state: string;
+  pausedUntil?: string | null;
   email: string | null;
+  /** Who signed it in — a person of the pool. They alone may sign it in again; with the pool's admins
+   *  they may take it out. The pool's `people` name them. */
+  userId: string;
   /** The plan the account's sign-in names (`plus`, `pro`, …), when it names one. */
   plan: string | null;
   /** `…AB12`: all any response says of the account's id. */
@@ -30,6 +38,11 @@ export interface CodexLogin {
   usage: PlanUsageSnapshot | null;
   usageUnavailable: string | null;
 }
+
+/** Every account such a pool holds, oldest first: the server's `logins`, and — from an older server,
+ *  which names only one — the pool's `login` as that one. */
+export const poolLogins = (pool: Pick<ProviderPool, 'login' | 'logins'>): CodexLogin[] =>
+  pool.logins ?? (pool.login ? [pool.login] : []);
 
 /** What starting a sign-in answers: the page to open and the one-time code to enter there. */
 export interface CodexLoginAttempt {
@@ -46,6 +59,8 @@ export interface CodexLoginPoll {
   userCode?: string | null;
   expiresAt?: string;
   account: CodexLogin | null;
+  /** Every account the pool holds, oldest first, once this poll stored the one it was waiting on. */
+  logins?: CodexLogin[];
   /** Why it failed, in the server's words. */
   error?: string;
 }
@@ -53,9 +68,10 @@ export interface CodexLoginPoll {
 /** POST starts a sign-in, GET polls it, DELETE gives it up; `/account` signs the account out. */
 export const codexLoginPath = (poolId: string) => `/providers/pools/${encodeId(poolId)}/codex-login`;
 
-/** A Codex pool of the user's own: one ChatGPT account, not a set of member keys. */
+/** A Codex pool of the user's own, the one their ChatGPT accounts are in — its people and keys read beside
+ *  them or not (ownPoolWithAccess), but never a pool made on the shared pools page. */
 export const isLoginPool = (pool: Pick<ProviderPool, 'engine' | 'shared'>): boolean =>
-  pool.engine === 'codex' && !pool.shared;
+  pool.engine === 'codex' && !pool.shared?.shared;
 
 /** `Plus` for `plus`: the plan as OpenAI's own pages name it. */
 const planName = (plan: string | null): string | null =>
@@ -94,17 +110,34 @@ export function loginState(login: CodexLogin, now: number = Date.now()): PoolMem
 }
 
 /**
- * A Codex pool of one's own in the shape every pool is drawn in: its account as the one member, and the
- * pool's own answers — why nothing can run, when a spent account frees up — read off that account in the
- * words a pool head has room for. A pool of any other kind comes back as it was.
+ * A Codex pool of one's own in the shape every pool is drawn in: each ChatGPT account it holds as one
+ * member, and the pool's own answers — why nothing can run, when a spent account frees up — read off
+ * those accounts in the words a pool head has room for. A pool of any other kind comes back as it was.
  */
 export function withLogin(pool: ProviderPool, now: number = Date.now()): ProviderPool {
   if (!isLoginPool(pool)) return pool;
-  const login = pool.login ?? null;
-  if (!login) return { ...pool, members: [], resetsAt: null, unavailable: 'Not signed in' };
+  const logins = poolLogins(pool);
+  if (logins.length === 0) return { ...pool, members: [], resetsAt: null, unavailable: 'Not signed in' };
+  const members = logins.map((login, index) => loginMember(pool, login, index, now));
+  const spent = members.flatMap((member) => (member.resetsAt ? [member.resetsAt] : []));
+  return {
+    ...pool,
+    members,
+    // Only ever a mark of the pool as a whole: when every account is spent, the EARLIEST of their
+    // resets — one account freeing up is enough for work to continue.
+    resetsAt: spent.reduce<string | null>(
+      (earliest, at) => (earliest === null || Date.parse(at) < Date.parse(earliest) ? at : earliest),
+      null,
+    ),
+    unavailable: members[0].state === 'SIGNED_OUT' ? 'Signed out' : null,
+  };
+}
+
+/** One of a pool's accounts as a member of it. The first is the account its sessions run on — the
+ *  server's `login` — so it is the one a session starting now uses, and the row that says NEXT. */
+function loginMember(pool: ProviderPool, login: CodexLogin, index: number, now: number): PoolMember {
   const state = loginState(login, now);
-  const resetsAt = state === 'SPENT' ? (loginSpentUntil(login, now) ?? null) : null;
-  const member: PoolMember = {
+  return {
     id: `login:${login.fingerprint}`,
     slug: pool.slug,
     label: loginName(login),
@@ -112,14 +145,9 @@ export function withLogin(pool: ProviderPool, now: number = Date.now()): Provide
     enabled: true,
     planUsage: login.usage,
     state,
-    resetsAt,
-    next: state === 'AVAILABLE',
+    resetsAt: state === 'SPENT' ? (loginSpentUntil(login, now) ?? null) : null,
+    next: index === 0 && state === 'AVAILABLE' && !accountIsPaused(login.pausedUntil, now),
+    pausedUntil: login.pausedUntil,
     login,
-  };
-  return {
-    ...pool,
-    members: [member],
-    resetsAt,
-    unavailable: state === 'SIGNED_OUT' ? 'Signed out' : null,
   };
 }

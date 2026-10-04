@@ -1,0 +1,5 @@
+{
+  "command": "node node_modules/typescript/bin/tsc -p src/web/ui-migration/controls.tsconfig.json --noEmit",
+  "exitCode": 0,
+  "durationSeconds": 0.24614262580871582
+}

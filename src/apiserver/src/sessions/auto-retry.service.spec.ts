@@ -4,7 +4,7 @@ import { RunStatus } from '@prisma/client';
 import type { PlanUsageSnapshot } from '@orbit/shared';
 import { encryptSecret } from '../providers/provider-crypto';
 import { QueueService } from '../queue/queue.service';
-import { AutoRetryService } from './auto-retry.service';
+import { AutoRetryService, RetryClaimLost } from './auto-retry.service';
 import type { SessionsService } from './sessions.service';
 import { AUTO_RETRY_TURN_KEY_PREFIX } from './watch-turn-key';
 
@@ -46,9 +46,11 @@ function poolQueue(members: Array<PlanUsageSnapshot | null>): QueueService {
     providerPool: {
       findFirst: async ({ where }: { where: { slug: string; ownerId: string } }) =>
         where.slug === POOL && where.ownerId === 'owner-1'
-          ? { engine: 'claude', logins: [], members: rows.map((provider) => ({ provider })) }
+          ? { engine: 'claude', members: rows.map((provider) => ({ provider })) }
           : null,
     },
+    // A Claude pool holds no ChatGPT account; the claim asks after them by pool id (migration 0371).
+    poolCodexLogin: { findMany: async () => [] },
   };
   const planUsage = { snapshot: (row: (typeof rows)[number]) => row.usage, usageStanding: () => null };
   return new QueueService(prisma as never, {} as never, planUsage as never);
@@ -340,6 +342,9 @@ function makeService(
         id: opts.seedTurnId,
         content: 'opening prompt',
       } : null),
+      // The latest message a runner took (`retryRecords`'s lost delivery): these fixtures model the
+      // runner's records alone, and no turn the runner went away with.
+      findFirst: async () => null,
     },
     attachment: {
       // The turn scope is the whole question — "which images went with THIS message" — so the
@@ -434,6 +439,22 @@ function row(over: SessionRow = {}): SessionRow {
 
 /** The same runner, three missed heartbeats ago — what a restart or a drain looks like. */
 const offlineRunner = { planUsage: null, status: 'ONLINE', lastHeartbeatAt: PAST };
+
+/**
+ * The one hook a sweep's re-send hands `resume` in the slot the session-to-session doors charge from:
+ * the claim's lease (§8 criteria 24 and 25). It lets through the claim this sweep wrote on `row`, refuses
+ * any other, and writes nothing — the transaction it is handed holds the session read and nothing else,
+ * so a charge would have nowhere to go.
+ */
+async function assertOnlyTheClaim(hook: unknown, claimed: SessionRow): Promise<void> {
+  assert.equal(typeof hook, 'function', 'the re-send was written with no check on its claim');
+  const check = hook as (tx: unknown) => Promise<void>;
+  const holding = (retryClaimedAt: unknown) => ({ session: { findUnique: async () => ({ retryClaimedAt }) } });
+  assert.ok(claimed.retryClaimedAt instanceof Date, 'the claim left no instant behind');
+  await check(holding(claimed.retryClaimedAt));
+  await assert.rejects(() => check(holding(null)), RetryClaimLost, 'a claim taken back was written over');
+  await assert.rejects(() => check(holding(new Date(0))), RetryClaimLost, 'another claim was written over');
+}
 
 test('re-sends the last user message once the quota is back', async () => {
   const { service, resumed } = makeService([row()]);
@@ -774,21 +795,22 @@ test('an armed failed retry follows the latest CURRENT_WORK USER back to its tar
 // the sweep re-sends it — delivered without its sender it reads as the account owner's — and the
 // re-send is the platform's: charged neither against the pair's hour nor as a steer.
 test('a re-send of another session’s message keeps its sender and is charged to nobody', async () => {
-  const { service, resumed, resumedWith } = makeService([row()], {
+  const { service, resumed, resumedWith, rows } = makeService([row()], {
     events: [{ type: 'user', payload: { text: 'echo with the block appended' }, turnId: 'message-7' }],
     turnContents: { 'message-7': 'please review the migration' },
     turnMetadata: { 'message-7': { senderSessionId: 'sender-session-1' } },
   });
   await service.sweep(NOW);
   assert.deepEqual(resumed, [{ id: 'session-1', content: 'please review the migration' }]);
-  // The sender, and no `participateSendTransaction`, which is where both charges ride.
+  // The sender — and in `participateSendTransaction`, the slot both charges ride in for the
+  // session-to-session doors, nothing but the claim's own check, which writes nothing.
   const [opts] = resumedWith.map((call) => call.opts as {
     senderSessionId?: string;
     participateSendTransaction?: unknown;
     onTurnWritten?: (tx: unknown, turn: { id: string }) => Promise<void>;
   });
   assert.equal(opts.senderSessionId, 'sender-session-1');
-  assert.equal(opts.participateSendTransaction, undefined);
+  await assertOnlyTheClaim(opts.participateSendTransaction, rows[0]);
   // ...and the request those words were, if they were one, moves onto the turn the re-send writes
   // (§8 criterion 14): one update of the request on the turn re-sent, in that turn's transaction.
   const moved: unknown[] = [];
@@ -801,12 +823,14 @@ test('a re-send of another session’s message keeps its sender and is charged t
 });
 
 test('the owner’s message is re-sent with no sender, under the same platform key', async () => {
-  const { service, resumedWith } = makeService([row()], {
+  const { service, resumedWith, rows } = makeService([row()], {
     events: [{ type: 'user', payload: { text: 'the original message' }, turnId: 'message-7' }],
     turnContents: { 'message-7': 'the original message' },
   });
   await service.sweep(NOW);
-  assert.deepEqual(resumedWith.map((call) => call.opts), [undefined]);
+  // Nothing beside the words but the claim's own check: no sender, nothing riding on the turn.
+  assert.deepEqual(resumedWith.map((call) => Object.keys(call.opts as object)), [['participateSendTransaction']]);
+  await assertOnlyTheClaim((resumedWith[0].opts as { participateSendTransaction?: unknown }).participateSendTransaction, rows[0]);
   assert.ok(resumedWith[0].clientTurnId.startsWith(AUTO_RETRY_TURN_KEY_PREFIX), resumedWith[0].clientTurnId);
 });
 
@@ -829,7 +853,7 @@ test('the sender re-sent is the sender of the words re-sent, not of the steer th
   });
   await service.sweep(NOW);
   assert.deepEqual(resumed, [{ id: 'session-1', content: 'the owner’s request' }]);
-  assert.deepEqual(resumedWith.map((call) => call.opts), [undefined]);
+  assert.deepEqual(resumedWith.map((call) => Object.keys(call.opts as object)), [['participateSendTransaction']]);
 });
 
 test('a failed background job wake re-sends nothing, least of all the message before it', async () => {

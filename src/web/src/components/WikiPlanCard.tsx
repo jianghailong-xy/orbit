@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { App, Button } from 'antd';
+import { Button } from 'antd';
 import { RightOutlined } from '@ant-design/icons';
 import type { WikiSpace } from '@orbit/shared';
 import { relTime } from './Transcript';
@@ -22,6 +22,7 @@ import {
   type WikiPlanLook,
 } from '../lib/wikiPlan';
 import { redraftWikiPlan, useWikiWrite } from '../lib/wikiWrites';
+import { useToast } from '../lib/toast';
 
 /**
  * The plan on the Wiki home (owner's call 2026-09-29, mocks 25 ③ and 26 ③): the first card of the right
@@ -59,7 +60,7 @@ export function WikiPlanBanner({ space }: { space: WikiSpace }) {
 /** The desktop's card, over Review: its dot and count, its sentence or its changes, and its buttons. */
 export function WikiPlanCard({ space }: { space: WikiSpace }) {
   const navigate = useNavigate();
-  const { message } = App.useApp();
+  const message = useToast();
   const { plan, look, counts, maintenance } = usePlanLook(space);
   const draft = useWikiWrite(() => redraftWikiPlan(space.id, null));
   if (!plan || !look) return null;
@@ -74,7 +75,7 @@ export function WikiPlanCard({ space }: { space: WikiSpace }) {
       message.success(answer.created ? WIKI_PLAN_REDRAFT_ASKED : WIKI_PLAN_REDRAFT_ALREADY);
       navigate(wikiPlanPath(space.slug));
     } catch (error) {
-      message.error(error instanceof Error ? error.message : 'The server refused it');
+      message.error("Couldn't draft the plan", error instanceof Error ? error.message : undefined);
     }
   };
   return (

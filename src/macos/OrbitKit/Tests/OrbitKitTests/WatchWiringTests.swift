@@ -55,12 +55,10 @@ final class WatchWiringTests: XCTestCase {
 
     func testTheWatchingCardSpeaksForTheWatchNotForAProcess() throws {
         let card = code(try source("Views/WatchingCard.swift"))
-        // The strip is read-only: no control comes from the state machine here, and the one action
-        // it offers is the way to the Following page, where Pause and Stop live.
+        // The strip is read-only: no control comes from the state machine here. Pause and Stop
+        // belong to the watch's detail page.
         XCTAssertFalse(card.contains("WatchStateMachine.controls"),
                        "the strip took back View/Edit/Pause/Stop — controls belong to the detail page")
-        XCTAssertTrue(card.contains("model.selectedSection = .following"),
-                      "the strip's only action is the way to the Following page")
         // The one line the strip is by default: the fixed label, the lone target by name with where
         // it stands, or what several need beside Tasks created here's sentence
         // (`WatchProjection.stripLabel` et al, held to the browser's `STRIP_*` declarations and to
@@ -91,6 +89,12 @@ final class WatchWiringTests: XCTestCase {
                             from: "struct AgentSessionRow: View {", to: "private func lineColor(")
         XCTAssertTrue(row.contains("SessionLine.make(for: session, live: !deleted, watching: watching)"))
         XCTAssertTrue(row.contains("StatusGlyphView(glyph: .make(for: session, watching: watching))"))
+        // The phone and iPad rows have no leading glyph: their trailing cue is where the eye goes.
+        XCTAssertTrue(row.contains("SessionLiveIndicator(session: session, watching: watching)"))
+        let indicator = code(try slice(source("Views/AgentsView.swift"),
+                                       from: "struct SessionLiveIndicator: View {", to: "struct BreathingGlyph: View {"))
+        XCTAssertTrue(indicator.contains("SessionStatusGlyph.make(for: session, watching: watching)"))
+        XCTAssertTrue(indicator.contains("case (.symbol(\"eye\"), _):"))
         XCTAssertFalse(code(row).contains("SessionHeader.statusWord(for: session))"),
                        "every status word the row speaks is handed the watch")
     }

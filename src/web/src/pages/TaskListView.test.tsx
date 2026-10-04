@@ -719,7 +719,7 @@ describe('what a Run from the task list refreshes', () => {
     expect(invalidated(['project', PROJ_A])).toBe(false);
     expect(invalidated(['project', PROJ_A, 'tasks', 'root'])).toBe(false);
     // The reason reaches the reader whole, through the existing toast path.
-    expect(message.error).toHaveBeenCalledWith('no runner available');
+    expect(message.error).toHaveBeenCalledWith("Couldn't start the task", 'no runner available');
     expect(message.success).not.toHaveBeenCalled();
   });
 
@@ -783,7 +783,7 @@ describe('what a Run from the task list refreshes', () => {
       .mutate({ id: T1, projectId: PROJ_A, triggerId: newRunRequestToken() })
       .catch(() => {});
 
-    expect(message.error).toHaveBeenCalledWith('task is settled');
+    expect(message.error).toHaveBeenCalledWith("Couldn't start the task", 'task is settled');
     expect(message.sessionNotice).not.toHaveBeenCalled();
   });
 
@@ -964,7 +964,7 @@ describe('what a Run from the task list refreshes', () => {
     const invalidated = invalidatedIn(qc);
     expect(invalidated(['task', T1])).toBe(false);
     expect(invalidated(['project', PROJ_A])).toBe(false);
-    expect(message.error).toHaveBeenCalledWith('Too many tasks');
+    expect(message.error).toHaveBeenCalledWith("Couldn't start the tasks", 'Too many tasks');
     // The modal stays open on a refusal, so the reader can read it and try again.
     expect(dismiss).not.toHaveBeenCalled();
   });

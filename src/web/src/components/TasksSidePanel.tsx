@@ -1,29 +1,43 @@
 import {
-  ApiOutlined,
   BgColorsOutlined,
-  BookOutlined,
   CaretDownOutlined,
   CheckOutlined,
-  CheckSquareOutlined,
   CodeOutlined,
-  DesktopOutlined,
   DisconnectOutlined,
   FolderOutlined,
+  HolderOutlined,
   LoadingOutlined,
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
-  ProjectOutlined,
   SettingOutlined,
   TeamOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragOverEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { Avatar, Dropdown, Tooltip } from 'antd';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useLocation, useMatch, useNavigate } from 'react-router-dom';
 import type {
   PlanUsage,
+  RunnerAntigravityState,
   RunnerAccountRemoveState,
   RunnerEngineHealth,
   RunnerInstallState,
@@ -41,13 +55,9 @@ import {
   wikiSpacesQuery,
   workspaceSessionCountsQuery,
 } from '../lib/queries';
-import {
-  groupWorkspacesByRunner,
-  orderWorkspaceGroupsByRunners,
-  orderWorkspaces,
-  workspaceRunnerId,
-} from '../lib/workspaceOrder';
+import { orderWorkspaces, reorderedWorkspaceIds, workspaceRunnerId } from '../lib/workspaceOrder';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
+import { useToast } from '../lib/toast';
 import {
   projectIsWorking,
   projectNeedsYouCount,
@@ -55,6 +65,7 @@ import {
   type SidebarProject,
 } from '../lib/projectAttention';
 import { wikiProposalsToReview, wikiShown } from '../lib/wiki';
+import { SidebarNavIcon } from './SidebarNavIcon';
 
 const IS_MAC_PLATFORM =
   typeof navigator !== 'undefined' &&
@@ -109,29 +120,30 @@ interface TopNavItem {
   shortcut?: string;
 }
 
-// Fixed product destinations (Admin is appended for admins below). Individual Workspace rows are
-// primary destinations in their own right, so there is no proxy Workspaces parent here.
+// Fixed product destinations, the same for every account: Admin is a row of the account menu at the
+// panel's foot, not one of these. Individual Workspace rows are primary destinations in their own
+// right, so there is no proxy Workspaces parent here.
 const TOP: TopNavItem[] = [
   {
     key: 'projects',
-    icon: <ProjectOutlined />,
+    icon: <SidebarNavIcon name="projects" />,
     label: 'Projects',
     shortcut: projectsShortcutLabel(),
   },
   // Tasks under Projects, in the iPhone drawer's order (Projects · Tasks · Wiki). It is the way into
   // the task lists too: they are picked from the Tasks page's title, as they are on the phone.
-  { key: 'tasks', icon: <CheckSquareOutlined />, label: 'Tasks' },
+  { key: 'tasks', icon: <SidebarNavIcon name="tasks" />, label: 'Tasks' },
   // The Wiki sits under Projects because it is the other thing a codebase has: Projects is the work
   // in it, and the Wiki is what the work learned. Its amber count is the proposals waiting for the
   // owner, which is the same `needs-you` pill a workspace row shows — and the same rule applies with
   // it: a row carrying an amber number shows no shortcut.
-  { key: 'wiki', icon: <BookOutlined />, label: 'Wiki' },
+  { key: 'wiki', icon: <SidebarNavIcon name="wiki" />, label: 'Wiki' },
   // No Following here: its watches are the waits agents keep for their own sessions, already shown
   // in each session's header and Watching strip, and those are what link to /following.
-  { key: 'runners', icon: <DesktopOutlined />, label: 'Runners' },
+  { key: 'runners', icon: <SidebarNavIcon name="runners" />, label: 'Runners' },
   // Providers is for everyone: each user manages their own (BYOK) list; admins additionally
   // manage the shared ones on the same page.
-  { key: 'providers', icon: <ApiOutlined />, label: 'Providers' },
+  { key: 'providers', icon: <SidebarNavIcon name="providers" />, label: 'Providers' },
 ];
 
 // The left sidebar is user-resizable; the chosen width persists across refreshes.
@@ -189,7 +201,7 @@ export interface Runner {
   displayName?: string | null;
   online?: boolean;
   maxConcurrent?: number;
-  // Persisted order of runner groups/cards; null until assigned by migration or a reorder.
+  // Persisted order of the Runners page's cards; null until assigned by migration or a reorder.
   position?: number | null;
   // Live sessions currently occupying this runner's slots (of maxConcurrent).
   activeSessions?: number;
@@ -226,6 +238,8 @@ export interface Runner {
   // Per-engine health this runner reported (installed / version / signed in). null when it has
   // never reported — which is not the same as "nothing installed", so the two stay distinct.
   engines?: RunnerEngineHealth[] | null;
+  /** Server-computed capability and CLI readiness for Gemini sessions. */
+  antigravity?: RunnerAntigravityState;
   // The engine install this runner has in flight, if any.
   install?: RunnerInstallState | null;
   // The Codex account removal this runner has in flight, if any: which slot is going, and what the
@@ -297,11 +311,6 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   // No Wiki row at all for an account the server has not switched the wiki on for (WIKI_DISABLED):
   // an entry that led to a refusal would be worse than none.
   const topItems = wikiShown(wikiSpaces) ? TOP : TOP.filter((t) => t.key !== 'wiki');
-  // Admins get an extra top-nav entry: user management.
-  const navItems: TopNavItem[] =
-    me.data?.role === 'ADMIN'
-      ? [...topItems, { key: 'admin', icon: <TeamOutlined />, label: 'Admin' }]
-      : topItems;
 
   // The open workspace comes from /workspaces/<id>; behind a /sessions/<id> link, resolve
   // it from that session so its row highlights there too. The session query reuses
@@ -378,6 +387,10 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   useEffect(() => setSel(routeKey), [routeKey]);
 
   const [projectsOpen, setProjectsOpen] = useState(true);
+  // The Workspaces group folds like the Projects group. Its rows move only while being arranged
+  // (Edit … Done); the rest of the time a row is a way into its workspace and nothing else.
+  const [workspacesOpen, setWorkspacesOpen] = useState(true);
+  const [editingWorkspaces, setEditingWorkspaces] = useState(false);
 
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     const saved = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
@@ -437,8 +450,8 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
     window.addEventListener('mouseup', onUp);
   };
 
-  // Runners carry both their persisted display order and the computed `online` flag. Poll on the
-  // same 15s cadence as the Runners page so ordering and status stay in sync while the sidebar is up.
+  // Runners carry the computed `online` flag and the names the rows show. Poll on the same 15s
+  // cadence as the Runners page so status stays in sync while the sidebar is up.
   const runners = useQuery({
     queryKey: ['runners'],
     queryFn: () => api<Runner[]>('/runners'),
@@ -458,18 +471,52 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
 
   // The "Workspaces" list is the user's workspace definitions (model + tools).
   const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: () => api<Workspace[]>('/workspaces') });
-  // Base workspace order; the existing runner order remains a stable sort key, but runner is now
-  // metadata rather than a visible/collapsible parent. Flattening every group keeps all workspaces
-  // present as one compact list while preserving the familiar order and ⌘1‒9 shortcuts.
-  const workspaceList = useMemo(() => orderWorkspaces(workspaces.data ?? []), [workspaces.data]);
-  const orderedWorkspaces = useMemo(
-    () =>
-      orderWorkspaceGroupsByRunners(
-        groupWorkspacesByRunner(workspaceList),
-        runners.data ?? [],
-      ).flatMap((group) => group.workspaces),
-    [workspaceList, runners.data],
+  // One order, the user's: the rows below, ⌘1‒9 and ⌘↑/↓ all read it (lib/workspaceOrder). The
+  // runner is metadata on each row, not a sort key.
+  const orderedWorkspaces = useMemo(() => orderWorkspaces(workspaces.data ?? []), [workspaces.data]);
+
+  // Each drop is saved at once, the Runners page's way: the rows (and their ⌘N) move immediately,
+  // the server's list settles it, and a refusal puts them back.
+  const qc = useQueryClient();
+  const message = useToast();
+  const reorderWorkspaces = useMutation({
+    mutationFn: (ids: string[]) =>
+      api<Workspace[]>('/workspaces/reorder', { method: 'POST', body: { ids } }),
+    onMutate: async (ids) => {
+      await qc.cancelQueries({ queryKey: ['workspaces'] });
+      const previous = qc.getQueryData<Workspace[]>(['workspaces']);
+      if (previous) {
+        const rank = new Map(ids.map((id, position) => [id, position]));
+        qc.setQueryData<Workspace[]>(
+          ['workspaces'],
+          previous.map((a) => ({ ...a, position: rank.get(a.id) ?? a.position })),
+        );
+      }
+      return { previous };
+    },
+    onError: (e: Error, _ids, context) => {
+      if (context?.previous) qc.setQueryData(['workspaces'], context.previous);
+      message.error("Couldn't reorder the workspaces", e.message);
+    },
+    onSuccess: (data) => qc.setQueryData(['workspaces'], data),
+    onSettled: () => void qc.invalidateQueries({ queryKey: ['workspaces'] }),
+  });
+  const workspaceSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
+  // While a row is held, every row's ⌘N is the one it will have if the row is dropped here.
+  const [dragPreviewIds, setDragPreviewIds] = useState<string[] | null>(null);
+  const onWorkspaceDragOver = ({ active, over }: DragOverEvent) =>
+    setDragPreviewIds(
+      over ? reorderedWorkspaceIds(orderedWorkspaces, String(active.id), String(over.id)) : null,
+    );
+  const onWorkspaceDragEnd = ({ active, over }: DragEndEvent) => {
+    setDragPreviewIds(null);
+    if (!over || reorderWorkspaces.isPending) return;
+    const ids = reorderedWorkspaceIds(orderedWorkspaces, String(active.id), String(over.id));
+    if (ids) reorderWorkspaces.mutate(ids);
+  };
 
   // Per-workspace Open-session tallies, counted server-side. Polls faster while anything is live.
   // This used to fetch every open session and tally them here, which on an account with
@@ -666,9 +713,9 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
         })}
       </div>
 
-      <div className="tp-scroll">
+      <div className="tp-scroll autohide-scrollbar">
         <div className="tp-section">
-          {navItems.map((t) => (
+          {topItems.map((t) => (
             <div
               key={t.key}
               className={`tp-item ${sel === t.key ? 'active' : ''}`}
@@ -705,31 +752,72 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
         <div className="tp-divider" />
 
         <div className="tp-group">
-          {orderedWorkspaces.map((a, index) => {
-            const runnerId = workspaceRunnerId(a);
-            const runnerLabel =
-              (runnerId ? runnerLabels.get(runnerId) : null) ??
-              a.runner?.displayName ??
-              a.runner?.name ??
-              'Shared';
-            return (
-              <WorkspaceRow
-                key={a.id}
-                workspace={a}
-                runnerLabel={runnerLabel}
-                active={a.id === activeWorkspaceId}
-                offline={workspaceRunnerIsOffline(
-                  runnerId,
-                  runnerId ? runnerOnlineById.get(runnerId) : undefined,
-                )}
-                running={(workspaceRunning.get(a.id) ?? 0) > 0}
-                jobs={workspaceJobs.get(a.id) ?? 0}
-                needsYou={workspaceNeedsYou.get(a.id) ?? 0}
-                shortcutLabel={workspaceShortcutLabel(index)}
-                onOpen={openWorkspace}
-              />
-            );
-          })}
+          {orderedWorkspaces.length > 0 && (
+            <WorkspacesHead
+              count={orderedWorkspaces.length}
+              open={workspacesOpen}
+              editing={editingWorkspaces}
+              onToggle={() => setWorkspacesOpen((o) => !o)}
+              onEdit={() => {
+                setWorkspacesOpen(true);
+                setEditingWorkspaces(true);
+              }}
+              onDone={() => setEditingWorkspaces(false)}
+            />
+          )}
+          {/* Until Edit, no row registers with this context, so nothing here can be dragged. A
+              row with no runner stays out of it even then: it sorts last whatever it is given. */}
+          <DndContext
+            sensors={workspaceSensors}
+            collisionDetection={closestCenter}
+            onDragOver={onWorkspaceDragOver}
+            onDragEnd={onWorkspaceDragEnd}
+            onDragCancel={() => setDragPreviewIds(null)}
+          >
+            <SortableContext
+              items={orderedWorkspaces.filter((a) => workspaceRunnerId(a)).map((a) => a.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              {(workspacesOpen || editingWorkspaces) &&
+                orderedWorkspaces.map((a, index) => {
+                  const runnerId = workspaceRunnerId(a);
+                  const runnerLabel =
+                    (runnerId ? runnerLabels.get(runnerId) : null) ??
+                    a.runner?.displayName ??
+                    a.runner?.name ??
+                    'Shared';
+                  const row = (dragHandle?: ReactNode) => (
+                    <WorkspaceRow
+                      key={a.id}
+                      workspace={a}
+                      runnerLabel={runnerLabel}
+                      active={a.id === activeWorkspaceId}
+                      offline={workspaceRunnerIsOffline(
+                        runnerId,
+                        runnerId ? runnerOnlineById.get(runnerId) : undefined,
+                      )}
+                      running={(workspaceRunning.get(a.id) ?? 0) > 0}
+                      jobs={workspaceJobs.get(a.id) ?? 0}
+                      needsYou={workspaceNeedsYou.get(a.id) ?? 0}
+                      shortcutLabel={workspaceShortcutLabel(dragPreviewIds?.indexOf(a.id) ?? index)}
+                      onOpen={openWorkspace}
+                      dragHandle={dragHandle}
+                    />
+                  );
+                  return editingWorkspaces && runnerId ? (
+                    <SortableWorkspaceRow
+                      key={a.id}
+                      workspace={a}
+                      disabled={reorderWorkspaces.isPending}
+                    >
+                      {row}
+                    </SortableWorkspaceRow>
+                  ) : (
+                    row()
+                  );
+                })}
+            </SortableContext>
+          </DndContext>
         </div>
 
         {orderedWorkspaces.length > 0 && openProjects.length > 0 && <div className="tp-divider" />}
@@ -828,6 +916,19 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
                 label: 'Settings',
                 onClick: () => navigate('/settings'),
               },
+              // User management, for admins only. It opens a settings page as the row above does, so
+              // it sits in that row's group. The menu opens from the collapsed rail's avatar too, so
+              // Admin stays reachable with the panel collapsed.
+              ...(me.data?.role === 'ADMIN'
+                ? [
+                    {
+                      key: 'admin',
+                      icon: <TeamOutlined />,
+                      label: 'Admin',
+                      onClick: () => navigate('/admin'),
+                    },
+                  ]
+                : []),
               { type: 'divider' },
               {
                 key: 'logout',
@@ -892,7 +993,7 @@ export function ProjectRow({
   return (
     <div className={`tp-item tp-project ${active ? 'active' : ''}`} onClick={() => onOpen(project)}>
       <span className="tp-ico tp-project-mark">
-        <span className={`tp-list-dot ${working ? 'running' : ''}`} title={working ? 'Running' : undefined} />
+        <span className={`tp-list-dot ${working ? 'running' : ''}`} title={working ? 'Work in flight' : undefined} />
       </span>
       <span className="tp-label">{project.title}</span>
       {needsYou > 0 && (
@@ -1008,6 +1109,7 @@ export function WorkspaceRow({
   needsYou,
   shortcutLabel,
   onOpen,
+  dragHandle,
 }: {
   workspace: Workspace;
   runnerLabel: string;
@@ -1018,7 +1120,39 @@ export function WorkspaceRow({
   needsYou: number;
   shortcutLabel?: string | null;
   onOpen: (a: Workspace) => void;
+  /** Set while the list is being arranged (Edit): see the branch below. */
+  dragHandle?: ReactNode;
 }) {
+  const label = (
+    <span className="tp-label tp-workspace-label">
+      <span className="tp-workspace-name">{workspace.name}</span>
+      <span className="tp-workspace-separator" aria-hidden="true">
+        ·
+      </span>
+      <span className="tp-workspace-runner" title={runnerLabel}>
+        {runnerLabel}
+      </span>
+    </span>
+  );
+  const shortcut = shortcutLabel && (
+    <kbd
+      className="tp-count tp-workspace-shortcut"
+      title={`Open workspace with ${shortcutLabel}`}
+    >
+      {shortcutLabel}
+    </kbd>
+  );
+  // While the list is arranged, the handle takes the folder's column and the row opens nothing. Its
+  // state marks step aside too, so every row shows the ⌘N it will have once dropped.
+  if (dragHandle) {
+    return (
+      <div className="tp-item editing">
+        {dragHandle}
+        {label}
+        {shortcut}
+      </div>
+    );
+  }
   const offlineTitle = runnerLabel ? `${runnerLabel} is offline` : 'Runner offline';
   // Disconnection remains higher priority than background activity. A needs-you count does not
   // hide it: the count sits at the row's other end, and the server leaves the sessions waiting on
@@ -1064,29 +1198,89 @@ export function WorkspaceRow({
           />
         )}
       </span>
-      <span className="tp-label tp-workspace-label">
-        <span className="tp-workspace-name">{workspace.name}</span>
-        <span className="tp-workspace-separator" aria-hidden="true">
-          ·
-        </span>
-        <span className="tp-workspace-runner" title={runnerLabel}>
-          {runnerLabel}
-        </span>
-      </span>
-      {needsYou === 0 && shortcutLabel && (
-        <kbd
-          className="tp-count tp-workspace-shortcut"
-          title={`Open workspace with ${shortcutLabel}`}
-        >
-          {shortcutLabel}
-        </kbd>
-      )}
+      {label}
+      {needsYou === 0 && shortcut}
       <WorkspaceStateMark
         offline={offline}
         running={running}
         needsYou={needsYou}
         runnerLabel={runnerLabel}
       />
+    </div>
+  );
+}
+
+/** A Workspace row while the list is being arranged, dragged by its handle with the pointer or the
+ *  keyboard — the Runners page's `SortableRunnerCard` idiom. */
+function SortableWorkspaceRow({
+  workspace,
+  disabled,
+  children,
+}: {
+  workspace: Workspace;
+  disabled: boolean;
+  children: (dragHandle: ReactNode) => ReactNode;
+}) {
+  const { attributes, listeners, setActivatorNodeRef, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: workspace.id, disabled });
+  return (
+    <div
+      ref={setNodeRef}
+      className={`tp-workspace-sortable${isDragging ? ' dragging' : ''}`}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+    >
+      {children(
+        <button
+          ref={setActivatorNodeRef}
+          type="button"
+          className="tp-ico tp-workspace-handle"
+          title="Drag to reorder"
+          aria-label={`Reorder ${workspace.name}`}
+          disabled={disabled}
+          {...attributes}
+          {...listeners}
+        >
+          <HolderOutlined />
+        </button>,
+      )}
+    </div>
+  );
+}
+
+/** The Workspaces group's head, in the Projects head's grammar: the name, the count, and a caret
+ *  that shows on hover and folds the rows. Its one action arranges them — Edit, shown on hover like
+ *  the caret (always in the touch drawer, which has no hover), then Done for as long as they move. */
+export function WorkspacesHead({
+  count,
+  open,
+  editing,
+  onToggle,
+  onEdit,
+  onDone,
+}: {
+  count: number;
+  open: boolean;
+  editing: boolean;
+  onToggle: () => void;
+  onEdit: () => void;
+  onDone: () => void;
+}) {
+  return (
+    <div className="tp-group-head" onClick={editing ? undefined : onToggle}>
+      <span className="tp-group-name">Workspaces</span>
+      <span className="tp-count">{count}</span>
+      {!editing && <CaretDownOutlined className={`tp-caret ${open ? '' : 'collapsed'}`} />}
+      <button
+        type="button"
+        className={`tp-group-action${editing ? ' editing' : ''}`}
+        onClick={(event) => {
+          event.stopPropagation();
+          if (editing) onDone();
+          else onEdit();
+        }}
+      >
+        {editing ? 'Done' : 'Edit'}
+      </button>
     </div>
   );
 }

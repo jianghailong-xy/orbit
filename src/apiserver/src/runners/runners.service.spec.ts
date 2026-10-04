@@ -46,6 +46,7 @@ test('reorderRunners handles workspaceless runners, filters invalid ids, and app
           modelCatalog: null,
           runtimeDefaultModels: null,
           engines: null,
+          accountNames: null,
           installStatus: null,
           installEngine: null,
           installCommand: null,
@@ -131,6 +132,9 @@ test('reorderRunners handles workspaceless runners, filters invalid ids, and app
       modelCatalog: true,
       runtimeDefaultModels: true,
       engines: true,
+      // The names its accounts were given in Orbit, laid over the report (namedRunnerEngines).
+      accountNames: true,
+      accountPauses: true,
       installStatus: true,
       installEngine: true,
       installCommand: true,

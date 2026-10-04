@@ -33,6 +33,7 @@ import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { isSessionGenerating } from '../common/session-generating';
 import { countLiveApprovals } from '../sessions/abandoned-approvals';
 import { readOpenRequestPeers } from '../sessions/session-request';
+import { readConfirmationsUnderReview } from '../tasks/owner-confirmation-read';
 import { WORKTREE_OPERATION_STALE_MS } from '../common/session-inbox-fence';
 import { latestAcceptedCheckpoint } from '../projects/task-checkpoint.service';
 import {
@@ -557,6 +558,13 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  /** Drop the cached owner + workspace of a session that moved to another workspace
+   *  (SessionsService.move). The cached workspaceId is otherwise only evicted when the session
+   *  ends, and it is what every later control event names as the envelope's `agentId`. */
+  forgetSessionOwner(sessionId: string): void {
+    this.ownerCache.delete(sessionId);
+  }
+
   /** A still-PENDING user turn was added or withdrawn. Queued turns have no durable transcript
    * event until the runner leases them, so focused clients need this live-only nudge to re-fetch
    * GET /sessions/:id/turns and keep a queue created on another device visible. */
@@ -903,6 +911,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     // Who this session is waiting on for a reply, and who is waiting on it (session-request.ts), the
     // pair the list rows carry — sent as empty lists too, which is how a row learns one cleared.
     const peers = (await readOpenRequestPeers(this.prisma, s.ownerId, [sessionId])).get(sessionId);
+    // The confirmation still with its reviewer (docs/owner-confirmation-review-contract.md §5 N3) —
+    // sent as null too, which is how a row learns the review moved on.
+    const underReview = (await readConfirmationsUnderReview(this.prisma, s.ownerId, { sessionIds: [sessionId] }))
+      .get(sessionId);
     return {
       id: s.id,
       taskId: s.taskId ?? null,
@@ -930,6 +942,13 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       projectTitle: s.coordinatorForProject?.title ?? null,
       pendingApprovals,
       waitingKind: sessionWaitingKind(approvals, decisions),
+      confirmationUnderReview: underReview
+        ? {
+          ...underReview,
+          since: underReview.since.toISOString(),
+          dueAt: underReview.dueAt.toISOString(),
+        }
+        : null,
       // The four owner items, sent with every summary — including as an empty list, which is how a
       // row learns that the one it was showing has been answered (§7.6 V13).
       ownerItems: ownerItemsForRow(decisions),

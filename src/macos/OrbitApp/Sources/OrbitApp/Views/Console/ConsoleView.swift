@@ -76,7 +76,10 @@ struct ConsoleView: View {
             ns: imagePreviewNS,
             open: { key, fallback, fallbackIndex in
                 let pages = SessionPreviewImages
-                    .collect(console.state.items) { fetched.byCard[$0.id] ?? $0.resultImages }
+                    .collect(console.state.items,
+                             isAttachmentImage: { console.attachments.image(for: $0) != nil }) {
+                        fetched.byCard[$0.id] ?? $0.resultImages
+                    }
                     .compactMap { PreviewImage($0) }
                 if let index = pages.firstIndex(where: { $0.id == key }) {
                     imagePreviewPages = pages
@@ -97,11 +100,22 @@ struct ConsoleView: View {
         var byCard: [String: [Data]] = [:]
     }
 
+    /// Whether the conversation gets the screen while you type: on a phone (compact width), while
+    /// the composer holds the keyboard. The band's cards, the bars under the nav bar and the nav bar
+    /// itself fold away together, and come back when the keyboard goes. The wide shells keep all of it.
+    private func foldsChrome(_ console: ConsoleModel?) -> Bool {
+        #if os(iOS)
+        hSize == .compact && console?.composerEditing == true
+        #else
+        false
+        #endif
+    }
+
     private func consoleBody(navTitleWidth: CGFloat) -> some View {
         Group {
             if let console = registry.peek(sessionID) {
                 VStack(spacing: 0) {
-                    TranscriptView(console: console)
+                    TranscriptView(console: console, hidesStickyQuestion: foldsChrome(console))
                     // Pending approvals (incl. the AskUserQuestion form) render inline at the tail of
                     // the transcript now — as the agent's latest turn, web-style — not in a fixed panel
                     // here. See TranscriptView.
@@ -113,6 +127,10 @@ struct ConsoleView: View {
                         // Errors only, and sticky until the ✕ — this row is in flow, so anything that
                         // comes and goes on a timer here shoves the composer around while the user is
                         // typing in it. Confirmations belong in the toast host (see `showToast`).
+                        if let repair = console.queuedAntigravityRepair {
+                            AntigravityRepairCardView(console: console, repair: repair)
+                                .padding(.bottom, .composerBandGap)
+                        }
                         if let msg = console.statusMessage {
                             HStack {
                                 Text(msg).font(.orbitLabel).foregroundStyle(.secondary).lineLimit(6)
@@ -149,13 +167,18 @@ struct ConsoleView: View {
                                 onDismiss: dismiss)
                                 .padding(.bottom, .composerBandGap)
                         }
-                        // What this session waits on — a watch, not a process — above the real shells.
-                        WatchingCardStack(sessionID: console.sessionID)
-                        BackgroundTrayView(procs: console.state.background, progress: console.state.taskProgress)
-                        // The tasks this session's agent created, beside the code the bar below
-                        // carries — the session's two kinds of output, together.
-                        CreatedTasksCard(console: console)
-                        WorktreeBar(console: console)
+                        // The session's cards, which a phone folds while you type (`TypingFold`). The
+                        // one-off cards above stay: each is about the message being sent.
+                        VStack(spacing: 0) {
+                            // What this session waits on — a watch, not a process — above the real shells.
+                            WatchingCardStack(sessionID: console.sessionID)
+                            BackgroundTrayView(procs: console.state.background, progress: console.state.taskProgress)
+                            // The tasks this session's agent created, beside the code the bar below
+                            // carries — the session's two kinds of output, together.
+                            CreatedTasksCard(console: console)
+                            WorktreeBar(console: console)
+                        }
+                        .modifier(TypingFold(folded: foldsChrome(console)))
                         ComposerView(console: console)
                         // What the provider pick standing in the composer will do, and WHEN — the
                         // part that matters, because a run keeps its provider for its whole life.
@@ -193,13 +216,19 @@ struct ConsoleView: View {
         // list carries the bar — showing it in both columns would state one fact twice.
         // …and, when this session is itself holding a question that does NOT stop its turn, the same
         // bar pointing down into this transcript instead of away from it. See `NeedsYouBannerView`.
+        // While you type the bar folds away with the nav bar (`foldsChrome`), and a backdrop takes the
+        // nav bar's place behind the status bar so the transcript doesn't scroll under the clock.
         .safeAreaInset(edge: .top, spacing: 0) {
             if hSize == .compact {
                 let console = registry.peek(sessionID)
-                NeedsYouBannerView(
-                    excluding: sessionID,
-                    below: console?.waitingBelow,
-                    onOpenBelow: { rowID in console?.requestScroll(to: rowID) })
+                if foldsChrome(console) {
+                    Color.clear.frame(height: 0).background(.bar, ignoresSafeAreaEdges: .top)
+                } else {
+                    NeedsYouBannerView(
+                        excluding: sessionID,
+                        below: console?.waitingBelow,
+                        onOpenBelow: { rowID in console?.requestScroll(to: rowID) })
+                }
             }
         }
         // Pushed onto the compact NavigationStack (and shown as the split detail on iPad), this page
@@ -208,6 +237,9 @@ struct ConsoleView: View {
         // right under the back button. (The New-session compose page already does this; without it the
         // console reverts to the large bar the moment the session is created — the reported gap.)
         .navigationBarTitleDisplayMode(.inline)
+        // …and none at all while a phone's composer holds the keyboard (`foldsChrome`): back, the
+        // title and Share come back when the keyboard goes.
+        .toolbar(foldsChrome(registry.peek(sessionID)) ? .hidden : .automatic, for: .navigationBar)
         // Inline title: the session name over a "state · when" subtitle, matching the web Agent
         // console header (`AgentView.tsx`). Centered/two-line — the system convention (Messages/Phone)
         // — rather than web's left-aligned bar. The status word lived in the transcript's `statusBar`
@@ -276,6 +308,27 @@ struct ConsoleView: View {
     }
 }
 
+/// The band's cards while a phone's composer holds the keyboard (`foldsChrome`): folded to no
+/// height, not removed, so an open list, the branch bar's sheet host and a "View tasks ›" press made
+/// meanwhile all keep their state, and the cards come back as they were when the keyboard goes.
+/// The wide shells never fold, and macOS doesn't take the modifier at all.
+private struct TypingFold: ViewModifier {
+    let folded: Bool
+
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        content
+            .frame(height: folded ? 0 : nil, alignment: .top)
+            .clipped()
+            .opacity(folded ? 0 : 1)
+            .allowsHitTesting(!folded)
+            .accessibilityHidden(folded)
+        #else
+        content
+        #endif
+    }
+}
+
 #if os(iOS)
 /// The pushed console's inline nav-bar title: the session name over a "state · when" subtitle,
 /// mirroring the web Agent console header (see OrbitKit `SessionHeader`). The session (with its
@@ -336,6 +389,9 @@ private struct ConsoleNavTitle: View {
 struct TranscriptView: View {
     @Environment(AppModel.self) private var app
     let console: ConsoleModel
+    /// The sticky "↑ Your question" header folds away while a phone's composer holds the keyboard,
+    /// with the rest of the console's chrome (`ConsoleView.foldsChrome`).
+    var hidesStickyQuestion = false
     private let bottomID = TranscriptRow.bottom.id
     // Mirrors web's `atBottom` (AgentView.tsx): flips false once the user scrolls up off the live
     // tail. Drives the floating jump-to-latest button AND gates the auto-follow below, so reading
@@ -594,7 +650,7 @@ struct TranscriptView: View {
             // the target just *below* the header, not hidden under it. iOS 18+/macOS 15+ (needs the
             // scroll/row geometry); on the earlier floor `stuckID` never updates, so this stays hidden.
             .safeAreaInset(edge: .top, spacing: 0) {
-                if #available(iOS 18, macOS 15, *), let q = stuckBubble {
+                if #available(iOS 18, macOS 15, *), !hidesStickyQuestion, let q = stuckBubble {
                     stickyQuestion(q, proxy: proxy)
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
@@ -744,6 +800,17 @@ struct TranscriptView: View {
                                        undelivered: bubble.undelivered,
                                        onCancelQueued: bubble.turnId == nil
                                            ? nil : { Task { await console.cancelQueued(bubble) } })
+            } else if let card = bubble.reviewRequest {
+                // A confirmation review's turns are Orbit's on the queue too: the cards the
+                // transcript draws once a runner takes them (web parity: the queued tail's
+                // `q.confirmationReviewRequest` / `q.confirmationReturn`).
+                ReviewRequestedCardView(card: card, ts: bubble.ts, undelivered: bubble.undelivered,
+                                        onCancelQueued: bubble.turnId == nil
+                                            ? nil : { Task { await console.cancelQueued(bubble) } })
+            } else if let card = bubble.reviewReturn {
+                SentBackByReviewerCardView(card: card, ts: bubble.ts, undelivered: bubble.undelivered,
+                                           onCancelQueued: bubble.turnId == nil
+                                               ? nil : { Task { await console.cancelQueued(bubble) } })
             } else if let wake = WatchWakeText.parse(bubble.text) {
                 WatchWakeCardView(wake: wake, text: bubble.text, ts: bubble.ts,
                                   undelivered: bubble.undelivered,
@@ -755,10 +822,17 @@ struct TranscriptView: View {
                 // once a runner takes it. Nothing has been recorded yet, so the block is still the
                 // turn's own content rather than a note beside it (web parity: the queued tail
                 // reads `q.content`). Withdrawing it is an ordinary cancel — nothing re-sends it.
+                // Except for a job that ended while the turn ran: that wake is a steer on its way
+                // into the running turn, which the server refuses to withdraw, so it says how far it
+                // has got instead (web parity: `QueuedTurnMeta` for a `steer` placement).
                 BackgroundWakeCardView(wake: background, ts: bubble.ts,
                                        undelivered: bubble.undelivered,
-                                       onCancelQueued: bubble.turnId == nil
-                                           ? nil : { Task { await console.cancelQueued(bubble) } })
+                                       onCancelQueued: bubble.turnId == nil || bubble.steer
+                                           ? nil : { Task { await console.cancelQueued(bubble) } },
+                                       steerState: BackgroundWakeCard.steerState(
+                                           steer: bubble.steer, delivery: bubble.delivery,
+                                           undelivered: bubble.undelivered),
+                                       queued: true)
             } else {
                 UserBubbleView(bubble: bubble,
                                onCancelQueued: { Task { await console.cancelQueued(bubble) } })
@@ -1340,6 +1414,17 @@ struct TranscriptItemView: View {
                 ProjectStartedCardView(card: started, text: b.text, ts: b.ts,
                                        undelivered: b.undelivered || b.delivery == "failed",
                                        attached: b.attached)
+            } else if let card = b.reviewRequest {
+                // A confirmation request handed to this conversation to review, and a reviewer's
+                // return handed to the run (`ConfirmationReviewTurns.swift`): Orbit's turns, drawn as
+                // their cards with the block the agent read riding at the foot (web parity: NodeView).
+                ReviewRequestedCardView(card: card, ts: b.ts,
+                                        undelivered: b.undelivered || b.delivery == "failed",
+                                        attached: b.attached)
+            } else if let card = b.reviewReturn {
+                SentBackByReviewerCardView(card: card, ts: b.ts,
+                                           undelivered: b.undelivered || b.delivery == "failed",
+                                           attached: b.attached)
             } else if let replies = b.sessionReplies, !replies.isEmpty {
                 // The outcomes of this session's own requests, handed back (`sessionReplies`,
                 // `SessionReply.parse`): a reply turn carries nobody's words, and a message of the
@@ -1365,11 +1450,16 @@ struct TranscriptItemView: View {
                 // returning engine is handed, a coordinator's standing role) is a folded entry in
                 // the same card, because it is the control plane's too. It used to be an entry in a
                 // user bubble under the card, which drew an empty bubble: a message with no words
-                // in it, in the reader's own name.
+                // in it, in the reader's own name. A job that ended while a turn ran was written
+                // into that turn as a steer: the same line, where its echo landed inside the running
+                // turn, saying how far it got (web parity: `Transcript.tsx`'s `steer=`).
                 VStack(alignment: .leading, spacing: 6) {
                     BackgroundWakeCardView(wake: background, ts: b.ts,
                                            undelivered: b.undelivered || b.delivery == "failed",
-                                           attached: attachedRest(background))
+                                           attached: attachedRest(background),
+                                           steerState: BackgroundWakeCard.steerState(
+                                               steer: b.steer, delivery: b.delivery,
+                                               undelivered: b.undelivered))
                     if BackgroundWakeCard.drawsBubble(text: b.text) {
                         UserBubbleView(bubble: withoutNote(b))
                     }
@@ -1383,7 +1473,9 @@ struct TranscriptItemView: View {
         case .interrupt:
             Label("Interrupted", systemImage: "stop.circle").font(.orbitLabel).foregroundStyle(.secondary)
         case .error(_, let message):
-            if let summary = ToolFailureSummary.parse(message) {
+            if let repair = EngineAuth.antigravityRepair(message), let console, console.executesAntigravity {
+                AntigravityRepairCardView(console: console, repair: repair)
+            } else if let summary = ToolFailureSummary.parse(message) {
                 ToolFailureCardView(message: message, summary: summary)
             } else {
                 Label(message, systemImage: "exclamationmark.triangle.fill")

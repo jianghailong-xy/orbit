@@ -11,15 +11,14 @@ import { describe, expect, it } from 'vitest';
  * Nothing said so until three tests that each happen to count one selector went red.
  *
  * So the count is held here for every selector at once: a top-level rule's selector is written once.
- * Six were already written twice in the sheet the paste landed on (c00eefef3^); they are held at the
- * two they had rather than judged here. At-rules are not counted — `@media (max-width: 600px)` is
+ * Six were already written twice in the sheet the paste landed on (c00eefef3^); the five still in
+ * it are held at the two they had rather than judged here (the toast rule left with AntD's toasts). At-rules are not counted — `@media (max-width: 600px)` is
  * meant to recur beside each thing it adjusts.
  */
 const css = readFileSync(new URL('./index.css', import.meta.url), 'utf8');
 
 const WRITTEN_TWICE_BEFORE = new Map<string, number>([
   [':root', 2],
-  ['.ant-message-notice:has(.toast-err)', 2],
   ['.runner-sub', 2],
   ['.wt-diff-body', 2],
   ['.wt-diff-view', 2],

@@ -801,6 +801,40 @@ func codexStderrIsStateInitFailure(line string) bool {
 	return strings.Contains(strings.ToLower(line), "failed to initialize sqlite state runtime")
 }
 
+// codexStderrDiagnostic recognizes startup diagnostics that do not prevent the app-server
+// from serving turns. Keep this deliberately narrow: stderr is also where the runtime reports
+// genuine startup and turn failures, and unknown lines must retain their existing treatment.
+// The diagnostic is nested under `diagnostic` while `stderr` remains the compatibility field used
+// by older clients and transcript exports.
+func codexStderrDiagnostic(line string) (map[string]interface{}, bool) {
+	lower := strings.ToLower(line)
+	tokenInvalidated := strings.Contains(lower, "token_invalidated") || strings.Contains(lower, "token has been invalidated")
+	if strings.Contains(lower, "codex_models_manager") &&
+		strings.Contains(lower, "failed to refresh available models") &&
+		strings.Contains(lower, "401") && tokenInvalidated {
+		return map[string]interface{}{
+			"component":   "model_catalog",
+			"phase":       "startup",
+			"severity":    "WARN",
+			"impact":      "degraded",
+			"recoverable": true,
+			"code":        "token_invalidated",
+		}, true
+	}
+	if strings.Contains(lower, "rmcp::transport::worker") &&
+		strings.Contains(lower, "401") && tokenInvalidated {
+		return map[string]interface{}{
+			"component":   "mcp_transport",
+			"phase":       "startup",
+			"severity":    "WARN",
+			"impact":      "degraded",
+			"recoverable": true,
+			"code":        "token_invalidated",
+		}, true
+	}
+	return nil, false
+}
+
 // codexApprovalPolicy is the `approvalPolicy` Codex is started with, derived from the session's
 // permission mode. This is what makes an "ask me first" mode mean that on Codex too: `untrusted`
 // auto-approves only known-safe read-only commands and asks about everything else, which Orbit
@@ -1054,7 +1088,11 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stat
 			if codexStderrIsExpectedRefusal(line) {
 				continue
 			}
-			emit(evSystem, map[string]interface{}{"stderr": line + "\n"})
+			payload := map[string]interface{}{"stderr": line + "\n"}
+			if diagnostic, ok := codexStderrDiagnostic(line); ok {
+				payload["diagnostic"] = diagnostic
+			}
+			emit(evSystem, payload)
 		}
 	}()
 	return app, nil

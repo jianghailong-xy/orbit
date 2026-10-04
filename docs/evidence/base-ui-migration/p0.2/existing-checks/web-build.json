@@ -1,0 +1,9 @@
+{
+  "command": "NO_COLOR=1 npm run build -w @orbit/web",
+  "startedAt": "2026-10-03T19:21:48.111374+00:00",
+  "finishedAt": "2026-10-03T19:21:49.705694+00:00",
+  "durationSeconds": 1.594,
+  "exitCode": 0,
+  "log": "web-build.log",
+  "testConfiguration": "Existing build script runs tsc -b && vite build."
+}

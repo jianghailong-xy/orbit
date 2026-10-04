@@ -77,9 +77,10 @@ export async function insertTask(
  * An owner, a runner, an agent, a coordinator-enabled Project with its runtime row, and three
  * tasks: the dispatch subject, a DONE prerequisite and an OPEN one.
  *
- * `coordinator_enabled` is set on the Project BEFORE the tasks are inserted, so
- * `task_dispatch_authority_derive` gives them COORDINATOR authority at birth rather than through
- * the fan-out — the state a real coordinated Project is in by the time anything dispatches.
+ * `coordinator_enabled` is on the Project from the start — the state a real coordinated Project is
+ * in by the time anything dispatches. (The order used to matter: 0122's `task_dispatch_authority_
+ * derive` stamped each task at birth from that column, and 0290's fan-out rewrote the ones that
+ * predated the flip. Both, and the column, are gone; what the Project carries is the flag itself.)
  */
 export async function seedRevisionFixture(client: Client, ids: RevisionIds): Promise<void> {
   try {

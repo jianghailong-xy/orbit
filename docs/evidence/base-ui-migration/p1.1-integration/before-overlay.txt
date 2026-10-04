@@ -1,0 +1,11 @@
+==> overlaying node_modules from /root/orbit
+==> tsc /tmp/orbit-p11-before-aa737ee0/node_modules/.bin/tsc (Version 7.0.2)
+==> copying @prisma/client out of /root/orbit/node_modules/@prisma/client (this worktree needs its own)
+==> generating this branch's Prisma client
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma/schema.prisma.
+==> building @orbit/shared
+==> require.resolve('@orbit/shared') from src/apiserver = /tmp/orbit-p11-before-aa737ee0/src/shared/dist/index.js
+==> require.resolve('@orbit/shared') from src/web = /tmp/orbit-p11-before-aa737ee0/src/shared/dist/index.js
+==> OK: /tmp/orbit-p11-before-aa737ee0 is ready to build and test

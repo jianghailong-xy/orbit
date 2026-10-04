@@ -23,9 +23,77 @@ export const WIKI_MAINTENANCE_JOB = {
   adoptOpsMax: 50,
 } as const;
 
+/**
+ * Whose failure a failed maintenance run was (contract `maintenance.job.recovery.failureKinds`), as its run
+ * row and the space's health say it: `infra` — the platform under the run: its runner went offline, its
+ * engine never came up, the server answered 5xx or could not be reached, the disk filled — or `content` —
+ * the run's own: what it read, what the model answered, what the server refused, its turn limit. Only an
+ * infra failure is run again by the platform.
+ */
+export const WIKI_MAINTENANCE_FAILURE_KINDS = ['infra', 'content'] as const;
+export type WikiMaintenanceFailureKind = (typeof WIKI_MAINTENANCE_FAILURE_KINDS)[number];
+
+/** The numbers a maintenance task that died is recovered by (contract `maintenance.job.recovery.rules`). */
+export const WIKI_MAINTENANCE_RECOVERY = {
+  /** A task whose session died of an infra failure is started again no sooner than this after the session ended… */
+  rerunAfterMinutes: 10,
+  /** …and this many times at most: a rerun that dies too, or a death of any other kind, closes the task FAILED. */
+  rerunsMax: 1,
+  /** The longest `orbit wiki maintain` waits for a server that answers 5xx or not at all before it ends the run. */
+  serverWaitMinutes: 15,
+} as const;
+
 /** What made a maintenance task: the backlog reached the threshold, or its oldest fact the age. */
 export const WIKI_MAINTENANCE_DUE = ['backlog', 'age'] as const;
 export type WikiMaintenanceDue = (typeof WIKI_MAINTENANCE_DUE)[number];
+
+/**
+ * Catch-up (contract `maintenance.job.catchUp`, criterion 3 revision 4, the owner's choice of 2026-10-02): a
+ * space whose oldest fact the wiki has not taken in is more than `behindHours` old is behind, and catches up —
+ * the end of its latest run makes the next, a run on a local endpoint or one that failed is not counted against
+ * the day, and its documents wait until it is behind no more — until its last `pauseAfterFailures` runs all
+ * failed, which pauses it until a run succeeds.
+ */
+export const WIKI_MAINTENANCE_CATCH_UP = {
+  behindHours: 24,
+  pauseAfterFailures: 3,
+} as const;
+
+/**
+ * How a run was made, kept on its row (`wiki_maintenance_run.catch_up`): `active` — the space behind and
+ * catching up; `paused` — behind, its last runs all failed. A run made while the space was not behind has none.
+ */
+export const WIKI_MAINTENANCE_CATCH_UP_STATES = ['active', 'paused'] as const;
+export type WikiMaintenanceCatchUp = (typeof WIKI_MAINTENANCE_CATCH_UP_STATES)[number];
+
+/** Whether a space whose oldest fact after its cursor is `oldestPendingAt` is behind at `now`: read when asked, never waited for. */
+export function wikiMaintenanceBehind(oldestPendingAt: Date | null, now: Date): boolean {
+  return oldestPendingAt !== null && now.getTime() - oldestPendingAt.getTime() > WIKI_MAINTENANCE_CATCH_UP.behindHours * 3_600_000;
+}
+
+/**
+ * Whether a provider's endpoint is on this machine or a private network (contract
+ * `maintenance.job.catchUp.localEndpoint`): its host is localhost or a name under .localhost, a loopback address
+ * (127.0.0.0/8, ::1), a private IPv4 address (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16), an IPv6 unique local
+ * address (fc00::/7), or a link-local one (169.254.0.0/16, fe80::/10). Any other name is not: a name says
+ * nothing of where it resolves, and a run taken for a public one is only counted.
+ */
+export function wikiMaintenanceEndpointIsLocal(baseUrl: string | null | undefined): boolean {
+  // The URL's host: what follows the scheme and any user info, up to its port, path, query or fragment.
+  const authority = /^[a-z][a-z0-9+.-]*:\/\/(?:[^@/?#]*@)?(\[[0-9a-f:.]+\]|[^:/?#]*)/iu.exec((baseUrl ?? '').trim());
+  let host = (authority?.[1] ?? '').toLowerCase().replace(/\.$/u, '');
+  if (host.startsWith('[') && host.endsWith(']')) host = host.slice(1, -1);
+  if (host === 'localhost' || host.endsWith('.localhost')) return true;
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/u.exec(host);
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    return a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254);
+  }
+  if (!host.includes(':')) return false;
+  if (/^(?:0{0,4}:){1,7}:?0{0,3}1$/u.test(host) && host.replace(/[0:]/gu, '') === '1') return true;
+  const first = Number.parseInt(host.split(':')[0] || 'ffff', 16);
+  return (first & 0xfe00) === 0xfc00 || (first & 0xffc0) === 0xfe80;
+}
 
 /**
  * Why a fact that found the space due made no task (contract `maintenance.job.held`), kept on the
@@ -87,12 +155,23 @@ export interface WikiMaintenanceRunContext {
   expect: string | null;
   /** How many sessions this run may cover (wikiMaintenanceRunSessions). */
   runSessions: number;
+  /**
+   * How the run was made (contract `maintenance.job.catchUp`): while the space was behind — catching up, or
+   * paused — it writes no document and proposes no change to the plan; null for a run made otherwise.
+   */
+  catchUp: WikiMaintenanceCatchUp | null;
 }
 
 /** What a run reports when it ends, kept as it was said (contract `maintenance.job.report`). */
 export interface WikiMaintenanceReport {
   /** The step the run stopped at, when it did not succeed. */
   stoppedAt?: string;
+  /**
+   * The run moved the space's cursor past the sessions whose ops it recorded, as soon as they were recorded
+   * (`POST …/maintenance/advance`): a step that failed after it fails the run, and the next run does not read
+   * those sessions again. A run from a runner that does not do this, or one that failed before, says nothing.
+   */
+  cursorAdvanced?: boolean;
   sessions: number;
   dossiers: number;
   unchanged: number;
@@ -161,8 +240,11 @@ export const WIKI_MAINTENANCE_DOCS_RULES = {
   proposalItemsMax: 12,
 } as const;
 
-/** Why a run wrote no document: the space has no confirmed plan, or its server writes none yet. */
-export const WIKI_MAINTENANCE_DOCS_SKIPPED = ['no_confirmed_plan', 'no_server_support'] as const;
+/**
+ * Why a run wrote no document: the space has no confirmed plan, its server writes none yet, or the run was
+ * made while the space was behind, whose documents wait until it has caught up (`maintenance.job.catchUp.docs`).
+ */
+export const WIKI_MAINTENANCE_DOCS_SKIPPED = ['no_confirmed_plan', 'no_server_support', 'catching_up'] as const;
 export type WikiMaintenanceDocsSkipped = (typeof WIKI_MAINTENANCE_DOCS_SKIPPED)[number];
 
 /** `GET /api/runner/wiki/spaces/:id/maintenance/check`: `orbit wiki check`'s verdict. */

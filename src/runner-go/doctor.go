@@ -14,11 +14,12 @@ import (
 )
 
 // engineSpec describes one coding-CLI engine the runner can drive. The bin names
-// (claude/codex/kimi/opencode) match runtimeProvider's provider constants, so the runtime
-// pre-flight can look them up directly.
+// (claude/codex/kimi/opencode/antigravity) match runtimeProvider's provider constants, so the
+// runtime pre-flight can look them up directly.
 type engineSpec struct {
 	name       string   // display name, e.g. "Claude Code"
-	bin        string   // executable on PATH, e.g. "claude"
+	bin        string   // the engine's name, and its executable on PATH unless exe says otherwise
+	exe        string   // the executable when it is not named after the engine: agy, for antigravity
 	installCmd string   // recommended install, run via `sh -c` when the user consents
 	updateCmd  string   // in-place update run periodically by engineUpdateLoop; empty => re-run installCmd (idempotent)
 	installAlt string   // alternative shown if the default install is declined/fails
@@ -36,10 +37,22 @@ type engineSpec struct {
 	// loginHeadless is the sign-in for a machine with no browser at hand — printed in
 	// reports and after a failed interactive sign-in.
 	loginHeadless string
+	// apiKeyEnv is set for an engine Orbit runs on an API key alone, never on a sign-in: the
+	// variable the key is read from. Such an engine counts as signed in when the key is there,
+	// and has no sign-in command for anyone to run.
+	apiKeyEnv string
+}
+
+// executable is the name the runner execs for this engine.
+func (s engineSpec) executable() string {
+	if s.exe != "" {
+		return s.exe
+	}
+	return s.bin
 }
 
 func (s engineSpec) loginCmd() string {
-	return strings.TrimSpace(s.bin + " " + strings.Join(s.loginArgs, " "))
+	return strings.TrimSpace(s.executable() + " " + strings.Join(s.loginArgs, " "))
 }
 
 // loginArgvFor picks the sign-in argv to run on this machine: the device-code
@@ -55,6 +68,9 @@ func (s engineSpec) loginArgvFor(binPath string) []string {
 // loginHint is the one-line sign-in guidance shown in reports: the interactive
 // command plus the headless alternative for a background service.
 func (s engineSpec) loginHint() string {
+	if s.apiKeyEnv != "" {
+		return s.loginHeadless
+	}
 	return s.loginCmd() + "   (headless: " + s.loginHeadless + ")"
 }
 
@@ -117,6 +133,32 @@ var engineSpecs = []engineSpec{
 		loginArgs:     []string{"auth", "login"},
 		loginHeadless: "opencode auth login",
 	},
+	{
+		name: "Antigravity",
+		bin:  providerAntigravity,
+		exe:  agyExecutable,
+		// The official installer puts agy in ~/.local/bin, already on the service PATH. It also runs
+		// `agy install`, which appends a PATH line to ~/.bashrc and ~/.profile
+		// (docs/antigravity-runtime-contract.md §6.4).
+		installCmd: "curl -fsSL https://antigravity.google/cli/install.sh | bash",
+		// Updates in place and unattended, which the AGY_CLI_DISABLE_AUTO_UPDATE every Orbit session
+		// runs with does not stop (§6.2): the binary changes when this updater runs, between sessions,
+		// and not behind a running one. --gemini_dir keeps the updater's state out of ~/.gemini.
+		updateCmd:  agyUpdateCmd(),
+		installAlt: "download agy from https://antigravity.google/cli and put it on PATH",
+		// The manifest the installer and the updater read.
+		latestURL:   "https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/" + runtime.GOOS + "_" + runtime.GOARCH + ".json",
+		latestField: "version",
+		// A key, or the runner's Google sign-in, which is made from Orbit and only on Linux
+		// (antigravity_google_login.go): `orbit doctor` has no sign-in of its own to offer.
+		apiKeyEnv:     "GEMINI_API_KEY",
+		loginHeadless: "set GEMINI_API_KEY in the runner's environment or give the session a Gemini API key — or, on a Linux runner, sign in to Google from Orbit",
+	},
+}
+
+// agyUpdateCmd is `agy update`, pointed at a Gemini directory of the runner's own.
+func agyUpdateCmd() string {
+	return agyExecutable + " --gemini_dir=" + shellQuote(filepath.Join(machineHome(), "antigravity", "updater")) + " update"
 }
 
 // authState is a tri-state sign-in probe result.
@@ -135,6 +177,8 @@ type engineHealth struct {
 	path          string // where the binary was found (dir used for the PATH check)
 	version       string
 	auth          authState
+	authSource    string
+	planUsage     *PlanUsage
 	onServicePath bool // found on the background service's baked PATH (not just the shell's)
 }
 
@@ -172,9 +216,9 @@ func checkEngine(spec engineSpec, servicePath string) engineHealth {
 	// Prefer the service PATH (what the runner uses; includes ~/.local/bin). Fall
 	// back to the doctor's own PATH so a binary in an unusual dir still registers as
 	// installed — just flagged as not on the service PATH.
-	full, onSvc := lookPathIn(spec.bin, servicePath)
+	full, onSvc := lookPathIn(spec.executable(), servicePath)
 	if !onSvc {
-		if p, err := exec.LookPath(spec.bin); err == nil {
+		if p, err := exec.LookPath(spec.executable()); err == nil {
 			full = p
 		}
 	}
@@ -189,7 +233,13 @@ func checkEngine(spec engineSpec, servicePath string) engineHealth {
 	h.path = abs
 	h.onServicePath = onSvc
 	h.version = engineVersion(abs)
-	h.auth = probeAuth(spec.bin, abs)
+	if spec.bin == providerAntigravity {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		h.auth, h.authSource, h.planUsage = probeAntigravityAuth(ctx, abs, nil)
+	} else {
+		h.auth = probeAuth(spec.bin, abs)
+	}
 	return h
 }
 
@@ -220,6 +270,48 @@ func probeAuth(bin, binPath string) authState {
 	return probeAuthIn(ctx, bin, binPath, nil)
 }
 
+// claudeStatusRefreshWindow is how near its expiry a Claude login's token may be before `claude auth
+// status` is no longer asked about it. Within five minutes of expiring, or past it, the CLI refreshes
+// the token as it starts any command, `auth status` included — but `auth status` does not wait for
+// the refresh to land: it exits about two seconds after its own answer, and the probe kills it at
+// ten. Against a fake token endpoint answering in 2.5s, the server rotated the refresh token and the
+// CLI exited without writing the new one, leaving on disk a refresh token already spent: the login
+// still reads Signed in, every usage read gets a 401, and the next refresh that is let finish signs
+// it out (wikova, 2026-10-02, a probe every five minutes under a load of 35–45: Default and an
+// account). Ten minutes is the CLI's five and the probe's own budget, with room to spare.
+const claudeStatusRefreshWindow = 10 * time.Minute
+
+// claudeStoredSignedIn reports whether the credentials the CLI stored for the Claude login env selects
+// (nil: this process's own) answer "signed in" by themselves, so `claude auth status` is not run where
+// it could start a refresh (claudeStatusRefreshWindow). A credentials file holding a refresh token
+// does, whenever its access token expires: the CLI refreshes it on the next run that needs it, and
+// empties the file if the server refuses. A login kept in the macOS Keychain, which leaves no file,
+// does only while its token is inside the window. Everything else is still the CLI's to answer: a
+// login with no refresh token, which nothing can refresh — signed out, or signed in some way only the
+// CLI knows, an API key say — and one nothing could be read of.
+func claudeStoredSignedIn(ctx context.Context, env []string) bool {
+	if env == nil {
+		env = os.Environ()
+	}
+	dir, err := effectiveClaudeConfigDir(env, "")
+	if err != nil {
+		return false
+	}
+	if b, err := os.ReadFile(filepath.Join(dir, ".credentials.json")); err == nil {
+		login, err := parseClaudeOAuthLogin(b)
+		return err == nil && login.refreshable
+	}
+	if runtime.GOOS != "darwin" {
+		return false
+	}
+	b, err := keychainCredentials(ctx, claudeKeychainService(strings.TrimSpace(envValue(env, "CLAUDE_CONFIG_DIR"))))
+	if err != nil {
+		return false
+	}
+	login, err := parseClaudeOAuthLogin(b)
+	return err == nil && login.refreshable && login.expiresWithin(claudeStatusRefreshWindow, time.Now())
+}
+
 // probeAuthIn is probeAuth asked with env as the CLI's environment (nil: this process's own), so one
 // account's config directory can be asked instead of the runner's — the same reason codexLoginStatus
 // takes an env. Claude's answer is the one that has to be asked this way: its login lives in
@@ -227,6 +319,9 @@ func probeAuth(bin, binPath string) authState {
 func probeAuthIn(ctx context.Context, bin, binPath string, env []string) authState {
 	switch bin {
 	case providerClaude:
+		if claudeStoredSignedIn(ctx, env) {
+			return authYes
+		}
 		// Parse stdout regardless of exit code — the JSON carries the answer.
 		cmd := exec.CommandContext(ctx, binPath, "auth", "status")
 		cmd.Env = env
@@ -267,6 +362,9 @@ func probeAuthIn(ctx context.Context, bin, binPath string, env []string) authSta
 			return authYes
 		}
 		return authUnknown
+	case providerAntigravity:
+		auth, _, _ := probeAntigravityAuth(ctx, binPath, env)
+		return auth
 	}
 	return authUnknown
 }
@@ -435,7 +533,7 @@ func supportsLoginFlag(binPath string, spec engineSpec, env []string) bool {
 // Returns true when the sign-in command exits 0.
 func signInEngine(spec engineSpec, binPath string) bool {
 	args := spec.loginArgvFor(binPath)
-	cmdLine := strings.TrimSpace(spec.bin + " " + strings.Join(args, " "))
+	cmdLine := strings.TrimSpace(spec.executable() + " " + strings.Join(args, " "))
 	note := "opens a URL you approve in any browser"
 	if len(args) > len(spec.loginArgs) {
 		note = "remote machine — approve the URL and enter the code in any browser"
@@ -486,9 +584,10 @@ func runDoctor(fix bool, proxyVars []envVar) []engineHealth {
 			healths[i] = checkEngine(healths[i].spec, serviceLoginPath())
 			fmt.Printf("  %s\n", formatEngineLine(healths[i]))
 		}
-		// Sign-in pass: anything installed but not confirmed signed in.
+		// Sign-in pass: anything installed but not confirmed signed in. An API-key engine has no
+		// sign-in to run; the hints below say where its key goes.
 		for i := range healths {
-			if !healths[i].installed || healths[i].auth == authYes {
+			if !healths[i].installed || healths[i].auth == authYes || healths[i].spec.apiKeyEnv != "" {
 				continue
 			}
 			if !signInEngine(healths[i].spec, healths[i].path) {
@@ -591,11 +690,11 @@ func specFor(bin string) (engineSpec, bool) {
 // isn't on the runner's PATH, so the failure points at a fix instead of a raw
 // "failed to spawn" from exec.
 func engineMissingMessage(bin string) string {
-	name := bin
+	name, exe := bin, bin
 	if s, ok := specFor(bin); ok {
-		name = s.name
+		name, exe = s.name, s.executable()
 	}
-	return fmt.Sprintf("%s CLI (%q) not found on this runner's PATH — run `orbit doctor` on the runner to install it and sign in.", name, bin)
+	return fmt.Sprintf("%s CLI (%q) not found on this runner's PATH — run `orbit doctor` on the runner to install it and sign in.", name, exe)
 }
 
 // engineSignedOutMessage is the runtime error for an engine that is installed but has
@@ -606,6 +705,13 @@ func engineSignedOutMessage(bin string) string {
 	name, hint := bin, "sign in on that machine"
 	if s, ok := specFor(bin); ok {
 		name, hint = s.name, "run `"+s.loginCmd()+"` on that machine"
+		if s.apiKeyEnv != "" {
+			msg := fmt.Sprintf("Failed to authenticate: %s runs on an API key (%s), and neither this session nor the runner has one", s.name, s.apiKeyEnv)
+			if s.loginHeadless != "" {
+				msg += " — " + s.loginHeadless
+			}
+			return msg + "."
+		}
 	}
 	return fmt.Sprintf("Failed to authenticate: %s is installed on this runner but not signed in — sign in from here, or %s.", name, hint)
 }

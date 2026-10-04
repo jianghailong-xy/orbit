@@ -364,8 +364,8 @@ func TestCodexResetOverrideAccountsNeverOpenReset(t *testing.T) {
 }
 
 // The probe cache moves only forwards, in the order the control plane stores blocks: a read that
-// finishes after a later-started one keeps the later block while its windows still land, a later
-// read replaces it, and neither a notification nor a read without a block takes it away.
+// finishes after a later-started one cannot restore pre-reset windows, a later read replaces it,
+// and neither a notification nor a read without a block takes the reset block away.
 func TestCodexResetProbeCacheOnlyMovesForward(t *testing.T) {
 	probe := newCodexPlanUsageProbe(codexResetTestLeaseOwner)
 	read := func(utilization float64, fetchedAt string, sequence int64) *PlanUsage {
@@ -389,11 +389,16 @@ func TestCodexResetProbeCacheOnlyMovesForward(t *testing.T) {
 		if got == nil || got.RateLimitReset == nil || got.RateLimitReset.Sequence != sequence || got.Primary == nil || got.Primary.Utilization != utilization {
 			t.Fatalf("%s: cached %+v / %+v, want block %d with %v%%", step, got.RateLimitReset, got.Primary, sequence, utilization)
 		}
+		if credits := got.RateLimitReset.RateLimitResetCredits; credits == nil || credits.AvailableCount != sequence {
+			t.Fatalf("%s: cached credits %+v, want count %d", step, credits, sequence)
+		}
 	}
-	probe.store(read(10, "2026-09-11T04:21:30.123Z", 7))
-	expect("first read", 7, 10)
-	probe.store(read(20, "2026-09-11T04:21:29.000Z", 6))
-	expect("an earlier-started read finishing late", 7, 20)
+	probe.store(read(99, "2026-09-11T04:21:29.000Z", 6))
+	expect("before reset", 6, 99)
+	probe.store(read(0, "2026-09-11T04:21:30.123Z", 7))
+	expect("reset refresh", 7, 0)
+	probe.store(read(99, "2026-09-11T04:21:29.000Z", 6))
+	expect("a pre-reset read finishing late", 7, 0)
 	probe.store(read(30, "2026-09-11T04:21:30.123Z", 8))
 	expect("a later read in the same millisecond", 8, 30)
 	probe.store(read(40, "2026-09-11T04:26:30.000Z", 9))

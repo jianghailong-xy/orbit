@@ -42,6 +42,7 @@ export interface AttentionProject {
   /** Where this project's finished work lands (§7.1 V1). Absent on a server that sends none, and
    *  null on a project that has not decided a line and has not integrated anything yet. */
   integration?: ProjectListIntegration | null;
+  coordinatorActivity?: ProjectListCoordinatorActivity | null;
 }
 
 /**
@@ -246,6 +247,11 @@ function quietDays(lastActivityAt: string | null, now: number): number | null {
   return quiet < QUIET_MS ? null : Math.floor(quiet / DAY_MS);
 }
 
+/** The queue owns work, even when no task or coordinator session is running. */
+function integrationIsActive(project: { integration?: ProjectListIntegration | null }): boolean {
+  return (project.integration?.activeJobCount ?? 0) > 0;
+}
+
 /**
  * Why an OPEN project needs a visible attention signal.
  *
@@ -267,23 +273,25 @@ export function attentionReasonOf(project: AttentionProject, now: number): Atten
   if (autoRemediationBlockerCount(project) > 0) return 'auto-remediation';
   if ((project.attention?.userBlockers ?? 0) > 0) return 'needs-user';
 
-  const quiet = quietDays(project.lastActivityAt, now);
+  const platformWorking = integrationIsActive(project) || project.coordinatorActivity?.working === true;
+  const quiet = platformWorking ? null : quietDays(project.lastActivityAt, now);
   if (project.buckets.running > 0 && quiet !== null) return 'no-activity-running';
   if (project.buckets.running === 0 && project.buckets.ready > 0 && quiet !== null) {
     return 'no-activity-ready';
   }
 
+  // Task work may be finished while a landing exception is still unresolved. Name the exception
+  // before the task tally so an all-DONE project cannot hide failed checks behind settled work.
+  if (project.attention?.coordinatorItems) return 'coordinator-handling';
+
   const { running, ready, blocked, done, cancelled } = project.buckets;
   const awaitingVerification = project.buckets.awaitingVerification ?? 0;
   if (
-    running + ready + blocked + awaitingVerification + failedTaskCount(project) === 0
+    !platformWorking
+    && running + ready + blocked + awaitingVerification + failedTaskCount(project) === 0
     && done + cancelled > 0
   ) return 'ready-to-close';
 
-  // Last, and only when nothing else is wrong: an exception the coordinator is working is the
-  // project moving, so it explains a chip and never moves a row (§7.1 V2). Every reason above is
-  // something the reader has to act on, and a coordinator's exception is not.
-  if (project.attention?.coordinatorItems) return 'coordinator-handling';
   return null;
 }
 
@@ -305,6 +313,8 @@ export function attentionSectionOf(project: AttentionProject, now: number): Atte
   // Fresh activity is ordinary by comparison — somebody is asking the reader for something.
   if (isNeedsYouReason(reason)) return 'attention';
 
+  if (integrationIsActive(project) || project.coordinatorActivity?.working === true) return 'running';
+
   const quietRunning = project.buckets.running > 0
     && quietDays(project.lastActivityAt, now) !== null;
   if (project.buckets.running > 0 && !quietRunning) return 'running';
@@ -312,6 +322,7 @@ export function attentionSectionOf(project: AttentionProject, now: number): Atte
   // A coordinator working an exception is the project moving; it earns the lane its activity
   // earns, which is where mock 1 draws it — brand chip, Running section (§7.1 V2).
   if (reason && reason !== 'coordinator-handling') return 'attention';
+  if (reason === 'coordinator-handling' && project.buckets.ready === 0) return 'waiting';
   if (project._count.tasks === 0) return 'definition';
   if (project.buckets.ready > 0) return 'ready';
   if (project.buckets.blocked > 0 || (project.buckets.awaitingVerification ?? 0) > 0) {
@@ -393,6 +404,7 @@ const COORDINATOR_LEAD_COPY: Record<CoordinatorLeadKind, string> = {
   INTEGRATION_CHECK_FAILED: 'checks failed',
   INTEGRATION_ERROR: 'handling an integration error',
   TASK_FAILED: 'handling a failed task',
+  DELIVERY_REVIEW: 'reviewing a delivery',
 };
 
 /**
@@ -553,7 +565,7 @@ export function attentionChipOf(project: AttentionProject, now: number): Attenti
     const settled = done + cancelled;
     return {
       tone: 'brand',
-      text: `${settled}/${running + ready + blocked + awaitingVerification + failed + settled} settled · still open`,
+      text: `${settled}/${running + ready + blocked + awaitingVerification + failed + settled} tasks settled · project still open`,
     };
   }
 
@@ -606,6 +618,7 @@ export interface SidebarProject {
   attention?: Pick<ProjectAttentionSummary, 'ownerItems' | 'startRequest'> | null;
   /** Absent from a server that predates it; null on a project with no coordinator bound. */
   coordinatorActivity?: ProjectListCoordinatorActivity | null;
+  integration?: ProjectListIntegration | null;
 }
 
 /** The four owner items this project is waiting on the reader for, of the kinds this build names. */
@@ -632,9 +645,12 @@ export function projectNeedsYouCount(project: SidebarProject): number {
     + (waitingStartRequest(project) ? 1 : 0);
 }
 
-/** Work in flight: a task running, or the project's coordinator working. */
-export function projectIsWorking(project: SidebarProject): boolean {
-  return project.buckets.running > 0 || project.coordinatorActivity?.working === true;
+/** Work in flight: a task, the coordinator, or a queued/running integration job. */
+export function projectIsWorking(
+  project: Pick<SidebarProject, 'buckets' | 'coordinatorActivity' | 'integration'>,
+): boolean {
+  return project.buckets.running > 0 || project.coordinatorActivity?.working === true
+    || integrationIsActive(project);
 }
 
 /** The project's newest activity: its latest task write, or its coordinator's latest turn. */

@@ -11,7 +11,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import type { LoginEngine } from '@orbit/shared';
+import type { InstallEngine, LoginEngine } from '@orbit/shared';
 
 export class CreateEnrollmentTokenDto {
   @IsOptional() @IsString() label?: string;
@@ -51,7 +51,7 @@ export const ACCOUNT_ID_PATTERN = /^(?:default|[0-9a-f]{8})$/;
 
 /** Which CLI to sign in. Absent from an older client, which only ever signed in claude. */
 export class StartLoginDto {
-  @IsOptional() @IsIn(['claude', 'codex', 'kimi']) engine?: LoginEngine;
+  @IsOptional() @IsIn(['claude', 'codex', 'kimi', 'antigravity']) engine?: LoginEngine;
   /** Sign in this account the runner already has, of an engine that keeps accounts. Absent: the
    *  runner's own login. */
   @IsOptional() @IsString() @Matches(ACCOUNT_ID_PATTERN) account?: string;
@@ -59,7 +59,13 @@ export class StartLoginDto {
   @IsOptional() @IsString() @MaxLength(60) accountName?: string;
 }
 
+/** A new name for an account a runner reports, Default included. The limit is the one an account
+ *  is added under (StartLoginDto.accountName). */
+export class RenameAccountDto {
+  @IsString() @MaxLength(60) name!: string;
+}
+
 /** Which CLI to install on the runner. Required — there is no historical default here. */
 export class StartInstallDto {
-  @IsIn(['claude', 'codex', 'kimi']) engine!: LoginEngine;
+  @IsIn(['claude', 'codex', 'kimi', 'antigravity']) engine!: InstallEngine;
 }

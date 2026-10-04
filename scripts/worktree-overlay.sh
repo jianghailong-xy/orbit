@@ -7,11 +7,12 @@
 #   cd src/apiserver && rm -rf build && npm test
 #   cd src/web && npx vitest run
 #
-# It needs no container and no network, it is idempotent (a second run re-links what moved, skips
-# the ~75MB copy and the generate, and costs a `tsc -p src/shared`), everything it writes is under
-# `node_modules/` or `dist/` and therefore gitignored, and it writes NOTHING outside the tree it is
-# run from. Leave what it lays down in place: an EXECUTABLE acceptance command runs in this same
-# worktree after the session's turn, and deleting the overlay is how that goes red.
+# It needs no container. Compatible installs need no network; otherwise npm ci uses its cache or
+# registry to install this tree's lockfile privately. It is idempotent (a second run re-links what
+# moved, skips the ~75MB copy and the generate, and costs a `tsc -p src/shared`). Apart from npm's
+# normal download cache/logs, everything it writes is under this tree's `node_modules/` or `dist/`
+# and therefore gitignored. Leave what it lays down in place: an EXECUTABLE acceptance command runs
+# in this same worktree after the session's turn, and deleting the overlay is how that goes red.
 #
 # THE RED IT EXISTS TO PREVENT
 # ============================
@@ -48,8 +49,8 @@
 #
 # WHAT IT LAYS DOWN, AND WHY EACH PIECE IS THERE
 # ==============================================
-#   * node_modules, borrowed. A worktree has none, and `npm install` inside one tears the links
-#     back down. The root, the apiserver's and src/shared's are linked from the main checkout.
+#   * node_modules, borrowed only when the actual installation satisfies this tree's lockfile.
+#     Otherwise an isolated npm ci replaces the borrowed links before anything writes dependencies.
 #   * `src/node_modules/@orbit/shared` -> this tree's src/shared, with this tree's dist built. That
 #     link sits closer to `src/apiserver/build/**` than the borrowed root does, so it is the one
 #     node finds, and the dist beside it is the one the child process reads. This is the pair that
@@ -78,7 +79,7 @@
 # skips the overlay entirely — there is nothing there to overlay. Callers that need `tsc` or
 # `prisma` afterwards resolve their own: this script prints which tsc it used, so a run that picks
 # up the wrong one says so rather than compiling a whole tree with it in silence.
-set -uo pipefail
+set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 API="$REPO/src/apiserver"
@@ -94,13 +95,43 @@ die() { echo "worktree-overlay: $*" >&2; exit 2; }
 # `Too many levels of symbolic links` instead, which is a broken environment rather than a missing
 # `npm install`, and three self-referential links in the caller's tree that this script had made.
 link() { if [ -L "$2" ] || [ ! -e "$2" ]; then ln -sfn "$1" "$2"; fi; }
+clear_dependencies() {
+  # rm unlinks symlinks, including those nested in real workspace directories; it never traverses them.
+  rm -rf "$REPO/node_modules" "$REPO/src/node_modules" \
+    "$API/node_modules" "$REPO/src/shared/node_modules" "$REPO/src/web/node_modules"
+}
 MAIN="$(dirname "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)")"
-[ -d "$MAIN/node_modules" ] || MAIN="$REPO"
+DEPENDENCIES="$MAIN"
+OVERLAY_KEY="$MAIN:$(git -C "$REPO" hash-object package-lock.json)"
+OVERLAY_MARKER="$REPO/src/node_modules/.worktree-overlay-lock"
 if [ "$MAIN" != "$REPO" ]; then
-  echo "==> overlaying node_modules from $MAIN"
-  link "$MAIN/node_modules"                "$REPO/node_modules"
-  link "$MAIN/src/apiserver/node_modules"  "$API/node_modules"
-  link "$MAIN/src/shared/node_modules"     "$REPO/src/shared/node_modules"
+  if [ -d "$REPO/node_modules" ] && [ ! -L "$REPO/node_modules" ] &&
+     node "$REPO/scripts/worktree-dependencies.mjs" "$REPO" "$REPO"; then
+    DEPENDENCIES="$REPO"
+    echo "==> reusing this worktree's lockfile-compatible installation"
+  elif node "$REPO/scripts/worktree-dependencies.mjs" "$REPO" "$MAIN"; then
+    echo "==> overlaying lockfile-compatible node_modules from $MAIN"
+    # An incompatible private install or an overlay from a different lock must not shadow the
+    # borrowed graph. Only a completed overlay below records its source/lock for repeat runs.
+    if { [ -d "$REPO/node_modules" ] && [ ! -L "$REPO/node_modules" ]; } ||
+       [ "$(cat "$OVERLAY_MARKER" 2>/dev/null || true)" != "$OVERLAY_KEY" ]; then
+      clear_dependencies
+    fi
+    link "$MAIN/node_modules"                "$REPO/node_modules"
+    link "$MAIN/src/apiserver/node_modules"  "$API/node_modules"
+    link "$MAIN/src/shared/node_modules"     "$REPO/src/shared/node_modules"
+  else
+    echo "==> installing this worktree's lockfile in isolated node_modules"
+    # Remove every old overlay before npm can traverse one, including the shared override.
+    clear_dependencies
+    # ci leaves manifests/lockfiles intact; ignoring lifecycle scripts also prevents workspace
+    # hooks from changing tracked sources. Prisma generation and shared compilation follow below.
+    ( cd "$REPO" && npm ci --ignore-scripts --include=dev --include=optional --no-audit --no-fund ) ||
+      die "isolated npm ci failed"
+    node "$REPO/scripts/worktree-dependencies.mjs" "$REPO" "$REPO" ||
+      die "isolated npm ci did not satisfy this tree's lockfile"
+    DEPENDENCIES="$REPO"
+  fi
 fi
 
 # TypeScript 7 and Prisma 7 were installed per workspace, beside a root that hoisted the 5.9.3 that
@@ -114,8 +145,8 @@ fi
 # tree is the thing that failed silently, so it is printed rather than assumed.
 TSC="$API/node_modules/.bin/tsc"; [ -x "$TSC" ] || TSC="$REPO/node_modules/.bin/tsc"
 PRISMA="$API/node_modules/.bin/prisma"; [ -x "$PRISMA" ] || PRISMA="$REPO/node_modules/.bin/prisma"
-[ -x "$TSC" ]    || die "no tsc under $MAIN — run npm install in the main checkout first"
-[ -x "$PRISMA" ] || die "no prisma under $MAIN — run npm install in the main checkout first"
+[ -x "$TSC" ]    || die "no tsc in the prepared dependencies under $DEPENDENCIES"
+[ -x "$PRISMA" ] || die "no prisma in the prepared dependencies under $DEPENDENCIES"
 echo "==> tsc $TSC ($("$TSC" --version))"
 
 # --- this branch's Prisma client ------------------------------------------------------------------
@@ -124,24 +155,27 @@ echo "==> tsc $TSC ($("$TSC" --version))"
 # ours can be real directories. Never in the main checkout: generating there is how every concurrent
 # session's tree goes red.
 if [ "$MAIN" != "$REPO" ]; then
-  NM="$API/node_modules"; MAIN_NM="$MAIN/src/apiserver/node_modules"
+  NM="$API/node_modules"; MAIN_NM="$DEPENDENCIES/src/apiserver/node_modules"
   # Where the main checkout's install put the two packages this step pairs, asked of Node rather
   # than named: npm kept both under the apiserver workspace until the 2026-09-09 dependabot bumps
   # (#74, #78) hoisted them to the root, and `$MAIN_NM/@prisma/client` then named nothing at all.
-  pkg_dir() { ( cd "$MAIN/src/apiserver" && node -p "path.dirname(require.resolve('$1/package.json'))" ); }
-  CLIENT_PKG="$(pkg_dir @prisma/client)" || die "no @prisma/client under $MAIN — run npm install in the main checkout first"
-  PRISMA_PKG="$(pkg_dir prisma)" || die "no prisma under $MAIN — run npm install in the main checkout first"
+  pkg_dir() { ( cd "$DEPENDENCIES/src/apiserver" && node -p "path.dirname(require.resolve('$1/package.json'))" ); }
+  CLIENT_PKG="$(pkg_dir @prisma/client)" || die "no @prisma/client under $DEPENDENCIES"
+  PRISMA_PKG="$(pkg_dir prisma)" || die "no prisma under $DEPENDENCIES"
   [ -L "$NM" ] && rm -f "$NM"
+  for d in "$NM/@prisma" "$NM/.prisma"; do [ ! -L "$d" ] || rm -f "$d"; done
   mkdir -p "$NM/@prisma" "$NM/.prisma"
-  for d in "$MAIN_NM"/* "$MAIN_NM"/.[!.]*; do
-    [ -e "$d" ] || continue
-    case "$(basename "$d")" in @prisma|.prisma|prisma) continue ;; esac
-    link "$d" "$NM/$(basename "$d")"
-  done
-  for d in "$MAIN_NM/@prisma"/*; do
-    [ -e "$d" ] || continue
-    [ "$(basename "$d")" = "client" ] || link "$d" "$NM/@prisma/$(basename "$d")"
-  done
+  if [ "$DEPENDENCIES" != "$REPO" ]; then
+    for d in "$MAIN_NM"/* "$MAIN_NM"/.[!.]*; do
+      [ -e "$d" ] || continue
+      case "$(basename "$d")" in @prisma|.prisma|prisma) continue ;; esac
+      link "$d" "$NM/$(basename "$d")"
+    done
+    for d in "$MAIN_NM/@prisma"/*; do
+      [ -e "$d" ] || continue
+      [ "$(basename "$d")" = "client" ] || link "$d" "$NM/@prisma/$(basename "$d")"
+    done
+  fi
   # The CLI goes beside the copy below, wherever it was installed. `prisma generate` resolves
   # `prisma` and `@prisma/client` from the schema's directory without following links, and refuses
   # with `Could not resolve @prisma/client` unless both sit in the same node_modules — so a private
@@ -170,6 +204,9 @@ fi
 # --- this tree's @orbit/shared --------------------------------------------------------------------
 echo "==> building @orbit/shared"
 "$TSC" -p "$REPO/src/shared/tsconfig.json" || die "src/shared failed to compile"
+for d in "$REPO/src/node_modules" "$REPO/src/node_modules/@orbit"; do
+  [ ! -L "$d" ] || rm -f "$d"
+done
 mkdir -p "$REPO/src/node_modules/@orbit"
 link "$REPO/src/shared" "$REPO/src/node_modules/@orbit/shared"
 
@@ -178,18 +215,23 @@ link "$REPO/src/shared" "$REPO/src/node_modules/@orbit/shared"
 # directory is undone and rebuilt as one symlink per entry — every entry, `@types/react-dom` being
 # installed only here — so that `@orbit/shared` and vite's two cache directories can be ours.
 if [ "$MAIN" != "$REPO" ]; then
-  WEB_NM="$REPO/src/web/node_modules"; MAIN_WEB_NM="$MAIN/src/web/node_modules"
+  WEB_NM="$REPO/src/web/node_modules"; MAIN_WEB_NM="$DEPENDENCIES/src/web/node_modules"
   [ -L "$WEB_NM" ] && rm -f "$WEB_NM"
-  mkdir -p "$WEB_NM/@orbit"
-  for d in "$MAIN_WEB_NM"/* "$MAIN_WEB_NM"/.[!.]*; do
-    [ -e "$d" ] || continue
-    # `.vite` (the pre-bundled deps) and `.vite-temp` (the bundled vite.config) are caches keyed by
-    # nothing that tells one tree's sources from another's, and not linking them is worth more than
-    # the red: at load 61, ProjectsPage.test.tsx cost 165.7s filling this tree's own pair and 45.8s
-    # reading it back — where against the main checkout's shared pair it costs 107-180s every time.
-    case "$(basename "$d")" in .vite|.vite-temp|@orbit) continue ;; esac
-    link "$d" "$WEB_NM/$(basename "$d")"
+  for d in "$WEB_NM/@orbit" "$WEB_NM/.vite" "$WEB_NM/.vite-temp"; do
+    [ ! -L "$d" ] || rm -f "$d"
   done
+  mkdir -p "$WEB_NM/@orbit"
+  if [ "$DEPENDENCIES" != "$REPO" ]; then
+    for d in "$MAIN_WEB_NM"/* "$MAIN_WEB_NM"/.[!.]*; do
+      [ -e "$d" ] || continue
+      # `.vite` (the pre-bundled deps) and `.vite-temp` (the bundled vite.config) are caches keyed by
+      # nothing that tells one tree's sources from another's, and not linking them is worth more than
+      # the red: at load 61, ProjectsPage.test.tsx cost 165.7s filling this tree's own pair and 45.8s
+      # reading it back — where against the main checkout's shared pair it costs 107-180s every time.
+      case "$(basename "$d")" in .vite|.vite-temp|@orbit) continue ;; esac
+      link "$d" "$WEB_NM/$(basename "$d")"
+    done
+  fi
   link "$REPO/src/shared" "$WEB_NM/@orbit/shared"
 fi
 
@@ -209,5 +251,8 @@ for sub in src/apiserver src/web; do
     *) die "@orbit/shared still resolves outside this tree from $sub — the overlay did not take" ;;
   esac
 done
+if [ "$MAIN" != "$REPO" ] && [ "$DEPENDENCIES" != "$REPO" ]; then
+  printf '%s\n' "$OVERLAY_KEY" > "$OVERLAY_MARKER"
+fi
 echo "==> OK: $REPO is ready to build and test"
 exit 0

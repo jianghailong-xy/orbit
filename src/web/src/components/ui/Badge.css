@@ -1,0 +1,12 @@
+.orbit-badge {
+  box-sizing: border-box; display: inline-block; position: relative; padding: 0 7px;
+  border: 1px solid transparent; border-radius: var(--orbit-radius-sm);
+  font-family: var(--orbit-font-family); font-size: 12px; font-weight: 400; line-height: 20px;
+  color: var(--text-1); background: var(--orbit-badge-default-bg); white-space: nowrap; text-align: start;
+}
+.orbit-badge-icon { margin-inline-end: 7px; }
+.orbit-badge-info { color: var(--orbit-control-primary); background: var(--orbit-badge-info-bg); }
+.orbit-badge-success { color: var(--orbit-badge-success); background: var(--orbit-badge-success-bg); }
+.orbit-badge-warning { color: var(--orbit-badge-warning); background: var(--orbit-badge-warning-bg); }
+.orbit-badge-error { color: var(--orbit-control-error); background: var(--orbit-control-error-bg); }
+.orbit-badge-blue { color: var(--orbit-badge-blue); background: var(--orbit-badge-blue-bg); }

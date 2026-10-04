@@ -43,6 +43,8 @@ public enum EngineAuth {
         /// can't express (the runner refuses such a request outright — `loginFlowFor` in login.go),
         /// so the card names the command to run on that machine instead of a button that can't work.
         case runCommand(String)
+        /// Antigravity uses a Gemini API key, connected and stored encrypted in Providers.
+        case connectGemini
         /// Any other slug is a control-plane–configured provider, i.e. an API key to fix. These
         /// clients have no Providers screen, so the card says where the key lives rather than
         /// offering an action it can't perform.
@@ -53,6 +55,50 @@ public enum EngineAuth {
     public static func remedy(forProvider provider: String) -> Remedy {
         if let engine = LoginEngine(rawValue: provider) { return .signIn(engine) }
         if provider == "opencode" { return .runCommand("opencode auth login") }
+        if provider == "antigravity" { return .connectGemini }
         return .apiKey(slug: provider)
+    }
+
+    public enum AntigravityRepair: String, Equatable, Sendable {
+        case needsKey, updateRunner, notInstalled
+    }
+
+    /// Runtime failures and the queue's capability gate earn the same actionable card as web.
+    public static func antigravityRepair(_ message: String?) -> AntigravityRepair? {
+        guard let message else { return nil }
+        if message.hasPrefix("Failed to authenticate: Antigravity runs on an API key (GEMINI_API_KEY), and neither this session nor the runner has one") {
+            return .needsKey
+        }
+        if message == "Antigravity requires a newer Orbit runner; update this runner first" {
+            return .updateRunner
+        }
+        if message.contains("Antigravity isn't installed")
+            || message.contains("Antigravity CLI isn't installed")
+            || message.contains("Antigravity CLI (\"agy\") not found") { return .notInstalled }
+        return nil
+    }
+
+    public static func antigravityTitle(_ repair: AntigravityRepair, runnerName: String?) -> String {
+        switch repair {
+        case .needsKey: return "Antigravity needs a Gemini API key"
+        case .updateRunner: return "Waiting for a newer runner"
+        case .notInstalled: return "Antigravity CLI isn't installed on \(machineName(runnerName))"
+        }
+    }
+
+    public static func antigravityBody(_ repair: AntigravityRepair, runnerName: String?,
+                                       runnerVersion: String?) -> String {
+        switch repair {
+        case .needsKey:
+            return "Connect Gemini in Providers. Orbit stores the key encrypted, and this conversation can continue on it."
+        case .updateRunner:
+            let version = runnerVersion?.isEmpty == false ? runnerVersion! : "an unknown version"
+            return "\(machineName(runnerName)) runs Orbit runner \(version); Antigravity needs 0.1.209 or newer. The runner updates itself when no session is running on it, and this session starts then."
+        case .notInstalled: return "Install it from Providers, then send your message again."
+        }
+    }
+
+    private static func machineName(_ name: String?) -> String {
+        name?.isEmpty == false ? name! : "this runner"
     }
 }

@@ -16,10 +16,16 @@
  *     plaintext is nowhere in the row;
  *   * what comes back out: an account is its email and `…AB12` — never the account id, never a token,
  *     never the ciphertext, asserted on the serialized answer;
- *   * one login per pool: the same account again is a 409, and so is a different one while an account is
- *     signed in; a SIGNED_OUT account is signed in AGAIN (the same row, not a second);
- *   * the fence: the database refuses a login naming anybody but the pool's owner, and every door here
- *     answers another owner's pool exactly as one that does not exist.
+ *   * as many accounts as the pool's people sign in, one row each: a second account joins the first, the
+ *     same account again while it is ACTIVE is a 409, and a SIGNED_OUT one is signed in AGAIN by the
+ *     person who signed it in (the same row, not a second); a sign-out takes out the one account its
+ *     fingerprint names — with none, the pool's first — and leaves the rest;
+ *   * who may do it (migration 0371): a person of the pool while its rule for accounts is on, an admin of
+ *     it always, each with an attempt of their own — the doors answer a pool the caller is not a person of
+ *     exactly as one that does not exist, and a sign-out of somebody else's account is the pool's admins'
+ *     alone (the person who signed it in may always take out their own);
+ *   * the fence: the database refuses a login naming anybody the pool does not hold — whoever they are —
+ *     and takes a person's logins with the pool they leave.
  *
  * Needs COORDINATOR_PG_URL (scripts/run-pg-spec.sh provides a disposable one); without it every case
  * reports as skipped, and that script counts a skip as red.
@@ -32,13 +38,14 @@ import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import { Client } from 'pg';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { CodexLoginService } from './codex-login.service';
+import { maskedAccount } from './codex-login';
 import { decryptSecret } from './provider-crypto';
 
 const PG_URL = process.env.COORDINATOR_PG_URL;
@@ -167,36 +174,51 @@ suite('the codex sign-in and its credential, on real PostgreSQL', { timeout: 300
   const newPool = async (ownerId: string, engine = 'codex', label = 'Mine') => {
     const id = randomUUID();
     await prisma.providerPool.create({
-      data: { id, slug: `codex-login-${randomUUID()}`, label, ownerId, engine, shared: false },
+      data: {
+        id, slug: `codex-login-${randomUUID()}`, label, ownerId, engine, shared: false,
+        // A Codex pool has its owner among its people from the start (migration 0358; the row
+        // ProvidersService.createPool writes) — the row the pool page's doors find them by, and the one a
+        // publish about its accounts reaches.
+        ...(engine === 'codex' ? { people: { create: { userId: ownerId, role: 'ADMIN' } } } : {}),
+      },
     });
     return id;
   };
 
   const owner = await newUser('owner');
   const stranger = await newUser('stranger');
+  const mia = await newUser('mia'); // a person the owner shared the pool with (migration 0371)
   const pool = await newPool(owner);
+  /** A person of a pool, as 0358/0371 have it — the row every door here finds its caller by. */
+  const addPerson = (poolId: string, userId: string, role = 'MEMBER') =>
+    prisma.providerPoolPerson.create({ data: { poolId, userId, role } });
+  await addPerson(pool, mia);
+  /** The fingerprint of the account Mia signs in below, which stands in the pool after that case. */
+  let mias = '';
 
   /** The pool's rows as the database holds them — the only place a token may be found. */
   const rows = (poolId = pool) => prisma.poolCodexLogin.findMany({ where: { poolId }, orderBy: { accountId: 'asc' } });
+  /** The code a refusal carries — what the page decides its next step by. */
+  const refusal = (e: unknown) => (e as { getResponse?: () => { code?: string } }).getResponse?.().code;
 
   /** Poll until the login reaches `want`; a terminal status other than `want` is returned as it is. */
-  async function pollTo(poolId: string, want: string) {
+  async function pollTo(poolId: string, want: string, caller = owner) {
     for (let attempt = 0; attempt < 200; attempt += 1) {
-      const answer = await service.poll(owner, poolId);
+      const answer = await service.poll(caller, poolId);
       if (answer.status === want || (answer.status !== 'PENDING' && answer.status !== want)) return answer;
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
     return assert.fail(`the login never reached ${want}`);
   }
   /** Drive a whole login: start it, approve it, and take the answer the first poll after approval gives. */
-  async function signIn(login: ReturnType<typeof account>, poolId = pool) {
+  async function signIn(login: ReturnType<typeof account>, poolId = pool, caller = owner) {
     const cli = await fakeCli(work, `ZXHO-K06HC`, login);
     process.env.CODEX_LOGIN_BIN = cli.bin;
-    const started = await service.start(owner, poolId);
+    const started = await service.start(caller, poolId);
     assert.equal(started.status, 'PENDING');
     const home = await cli.home();
     await writeFile(join(home, 'approve'), 'yes');
-    const answer = await pollTo(poolId, 'CONFIRMED');
+    const answer = await pollTo(poolId, 'CONFIRMED', caller);
     return { answer, home, cli };
   }
 
@@ -244,6 +266,8 @@ suite('the codex sign-in and its credential, on real PostgreSQL', { timeout: 300
       fingerprint: `…${login.accountId.slice(-4)}`,
       lastError: null,
       expiresAt: login.expiresAt.toISOString(),
+      // Who signed it in (migration 0371) — the pool's owner here.
+      userId: owner,
       usage: null,
       usageUnavailable: 'no quota has been read for this account yet',
       spentUntil: null,
@@ -314,14 +338,15 @@ suite('the codex sign-in and its credential, on real PostgreSQL', { timeout: 300
     );
   });
 
-  await t.test('a refused account is signed in again, on the same row — only its owner can do it, and it is still one login', async () => {
+  await t.test('a signed-out account is signed in again, on the same row — by the person who signed it in, and it is still one login', async () => {
     const held = (await rows())[0];
     const before = held.expiresAt.toISOString();
     const signedInAgain = account({ accountId: held.accountId, email: held.email ?? undefined, exp: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60, suffix: 'again' });
 
-    // The gateway's door, on an upstream 401 (P3-b): the account is out until its owner signs in again.
-    assert.equal(await service.markSignedOut(pool, 'your authentication token has been invalidated'), true);
-    assert.equal(await service.markSignedOut(pool, 'again'), false, 'a signed-out account moved twice');
+    // The gateway's door, on an upstream 401 (P3-b): the account is out until its contributor signs in
+    // again — here its contributor is the pool's owner, who signed it in above.
+    assert.equal(await service.markSignedOut(pool, held.accountId, 'your authentication token has been invalidated'), true);
+    assert.equal(await service.markSignedOut(pool, held.accountId, 'again'), false, 'a signed-out account moved twice');
     const out = (await rows())[0];
     assert.deepEqual({ state: out.state, lastError: out.lastError }, {
       state: 'SIGNED_OUT',
@@ -340,28 +365,107 @@ suite('the codex sign-in and its credential, on real PostgreSQL', { timeout: 300
     assert.equal(decryptSecret(after[0].accessTokenEnc), signedInAgain.access);
   });
 
-  await t.test('a different account while one is signed in is refused: one login per pool, and signing out is what changes it', async () => {
-    const other = account({ email: 'second@codex-login.invalid' });
-    const cli = await fakeCli(work, 'EF56-GH78', other);
-    process.env.CODEX_LOGIN_BIN = cli.bin;
-    await service.start(owner, pool);
-    const home = await cli.home();
-    await writeFile(join(home, 'approve'), 'yes');
-    await assert.rejects(
-      () => pollTo(pool, 'CONFIRMED'),
-      (e: unknown) => ((e as { getResponse?: () => { code?: string } }).getResponse?.().code === 'POOL_CODEX_ACCOUNT_TAKEN'),
-    );
-    assert.equal((await rows()).length, 1);
+  await t.test('a second account joins the pool as a row of its own: A and B both signed in, A again is still a 409, and signing B out leaves A', async () => {
+    // A pool of its own, so it holds only what this case signs in. The two account ids end differently
+    // by construction: a fingerprint is their last four characters, and two alike would be one name.
+    const two = await newPool(owner, 'codex', 'Two accounts');
+    const a = account({ accountId: `${randomUUID().slice(0, -4)}aaaa`, email: 'a@codex-login.invalid', plan: 'plus' });
+    const b = account({ accountId: `${randomUUID().slice(0, -4)}bbbb`, email: 'b@codex-login.invalid', plan: 'pro' });
 
-    // The owner signs the account out; the pool now holds nothing, and the login list says so.
+    assert.equal((await signIn(a, two)).answer.status, 'CONFIRMED');
+    // B is started and stored while A is in the pool: nothing asks for the pool to be empty first.
+    const second = (await signIn(b, two)).answer;
+    assert.equal(second.status, 'CONFIRMED');
+    // The answer names the account that sign-in stored, and every account the pool now holds, oldest
+    // first — each by its email, plan and four characters, and never by its id.
+    assert.deepEqual(
+      {
+        account: second.account?.email,
+        logins: second.logins.map((login) => [login.email, login.plan, login.fingerprint, login.state]),
+      },
+      {
+        account: 'b@codex-login.invalid',
+        logins: [
+          ['a@codex-login.invalid', 'plus', '…aaaa', 'ACTIVE'],
+          ['b@codex-login.invalid', 'pro', '…bbbb', 'ACTIVE'],
+        ],
+      },
+    );
+    for (const id of [a.accountId, b.accountId]) {
+      assert.equal(JSON.stringify(second).includes(id), false, 'the answer carried an account id');
+    }
+    // Two rows, each holding its own account's tokens.
+    const stored = new Map((await rows(two)).map((row) => [row.accountId, [row.state, decryptSecret(row.accessTokenEnc)]]));
+    assert.deepEqual(
+      [stored.size, stored.get(a.accountId), stored.get(b.accountId)],
+      [2, ['ACTIVE', a.access], ['ACTIVE', b.access]],
+    );
+
+    // A again, while it is ACTIVE: the same 409 as ever, and A's row keeps the tokens it had.
+    const again = await fakeCli(work, 'EF56-GH78', account({ accountId: a.accountId, email: a.email }));
+    process.env.CODEX_LOGIN_BIN = again.bin;
+    await service.start(owner, two);
+    await writeFile(join(await again.home(), 'approve'), 'yes');
+    await assert.rejects(() => pollTo(two, 'CONFIRMED'), (e: unknown) => refusal(e) === 'POOL_CODEX_ACCOUNT_DUPLICATE');
+    assert.deepEqual(
+      (await rows(two)).map((row) => decryptSecret(row.accessTokenEnc)).sort(),
+      [a.access, b.access].sort(),
+      'the refused sign-in wrote something',
+    );
+
+    // B out, named by the four characters every answer names it by: its row goes, and A stays as it was.
+    assert.deepEqual(await service.signOut(owner, two, '…bbbb'), { removed: 1 });
+    assert.deepEqual(
+      (await rows(two)).map((row) => [row.accountId, row.state, decryptSecret(row.accessTokenEnc)]),
+      [[a.accountId, 'ACTIVE', a.access]],
+    );
+    assert.deepEqual(await service.signOut(owner, two, '…bbbb'), { removed: 0 }, 'B was signed out twice');
+    const left = await service.poll(owner, two);
+    assert.deepEqual(
+      { status: left.status, account: left.account?.email, logins: left.logins.map((login) => login.fingerprint) },
+      { status: 'NONE', account: 'a@codex-login.invalid', logins: ['…aaaa'] },
+    );
+  });
+
+  await t.test('a sign-out takes out one account — the one its fingerprint names, with none the pool’s first — and refuses a fingerprint two accounts share', async () => {
+    // The pool holds the account signed in again above; others join it here, written straight in.
+    const [held] = await rows();
+    const insert = (accountId: string) =>
+      prisma.poolCodexLogin.create({
+        data: {
+          poolId: pool, userId: owner, accountId, accessTokenEnc: 'x', refreshTokenEnc: 'y',
+          expiresAt: new Date(Date.now() + 86_400_000),
+        },
+      });
+    const later = `${randomUUID().slice(0, -4)}cccc`;
+    await insert(later);
+
+    // A fingerprint the pool holds no account by takes nothing out.
+    assert.deepEqual(await service.signOut(owner, pool, '…none'), { removed: 0 });
+    assert.equal((await rows()).length, 2);
+    // None at all is the pool's first — its `login`, the account a page that names one shows — alone.
     assert.deepEqual(await service.signOut(owner, pool), { removed: 1 });
+    assert.deepEqual((await rows()).map((row) => row.accountId), [later], `${held.accountId} was not the one taken out`);
+
+    // Two accounts whose ids end alike share one name: the sign-out is refused, and both stay.
+    await insert(`${randomUUID().slice(0, -4)}cccc`);
+    await assert.rejects(() => service.signOut(owner, pool, '…cccc'), (e: unknown) => refusal(e) === 'POOL_CODEX_ACCOUNT_AMBIGUOUS');
+    assert.equal((await rows()).length, 2, 'an ambiguous sign-out took an account out');
+
+    // One at a time they all go, and then a sign-out has nothing to take.
+    assert.deepEqual(await service.signOut(owner, pool), { removed: 1 });
+    assert.deepEqual(await service.signOut(owner, pool, '…cccc'), { removed: 1 });
     assert.deepEqual(await rows(), []);
     assert.deepEqual(await service.signOut(owner, pool), { removed: 0 });
   });
 
   await t.test('the deadline takes the attempt with it: EXPIRED, no row, no child, no directory', async () => {
     const ttl = process.env.CODEX_LOGIN_TTL_MS;
-    process.env.CODEX_LOGIN_TTL_MS = '300';
+    // Seconds, not milliseconds: the deadline starts counting before the stand-in is even spawned, and
+    // `start` answers only once it has printed its code. A deadline shorter than a loaded machine takes to
+    // get bash that far is refused at the start ("no device code") instead of being reached here — 300ms
+    // was, a few starts in a hundred under load.
+    process.env.CODEX_LOGIN_TTL_MS = '3000';
     try {
       const cli = await fakeCli(work, 'IJ90-KL12', account());
       process.env.CODEX_LOGIN_BIN = cli.bin;
@@ -394,10 +498,15 @@ suite('the codex sign-in and its credential, on real PostgreSQL', { timeout: 300
     assert.equal((await service.poll(owner, pool)).status, 'NONE');
   });
 
-  await t.test('a login belongs to the pool’s owner, and to nobody else — at every door', async () => {
-    const login = account();
-    const { answer } = await signIn(login);
+  await t.test('the doors open to a person of the pool — the owner and the people it is shared with alike — and to nobody else', async () => {
+    // Mia, a person the owner shared the pool with, signs an account of her own in (migration 0371): the
+    // same flow, and the row is credited to her.
+    const hers = account({ email: 'mia@codex-login.invalid', suffix: 'mia-' });
+    const { answer } = await signIn(hers, pool, mia);
     assert.equal(answer.status, 'CONFIRMED');
+    assert.equal(answer.account?.email, 'mia@codex-login.invalid');
+    assert.equal((await rows()).find((row) => row.accountId === hers.accountId)?.userId, mia, 'the member’s sign-in was credited to somebody else');
+    mias = maskedAccount(hers.accountId);
 
     for (const door of [
       () => service.start(stranger, pool),
@@ -410,14 +519,70 @@ suite('the codex sign-in and its credential, on real PostgreSQL', { timeout: 300
     // The account is untouched by any of that.
     assert.equal((await rows()).length, 1);
 
-    // A Claude pool of the owner's own holds no ChatGPT login, and a pool nobody made is nobody's: the
-    // same answer for both, which is what "as if it did not exist" means.
+    // A pool the caller is not a person of answers as one that does not exist does — another's pool, and a
+    // Claude pool of the caller's own, which holds no ChatGPT login at all.
+    const anothers = await newPool(stranger);
     const claudePool = await newPool(owner, 'claude');
-    await assert.rejects(() => service.start(owner, claudePool), (e: unknown) => e instanceof NotFoundException);
-    await assert.rejects(() => service.start(owner, randomUUID()), (e: unknown) => e instanceof NotFoundException);
+    for (const door of [
+      () => service.start(owner, anothers),
+      () => service.start(owner, claudePool),
+      () => service.start(owner, randomUUID()),
+    ]) {
+      await assert.rejects(door, (e: unknown) => e instanceof NotFoundException);
+    }
   });
 
-  await t.test('the database refuses a login naming anybody but the pool’s owner', async () => {
+  await t.test('the pool’s rule closes the door to a member — and taking one’s own account out is not the rule’s business', async () => {
+    const ruled = await newPool(owner, 'codex', 'Rule off');
+    await addPerson(ruled, mia);
+    await prisma.providerPool.update({ where: { id: ruled }, data: { membersCanAddAccounts: false } });
+    // Written straight in: what is at stake here is the door, not another CLI run.
+    const hersIn = `${randomUUID().slice(0, -4)}rule`;
+    await prisma.poolCodexLogin.create({
+      data: {
+        poolId: ruled, userId: mia, accountId: hersIn, accessTokenEnc: 'x', refreshTokenEnc: 'y',
+        expiresAt: new Date(Date.now() + 86_400_000),
+      },
+    });
+
+    // Adding is what the rule closes for everybody but the pool's admins…
+    for (const door of [() => service.start(mia, ruled), () => service.poll(mia, ruled), () => service.cancel(mia, ruled)]) {
+      await assert.rejects(door, (e: unknown) => e instanceof ForbiddenException, 'a member added an account with the rule off');
+    }
+    // …and taking one's own account out is not adding: it goes.
+    assert.deepEqual(await service.signOut(mia, ruled), { removed: 1 });
+  });
+
+  await t.test('a sign-out is the contributor’s or the pool’s admins’: another member reaches neither account', async () => {
+    const held = (userId: string, tail: string) =>
+      prisma.poolCodexLogin.create({
+        data: {
+          poolId: pool, userId, accountId: `${randomUUID().slice(0, -4)}${tail}`, accessTokenEnc: 'x',
+          refreshTokenEnc: 'y', expiresAt: new Date(Date.now() + 86_400_000),
+        },
+      });
+    await held(mia, 'mia1'); // Mia's own, and the pool's first before the owner's is written
+    await held(owner, 'own1');
+    const pia = await newUser('pia');
+    await addPerson(pool, pia);
+
+    // Neither member may take out an account that is not theirs — the owner's, and another member's.
+    for (const door of [() => service.signOut(mia, pool, '…own1'), () => service.signOut(pia, pool, '…mia1')]) {
+      await assert.rejects(door, (e: unknown) => e instanceof ForbiddenException);
+    }
+    // An admin of the pool may take out anybody's…
+    assert.deepEqual(await service.signOut(owner, pool, '…mia1'), { removed: 1 });
+    // …and a member their own, while the owner's alone stands.
+    await held(mia, 'mia2');
+    assert.deepEqual(await service.signOut(mia, pool, '…mia2'), { removed: 1 });
+    // Mia's first account stands as it did.
+    assert.deepEqual(
+      (await rows()).map((row) => `${maskedAccount(row.accountId)}:${row.userId}`).sort(),
+      [`${mias}:${mia}`, `…own1:${owner}`].sort(),
+    );
+  });
+
+  await t.test('the database refuses a login naming anybody the pool does not hold, and takes a pool’s logins with it', async () => {
     await assert.rejects(
       sql.query(
         `INSERT INTO pool_codex_login (pool_id, user_id, account_id, access_token_enc, refresh_token_enc,
@@ -437,7 +602,8 @@ suite('the codex sign-in and its credential, on real PostgreSQL', { timeout: 300
       ),
       (e: unknown) => (e as { constraint?: string }).constraint === 'pool_codex_login_state_check',
     );
-    // Deleting the pool takes its login with it (the fence is the only owner of that row).
+    // Deleting the pool takes its logins with it — through the person rows the fence now hangs off: the
+    // pool's people go by their own cascade, and a person's logins go with them (migration 0371).
     const doomed = await newPool(owner);
     await prisma.poolCodexLogin.create({
       data: {

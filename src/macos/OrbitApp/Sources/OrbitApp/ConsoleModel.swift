@@ -97,6 +97,10 @@ final class ConsoleModel {
     /// runs no stream, and `send()` calls `createSession` for this agent instead of POSTing a turn
     /// (see `createDraftSession`). A live console leaves this nil.
     private let draftAgent: Agent?
+    /// Draft only: the folder whose page opened this draft (a folder page's ✎), whose sessions the
+    /// session it creates is filed in — the create request carries it as `folderId`
+    /// (docs/session-folders-move-design.md §3.3). Nil for a draft opened from a list.
+    private let draftFolderID: String?
     private(set) var provider = "claude"
     /// Draft only: an explicit provider pick from the new-session hero, as opposed to the agent's
     /// own. Non-nil means the create request carries it AND the pick is remembered on the agent
@@ -121,6 +125,84 @@ final class ConsoleModel {
     private(set) var sessionCodexAccountPinned = false
     private(set) var sessionClaudeAccountPinned = false
     private(set) var workspaceEnv: [String: String]?
+    private var workspaceAntigravityKeys: [String: Bool]?
+    private(set) var runnerAntigravity: RunnerAntigravityState?
+    private(set) var runnerVersion: String?
+    private(set) var sessionError: String?
+    private(set) var antigravityInstalling = false
+    private(set) var runnerInstall: RunnerInstallState?
+
+    var canInstallAntigravity: Bool {
+        runnerID != nil && runnerOnline == true && runnerAntigravity?.supported == true
+            && !antigravityInstalling && runnerInstall?.inFlight != true
+    }
+
+    var antigravityKeyAvailable: Bool {
+        let keys = isDraft ? draftAgent?.antigravityKeyAvailableByRunner : workspaceAntigravityKeys
+        let hasWorkspace = isDraft || agentID != nil
+        if hasWorkspace { return runnerID.flatMap { keys?[$0] } == true }
+        return runnerAntigravity?.envKeyAvailable == true
+    }
+
+    var queuedAntigravityRepair: EngineAuth.AntigravityRepair? {
+        guard executesAntigravity, sessionStatus == .pending else { return nil }
+        return EngineAuth.antigravityRepair(sessionError)
+    }
+
+    var executesAntigravity: Bool {
+        provider == "antigravity" || configuredProviders.first { $0.slug == provider }?.runtime == "antigravity"
+    }
+
+    var geminiSwitchChoice: ProviderChoice? {
+        providerSwitchChoices.first { choice in
+            let configured = configuredProviders.first { $0.slug == choice.slug }
+            return choice.kind == .byok && choice.slug != provider && choice.unavailable == nil
+                && configured?.presetSlug == "gemini" && configured?.runtime == "antigravity"
+        }
+    }
+
+    var antigravityProvidersURL: URL? {
+        guard let runnerID else { return nil }
+        return providersURL(engine: "antigravity", runnerID: runnerID)
+    }
+
+    func providersURL(engine: String, runnerID: String) -> URL? {
+        var components = URLComponents(url: api.baseURL.appendingPathComponent("providers"), resolvingAgainstBaseURL: false)
+        components?.queryItems = [URLQueryItem(name: "runner", value: runnerID), URLQueryItem(name: "engine", value: engine)]
+        return components?.url
+    }
+
+    func connectGeminiURL() async -> URL {
+        let keys = try? await api.personalProviders()
+        if let key = keys?.first(where: { $0.presetSlug == "gemini" && $0.runtime == "antigravity" }),
+           let id = key.providerID {
+            return api.baseURL.appendingPathComponent("providers/\(id)")
+        }
+        return api.baseURL.appendingPathComponent("providers/new/gemini")
+    }
+
+    func installAntigravity() async {
+        guard let runnerID, canInstallAntigravity else { return }
+        antigravityInstalling = true
+        defer { antigravityInstalling = false }
+        do {
+            runnerInstall = try await api.installAntigravity(runnerID)
+            showTransientStatus("Installing Antigravity CLI…")
+        } catch { statusMessage = "Couldn't install Antigravity CLI — \(APIClient.failureReason(error))." }
+    }
+
+    /// Returning from Providers must make a newly connected key available in this conversation.
+    func refreshAntigravityRepairContext() async {
+        if let providers = try? await api.providers() { adoptProviders(providers, pools: providerPools) }
+        _ = await refreshServerStatus()
+        await refreshAntigravityRunner()
+    }
+
+    func refreshAntigravityRunner() async {
+        guard let runnerID, let runners = try? await api.runners() else { return }
+        if let runner = runners.first(where: { $0.id == runnerID }) { adoptRunnerSnapshot(runner) }
+        else { clearRunnerSnapshot() }
+    }
     /// A provider switch made while this session was ENDED. There is nothing to PATCH then, so it
     /// rides along with the resume that revives it — the route Model/Mode/Effort already take.
     /// Nil unless the user picked one here: the session's own provider must never be re-asserted
@@ -144,6 +226,12 @@ final class ConsoleModel {
     /// WHERE the answer is shown, which is the difference between an answer and a notification.
     private var runConflictFromRetry = false
     private var sendingAutoRetry = false
+    /// A Retry the reader has already pressed, from the press until what it asked for is out (or its
+    /// send failed). Set at the top of `retryLastMessage`, BEFORE the send it routes to: `send` sets
+    /// `sending` only after it has re-read the session's status, and a double tap lands inside that
+    /// gap — two tests over the same failed message, which is what §2.1 criterion 19 forbids. Both
+    /// cards draw their Retry disabled while this is true, beside `sending`.
+    private(set) var retryInFlight = false
 
     /// The refusal the auto-retry card shows instead of its Retry button.
     ///
@@ -622,6 +710,11 @@ final class ConsoleModel {
     // session runner's reported set, narrowed to host-level + this session's agent (see applySlashItems).
     private(set) var slashItems: [SlashCommandInfo] = []
     var slashScope: String?   // nil = both kinds; "command"/"skill" when opened from the + menu
+    /// Whether the composer holds the keyboard (iOS): its editor's begin/end editing writes it, and
+    /// setting it focuses the field (`ComposerView`). A phone gives the transcript the room while you
+    /// type: the band's cards, the bars under the nav bar and the nav bar itself fold away until the
+    /// keyboard goes (`ConsoleView`).
+    var composerEditing = false
 
     /// The worktree status bar's own model (detail snapshot + diffs + commit/merge actions) —
     /// see `WorktreeModel`. Wired back to this console for the live status + the status line.
@@ -670,6 +763,7 @@ final class ConsoleModel {
         self.sessionID = sessionID
         self.agentID = agentID
         self.draftAgent = nil
+        self.draftFolderID = nil
         self.attachments = attachments
         let api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
         self.api = api
@@ -697,11 +791,13 @@ final class ConsoleModel {
          providerPools: [ProviderPool] = [],
          sharedPools: [SharedPool] = [],
          modelCatalog: RunnerModelCatalog? = nil, accountDefaultEffort: String? = nil,
+         folderID: String? = nil,
          baseURL: URL, tokenStore: TokenStore,
          attachments: AttachmentImageStore) {
         self.sessionID = ""
         self.agentID = agent.id
         self.draftAgent = agent
+        self.draftFolderID = folderID
         self.attachments = attachments
         let api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
         self.api = api
@@ -1384,6 +1480,9 @@ final class ConsoleModel {
         runnerPlanUsage = runner.planUsage
         modelCatalog = runner.modelCatalog
         runnerEngines = runner.engines
+        runnerAntigravity = runner.antigravity
+        runnerVersion = runner.version
+        runnerInstall = runner.install
         runnerCapabilities = runner.capabilities
         runnerRunsAsRoot = runner.runsAsRoot
     }
@@ -1395,6 +1494,9 @@ final class ConsoleModel {
         runnerPlanUsage = nil
         modelCatalog = nil
         runnerEngines = nil
+        runnerAntigravity = nil
+        runnerVersion = nil
+        runnerInstall = nil
         runnerCapabilities = nil
         runnerRunsAsRoot = nil
     }
@@ -1424,6 +1526,10 @@ final class ConsoleModel {
         // session has no project and makes none of those reads.
         projectID = s.projectId
         if projectID != nil { Task { [weak self] in await self?.refreshRulerQuestions() } }
+        // A conversation that coordinates nothing can still hold an evidence card: a task it
+        // dispatched outside any project is settled here, and the owner's card for it is drawn
+        // here once this session stops holding it (`refreshEvidenceDecisions`).
+        if projectID == nil { Task { [weak self] in await self?.refreshEvidenceDecisions() } }
         // The task this conversation is a run of, if it is one. That — and not the project — is
         // what decides whether an owner confirmation is asked here, so it is read separately and
         // kicked separately: an OWNER_CONFIRMED task may be filed under no project at all.
@@ -1440,6 +1546,7 @@ final class ConsoleModel {
         sessionCodexAccountPinned = s.codexAccountPinned ?? false
         sessionClaudeAccountPinned = s.claudeAccountPinned ?? false
         workspaceEnv = s.agent?.env
+        workspaceAntigravityKeys = s.agent?.antigravityKeyAvailableByRunner
 
         // A historical Session.model is authoritative and can be adopted immediately. If the user
         // already touched the picker while the session request was in flight, their explicit value
@@ -1533,6 +1640,8 @@ final class ConsoleModel {
     func adoptServerSnapshot(_ session: Session?) {
         guard let session, session.id == sessionID else { return }
         serverStatus = session.effectiveRunStatus
+        sessionError = session.error
+        if let keys = session.agent?.antigravityKeyAvailableByRunner { workspaceAntigravityKeys = keys }
         serverCapabilities = session.capabilities
         // What this row says it is waiting on the owner for moves before any card here does: a
         // coordinator asking to start its project lands on its row as a count (`waitingKind`
@@ -1542,6 +1651,9 @@ final class ConsoleModel {
             waitingSignal = waiting
             if projectID != nil {
                 Task { [weak self] in await self?.refreshRulerQuestions(force: true) }
+            } else {
+                // The count an evidence card of a dispatched task adds lands here too.
+                Task { [weak self] in await self?.refreshEvidenceDecisions(force: true) }
             }
         }
         // A run ending its turn moves this SESSION's row, not the task, so no task event re-reads
@@ -1569,7 +1681,9 @@ final class ConsoleModel {
     /// The moment of a run's row, as a value that changes when and only when something about the run
     /// moved: web keys its confirmation re-read on the same pair.
     private func runMoment(_ s: Session) -> String {
-        "\(s.effectiveRunState.rawValue)|\(s.lastTurnAt ?? "")"
+        // The row's review is in it too: a reviewer that ends, answers or runs out of time moves
+        // this row and nothing about the task (contract §5 N5), and the card has to follow the row.
+        "\(s.effectiveRunState.rawValue)|\(s.lastTurnAt ?? "")|\(s.confirmationUnderReview?.requestId ?? "")"
     }
 
     /// Re-read the authoritative lifecycle + capabilities from REST (lighter than loadContext).
@@ -1590,6 +1704,7 @@ final class ConsoleModel {
         sessionCodexAccountPinned = s.codexAccountPinned ?? false
         sessionClaudeAccountPinned = s.claudeAccountPinned ?? false
         workspaceEnv = s.agent?.env
+        workspaceAntigravityKeys = s.agent?.antigravityKeyAvailableByRunner
         return true
     }
 
@@ -1624,9 +1739,12 @@ final class ConsoleModel {
             provider,
             in: SessionProviderChoices.choices(configured: configuredProviders,
                                                catalog: modelCatalog, engines: runnerEngines,
-                                               pools: allPools),
+                                               pools: allPools,
+                                               antigravity: runnerAntigravity,
+                                               antigravityKeyAvailable: antigravityKeyAvailable),
             configured: configuredProviders,
-            catalog: modelCatalog)
+            catalog: modelCatalog,
+            antigravity: runnerAntigravity)
     }
 
     /// Move an existing session to another provider on the same runtime. The model comes along only
@@ -1945,7 +2063,7 @@ final class ConsoleModel {
                 if fromComposer { composerText = "" }
                 return
             }
-            if replyContext == nil, provider != "codex", provider != "opencode" {
+            if replyContext == nil, provider != "codex", provider != "opencode", provider != "antigravity" {
                 if command.isEmpty {
                     statusMessage = "Pick a slash command before sending"
                     return
@@ -2230,14 +2348,18 @@ final class ConsoleModel {
         // the same bubble. When it holds none — a run's message is thousands of events behind the
         // window — the server's words stand in, and there are no files to carry with them.
         let last = lastUserMessage
-        guard !sending else { return }
+        guard !sending, !retryInFlight else { return }
         switch RetryRoute.of(loadedText: last.text, loadedSender: last.sessionMessage,
                              serverText: serverRetryText, serverSender: serverRetrySender) {
         case .nothing:
             return
         case .serverResend:
+            retryInFlight = true
+            defer { retryInFlight = false }
             await resendFromSession()
         case .send(let text):
+            retryInFlight = true
+            defer { retryInFlight = false }
             sendingAutoRetry = true
             defer { sendingAutoRetry = false }
             await send(overrideText: text, overrideAttachments: last.attachments)
@@ -2247,12 +2369,14 @@ final class ConsoleModel {
     /// The Retry of another Orbit session's message: the server re-sends it as the automatic retry
     /// would — that session's, signed and with the request it was, charged to nobody's hourly limit
     /// (docs/session-request-reply-contract.md §2.1). Never through `send`, which would say the words
-    /// again in the owner's name. Web parity: `resendSessionRetryMessage`.
+    /// again in the owner's name. It carries no key: the server derives one from the failed message,
+    /// so a second press is the turn already queued (criterion 19). Web parity:
+    /// `resendSessionRetryMessage`.
     private func resendFromSession() async {
         sending = true
         defer { sending = false }
         do {
-            _ = try await api.resendRetryMessage(sessionID: sessionID, clientTurnId: UUID().uuidString)
+            _ = try await api.resendRetryMessage(sessionID: sessionID)
             statusMessage = ComposerLogic.statusAfterAcceptedSend(statusMessage)
         } catch {
             statusMessage = ComposerLogic.sendFailureMessage(error)
@@ -2384,7 +2508,7 @@ final class ConsoleModel {
             : state.contextWindow ?? AgentDefaults.contextWindow(for: modelID, catalog: modelCatalog,
                                                                  configured: configuredProviders,
                                                                  provider: provider)
-        let primary = planUsage?.rows.first
+        let primary = planUsage?.bindingRow()
         let rows = ComposerHostCommand.statusRows(ComposerStatusSnapshot(
             surface: "App",
             sessionTitle: isDraft ? nil : "Current session",
@@ -2442,7 +2566,10 @@ final class ConsoleModel {
                 // Only an explicit pick, as with the provider: none leaves it to the workspace's
                 // account, or to Automatic, which the server resolves when it creates the session.
                 codexAccount: provider == "codex" ? draftCodexAccount : nil,
-                claudeAccount: provider == "claude" ? draftClaudeAccount : nil))
+                claudeAccount: provider == "claude" ? draftClaudeAccount : nil,
+                // The folder page this draft was opened from, if any: the session is filed in it as
+                // it is created (§3.3). Omitted for a draft from a list.
+                folderId: draftFolderID))
             composerText = ""
             pendingAttachments = []
             // The pick was this session's binding; nothing to write back. The next draft here
@@ -3036,6 +3163,8 @@ final class ConsoleModel {
     private(set) var ownerConfirmation: OwnerConfirmationView?
     private var loadingOwnerConfirmation = false
     private var lastOwnerRead = Date.distantPast
+    /// The re-read a card under review asks for a second after its review is due (`scheduleReviewDueRead`).
+    private var reviewDueRead: Task<Void, Never>?
     /// The moment of the run this conversation last re-read the confirmation for: web re-reads when
     /// a run's row moves, and the same change is what makes a report arrive.
     private var ownerReadMoment: String?
@@ -3059,6 +3188,9 @@ final class ConsoleModel {
     /// recycles that row back on screen, so scrolling past the card must not be a way to spend
     /// requests; the reads that must never be throttled say so (`force`).
     private var lastRulerRead = Date.distantPast
+    /// The evidence read's own pair: it runs in every conversation, not only a coordinator's.
+    private var loadingEvidence = false
+    private var lastEvidenceRead = Date.distantPast
     /// Web's card re-reads on a 20s timer. This one re-reads on the events that can change the
     /// answer — context load, reconnect, the card appearing, a press — with this as the floor
     /// between two of them.
@@ -3112,7 +3244,10 @@ final class ConsoleModel {
                 return waiting(EvidenceDecisions.isOpen(evidenceStanding(taskID, evidenceRevision)),
                                question: true)
             case .ownerConfirmation(let taskID, let requestID):
-                return waiting(OwnerConfirmations.isOpen(ownerStanding(taskID, requestID)),
+                // Still open while its report is with its reviewer — the card is drawn and can be
+                // pressed — but not asking the owner yet, so the bar does not count it or point at
+                // it (contract §5 N1: iOS's "1 open question below").
+                return waiting(OwnerConfirmations.asksNow(ownerStanding(taskID, requestID)),
                                question: true)
             case .ownerDecisionReceipt:
                 // A receipt is a record, not a question: it stays on screen and is never counted.
@@ -3238,6 +3373,9 @@ final class ConsoleModel {
     /// iOS-specific gap — a suspended socket misses everything), when a card scrolls into view, and
     /// after any press. What it may never do is remove a card.
     func refreshRulerQuestions(force: Bool = false) async {
+        // The evidence cards first, and in every conversation (`refreshEvidenceDecisions`): every
+        // door that asks for the ruler's reads — reconnect, a card appearing, a press — asks for them.
+        await refreshEvidenceDecisions(force: force)
         guard !isDraft, let projectID, !loadingRuler else { return }
         if !force, Date().timeIntervalSince(lastRulerRead) < Self.rulerReadThrottle { return }
         loadingRuler = true
@@ -3249,14 +3387,6 @@ final class ConsoleModel {
             criteriaDecisions = queue
             for row in queue.pending { deliver(.criteriaDecision(intentID: row.intentId)) }
             adoptReceipts(queue)
-        }
-        // Scoped to THIS session: every row says whether the door would take an answer from here.
-        if let queue = try? await api.pendingEvidenceDecisions(decidingSessionID: sessionID) {
-            evidenceDecisions = queue
-            for row in EvidenceDecisions.cardRows(queue: queue, projectId: projectID) {
-                deliver(.evidenceDecision(taskID: row.taskId, evidenceRevision: row.evidenceRevision))
-            }
-            adoptEvidenceReceipts(queue)
         }
         if let standing = try? await api.acceptanceConfirmation(projectID: projectID) {
             acceptanceConfirmation = standing
@@ -3665,8 +3795,16 @@ final class ConsoleModel {
 
         if let read = try? await api.ownerConfirmation(taskID: taskID) {
             ownerConfirmation = read
+            scheduleReviewDueRead(read)
             if let waiting = OwnerConfirmations.waitingIn(read, sessionID: sessionID) {
                 deliver(.ownerConfirmation(taskID: taskID, requestID: waiting.requestId))
+            }
+            // A report its reviewer sent back is drawn as the record its card became (contract
+            // §8 B6): in place, where this console drew the card while it waited, or — on a device
+            // that never saw it waiting — at the moment it was sent back.
+            for returned in OwnerConfirmations.reviewerReturnsIn(read, sessionID: sessionID) {
+                deliver(.ownerConfirmation(taskID: taskID, requestID: returned.requestId),
+                        placement: .at(returned.review.returned?.recordedAt ?? returned.requestedAt))
             }
             // The receipts this conversation has recorded — from the read rather than from the
             // press, so a reload or another device shows them too. Each is drawn where it was
@@ -3675,6 +3813,22 @@ final class ConsoleModel {
             adoptOwnerReceipts(read)
         }
         lastOwnerRead = Date()
+    }
+
+    /// Nothing on the server moves a review out of "under review" when its window runs out — it reads
+    /// as not reviewed from then on (contract §5 N5), and the clock is only ever read — so a card
+    /// showing one reads again a second after it is due, rather than at the next nudge.
+    private func scheduleReviewDueRead(_ read: OwnerConfirmationView) {
+        reviewDueRead?.cancel()
+        reviewDueRead = nil
+        guard let review = OwnerConfirmations.waitingIn(read, sessionID: sessionID)?.review,
+              review.state == .underReview, let due = RelativeTime.parse(review.dueAt) else { return }
+        let wait = max(0, due.timeIntervalSinceNow + 1)
+        reviewDueRead = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            await self?.refreshOwnerConfirmation(force: true)
+        }
     }
 
     /// Where one delivered confirmation card stands right now — re-derived from the read on every
@@ -3696,10 +3850,10 @@ final class ConsoleModel {
     /// the outcomes worth explaining, and the re-read below is what explains them. The receipt the
     /// answer leaves comes back with that read, so what is drawn is the record rather than a guess.
     func decideOwnerConfirmation(_ waiting: OwnerConfirmationWaiting, _ decision: OwnerDecision,
-                                 note: String? = nil) async {
+                                 note: String? = nil, review: OwnerDecisionReview? = nil) async {
         guard let taskID,
               let request = OwnerConfirmations.request(waiting: waiting, decision: decision,
-                                                       note: note) else { return }
+                                                       note: note, review: review) else { return }
         do {
             _ = try await api.decideOwnerConfirmation(taskID: taskID, request)
             close(.ownerConfirmation(taskID: taskID, requestID: waiting.requestId))
@@ -3717,11 +3871,45 @@ final class ConsoleModel {
         await refreshOwnerConfirmation(force: true)
     }
 
+    /// Reopen task, from a receipt whose late review found problems (contract §9 L4): the task
+    /// panel's own write (`TaskReopen.request`), not a door of its own. The read that follows is
+    /// what takes the button away again.
+    func reopenOwnerConfirmedTask() async {
+        guard let taskID else { return }
+        do {
+            _ = try await api.updateTask(taskID, TaskReopen.request)
+        } catch {
+            statusMessage = "Task status was not changed — \(APIClient.failureReason(error))."
+        }
+        await refreshOwnerConfirmation(force: true)
+    }
+
     /// Where one delivered evidence card stands right now — re-derived from the read on every call,
     /// never a frame the card kept.
     func evidenceStanding(_ taskID: String, _ evidenceRevision: String) -> EvidenceDecisionStanding {
-        EvidenceDecisions.standing(queue: evidenceDecisions, projectId: projectID, taskId: taskID,
-                                   evidenceRevision: evidenceRevision)
+        EvidenceDecisions.standing(queue: evidenceDecisions, projectId: projectID, sessionId: sessionID,
+                                   taskId: taskID, evidenceRevision: evidenceRevision)
+    }
+
+    /// Re-read the evidence decisions this conversation draws cards for — in EVERY conversation,
+    /// not only a project's coordinator. A coordinator draws its project's rows; a task a session
+    /// dispatched outside any project has its owner card in that session, or in the task's run once
+    /// that one is in Trash, and the read names which (`EvidenceDecisionRow.ownerCard`). Asked with
+    /// the ruler's reads (`refreshRulerQuestions`), and on its own where those are not made.
+    func refreshEvidenceDecisions(force: Bool = false) async {
+        guard !isDraft, !loadingEvidence else { return }
+        if !force, Date().timeIntervalSince(lastEvidenceRead) < Self.rulerReadThrottle { return }
+        loadingEvidence = true
+        defer { loadingEvidence = false }
+        // Scoped to THIS session: every row says whether the door would take an answer from here.
+        if let queue = try? await api.pendingEvidenceDecisions(decidingSessionID: sessionID) {
+            evidenceDecisions = queue
+            for row in EvidenceDecisions.cardRows(queue: queue, projectId: projectID, sessionId: sessionID) {
+                deliver(.evidenceDecision(taskID: row.taskId, evidenceRevision: row.evidenceRevision))
+            }
+            adoptEvidenceReceipts(queue)
+            lastEvidenceRead = Date()
+        }
     }
 
     /// Answer one revision of a task's evidence at the decision door, FROM this session and with

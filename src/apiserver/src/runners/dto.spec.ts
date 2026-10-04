@@ -1,10 +1,18 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { validate } from 'class-validator';
-import { ReorderRunnersDto, StartLoginDto } from './dto';
+import { ReorderRunnersDto, StartInstallDto, StartLoginDto } from './dto';
 
-test('StartLoginDto accepts every built-in login engine, including Kimi', async () => {
-  for (const engine of ['claude', 'codex', 'kimi'] as const) {
+test('Antigravity can be installed and signed into', async () => {
+  const install = Object.assign(new StartInstallDto(), { engine: 'antigravity' });
+  assert.equal((await validate(install)).length, 0);
+  // Whether a given runner can relay its Google sign-in is the service's question (startLogin).
+  const login = Object.assign(new StartLoginDto(), { engine: 'antigravity' });
+  assert.equal((await validate(login)).length, 0);
+});
+
+test('StartLoginDto accepts every built-in login engine, including Kimi and Antigravity', async () => {
+  for (const engine of ['claude', 'codex', 'kimi', 'antigravity'] as const) {
     const dto = new StartLoginDto();
     dto.engine = engine;
     assert.equal((await validate(dto)).length, 0, engine);

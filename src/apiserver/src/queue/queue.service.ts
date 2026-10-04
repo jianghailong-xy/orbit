@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { Injectable, Logger } from '@nestjs/common';
+import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { EventEmitter } from 'events';
 import {
@@ -7,14 +7,17 @@ import {
   ClaimedSession,
   PermissionMode,
   fastModeAvailable,
+  type PlanUsageSnapshot,
   type RunnerModelCatalog,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
-import { codexLoginUnavailableReason, loginPoolResumesAt } from '../providers/codex-login';
+import { codexPoolUnavailableReason } from '../providers/codex-login';
+import { loginCanRun, loginPoolResumesAt, type LoginAccount } from '../providers/pool-login-select';
+import { choosePoolCredential } from '../providers/pool-credential-select';
 import { isBuiltinProvider, resolveProviderExec, type ModelProviderRow } from '../providers/custom-provider';
 import { ProviderPlanUsageService } from '../providers/plan-usage.service';
 import { isPoolCandidate, poolUnavailableReason } from '../providers/pool-admission';
-import { choosePoolKey, keyCanRun, poolKeysResumeAt, poolKeySwitchNotice } from '../providers/pool-key-select';
+import { keyCanRun, poolKeysResumeAt } from '../providers/pool-key-select';
 import {
   mintPoolGatewayToken,
   mintPoolLoginToken,
@@ -24,7 +27,7 @@ import {
 } from '../providers/shared-pool';
 import { PoolNotices } from '../providers/pool-notice';
 import { CLAUDE_ACCOUNT_MOVE_V1, CODEX_ACCOUNT_MOVE_V1 } from '../providers/account-move-capability';
-import { accountBeforeDispatch, accountSwitchNotice } from '../providers/plan-usage-accounts';
+import { accountBeforeDispatch, accountSwitchNotice, sessionAccountPausedUntil } from '../providers/plan-usage-accounts';
 import {
   choosePoolMember,
   poolFallbackNotice,
@@ -44,6 +47,7 @@ import {
   treeCeiling,
 } from '../common/session-tree-sql';
 import {
+  ANTIGRAVITY_RUNNER_UPGRADE_ERROR,
   OPENCODE_RUNNER_UPGRADE_ERROR,
   SOURCE_PROTOCOL_UNSUPPORTED_ERROR,
 } from '../runner-api/runner-provider-support';
@@ -95,33 +99,92 @@ export class QueueService {
     this.signal.emit('queued');
   }
 
-  private waitForSignal(timeoutMs: number): Promise<void> {
+  private waitForSignal(timeoutMs: number, hungUp?: AbortSignal): Promise<void> {
     return new Promise((resolve) => {
       const done = (): void => {
         clearTimeout(timer);
         this.signal.off('queued', done);
+        hungUp?.removeEventListener('abort', done);
         resolve();
       };
       const timer = setTimeout(done, timeoutMs);
       this.signal.once('queued', done);
+      hungUp?.addEventListener('abort', done, { once: true });
     });
   }
 
+  /**
+   * `hungUp` is the runner's connection closing. A claim committed after it moves the row
+   * PENDING -> RUNNING for a process that is no longer listening: nobody takes it over, and nothing
+   * on this side ever puts it back. On 2026-10-03 the long poll a self-updating runner had left
+   * open claimed a task's session 4s after the runner re-executed, and it read "Starting" for 15
+   * minutes — until an unrelated failed claim made the new process reconcile.
+   */
   async claimSessionForRunner(
     runner: { id: string; supportedProviders?: readonly AgentProvider[] },
     waitMs = 0,
     supportsTerminalHandoff = false,
     supportsSourcePin = false,
     supportsWikiMaintenance = false,
+    hungUp?: AbortSignal,
   ): Promise<ClaimedSession | null> {
     const deadline = Date.now() + waitMs;
     for (;;) {
-      const job = await this.trySessionClaim(runner, supportsTerminalHandoff, supportsSourcePin, supportsWikiMaintenance);
+      if (hungUp?.aborted) return null;
+      const job = await this.trySessionClaim(runner, supportsTerminalHandoff, supportsSourcePin, supportsWikiMaintenance, hungUp);
       if (job) return job;
       const remaining = deadline - Date.now();
       if (remaining <= 0) return null;
-      await this.waitForSignal(Math.min(remaining, 5000));
+      await this.waitForSignal(Math.min(remaining, 5000), hungUp);
     }
+  }
+
+  /** Evaluate pauses before the short global claim lock. The inbox rechecks after claim,
+   * so a concurrent pause cannot leak a new turn; paused rows never occupy runner capacity. */
+  private async pausedPendingSessions(runnerId: string): Promise<string[]> {
+    const now = new Date();
+    const pending = await this.prisma.session.findMany({
+      where: {
+        assignedRunnerId: runnerId, status: 'PENDING', cancelRequestedAt: null,
+        OR: [{ providerBuiltin: false }, { assignedRunner: { accountPauses: { not: Prisma.DbNull } } }],
+      },
+      select: {
+        id: true, ownerId: true, provider: true, providerBuiltin: true, error: true,
+        codexAccount: true, codexAccountPinned: true, claudeAccount: true, claudeAccountPinned: true,
+        workspace: { select: { env: true, codexAccount: true, claudeAccount: true } },
+        assignedRunner: { select: { engines: true, accountPauses: true, planUsage: true, capabilities: true } },
+      },
+    });
+    const blocked: string[] = [];
+    const poolPauses = new Map<string, Date | null>();
+    for (const session of pending) {
+      const runner = session.assignedRunner;
+      let until = runner ? sessionAccountPausedUntil(session, session.workspace, runner, now) : null;
+      const engine = session.provider;
+      if (until && runner && (engine === 'codex' || engine === 'claude')) {
+        const canMove = runner.capabilities.includes(engine === 'codex' ? CODEX_ACCOUNT_MOVE_V1 : CLAUDE_ACCOUNT_MOVE_V1);
+        const move = canMove && accountBeforeDispatch(engine, {
+          account: engine === 'codex' ? session.codexAccount : session.claudeAccount,
+          pinned: engine === 'codex' ? session.codexAccountPinned : session.claudeAccountPinned,
+        }, session.workspace, runner.engines, runner.planUsage, now, runner.accountPauses);
+        if (move) until = null;
+      }
+      if (!isBuiltinProvider(engine, session.providerBuiltin) && engine) {
+        const key = `${session.ownerId}:${engine}`;
+        if (!poolPauses.has(key)) poolPauses.set(key, await this.accountPoolPausedUntil(session.ownerId, engine, now));
+        until = poolPauses.get(key) ?? null;
+      }
+      if (!until) continue;
+      blocked.push(session.id);
+      const error = `Account paused until ${until.toISOString()}`;
+      if (session.error !== error) {
+        const updated = await this.prisma.session.updateMany({
+          where: { id: session.id, status: 'PENDING' }, data: { error },
+        });
+        if (updated.count) this.realtime.publishSessionUpdated(session.id);
+      }
+    }
+    return blocked;
   }
 
   private async trySessionClaim(
@@ -129,8 +192,11 @@ export class QueueService {
     supportsTerminalHandoff: boolean,
     supportsSourcePin: boolean,
     supportsWikiMaintenance: boolean,
+    hungUp?: AbortSignal,
   ): Promise<ClaimedSession | null> {
     const supportsOpenCode = runner.supportedProviders?.includes(AgentProvider.OPENCODE) ?? false;
+    const supportsAntigravity = runner.supportedProviders?.includes(AgentProvider.ANTIGRAVITY) ?? false;
+    const paused = await this.pausedPendingSessions(runner.id);
     // Atomically claim one PENDING session assigned to this runner. The runner id
     // must be cast to ::uuid: Prisma binds template params as text, and Postgres
     // has no `uuid = text` operator (claim silently fails otherwise — 42883).
@@ -153,10 +219,15 @@ export class QueueService {
         // pg_advisory_xact_lock returns PostgreSQL void, which queryRaw cannot deserialize;
         // executeRaw deliberately discards that result (same pattern as pg_notify).
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(1330792788, 1)`;
-        // Migration 0080 installs a database trigger so an older apiserver replica cannot
-        // claim OpenCode as Claude during a rolling control-plane deploy. This transaction-
-        // local capability is the positive signal that lets only the new, capable path pass.
-        await tx.$executeRaw`SELECT set_config('orbit.runner_supports_opencode', ${supportsOpenCode ? '1' : '0'}, true)`;
+        // Migrations 0080 and 0367 install database triggers so an older apiserver replica cannot
+        // claim OpenCode or Antigravity as Claude during a rolling control-plane deploy (0372
+        // widened the Antigravity one to the configured rows that borrow it). These
+        // transaction-local capabilities are the positive signal that lets only the new, capable
+        // path pass. One statement for both: this runs inside the global claim lock above.
+        await tx.$executeRaw`SELECT set_config('orbit.runner_supports_opencode', ${supportsOpenCode ? '1' : '0'}, true), set_config('orbit.runner_supports_antigravity', ${supportsAntigravity ? '1' : '0'}, true)`;
+        // Asked again here, after the waits for a connection and for the lock above (up to 20s
+        // under a busy pool): the runner may have hung up during them.
+        if (hungUp?.aborted) return [];
         // Prisma.sql rather than a bare tagged template so the cap fragments below are the
         // SAME SQL the session list uses to explain a queued row. Written twice they drift,
         // and a UI that names the wrong gate is worse than one that names none.
@@ -169,7 +240,11 @@ export class QueueService {
           -- being claimed IS the answer, so leaving the text behind would make a running session
           -- read as blocked on the machine that is running it.
           error = CASE
-            WHEN error IN (${OPENCODE_RUNNER_UPGRADE_ERROR}, ${SOURCE_PROTOCOL_UNSUPPORTED_ERROR}) THEN NULL
+            WHEN error IN (
+              ${OPENCODE_RUNNER_UPGRADE_ERROR},
+              ${ANTIGRAVITY_RUNNER_UPGRADE_ERROR},
+              ${SOURCE_PROTOCOL_UNSUPPORTED_ERROR}
+            ) OR error LIKE 'Account paused until %' THEN NULL
             ELSE error
           END,
           "started_at" = COALESCE("started_at", now()),
@@ -193,6 +268,7 @@ export class QueueService {
         WHERE id = (
           SELECT s.id FROM "session" s
           WHERE s.status = 'PENDING'
+            AND NOT (s.id = ANY(${paused}::uuid[]))
             AND s."cancel_requested_at" IS NULL
             AND s."assigned_runner_id" = ${runnerId}
             -- Legacy runners treat an unknown provider as Claude. Require a positive OpenCode
@@ -201,6 +277,26 @@ export class QueueService {
             AND (
               ${supportsOpenCode}
               OR COALESCE(s.provider, 'claude') <> 'opencode'
+            )
+            -- The same gate for Antigravity (migration 0367): every runner shipped before one
+            -- that advertises it reads the slug as Claude.
+            AND (
+              ${supportsAntigravity}
+              OR COALESCE(s.provider, 'claude') <> 'antigravity'
+            )
+            -- …and for a configured provider that borrows Antigravity (a Gemini key): the slug is
+            -- the row's own, but the runner is handed an antigravity job all the same. The rows
+            -- dispatch resolves, an enabled one of the session's owner or a shared one
+            -- (providerSlugsOn); migration 0372's trigger asks the same.
+            AND (
+              ${supportsAntigravity}
+              OR NOT EXISTS (
+                SELECT 1 FROM "model_provider" mp
+                WHERE mp."slug" = s.provider
+                  AND mp."runtime" = 'antigravity'
+                  AND mp."enabled"
+                  AND (mp."owner_id" IS NULL OR mp."owner_id" = s."owner_id")
+              )
             )
             -- A runner may only ever drive sessions owned by its own owner.
             AND s."owner_id" = (SELECT r."owner_id" FROM "runner" r WHERE r.id = ${runnerId})
@@ -291,7 +387,18 @@ export class QueueService {
       // before hydration: buildSession can fail after the claim committed, and in that case there
       // is still a durable state change every connected client must reconcile.
       this.realtime.publishSessionUpdated(rows[0].id);
-      return this.buildSession(rows[0].id);
+      try {
+        return await this.buildSession(rows[0].id);
+      } catch (error: any) {
+        const refusal = error?.getResponse?.();
+        if (refusal?.code !== 'POOL_ACCOUNT_PAUSED') throw error;
+        await this.prisma.session.updateMany({
+          where: { id: rows[0].id, status: 'RUNNING' },
+          data: { status: 'PENDING', error: `Account paused until ${refusal.pausedUntil}` },
+        });
+        this.realtime.publishSessionUpdated(rows[0].id);
+        return null;
+      }
     } catch (err: any) {
       // pg error 55P03 = lock_not_available: FOR UPDATE NOWAIT cannot lock the
       // candidate row because a concurrent transaction (e.g. activateLeases in a
@@ -332,7 +439,7 @@ export class QueueService {
     claudeAccount: string | null;
     claudeAccountPinned: boolean;
     workspace: { env: unknown; codexAccount: string | null; claudeAccount: string | null } | null;
-    assignedRunner: { engines: unknown; planUsage: unknown; capabilities: string[] } | null;
+    assignedRunner: { engines: unknown; accountNames: unknown; accountPauses?: unknown; planUsage: unknown; capabilities: string[] } | null;
   }): Promise<{ codexAccount: string | null | undefined; claudeAccount: string | null | undefined }> {
     const workspace = session.workspace;
     const accounts = {
@@ -355,6 +462,7 @@ export class QueueService {
       runner.engines,
       runner.planUsage,
       new Date(),
+      runner.accountPauses,
     );
     if (!move) return accounts;
     const { count } = await this.prisma.session.updateMany({
@@ -367,8 +475,11 @@ export class QueueService {
     // Owed only when no other line is: one already owed (a pool's) is said first, as PoolNotices.owe keeps it.
     await this.prisma.session.updateMany({
       where: { id: session.id, poolSwitchNotice: null },
-      data: { poolSwitchNotice: accountSwitchNotice(engine, move, runner.engines) },
+      data: { poolSwitchNotice: accountSwitchNotice(engine, move, runner) },
     });
+    // A resident engine still holds the previous account's environment. Reload before
+    // the next message so a pause cannot be bypassed by reusing that warm process.
+    if (move.paused) await new PoolNotices(this.prisma, this.realtime).carrier(session.id, engine);
     return codex ? { ...accounts, codexAccount: move.to } : { ...accounts, claudeAccount: move.to };
   }
 
@@ -387,6 +498,9 @@ export class QueueService {
             modelCatalog: true,
             runsAsRoot: true,
             engines: true,
+            // What naming the account it moves to reads (accountSwitchNotice).
+            accountNames: true,
+            accountPauses: true,
             // What moving it off a spent account before this start reads (accountsForClaim).
             planUsage: true,
             capabilities: true,
@@ -499,7 +613,7 @@ export class QueueService {
         (maintenance
           ? null
           : ((await this.resolveLoginPool(this.prisma, session, declared!, true)) ??
-            (await this.resolvePoolMember(this.prisma, session, declared!)) ??
+            (await this.resolvePoolMember(this.prisma, session, declared!, true)) ??
             (await this.resolveSharedPool(this.prisma, session, declared!, true)))));
     const resolveExec = (sessionModel: string | null) =>
       resolveProviderExec({
@@ -690,6 +804,62 @@ export class QueueService {
     }, maintenance);
   }
 
+  /** Manual pauses wait at dispatch, before a credential or runner default can be consumed. */
+  async accountPoolPausedUntil(
+    ownerId: string, slug: string, now: Date, db: Prisma.TransactionClient | PrismaService = this.prisma,
+  ): Promise<Date | null> {
+    if (isBuiltinProvider(slug)) return null;
+    const own = await this.accountPool(ownerId, slug, db);
+    if (own && own.engine !== AgentProvider.CODEX) {
+      const paused = own.candidates.filter((candidate) => candidate.pausedUntil && candidate.pausedUntil > now);
+      if (!paused.length) return null;
+      const selection = selectPoolMember(own.candidates, null, now);
+      if (selection.kind === 'SELECTED') return null;
+      return selection.kind === 'EXHAUSTED' && selection.resetsAt
+        ? selection.resetsAt
+        : new Date(Math.min(...paused.map((candidate) => candidate.pausedUntil!.getTime())));
+    }
+    const pool = own ?? await this.sharedPoolOf(db, ownerId, slug);
+    if (!pool) return null;
+    const keys = await sharedPoolKeyCandidates(db, pool.id, now);
+    const pauses = [...pool.logins, ...keys].flatMap((row) => row.pausedUntil && row.pausedUntil > now ? [row.pausedUntil.getTime()] : []);
+    if (!pauses.length || pool.logins.some((login) => loginCanRun(login, now)) || keys.some((key) => keyCanRun(key, ownerId, now))) return null;
+    return earliest(loginPoolResumesAt(pool.logins, now), poolKeysResumeAt(keys, ownerId, now)) ?? new Date(Math.min(...pauses));
+  }
+
+  /** The selected member may have been paused after the claim; inbox requeues before the next turn. */
+  async pausedPoolMemberUntil(
+    ownerId: string,
+    slug: string,
+    session: { poolMemberProviderId: string | null; poolCodexAccountId: string | null; poolKeyId: string | null },
+    now: Date,
+    db: Prisma.TransactionClient | PrismaService = this.prisma,
+  ): Promise<Date | null> {
+    if (isBuiltinProvider(slug)) return null;
+    const pool = await db.providerPool.findFirst({
+      where: { slug, OR: [{ ownerId, shared: false }, { engine: AgentProvider.CODEX, people: { some: { userId: ownerId } } }] },
+      select: { id: true, engine: true },
+    });
+    if (!pool) return null;
+    // The inbox calls inside its session transaction. Holding this membership through delivery makes
+    // pause and delivery ordered: either this turn was delivered before pause, or it sees the pause.
+    const rows = pool.engine !== AgentProvider.CODEX && session.poolMemberProviderId
+      ? await db.$queryRaw<Array<{ pausedUntil: Date | null }>>`
+          SELECT "paused_until" AS "pausedUntil" FROM "provider_pool_member"
+          WHERE "pool_id" = ${pool.id}::uuid AND "provider_id" = ${session.poolMemberProviderId}::uuid FOR SHARE`
+      : session.poolCodexAccountId
+        ? await db.$queryRaw<Array<{ pausedUntil: Date | null }>>`
+            SELECT "paused_until" AS "pausedUntil" FROM "pool_codex_login"
+            WHERE "pool_id" = ${pool.id}::uuid AND "account_id" = ${session.poolCodexAccountId} FOR SHARE`
+        : session.poolKeyId
+          ? await db.$queryRaw<Array<{ pausedUntil: Date | null }>>`
+              SELECT "paused_until" AS "pausedUntil" FROM "pool_api_key"
+              WHERE "pool_id" = ${pool.id}::uuid AND "id" = ${session.poolKeyId}::uuid FOR SHARE`
+          : [];
+    const pausedUntil = rows[0]?.pausedUntil;
+    return pausedUntil && pausedUntil > now ? pausedUntil : null;
+  }
+
   /**
    * When work on `slug` can next go to one of `ownerId`'s account pools, for the brakes that hold work
    * back instead of claiming it: TasksService.quotaGate, AutoRetryService's sweep, and the retry
@@ -702,81 +872,132 @@ export class QueueService {
    * Read from the members and the quota cache the claim below picks from, so a brake does not release
    * work the claim would then send to an account known to be spent.
    *
-   * A shared pool `ownerId` is in (migration 0321) answers from its keys the same way
-   * (pool-key-select.ts poolKeysResumeAt): `now` while one can run for them, the first reset while all
-   * are out of budget or spent to their caps, and null when none will come back by waiting.
-   *
-   * A Codex pool of `ownerId`'s own (migration 0324) answers from its one account: its `spent_until` —
-   * the reset the Codex backend named when it said the usage limit is reached — while that is ahead,
-   * `now` while it is not, and null while there is no account or it is signed out, which no wait mends.
-   * There is no other account to go to: a login pool waits for its own.
+   * A Codex pool answers from its ChatGPT accounts the same way (pool-login-select.ts loginPoolResumesAt):
+   * `now` while one can run, the first of them to come back while none can — an account's `spent_until`,
+   * the reset the Codex backend named, and the resets of the windows its last reading says are used up —
+   * and null while it holds none or OpenAI signed every one out, which no wait mends. Its API keys
+   * (migration 0358) answer beside them, since every session of the pool runs on a key when no account
+   * can: whichever of the two comes back first. That is one pool of one's own (migrations 0323/0324) and
+   * one of somebody else's own `ownerId` was added to, whose accounts run their sessions too
+   * (pool-credential-select.ts); a shared pool (0321) holds no account and answers from its keys alone
+   * (pool-key-select.ts poolKeysResumeAt).
    */
   async accountPoolResumesAt(ownerId: string, slug: string, now: Date): Promise<Date | null> {
     // A built-in engine is never a pool.
     if (isBuiltinProvider(slug)) return null;
     // With no quota cache there is nothing to judge an account pool by.
     const pool = this.planUsage ? await this.accountPool(ownerId, slug) : null;
-    // A Codex pool of one's own is judged by its one account (migration 0324), not by a member's quota.
-    if (pool?.engine === AgentProvider.CODEX) return loginPoolResumesAt(pool.login, now);
+    // A Codex pool of one's own is judged by its ChatGPT accounts (migration 0324) and its keys (0358), not by
+    // a member's quota.
+    if (pool?.engine === AgentProvider.CODEX) {
+      return earliest(
+        loginPoolResumesAt(pool.logins, now),
+        poolKeysResumeAt(await sharedPoolKeyCandidates(this.prisma, pool.id, now), ownerId, now),
+      );
+    }
     if (pool) return poolResumesAt(pool.candidates, now);
     const shared = await this.sharedPoolOf(this.prisma, ownerId, slug);
-    return shared ? poolKeysResumeAt(await sharedPoolKeyCandidates(this.prisma, shared.id, now), ownerId, now) : null;
+    if (!shared) return null;
+    return earliest(
+      loginPoolResumesAt(shared.logins, now),
+      poolKeysResumeAt(await sharedPoolKeyCandidates(this.prisma, shared.id, now), ownerId, now),
+    );
   }
 
   /**
-   * When a turn of a shared-pool session that failed on its key is to be sent again — the gateway
-   * refused the key (switched off, refused or disabled by OpenAI, its cap spent by the others, gone), or
-   * OpenAI said it is out of budget or refused it — for the arm turn-complete and finalize put on a failed
-   * run (RunnerApiController). `now` while another key can take it, which the next claim then chooses;
-   * the first reset while every key is spent; null when no key will come back by waiting.
+   * When a turn of a session on somebody else's Codex pool (migrations 0321/0358) that failed on its
+   * credential is to be sent again — the gateway refused the key (switched off, refused or disabled by
+   * OpenAI, its cap spent by the others, gone), OpenAI said it is out of budget or refused it, or the
+   * ChatGPT account it runs on was spent or signed out — for the arm turn-complete and finalize put on a
+   * failed run (RunnerApiController). `now` while another credential can take it, which the next claim
+   * then chooses; the first reset while nothing can; null when nothing comes back by waiting.
    *
-   * Null too when the key the session is on can still run for it — the failure was not the key's, and the
+   * Null too when the credential the session is on can still run — the failure was not its, and the
    * ordinary rules apply: a rate limit, above all, is waited out on its own key and never moves a session
-   * (docs/codex-shared-pool-design.md §2.3) — and when `session` is on no shared pool of its owner's.
-   * Decided from the keys as the database holds them, not from the words the engine ended with.
+   * (docs/codex-shared-pool-design.md §2.3) — and when `session` is on no such pool. Decided from the
+   * accounts and the keys as the database holds them, not from the words the engine ended with.
    */
-  async sharedPoolKeyRetryAt(
+  async sharedPoolRetryAt(
     db: Prisma.TransactionClient | PrismaService,
-    session: { ownerId: string; provider: string | null; poolKeyId: string | null },
+    session: {
+      ownerId: string;
+      provider: string | null;
+      poolKeyId: string | null;
+      poolCodexAccountId: string | null;
+    },
     now: Date,
   ): Promise<Date | null> {
     if (!session.provider || isBuiltinProvider(session.provider)) return null;
     const pool = await this.sharedPoolOf(db, session.ownerId, session.provider);
     if (!pool) return null;
     const keys = await sharedPoolKeyCandidates(db, pool.id, now);
-    const current = keys.find((key) => key.id === session.poolKeyId);
-    if (current && keyCanRun(current, session.ownerId, now)) return null;
-    return poolKeysResumeAt(keys, session.ownerId, now);
+    // What the session is on: the ChatGPT account its row names (a pool of somebody else's own), else the
+    // key. One on a credential that can still run failed on something else.
+    const account = pool.logins.find((login) => login.accountId === session.poolCodexAccountId);
+    if (account) {
+      if (loginCanRun(account, now)) return null;
+    } else {
+      const current = keys.find((key) => key.id === session.poolKeyId);
+      if (current && keyCanRun(current, session.ownerId, now)) return null;
+    }
+    return earliest(loginPoolResumesAt(pool.logins, now), poolKeysResumeAt(keys, session.ownerId, now));
   }
 
   /**
-   * When a turn of a login-pool session that failed on its account's usage limit is to be sent again, for
-   * the arm turn-complete and finalize put on a failed run (RunnerApiController), beside
-   * sharedPoolKeyRetryAt: the reset the Codex backend named (`spent_until`, which the gateway wrote before
-   * the 429 went back), while it is ahead. Null otherwise — the account is not spent, and the failure
-   * follows the ordinary rules; or it is signed out, which only its owner's signing in again mends — and
-   * when `session` is on no login pool of its owner's. Decided from the account as the database holds it,
-   * not from the words the engine ended with. The session is never moved: the pool has no other account.
+   * When a turn of a login-pool session that failed on its account is to be sent again — its usage limit
+   * is reached (`spent_until`, which the gateway wrote before the 429 went back, or a window its last
+   * reading says is used up), OpenAI signed it out, or it left the pool — for the arm turn-complete and
+   * finalize put on a failed run (RunnerApiController), beside sharedPoolRetryAt: `now` while another
+   * account can take it, which the next claim then moves the session to (resolveLoginPool); the first
+   * account to come back while none can; null when none comes back by waiting.
+   *
+   * Null too when the account the session is on can still run — the failure was not the account's, and the
+   * ordinary rules apply — and when `session` is on no login pool of its owner's. Decided from the accounts
+   * as the database holds them, not from the words the engine ended with.
+   *
+   * The pool's API keys (migration 0358) count beside its accounts: the owner's session runs on a key when
+   * no account can (resolveLoginPool), so one on a key that can still run is null as one on an account is,
+   * and another key that can run — or an account come back — is `now`.
    */
   async loginPoolRetryAt(
     db: Prisma.TransactionClient | PrismaService,
-    session: { ownerId: string; provider: string | null },
+    session: { ownerId: string; provider: string | null; poolCodexAccountId: string | null; poolKeyId?: string | null },
     now: Date,
   ): Promise<Date | null> {
     if (!session.provider || isBuiltinProvider(session.provider)) return null;
     const pool = await this.accountPool(session.ownerId, session.provider, db);
-    const account = pool?.engine === AgentProvider.CODEX ? pool.login : null;
-    return account?.state === 'ACTIVE' && account.spentUntil && account.spentUntil.getTime() > now.getTime()
-      ? account.spentUntil
-      : null;
+    if (pool?.engine !== AgentProvider.CODEX) return null;
+    const keys = await sharedPoolKeyCandidates(db, pool.id, now);
+    if (session.poolCodexAccountId) {
+      const current = pool.logins.find((login) => login.accountId === session.poolCodexAccountId);
+      if (current && loginCanRun(current, now)) return null;
+    } else {
+      const current = keys.find((key) => key.id === (session.poolKeyId ?? null));
+      if (current && keyCanRun(current, session.ownerId, now)) return null;
+    }
+    return earliest(loginPoolResumesAt(pool.logins, now), poolKeysResumeAt(keys, session.ownerId, now));
   }
 
-  /** The shared pool on `slug` that `ownerId` is a person of, or null — nobody else's is theirs to name. */
-  private sharedPoolOf(db: Prisma.TransactionClient | PrismaService, ownerId: string, slug: string) {
-    return db.providerPool.findFirst({
-      where: { slug, shared: true, people: { some: { userId: ownerId } } },
-      select: { id: true, label: true, ownKeyFirst: true },
+  /**
+   * The Codex pool on `slug` `ownerId` runs on as one of its people, or null — nobody else's is theirs to
+   * name: a shared pool they are in (migration 0321), or a pool of somebody else's own its owner added
+   * them to (migration 0358). Either may hold ChatGPT accounts — whoever in the pool signed each one in
+   * (migration 0371) — and every person's sessions run on them (pool-credential-select.ts). A pool of
+   * their own is not this but accountPool's (resolveLoginPool). `logins` are the pool's accounts, oldest
+   * first, as choosing reads them.
+   */
+  private async sharedPoolOf(db: Prisma.TransactionClient | PrismaService, ownerId: string, slug: string) {
+    const pool = await db.providerPool.findFirst({
+      where: {
+        slug,
+        engine: AgentProvider.CODEX,
+        people: { some: { userId: ownerId } },
+        OR: [{ shared: true }, { ownerId: { not: ownerId } }],
+      },
+      select: { id: true, label: true, ownKeyFirst: true, ownerId: true, shared: true },
     });
+    if (!pool) return null;
+    return { ...pool, logins: await poolLogins(db, pool.id) };
   }
 
   /**
@@ -789,9 +1010,13 @@ export class QueueService {
    * A pool whose members are all spent is not refused. It waits for the first of them to reset, as
    * the claim and the brakes above already make it.
    *
-   * A shared pool `ownerId` is in (migration 0321) is refused the same way when none of its keys can run
-   * — it has none, or each is switched off or refused by OpenAI — and not when its keys are only spent to
-   * their share caps, which come back on the first of the month (sharedPoolUnavailableReason).
+   * A pool of somebody else's own `ownerId` was added to (migration 0358, and 0321's shared pools too
+   * since 2026-10-03): every session of it runs on its ChatGPT accounts first — whoever in the pool signed
+   * each one in (migration 0371) — and on its API keys while none can, so it is refused only while
+   * neither can run (codexPoolUnavailableReason). A pool holding no account at all is refused in the
+   * keys' own words (sharedPoolUnavailableReason) — it has none, or each is switched off or refused by
+   * OpenAI — and not when its keys are only spent to their share caps, which come back on the first of
+   * the month.
    */
   async accountPoolRefusal(
     ownerId: string,
@@ -800,23 +1025,28 @@ export class QueueService {
   ): Promise<string | null> {
     const pool = await this.accountPool(ownerId, slug, db);
     if (!pool) {
-      const shared = await db.providerPool.findFirst({
-        where: { slug, shared: true, people: { some: { userId: ownerId } } },
-        select: { id: true, label: true },
-      });
+      const shared = await this.sharedPoolOf(db, ownerId, slug);
       if (!shared) return null;
       const keys = await db.poolApiKey.findMany({
         where: { poolId: shared.id },
         orderBy: { id: 'asc' },
         select: { label: true, enabled: true, state: true },
       });
-      return sharedPoolUnavailableReason(shared.label, keys);
+      if (shared.logins.length === 0) return sharedPoolUnavailableReason(shared.label, keys);
+      const account = shared.logins.find((login) => login.state === 'ACTIVE') ?? shared.logins[0] ?? null;
+      return codexPoolUnavailableReason(shared.label, account, keys, account?.userId === ownerId);
     }
-    // A Codex pool of the owner's own (migration 0323) has no members to choose from: its account is the
-    // credential, and it takes a session exactly while that account is ACTIVE — signed out, or nobody
-    // signed in yet, refuses it here, where the person can act on the reason. A quota that has not been
-    // read is not that and does not appear here at all.
-    if (pool.engine === AgentProvider.CODEX) return codexLoginUnavailableReason(pool.label, pool.login);
+    // A Codex pool of the owner's own (migration 0323) has no members to choose from: its accounts are the
+    // credential, and it takes a session exactly while one of them is ACTIVE, which the claim can put the
+    // session on — or, with none, while one of its API keys (migration 0358) is switched on and unrefused,
+    // which the claim puts it on instead. Every account signed out (named by the oldest), or nobody signed
+    // in yet, with no such key, refuses it here, where the person can act on the reason. A quota that has
+    // not been read is not that and does not appear here at all; nor does a spent one, which is waited for.
+    if (pool.engine === AgentProvider.CODEX) {
+      const keys = await db.poolApiKey.findMany({ where: { poolId: pool.id }, select: { enabled: true, state: true } });
+      const account = pool.logins.find((login) => login.state === 'ACTIVE') ?? pool.logins[0] ?? null;
+      return codexPoolUnavailableReason(pool.label, account, keys, account?.userId === ownerId);
+    }
     if (selectPoolMember(pool.candidates, null, new Date()).kind !== 'UNAVAILABLE') return null;
     return poolUnavailableReason(pool.label, pool.rows);
   }
@@ -833,23 +1063,17 @@ export class QueueService {
         id: true,
         label: true,
         engine: true,
-        // A `codex` pool of one's own holds a ChatGPT login instead of members (migration 0323): what
-        // decides whether it can run is this row's state, never a quota reading — and what it waits for
-        // is the reset the backend named (`spent_until`, migration 0324). The flow keeps one; the oldest
-        // is the one, should there be more.
-        logins: {
-          orderBy: [{ createdAt: 'asc' }, { accountId: 'asc' }],
-          select: { accountId: true, email: true, state: true, spentUntil: true },
-        },
+        // A `codex` pool's rule for choosing among its API keys (migration 0358), as a shared pool's.
+        ownKeyFirst: true,
         members: {
           where: { ownerId },
           orderBy: { provider: { slug: 'asc' } },
-          select: { provider: true },
+          select: { provider: true, pausedUntil: true },
         },
       },
     });
     if (!pool) return null;
-    const rows = pool.members.map((member) => member.provider);
+    const rows = pool.members.map((member) => ({ ...member.provider, pausedUntil: member.pausedUntil }));
     // A member no claim may choose is no candidate, and nobody asks after its quota.
     const candidates = rows
       .filter(isPoolCandidate)
@@ -857,12 +1081,21 @@ export class QueueService {
         const standing = this.planUsage?.usageStanding(row) ?? null;
         return {
           row,
+          pausedUntil: row.pausedUntil,
           usage: this.planUsage?.snapshot(row) ?? null,
           refused: standing === 'KEY_REFUSED',
           usageUnreadable: standing === 'USAGE_UNKNOWN',
         };
       });
-    return { id: pool.id, label: pool.label, engine: pool.engine, login: pool.logins[0] ?? null, rows, candidates };
+    return {
+      id: pool.id,
+      label: pool.label,
+      engine: pool.engine,
+      ownKeyFirst: pool.ownKeyFirst,
+      logins: await poolLogins(db, pool.id),
+      rows,
+      candidates,
+    };
   }
 
   /**
@@ -888,6 +1121,7 @@ export class QueueService {
     db: Prisma.TransactionClient | PrismaService,
     session: { id: string; ownerId: string; poolMemberProviderId: string | null },
     slug: string,
+    atClaim = false,
   ) {
     const pool = await this.accountPool(session.ownerId, slug, db);
     // A Codex pool of one's own has no members to choose: it is resolveLoginPool's.
@@ -895,6 +1129,10 @@ export class QueueService {
     const now = new Date();
     const { rows, candidates } = pool;
     const chosen = choosePoolMember(candidates, session.poolMemberProviderId, now);
+    if (!chosen && candidates.some((candidate) => candidate.pausedUntil && candidate.pausedUntil > now)) {
+      const pausedUntil = await this.accountPoolPausedUntil(session.ownerId, slug, now, db);
+      throw new ConflictException({ code: 'POOL_ACCOUNT_PAUSED', message: 'The pool accounts are paused', pausedUntil: pausedUntil?.toISOString() });
+    }
     if (!chosen) {
       await db.session.update({
         where: { id: session.id },
@@ -918,6 +1156,7 @@ export class QueueService {
                   ? {
                       label: previous.label,
                       enabled: previous.enabled,
+                      pausedUntil: previous.pausedUntil,
                       usage: standing?.usage ?? null,
                       refused: standing?.refused ?? false,
                     }
@@ -928,6 +1167,9 @@ export class QueueService {
           : {}),
       },
     });
+    if (atClaim && previous?.pausedUntil && previous.pausedUntil > now) {
+      await new PoolNotices(this.prisma, this.realtime).carrier(session.id, slug);
+    }
     return chosen;
   }
 
@@ -938,13 +1180,27 @@ export class QueueService {
    *
    * The engine gets the pool gateway as its OpenAI endpoint and a session token minted here as its key
    * (shared-pool.ts sharedPoolExecRow) — never the login, which only the gateway ever reads, decrypts or
-   * refreshes. The token is bound to the account the pool holds now, and that account is recorded on the
-   * session (`pool_codex_account_id`), which is how a session says which account it ran on. There is no
-   * choosing: a login pool holds one account, and a session on it is never moved to another — a spent
-   * account is waited for (loginPoolRetryAt), a signed-out one is its owner's to sign in again. A pool
-   * holding no account still dispatches here, on a token bound to none, and the gateway answers why —
-   * rather than on the runner's own login, which is exactly what a login pool is not. At the claim
-   * (`atClaim`), a line the gateway owed the session is given its carrier.
+   * refreshes. The account the session runs on is chosen here (pool-credential-select.ts, by
+   * pool-login-select.ts chooseLoginAccount: the one it is on while that can run, else the one that can
+   * whose quota resets soonest, else it stays) and recorded on the session (`pool_codex_account_id`),
+   * which is how a session says which account it ran on — and, since migration 0355, the only thing that
+   * says it: the token names no account, and the gateway sends every request of the token on whichever
+   * account its session is on then, so an engine warm on an older token follows the move with nothing
+   * re-spawned. A pool holding no account still dispatches here, and the gateway answers why — rather than
+   * on the runner's own login, which is exactly what a login pool is not.
+   *
+   * A move off another account records the line the transcript owes for it (loginSwitchNotice), in place
+   * of the one the gateway owed when that account was spent or signed out — "Switched to …" says why. At
+   * the claim (`atClaim`), a line owed either way is given its carrier, as resolveSharedPool's is; the
+   * reclaim and the reload re-spawn their engine, whose own start carries it.
+   *
+   * The pool may hold API keys beside its accounts (migration 0358), and its owner's session runs on one
+   * of them while none of its accounts can run — the key pool-key-select.ts chooses for the owner, as for
+   * any person of a shared pool — recorded as `pool_key_id`, with `pool_codex_account_id` cleared, and back
+   * on an account at the first claim that finds one that can (pool-credential-select.ts). The
+   * gateway sends on whichever of the two the session names: the token is the same login pool token
+   * either way, and authenticates (pool, owner, session) alone. With neither able to run, the session
+   * stays on what it is on. Each move says so, as a move between accounts does.
    *
    * Every door that builds such a session's engine environment resolves it here — the claim, a restarted
    * runner's reclaim, a provider-switch reload (RunnerApiController) — and each mints its own token.
@@ -952,75 +1208,143 @@ export class QueueService {
    */
   async resolveLoginPool(
     db: Prisma.TransactionClient | PrismaService,
-    session: { id: string; ownerId: string; poolCodexAccountId: string | null; poolSwitchNotice?: string | null },
+    session: {
+      id: string;
+      ownerId: string;
+      poolCodexAccountId: string | null;
+      poolKeyId: string | null;
+      poolSwitchNotice?: string | null;
+    },
     slug: string,
     atClaim = false,
   ): Promise<ModelProviderRow | null> {
     const pool = await this.accountPool(session.ownerId, slug, db);
     if (pool?.engine !== AgentProvider.CODEX) return null;
-    const accountId = pool.login?.accountId ?? null;
-    if (accountId !== session.poolCodexAccountId) {
-      await db.session.update({ where: { id: session.id }, data: { poolCodexAccountId: accountId } });
+    const now = new Date();
+    // accountPool found it as a pool of the session's owner's own, never a shared one: its accounts first.
+    const { chosen, next, notice } = choosePoolCredential(
+      {
+        ownerId: session.ownerId,
+        accounts: pool.logins,
+        keys: await sharedPoolKeyCandidates(db, pool.id, now),
+        ownKeyFirst: pool.ownKeyFirst,
+      },
+      { ownerId: session.ownerId, accountId: session.poolCodexAccountId, keyId: session.poolKeyId },
+      now,
+    );
+    if (!chosen) {
+      const pausedUntil = await this.accountPoolPausedUntil(session.ownerId, slug, now, db);
+      if (pausedUntil) throw new ConflictException({
+        code: 'POOL_ACCOUNT_PAUSED', message: 'The pool accounts are paused', pausedUntil: pausedUntil.toISOString(),
+      });
+    }
+    if (next.accountId !== session.poolCodexAccountId || next.keyId !== session.poolKeyId) {
+      await db.session.update({
+        where: { id: session.id },
+        data: {
+          poolCodexAccountId: next.accountId,
+          poolKeyId: next.keyId,
+          ...(notice ? { poolSwitchNotice: notice } : {}),
+        },
+      });
     }
     const token = await mintPoolLoginToken(
       db,
-      { poolId: pool.id, userId: session.ownerId, sessionId: session.id, accountId },
-      new Date(),
+      { poolId: pool.id, userId: session.ownerId, sessionId: session.id },
+      now,
     );
-    // A line the gateway owed this session — its account spent or signed out — is said before the turn
-    // this claim runs: a resident engine starts nothing, so it is handed a reload that changes nothing
-    // and answers it with a `resumed` that carries the line (pool-notice.ts), as resolveSharedPool does.
-    if (atClaim && session.poolSwitchNotice) await new PoolNotices(this.prisma, this.realtime).carrier(session.id);
+    // The line is said before the turn this claim runs: a resident engine starts nothing, so it is handed
+    // a reload that changes nothing and answers it with a `resumed` that carries the line (pool-notice.ts).
+    if (atClaim && (notice || session.poolSwitchNotice)) {
+      await new PoolNotices(this.prisma, this.realtime).carrier(session.id);
+    }
     return sharedPoolExecRow(token);
   }
 
   /**
-   * What a session on a shared pool (migration 0321) dispatches as, or null when `slug` names no shared
-   * pool this session's owner is in — which then dispatches as a deleted provider does, exactly as a slug
-   * nothing holds. A shared pool is reached by its people only: nobody else's session is handed its
-   * gateway, a token or anything about its keys.
+   * What a session on somebody else's Codex pool dispatches as, or null when `slug` names no pool this
+   * session's owner is one of its people of — which then dispatches as a deleted provider does, exactly
+   * as a slug nothing holds. Such a pool is reached by its people only: nobody else's session is handed
+   * its gateway, a token or anything about its credentials.
    *
    * The engine gets the pool gateway as its OpenAI endpoint and a session token minted here as its key
-   * (shared-pool.ts sharedPoolExecRow) — never a key of the pool, which only the gateway ever reads. The
-   * key this session's requests go out on is chosen here, the way pool-key-select.ts chooses (staying on
-   * the one it had, the owner's own first when the pool says so, none spent to its share cap), and
-   * recorded as `poolKeyId` for the gateway. When no key can run for this person the session stays on
-   * the key it had (null for one that never had any), which the gateway answers with the reason, and
-   * moves at the first claim that finds another one — so a move after a wait still says which key it
-   * left. Every door that builds such a session's engine environment resolves it here — this claim,
-   * a restarted runner's reclaim and a provider-switch reload (RunnerApiController) — and each mints its
-   * own token, since only a hash is kept and a new process needs the token in its environment.
+   * (shared-pool.ts sharedPoolExecRow) — never a key or a login of the pool, which only the gateway ever
+   * reads. The credential this session's requests go out on is chosen here (pool-credential-select.ts)
+   * and recorded on the session for the gateway: `poolCodexAccountId` for one of the pool's ChatGPT
+   * accounts (2026-10-03 — they run the people its owner added too, not its owner's sessions alone), or
+   * `poolKeyId` for one of its API keys, which is what a shared pool (migration 0321) holds and what any
+   * session falls to while no account can run. Within each kind the rules are pool-login-select.ts's and
+   * pool-key-select.ts's. When nothing can run the session stays on the credential it had (null for one
+   * that never had any), which the gateway answers with the reason, and moves at the first claim that
+   * finds one that can — so a move after a wait still says what it left. Every door that builds such a
+   * session's engine environment resolves it here — this claim, a restarted runner's reclaim and a
+   * provider-switch reload (RunnerApiController) — and each mints its own token, since only a hash is
+   * kept and a new process needs the token in its environment.
    * `db` is the caller's client: the reload runs inside the transaction that holds this session's row.
    *
-   * A move off another key records the line the transcript owes for it (pool-key-select.ts
-   * poolKeySwitchNotice), carried by the next engine start event the runner reports, as an account
-   * pool's is. The gateway moves no session itself, so every move happens here — and a claim may land on
-   * a resident engine, which starts nothing and so reports no such event. `atClaim` says this is the
-   * claim, and a move then also queues a `reload` that changes nothing (pool-notice.ts PoolNotices.carrier): the
-   * resident engine answers it with a `resumed`, which carries the line, ahead of the message it runs on
-   * the new key. The reclaim and the reload re-spawn their engine, whose own start carries it.
+   * A move off another credential records the line the transcript owes for it (pool-key-select.ts
+   * poolKeySwitchNotice, pool-login-select.ts's account lines), carried by the next engine start event the
+   * runner reports, as a pool of one's own accounts are. The gateway moves no session itself, so every
+   * move happens here — and a claim may land on a resident engine, which starts nothing and so reports no
+   * such event. `atClaim` says this is the claim, and a move then also queues a `reload` that changes
+   * nothing (pool-notice.ts PoolNotices.carrier): the resident engine answers it with a `resumed`, which
+   * carries the line, ahead of the message it runs on the new credential. The reclaim and the reload
+   * re-spawn their engine, whose own start carries it.
+   *
+   * The token is a person's (`pool_gateway_token`), never a login pool's, whose table names nobody but a
+   * pool's owner: a session of somebody the owner added runs on that pool's accounts without any token
+   * row of its own naming one (migration 0355 — the token names no account at all, and the gateway sends
+   * on whichever credential the session is on when the request arrives).
    */
   async resolveSharedPool(
     db: Prisma.TransactionClient | PrismaService,
-    session: { id: string; ownerId: string; poolKeyId: string | null },
+    session: {
+      id: string;
+      ownerId: string;
+      poolKeyId: string | null;
+      poolCodexAccountId: string | null;
+      poolSwitchNotice?: string | null;
+    },
     slug: string,
     atClaim = false,
   ): Promise<ModelProviderRow | null> {
     const pool = await this.sharedPoolOf(db, session.ownerId, slug);
     if (!pool) return null;
     const now = new Date();
-    const keys = await sharedPoolKeyCandidates(db, pool.id, now);
-    const chosen = choosePoolKey(keys, session.ownerId, pool.ownKeyFirst, session.poolKeyId, now);
-    if (chosen && chosen.id !== session.poolKeyId) {
-      // The first key a session runs on is where it starts, not a move.
-      const notice = session.poolKeyId
-        ? poolKeySwitchNotice(chosen, keys.find((key) => key.id === session.poolKeyId) ?? null, session.ownerId, now)
-        : null;
+    // This person's sessions run on the pool's ChatGPT accounts first — whoever in the pool signed each
+    // one in (migration 0371) — and on its keys when none can run (pool-credential-select.ts).
+    const { chosen, next, notice } = choosePoolCredential(
+      {
+        ownerId: pool.ownerId,
+        accounts: pool.logins,
+        keys: await sharedPoolKeyCandidates(db, pool.id, now),
+        ownKeyFirst: pool.ownKeyFirst,
+      },
+      { ownerId: session.ownerId, accountId: session.poolCodexAccountId, keyId: session.poolKeyId },
+      now,
+    );
+    if (!chosen) {
+      const pausedUntil = await this.accountPoolPausedUntil(session.ownerId, slug, now, db);
+      if (pausedUntil) throw new ConflictException({
+        code: 'POOL_ACCOUNT_PAUSED', message: 'The pool accounts are paused', pausedUntil: pausedUntil.toISOString(),
+      });
+    }
+    if (next.keyId !== session.poolKeyId || next.accountId !== session.poolCodexAccountId) {
       await db.session.update({
         where: { id: session.id },
-        data: { poolKeyId: chosen.id, ...(notice ? { poolSwitchNotice: notice } : {}) },
+        data: {
+          poolKeyId: next.keyId,
+          poolCodexAccountId: next.accountId,
+          ...(notice ? { poolSwitchNotice: notice } : {}),
+        },
       });
-      if (notice && atClaim) await new PoolNotices(this.prisma, this.realtime).carrier(session.id);
+    }
+    // The line is said before the turn this claim runs: a resident engine starts nothing, so it is handed
+    // a reload that changes nothing and answers it with a `resumed` that carries the line (pool-notice.ts)
+    // — the one this choosing wrote, or the one the gateway left when the account it is on was spent or
+    // signed out and no other can run.
+    if (atClaim && (notice || session.poolSwitchNotice)) {
+      await new PoolNotices(this.prisma, this.realtime).carrier(session.id);
     }
     const token = await mintPoolGatewayToken(
       db,
@@ -1074,4 +1398,26 @@ export class QueueService {
     });
     return opened !== null;
   }
+}
+
+/**
+ * A pool's ChatGPT logins as choosing reads them, oldest first — each signed in by whichever person of
+ * the pool contributed it (migration 0371), so they hang off no relation of the pool's row. Never a token
+ * or a ciphertext: none is selected.
+ */
+async function poolLogins(
+  db: Prisma.TransactionClient | PrismaService,
+  poolId: string,
+): Promise<Array<LoginAccount & { userId: string }>> {
+  const rows = await db.poolCodexLogin.findMany({
+    where: { poolId },
+    orderBy: [{ createdAt: 'asc' }, { accountId: 'asc' }],
+    select: { accountId: true, userId: true, email: true, state: true, spentUntil: true, pausedUntil: true, usage: true },
+  });
+  return rows.map((login) => ({ ...login, usage: login.usage as PlanUsageSnapshot | null }));
+}
+
+/** The earlier of two times, either of which may be none: when the first of two things comes back. */
+function earliest(a: Date | null, b: Date | null): Date | null {
+  return a && b ? (a.getTime() <= b.getTime() ? a : b) : (a ?? b);
 }

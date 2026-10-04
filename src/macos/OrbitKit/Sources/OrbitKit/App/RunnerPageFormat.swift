@@ -155,7 +155,7 @@ public enum RunnerPageFormat {
 
     /// The engines a runner reports on, in the order its page lists them — runnerEngines.ts
     /// `ENGINE_CLI_NAME`'s — and any the page doesn't know yet after them, as reported.
-    public static let engineOrder = ["claude", "codex", "kimi", "opencode"]
+    public static let engineOrder = ["claude", "codex", "kimi", "opencode", "antigravity"]
 
     public static func engines(_ runner: Runner) -> [RunnerEngineHealth] {
         let reported = runner.engines ?? []
@@ -163,14 +163,17 @@ public enum RunnerPageFormat {
         return known + reported.filter { !engineOrder.contains($0.engine) }
     }
 
-    /// The CLI's own product name: `Claude Code`, `Codex`, `Kimi Code`, `OpenCode`.
+    /// The CLI's own product name: `Claude Code`, `Codex`, `Kimi Code`, `OpenCode`,
+    /// `Antigravity CLI`.
     public static func engineName(_ engine: String) -> String {
         if let login = LoginEngine(rawValue: engine) { return login.displayName }
+        if engine == "antigravity" { return "Antigravity CLI" }
         return engine == "opencode" ? "OpenCode" : engine
     }
 
     /// The engines Orbit signs in on a runner. OpenCode's sign-in belongs to whichever provider it
-    /// runs, so a runner page has nothing to say about it.
+    /// runs, and Antigravity has none — it runs on a Gemini API key from its environment — so a
+    /// runner page has nothing to say about either.
     public static func loginEngine(_ engine: String) -> LoginEngine? { LoginEngine(rawValue: engine) }
 
     /// The engines whose CLI keeps a login per directory, so one machine holds several accounts of
@@ -293,15 +296,23 @@ public enum RunnerPageFormat {
     public struct AccountLine: Equatable, Sendable, Identifiable {
         /// `default`, or the account's id on that runner.
         public let id: String
-        /// `Default`, what the user called it, or `Account <id>`.
+        /// What the user called it — Default too, once renamed in Orbit — else `Default`, or
+        /// `Account <id>`.
         public let name: String
         /// Where its login lives on that machine, with the home directory as `~`.
         public let home: String?
         public let auth: String?
         public var isDefault: Bool { id == CodexAccounts.defaultID }
+        /// The line under the name: where its login lives — and, for a Default renamed in Orbit, that
+        /// it is still the machine's own login (web's DEFAULT mark).
+        public var subtitle: String? {
+            guard isDefault, name != "Default" else { return home }
+            return [home, "Default"].compactMap { $0 }.joined(separator: " · ")
+        }
         /// What a sign-in on this line names: the account, when the runner lists more than one; nil —
         /// the runner's own login, as every sign-in was before accounts — when it doesn't.
         public let signInAccount: String?
+        public let pausedUntil: String?
     }
 
     /// Every account an engine is signed into on that runner, Default first. One line for the
@@ -313,13 +324,23 @@ public enum RunnerPageFormat {
             return [AccountLine(id: CodexAccounts.defaultID,
                                 name: CodexAccounts.label(CodexAccounts.defaultID, accounts: accounts),
                                 home: (own?.home ?? own?.codexHome).map(tildePath),
-                                auth: health.auth, signInAccount: nil)]
+                                auth: health.auth, signInAccount: nil, pausedUntil: own?.pausedUntil)]
         }
         return accounts.map { account in
             AccountLine(id: account.id, name: CodexAccounts.label(account.id, accounts: accounts),
                         home: (account.home ?? account.codexHome).map(tildePath),
-                        auth: account.auth, signInAccount: account.id)
+                        auth: account.auth, signInAccount: account.id, pausedUntil: account.pausedUntil)
         }
+    }
+
+    /// What Add Account calls a new account until the user names it: its number on the machine,
+    /// Default being the first — or the next number free, so it never takes a name an account already
+    /// goes by (web `defaultAccountName`).
+    public static func defaultAccountName(_ accounts: [RunnerEngineAccount]) -> String {
+        let taken = Set(accounts.map { CodexAccounts.label($0.id, accounts: accounts) })
+        var number = max(accounts.count, 1) + 1
+        while taken.contains("Account \(number)") { number += 1 }
+        return "Account \(number)"
     }
 
     /// What became of the last removal asked of this account: under way, or refused in the machine's

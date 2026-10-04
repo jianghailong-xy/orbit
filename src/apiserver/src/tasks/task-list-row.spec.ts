@@ -36,8 +36,13 @@ test('GET tasks/:id/row forwards the authenticated owner to the lightweight read
 
 test('listRow reuses the page select and restricts live overlays to the one owned task', async () => {
   let taskRead: any;
-  let busyRead: any;
-  const raw = recordingQueryRaw(() => [{ id: TASK_ID }]);
+  // The runnable read answers with the row's id; the carrier read with the one session queued on it.
+  const raw = recordingQueryRaw((sql) => (sql.includes('"runReason"')
+    ? [{
+      taskId: TASK_ID, sessionId: 'session-1', status: 'PENDING', runReason: 'TURN',
+      runningBgJobs: [], runningBgJobActivity: {}, startedAt: null,
+    }]
+    : [{ id: TASK_ID }]));
   const stored = {
     id: TASK_ID,
     title: 'incremental row',
@@ -51,12 +56,6 @@ test('listRow reuses the page select and restricts live overlays to the one owne
         return stored;
       },
     },
-    session: {
-      groupBy: async (args: any) => {
-        busyRead = args;
-        return [{ taskId: TASK_ID, status: 'PENDING', _count: { _all: 1 } }];
-      },
-    },
     taskDependency: { findMany: async () => [] },
     $queryRaw: raw.$queryRaw,
   };
@@ -66,20 +65,20 @@ test('listRow reuses the page select and restricts live overlays to the one owne
 
   assert.deepEqual(taskRead.where, { id: TASK_ID, ownerId: OWNER_ID });
   assert.equal(taskRead.select, TASK_LIST_SELECT, 'the endpoint must not grow a second list DTO');
-  assert.deepEqual(busyRead.where, {
-    ownerId: OWNER_ID,
-    taskId: { in: [TASK_ID] },
-    status: { in: ['PENDING', 'RUNNING'] },
-  });
+  const busyRead = raw.statements.find(({ text }) => text.includes('"runReason"'));
+  assert.ok(busyRead, 'the live overlay is the carrier read');
+  assert.deepEqual(busyRead.values, [OWNER_ID, TASK_ID], 'restricted to the one owned task');
   assert.equal(row.running, false);
   assert.equal(row.queued, true);
+  assert.equal(row.runReason, 'TURN');
   assert.equal(row.dependencyState, 'NONE');
   assert.equal(row.blocked, false);
   assert.equal(row.runnable, true);
-  assert.equal(raw.statements.length, 1, 'one shared predicate read covers the row');
-  assert.equal(raw.statements[0].invocation, 'sql-object');
-  assert.match(raw.statements[0].text, /SELECT t\.id/);
-  assert.deepEqual(raw.statements[0].values.slice(0, 2), [OWNER_ID, TASK_ID]);
+  const runnableReads = raw.statements.filter(({ text }) => !text.includes('"runReason"'));
+  assert.equal(runnableReads.length, 1, 'one shared predicate read covers the row');
+  assert.equal(runnableReads[0].invocation, 'sql-object');
+  assert.match(runnableReads[0].text, /SELECT t\.id/);
+  assert.deepEqual(runnableReads[0].values.slice(0, 2), [OWNER_ID, TASK_ID]);
 });
 
 test('listRow returns 404 before reading overlays for an unknown or cross-tenant id', async () => {
@@ -87,7 +86,7 @@ test('listRow returns 404 before reading overlays for an unknown or cross-tenant
   const service = new TasksService(
     {
       task: { findFirst: async () => null },
-      session: { groupBy: async () => { overlayReads += 1; return []; } },
+      $queryRaw: async () => { overlayReads += 1; return []; },
       taskDependency: { findMany: async () => { overlayReads += 1; return []; } },
     } as never,
     {} as never,

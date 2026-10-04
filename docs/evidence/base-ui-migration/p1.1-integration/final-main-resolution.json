@@ -1,0 +1,12 @@
+{
+  "name": "final-main-resolution",
+  "cwd": "/root/orbit",
+  "command": "node -e 'for (const mod of [\"@base-ui/react/button\", \"@base-ui/react/dialog\"]) { try { console.log(require.resolve(mod, {paths: [process.cwd()+\"/src/web\"]})); process.exitCode=1; } catch(e) { if(e.code!==\"MODULE_NOT_FOUND\") throw e; console.log(mod, e.code); } }'",
+  "start": "2026-10-04T01:05:37.245899+00:00",
+  "commit": "dfd64dd1f46f85ca3b195ce5e3c5e7c24e7dbe8d",
+  "tree": "8466dae5dc7f936a45a3d527266bb82018de03f7",
+  "trackedBefore": "",
+  "exitCode": 0,
+  "end": "2026-10-04T01:05:37.278892+00:00",
+  "trackedAfter": ""
+}

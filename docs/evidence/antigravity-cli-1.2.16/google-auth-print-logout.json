@@ -1,0 +1,23 @@
+{
+  "probe": "print-logout",
+  "agy_version": "1.2.16",
+  "authentication": "copy of owner-authorized token file within private temp root; same account, not second account",
+  "argv": [
+    "<TMP>/bin/agy",
+    "--gemini_dir=<TMP>/runs/print-logout/gemini",
+    "--log-file=/dev/null",
+    "--print=/logout",
+    "--output-format",
+    "stream-json",
+    "--print-timeout=20s"
+  ],
+  "stdin_is_tty": false,
+  "stdout_is_tty": false,
+  "dbus": "nonexistent isolated socket",
+  "useG1Credits": false,
+  "duration_seconds": 0.39,
+  "forced_stop": false,
+  "exit_code": 2,
+  "stdout": "{\"event\":\"result\",\"result\":{\"conversation_id\":\"\",\"status\":\"ERROR\",\"response\":\"\",\"error\":\"/logout is not available in print mode (it clears stored credentials, an effect that outlives the run); pass --disable-slash-commands to send /logout to the model as literal text\",\"duration_seconds\":0,\"num_turns\":0,\"usage\":{\"input_tokens\":0,\"output_tokens\":0,\"thinking_tokens\":0,\"cache_read_tokens\":0,\"total_tokens\":0}}}\n",
+  "stderr": "error: /logout is not available in print mode (it clears stored credentials, an effect that outlives the run); pass --disable-slash-commands to send /logout to the model as literal text\n"
+}

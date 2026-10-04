@@ -122,6 +122,7 @@ test('an account is named by its email and its last four characters — never by
   assert.equal(maskedAccount(ACCOUNT_ID), '…4e5f');
   const view = codexLoginView({
     accountId: ACCOUNT_ID,
+    userId: 'a-person-of-the-pool',
     email: 'owner@example.invalid',
     plan: 'plus',
     state: 'ACTIVE',
@@ -134,12 +135,14 @@ test('an account is named by its email and its last four characters — never by
     email: 'owner@example.invalid',
     plan: 'plus',
     fingerprint: '…4e5f',
+    userId: 'a-person-of-the-pool',
     lastError: null,
     expiresAt: '2026-09-28T12:00:00.000Z',
     linkedAt: '2026-09-27T12:00:00.000Z',
     usage: null,
     usageUnavailable: CODEX_USAGE_UNREAD,
     spentUntil: null,
+    pausedUntil: null,
   });
   const whole = JSON.stringify(view);
   for (const secret of [ACCOUNT_ID, ACCESS_TOKEN, REFRESH_TOKEN]) {

@@ -24,7 +24,7 @@ public enum SessionTimeGrouping {
     /// into ordered sections. When `pinnedFirst` (Open, where pinning applies — mirrors the
     /// row's `showsPin`), pinned sessions become a leading "Pinned" section in their given order;
     /// every other session buckets by the calendar day of `lastTurnAt ?? createdAt` into Today /
-    /// Yesterday / Previous 7 Days / Previous 30 Days / Older. Order within each bucket is preserved
+    /// Yesterday / 2–7 days ago / 8–30 days ago / Older. Order within each bucket is preserved
     /// (so recency still holds), empty buckets are dropped, and a session with no/unparseable
     /// timestamp falls to "Older". `now` and `calendar` are injectable for deterministic tests.
     public static func sections(_ sessions: [Session], pinnedFirst: Bool = true,
@@ -32,7 +32,7 @@ public enum SessionTimeGrouping {
         var pinned: [Session] = []
         // Fixed bucket order; titles double as the rendered section headers.
         var buckets: [[Session]] = Array(repeating: [], count: 5)
-        let titles = ["Today", "Yesterday", "Previous 7 Days", "Previous 30 Days", "Older"]
+        let titles = ["Today", "Yesterday", "2–7 days ago", "8–30 days ago", "Older"]
         let today = calendar.startOfDay(for: now)
 
         for s in sessions {
@@ -50,7 +50,7 @@ public enum SessionTimeGrouping {
         return out
     }
 
-    /// 0 Today · 1 Yesterday · 2 Previous 7 Days · 3 Previous 30 Days · 4 Older. A future timestamp
+    /// 0 Today · 1 Yesterday · 2 2–7 days ago · 3 8–30 days ago · 4 Older. A future timestamp
     /// (clock skew) reads as Today; a missing/unparseable one falls to Older.
     private static func bucketIndex(for s: Session, today: Date, calendar: Calendar) -> Int {
         guard let iso = s.lastTurnAt ?? s.createdAt, let date = RelativeTime.parse(iso) else { return 4 }

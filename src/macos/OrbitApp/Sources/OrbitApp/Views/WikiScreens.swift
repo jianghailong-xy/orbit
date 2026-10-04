@@ -619,7 +619,7 @@ struct WikiReviewView: View {
             .sheet(item: $editing) { card in
                 WikiProposalForm(card: card, entry: card.op.entryId.flatMap { wiki.detail($0)?.entry }) { edited in
                     let answer = await wiki.decide(card, .edit, edited: edited)
-                    finish(answer, done: WikiCopy.decided)
+                    finish(answer, card: card, action: .edit, renamed: edited.title)
                     return answer == nil
                 }
             }
@@ -627,7 +627,7 @@ struct WikiReviewView: View {
                 if let entry = card.op.entryId.flatMap({ wiki.detail($0)?.entry }) {
                     WikiChallengeAmendForm(entry: entry) { edited in
                         let answer = await wiki.decide(card, .amend, edited: edited)
-                        finish(answer, done: WikiCopy.decided)
+                        finish(answer, card: card, action: .amend, renamed: edited.title)
                         return answer == nil
                     }
                 }
@@ -648,7 +648,7 @@ struct WikiReviewView: View {
             decide: { card, action, reason in
                 Task {
                     let answer = await wiki.decide(card, action, reason: reason)
-                    finish(answer, done: action == .reject ? WikiCopy.rejected : WikiCopy.decided)
+                    finish(answer, card: card, action: action)
                 }
             },
             edit: { card in editing = card },
@@ -656,11 +656,18 @@ struct WikiReviewView: View {
             amend: { card in amending = card })
     }
 
-    private func finish(_ answer: String?, done: String) {
+    /// A refusal opens the alert with the server's reason. An answer that landed floats its outcome
+    /// in the answer's own words, with the entry it was about under it — by then the pager has moved
+    /// on to the next card, so a bare "Decided" named neither. An edit names the entry by the title
+    /// the owner gave it.
+    private func finish(_ answer: String?, card: WikiLogic.ReviewCard, action: WikiDecideAction,
+                        renamed: String? = nil) {
         if let answer {
             notice = answer
         } else {
-            model.showToast(done)
+            let entry = card.op.entryId.flatMap { model.wiki?.detail($0)?.entry }
+            model.showToast(WikiLogic.decidedToast(op: card.op.op, action: action),
+                            subtitle: renamed ?? WikiLogic.knownTitle(card, entry: entry))
         }
     }
 }

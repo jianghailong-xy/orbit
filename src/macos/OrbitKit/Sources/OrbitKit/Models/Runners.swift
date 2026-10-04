@@ -76,13 +76,19 @@ public struct RunnerModelCatalog: Codable, Equatable, Sendable {
     public let codex: [RunnerModelInfo]?
     public let kimi: [RunnerModelInfo]?
     public let opencode: [RunnerModelInfo]?
+    /// From `agy models`, whose slugs carry their level (`gemini-3.8-flash-high`): the runner folds
+    /// them into one row per base model (`gemini-3.8-flash`) with its levels as `reasoningLevels`,
+    /// and a session passes the two back as `--model` and `--effort`.
+    public let antigravity: [RunnerModelInfo]?
 
     public init(claude: [RunnerModelInfo]? = nil, codex: [RunnerModelInfo]? = nil,
-                kimi: [RunnerModelInfo]? = nil, opencode: [RunnerModelInfo]? = nil) {
+                kimi: [RunnerModelInfo]? = nil, opencode: [RunnerModelInfo]? = nil,
+                antigravity: [RunnerModelInfo]? = nil) {
         self.claude = claude
         self.codex = codex
         self.kimi = kimi
         self.opencode = opencode
+        self.antigravity = antigravity
     }
 
     public func models(for provider: String) -> [ModelOption]? {
@@ -91,6 +97,7 @@ public struct RunnerModelCatalog: Codable, Equatable, Sendable {
         case "codex": rows = codex
         case "kimi":     rows = kimi
         case "opencode": rows = opencode
+        case "antigravity": rows = antigravity
         default:         rows = claude
         }
         guard let rows, !rows.isEmpty else { return nil }
@@ -98,7 +105,10 @@ public struct RunnerModelCatalog: Codable, Equatable, Sendable {
     }
 
     public func contextWindow(for id: String) -> Int? {
-        let all = (claude ?? []) + (codex ?? []) + (kimi ?? []) + (opencode ?? [])
+        // A list rather than one `(rows ?? []) + …` chain: at five runtimes that expression is past
+        // what the Swift type-checker resolves in reasonable time, and it fails the build outright.
+        let runtimes: [[RunnerModelInfo]?] = [claude, codex, kimi, opencode, antigravity]
+        let all = runtimes.flatMap { $0 ?? [] }
         return all.first { $0.value == id }?.contextWindow
     }
 
@@ -111,15 +121,18 @@ public struct RunnerModelCatalog: Codable, Equatable, Sendable {
         case "codex": rows = codex
         case "kimi": rows = kimi
         case "opencode": rows = opencode
+        case "antigravity": rows = antigravity
         default: rows = claude
         }
         return rows?.first { $0.value == model }
     }
 
     /// Runtimes whose reasoning levels are declared per model: Codex efforts, OpenCode variants,
-    /// and Kimi's `supportEfforts` (K2.7 Coding declares none; K3 declares low/high/max).
+    /// Kimi's `supportEfforts` (K2.7 Coding declares none; K3 declares low/high/max), and the
+    /// levels agy lists per Gemini model (3.1 Pro has low/high only).
     public func reasoningLevels(for provider: String, model: String) -> [String]? {
-        guard provider == "codex" || provider == "opencode" || provider == "kimi" else { return nil }
+        guard provider == "codex" || provider == "opencode" || provider == "kimi"
+                || provider == "antigravity" else { return nil }
         return modelInfo(for: provider, model: model)?.reasoningLevels
     }
 
@@ -172,6 +185,22 @@ public struct RotateTokenResponse: Codable, Equatable, Sendable {
     public let token: String
 }
 
+/// Server-resolved Antigravity support, CLI readiness, and runner-environment key availability.
+public struct RunnerAntigravityState: Codable, Equatable, Sendable {
+    public let supported: Bool
+    public let installed: Bool?
+    public let version: String?
+    public let envKeyAvailable: Bool
+
+    public init(supported: Bool, installed: Bool? = nil, version: String? = nil,
+                envKeyAvailable: Bool = false) {
+        self.supported = supported
+        self.installed = installed
+        self.version = version
+        self.envKeyAvailable = envKeyAvailable
+    }
+}
+
 /// One coding-engine CLI's health on a runner, reported each heartbeat (shared `RunnerEngineHealth`).
 /// `engine` stays a raw string rather than `LoginEngine`: a server that starts reporting a fourth
 /// engine must not fail the decode of the whole runner row and blank the list.
@@ -207,7 +236,8 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
 public struct RunnerEngineAccount: Codable, Equatable, Sendable, Identifiable {
     /// `default`, or the slot's id — what a session is created with (`codexAccount`).
     public let id: String
-    /// What the user called it. Absent for Default.
+    /// What the user called it: the name it was renamed to in Orbit, else the one it was added under.
+    /// Absent for a Default never renamed.
     public let name: String?
     /// The CLI's own answer for this account: `yes` / `no` / `unknown`.
     public let auth: String?
@@ -219,16 +249,19 @@ public struct RunnerEngineAccount: Codable, Equatable, Sendable, Identifiable {
     /// `cxa1_` and the first 8 hex digits of the account's fingerprint; absent until the runner has
     /// read one. Two accounts showing the same one are the same account.
     public let fingerprintPrefix: String?
+    /// Temporarily skipped until this time, without changing authentication or quota.
+    public let pausedUntil: String?
 
     public init(id: String, name: String? = nil, auth: String? = nil,
                 home: String? = nil, codexHome: String? = nil,
-                fingerprintPrefix: String? = nil) {
+                fingerprintPrefix: String? = nil, pausedUntil: String? = nil) {
         self.id = id
         self.name = name
         self.auth = auth
         self.home = home
         self.codexHome = codexHome
         self.fingerprintPrefix = fingerprintPrefix
+        self.pausedUntil = pausedUntil
     }
 }
 
@@ -263,6 +296,8 @@ public struct RunnerInstallState: Codable, Equatable, Sendable {
     public let command: String?
     public let message: String?
     public let mode: String?
+    /// One runner has one install relay; another engine's active install occupies it too.
+    public var inFlight: Bool { status == "pending" || status == "installing" }
 }
 
 /// Browser-facing account-removal relay. Raw engine/status strings preserve forward compatibility.
@@ -335,6 +370,13 @@ public struct StartLoginRequest: Encodable, Sendable {
         self.account = account
         self.accountName = accountName
     }
+}
+
+/// PATCH /runners/:id/accounts/:engine/:account — a new name for one of the runner's accounts,
+/// Default included. Only a label, kept by the control plane: nothing on the machine changes.
+public struct RenameRunnerAccountRequest: Encodable, Sendable {
+    public let name: String
+    public init(name: String) { self.name = name }
 }
 
 /// POST /runners/:id/login/code — hand back the code the sign-in page gave the user.
@@ -687,8 +729,45 @@ public extension PlanUsageSnapshot {
             }
     }
 
-    /// The first displayed window's percent, or nil when no windows are reported.
-    var primaryPercent: Int? { rows.first?.percent }
+    /// `rows` as they stand at `now` (web's `currentPlanUsageRows`). A window whose reset has passed
+    /// reads as the fresh window it now is — nothing used, no reset to name — rather than as the
+    /// reading taken before it rolled over: the runner reads again just after a reset, so a past one
+    /// outlives it only on a reading that has stopped refreshing.
+    func currentRows(at now: Date = Date()) -> [PlanUsageRow] {
+        rows.map { row in
+            guard let resets = planUsageResetDate(row.window), resets <= now else { return row }
+            return PlanUsageRow(key: row.key, label: row.label, groupLabel: row.groupLabel,
+                                window: PlanUsageWindow(utilization: 0, label: row.window.label,
+                                                        windowDurationMins: row.window.windowDurationMins))
+        }
+    }
+
+    /// The window that stops this login, or will stop it first (web's `bindingPlanUsageRow`): a spent
+    /// one before any other — of several, the one that resets last, since the login is back only once
+    /// every spent one has — else the one closest to its limit, a tie going to the first. Whatever
+    /// shows one number for a login shows this one: a Claude login's 5-hour window can read 6% while
+    /// its weekly one is spent.
+    func bindingRow(at now: Date = Date()) -> PlanUsageRow? {
+        let current = currentRows(at: now)
+        let spent = current.filter { $0.window.utilization >= 100 }
+        if let first = spent.first {
+            // A spent window with no reset named holds the login for as long as anyone can tell.
+            let reset = { (row: PlanUsageRow) in planUsageResetDate(row.window) ?? .distantFuture }
+            return spent.dropFirst().reduce(first) { reset($1) > reset($0) ? $1 : $0 }
+        }
+        return current.dropFirst().reduce(current.first) { tightest, row in
+            guard let tightest else { return row }
+            return row.window.utilization > tightest.window.utilization ? row : tightest
+        }
+    }
+}
+
+/// When a window resets, or nil when it names no time this can read.
+private func planUsageResetDate(_ window: PlanUsageWindow) -> Date? {
+    guard let at = window.resetsAt else { return nil }
+    let withFraction = ISO8601DateFormatter()
+    withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return withFraction.date(from: at) ?? ISO8601DateFormatter().date(from: at)
 }
 
 public extension PlanUsage {
@@ -747,7 +826,6 @@ public extension PlanUsage {
     }
 
     var rows: [PlanUsageRow] { flatSnapshot.rows }
-    var primaryPercent: Int? { flatSnapshot.primaryPercent }
 }
 
 /// The request that confirms one earned Codex reset credit. The client request id makes a retried

@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,7 +22,10 @@ import (
 )
 
 const (
-	runnerCapabilitiesHeader         = "X-Orbit-Runner-Capabilities"
+	runnerCapabilitiesHeader = "X-Orbit-Runner-Capabilities"
+	// The operating system this binary was built for (runtime.GOOS). The control plane offers a
+	// sign-in only where it works — Antigravity's Google login is Linux-only for now.
+	runnerOSHeader                   = "X-Orbit-Runner-Os"
 	sessionOrchestrationCredentialV1 = "session-orchestration-credential-v1"
 	sessionTerminalHandoffV1         = "session-terminal-handoff-v1"
 	sessionWorktreeOpsV1             = "session-worktree-ops-v1"
@@ -76,6 +80,7 @@ func init() {
 		integrationJobCapabilityV1,
 		promotionAutomaticLandCapabilityV1,
 		codexAccountLoginCapabilityV1,
+		antigravityGoogleLoginCapabilityV1,
 		codexAccountRemoveCapabilityV1,
 		codexAccountMoveCapabilityV1,
 		claudeAccountLoginCapabilityV1,
@@ -215,7 +220,7 @@ func isLeaseOwnershipError(err error) bool {
 // Sent on claim/reclaim from the first release that safely understands OpenCode. The server uses
 // this positive capability advertisement instead of trusting a stale heartbeat version during a
 // rolling upgrade. Older control planes ignore the header.
-const runnerSupportedProviders = "claude,codex,opencode"
+const runnerSupportedProviders = "claude,codex,opencode,antigravity"
 
 func NewTransport(baseURL, token string) *Transport {
 	leaseOwner, err := newLeaseGeneration()
@@ -269,6 +274,7 @@ func (t *Transport) doVia(ctx context.Context, client *http.Client, method, path
 	}
 	req.Header.Set("content-type", "application/json")
 	req.Header.Set(runnerCapabilitiesHeader, runnerCapabilitiesV1)
+	req.Header.Set(runnerOSHeader, runtime.GOOS)
 	req.Header.Set("X-Orbit-Supported-Providers", runnerSupportedProviders)
 	req.Header.Set(runnerWriteCapabilityRevisionHeader, strconv.Itoa(runnerWriteCapabilityRevision))
 	req.Header.Set(runnerWriteSchemaRevisionHeader, strconv.Itoa(runnerWriteSchemaRevision))
@@ -1002,8 +1008,9 @@ func (t *Transport) notify(sessionID, message string) (json.RawMessage, error) {
 }
 
 // backgroundWakeReceipt is what the control plane did with a wake: filed it as a new turn of the
-// session (ENQUEUED), onto a wake turn nobody has been handed yet (MERGED), or nowhere, because the
-// session has ended (DROPPED).
+// session, or written into the turn it is running (ENQUEUED), onto a wake turn nobody has been handed
+// yet (MERGED), or nowhere (DROPPED) — because the session has ended, or because it is output its
+// job's exit, already filed, reports too. None of them is retried.
 type backgroundWakeReceipt struct {
 	Outcome string `json:"outcome"`
 	TurnID  string `json:"turnId,omitempty"`
@@ -1431,7 +1438,7 @@ func (t *Transport) resolveOpenItem(sessionID, id, itemID, note string) (json.Ra
 // retryIntegration asks for the next generation of a DONE task's failed landing, as the acting
 // session (contract §2.3 J-T1b). The session header is the authority the server checks against the
 // project's coordinator pointer; the reason travels as the body and is kept on the new generation and
-// on every item it supersedes. A refusal — in flight, the owner's, not this project's — travels as the
+// on every item it handles. A refusal — in flight, the owner's, not this project's — travels as the
 // server raised it.
 func (t *Transport) retryIntegration(sessionID, id, taskID, reason string) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
@@ -1443,6 +1450,25 @@ func (t *Transport) retryIntegration(sessionID, id, taskID, reason string) (json
 	var out json.RawMessage
 	err := t.doHeaders(nil, "POST",
 		"/runner/projects/"+url.PathEscape(id)+"/tasks/"+url.PathEscape(taskID)+"/integration/retry",
+		map[string]interface{}{"reason": reason}, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
+// retryPromotionCheck asks for a blocked candidate's check to run again, as the acting session
+// (contract §4.7 H1) — retryIntegration's door for an item that names no task. The session header is
+// the authority the server checks against the project's coordinator pointer; the reason travels as
+// the body and is kept on the new check and on every item it handles. A refusal travels as the server
+// raised it.
+func (t *Transport) retryPromotionCheck(sessionID, id, promotionID, reason string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	if err := validatePathSegmentID(promotionID); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST",
+		"/runner/projects/"+url.PathEscape(id)+"/promotions/"+url.PathEscape(promotionID)+"/integration/retry",
 		map[string]interface{}{"reason": reason}, &out, taskOpTimeout, sessionHeader(sessionID))
 	return out, err
 }
@@ -1735,6 +1761,31 @@ func (t *Transport) claimOwnerConfirmation(id, agentID, sessionID string) (json.
 	var out json.RawMessage
 	err := t.doHeaders(nil, "POST", "/runner/tasks/"+url.PathEscape(id)+"/owner-confirmation/claim",
 		nil, &out, taskOpTimeout, taskCreateHeaders(agentID, sessionID))
+	return out, err
+}
+
+// The reviewer's two answers to a confirmation request (docs/owner-confirmation-review-contract.md
+// §3.5, §8). The reviewing session is the authenticated header, like a declaration's: whoever may
+// review a request is decided by the control plane against the session the request was handed to,
+// never by a field of the body.
+func (t *Transport) reviewOwnerConfirmation(id, agentID, sessionID string, body interface{}) (json.RawMessage, error) {
+	return t.answerOwnerConfirmationReview(id, agentID, sessionID, "review", body)
+}
+
+func (t *Transport) returnOwnerConfirmation(id, agentID, sessionID string, body interface{}) (json.RawMessage, error) {
+	return t.answerOwnerConfirmationReview(id, agentID, sessionID, "return", body)
+}
+
+func (t *Transport) answerOwnerConfirmationReview(id, agentID, sessionID, verb string, body interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	if sessionID == "" {
+		return nil, fmt.Errorf("session id is required to review a confirmation request")
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/tasks/"+url.PathEscape(id)+"/owner-confirmation/"+verb,
+		body, &out, taskOpTimeout, taskCreateHeaders(agentID, sessionID))
 	return out, err
 }
 

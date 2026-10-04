@@ -106,7 +106,10 @@ test('runner REST submit derives actor and source from authenticated headers, no
  * deciding session comes from — a header the runner is authenticated as, a named field the browser
  * has to supply — and neither controller decides anything about it: the service asks the same
  * question of both, so an owner pressing the button in the app gets no shorter path than a
- * coordinator does.
+ * coordinator does. The app's door also says who is asking, the way the OWNER_CONFIRMED door does,
+ * for the one press the service takes from the owner in the app alone: the owner card of a task in
+ * no project with no dispatching session, in the run it is drawn in (`ownerDecidesInTheRun`). The
+ * runner's door never says it, so nothing an agent sends can be taken for it.
  */
 test('the app decides through the same service call, naming the session instead of carrying it', async () => {
   const calls: unknown[][] = [];
@@ -122,7 +125,7 @@ test('the app decides through the same service call, naming the session instead 
     decidingSessionId: SESSION,
     evidenceRevision: '2',
     decision: 'CONFIRM',
-  } as never);
+  } as never, undefined);
   await runner.decide({ ownerId: OWNER } as never, TASK, SESSION, WORKSPACE, undefined, {
     evidenceRevision: '2',
     decision: 'CONFIRM',
@@ -135,6 +138,9 @@ test('the app decides through the same service call, naming the session instead 
   assert.deepEqual(calls[1].slice(0, 2), [OWNER, TASK]);
   assert.deepEqual(calls[0][3], { decidingSessionId: SESSION, evidenceRevision: '2', decision: 'CONFIRM' });
   assert.deepEqual(calls[1][3], { decidingSessionId: SESSION, evidenceRevision: '2', decision: 'CONFIRM' });
+  // Who is asking: the app's door, as the OWNER_CONFIRMED door reads it; the runner's, nobody.
+  assert.deepEqual(calls[0][4], { door: 'USER', userId: OWNER, actingSessionId: undefined });
+  assert.equal(calls[1][4], undefined);
 });
 
 test('the pending queue refuses to answer without the session it would be read for', async () => {

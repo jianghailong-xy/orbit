@@ -8,6 +8,7 @@ import type {
   IntegrationCheckResult,
   OpenItemAction,
   OpenItemFacts,
+  OpenItemHandling,
   OpenItemKind,
   ProjectOpenItemRow,
   ProjectOpenItemsView,
@@ -77,6 +78,20 @@ export const NEEDS_YOU_GROUP = 'Needs you';
 export const WITH_COORDINATOR_GROUP = 'With the coordinator';
 
 /**
+ * The word an exception card wears for where the coordinator's handling of it stands (§4.7 H1–H5).
+ *
+ * `Handling` while the rerun the coordinator asked for is still queued or running — the item is
+ * open, and nothing about it is settled yet: it wears the blue the project list's "Coordinator ·
+ * handling" chip wears, and never the word "handled". `Handled` once the rerun landed or passed, or
+ * the coordinator closed the item with a reason; `Superseded` once the rerun failed again and a new
+ * card took this one's place. What is the owner's says so in its heading (`escalationHeading`), as it
+ * always has.
+ */
+export const HANDLING_TAG = 'Handling';
+export const HANDLED_TAG = 'Handled';
+export const SUPERSEDED_TAG = 'Superseded';
+
+/**
  * What each exception card is called, by kind (§7.5, from mock 5).
  *
  * The kind's own line and nothing else: WHAT the item is about — the task, the branch, the check —
@@ -90,6 +105,19 @@ const ITEM_HEADING: Partial<Record<OpenItemKind, string>> = {
   INTEGRATION_ERROR: 'Integration error',
   TASK_FAILED: 'Task failed',
 };
+
+const REVIEW_HEADING: Readonly<Record<string, string>> = {
+  OUTSIDE_DECLARED_SCOPE: 'Changed files it didn’t declare',
+  MERGE_REFUSED_BY_GIT: 'Git refused to merge it',
+};
+
+function itemHeading(row: ProjectOpenItemRow): string {
+  if (row.kind === 'DELIVERY_REVIEW') {
+    const reason = row.facts?.review?.reason;
+    return (reason ? REVIEW_HEADING[reason] : undefined) ?? row.title;
+  }
+  return ITEM_HEADING[row.kind] ?? row.title;
+}
 
 /** The two words each group's rows use for who has the item. */
 const WHO = { OWNER: 'You', COORDINATOR: 'Coordinator' } as const;
@@ -269,6 +297,7 @@ const KIND_NEXT_STEP: Partial<Record<OpenItemKind, OpenItemAction>> = {
   INTEGRATION_CONFLICT: 'OPEN_TASK_SESSION',
   INTEGRATION_CHECK_FAILED: 'OPEN_TASK_SESSION',
   TASK_FAILED: 'RETRY',
+  DELIVERY_REVIEW: 'OPEN_TASK_SESSION',
 };
 
 /** The presses a card leads with, in the order it draws them: the step this kind of exception is
@@ -509,6 +538,7 @@ const HAND_CLOSABLE_KINDS: ReadonlySet<OpenItemKind> = new Set<OpenItemKind>([
   'INTEGRATION_CHECK_FAILED',
   'INTEGRATION_ERROR',
   'TASK_FAILED',
+  'DELIVERY_REVIEW',
 ]);
 
 /**
@@ -830,7 +860,7 @@ export function OpenItemCard({
   return (
     <ItemCard
       row={row}
-      heading={ITEM_HEADING[row.kind] ?? row.title}
+      heading={itemHeading(row)}
       tone="coordinator"
       now={now}
     >
@@ -950,7 +980,16 @@ function ItemFactRows({ row }: { row: ProjectOpenItemRow }): JSX.Element | null 
       ) : null}
       {/* Only where the item is about a task: the press this sentence describes is a push to that
           task's branch, and a promotion's failure has no task branch to push to. */}
-      {facts.task && facts.files.length > 0 ? (
+      {facts.review ? (
+        <FactRow label="Declared">
+          <span className="project-open-item-mono">
+            {facts.review.declaredPaths.length > 0
+              ? facts.review.declaredPaths.join(' · ')
+              : 'no paths'}
+          </span>
+        </FactRow>
+      ) : null}
+      {facts.task && facts.files.length > 0 && !facts.review ? (
         <FactRow label="After a fix">
           push to the task branch — Orbit re-integrates and re-checks on its own
         </FactRow>
@@ -984,6 +1023,88 @@ function ItemFactRows({ row }: { row: ProjectOpenItemRow }): JSX.Element | null 
       ) : null}
     </div>
   );
+}
+
+/** What the coordinator's rerun is, in the card's words: a task's landing, or a candidate's check. */
+function rerunOf(
+  row: Pick<ProjectOpenItemRow, 'promotionId'>,
+  jobKind?: OpenItemHandling['jobKind'],
+): string {
+  const check = jobKind ? jobKind === 'CHECK_PROMOTION' : row.promotionId != null;
+  return check ? 'the re-check of the merge into main' : 'the rerun of the landing';
+}
+
+/** §4.7 H1, in one line: which rerun, which generation, where it is, and since when it was asked. */
+function handlingLine(row: ProjectOpenItemRow, handling: OpenItemHandling, now: number): string {
+  const where = handling.state === 'RUNNING' ? 'is running' : 'is queued';
+  return `${rerunOf(row, handling.jobKind)} — generation ${handling.generation} ${where} · asked `
+    + `${ago(handling.startedAt, now)}`;
+}
+
+/** §4.7 H2/H3, in one line: how the coordinator's handling of an item ended. */
+function outcomeLine(row: ProjectOpenItemRow): string | null {
+  const outcome = row.outcome;
+  if (!outcome) return null;
+  if (outcome.resolution === 'RETRIED') {
+    return `${rerunOf(row)} failed again — a new item took its place`;
+  }
+  if (outcome.jobId == null) return 'closed by the coordinator, with its reason';
+  return row.promotionId != null
+    ? 'the re-check of the merge into main passed'
+    : 'the rerun of the landing landed';
+}
+
+/**
+ * The card's rows about the coordinator's handling (§4.7): the rerun while it runs, or how it
+ * ended — each with the reason the coordinator gave, which is the one part of the record nobody
+ * else wrote. Nothing at all for an item nobody has handled.
+ */
+function ItemHandlingRows({
+  row,
+  now,
+}: {
+  row: ProjectOpenItemRow;
+  now: number;
+}): JSX.Element | null {
+  const handling = row.handling ?? null;
+  const outcome = row.outcome ?? null;
+  if (!handling && !outcome) return null;
+  const said = outcome ? outcomeLine(row) : null;
+  const reason = outcome ? outcome.note : handling?.reason ?? null;
+  return (
+    <div className="project-open-item-facts project-open-item-handling">
+      {handling ? <FactRow label={HANDLING_TAG}>{handlingLine(row, handling, now)}</FactRow> : null}
+      {outcome && said ? (
+        <FactRow label={outcome.resolution === 'RETRIED' ? SUPERSEDED_TAG : HANDLED_TAG}>
+          {said}
+          {outcome.supersededByItemId ? (
+            <>
+              {' · '}
+              <a
+                className="project-open-item-quiet"
+                href={`#open-item-${outcome.supersededByItemId}`}
+              >
+                see the new item
+              </a>
+            </>
+          ) : null}
+        </FactRow>
+      ) : null}
+      {reason ? <FactRow label="Reason">{reason}</FactRow> : null}
+    </div>
+  );
+}
+
+/** The state word a card's head wears (§4.7), or null for an item nobody is handling. */
+function handlingTag(
+  row: ProjectOpenItemRow,
+): { text: string; tone: 'handling' | 'handled' | 'superseded' } | null {
+  if (row.outcome) {
+    return row.outcome.resolution === 'RETRIED'
+      ? { text: SUPERSEDED_TAG, tone: 'superseded' }
+      : { text: HANDLED_TAG, tone: 'handled' };
+  }
+  return row.handling ? { text: HANDLING_TAG, tone: 'handling' } : null;
 }
 
 /** A card's presses, in the weights the mock gives them (mock 7, 方案 B): the step this kind of
@@ -1056,12 +1177,38 @@ export function EscalatedItemCard({
   row: ProjectOpenItemRow;
   now: number;
 }): JSX.Element {
-  const heading = escalationHeading(row, now) ?? ITEM_HEADING[row.kind] ?? row.title;
+  const heading = escalationHeading(row, now) ?? itemHeading(row);
   return (
     <ItemCard row={row} heading={heading} tone="owner" now={now}>
       <CardActions projectId={projectId} row={row} />
     </ItemCard>
   );
+}
+
+/**
+ * An exception the coordinator's handling has ended (§4.7 H5): handled — its rerun landed or
+ * passed, or it closed the item with a reason — or superseded by the card its failed rerun opened.
+ * The same card, at the same place in the conversation, with nothing left to press: what it was
+ * about, how it ended, and the coordinator's reason.
+ */
+export function SettledItemCard({
+  row,
+  now,
+}: {
+  row: ProjectOpenItemRow;
+  now: number;
+}): JSX.Element {
+  return (
+    <ItemCard row={row} heading={itemHeading(row)} tone="settled" now={now} />
+  );
+}
+
+/** A settled card's footer: who ended it and when — the coordinator, in both endings. */
+function settledLine(row: ProjectOpenItemRow, now: number): string {
+  const when = ago(row.outcome?.resolvedAt, now);
+  return row.outcome?.resolution === 'RETRIED'
+    ? `Superseded after the coordinator’s rerun · ${when}`
+    : `Handled by the coordinator · ${when}`;
 }
 
 /** The chrome all three share: the head with its provenance mark, the fact block, the actions, and
@@ -1077,12 +1224,14 @@ function ItemCard({
   row: ProjectOpenItemRow;
   heading: string;
   /** Amber for what the owner has to act on, neutral for what the coordinator is handling — the
-   *  same two colours the project page's two groups use, so a card and its row agree at a glance. */
-  tone: 'owner' | 'coordinator';
+   *  same two colours the project page's two groups use, so a card and its row agree at a glance —
+   *  and a quieter neutral for one whose handling has ended (§4.7 H5). */
+  tone: 'owner' | 'coordinator' | 'settled';
   now: number;
   id?: string;
   children?: ReactNode;
 }): JSX.Element {
+  const tag = handlingTag(row);
   return (
     <div
       className={`approval-card project-open-item-card is-${tone}`}
@@ -1091,11 +1240,13 @@ function ItemCard({
       // One handle for all three cards, whichever id each is drawn under: what the conversation's
       // pinned line scrolls to, and measures to say which way that is (`revealOpenItemCard`).
       data-open-item={row.itemId}
+      data-handling={tag?.tone}
     >
       <div className="approval-head project-open-item-head">
         <span className="project-open-item-heading">{heading}</span>
+        {tag ? <span className={`project-open-item-state is-${tag.tone}`}>{tag.text}</span> : null}
         <span
-          className={`criteria-provenance${tone === 'coordinator' ? ' prov-neutral' : ''}`}
+          className={`criteria-provenance${tone === 'owner' ? '' : ' prov-neutral'}`}
           title={FROM_ORBIT_TITLE}
         >
           {FROM_ORBIT}
@@ -1103,9 +1254,12 @@ function ItemCard({
       </div>
       <div className="approval-body is-plan project-open-item-body">
         <ItemFactRows row={row} />
+        <ItemHandlingRows row={row} now={now} />
         <div className="project-open-item-actions">{children}</div>
       </div>
-      <div className="project-open-item-foot">{ownerLine(row, now)}</div>
+      <div className="project-open-item-foot">
+        {tone === 'settled' ? settledLine(row, now) : ownerLine(row, now)}
+      </div>
     </div>
   );
 }
@@ -1125,6 +1279,8 @@ export function ItemAsCard({
   if (row.kind === 'FUSE_PAUSED') {
     return <FusePauseCard projectId={projectId} row={row} now={now} />;
   }
+  // Ended by the coordinator's handling (§4.7 H5): the card stays where it was, saying how it ended.
+  if (row.outcome) return <SettledItemCard row={row} now={now} />;
   // A question has its own card, mounted beside this one by both hosts — drawing it again here
   // would be two cards answering one question, and only one of them could win. A merge approval is
   // the same: `ProjectPromotionCard` draws it from the candidate itself, which is where what would
@@ -1149,7 +1305,8 @@ function hasCardOfItsOwn(row: Pick<ProjectOpenItemRow, 'kind'>): boolean {
  * has something pointing at it. The native clients count the same rows (`ExceptionCards.cards`).
  */
 export function isOwnerExceptionCard(row: ProjectOpenItemRow): boolean {
-  return row.assignee === 'OWNER' && !hasCardOfItsOwn(row);
+  // A card whose handling has ended asks nobody anything, whoever held it last.
+  return row.assignee === 'OWNER' && !row.outcome && !hasCardOfItsOwn(row);
 }
 
 /**
@@ -1191,7 +1348,14 @@ export function exceptionCardRows(
  * the thing that stopped the project.
  */
 function ordered(items: ProjectOpenItemsView | undefined): ProjectOpenItemRow[] {
-  const all = [...(items?.needsYou ?? []), ...(items?.withCoordinator ?? [])];
+  // The settled ones too (§4.7 H5): a card the conversation drew while the coordinator handled it
+  // stays at the moment it happened and says how it ended, rather than vanishing from under the
+  // reader the moment its rerun lands.
+  const all = [
+    ...(items?.needsYou ?? []),
+    ...(items?.withCoordinator ?? []),
+    ...(items?.settled ?? []),
+  ];
   const paused = all.filter((row) => row.kind === 'FUSE_PAUSED');
   const rest = all
     .filter((row) => row.kind !== 'FUSE_PAUSED')
@@ -1211,6 +1375,14 @@ function OpenItemRowView({ row, now }: { row: ProjectOpenItemRow; now: number })
         {row.detailLine ? (
           <div className="project-open-item-line" title={row.detailLine}>
             {row.detailLine}
+          </div>
+        ) : null}
+        {/* §4.7 H1: the coordinator's rerun of it, while it runs — the row is still open, and says
+            so rather than "handled". */}
+        {row.handling ? (
+          <div className="project-open-item-line is-handling" title={row.handling.reason}>
+            <span className="project-open-item-state is-handling">{HANDLING_TAG}</span>
+            {` ${handlingLine(row, row.handling, now)}`}
           </div>
         ) : null}
       </div>

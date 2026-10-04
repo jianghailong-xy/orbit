@@ -594,7 +594,8 @@ export async function queueLandingBehindTheWork(
   });
 }
 
-/** Why a rerun was asked for, as migration 0344 records it on the generation it queued. */
+/** Why a rerun was asked for, as migration 0344 records it on the generation it queued — a task's
+ *  landing, or (0368) a blocked candidate's check. */
 export interface LandingRetryRequest {
   /** The failed generation this one runs again. */
   ofJobId: string;
@@ -716,6 +717,34 @@ function workSessionsOfTaskSelect() {
 }
 
 /**
+ * What a DONE of this task hands its project's integration line: the project, and the work session
+ * whose branch is landed — or no work, which is NOT_A_CODE_TASK: a task in no project, a codeless
+ * one, or one none of whose work sessions took a worktree on a branch.
+ *
+ * Writes nothing. `enqueueForDoneTask` acts on it, and the owner's confirmation card reads it as the
+ * landing confirming starts (`landing: NONE` when there is no work).
+ */
+export async function doneTaskLandingWork(
+  db: Pick<Prisma.TransactionClient, 'task'>,
+  ownerId: string,
+  taskId: string,
+) {
+  const task = await db.task.findFirst({
+    where: { id: taskId, ownerId },
+    select: {
+      projectId: true,
+      codeless: true,
+      sessions: workSessionsOfTaskSelect(),
+    },
+  });
+  const work = landingWorkSession(task?.sessions ?? []);
+  if (!task?.projectId || task.codeless || !work?.branch) {
+    return { projectId: task?.projectId ?? null, work: null };
+  }
+  return { projectId: task.projectId, work: { ...work, branch: work.branch } };
+}
+
+/**
  * Give this task's branch a route to its project's integration line, in the transaction that wrote
  * DONE (§2.3 J-T1a).
  *
@@ -743,19 +772,11 @@ export async function enqueueForDoneTask(
   ownerId: string,
   taskId: string,
 ): Promise<EnqueueOutcome> {
-  const task = await tx.task.findFirst({
-    where: { id: taskId, ownerId },
-    select: {
-      projectId: true,
-      codeless: true,
-      sessions: workSessionsOfTaskSelect(),
-    },
-  });
-  const work = landingWorkSession(task?.sessions ?? []);
-  if (!task?.projectId || task.codeless || !work?.branch) {
-    return { enqueued: false, reason: 'NOT_A_CODE_TASK', projectId: task?.projectId ?? null };
+  const landing = await doneTaskLandingWork(tx, ownerId, taskId);
+  if (!landing.work) {
+    return { enqueued: false, reason: 'NOT_A_CODE_TASK', projectId: landing.projectId };
   }
-  const projectId = task.projectId;
+  const { projectId, work } = landing;
 
   const first = await startOnFirstIntegration(tx, { ownerId, projectId, taskId });
   if (!first.started) {
@@ -769,8 +790,11 @@ export async function enqueueForDoneTask(
   if (!codebase) return { enqueued: false, reason: 'INTEGRATION_REPOSITORY_UNKNOWN', projectId };
 
   const session = { id: work.id, branch: work.branch, runnerId: work.assignedRunnerId };
-  // L3 step 4. Only on the beat the line started: afterwards every DONE queues itself.
-  const onTheStartingBeat = first.startedAt.getTime() >= Date.now() - 1_000;
+  // L3 step 4. Only on the beat the line started: afterwards every DONE queues itself. Asked of the
+  // transaction, not of the clock: a later DONE inside a "started within the last second" window
+  // back-filled the project's other DONE tasks, and re-queued a landing that had come back red —
+  // a retry the platform never makes on its own (J5).
+  const onTheStartingBeat = first.startedNow;
 
   const queued = await queueLandingForWork(tx, {
     ownerId, projectId, taskId, codebase, session, line: first.line,
@@ -1125,6 +1149,8 @@ export async function queuePromotionJob(
     promotion: PromotionJobSubject;
     canonicalRepoUrl: string;
     confirmedAutomatically?: boolean;
+    /** Set only for the check a coordinator asked to run again (§4.7 H1, migration 0368). */
+    retry?: LandingRetryRequest;
   },
 ): Promise<string> {
   const previous = await tx.projectIntegrationJob.aggregate({
@@ -1167,6 +1193,14 @@ export async function queuePromotionJob(
         subjectId: input.promotion.id,
         generation,
       }),
+      ...(input.retry
+        ? {
+            retryOfJobId: input.retry.ofJobId,
+            retryFailureClass: input.retry.failureClass,
+            retryReason: input.retry.reason,
+            retryRequestedBySessionId: input.retry.requestedBySessionId,
+          }
+        : {}),
     }],
     skipDuplicates: true,
     select: { id: true },

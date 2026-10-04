@@ -26,10 +26,10 @@ export interface CreateSessionDto {
   taskId?: string;
 
   /** Per-session provider override, picked on the New Session screen: a built-in engine
-   *  ("claude"/"codex"/"kimi"/"opencode") or one of the caller's configured ModelProvider
-   *  slugs. Omitted keeps the historical behaviour — the session inherits its workspace's
-   *  provider. An unknown or foreign slug is rejected rather than silently falling back,
-   *  so a session never dispatches with an identity the caller can't use. */
+   *  ("claude"/"codex"/"kimi"/"opencode"/"antigravity") or one of the caller's configured
+   *  ModelProvider slugs. Omitted keeps the historical behaviour — the session inherits its
+   *  workspace's provider. An unknown or foreign slug is rejected rather than silently falling
+   *  back, so a session never dispatches with an identity the caller can't use. */
   provider?: string;
   /** Per-session override; omitted falls back to the Runner Runtime or ModelProvider default. */
   model?: string;
@@ -141,12 +141,6 @@ export interface MergeRepairDto {
   preparePR?: boolean;
 }
 
-/** POST /sessions/:id/retry-message — the failure card's Retry, asking the server to re-send. */
-export interface SessionRetryResendDto {
-  /** Client-supplied idempotency key (UUID): a retried request answers with the turn it wrote. */
-  clientTurnId: string;
-}
-
 export interface SessionArmRetryDto {
   /** When the re-send should fire (ISO). Supplied by the caller because disarming cleared the
    *  only copy the server had; the client re-derives it from the failing reply with the same
@@ -221,9 +215,9 @@ export class RecordMergeReceiptDto {
  * `POST /sessions/:id/move` (docs/session-folders-move-design.md §5.4). A class, so the global
  * ValidationPipe decodes both ids from whichever spelling a client sends (`IsPublicId`).
  *
- * Only the folder half exists so far: `workspaceId` may be omitted or name the session's own
- * workspace, and `folderId` names a folder of that workspace — or, null or omitted, none, which is
- * how a session leaves its folder.
+ * `workspaceId` omitted, or naming the session's own workspace, files it: `folderId` names a folder
+ * of that workspace — or, null or omitted, none, which is how a session leaves its folder. Naming
+ * another workspace moves the session there, into `folderId` (a folder of that workspace) or none.
  */
 export class MoveSessionDto {
   @IsOptional() @IsPublicId() workspaceId?: string;

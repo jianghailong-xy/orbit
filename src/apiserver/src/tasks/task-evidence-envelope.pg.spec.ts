@@ -113,6 +113,10 @@ async function fixture(db: PrismaClient) {
         // creator states — including a fixture.
         completionCriterion: 'EVIDENCE_JUDGMENT',
         acceptanceCriteria: 'the envelope resolves at least one citation',
+        // Declared against the criterion its evidence quotes: being filed under the project is not
+        // what holds a task to the project's wording, declaring the criterion is.
+        criterionDefinitionId: criterionId,
+        criterionRevision: 1,
       },
     });
   }

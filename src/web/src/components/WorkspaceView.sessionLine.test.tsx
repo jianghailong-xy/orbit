@@ -302,3 +302,61 @@ describe('statusLabel over a session parked on a watch', () => {
     expect(statusLabel({ status: 'RUNNING' }, 'Watching 1 target')).toBe('Running');
   });
 });
+
+/**
+ * The same wait on the session list, where the screenshot found it: the row read the parked session
+ * as a reply preview under a "Waiting for your reply" glyph while its header and strip said Watching.
+ * The line is the strip's own (lib/watches `watchingSessions`); what is asserted here is where the
+ * row puts it — the place macOS's `SessionLine` puts it — and what still outranks it.
+ */
+describe('sessionLine over a session parked on a watch', () => {
+  const parked = {
+    status: 'AWAITING_INPUT',
+    engineTurnActive: false,
+    pendingApprovals: 0,
+    lastAssistantText: 'Nothing for you to do until it lands.',
+  };
+  const watching = { word: 'Watching 1 target', line: 'Watching Fix the login redirect' };
+
+  it('says what the wait is for instead of the last reply', () => {
+    expect(sessionLine(parked, true)).toEqual({ text: 'Nothing for you to do until it lands.', tone: 'preview' });
+    expect(sessionLine(parked, true, watching)).toEqual({ text: 'Watching Fix the login redirect', tone: 'watching' });
+    // Nothing was handed over (the search palette's rows): the reading it always had.
+    expect(sessionLine(parked, true, null)).toEqual({ text: 'Nothing for you to do until it lands.', tone: 'preview' });
+  });
+
+  it("keeps a background process out of the watch's line", () => {
+    expect(sessionLine({ ...parked, runningBgCount: 1 }, true)).toEqual({
+      text: 'Background process running…',
+      tone: 'background',
+    });
+    expect(sessionLine({ ...parked, runningBgCount: 1 }, true, watching)).toEqual({
+      text: 'Watching Fix the login redirect',
+      tone: 'watching',
+    });
+  });
+
+  it('never hides work of its own or a question for the reader behind the wait', () => {
+    expect(sessionLine({ ...parked, runningSubagentCount: 1 }, true, watching)).toEqual({
+      text: 'Running Agent…',
+      tone: 'running',
+    });
+    expect(sessionLine({ ...parked, engineTurnActive: true, lastToolUse: 'Bash' }, true, watching)).toEqual({
+      text: 'Running Bash…',
+      tone: 'running',
+    });
+    expect(sessionLine({ ...parked, pendingApprovals: 1 }, true, watching)).toEqual({
+      text: 'Waiting for approval',
+      tone: 'approval',
+    });
+    // Woken: the run has the line, whatever the list's copy of the watches still says.
+    expect(sessionLine({ status: 'RUNNING', lastToolUse: 'Bash' }, true, watching)).toEqual({
+      text: 'Running Bash…',
+      tone: 'running',
+    });
+  });
+
+  it('stays a static preview in Trash', () => {
+    expect(sessionLine(parked, false, watching)).toEqual({ text: 'Nothing for you to do until it lands.', tone: 'preview' });
+  });
+});

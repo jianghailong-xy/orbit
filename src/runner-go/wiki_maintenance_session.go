@@ -34,10 +34,18 @@ import (
 // engine. And thinking is off: Claude Code sends a model it does not know `effort: high` and adaptive
 // thinking of its own accord, which CLAUDE_CODE_EFFORT_LEVEL=unset and MAX_THINKING_TOKENS=0 take out.
 //
+// `orbit` BY ITS PATH, OR BARE. A clean start runs in dontAsk, so a command not pre-approved is refused,
+// and the rules a session is given name the CLI by its absolute path. The task prompts write the bare
+// `orbit wiki …` (maintenance.job.task, plan.jobs.task), and a model copies that as often as the path the
+// system prompt gives: from 2026-10-01 to 10-03 every bare one was refused, and four runs failed on it. So
+// the same `orbit wiki` commands are pre-approved bare as well — but only where `orbit` on the PATH the
+// engine is handed is this runner's own executable, never some other `orbit` that comes first on it.
+//
 // A RUN CUT SHORT FAILED. The CLI ends a turn that reached --max-turns with `error_max_turns`: the turn is
 // FAILED like any error, and the runner says so on the space's cursor as `truncated` — one more of the
-// space's consecutive failures, with the cursor where the last good run left it — because the run itself
-// can no longer say anything.
+// space's consecutive failures, with the cursor no further than past the ops the run had recorded (criterion
+// 3, revision 4), and where it was when it was cut short before that — because the run itself can no longer
+// say anything.
 
 // wikiMaintenanceRunV1 is contracts/wiki.contract.json `maintenance.run.capability`: declared on every call
 // (runnerCapabilitiesV1), it is what gets this runner handed maintenance sessions at all.
@@ -57,6 +65,10 @@ type WikiMaintenanceRun struct {
 
 	// The session's own HOME and CLAUDE_CONFIG_DIR, made by prepareWikiMaintenanceStart. Runner-internal.
 	home, config string
+	// The PATH the engine is handed, and whether `orbit` on it is this runner's own CLI (wikiMaintenancePath):
+	// decided once by prepareWikiMaintenanceStart, so --allowedTools and the environment cannot disagree.
+	path      string
+	bareOrbit bool
 }
 
 // wikiMaintenanceTools is contracts/wiki.contract.json `maintenance.run.cleanStart.mcpTools`: what the orbit
@@ -72,12 +84,12 @@ const wikiMaintenanceBuiltinTools = "Bash"
 const wikiMaintenanceHelper = `{"apiKeyHelper":"printenv ANTHROPIC_AUTH_TOKEN"}`
 
 // wikiMaintenanceEnvPass is what of the runner's own environment a clean start is handed: what a process
-// needs to run at all. wikiMaintenanceProviderEnv is what of the session's: the endpoint the provider
-// injected and how to talk to it. Nothing else of either reaches the engine — not the runner's
-// ANTHROPIC_API_KEY or CLAUDE_CODE_*, not the workspace's own variables.
+// needs to run at all, beside the PATH (wikiMaintenancePath). wikiMaintenanceProviderEnv is what of the
+// session's: the endpoint the provider injected and how to talk to it. Nothing else of either reaches the
+// engine — not the runner's ANTHROPIC_API_KEY or CLAUDE_CODE_*, not the workspace's own variables.
 var (
 	wikiMaintenanceEnvPass = []string{
-		"PATH", "LANG", "LC_ALL", "LC_CTYPE", "TZ", "TMPDIR",
+		"LANG", "LC_ALL", "LC_CTYPE", "TZ", "TMPDIR",
 		"SSL_CERT_FILE", "SSL_CERT_DIR", "NODE_EXTRA_CA_CERTS",
 		"HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy",
 	}
@@ -118,10 +130,13 @@ func wikiMaintenanceSystemPrompt(orbitExe string, maxTurns int) string {
 	return "You are a Wiki maintenance run of Orbit: an unattended run that keeps one space's wiki up to date " +
 		"from what happened in it since the last run, or drafts the space's plan. Your task says which space, and which " +
 		"one command. Do exactly this: run the command your task names — `orbit wiki maintain`, or `orbit wiki plan " +
-		"draft` or `orbit wiki plan revise` — with " + cli + " as your task says, with the Bash tool; it does the whole " +
+		"draft` or `orbit wiki plan revise` — with " + cli + " as your task says, with the Bash tool and `timeout: " +
+		strconv.FormatInt(wikiMaintainRunBudget.Milliseconds(), 10) + "`, never a shorter one; it does the whole " +
 		"run and prints what it did. Then report it: task_progress_report for where the run ended, and one task_comment " +
 		"with the outcome, what it printed of what was done, and the token spend it printed; if it failed, its last " +
-		"lines. Run nothing else, write no files, and do not retry a failed run more than once. You have " +
+		"lines. Run nothing else, write no files, and do not retry a failed run more than once; a command the Bash tool " +
+		"came back from before it ended — it timed out, or was cut off — is never run again: report what it printed " +
+		"up to there. You have " +
 		strconv.Itoa(maxTurns) + " turns; a run cut short by them counts as failed."
 }
 
@@ -133,7 +148,8 @@ func wikiMaintenanceDirs(scratchDir string) (home, config string) {
 // prepareWikiMaintenanceStart makes the session's HOME and CLAUDE_CONFIG_DIR — empty but for the onboarding
 // mark when first made, and the session's own transcript after that — and points the session's environment
 // at the config directory, so everything that asks where this session's conversation lives (the rebuild
-// before a --resume, the session's meta) asks the clean one.
+// before a --resume, the session's meta) asks the clean one. It decides the engine's PATH too, and with it
+// whether the bare `orbit wiki …` is pre-approved.
 func prepareWikiMaintenanceStart(job *ClaimedSession, scratchDir string) error {
 	home, config := wikiMaintenanceDirs(scratchDir)
 	for _, dir := range []string{home, config} {
@@ -148,6 +164,7 @@ func prepareWikiMaintenanceStart(job *ClaimedSession, scratchDir string) error {
 		}
 	}
 	job.WikiMaintenance.home, job.WikiMaintenance.config = home, config
+	job.WikiMaintenance.path, job.WikiMaintenance.bareOrbit = wikiMaintenancePath(os.Getenv("PATH"), orbitCLIPermissionExecutable(orbitCLIExecutable()))
 	env := make(map[string]string, len(job.Agent.Env)+1)
 	for k, v := range job.Agent.Env {
 		env[k] = v
@@ -179,18 +196,7 @@ func wikiMaintenanceClaudeArgs(job *ClaimedSession, scratchDir string, firstSpaw
 	}
 	disallowed := withBuiltinTaskToolsDisallowed(appendUnique(a.DisallowedTools, run.DisallowedTools...))
 	args = append(args, "--disallowedTools", strings.Join(disallowed, ","))
-	// Pre-approved, because nobody is asked: the three tools the run reports with, and the `orbit wiki`
-	// commands the platform pre-approves for every session — no other command of the CLI.
-	allowed := []string{}
-	for _, tool := range wikiMaintenanceTools {
-		allowed = append(allowed, "mcp__orbit__"+tool)
-	}
-	for _, rule := range orbitCLIAllowedTools(orbitCLIPermissionExecutable(orbitExe), false) {
-		if strings.Contains(rule, " wiki ") {
-			allowed = append(allowed, rule)
-		}
-	}
-	args = append(args, "--allowedTools", strings.Join(allowed, ","))
+	args = append(args, "--allowedTools", strings.Join(wikiMaintenanceAllowedTools(orbitExe, run.bareOrbit), ","))
 	servers := map[string]interface{}{}
 	if orbitExe != "" {
 		servers["orbit"] = map[string]interface{}{
@@ -216,6 +222,80 @@ func wikiMaintenanceClaudeArgs(job *ClaimedSession, scratchDir string, firstSpaw
 	return args
 }
 
+// wikiMaintenanceAllowedTools is a clean start's --allowedTools, pre-approved because nobody is asked: the
+// three tools the run reports with, and the `orbit wiki` commands the platform pre-approves for every
+// session — no other command of the CLI. Each by the CLI's path, in the forms orbitCLIAllowedTools writes
+// it, and — when bareOrbit says `orbit` on the engine's PATH is that same CLI — as the bare `orbit wiki …`
+// the task prompts write.
+func wikiMaintenanceAllowedTools(orbitExe string, bareOrbit bool) []string {
+	allowed := []string{}
+	for _, tool := range wikiMaintenanceTools {
+		allowed = append(allowed, "mcp__orbit__"+tool)
+	}
+	exe := orbitCLIPermissionExecutable(orbitExe)
+	bare := []string{}
+	for _, rule := range orbitCLIAllowedTools(exe, false) {
+		// The family is read off the rule's start, after the path, so a path that has " wiki " in it
+		// cannot carry another family's rule in with it.
+		for _, command := range []string{shellQuote(exe), exe} {
+			if rest, ok := strings.CutPrefix(rule, "Bash("+command+" wiki "); ok {
+				allowed = append(allowed, rule)
+				bare = appendUnique(bare, "Bash(orbit wiki "+rest)
+				break
+			}
+		}
+	}
+	if bareOrbit {
+		allowed = append(allowed, bare...)
+	}
+	return allowed
+}
+
+// wikiMaintenancePath is the PATH a clean start is handed, and whether `orbit` on it is orbitExe, the
+// runner's own CLI: the runner's own PATH, with orbitExe's directory added at its end when that is what
+// makes `orbit` on it the runner's own — and as it was otherwise, when bare `orbit` is not pre-approved.
+// "" for orbitExe — no path the rules can name — is never `orbit` on any PATH.
+func wikiMaintenancePath(path, orbitExe string) (string, bool) {
+	if orbitOnPathIs(path, orbitExe) {
+		return path, true
+	}
+	if orbitExe == "" {
+		return path, false
+	}
+	withDir := filepath.Dir(orbitExe)
+	if path != "" {
+		withDir = path + string(os.PathListSeparator) + withDir
+	}
+	if orbitOnPathIs(withDir, orbitExe) {
+		return withDir, true
+	}
+	return path, false
+}
+
+// orbitOnPathIs reports whether the `orbit` a shell runs off path — the first executable file of that name
+// in its directories — is exe itself. An empty or relative directory before it is looked in from wherever
+// the shell stands, the session's checkout, so a path with one there never counts as running exe.
+func orbitOnPathIs(path, exe string) bool {
+	if exe == "" {
+		return false
+	}
+	want, err := os.Stat(exe)
+	if err != nil {
+		return false
+	}
+	for _, dir := range filepath.SplitList(path) {
+		if !filepath.IsAbs(dir) {
+			return false
+		}
+		found, err := os.Stat(filepath.Join(dir, "orbit"))
+		if err != nil || found.IsDir() || found.Mode()&0o111 == 0 {
+			continue
+		}
+		return os.SameFile(found, want)
+	}
+	return false
+}
+
 // wikiMaintenanceEnv is a clean start's whole environment, built from nothing (see wikiMaintenanceEnvPass).
 // The session context is what the orbit MCP server and the `orbit` CLI need to act for this session, and
 // ORBIT_HOME is said outright: under the clean HOME they would otherwise look for the runner's
@@ -232,6 +312,9 @@ func wikiMaintenanceEnv(job *ClaimedSession) []string {
 		"ORBIT_HOME=" + machineHome(),
 	}
 	env = append(env, wikiMaintainBashEnv()...)
+	if run.path != "" {
+		env = append(env, "PATH="+run.path)
+	}
 	for _, key := range wikiMaintenanceEnvPass {
 		if value, ok := os.LookupEnv(key); ok {
 			env = append(env, key+"="+value)
@@ -287,10 +370,11 @@ func onlyMCPTools(tools []map[string]interface{}, only map[string]bool) []map[st
 const claudeMaxTurnsSubtype = "error_max_turns"
 
 // reportWikiMaintenanceTruncated says on the space's cursor that the run was cut short: a failure, and one
-// that moves nothing. Best-effort — the turn itself is already FAILED, which is the record that stays.
+// that moves the cursor no further. Best-effort — the turn itself is already FAILED, which is the record that stays.
 func reportWikiMaintenanceTruncated(t *Transport, job *ClaimedSession) {
 	run := job.WikiMaintenance
-	why := fmt.Sprintf("the run reached its limit of %d model turns and was cut short, so it failed and moved nothing", run.MaxTurns)
+	why := fmt.Sprintf("the run reached its limit of %d model turns and was cut short, so it failed and moved the cursor no "+
+		"further than past the ops it had recorded", run.MaxTurns)
 	if _, err := t.advanceWikiCursor(job.SessionID, run.SpaceID, map[string]interface{}{"outcome": "truncated", "error": why}); err != nil {
 		logln("wiki maintenance: could not record the truncated run of", job.SessionID+":", err)
 	}

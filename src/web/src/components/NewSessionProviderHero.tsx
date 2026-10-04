@@ -5,7 +5,7 @@ import { encodeId } from '../lib/idCodec';
 import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
 import type { AccountChoice, ProviderChoice } from '../lib/sessionProviderChoices';
 
-/** The brand mark. Same construction as the /providers tile (gradient + white glyph), sized up:
+/** The brand mark. Same artwork and tile as /providers, sized up:
  *  at hero size it carries a soft shadow in its own brand colour, which a 24px chip can't. An
  *  account pool wears its vendor's mark with the number of accounts (a shared pool's: keys) in its
  *  corner. */
@@ -35,6 +35,7 @@ function BrandMark({ choice, size }: { choice: ProviderChoice; size: number }) {
         height: size,
         borderRadius: Math.round(size * 0.26),
         background: `linear-gradient(135deg, ${choice.brand.from}, ${choice.brand.to})`,
+        border: choice.glyphKey === 'antigravity' ? '1px solid rgba(255,255,255,0.16)' : undefined,
         boxShadow: size >= 40 ? `0 8px 22px ${hexAlpha(choice.brand.to, 0.34)}` : undefined,
       }}
     >
@@ -106,6 +107,7 @@ export function NewSessionProviderHero({
   projectIntent?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const displayedChoices = choices.some((choice) => choice.slug === current.slug) ? choices : [current, ...choices];
   const pinnable = choices.filter((choice) => choice.inPool);
   // Open from the start when the pick already is one of those accounts, so its tick is in view.
   const [pinOpen, setPinOpen] = useState(() => pinnable.some((choice) => choice.slug === current.slug));
@@ -134,7 +136,7 @@ export function NewSessionProviderHero({
         onClick={() => setOpen(false)}
       >
         <ProviderMark choice={choice} size={20} />
-        <span className="np-row-name">{choice.label}</span>
+        <span className="np-row-name">{choice.label}{choice.labelDetail && <small className="np-label-detail">{choice.labelDetail}</small>}</span>
         <span className="np-row-model np-fix">{choice.unavailable}</span>
       </Link>
     ) : (
@@ -148,7 +150,7 @@ export function NewSessionProviderHero({
           }}
         >
           <ProviderMark choice={choice} size={20} />
-          <span className="np-row-name">{choice.label}</span>
+          <span className="np-row-name">{choice.label}{choice.labelDetail && <small className="np-label-detail">{choice.labelDetail}</small>}</span>
           <span className="np-row-model">{choice.modelLabel}</span>
         </button>
         {choice.accounts && automatic?.[choice.slug] !== undefined && automaticRow(choice)}
@@ -224,8 +226,8 @@ export function NewSessionProviderHero({
   // an account pool runs on fold away under it: picking the pool is the usual answer, and one of
   // them on its own is the exception.
   const list = (
-    <div className={`np-list${choices.some((choice) => choice.accounts) ? ' with-accounts' : ''}`}>
-      {choices.filter((choice) => !choice.inPool).map(row)}
+    <div className={`np-list${choices.some((choice) => choice.accounts) ? ' with-accounts' : ''}${displayedChoices.some((choice) => choice.labelDetail) ? ' with-details' : ''}`}>
+      {displayedChoices.filter((choice) => !choice.inPool).map(row)}
       {pinnable.length > 0 && (
         <>
           <button
@@ -263,6 +265,7 @@ export function NewSessionProviderHero({
       <ProviderMark choice={current} size={56} />
       <span className="np-name">
         {current.label}
+        {current.labelDetail && <small className="np-label-detail">{current.labelDetail}</small>}
         {!disabled && <span className="np-chev">▾</span>}
       </span>
     </button>

@@ -1,8 +1,8 @@
 import type { PlanUsageSnapshot } from '@orbit/shared';
 
 /**
- * The account a codex login pool runs on: the owner's own ChatGPT/Codex subscription login, signed in by
- * this server with the official codex CLI and held encrypted (migration 0323,
+ * The accounts a codex login pool holds: each one the owner's own ChatGPT/Codex subscription login, signed
+ * in by this server with the official codex CLI and held encrypted (migration 0323,
  * docs/codex-shared-pool-design.md §2.4–§2.5 in this direction). Nothing in this file holds a token for
  * longer than the call that read it, and nothing it builds carries one: what a response shows of an
  * account is its email and `maskedAccount`'s last four characters.
@@ -147,12 +147,16 @@ export interface CodexLoginView {
   lastError: string | null;
   expiresAt: string;
   linkedAt: string;
+  /** Who signed it in — a person of the pool (migration 0371). They alone may sign it in again, and with
+   *  the pool's admins they may take it out; the pages say whose account a row is by this. */
+  userId: string;
   /** The account's quota as something read it; null when nothing has (not a refusal, and not SPENT). */
   usage: PlanUsageSnapshot | null;
   usageUnavailable: string | null;
   /** Until when the Codex backend said the account's usage limit is reached (migration 0324), while that
    *  is ahead of the reading's time; null otherwise. */
   spentUntil: string | null;
+  pausedUntil: string | null;
 }
 
 /** Why `usage` is null when it is: nothing has read this account's quota yet. */
@@ -162,6 +166,7 @@ export const CODEX_USAGE_UNREAD = 'no quota has been read for this account yet';
 export function codexLoginView(
   row: {
     accountId: string;
+    userId: string;
     email: string | null;
     plan: string | null;
     state: string;
@@ -169,6 +174,7 @@ export function codexLoginView(
     expiresAt: Date;
     createdAt: Date;
     spentUntil?: Date | null;
+    pausedUntil?: Date | null;
   } | null,
   usage: PlanUsageSnapshot | null = null,
   now: Date = new Date(),
@@ -176,12 +182,14 @@ export function codexLoginView(
   if (!row) return null;
   return {
     state: row.state,
+    pausedUntil: row.pausedUntil && row.pausedUntil > now ? row.pausedUntil.toISOString() : null,
     email: row.email,
     plan: row.plan,
     fingerprint: maskedAccount(row.accountId),
     lastError: row.lastError,
     expiresAt: row.expiresAt.toISOString(),
     linkedAt: row.createdAt.toISOString(),
+    userId: row.userId,
     usage,
     usageUnavailable: usage ? null : CODEX_USAGE_UNREAD,
     spentUntil: row.spentUntil && row.spentUntil.getTime() > now.getTime() ? row.spentUntil.toISOString() : null,
@@ -190,34 +198,48 @@ export function codexLoginView(
 
 /**
  * Why a codex login pool can take no session: it has no account signed in, or the one it has was refused
- * and only its owner can sign in again. The doors that write a provider onto a session or a task refuse
- * such a pool with this string (QueueService.accountPoolRefusal) — the same shape the member pools'
- * refusals take, and for the same reason: taken, the claim could only run on the runner's own login.
+ * and only the person who signed it in can sign it in again (migration 0371; the pool's owner alone
+ * before it — an admin of the pool cannot either, having no credential for that account). The doors that
+ * write a provider onto a session or a task refuse such a pool with this string
+ * (QueueService.accountPoolRefusal) — the same shape the member pools' refusals take, and for the same
+ * reason: taken, the claim could only run on the runner's own login. `byContributor` says who reads it:
+ * the account's own contributor, who signs it in again from its row, or somebody else, who can only ask
+ * them to. It is the reader's relation to THIS account, not to the pool: an owner's pool may hold a
+ * member's account.
  */
 export function codexLoginUnavailableReason(
   label: string,
   account: { email: string | null; state: string } | null,
+  byContributor = true,
 ): string | null {
   if (!account) {
-    return `the pool "${label}" has no ChatGPT account signed in — sign in on its page, or pick another provider`;
+    // Nobody's account in particular: whoever may add one (an admin of the pool, or a member while its
+    // rule for it is on) does it on its page, so the sentence is the same for every reader.
+    return `the pool "${label}" has no ChatGPT account signed in — sign one in on its page, or pick another provider`;
   }
   if (account.state !== 'ACTIVE') {
     const who = account.email ?? 'the account';
-    return `the ChatGPT account ${who} on the pool "${label}" was rejected by OpenAI — sign in again on its page, or pick another provider`;
+    const way = byContributor
+      ? 'sign in again on its page'
+      : 'only the person who signed it in can sign it in again, on the pool\'s page';
+    return `the ChatGPT account ${who} on the pool "${label}" was rejected by OpenAI — ${way}, or pick another provider`;
   }
   return null;
 }
 
 /**
- * When work on a Codex pool of one's own can go again, for the brakes that hold work back rather than send
- * it (QueueService.accountPoolResumesAt): while the account's usage limit is reached — `spentUntil`, the
- * reset the Codex backend named, still ahead — at that reset; `now` otherwise. Null while the pool holds no
- * account or its account is signed out: nothing comes back by waiting, only by its owner signing in.
+ * codexLoginUnavailableReason, for a codex pool that may hold API keys beside its accounts (migrations
+ * 0358, 0371): a session of it runs on a key when no account can, so the pool is refused only while no
+ * key of it is switched on and unrefused either — the same test a keys-only pool's refusal makes of its
+ * keys (shared-pool.ts sharedPoolUnavailableReason). The reason given is still the accounts': they are
+ * what such a pool's sessions run on first. `byContributor` as above.
  */
-export function loginPoolResumesAt(
-  account: { state: string; spentUntil: Date | null } | null,
-  now: Date,
-): Date | null {
-  if (!account || account.state !== 'ACTIVE') return null;
-  return account.spentUntil && account.spentUntil.getTime() > now.getTime() ? account.spentUntil : now;
+export function codexPoolUnavailableReason(
+  label: string,
+  account: { email: string | null; state: string } | null,
+  keys: ReadonlyArray<{ enabled: boolean; state: string }>,
+  byContributor = true,
+): string | null {
+  if (keys.some((key) => key.enabled && key.state === 'ACTIVE')) return null;
+  return codexLoginUnavailableReason(label, account, byContributor);
 }

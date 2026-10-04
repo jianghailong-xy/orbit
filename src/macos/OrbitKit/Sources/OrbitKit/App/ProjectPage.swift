@@ -38,7 +38,7 @@ public enum ProjectPage {
     public static let readyUntilStarted = "starts when you start"
 
     /// The cells the card draws, in reading order. A project that integrates splits Done into
-    /// Integrating / On project branch / On main (the branch lane dropped on a `MAIN` line), and draws
+    /// Pending landing / On project branch / On main (the branch lane dropped on a `MAIN` line), and draws
     /// the lanes outside that sum only when they are non-zero; one that does not draws the seven
     /// lanes, Done carrying its share of the whole. `started` is whether anybody has started the
     /// project; only `false` changes anything — Ready's footnote.
@@ -53,10 +53,10 @@ public enum ProjectPage {
                              footnote: readyFootnote, glyph: .triangle),
                 OverviewCell(key: "blocked", label: "Waiting", value: b.blocked,
                              footnote: (b.waitingForLanding ?? 0) > 0
-                                ? "for a prerequisite to land" : "waiting on dependencies",
+                                ? "\(b.waitingForLanding ?? 0) waiting for a prerequisite to land" : "waiting on dependencies",
                              glyph: .square),
-                OverviewCell(key: "integrating", label: "Integrating", value: b.integrating ?? 0,
-                             footnote: "checks running on the combined tree", glyph: .spinner),
+                OverviewCell(key: "integrating", label: "Pending landing", value: b.integrating ?? 0,
+                             footnote: "finished work without a landing receipt", glyph: .hourglass),
             ]
             if line != .main {
                 lanes.append(OverviewCell(key: "onIntegrationLine", label: "On project branch",
@@ -115,20 +115,22 @@ public enum ProjectPage {
     /// whose footnote is a term of art. The owner read exactly that page on 2026-09-25 and concluded
     /// the project had stopped.
     public struct LandingLine: Equatable, Sendable {
+        public let word: String
         /// The task being landed, "N jobs" when more than one is in flight, or nil when the job
         /// names no single task (a promotion, a merge check) — the row then draws its word and
         /// state alone.
         public let what: String?
-        /// Whether the combined-tree checks are running, as opposed to the job still waiting its
+        /// Whether the job is running, as opposed to still waiting its
         /// turn. What the ring's spin and the two brand-blue words are drawn from; the `state` word
         /// is what carries the same fact to a reader who cannot use motion.
         public let running: Bool
-        /// "checking" or "queued".
+        /// The reported job phase, or "queued".
         public let state: String
         /// "1m 20s". See `landingClock`.
         public let clock: String
 
-        public init(what: String?, running: Bool, state: String, clock: String) {
+        public init(what: String?, running: Bool, state: String, clock: String, word: String = "Integration") {
+            self.word = word
             self.what = what
             self.running = running
             self.state = state
@@ -136,8 +138,13 @@ public enum ProjectPage {
         }
     }
 
-    /// The row's first word, and the whole of what the line is about.
-    public static let landingWord = "Landing"
+    public static let integrationJobWords = [
+        "LAND_TASK": "Landing", "CHECK_PROMOTION": "Merge check", "LAND_PROMOTION": "Merge to main",
+    ]
+    public static let integrationPhaseWords = [
+        "FETCH": "fetching", "MAIN_SYNC": "syncing main", "REBASE": "rebasing", "MERGE": "merging",
+        "CHECK": "checking", "VERIFY": "verifying", "PUSH": "pushing",
+    ]
 
     /// "1m 20s" — the landing clock, minutes and seconds ALWAYS, at every length.
     ///
@@ -170,8 +177,9 @@ public enum ProjectPage {
         let elapsed = RelativeTime.parse(inFlight.startedAt).map { now.timeIntervalSince($0) } ?? 0
         return LandingLine(what: jobs > 1 ? "\(jobs) jobs" : inFlight.taskTitle,
                            running: running,
-                           state: running ? "checking" : "queued",
-                           clock: landingClock(elapsed))
+                           state: running ? (integrationPhaseWords[inFlight.phase ?? ""] ?? "running") : "queued",
+                           clock: landingClock(elapsed),
+                           word: integrationJobWords[inFlight.kind ?? ""] ?? "Integration")
     }
 
     // MARK: - Acceptance criteria
@@ -435,26 +443,26 @@ public enum ProjectPage {
     // MARK: - Integration line
 
     /// The line row's facts, in order: "⎇ project/x", "7 commits ahead of main", "synced with main
-    /// 12m ago", "Integrating 1 · Queued 0", "Merge check ✓ passing on the branch tip". Nil when no
+    /// 12m ago", "Running jobs 1 · Queued 0", "Last landing check ✓ passing". Nil when no
     /// line has been decided.
     public static func integrationFacts(_ view: ProjectIntegrationView, now: Date) -> [String]? {
         guard let line = view.line, line != .unknown else { return nil }
         let branchLine = line == .projectBranch
         var facts: [String] = [branchLine ? (view.ref ?? "project branch") : (view.upstreamRef ?? "main")]
         if branchLine, let ahead = view.commitsAheadOfUpstream {
-            facts.append("\(ahead) commit\(ahead == 1 ? "" : "s") ahead of main")
+            facts.append("\(ahead) commit\(ahead == 1 ? "" : "s") ahead of main at last measurement")
         }
         if branchLine, let synced = view.lastUpstreamSyncAt, let ago = RelativeTime.ago(synced, now: now) {
             facts.append("synced with main \(ago)")
         }
-        facts.append("Integrating \(view.integratingCount) · Queued \(view.queuedCount)")
+        facts.append("Running jobs \(view.integratingCount) · Queued \(view.queuedCount)")
         let tip: String
         switch view.mergeCheckOnTip {
         case "PASSING": tip = "✓ passing"
         case "FAILING": tip = "✕ failing"
-        default: tip = "not run yet"
+        default: tip = "not checked"
         }
-        facts.append("Merge check \(tip)\(branchLine ? " on the branch tip" : "")")
+        facts.append("Last landing check \(tip)")
         return facts
     }
 
@@ -487,6 +495,7 @@ public enum ProjectPage {
     public enum IntegrationStage: Sendable { case integrating, landed }
 
     public static func integrationStage(_ t: ProjectTaskRow) -> IntegrationStage? {
+        guard workState(t) == "DONE" else { return nil }
         guard let state = t.integration?.state else { return nil }
         if integratingStates.contains(state) { return .integrating }
         return landedStates.contains(state) ? .landed : nil
@@ -543,8 +552,8 @@ public enum ProjectPage {
         case "QUEUED":
             return Tag(text: "Queued for integration", tone: .neutral)
         case "RUNNING":
-            guard let ms = integration.checksRunningForMs else { return Tag(text: "Integrating", tone: .brand) }
-            return Tag(text: "Integrating · checks \(RelativeTime.span(ms / 1000))", tone: .brand)
+            guard integration.checksRunningForMs != nil else { return Tag(text: "Integrating", tone: .brand) }
+            return Tag(text: "Integrating · checking", tone: .brand)
         case "CONFLICT": return Tag(text: "Conflict · \(who)", tone: .danger)
         case "CHECK_FAILED": return Tag(text: "Checks failed · \(who)", tone: .danger)
         case "ERROR": return Tag(text: "Integration error · \(who)", tone: .danger)
@@ -593,7 +602,7 @@ public enum ProjectPage {
             if !tasks.isEmpty { groups.append(TaskGroup(key: key, heading: heading, tasks: tasks, settled: settled)) }
         }
         add("running", "Running", running)
-        add("integrating", "Integrating · checks run on the combined tree", integrating)
+        add("integrating", "Pending landing", integrating)
         add("ready", "Ready · can start now", ready)
         add("awaiting-verification", "Awaiting verification · subject work must not be started", awaiting)
         add("failed", "Failed · coordinated continuation", failed)

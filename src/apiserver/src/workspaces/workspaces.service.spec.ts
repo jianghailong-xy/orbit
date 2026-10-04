@@ -7,6 +7,7 @@ import { WorkspacesService } from './workspaces.service';
 /** Records what reached the database; `$queryRaw` stands in for the derived-provider lookup. */
 function prismaStub(writes: Record<string, unknown>[]) {
   return {
+    runner: { findMany: async () => [] },
     workspace: {
       create: async (args: { data: Record<string, unknown> }) => {
         writes.push(args.data);
@@ -94,6 +95,7 @@ test('the repair queue matches a runner that has never been asked', async () => 
       }),
     },
     runner: {
+      findMany: async () => [],
       updateMany: async (args: { where: Record<string, unknown> }) => {
         where = args.where;
         return { count: 1 };
@@ -120,6 +122,7 @@ test('the repair queue matches a runner that has never been asked', async () => 
 function deleteStub(coordinating: number, locked = true) {
   const deleted: Record<string, unknown>[] = [];
   const prisma = {
+    runner: { findMany: async () => [] },
     workspace: {
       findFirst: async () => ({ id: 'workspace-1' }),
       update: async (args: { data: Record<string, unknown> }) => {
@@ -158,10 +161,8 @@ test('an agent no project coordinates with is deleted as before', async () => {
 });
 
 /**
- * The remote is RECORDED, never derived — it is the only source `project-integration-line.ts` has
- * for the repository a project's codebase binding is built from, and the column's comment in
- * schema.prisma says why a runner-reported `origin` must not stand in for it. It is stored exactly
- * as the person typed it: the one reader normalizes it itself (`canonicalRepoUrl`).
+ * An explicit URL is stored exactly as the person typed it; project integration normalizes it
+ * when binding. Runner detection only fills an empty URL and must leave this choice alone.
  */
 test('a repository URL stated on the workspace is stored as stated', async () => {
   const writes: Record<string, unknown>[] = [];

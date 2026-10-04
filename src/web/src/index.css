@@ -46,6 +46,8 @@
   --warning-solid: #fa8c16;
   --warning-bg: #fff4e6;
   --warning-border: #ffd591;
+  /* what smart model selection would have picked, on a run that kept the agent's own model */
+  --route-shadow: #5b2fb8;
   /* high-contrast inverted button (dark CTA on light, light CTA on dark) */
   --invert-surface: #1f2329;
   --invert-surface-hover: #000000;
@@ -89,6 +91,7 @@
   --warning-solid: #e0902b;
   --warning-bg: rgba(250, 140, 22, 0.15);
   --warning-border: rgba(250, 140, 22, 0.38);
+  --route-shadow: #b69cf5;
   --invert-surface: #e6e8eb;
   --invert-surface-hover: #ffffff;
   --invert-text: #16171a;
@@ -208,6 +211,15 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-hover);
 }
+/* A list marked .autohide-scrollbar shows its thumb only while it scrolls (lib/scrollbarAutohide
+   sets data-scrolling for that long) or while the pointer is on it, to grab it. The gutter stays
+   either way, so nothing shifts when the thumb appears. */
+.autohide-scrollbar:not([data-scrolling])::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+.autohide-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-hover);
+}
 
 /* Off-screen but still in the accessibility tree — the toast live region (see lib/toast.tsx). */
 .sr-only {
@@ -219,224 +231,150 @@ body {
   white-space: nowrap;
 }
 
-/* Toasts (AntD message): a top-right notification stack. The transcript is a growing content
-   stream, so a centred overlay lands right on whatever you just scrolled to; parking the cards
-   in the corner keeps the conversation column and the session title clear. AntD has no
-   placement option for message, so we re-anchor each notice inside its own list. Fixed width
-   keeps a stack's edges flush; text-align:start because the list's alignment would otherwise
-   ragged-right the wrapped lines. Sitting over the header band is fine here: the cards take no
-   clicks (see below), so the controls underneath stay live.
-   The card is `-notice`; `-notice-wrapper` is the icon+text row inside it. That pairing is
-   inverted from v5, where the wrapper was the outer box — decorating the wrapper paints a
-   second card inside AntD's own, which reads as a white slab around the toast.
-   Vertically: v6 pads the list by 24px and positions the card inside that padding, so the
-   holder's top edge sits 24px above the card's. 16px plus the notch inset therefore lands the
-   card level with the lifecycle notifications below — one origin for both toast surfaces.
-   !important only where a flat selector has to outrank AntD: its cssinjs rules read
-   `:where(.css-hash).ant-message .ant-message-notice …`, i.e. specificity (0,2,0)/(0,3,0). The
-   card rule qualifies through the list instead and needs none. */
-/* Normally level with the notification stack's origin; when that stack has cards up, it parks
-   below them instead of underneath them — lib/toast.tsx measures it into --toast-stack-top
-   (0px when the stack is empty, so max() falls back to the normal top). */
-.ant-message {
-  top: max(calc(env(safe-area-inset-top, 0px) + 16px), var(--toast-stack-top, 0px)) !important;
-  transition: top 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-/* AntD 6 centres each notice by hand — inset-inline-start:50% plus a -50% translate on a
-   shrink-to-fit box — so right-aligning the stack means replacing that pair, not justifying the
-   list around it. 16px inside the list's own 24px padding puts the card's right edge where the
-   lifecycle card's sits; max-width keeps a 16px gutter on the other side once the viewport is
-   too narrow for the full 360px. Four classes to outrank AntD's own (0,2,0) rules without
-   !important on `transform`: an important transform would also outrank the entrance keyframes
-   below and turn the slide into a bare fade.
-   Same card as the lifecycle notification below — radius, padding, border, shadow and icon
-   metrics are shared, so two cards stacked in one corner read as one family rather than as two
-   systems that happen to overlap. AntD's own defaults for this surface are 8px radius,
-   9px/12px padding, a three-layer shadow and 16px icons. */
-.ant-message.ant-message-list .ant-message-list-content > .ant-message-notice {
-  inset-inline-start: auto;
-  inset-inline-end: max(16px, env(safe-area-inset-right, 0px));
-  transform: none;
+/* ---- Toasts (components/ToastViewport.tsx, docs/mocks/toast-system) ----
+   One column in the top-right corner. The transcript is a growing content stream, so a centred
+   overlay lands right on whatever you just scrolled to; the corner keeps the conversation column
+   and the session title clear. What waits for you — a failure — is pinned at the top of the column
+   and stays until its ×; what passes stacks under it, newest last. A phone centres the column under
+   its top bar instead. The column takes no clicks, and neither does a pill that names nothing:
+   they float over the header band, whose controls stay live. Toasts that do something opt back in
+   (`.toast--live`). */
+.toast-viewport {
+  position: fixed;
+  z-index: 2050;
+  top: calc(env(safe-area-inset-top, 0px) + 16px);
+  right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
   width: 360px;
-  max-width: calc(100vw - 56px);
-  padding: 12px 16px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  background: var(--bg-raised);
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.1);
-  text-align: start;
+  max-width: calc(100vw - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
+  pointer-events: none;
 }
-:root[data-theme='dark'] .ant-message-notice {
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35) !important;
-}
-/* Toasts don't take clicks — the card floats over the header's right edge and used to swallow
-   them (it blocked the double-click-to-rename target). Interactive cards opt back in below. */
-.ant-message-notice {
-  pointer-events: none !important;
-}
-/* 20px glyph inset 16px, text at 52px — the lifecycle card's icon column, so the two surfaces
-   share a text edge. The gap is the row's, so it goes on the row. One palette too: AntD's
-   message icons default to its own token colours, which are a different red (#f54a45) and
-   orange (#ff8800) from the semantic vars every other status surface in the app resolves
-   through. */
-.ant-message-notice-wrapper {
-  gap: 16px !important;
-}
-.ant-message-notice-icon {
-  font-size: 20px !important;
-}
-.ant-message-notice-icon > .anticon {
-  font-size: inherit !important;
-}
-.ant-message-success > .ant-message-notice-icon {
-  color: var(--success-solid) !important;
-}
-.ant-message-info > .ant-message-notice-icon {
-  color: var(--brand) !important;
-}
-.ant-message-warning > .ant-message-notice-icon {
-  color: var(--warning-solid) !important;
-}
-.ant-message-error > .ant-message-notice-icon {
-  color: var(--error-solid) !important;
-}
-.ant-message-notice:has(.toast-err) {
-  pointer-events: auto !important;
-}
-.ant-message-notice:has(.toast-err) {
-  user-select: text;
-}
-/* Error toast: the text plus a × that closes it (see lib/toast.tsx — errors never time out).
-   AntD wraps our content in a <span> of its own that shrink-wraps inside the card's flex row,
-   so the trailing close action needs that span to fill the card. */
-.ant-message-notice-title:has(> .toast-err) {
-  flex: 1;
-  min-width: 0;
-}
-
-/* Session-level results use Notification rather than Message: this is a compact card with the
-   outcome + session title, optional diagnostic detail, and a real action button when reversible.
-   These hug the viewport's top-right corner instead of hanging off the pane header's bottom edge:
-   anchored under the header the card dropped ~100px down and landed inside the reading column,
-   covering the top of the transcript and reading as page content rather than as a transient
-   system message. A toast is chrome, so it sits over chrome — the band it now overlaps carries
-   only the conversation header's ⋮ menu (desktop) or empty space right of "Orbit" (the mobile top
-   bar). Subsequent cards stack downward with an 8px gap. */
-.ant-notification.ant-notification-topRight:has(.session-lifecycle-toast) {
-  top: calc(env(safe-area-inset-top, 0px) + 16px) !important;
-  margin-right: max(16px, env(safe-area-inset-right, 0px)) !important;
-}
-/* Unlike the Message stack above, every card here takes clicks: the copy block opens the session
-   the card names (see lib/toast.tsx), so there is no such thing as an inert one. */
-.ant-notification-notice.session-lifecycle-toast {
-  box-sizing: border-box;
-  width: 360px;
-  max-width: calc(
-    100vw - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)
-  );
-  min-height: 64px;
-  margin-bottom: 8px;
-  padding: 12px 16px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  background: var(--bg-raised);
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.1);
-}
-.session-lifecycle-toast .ant-notification-notice-wrapper,
-.session-lifecycle-toast .ant-notification-notice-title {
-  min-width: 0;
-}
-/* AntD 6 lays the card out as a flex row rather than absolutely positioning the glyph against an
-   indented message, so the icon column is the row's own gap: 16px of padding, a 20px glyph and a
-   16px gap put the text on the same edge the Message card uses. */
-.session-lifecycle-toast .ant-notification-notice-wrapper {
-  gap: 16px;
+.toast-viewport--narrow {
+  top: calc(env(safe-area-inset-top, 0px) + 56px);
+  left: max(16px, env(safe-area-inset-left, 0px));
+  width: auto;
+  max-width: none;
   align-items: center;
 }
-/* One icon size for every tone, and the same 20px the Message toast uses — success used to
-   render at 24px against everyone else's 20px, so the same filled status circle came in two
-   weights depending on the outcome. (AntD sizes this one itself, hence !important.) */
-.session-lifecycle-toast .ant-notification-notice-icon {
-  width: 20px;
-  font-size: 20px !important;
-  line-height: 1;
-  text-align: center;
-}
-.session-lifecycle-toast--success .session-lifecycle-toast-icon {
-  color: var(--success-solid);
-}
-.session-lifecycle-toast--neutral .session-lifecycle-toast-icon {
-  color: var(--text-3);
-}
-.session-lifecycle-toast--info .session-lifecycle-toast-icon {
-  color: var(--brand);
-}
-.session-lifecycle-toast--warning .session-lifecycle-toast-icon {
-  color: var(--warning-solid);
-}
-.session-lifecycle-toast--error .session-lifecycle-toast-icon,
-.session-lifecycle-toast--danger .session-lifecycle-toast-icon {
-  color: var(--error-solid);
-}
-/* A tinted border means the card waits for you: warning and error are the two tones that never
-   time out. `danger` keeps the red icon — it reports a destructive result — but not the border,
-   because it dismisses itself like any other confirmation, and a card that looks identical to
-   the one that stays put is the reason you stop trusting the border at all. */
-.ant-notification-notice.session-lifecycle-toast--warning {
-  border-color: var(--warning-border);
-}
-.ant-notification-notice.session-lifecycle-toast--error {
-  border-color: var(--error-border);
-}
-.session-lifecycle-toast .ant-notification-notice-title {
-  margin: 0;
-  font-size: inherit;
-  line-height: inherit;
-}
-/* AntD parks the × 24px in from the edge; pull it onto the card's own 16px content grid so it
-   lines up with the Message toast's ×. */
-.session-lifecycle-toast .ant-notification-notice-close {
-  inset-inline-end: 16px !important;
-}
-.session-lifecycle-toast-body {
+.toast {
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 38px;
+  margin: 0;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-raised);
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.12);
+  color: var(--text-1);
+  font: inherit;
+  font-size: 14px;
+  line-height: 20px;
+  text-align: start;
+  animation: orbit-toast-enter 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-/* The copy block is a button that opens the session the card names (see lib/toast.tsx). Strip
-   the button chrome so the card looks exactly as it did, and let the hover state carry the
-   affordance — a pointer plus an underlined headline, the same signal a link gives. */
-.session-lifecycle-toast-copy {
-  display: block;
+:root[data-theme='dark'] .toast {
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4);
+}
+.toast--live {
+  pointer-events: auto;
+}
+/* ① a confirmation and a progress line: a pill that hugs its words. */
+.toast--pill {
+  gap: 8px;
+  max-width: 100%;
+  min-height: 36px;
+  padding: 7px 16px 7px 10px;
+  border-radius: 999px;
+}
+button.toast--pill {
+  cursor: pointer;
+}
+button.toast--pill:hover {
+  background: var(--bg-hover);
+}
+/* ② and ③: a card as wide as the column. */
+.toast--card {
+  width: 100%;
+  min-height: 56px;
+  padding: 12px 12px 12px 14px;
+  border-radius: 12px;
+}
+/* ③: tinted over the raised surface (the dark theme's tints are translucent), the server's words
+   in a block of their own, and selectable — the thing you read twice and paste somewhere. */
+.toast--attention {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  user-select: text;
+}
+.toast--error {
+  border-color: var(--error-border);
+  background: linear-gradient(var(--error-bg), var(--error-bg)), var(--bg-raised);
+}
+.toast--warning {
+  border-color: var(--warning-border);
+  background: linear-gradient(var(--warning-bg), var(--warning-bg)), var(--bg-raised);
+}
+.toast-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.toast-glyph {
+  flex: none;
+  font-size: 20px;
+  line-height: 0;
+}
+.toast--pill .toast-glyph {
+  font-size: 18px;
+}
+.toast-glyph--success {
+  color: var(--success-solid);
+}
+.toast-glyph--info {
+  color: var(--brand);
+}
+.toast-glyph--neutral {
+  color: var(--text-3);
+}
+.toast-glyph--warning {
+  color: var(--warning-solid);
+}
+.toast-glyph--error {
+  color: var(--error-solid);
+}
+.toast-copy {
+  display: flex;
   flex: 1;
+  flex-direction: column;
+  gap: 2px;
   min-width: 0;
+}
+.toast--pill .toast-copy {
+  flex: 0 1 auto;
+  gap: 0;
+}
+.toast-copy--link {
   padding: 0;
   border: 0;
-  background: transparent;
+  border-radius: 6px;
+  background: none;
   color: inherit;
   font: inherit;
   text-align: start;
   cursor: pointer;
 }
-.session-lifecycle-toast-copy:hover .session-lifecycle-toast-status {
-  text-decoration: underline;
+.toast-copy--link:hover .toast-head {
+  color: var(--brand);
 }
-.session-lifecycle-toast-copy:hover .session-lifecycle-toast-title {
-  color: var(--text-2);
-}
-.session-lifecycle-toast-copy:focus-visible {
-  border-radius: 6px;
-  outline: 2px solid var(--brand);
-  outline-offset: 2px;
-}
-.session-lifecycle-toast-status {
-  color: var(--text-1);
-  font-size: 14px;
+.toast-head {
   font-weight: 600;
-  line-height: 20px;
+  overflow-wrap: anywhere;
 }
-.session-lifecycle-toast-title {
+.toast-sub {
   overflow: hidden;
   color: var(--text-3);
   font-size: 13px;
@@ -444,54 +382,123 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.session-lifecycle-toast-detail {
-  margin-top: 4px;
+.toast-detail {
   color: var(--text-2);
   font-size: 13px;
   line-height: 18px;
   overflow-wrap: anywhere;
 }
-.session-lifecycle-toast:has(.session-lifecycle-toast-detail) .ant-notification-notice-wrapper {
-  align-items: flex-start;
-}
-.session-lifecycle-toast--warning,
-.session-lifecycle-toast--error {
-  user-select: text;
-}
-.session-lifecycle-toast-undo {
-  flex: none;
-  min-width: 52px;
-  min-height: 36px;
-  margin-left: auto;
-  padding: 0 8px;
-  border: 0;
+.toast-reason {
+  max-height: 108px;
+  margin-left: 32px;
+  overflow: auto;
+  padding: 7px 10px;
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  background: transparent;
-  color: var(--brand);
-  font-family: inherit;
-  font-size: 14px;
+  background: var(--bg-raised);
+  color: var(--text-2);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.toast-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: 32px;
+}
+.toast-action {
+  flex: none;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  background: var(--bg-raised);
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13px;
   font-weight: 600;
-  line-height: 20px;
   cursor: pointer;
 }
-.session-lifecycle-toast-undo:hover {
-  background: var(--brand-tint);
+.toast-action:hover {
+  background: var(--bg-hover);
 }
-.session-lifecycle-toast-undo:active {
+.toast-action--primary {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: #fff;
+}
+.toast-action--primary:hover {
+  border-color: var(--brand-strong);
+  background: var(--brand-strong);
+}
+/* A result card's one action — Undo — in the tint the lifecycle card's Undo always had. */
+.toast--card:not(.toast--attention) > .toast-action {
+  border-color: var(--brand-tint);
+  background: var(--brand-tint);
+  color: var(--brand);
+}
+.toast--card:not(.toast--attention) > .toast-action:hover {
   background: var(--brand-tint-hover);
 }
-.session-lifecycle-toast-undo:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: 1px;
+.toast-close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  font-size: 13px;
+  cursor: pointer;
 }
-:root[data-theme='dark'] .ant-notification-notice.session-lifecycle-toast {
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+.toast-close:hover {
+  color: var(--text-1);
+}
+.toast-count {
+  flex: none;
+  padding: 0 7px;
+  border-radius: 9px;
+  background: var(--error-solid);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+}
+.toast-chev {
+  flex: none;
+  color: var(--text-3);
+  font-size: 11px;
+}
+.toast-more {
+  pointer-events: auto;
+  margin-top: -2px;
+  padding: 3px 12px;
+  border: 1px solid var(--error-border);
+  border-radius: 999px;
+  background: linear-gradient(var(--error-bg), var(--error-bg)), var(--bg-raised);
+  color: var(--error);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.toast-copy--link:focus-visible,
+.toast-action:focus-visible,
+.toast-close:focus-visible,
+.toast-more:focus-visible,
+button.toast--pill:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
 }
 
-/* One entrance for both toast surfaces. AntD's top-right Notification already enters
-   horizontally — tightened here to a subtle 16px so it feels anchored to the header rather than
-   flying in from off-screen — while its Message drops in vertically. Cards that share a corner
-   shouldn't arrive from two different directions, so Message borrows this one. */
+/* Cards in the corner arrive from the side the corner is on, subtly — anchored to the header rather
+   than flying in from off-screen; a phone's centred column drops in from under its top bar. */
 @keyframes orbit-toast-enter {
   from {
     opacity: 0;
@@ -499,84 +506,33 @@ body {
   }
   to {
     opacity: 1;
-    transform: translate3d(0, 0, 0);
+    transform: none;
   }
 }
-.session-lifecycle-toast.ant-notification-fade-enter.ant-notification-fade-enter-active,
-.session-lifecycle-toast.ant-notification-fade-appear.ant-notification-fade-appear-active,
-.ant-message .ant-message-notice.ant-message-fade-enter.ant-message-fade-enter-active,
-.ant-message .ant-message-notice.ant-message-fade-appear.ant-message-fade-appear-active {
-  animation-name: orbit-toast-enter !important;
-  animation-duration: 180ms !important;
-  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+@keyframes orbit-toast-drop {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -12px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
-
-@media (max-width: 600px) {
-  .ant-notification.ant-notification-topRight:has(.session-lifecycle-toast) {
-    right: max(16px, env(safe-area-inset-right, 0px)) !important;
-    left: max(16px, env(safe-area-inset-left, 0px)) !important;
-    width: auto;
-    margin-right: 0 !important;
-  }
-  .ant-notification-notice.session-lifecycle-toast {
-    width: 100%;
-    max-width: none;
-  }
+.toast-viewport--narrow .toast {
+  animation-name: orbit-toast-drop;
 }
 
 @media (pointer: coarse) {
-  .session-lifecycle-toast-undo {
+  .toast-action {
     min-height: 44px;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ant-notification-notice.session-lifecycle-toast {
-    transition: none !important;
+  .toast {
+    animation: none;
   }
-  .session-lifecycle-toast.ant-notification-fade-enter,
-  .session-lifecycle-toast.ant-notification-fade-appear,
-  .session-lifecycle-toast.ant-notification-fade-leave,
-  .ant-message .ant-message-notice.ant-message-fade-enter,
-  .ant-message .ant-message-notice.ant-message-fade-appear,
-  .ant-message .ant-message-notice.ant-message-fade-leave {
-    opacity: 1 !important;
-    animation: none !important;
-  }
-  .ant-message {
-    transition: none;
-  }
-}
-
-/* A wrapped error is three lines tall; keep AntD's severity icon up on the first one with the
-   × instead of centred against the whole block. The icon and the text are the two children of
-   the notice's own row, so this lands on the row rather than on the card around it. */
-.ant-message-notice-wrapper:has(.toast-err) {
-  align-items: flex-start;
-}
-.toast-err {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-}
-.toast-err-text {
-  min-width: 0;
-}
-.toast-err-close {
-  flex: none;
-  margin-left: auto;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--text-3);
-  /* Same glyph and same 16px inset as the lifecycle card's × (see below) — dismissing a toast
-     shouldn't be a different-sized target depending on which surface it came from. */
-  font-size: 14px;
-  line-height: 20px;
-  cursor: pointer;
-}
-.toast-err-close:hover {
-  color: var(--text-1);
 }
 
 /* ---- App shell: side nav | main region (master/detail) ---- */
@@ -936,6 +892,9 @@ body {
   background: var(--border-subtle);
   margin: 8px 16px;
 }
+.tp-group + .tp-divider {
+  background: transparent;
+}
 .tp-group {
   padding: 0 8px;
 }
@@ -963,6 +922,84 @@ body {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-2);
+}
+/* The Workspaces head's one action: Edit, then Done while the rows are arranged. It shows on hover
+   like the caret beside it (opacity, so the keyboard can still reach it), and always in the touch
+   drawer, which has no hover. */
+.tp-group-action {
+  margin-left: auto;
+  padding: 1px 6px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.tp-group-head:hover .tp-group-action,
+.tp-group-action:focus-visible,
+.tp-group-action.editing {
+  opacity: 1;
+}
+.tp-group-action:hover,
+.tp-group-action:focus-visible {
+  background: var(--bg-hover-strong);
+  color: var(--text-1);
+  outline: none;
+}
+.tp-group-action.editing {
+  color: var(--brand);
+  font-weight: 600;
+}
+@media (max-width: 960px) {
+  .tp-group-action {
+    opacity: 1;
+  }
+}
+/* A Workspace row while the list is arranged: it opens nothing, and the Runners page's drag handle
+   stands in the folder's column. */
+.tp-item.editing {
+  cursor: default;
+}
+.tp-workspace-handle {
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 28px;
+  margin: 0 -2px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-4);
+  font-size: 15px;
+  cursor: grab;
+  touch-action: none;
+}
+.tp-workspace-handle:hover,
+.tp-workspace-handle:focus-visible {
+  background: var(--bg-hover-strong);
+  color: var(--text-2);
+  outline: none;
+}
+.tp-workspace-handle:active {
+  cursor: grabbing;
+}
+.tp-workspace-handle:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+.tp-workspace-sortable.dragging {
+  position: relative;
+  z-index: 1;
+}
+.tp-workspace-sortable.dragging .tp-item {
+  background: var(--bg-raised);
+  box-shadow: 0 8px 24px rgba(31, 35, 41, 0.16), 0 0 0 1px var(--brand-border);
 }
 .tp-add {
   color: var(--text-3);
@@ -2309,6 +2346,15 @@ body {
   min-width: 0;
   font-size: 12.5px;
 }
+/* Whose windows these are, when the engine has several accounts: the one a new session starts on. */
+.rd-quota-next {
+  margin-bottom: 4px;
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .rd-quota-head {
   display: flex;
   justify-content: space-between;
@@ -2685,6 +2731,56 @@ body {
 .rd-set-row .ant-switch {
   margin-top: 2px;
   flex: none;
+}
+/* The engines smart selection may move a task run to (model routing §6), under the switch's own
+   explanation: one chip per engine, the agent's own ticked and fixed. Qualified with .rd-engines-list
+   so antd's single-class checkbox rules, injected after this stylesheet, do not win on order. */
+.rd-route-engines {
+  margin-top: 10px;
+}
+.rd-engines-label {
+  font-size: 12px;
+  color: var(--text-2);
+}
+.rd-engines-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.rd-engines-list .ant-checkbox-wrapper {
+  margin-inline-start: 0;
+  padding: 2px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.rd-engines-list .ant-checkbox-wrapper.is-on {
+  border-color: var(--brand-border);
+  background: var(--brand-tint);
+  color: var(--brand-strong);
+  font-weight: 600;
+}
+/* The agent's own engine cannot be unticked, but it is ticked: drawn as on, not as greyed out. */
+.rd-engines-list .ant-checkbox-wrapper-disabled.is-on {
+  cursor: default;
+}
+.rd-engines-list .ant-checkbox-wrapper-disabled.is-on .ant-checkbox-inner {
+  background: var(--brand);
+  border-color: var(--brand);
+}
+.rd-engines-list .ant-checkbox-wrapper-disabled.is-on .ant-checkbox-inner::after {
+  border-color: #fff;
+}
+.rd-engines-list .ant-checkbox-wrapper-disabled.is-on .ant-checkbox + span {
+  color: var(--brand-strong);
+}
+.rd-engines-note {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 6px;
+  line-height: 1.5;
 }
 /* Advanced disclosure — folded by default, but it has to admit when it hides something. */
 .rd-adv-toggle {
@@ -3204,7 +3300,7 @@ body {
      list never scrolls sideways (titles/previews already ellipsize). */
   overflow-x: hidden;
 }
-/* Recency ("Today", "Previous 7 Days", …) / tag section headings over the rows below them.
+/* Recency ("Today", "2–7 days ago", …) / tag section headings over the rows below them.
    Sticky so the heading of the group being scrolled through stays legible, and light enough
    that the rows — not the headings — carry the list's weight. */
 .session-section-head {
@@ -3399,11 +3495,11 @@ html[data-theme='dark'] .session-tag-chip {
 }
 .session-row.active {
   background: var(--brand-tint);
-  --row-bg: var(--brand-tint);
+  --session-menu-surface: var(--brand-tint);
 }
 .session-row.active:hover {
   background: var(--brand-tint-hover);
-  --row-bg: var(--brand-tint-hover);
+  --session-menu-surface: var(--brand-tint-hover);
 }
 .workspace-draft {
   display: flex;
@@ -4583,6 +4679,7 @@ html[data-theme='dark'] .session-tag-chip {
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.16);
 }
 .session-row {
+  --session-menu-surface: var(--bg-base);
   position: relative;
   display: flex;
   align-items: center;
@@ -4593,7 +4690,6 @@ html[data-theme='dark'] .session-tag-chip {
   cursor: pointer;
   /* Keep the swipe-away content from spilling past the row's edges. */
   overflow: hidden;
-  --row-bg: var(--bg-raised);
 }
 /* Wraps the row's icon + text so a touch swipe can slide it either way, exposing the swipe
    actions behind it. On desktop it never translates (transform stays 0). */
@@ -4678,10 +4774,32 @@ html[data-theme='dark'] .session-tag-chip {
 :root[data-theme='dark'] .session-swipe-action.purge {
   background: #ff453a;
 }
+/* Share and Move sit inside Delete, in the colours the iOS row gives them (blue, indigo). */
+.session-swipe-action.share {
+  background: #007aff;
+}
+.session-swipe-action.move {
+  background: #5856d6;
+}
+:root[data-theme='dark'] .session-swipe-action.share {
+  background: #0a84ff;
+}
+:root[data-theme='dark'] .session-swipe-action.move {
+  background: #5e5ce6;
+}
 @media (hover: hover) {
   .session-row:hover {
     background: var(--bg-hover);
-    --row-bg: var(--bg-hover);
+    --session-menu-surface: var(--bg-hover);
+  }
+}
+.session-row.menu-open:not(.active) {
+  background: var(--bg-hover);
+  --session-menu-surface: var(--bg-hover);
+}
+@media (min-width: 961px) {
+  .session-row {
+    border-radius: 6px;
   }
 }
 /* Trash rows are managed, not opened — no pointer affordance. */
@@ -4761,16 +4879,6 @@ html[data-theme='dark'] .session-tag-chip {
 /* Last assistant reply, flattened to one line. Shares the second line with the row's tags
    (.session-sub owns the spacing above) — darker than the time so it reads as content,
    not metadata. */
-/* Who a session list row is waiting on for a reply, and who is waiting on it (session requests). */
-.session-requests {
-  margin-top: 2px;
-  font-size: 12px;
-  color: var(--brand);
-  line-height: 1.35;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 .session-preview {
   flex: 1;
   min-width: 0;
@@ -4782,8 +4890,9 @@ html[data-theme='dark'] .session-tag-chip {
   text-overflow: ellipsis;
 }
 /* Live status line (in place of a reply, while the agent works). Colour matches the
-   status glyph: blue = running, amber = waiting on you, grey = queued or a background
-   process the agent left up (which outlives the turn but isn't the agent working). */
+   status glyph: blue = running, amber = waiting on you, grey = queued, a background
+   process the agent left up (which outlives the turn but isn't the agent working), or a
+   watch that will resume the session (nothing is running, and nobody is being asked). */
 .session-preview.tone-running {
   color: var(--brand);
 }
@@ -4791,38 +4900,36 @@ html[data-theme='dark'] .session-tag-chip {
   color: var(--warning-solid);
 }
 .session-preview.tone-queued,
-.session-preview.tone-background {
+.session-preview.tone-background,
+.session-preview.tone-watching,
+.session-preview.tone-review {
   color: var(--text-3);
 }
-/* Row actions overlay the right edge instead of taking layout space: while idle
-   the title fills the full row width, and on hover the icon fades in over the
-   text. A gradient blends the title into the row background so it never collides
-   with the icon. */
+/* Float above full-width text without changing its layout when actions appear. */
 .session-right {
   position: absolute;
   top: 0;
   right: 8px;
   bottom: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
-  padding-left: 40px;
-  background: linear-gradient(to right, transparent, var(--row-bg) 40px);
-  opacity: 0;
+  width: 32px;
+}
+.session-right::before {
+  content: '';
+  position: absolute;
+  inset: 0 -8px 0 -28px;
+  /* Composite translucent dark-mode tints onto an opaque surface before fading. */
+  background: linear-gradient(var(--session-menu-surface), var(--session-menu-surface)), var(--bg-base);
+  mask-image: linear-gradient(to right, transparent, #000 42%);
   pointer-events: none;
-  transition: opacity 0.12s ease;
 }
-/* Reveal-on-hover only for real pointers. On touch, actions come from a swipe
-   (.session-swipe-actions); keeping :hover off touch also stops iOS Safari's "first tap shows
-   hover, second tap clicks" — which was swallowing the tap that should open the session. */
-@media (hover: hover) {
-  .session-row:hover .session-right {
-    opacity: 1;
-    pointer-events: auto;
+/* Touch phones use swipes; narrow desktop windows still need the menu for mouse/keyboard. */
+@media (max-width: 960px) and (hover: none) and (pointer: coarse) {
+  .session-right {
+    display: none;
   }
-}
-.session-row.menu-open .session-right {
-  opacity: 1;
-  pointer-events: auto;
 }
 .session-actions {
   display: flex;
@@ -4839,9 +4946,9 @@ html[data-theme='dark'] .session-tag-chip {
   font-size: 16px;
   flex: none;
 }
-/* Enlarge the click/hover target to the full row height without growing the
-   visible chip, so the icon stays light but is easy to hit. */
-.session-kebab::before {
+/* Folder controls keep their existing expanded target; session actions use a real button. */
+.session-folder-more::before,
+.session-folder-head-more::before {
   content: '';
   position: absolute;
   top: -18px;
@@ -4853,43 +4960,443 @@ html[data-theme='dark'] .session-tag-chip {
   background: var(--bg-hover-strong);
   color: var(--text-1);
 }
-/* Complete button: a bare glyph with no chip — the row's own hover/selected
-   highlight already frames it, so the action stays light and never clashes with
-   the selected-row tint. Darkens slightly on direct hover for feedback. */
-.session-kebab.session-complete {
-  background: transparent;
-  color: var(--text-3);
-  font-size: 16px;
-}
-.session-kebab.session-complete:hover {
-  background: transparent;
-  color: var(--text-2);
-}
-.session-kebab.session-complete.disabled,
-.session-kebab.session-complete.disabled:hover {
-  color: var(--text-3);
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-/* Pin toggle: a bare pushpin like the ✓, chip-highlighted on direct hover. It only ever shows
-   together with the row's other actions (on hover) — a pinned row is marked at rest by the
-   accent bar below instead, so there is never a lone floating pin. */
-.session-kebab.session-pin-toggle {
-  background: transparent;
-  color: var(--text-3);
-}
-.session-kebab.session-pin-toggle:hover {
+.session-actions > .session-kebab {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
   background: var(--bg-hover-strong);
   color: var(--text-1);
+  font: inherit;
+  font-size: 16px;
+  cursor: pointer;
 }
-/* Pinned rows: a thin accent bar on the leading edge marks the pinned state at rest (they also
-   sort to the top). The pin/✓ actions still appear only on hover, exactly like every other row.
-   box-shadow (not background) so it survives the hover/selected background tints. */
-.session-row.pinned {
-  box-shadow: inset 3px 0 0 var(--brand);
+/* Hide the button and its fade together, while keeping keyboard access. */
+@media (hover: hover) and (pointer: fine) {
+  .session-right {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .session-row:hover .session-right,
+  .session-row:focus-within .session-right,
+  .session-row.menu-open .session-right {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+.session-row.active .session-actions > .session-kebab {
+  background: color-mix(in srgb, var(--brand) 10%, var(--session-menu-surface));
+}
+.session-actions > .session-kebab:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+.session-row-menu {
+  min-width: 240px;
+}
+.session-row-menu .session-menu-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.session-row-menu .session-menu-label kbd {
+  flex: none;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
 }
 .session-status {
   font-size: 12.5px;
+}
+
+/* ---- Session folders (docs/session-folders-move-design.md §3, §7) ---- */
+/* A folder row: one line above Pinned and the time sections, shorter than a session row so the
+   two read apart at a glance. The folder is indigo — Move's colour, and not the grey folder a
+   Workspace row draws in the sidebar. */
+.session-folder-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 44px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--bg-hover);
+  cursor: pointer;
+  --row-bg: var(--bg-raised);
+}
+.session-folder-row.menu-open {
+  background: var(--bg-hover);
+  --row-bg: var(--bg-hover);
+}
+.session-folder-row:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
+.session-folder-row.editing {
+  height: auto;
+  min-height: 44px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  align-items: flex-start;
+  cursor: default;
+}
+.session-folder-icon {
+  position: relative;
+  justify-content: center;
+  color: #5856d6;
+  font-size: 16px;
+}
+:root[data-theme='dark'] .session-folder-icon {
+  color: #7d7aff;
+}
+.session-folder-row.editing .session-folder-icon {
+  margin-top: 5px;
+}
+/* What the sessions inside are doing, on the folder as the sidebar marks a Workspace: still while
+   one runs, breathing while only a background job does. */
+.session-folder-activity {
+  position: absolute;
+  right: -3px;
+  bottom: -1px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--brand);
+  box-shadow: 0 0 0 1.5px var(--row-bg);
+}
+.session-folder-activity.jobs {
+  animation: status-glyph-breathe 2.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .session-folder-activity.jobs {
+    animation: none;
+  }
+}
+.session-folder-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.session-folder-needs {
+  flex: none;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--warning-bg);
+  color: var(--warning);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+}
+.session-folder-count {
+  flex: none;
+  min-width: 10px;
+  text-align: right;
+  font-size: 12.5px;
+  color: var(--text-4);
+  font-variant-numeric: tabular-nums;
+}
+/* The trailing slot: the chevron at rest, the folder's ⋯ in its place on hover or while its menu
+   is open. On touch there is no hover, and the folder's page carries the same ⋯. */
+.session-folder-end {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+}
+.session-folder-chev {
+  color: var(--text-4);
+  font-size: 10px;
+}
+.session-kebab.session-folder-more {
+  position: absolute;
+  display: none;
+  width: 24px;
+  height: 24px;
+  font-size: 15px;
+}
+.session-folder-row.menu-open .session-folder-chev {
+  display: none;
+}
+.session-folder-row.menu-open .session-folder-more {
+  display: flex;
+  background: var(--bg-hover-strong);
+  color: var(--text-1);
+}
+@media (hover: hover) {
+  .session-folder-row:hover {
+    background: var(--bg-hover);
+    --row-bg: var(--bg-hover);
+  }
+  .session-folder-row:hover .session-folder-chev {
+    display: none;
+  }
+  .session-folder-row:hover .session-folder-more {
+    display: flex;
+  }
+}
+/* New Folder… and Rename…: the name is typed where the folder's name goes. */
+.session-folder-edit {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.folder-name-input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--brand);
+  border-radius: 6px;
+  background: var(--bg-raised);
+  box-shadow: 0 0 0 2px var(--brand-tint);
+  color: var(--text-1);
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+}
+.folder-name-input.error {
+  border-color: var(--error);
+  box-shadow: 0 0 0 2px var(--error-bg, rgba(255, 77, 79, 0.12));
+}
+.session-folder-hint {
+  font-size: 12px;
+  color: var(--text-4);
+}
+.session-folder-error {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--error);
+}
+.session-folder-head + .session-folder-error {
+  margin: -4px 0 6px 30px;
+}
+/* A folder's page: back to the list · the folder, over the workspace it is in · its ⋯. */
+.session-folder-head {
+  gap: 4px;
+}
+.session-folder-back {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-left: -6px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 13px;
+  cursor: pointer;
+}
+.session-folder-back:hover {
+  background: var(--bg-sunken);
+  color: var(--text-1);
+}
+.session-folder-titles {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.session-folder-title {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 19px;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.session-folder-workspace {
+  font-size: 12px;
+  line-height: 15px;
+  color: var(--text-4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.session-kebab.session-folder-head-more {
+  margin-left: auto;
+  cursor: pointer;
+}
+
+/* ---- The Move dialog (§4, §5) ---- */
+.move-dialog-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.move-dialog-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-left: -6px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 13px;
+  cursor: pointer;
+}
+.move-dialog-back:hover:not(:disabled) {
+  background: var(--bg-sunken);
+}
+.move-dialog-sub {
+  margin: -4px 0 14px;
+  font-size: 13px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.move-dialog-group {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-4);
+}
+.move-dialog-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0 -8px 14px;
+}
+.move-dialog-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+.move-dialog-option:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+.move-dialog-option:disabled {
+  cursor: default;
+}
+.move-dialog-option.new,
+.move-dialog-option.new .move-dialog-icon {
+  color: var(--brand);
+}
+.move-dialog-option.off .move-dialog-name {
+  color: var(--text-4);
+}
+.move-dialog-option.off .move-dialog-tile {
+  opacity: 0.4;
+}
+.move-dialog-option.editing {
+  cursor: default;
+}
+.move-dialog-icon {
+  display: flex;
+  flex: none;
+  justify-content: center;
+  width: 18px;
+  color: var(--text-3);
+  font-size: 16px;
+}
+.move-dialog-icon.folder {
+  color: #5856d6;
+}
+:root[data-theme='dark'] .move-dialog-icon.folder {
+  color: #7d7aff;
+}
+.move-dialog-tile {
+  display: flex;
+  flex: none;
+}
+.move-dialog-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.move-dialog-name small {
+  display: block;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-4);
+}
+.move-dialog-option.off .move-dialog-name small {
+  color: var(--text-3);
+}
+.move-dialog-count {
+  flex: none;
+  font-size: 12.5px;
+  color: var(--text-4);
+}
+.move-dialog-check {
+  flex: none;
+  color: var(--brand);
+  font-size: 14px;
+}
+.move-dialog-chev {
+  flex: none;
+  color: var(--text-4);
+  font-size: 10px;
+}
+.move-dialog-pill {
+  flex: none;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+.move-dialog-note {
+  margin: -6px 0 6px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+.move-dialog-error {
+  margin: 2px 8px 6px 36px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--error);
+}
+.move-dialog-foot {
+  margin: -6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-3);
+}
+.move-dialog-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.move-confirm-body p {
+  margin: 0 0 10px;
+}
+.move-confirm-body p:last-child {
+  margin-bottom: 0;
 }
 
 /* ---- Add a runner (Option A) ---- */
@@ -5558,6 +6065,44 @@ html[data-theme='dark'] .session-tag-chip {
 }
 .composer-model-menu.ant-dropdown-menu {
   min-width: 200px;
+}
+/* A task run on smart selection's pick (model routing §9): a ✦ and a light blue ground, no wider
+   than before — why it is this model opens at the top of the menu. */
+.composer-model-chip.is-smart {
+  background: var(--brand-tint);
+}
+.composer-model-chip.is-smart.ant-dropdown-open {
+  background: var(--brand-tint-hover);
+}
+.composer-model-chip.is-smart .composer-model-name {
+  color: var(--brand-strong);
+}
+.composer-model-spark {
+  align-self: center;
+  color: var(--brand);
+  font-size: 12px;
+}
+.composer-route-note {
+  max-width: 320px;
+  white-space: normal;
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.composer-route-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 650;
+}
+.composer-route-reason {
+  margin-top: 6px;
+}
+.composer-route-open {
+  color: var(--brand-strong);
+  font-weight: 600;
 }
 /* Lightweight, borderless controls (Claude-style): text-only label, with a faint
    rounded background surfacing only on hover. The pill category is named via Tooltip. */
@@ -7401,7 +7946,8 @@ button.chat-jump-start:hover {
 }
 /* How many identical repeats of this line folded into it. Rides at the end of the line, dimmer
    than the message: it is a fact about the log, not part of what the engine said. */
-.chat-error-repeat {
+.chat-error-repeat,
+.chat-diagnostic-repeat {
   margin-left: 6px;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
@@ -7415,6 +7961,32 @@ button.chat-jump-start:hover {
   font-size: 13px;
   line-height: 1.5;
   margin: 6px 0;
+}
+.chat-diagnostic {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  overflow-wrap: anywhere;
+}
+.chat-diagnostic-mark {
+  flex: none;
+}
+.chat-diagnostic-label {
+  flex: none;
+  color: var(--text-3);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.chat-diagnostic-text {
+  min-width: 0;
+}
+.chat-notice.chat-diagnostic .chat-diagnostic-text {
+  color: var(--text-2);
+}
+.chat-error.chat-diagnostic .chat-diagnostic-text a,
+.chat-notice.chat-diagnostic .chat-diagnostic-text a {
+  color: inherit;
+  text-decoration: underline;
 }
 
 /* Sign-in failure: a remedy card, not an error line. Sits at message width so it reads as
@@ -7448,6 +8020,11 @@ button.chat-jump-start:hover {
 .chat-authfix-desc {
   margin: 8px 0 0;
   color: var(--text-2);
+}
+.chat-authfix-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 /* Browser-driven runner sign-in, inside the sign-in card. */
 /* No panel of its own: the card is already the container, and buttons are self-delimiting —
@@ -7829,6 +8406,20 @@ button.chat-jump-start:hover {
 .chat-quota-retry[data-primary='true']:hover {
   background: var(--brand-strong);
   color: #fff;
+}
+/* A Retry already in flight (docs/session-request-reply-contract.md §2.1, §8 criterion 19): the
+   button stays where it was and stops offering, so a double tap cannot read as two attempts.
+   Placed after the variants above so it wins their hovers at equal specificity. */
+.chat-authfix-retry:disabled,
+.chat-quota-retry:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.chat-authfix-retry:disabled:hover,
+.chat-quota-retry:disabled:hover {
+  border-color: var(--border);
+  background: var(--bg-raised);
+  color: var(--text-1);
 }
 .chat-quota-note {
   color: var(--text-3);
@@ -8636,6 +9227,75 @@ button.chat-jump-start:hover {
   /* The text keeps its paragraphs and list items on lines of their own (`markdownToPlainLines`). */
   white-space: pre-wrap;
 }
+/* What counts as done, folded to one row that opens in place: the key, how many items, a caret. */
+.owner-confirmation-fold {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+.owner-confirmation-count {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.owner-confirmation-fold .anticon {
+  font-size: 10px;
+  color: var(--text-3);
+}
+/* If you confirm: Orbit's own facts about what the press sets off, right above Confirm done. White
+   and edged in the neutral border, with a symbol per row and no author, where the two boxes above
+   it quote somebody. */
+.owner-confirmation-if {
+  margin-top: 10px;
+  padding: 8px 12px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-base);
+}
+.owner-confirmation-if-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+.owner-confirmation-if-symbol {
+  flex: none;
+  width: 14px;
+  padding-top: 2px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.owner-confirmation-if-row.is-start .owner-confirmation-if-symbol {
+  color: var(--brand);
+}
+.owner-confirmation-if-text {
+  flex: 1;
+  min-width: 0;
+}
+.owner-confirmation-if-lead {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--text-1);
+}
+.owner-confirmation-if-added {
+  font-weight: 500;
+  color: var(--success-solid);
+}
+.owner-confirmation-if-detail {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 /* The line under the buttons on both cards whose second answer is a composer handoff: where the
    next message goes, and what pressing does not do. One rule, two cards — the sentence is the
    promise, and a promise that drifts between two cards saying the same thing is two promises. */
@@ -8668,6 +9328,191 @@ button.chat-jump-start:hover {
   font-size: 13px;
   color: var(--warning-solid);
   white-space: nowrap;
+}
+/* …and while its report is still with its reviewer: nobody is asking the owner yet, so not amber. */
+.tdp-owner-confirmation-pointer.is-under-review {
+  color: var(--text-2);
+}
+/* The review bar (`OwnerConfirmationReview.tsx`): the reviewer's box, between what the agent said and
+   If you confirm. Drawn like the agent's own box — somebody's words, under their name — with Orbit's
+   first line in it. */
+.owner-confirmation-review {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--brand-border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+}
+.owner-confirmation-review-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+/* The reviewer's name gives way, never the label or the time beside it. */
+.owner-confirmation-review-who {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+}
+.owner-confirmation-review-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.owner-confirmation-review-who .owner-confirmation-key {
+  flex: none;
+  white-space: pre;
+}
+.owner-confirmation-review-sha {
+  flex: none;
+  margin-left: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.owner-confirmation-review-sha.is-struck {
+  text-decoration: line-through;
+}
+.owner-confirmation-review-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.owner-confirmation-review-status .anticon {
+  font-size: 14px;
+  color: var(--text-3);
+}
+.owner-confirmation-review-status.is-warn {
+  color: var(--warning);
+}
+.owner-confirmation-review-note {
+  margin-top: 4px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+/* Orbit's first line: one line, the whole of it in the lines below. */
+.owner-confirmation-review-headline {
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.owner-confirmation-review-headline.is-warn {
+  color: var(--warning);
+}
+.owner-confirmation-review-row {
+  display: grid;
+  grid-template-columns: 84px 1fr;
+  column-gap: 8px;
+  margin-top: 5px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-1);
+  cursor: pointer;
+}
+.owner-confirmation-review-row-label {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-3);
+}
+.owner-confirmation-review-row.is-checked .owner-confirmation-review-row-label {
+  color: var(--success);
+}
+.owner-confirmation-review-row.is-not-checked .owner-confirmation-review-row-label,
+.owner-confirmation-review-row.is-problem .owner-confirmation-review-row-label {
+  color: var(--warning);
+}
+/* Two lines at most at rest; a press opens the row to each of its lines. */
+.owner-confirmation-review-row-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.owner-confirmation-review-items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+.owner-confirmation-review-items li + li {
+  margin-top: 4px;
+}
+.owner-confirmation-review-why {
+  font-size: 12px;
+  color: var(--text-2);
+}
+.owner-confirmation-review-ref {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+}
+.owner-confirmation-review-quote {
+  margin-top: 7px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+.owner-confirmation-review-old {
+  margin-top: 6px;
+}
+.owner-confirmation-review-old .anticon,
+.owner-confirmation-review-evidence .anticon {
+  font-size: 10px;
+  color: var(--text-3);
+}
+.owner-confirmation-review-reopen {
+  margin-top: 8px;
+}
+/* The answer blocks for the reviewer's questions: the question card's own rows. */
+.owner-confirmation-review-answers {
+  margin-top: 4px;
+}
+.owner-confirmation-review-question + .owner-confirmation-review-question {
+  margin-top: 10px;
+}
+.owner-confirmation-review-question-text {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.owner-confirmation-review-evidence {
+  margin-top: 2px;
+}
+/* Under a receipt: the review came in after the decision, and what the owner answered. */
+.owner-confirmation-before-review {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.owner-confirmation-answers {
+  margin-top: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-1);
+}
+.owner-confirmation-answers-head {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.owner-confirmation-answer + .owner-confirmation-answer {
+  margin-top: 4px;
 }
 /* ── The settlement confirmation card ─────────────────────────────────────────────────────
    `AcceptanceConfirmationCard.tsx`: whether the stated criteria, together, are what "done" means.
@@ -10320,6 +11165,67 @@ button.chat-jump-start:hover {
   background: var(--bg-hover);
   border-radius: 4px;
 }
+/* The Suggested tier (model routing §9): its picker with the coordinator's reason under it, and in
+   the picker each tier's dot, its model and effort, and the work it is for. */
+.tdp-field-stack {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.tdp-field-note {
+  margin-top: 1px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-3);
+}
+.tdp-hint-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.tdp-hint-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+.tdp-hint-dot.is-s {
+  background: var(--success-solid);
+}
+.tdp-hint-dot.is-m {
+  background: var(--brand);
+}
+.tdp-hint-dot.is-l {
+  background: var(--warning-solid);
+}
+.tdp-hint-dot.is-xl {
+  background: var(--error);
+}
+.tdp-hint-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  max-width: 340px;
+  white-space: normal;
+}
+.tdp-hint-option .tdp-hint-dot {
+  margin-top: 6px;
+}
+.tdp-hint-option-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.tdp-hint-option.is-none .tdp-hint-option-name {
+  font-weight: 400;
+  color: var(--text-3);
+}
+.tdp-hint-option-detail {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
 /* 「Start at」editor: the label keeps the shared 76px gutter, everything the control needs —
    input, its two actions, and the line under them — stacks in the remaining column. */
 .tdp-schedule {
@@ -11347,6 +12253,69 @@ button.chat-jump-start:hover {
   font-size: 11px;
   color: var(--text-3);
   margin-top: 1px;
+}
+/* A run's routing (model routing §9): the tier smart selection put it on — amber when a failed run
+   moved it up — or, where the Agent has not turned it on, the purple line saying what it would
+   have picked. Either opens the Why under the row. */
+.tdp-route-tag {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 0 5px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--brand-tint);
+  color: var(--brand-strong);
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 650;
+  line-height: 16px;
+  vertical-align: 1px;
+  cursor: pointer;
+}
+.tdp-route-tag.is-up {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.tdp-route-would {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--route-shadow);
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+.tdp-route-would:hover {
+  text-decoration: underline;
+}
+.tdp-route-why {
+  margin: 6px 0 2px 26px;
+  padding: 10px 12px;
+  border: 1px solid var(--brand-border);
+  border-radius: 9px;
+  background: var(--brand-tint);
+}
+.tdp-route-why-title {
+  margin-bottom: 5px;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--text-1);
+}
+.tdp-route-why ul {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--text-2);
+}
+.tdp-route-why-foot {
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--text-3);
 }
 .tdp-dot {
   width: 8px;
@@ -12871,12 +13840,19 @@ button.chat-jump-start:hover {
 .re-card + .re-card {
   margin-top: 10px;
 }
-/* An offline runner's rows describe its last check-in, not its present state. */
+/* An offline runner's rows describe its last check-in, not its present state. Server-side account
+   actions remain available in More; operations that need the machine are disabled in its menu. */
 .re-card.offline {
   background: var(--bg-subtle);
 }
-.re-card.offline .re-row {
+.re-card.offline .re-row > :not(.re-id),
+.re-card.offline .re-id > :not(.re-id-main),
+.re-card.offline .re-id-main > :not(.re-name):not(.re-name-input),
+.re-card.offline .re-name > * {
   opacity: 0.62;
+}
+.re-card.offline .re-row > .re-act:has(.re-more) {
+  opacity: 1;
 }
 .re-head {
   display: flex;
@@ -12953,6 +13929,92 @@ button.chat-jump-start:hover {
   white-space: nowrap;
 }
 
+/* The runner header's spare width belongs to its toggle, with Manage kept independent. */
+.re-runner-card .re-head {
+  gap: 0;
+  padding: 0;
+}
+.re-runner-card .re-toggle {
+  flex: 1;
+  align-self: stretch;
+  gap: 10px;
+  min-height: 64px;
+  padding: 10px 12px;
+  border-radius: 11px 0 0 11px;
+}
+.re-runner-card .re-toggle:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -3px;
+}
+.re-runner-card .re-chev {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  color: var(--text-2);
+  transition: color 0.15s, transform 0.15s;
+}
+.re-runner-card .re-chev.open,
+.re-runner-card .re-toggle:hover .re-chev {
+  color: var(--brand);
+}
+.re-runner-copy {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 9px;
+  min-width: 0;
+}
+.re-runner-copy .re-runner,
+.re-runner-copy .re-runner-meta {
+  overflow-wrap: anywhere;
+}
+.re-runner-card .re-manage {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  margin: 0 14px 0 8px;
+}
+.re-runner-card .re-manage:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+.re-runner-card .re-head > .ant-tag {
+  margin: 0 4px;
+}
+@container re-card (max-width: 600px) {
+  .re-runner-card .re-head {
+    flex-wrap: wrap;
+  }
+  .re-runner-card .re-toggle {
+    flex-basis: 100%;
+    gap: 8px;
+    padding: 10px 8px;
+    border-radius: 11px;
+  }
+  .re-runner-copy,
+  .re-runner-copy > span {
+    display: block;
+  }
+  .re-runner-copy .re-runner-meta {
+    margin-top: 3px;
+  }
+  .re-runner-card .re-summary {
+    border-left: 0;
+    padding: 3px 0 0;
+  }
+  .re-runner-card .re-manage {
+    margin-left: auto;
+    margin-right: 12px;
+  }
+  .re-runner-card .re-head > .ant-tag {
+    margin-left: 75px;
+  }
+}
+
 .re-row {
   display: grid;
   /* The last column is sized for two small buttons side by side: `+ Account` beside `Re-sign in` on
@@ -13003,6 +14065,67 @@ button.chat-jump-start:hover {
     display: none;
   }
 }
+/* A runner's engines and their accounts (RunnerEngines). Each row's quota is every window of its
+   login with when it resets, under a status that says whether the login can run now — the account
+   pools' login rows, which share these classes and keep the layout above. The status is sized for
+   the longest thing it says, "Spent · resets Mon 19:00"; the last column holds the widest pair of
+   actions, Add account beside More on a one-account row. On a narrow card the quota's bar gives way before the
+   name does: the name keeps 137px, an engine's name on one line clear of the status beside it. */
+.re-runner-card .re-row {
+  grid-template-columns: minmax(137px, 1fr) 168px minmax(128px, 190px) 160px;
+  /* Against the top: the quota stacks a window per line, and the name, status and actions stay level
+     with the first of them. */
+  align-items: start;
+}
+/* A group's head has no status or quota of its own — its accounts do — so its line runs the width
+   of the row, and its one action sits level with the name it belongs to. */
+@media (min-width: 701px) {
+  .re-runner-card .re-row.re-grp {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+  /* Too narrow for those floors (665px, 663 inside the border), as above: name and status, then
+     quota and actions. */
+  @container re-card (max-width: 662px) {
+    .re-runner-card .re-row {
+      grid-template-columns: minmax(0, 1fr) max-content;
+    }
+    .re-runner-card .re-row > :nth-child(2) {
+      justify-self: end;
+    }
+    .re-runner-card .re-quota {
+      margin-left: 38px;
+    }
+  }
+}
+@media (max-width: 700px) {
+  /* Keep the name and its actions together. Status and quota get their own lines so Add account
+     and Sign in can both remain visible without squeezing the account's state. */
+  .re-runner-card .re-row {
+    grid-template-columns: minmax(0, 1fr) max-content;
+    gap: 8px 10px;
+  }
+  .re-runner-card .re-row > .re-act {
+    grid-row: 1;
+    grid-column: 2;
+  }
+  .re-runner-card .re-row > .re-status,
+  .re-runner-card .re-row > .ant-tag {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    margin-left: 38px;
+    justify-self: start;
+  }
+  .re-runner-card .re-quota {
+    display: block;
+    grid-row: 3;
+    grid-column: 1 / -1;
+    margin-left: 38px;
+  }
+  .re-runner-card .re-acct .re-name {
+    overflow-wrap: anywhere;
+  }
+}
 .re-id {
   display: flex;
   align-items: center;
@@ -13050,12 +14173,118 @@ button.chat-jump-start:hover {
   font-size: 11px;
   color: var(--text-4);
 }
+/* One window under another, each with when it resets — the account pools' login rows. */
+.re-window + .re-window {
+  margin-top: 8px;
+}
+.re-reset {
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+/* A reading older than the runner's reads: the numbers above are as of then, not now. A fact in the
+   resets' grey, not a warning — a runner reads an engine no workspace defaults to only while one of
+   its sessions runs, so an idle Codex login's reading is often this old with nothing wrong. */
+.re-stale {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.re-status {
+  min-width: 0;
+}
+.re-status .ant-tag {
+  max-width: 100%;
+  margin-inline-end: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
 .re-act {
   display: flex;
   justify-content: flex-end;
-  /* An account's row holds two actions — sign in, and off this machine — and a group head one;
+  /* An account's row holds two actions — off this machine, and sign in — and a group head one;
      one child is a no-op. */
   gap: 8px;
+}
+.re-runner-card .re-act {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 30px;
+}
+.re-action.ant-btn {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 28px;
+  gap: 6px;
+}
+.re-action.ant-btn-default:not(:disabled) {
+  color: var(--text-2);
+  border-color: var(--border);
+  background: var(--bg-raised);
+  box-shadow: 0 1px 1px rgba(31, 35, 41, .025);
+}
+.re-action .anticon {
+  font-size: 13px;
+}
+.re-action.re-add-account,
+.re-action.re-install {
+  min-width: 112px;
+}
+.re-action.re-add-account:not(:disabled) {
+  color: var(--brand);
+  border-color: color-mix(in srgb, var(--brand) 15%, var(--bg-raised));
+  background: color-mix(in srgb, var(--brand) 5.5%, var(--bg-raised));
+}
+.re-action.re-add-account:not(:disabled):hover {
+  background: var(--brand-tint);
+  border-color: var(--brand-border);
+}
+.re-action.re-more {
+  width: 30px;
+  min-width: 30px;
+  padding: 0;
+  color: var(--text-3);
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+.re-action.re-more:hover,
+.re-action.re-more.ant-dropdown-open {
+  color: var(--text-2);
+  background: var(--fill-muted);
+}
+.re-action.re-more .anticon {
+  font-size: 17px;
+}
+.re-menu-anchor {
+  display: inline-flex;
+}
+.re-account-menu .ant-dropdown-menu {
+  min-width: 176px;
+  padding: 5px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  box-shadow: 0 8px 28px rgba(31, 35, 41, .11), 0 2px 5px rgba(31, 35, 41, .04);
+}
+.re-account-menu .ant-dropdown-menu .ant-dropdown-menu-item {
+  min-height: 33px;
+  padding: 5px 9px;
+  font-size: 12px;
+  gap: 8px;
+  border-radius: 5px;
+}
+.re-account-menu .ant-dropdown-menu .ant-dropdown-menu-item-icon {
+  color: var(--text-3);
+  font-size: 13px;
+}
+.re-account-menu .ant-dropdown-menu .ant-dropdown-menu-item-danger .ant-dropdown-menu-item-icon {
+  color: inherit;
 }
 /* Codex with more than one account: the engine's row heads a group, and each account is a row
    under it. The head keeps what the engine owns — binary, version, updates — and says how many. */
@@ -13104,7 +14333,7 @@ button.chat-jump-start:hover {
   bottom: auto;
   height: 28px;
 }
-/* DEFAULT: the machine's own ~/.codex, the one a terminal's `codex` shares. */
+/* A mark beside a name: NEXT, where the next session starts — on a pool, or among a runner's accounts. */
 .re-chip {
   display: inline-block;
   margin-left: 6px;
@@ -13116,6 +14345,33 @@ button.chat-jump-start:hover {
   font-weight: 600;
   line-height: 16px;
   vertical-align: 1px;
+}
+/* The name being renamed: the session title's underlined input (.workspace-name-input), at the
+   name's own size, its width set from the unseen twin below so the underline hugs the text. */
+.re-name-input {
+  display: block;
+  box-sizing: content-box;
+  max-width: 100%;
+  min-width: 3ch;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-bottom: 1px solid var(--brand);
+  background: transparent;
+  outline: none;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.re-name-mirror {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  visibility: hidden;
+  white-space: pre;
+  font-size: 13px;
+  font-weight: 600;
 }
 /* Two slots, one account: said under the second slot's row, in the second slot's own words, with
    the way out beside it. Indented past the rail so it reads as that row's and not the card's. */
@@ -13139,15 +14395,14 @@ button.chat-jump-start:hover {
   display: flex;
   align-items: center;
   gap: 10px;
+  /* The sign-in below starts flush in a panel (.re-panel .rsi), so the gap between them is this row's. */
+  margin-bottom: 10px;
 }
 .re-add-label {
   flex: none;
   width: 118px;
   font-size: 12.5px;
   color: var(--text-2);
-}
-.re-add-hint {
-  margin: 10px 0;
 }
 
 /* An install or a sign-in in flight, opened under the row it belongs to. */
@@ -13327,6 +14582,11 @@ button.chat-jump-start:hover {
 .pool-gauge-pct {
   font-variant-numeric: tabular-nums;
   color: var(--text-2);
+}
+/* Its tightest window at 90% or more: orange with its bar, as the composer's quota turns. */
+.pool-gauge-pct.near-limit {
+  color: var(--warning);
+  font-weight: 600;
 }
 .pool-gauge.spent {
   color: var(--warning);
@@ -13671,6 +14931,188 @@ button.chat-jump-start:hover {
   color: var(--text-3);
 }
 
+/* ── A Codex pool by who reads it: its owner, or somebody they added (docs/mocks/account-pool-access) ── */
+/* The subtitle: who can use it first, a shade darker. */
+.pool-sub {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.pool-sub b {
+  color: var(--text-2);
+  font-weight: 500;
+}
+/* Whose sessions an account runs, after its fingerprint: a ChatGPT account its owner's alone, a key
+   everybody's. */
+.pool-runs-for {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.pool-runs-for.all {
+  color: var(--success);
+}
+.pool-runs-for .anticon {
+  font-size: 11px;
+}
+/* The owner's ChatGPT accounts, as somebody they added sees them: one locked line. */
+.pool-card .re-row.pool-row-locked {
+  grid-template-columns: minmax(0, 1fr);
+  background: var(--bg-subtle);
+}
+.pool-row-locked .re-name {
+  color: var(--text-2);
+}
+.pool-lock-tile {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px dashed var(--border);
+  border-radius: 7px;
+  background: var(--fill-muted);
+  color: var(--text-3);
+  font-size: 13px;
+}
+/* Who can use it: the switch with what it means beside it, then each person, the one rule, and why the
+   owner's ChatGPT accounts are never anybody else's. */
+.who-card .re-head {
+  gap: 10px;
+}
+.who-mode {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.who-mode:last-child {
+  border-bottom: 0;
+}
+.who-mode-h {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-3);
+}
+.who-card .pool-rule {
+  border-top: 1px solid var(--border-subtle);
+}
+.pool-runs {
+  color: var(--text-3);
+}
+.pool-runs.all {
+  color: var(--text-2);
+}
+.who-foot {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-subtle);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-3);
+}
+.who-foot .anticon {
+  flex: none;
+  margin-top: 4px;
+  font-size: 12px;
+}
+.who-foot b {
+  color: var(--text-2);
+  font-weight: 600;
+}
+/* Shared with people, and no API key yet: none of them can start a session, and what fixes it. */
+.who-warn {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 14px;
+  border-top: 1px solid var(--warning-border);
+  background: var(--warning-bg);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+.who-warn > .anticon {
+  flex: none;
+  font-size: 15px;
+  color: var(--warning-solid);
+}
+.who-warn b {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.who-warn .ant-btn {
+  flex: none;
+  margin-left: auto;
+}
+.pool-share-emails {
+  width: 100%;
+}
+/* "Add account": each kind a card that is its own radio, what it runs said on it. */
+.add-kinds {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+.add-kinds .ant-radio-wrapper.add-kind {
+  display: flex;
+  align-items: flex-start;
+  margin-inline-end: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-raised);
+}
+.add-kinds .ant-radio-wrapper.add-kind.ant-radio-wrapper-checked {
+  border-color: var(--brand);
+  background: var(--brand-tint);
+}
+.add-kinds .add-kind .ant-radio {
+  align-self: flex-start;
+  margin-top: 3px;
+}
+.add-kinds .add-kind .ant-radio-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding-inline: 12px 0;
+}
+.add-kind-t {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.add-kind-s {
+  display: block;
+  margin-top: 2px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+.add-kind-s b {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.add-kind-key {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #6b7280, #4b5563);
+  color: #fff;
+  font-size: 13px;
+}
+
 /* ── "Add a key" / "Replace key" ─────────────────────────────────────────────── */
 .pa-lead {
   font-size: 13px;
@@ -13768,6 +15210,12 @@ button.chat-jump-start:hover {
 .pool-login-window + .pool-login-window {
   margin-top: 8px;
 }
+/* The sign-out mark rests grey and turns red only under the pointer: red on a row that is fine read
+   as something wrong with it. Weightier than antd's resting colour, lighter than its :hover and
+   :active, which keep the danger button's own red. */
+.pool-row .pool-signout.ant-btn {
+  color: var(--text-3);
+}
 .pool-login-reset {
   margin-top: 3px;
   font-size: 11px;
@@ -13827,7 +15275,7 @@ button.chat-jump-start:hover {
 }
 @media (max-width: 700px) {
   /* The quota is what an account's row is about: a line of its own under the name, bars and resets
-     kept — unlike a Claude account's, whose gauge waits for a wider window. */
+     kept — as a runner's accounts have it on Providers. */
   .pool-row .re-quota.pool-login-quota {
     display: block;
     grid-column: 1 / -1;
@@ -14362,6 +15810,18 @@ button.chat-jump-start:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.np-label-detail {
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-3);
+}
+.prov-runtime {
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-3);
+}
 /* Each row previews the model it would switch to, so the consequence is visible before the click. */
 .np-row-model {
   margin-left: auto;
@@ -14447,6 +15907,10 @@ button.chat-jump-start:hover {
 .np-list.with-accounts {
   width: 280px;
 }
+.np-list.with-details {
+  width: 360px;
+  max-width: calc(100vw - 32px);
+}
 /* The composer's account pill: which of a pool's accounts this session is spending. */
 .composer-account {
   padding-right: 6px;
@@ -14522,6 +15986,66 @@ button.chat-jump-start:hover {
 .project-integration-facts b {
   color: var(--text-1);
   font-weight: 600;
+}
+/* The current landings under the line (§2.7a): one compact block per task, in the task page's words. */
+.project-land-task {
+  border-top: 1px solid var(--border-subtle);
+  padding: 8px 10px;
+}
+.project-land-task-title {
+  display: inline-block;
+  margin-bottom: 4px;
+  font-weight: 600;
+  font-size: 12.5px;
+  color: var(--text-1);
+}
+.project-land-task-title:hover {
+  color: var(--brand);
+}
+/* A task's newest landing attempt: the task's status and the landing's apart, the reason, the facts. */
+.land-task-status {
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.land-task-status-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.land-task-task-state {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.land-task-generation,
+.land-task-step {
+  color: var(--text-3);
+}
+.land-task-reason {
+  margin-top: 5px;
+  color: var(--text-1);
+}
+.land-task-receipt {
+  margin-top: 5px;
+  color: var(--text-3);
+}
+.land-task-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 6px 0 0;
+}
+.land-task-facts > div {
+  display: flex;
+  gap: 5px;
+  min-width: 0;
+}
+.land-task-facts dt {
+  color: var(--text-3);
+}
+.land-task-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 /* A project nobody has started: one sentence beside the mark, wrapping under itself on a phone. */
 .project-integration-undecided {
@@ -16706,6 +18230,14 @@ button.chat-jump-start:hover {
   flex: none;
   font-size: 12px;
 }
+.bgwake-details-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  margin-left: auto;
+  font-size: 12px;
+}
 .bgwake-caret {
   flex: none;
   align-self: center;
@@ -16813,17 +18345,73 @@ button.chat-jump-start:hover {
   margin-top: 8px;
 }
 .bgwake-tail {
-  margin: 2px 0 6px 22px;
+  margin: 6px 0 6px 22px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-sunken);
 }
 .bgwake-tail-name {
   margin-bottom: 2px;
   color: var(--text-2);
   font-size: 12px;
 }
+.bgwake-output > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.bgwake-output > summary::-webkit-details-marker {
+  display: none;
+}
+.bgwake-output-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+/* Clamp visual lines: one long JSON line must be as compact as multiline output. */
+.bgwake-output-preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-height: 1.6;
+  max-height: 4.8em;
+  overflow: hidden;
+}
+.bgwake-output-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  color: var(--brand);
+  font-size: 12px;
+}
+.bgwake-output-collapse,
+.bgwake-output[open] .bgwake-output-preview,
+.bgwake-output[open] .bgwake-output-expand {
+  display: none;
+}
+.bgwake-output[open] .bgwake-output-collapse {
+  display: inline;
+}
+.bgwake-output[open] .bgwake-output-action .anticon {
+  transform: rotate(180deg);
+}
+.bgwake-output-full {
+  margin-top: 6px;
+  line-height: 1.6;
+}
 .bgwake-undelivered {
   margin: 2px 0 0 22px;
   color: var(--warning);
   font-size: 12px;
+}
+/* A wake written into the running turn: delivery progress in the same quiet tone as a steer. */
+.bgwake-steer {
+  margin: 2px 0 0 22px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-3);
 }
 /* Still waiting behind the running turn (WorkspaceView's queued tail): dashed like a queued
    message, with the queue's own status line under it. */
@@ -17527,6 +19115,94 @@ button.chat-jump-start:hover {
   flex-basis: 100%;
   white-space: normal;
 }
+/* A confirmation review's two turns (`ConfirmationReviewTurnCards.tsx`): the request a reviewer is
+   handed, and the reviewer's return handed to the run. Orbit's turns, drawn as the started card is. */
+.crc-wrap {
+  display: flex;
+  justify-content: flex-end;
+  margin: 8px 0;
+}
+.crc {
+  width: min(560px, 88%);
+  padding: 10px 12px;
+  border: 1px solid var(--brand-border);
+  border-radius: 12px;
+  background: var(--brand-tint);
+  color: var(--text-1);
+}
+.crc.is-returned {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+}
+.crc.is-queued {
+  border-style: dashed;
+}
+.crc-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--brand);
+  font-weight: 600;
+}
+.crc.is-returned .crc-head {
+  color: var(--warning);
+}
+.crc-when {
+  margin-left: auto;
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 400;
+}
+.crc-title,
+.crc-who {
+  margin: 4px 0 2px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.crc-title a,
+.crc-who a {
+  color: var(--brand);
+  text-decoration: none;
+}
+.crc-meta {
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.crc-actions {
+  margin-top: 8px;
+}
+.crc-quote {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.crc-problems {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+.crc-problems li {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  column-gap: 8px;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+}
+.crc-problem-label {
+  color: var(--warning);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.crc-undelivered {
+  margin-top: 4px;
+  color: var(--warning);
+  font-size: 12px;
+}
+.crc-queued {
+  margin-top: 6px;
+}
 .watch-editor {
   display: flex;
   flex-direction: column;
@@ -17803,6 +19479,51 @@ button.project-open-item-action:disabled {
 }
 .project-open-item-heading {
   min-width: 0;
+}
+/* An item whose handling by the coordinator has ended (§4.7 H5): the same card, quieter — nothing on
+   it is waiting for anybody. */
+.project-open-item-card.is-settled {
+  border-color: var(--border-subtle);
+  background: var(--bg-raised);
+}
+.project-open-item-card.is-settled .approval-head {
+  background: var(--bg-subtle);
+  border-bottom-color: var(--border-subtle);
+  color: var(--text-2);
+}
+/* Where the coordinator's handling stands (§4.7): blue while its rerun runs — the colour the project
+   list's "Coordinator · handling" chip uses — green once it was handled, grey once a new item took
+   its place. */
+.project-open-item-state {
+  flex: none;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  color: var(--text-2);
+}
+.project-open-item-state.is-handling {
+  border-color: var(--brand-border);
+  background: var(--brand-tint);
+  color: var(--brand);
+}
+.project-open-item-state.is-handled {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success);
+}
+.project-open-item-state.is-superseded {
+  color: var(--text-3);
+}
+.project-open-item-line.is-handling .project-open-item-state {
+  display: inline-block;
+  margin-right: 2px;
+  line-height: 16px;
+}
+.project-open-item-handling {
+  margin-top: 6px;
 }
 /* The provenance mark in its third colour: nothing is wrong and nobody is being asked to decide —
    Orbit is reporting a fact. Same box, so the three marks read as one family. */
@@ -19200,3 +20921,65 @@ a.wkctx-title:hover { text-decoration: underline; }
 .wt-recovery-repair-hint { margin: 5px 0 0 !important; font-size: 11px; }
 .wt-recovery-repair-error { color: var(--error) !important; }
 @media (max-width: 680px) { .wt-recovery-histories { grid-template-columns: 1fr; } }
+
+/* Timed pauses keep identity and quota visible while showing when the account returns. */
+.re-row.account-paused {
+  background: color-mix(in srgb, var(--warning, #d89614) 7%, transparent);
+}
+.account-pause-remaining {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.re-act:has(.account-pause-actions) {
+  flex-wrap: wrap;
+}
+.account-pause-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.account-pause-name {
+  margin: 14px 0 10px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.account-pause-copy {
+  color: var(--text-2);
+  line-height: 1.65;
+}
+.account-pause-scope {
+  padding: 10px 12px;
+  margin: 12px 0;
+  background: color-mix(in srgb, var(--warning, #d89614) 10%, transparent);
+  border-radius: 8px;
+  font-size: 13px;
+}
+.account-pause-durations {
+  display: flex;
+  margin: 20px 0 16px;
+}
+.account-pause-durations .ant-radio-button-wrapper {
+  flex: 1;
+  text-align: center;
+}
+.account-pause-custom {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.account-pause-custom > span,
+.account-pause-preview {
+  font-size: 12px;
+  color: var(--text-3);
+}
+@media (max-width: 700px) {
+  .re-row:has(.account-pause-actions) > .re-act {
+    grid-column: 1 / -1;
+    grid-row: auto;
+    justify-content: flex-start;
+    margin-left: 38px;
+  }
+}

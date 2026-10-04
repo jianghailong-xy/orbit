@@ -112,6 +112,7 @@ export const HANDOFF_APPROVAL_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export interface HandoffPlan {
   title: string;
   description?: string | null;
+  attachmentIds?: readonly string[] | null;
   acceptanceCriteria?: string | null;
   acceptanceCommand?: string | null;
   acceptanceExpectedExitCode?: number | null;
@@ -123,6 +124,8 @@ export interface HandoffPlan {
   /** WITH WHAT. */
   provider?: string | null;
   model?: string | null;
+  modelHint?: string | null;
+  modelHintReason?: string | null;
   /** WHEN. */
   autoRunWhenReady?: boolean | null;
   runAt?: string | null;
@@ -185,15 +188,19 @@ export function handoffPayloadDigest(identity: HandoffRequestIdentity): string {
   const executableAcceptance =
     plan.acceptanceCommand != null || plan.acceptanceExpectedExitCode != null;
   const typedCompletion = plan.completionCriterion != null;
+  const modelSuggestion = plan.modelHint != null || plan.modelHintReason != null;
+  const attachmentIds = [...new Set(plan.attachmentIds ?? [])].sort();
   // v5 is retired, not renumbered: 0227 removed the negotiated timeout pair that selected it, so
   // no new plan can reach that shape. Rows that were keyed with it keep the digest they were
   // written with, which is the whole point of an append-only idempotency preimage.
   return createHash('sha256')
     .update(canonicalJson({
-      v: typedCompletion ? 4 : executableAcceptance ? 3 : 2,
+      v: attachmentIds.length ? 7 : modelSuggestion ? 6 : typedCompletion ? 4 : executableAcceptance ? 3 : 2,
       plan: {
         title: plan.title,
         description: plan.description ?? null,
+        // Empty inputs preserve old approvals; an attachment-bearing plan binds the source set.
+        ...(attachmentIds.length ? { attachmentIds } : {}),
         acceptanceCriteria: plan.acceptanceCriteria ?? null,
         ...(executableAcceptance
           ? {
@@ -209,6 +216,11 @@ export function handoffPayloadDigest(identity: HandoffRequestIdentity): string {
         listId: plan.listId ?? null,
         provider: plan.provider ?? null,
         model: plan.model ?? null,
+        // v6 binds suggestions without changing the identity of older, unsuggested requests.
+        ...(modelSuggestion ? {
+          modelHint: plan.modelHint ?? null,
+          modelHintReason: plan.modelHintReason ?? null,
+        } : {}),
         autoRunWhenReady: plan.autoRunWhenReady ?? null,
         runAt: plan.runAt ?? null,
         dueDate: plan.dueDate ?? null,

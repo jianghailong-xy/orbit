@@ -148,7 +148,12 @@ function prismaFor(s: Scenario) {
       findUniqueOrThrow: async () => row,
       findMany: async () => [row],
     },
-    modelProvider: { findFirst: async () => s.customRow ?? null },
+    modelProvider: {
+      findFirst: async () => s.customRow ?? null,
+      // A runner that names no runtime makes the claim/reclaim ask which providers borrow one
+      // (providerSlugsOn); none do here.
+      findMany: async () => [],
+    },
     runEvent: { aggregate: async () => ({ _max: { seq: 7 } }) },
     user: { findUnique: async () => null },
     $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
@@ -408,6 +413,7 @@ test('a workspace stores the slot id or Default, never a path', async () => {
   const written: Array<Record<string, unknown>> = [];
   const stored = { id: WORKSPACE_ID, ownerId: OWNER, name: 'repo', runner: null };
   const prisma = {
+    runner: { findMany: async () => [] },
     workspace: {
       findFirst: async () => stored,
       update: async ({ data }: { data: Record<string, unknown> }) => {

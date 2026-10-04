@@ -9,10 +9,11 @@ import type { RealtimeService } from '../realtime/realtime.service';
  * `init` / `resumed` the runner reports (RunnerApiController.events) — never a run event of this server's
  * own: the runner numbers a session's events, and a row written here would take the seq its next event is
  * about to use (server-must-not-insert-run-event-rows). The line is owed by the claim that moves a
- * shared-pool session onto another key (QueueService.resolveSharedPool) and by the pool gateway when a
- * login pool's account is spent or signed out (PoolLoginGatewayService, `owe`); the carrier is queued by
- * the claim that follows it. A plain class rather than a provider, since those two live on either side of
- * the ProvidersModule → QueueModule import.
+ * shared-pool session onto another key (QueueService.resolveSharedPool) or a login-pool session onto
+ * another account (QueueService.resolveLoginPool), and by the pool gateway when a login pool's account is
+ * spent or signed out (PoolLoginGatewayService, `owe`); the carrier is queued by the claim that follows it.
+ * A plain class rather than a provider, since those two live on either side of the ProvidersModule →
+ * QueueModule import.
  */
 export class PoolNotices {
   private readonly logger = new Logger('PoolNotices');
@@ -28,9 +29,10 @@ export class PoolNotices {
    * line to ride on. A runner answers every reload with a `resumed` event, and the inbox delivers a reload
    * ahead of the message waiting behind it, so on a resident engine the line lands just before the turn
    * it is about. On an engine a claim starts, the start's own event has taken the line by then, and the
-   * `resumed` this earns carries nothing and draws nothing.
+   * `resumed` this earns carries nothing and draws nothing. Passing a provider also refreshes the
+   * environment: a direct Claude credential or runner account change must restart its warm process.
    */
-  async carrier(sessionId: string): Promise<void> {
+  async carrier(sessionId: string, provider?: string): Promise<void> {
     const clientTurnId = `pool-key-switch:${randomUUID()}`;
     await withTransactionRetry(this.prisma, async (tx) => {
       // The seq is allocated under the Session's own lock, as every other producer of a turn does.
@@ -45,7 +47,7 @@ export class PoolNotices {
           sessionId,
           seq: (last?.seq ?? 0) + 1,
           kind: 'reload',
-          content: '{}',
+          content: provider ? JSON.stringify({ provider }) : '{}',
           clientTurnId,
           status: 'PENDING',
         },

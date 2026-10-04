@@ -1143,6 +1143,12 @@ export const WIKI_MAINTENANCE_RUN = {
   permissionMode: 'dontAsk',
   /** The one runtime whose clean start and disallowedTools hold (the codex path ignores disallowedTools). */
   runtime: 'claude',
+  /**
+   * The timeout of the run's one Bash call, the command its task names, in milliseconds: five hours. The
+   * clean start's default and most (BASH_DEFAULT_TIMEOUT_MS, BASH_MAX_TIMEOUT_MS), and what the task's prompt
+   * tells the model to give the call, since a timeout the call names wins over the default.
+   */
+  bashTimeoutMs: 18_000_000,
 } as const;
 
 /**

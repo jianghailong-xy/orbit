@@ -42,12 +42,18 @@ import {
 } from './task-completion-criterion';
 import { MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS } from './task-criterion-shape-advice';
 import { MAX_TASK_CODELESS_REASON_CHARS } from './task-codeless';
+import {
+  MAX_OWNER_CONFIRMATION_REASON_NOTE_CHARS,
+  OWNER_CONFIRMATION_REASONS,
+  type OwnerConfirmationReasonValue,
+} from './owner-confirmation-reason';
 
 const TASK_STATUSES = Object.values(TaskStatus);
 const TASK_COMPLETION_POLICY_VALUES = [...TASK_COMPLETION_POLICIES];
 const TASK_VERDICT_VALUES = [...TASK_VERDICTS];
 const TASK_COMPLETION_CRITERION_VALUES = [...TASK_COMPLETION_CRITERIA];
 const TASK_TERMINAL_REASON_VALUES = [...TASK_TERMINAL_REASONS];
+const OWNER_CONFIRMATION_REASON_VALUES = [...OWNER_CONFIRMATION_REASONS];
 
 /**
  * Bounds on one task's labels. Not a taxonomy — a stop on a caller that has confused the label
@@ -58,6 +64,10 @@ export const TASK_LABEL_MAX_LENGTH = 64;
 
 /** Same cap and same reasoning as the project's own criteria (see projects/dto.ts). */
 export const MAX_TASK_ACCEPTANCE_CRITERIA_CHARS = 4_000;
+
+export const TASK_MODEL_HINTS = ['S', 'M', 'L', 'XL'] as const;
+export type TaskModelHint = (typeof TASK_MODEL_HINTS)[number];
+export const MAX_TASK_MODEL_HINT_REASON_CHARS = 500;
 
 /**
  * A day, matching 0236's `task_acceptance_timeout_shape_check`. Not a policy about how long work
@@ -270,6 +280,23 @@ export class DecideOwnerConfirmationDto {
   @IsString()
   @MaxLength(MAX_OWNER_DECISION_NOTE_CHARS)
   note?: string;
+
+  /**
+   * The REVIEW record the card drew as the request's current review, or null when it drew none
+   * (docs/owner-confirmation-review-contract.md §7 Q3). A client that knows about reviews always sends
+   * this key; one that leaves it out predates them, and is never refused on a review's account.
+   */
+  @IsOptional()
+  @IsPublicId()
+  reviewRecordId?: string | null;
+
+  /**
+   * The owner's answers to that review's questions: `{ key, option?, text? }` each, checked against
+   * the review by the service (Q3), which is also what refuses a malformed one with 400.
+   */
+  @IsOptional()
+  @IsArray()
+  answers?: Array<{ key: string; option?: number | null; text?: string | null }>;
 }
 
 /** The shared read shape of one recorded decision. */
@@ -345,6 +372,8 @@ export class CreateTaskDto {
   title!: string;
 
   @IsOptional() @IsString() description?: string;
+  // Existing owner-owned attachments to copy as task inputs, preserving their original scope.
+  @IsOptional() @IsArray() @IsPublicId({ each: true }) attachmentIds?: string[];
   // The workspace assigned to execute the task. Must be owned by the caller.
   @IsOptional() @IsPublicId() assigneeId?: string;
   // The list this task belongs to. Must be owned by the caller.
@@ -412,6 +441,14 @@ export class CreateTaskDto {
   // server question. Optional on the first attempt; a mismatch without it returns an ADVISORY.
   @IsOptional() @IsString() @MaxLength(MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS)
   completionCriterionOverrideReason?: string;
+  // Why only the account owner can settle this task, for an OWNER_CONFIRMED declaration
+  // (`owner-confirmation-reason.ts`). Required of a session declaring OWNER_CONFIRMED outside an
+  // Automatic project — the write is refused 409 without it — and stored on the task either way.
+  @IsOptional() @IsIn(OWNER_CONFIRMATION_REASON_VALUES)
+  ownerConfirmationReason?: OwnerConfirmationReasonValue;
+  // The one sentence that may go with that reason. Never on its own.
+  @IsOptional() @IsString() @MaxLength(MAX_OWNER_CONFIRMATION_REASON_NOTE_CHARS)
+  ownerConfirmationReasonNote?: string;
   // How this task's own completion is decided once it has subtasks. Omitted is MANUAL, which is
   // what every task has always been: nothing completes it but a status write. See §13.1.
   @IsOptional() @IsIn(TASK_COMPLETION_POLICY_VALUES) completionPolicy?: TaskCompletionPolicyValue;
@@ -464,6 +501,10 @@ export class CreateTaskDto {
   // null) inherits from the assignee, which is the historical behaviour.
   @IsOptional() @IsString() @MaxLength(64) provider?: string | null;
   @IsOptional() @IsString() @MaxLength(200) model?: string | null;
+  // Suggested difficulty, distinct from the model pin; provider still chooses the engine.
+  @IsOptional() @IsIn(TASK_MODEL_HINTS) modelHint?: TaskModelHint | null;
+  @IsOptional() @IsString() @MaxLength(MAX_TASK_MODEL_HINT_REASON_CHARS)
+  modelHintReason?: string | null;
   // Prerequisite task ids this new task should wait on (each must be owned by the
   // caller). The task only runs once they're all DONE.  //
   // Name the SUBJECT, not its verification task. "B waits for A to be verified" is spelled
@@ -644,6 +685,14 @@ export class UpdateTaskDto {
   // but it is now recorded, beside the criterion being left behind.
   @IsOptional() @IsString() @MaxLength(MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS)
   completionCriterionOverrideReason?: string;
+  // See CreateTaskDto.ownerConfirmationReason. Three-state: omit to keep the stored reason, null to
+  // clear it together with its sentence, a value to (re)state it. Asked of a session's write only
+  // when it moves the criterion, the project or the criterion served, as the 09-29 rule is; a write
+  // that takes the task off OWNER_CONFIRMED clears both on its own.
+  @IsOptional() @IsIn(OWNER_CONFIRMATION_REASON_VALUES)
+  ownerConfirmationReason?: OwnerConfirmationReasonValue | null;
+  @IsOptional() @IsString() @MaxLength(MAX_OWNER_CONFIRMATION_REASON_NOTE_CHARS)
+  ownerConfirmationReasonNote?: string | null;
   @IsOptional() @IsDateString() dueDate?: string | null;
   // Three-state like dueDate above: omit to keep the current schedule, null to cancel it, an ISO
   // instant to (re)schedule. Rescheduling a task whose dispatch is in flight is safe — the
@@ -654,6 +703,10 @@ export class UpdateTaskDto {
   // runs to that provider / model id. Omit to leave the current pin alone.
   @IsOptional() @IsString() @MaxLength(64) provider?: string | null;
   @IsOptional() @IsString() @MaxLength(200) model?: string | null;
+  // Three-state for each field: omitted preserves it, a value replaces it, null clears it.
+  @IsOptional() @IsIn(TASK_MODEL_HINTS) modelHint?: TaskModelHint | null;
+  @IsOptional() @IsString() @MaxLength(MAX_TASK_MODEL_HINT_REASON_CHARS)
+  modelHintReason?: string | null;
   // Full replacement for this task's prerequisites. Omit to keep them unchanged;
   // pass [] to clear them all.  //
   // Name the SUBJECT, not its verification task. "B waits for A to be verified" is spelled

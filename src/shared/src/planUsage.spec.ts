@@ -8,6 +8,7 @@ import {
   planUsageReported,
   codexAccountToMoveTo,
   codexAccountToStartOn,
+  accountToStartOn,
   quotaExpiresAt,
   quotaNearLimit,
 } from './planUsage';
@@ -171,6 +172,29 @@ describe('a runner with more than one Claude account', () => {
     expect(planUsageBlockedUntil(workSpent, 'claude', NOW, 'default')).toBeNull();
   });
 
+  it("starts a session on the account whose week ends first, until that one's 5-hour window passes 80%", () => {
+    const accounts: RunnerEngineAccount[] = [
+      { id: 'default', home: '/root/.claude', auth: 'yes' },
+      { id: WORK, home: `/root/.orbit/claude-accounts/${WORK}`, auth: 'yes' },
+    ];
+    /** 2026-10-02 on wikova, in miniature: Work's week ends days before Default's, and every new
+     *  session went to Work while Default sat at 1% of its 5 hours. */
+    const usage = (workFiveHour: number): PlanUsage => ({
+      claude: {
+        fiveHour: { utilization: 1, resetsAt: EARLIER },
+        sevenDay: { utilization: 0, resetsAt: '2026-08-09T03:59:59Z' },
+        accounts: {
+          [WORK]: {
+            fiveHour: { utilization: workFiveHour, resetsAt: EARLIER },
+            sevenDay: { utilization: 59, resetsAt: '2026-08-06T21:59:59Z' },
+          },
+        },
+      },
+    });
+    expect(accountToStartOn('claude', accounts, usage(79), NOW)).toBe(WORK);
+    expect(accountToStartOn('claude', accounts, usage(85), NOW)).toBe('default');
+  });
+
   it('knows nothing about an account that has not been read, nor about a run on a key of its own', () => {
     const usage = claudeAccounts(100, 100);
     for (const account of ['0badf00d', null]) {
@@ -270,11 +294,28 @@ describe('quotaExpiresAt — when what an account has left goes to waste', () =>
     expect(quotaExpiresAt(lapsedWeek, NOW)).toBe(Date.parse(IN_TWO_HOURS));
   });
 
-  it('calls a window at 90% or more nearly spent, until its reset has passed', () => {
-    const at = (utilization: number, resetsAt: string) => ({ provider: 'claude' as const, fiveHour: { utilization, resetsAt } });
-    expect(quotaNearLimit(at(89, IN_TWO_HOURS), NOW)).toBe(false);
-    expect(quotaNearLimit(at(90, IN_TWO_HOURS), NOW)).toBe(true);
-    expect(quotaNearLimit(at(100, '2026-08-03T12:00:00Z'), NOW)).toBe(false);
+  it('calls a 5-hour window nearly spent at 80%, a longer one at 90%, until its reset has passed', () => {
+    const claude = (fiveHour: number, sevenDay: number) => ({
+      provider: 'claude' as const,
+      fiveHour: { utilization: fiveHour, resetsAt: IN_TWO_HOURS },
+      sevenDay: { utilization: sevenDay, resetsAt: IN_THREE_DAYS },
+    });
+    expect(quotaNearLimit(claude(79, 89), NOW)).toBe(false);
+    expect(quotaNearLimit(claude(80, 0), NOW)).toBe(true);
+    expect(quotaNearLimit(claude(0, 90), NOW)).toBe(true);
+    // By the window's length, never its slot: Codex reports a Plus login's 5-hour window and a Pro
+    // login's weekly one alike, as its `primary`.
+    const codex = (utilization: number, windowDurationMins?: number) => ({
+      provider: 'codex' as const,
+      primary: { utilization, resetsAt: IN_TWO_HOURS, ...(windowDurationMins ? { windowDurationMins } : {}) },
+    });
+    expect(quotaNearLimit(codex(80, 300), NOW)).toBe(true);
+    expect(quotaNearLimit(codex(89, 10080), NOW)).toBe(false);
+    expect(quotaNearLimit(codex(90, 10080), NOW)).toBe(true);
+    // One that does not say how long it is is held to the longer windows' mark.
+    expect(quotaNearLimit(codex(89), NOW)).toBe(false);
+    const lapsed = { provider: 'claude' as const, fiveHour: { utilization: 100, resetsAt: '2026-08-03T12:00:00Z' } };
+    expect(quotaNearLimit(lapsed, NOW)).toBe(false);
     expect(quotaNearLimit(null, NOW)).toBe(false);
   });
 });
@@ -316,6 +357,15 @@ describe('codexAccountToStartOn — where a session with no account picked start
     expect(codexAccountToStartOn(both, usage(100, 18, 92), NOW)).toBe(PRO);
   });
 
+  it("leaves the last fifth of a Plus login's 5 hours to the sessions already on it, and a Pro login's week its last tenth", () => {
+    // Default's week ends first, so it takes the run — until its 5-hour window passes 80%.
+    expect(codexAccountToStartOn(both, usage(79, 18, 40, '2026-08-10T00:00:00Z'), NOW)).toBe('default');
+    expect(codexAccountToStartOn(both, usage(80, 18, 40, '2026-08-10T00:00:00Z'), NOW)).toBe(PRO);
+    // Pro reports its week in the slot Plus reports its 5 hours in: at 85% it is not nearly spent, and
+    // its week ending first still takes the run.
+    expect(codexAccountToStartOn(both, usage(5, 18, 85, '2026-08-05T13:00:00Z'), NOW)).toBe(PRO);
+  });
+
   it("passes over a spent account, and on equal expiry ranks the rest by each one's tightest window", () => {
     // Default's 5-hour window spent: Pro, whatever its weekly use.
     expect(codexAccountToStartOn(both, usage(100, 18, 70), NOW)).toBe(PRO);
@@ -328,9 +378,9 @@ describe('codexAccountToStartOn — where a session with no account picked start
   });
 
   it('ranks an account nothing was read for after every one with room, but still takes it over a spent one', () => {
-    expect(codexAccountToStartOn(both, usage(80, 18, null), NOW)).toBe('default');
+    expect(codexAccountToStartOn(both, usage(79, 18, null), NOW)).toBe('default');
     // Ahead of one nearly spent, though: nothing says the unread one is.
-    expect(codexAccountToStartOn(both, usage(90, 18, null), NOW)).toBe(PRO);
+    expect(codexAccountToStartOn(both, usage(80, 18, null), NOW)).toBe(PRO);
     expect(codexAccountToStartOn(both, usage(100, 18, null), NOW)).toBe(PRO);
   });
 

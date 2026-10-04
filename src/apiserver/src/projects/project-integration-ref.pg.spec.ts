@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import { Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
-import { uuidToBase62 } from '@orbit/shared';
+import { RunnerStatus as HeartbeatRunnerStatus, uuidToBase62, type AgentDirProbe } from '@orbit/shared';
 import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
 import { Client } from 'pg';
 
@@ -17,6 +17,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import type { QueueService } from '../queue/queue.service';
 import type { RealtimeService } from '../realtime/realtime.service';
 import type { RunnerOrchestrationAuthorizer } from '../runner-api/runner-orchestration-authorizer';
+import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { RunnerProjectsController } from '../runner-api/runner-projects.controller';
 import { RunnerSessionsController } from '../runner-api/runner-sessions.controller';
 import type { SessionTagsService } from '../session-tags/session-tags.service';
@@ -49,9 +50,9 @@ import { TaskCheckpointService } from './task-checkpoint.service';
  *   bash scripts/run-pg-spec.sh src/apiserver/src/projects/project-integration-ref.pg.spec.ts
  *
  * Project acceptance criterion 4, cases as `docs/project-integration-line-contract.md` §1.7 lists
- * them, plus §8.8's C1 compatibility case and L5's owner-only door. The last three cases are L3
+ * them, plus §8.8's C1 compatibility case and L5's owner-only door. The last four cases are L3
  * step 4's back-fill (J-T1d): which finished code tasks a line that has just started still owes a
- * landing to.
+ * landing to, and that only the transaction starting it owes them one.
  *
  * WHAT IS REAL
  * ============
@@ -213,9 +214,8 @@ interface Fixture {
  * One owner, one runner, and one project coordinated from a workspace that names its remote.
  * The workspace's merge default is `main`, which is what case 6 watches for movement.
  *
- * `repoUrl` is a parameter because the binding has two inputs: a workspace that already states one
- * (every case above), and one that states none until its owner declares it through the form's own
- * door (the declaration case below).
+ * `repoUrl` is a parameter because a workspace may already name a remote, or learn it later from
+ * its owner or the runner's checkout probe.
  */
 async function project(stack: Stack, label: string, repoUrl: string | null = REPO_URL): Promise<Fixture> {
   const db = stack.db;
@@ -583,10 +583,7 @@ test('a project’s integration line is recorded, defaulted, locked, read for la
     assert.ok(row?.integration_started_at instanceof Date, 'the line records when it started');
   });
 
-  // Where the repository comes from, for a workspace that never named one: the person declares it
-  // on the workspace itself (the form's "Repository URL"), and that — not a guess read off the
-  // machine's checkout — is what the binding is built from. Both inputs are reached over HTTP,
-  // because that is the only door either of them is stated through.
+  // A person can still declare the remote directly through the workspace form.
   await t.test('a remote the owner declares on the workspace is what the binding is bootstrapped '
     + 'from', async () => {
     const f = await project(stack, 'declared', null);
@@ -665,6 +662,81 @@ test('a project’s integration line is recorded, defaulted, locked, read for la
       const [row] = await codebaseRow(stack, f);
       assert.equal(row?.canonical_repo_url, CANONICAL_REPO_URL);
       assert.equal(row?.integration_ref_source, 'EXPLICIT');
+    });
+
+  await t.test('the runner discovers a workspace remote before its project branch is configured',
+    async () => {
+      const f = await project(stack, 'discovered-remote', null);
+      const workDir = '~/orbit-checkout';
+      await stack.db.workspace.update({ where: { id: f.workspaceId }, data: { workDir } });
+      const otherRunner = await stack.db.runner.create({
+        data: {
+          ownerId: f.ownerId,
+          name: `other-${f.publicId}`,
+          tokenHash: `other-${randomUUID()}`,
+        },
+      });
+      const realtime = {
+        drainCancellations: async () => [],
+        drainArtifactRequests: async () => [],
+      } as unknown as RealtimeService;
+      const heartbeat = new RunnerApiController(stack.prisma, {} as never, realtime,
+        {} as never, {} as never, {} as never);
+      const beat = (runnerId: string, probe?: AgentDirProbe) => heartbeat.heartbeat(
+        { id: runnerId, version: null },
+        {
+          status: HeartbeatRunnerStatus.ONLINE,
+          idleCapacity: 1,
+          ...(probe ? { agentDirProbes: [probe] } : {}),
+        },
+      );
+      const recordedRemote = async () => (await stack.db.workspace.findUniqueOrThrow({
+        where: { id: f.workspaceId }, select: { repoUrl: true },
+      })).repoUrl;
+      const probe: AgentDirProbe = {
+        agentId: f.workspaceId, workDir, exists: true, isGitRepo: true, repoUrl: REPO_URL,
+      };
+
+      // Newly created and old workspaces use the same loop: one beat names the directory, the
+      // next reports what was found there. The target's literal spelling survives '~' expansion.
+      assert.deepEqual((await beat(f.runnerId)).agentDirs, [{ agentId: f.workspaceId, workDir }]);
+      assert.equal(await recordedRemote(), null);
+      for (const [label, runnerId, report] of [
+        ['wrong runner', otherRunner.id, probe],
+        ['stale directory', f.runnerId, { ...probe, workDir: '/srv/old-checkout' }],
+        ['older runner without a path', f.runnerId, { ...probe, workDir: undefined }],
+        ['no origin', f.runnerId, { ...probe, repoUrl: undefined }],
+        ['empty origin', f.runnerId, { ...probe, repoUrl: '' }],
+      ] as const) {
+        await beat(runnerId, report);
+        assert.equal(await recordedRemote(), null, `${label} must not fill the repository`);
+      }
+
+      await beat(f.runnerId, probe);
+      assert.ok(await recordedRemote(), 'the checkout remote must reach the workspace');
+      const chosen = await call(door.base, f.ownerId, 'PATCH',
+        `/api/projects/${f.publicId}/integration`, { line: 'PROJECT_BRANCH' });
+      assert.equal(chosen.status, 200,
+        `the discovered repository must admit the project branch: ${chosen.body}`);
+      assert.deepEqual(lineOf(await integrationOf(door, f)), {
+        line: 'PROJECT_BRANCH', ref: `project/${f.publicId}`, upstreamRef: 'main',
+        source: 'EXPLICIT', locked: false,
+      });
+      assert.equal((await codebaseRow(stack, f))[0]?.canonical_repo_url, CANONICAL_REPO_URL);
+
+      // Whatever order the two writes reach PostgreSQL, a person's explicit value wins. Later
+      // probes neither replace it nor change the project's already established binding.
+      await stack.db.workspace.update({ where: { id: f.workspaceId }, data: { repoUrl: null } });
+      const declaredRemote = 'https://github.com/Example/Declared-Elsewhere.git';
+      const [declared] = await Promise.all([
+        call(door.base, f.ownerId, 'PATCH', `/api/workspaces/${uuidToBase62(f.workspaceId)}`,
+          { repoUrl: declaredRemote }),
+        beat(f.runnerId, probe),
+      ]);
+      assert.equal(declared.status, 200, declared.body);
+      await beat(f.runnerId, probe);
+      assert.equal(await recordedRemote(), declaredRemote);
+      assert.equal((await codebaseRow(stack, f))[0]?.canonical_repo_url, CANONICAL_REPO_URL);
     });
 
   await t.test('with no explicit choice, a single code task records main at the first integration',
@@ -899,5 +971,35 @@ test('a project’s integration line is recorded, defaulted, locked, read for la
     assert.deepEqual(await jobsFor(stack, pair.other), [
       { kind: 'LAND_TASK', state: 'QUEUED', target_ref: `refs/heads/project/${f.publicId}` },
     ], 'a receipt into some other project’s branch was read as landing on this project’s line');
+  });
+
+  // And ONLY the transaction that starts the line. That was once read off the clock — "the line
+  // started within the last second" — so on a fast host the very next DONE back-filled too, and
+  // re-queued a landing that had already come back red: a retry the platform never makes on its own
+  // (J5). The DONE below follows the start by milliseconds, well inside that second.
+  await t.test('a DONE right after another transaction started the line back-fills nothing, and '
+    + 'never re-queues a landing that came back red', async () => {
+    const f = await project(stack, 'after');
+    const { trigger } = await finishedPair(stack, f, 'after');
+    const started = await enqueue(stack, f, trigger);
+    assert.equal(started.enqueued, true, `the line never started: ${JSON.stringify(started)}`);
+    await stack.sql.query(
+      `UPDATE "project_integration_job" SET "state" = 'CHECK_FAILED', "finished_at" = now()
+        WHERE "task_id" = $1::uuid`,
+      [trigger],
+    );
+    const late = await codeTask(stack, f, 'after: a task finished once the line was running');
+    await workSession(stack, f, late, `after-${f.publicId}-late`);
+    await done(stack, late);
+
+    const outcome = await enqueue(stack, f, late);
+
+    assert.equal(outcome.enqueued, true, `the late task was not queued: ${JSON.stringify(outcome)}`);
+    assert.deepEqual(outcome.enqueued && outcome.alsoQueuedTaskIds, [],
+      'a DONE written after the line started back-filled the project’s other finished tasks');
+    assert.deepEqual(await jobsFor(stack, trigger), [
+      { kind: 'LAND_TASK', state: 'CHECK_FAILED', target_ref: `refs/heads/project/${f.publicId}` },
+    ], 'another task’s DONE queued a red landing again — only its coordinator’s rerun may (J-T1b)');
+    assert.deepEqual((await jobsFor(stack, late)).map((job) => job.kind), ['LAND_TASK']);
   });
 });

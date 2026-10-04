@@ -1,0 +1,8 @@
+{
+  "command": "npm ci --ignore-scripts --no-audit --no-fund --cache /tmp/orbit-p02-npm-cache",
+  "exitCode": 130,
+  "termination": "Interrupted after repeated EAI_AGAIN DNS failures; no packages were downloaded.",
+  "finishedAt": "2026-10-03T19:20:42.410634+00:00",
+  "log": "npm-ci.log",
+  "debugLog": "npm-ci.debug.log"
+}

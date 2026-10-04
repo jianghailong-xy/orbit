@@ -86,6 +86,9 @@ test('UI list and detail payloads include the same derived capabilities', async 
         titleManagedByProject: true,
         titleBeforeProjectManagement: 'Dormant session',
       }),
+      // Which of the rows are runs of a task, for the evidence cards of dispatched tasks a run can
+      // hold (`tasks/pending-evidence-judgments.ts#countDispatchedEvidenceJudgments`): none.
+      findMany: async () => [],
     },
     // The list's `pendingApprovals` is blocked tool calls plus the owner decisions each row is the
     // surface for (`projects/owner-decision-signal.ts`). This row coordinates nothing and no
@@ -93,6 +96,8 @@ test('UI list and detail payloads include the same derived capabilities', async 
     // are unaffected either way.
     project: { findMany: async () => [] },
     taskOwnerConfirmationRequest: { findMany: async () => [] },
+    // …the evidence of tasks it dispatched outside any project (`tasks/evidence-review.ts`), none…
+    task: { findMany: async () => [] },
     // …and the four owner items a project can be waiting on its owner for (§7.6 V13),
     // which these fixtures have none of either.
     sessionRequest: noSessionRequests(),
@@ -137,4 +142,43 @@ test('merge recovery is offered only by a capable assigned runner', async () => 
     session: { findFirst: async () => ({ ...row, assignedRunner: null }) },
   } as never, {} as never, {} as never);
   assert.equal((await service.get('owner-1', row.id)).mergeRecoverySupported, false);
+});
+
+test('session detail resolves the embedded workspace key against its actual runner', async () => {
+  const row = sessionRow();
+  const runner = {
+    ...row.assignedRunner, displayName: 'HPC', version: '0.1.210', capabilities: ['provider:antigravity'],
+    engines: [{ engine: 'antigravity', installed: true, version: '1.2.3', auth: 'no' }],
+  };
+  const workspace = { id: 'workspace-1', runnerId: 'a-different-runner', env: { GEMINI_API_KEY: '' } };
+  const service = new SessionsService({ session: { findFirst: async () => ({ ...row, assignedRunner: runner, workspace }) } } as never, {} as never, {} as never);
+  let detail = await service.get('owner-1', row.id);
+  assert.deepEqual(detail.workspace?.antigravityKeyAvailableByRunner, { [runner.id]: false });
+  assert.deepEqual(detail.assignedRunner?.antigravity, {
+    supported: true, installed: true, version: '1.2.3', envKeyAvailable: false, authSource: null, googleLogin: 'needs_update',
+  });
+  workspace.env.GEMINI_API_KEY = 'test-workspace-key';
+  detail = await service.get('owner-1', row.id);
+  assert.deepEqual(detail.workspace?.antigravityKeyAvailableByRunner, { [runner.id]: true });
+  workspace.env.GEMINI_API_KEY = '';
+  runner.engines[0].auth = 'yes';
+  detail = await service.get('owner-1', row.id);
+  assert.deepEqual(detail.workspace?.antigravityKeyAvailableByRunner, { [runner.id]: true });
+});
+
+test('session detail says which credential the runner runs built-in Antigravity on', async () => {
+  const row = sessionRow();
+  const runner = {
+    ...row.assignedRunner, displayName: 'HPC', version: '0.1.211',
+    capabilities: ['provider:antigravity', 'antigravity-google-login/v1'],
+    engines: [{ engine: 'antigravity', installed: true, version: '1.2.16', auth: 'yes', authSource: 'google' }],
+  };
+  const workspace = { id: 'workspace-1', runnerId: runner.id, env: null };
+  const service = new SessionsService({ session: { findFirst: async () => ({ ...row, assignedRunner: runner, workspace }) } } as never, {} as never, {} as never);
+  const detail = await service.get('owner-1', row.id);
+  // Signed in with Google and no key anywhere: the engine is offered, labelled by its source.
+  assert.deepEqual(detail.workspace?.antigravityKeyAvailableByRunner, { [runner.id]: true });
+  assert.deepEqual(detail.assignedRunner?.antigravity, {
+    supported: true, installed: true, version: '1.2.16', envKeyAvailable: true, authSource: 'google', googleLogin: 'available',
+  });
 });

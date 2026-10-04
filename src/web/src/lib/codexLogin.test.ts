@@ -5,9 +5,10 @@ import { poolsAsProviders, type ProviderPool } from './providerPools';
 import { providerChoices } from './sessionProviderChoices';
 
 /**
- * A Codex pool of one's own ChatGPT account, as every reader of the pool list gets it: its account as
- * the pool's one member (`withLogin`), where it stands read off the account, and the pool itself offered
- * as Codex — never as the Claude pool every other pool of one's own is.
+ * A Codex pool of one's own ChatGPT accounts, as every reader of the pool list gets it: each account it
+ * holds as a member of its own (`withLogin`), where it stands read off the account — the first being the
+ * one a session runs on — and the pool itself offered as Codex, never as the Claude pool every other
+ * pool of one's own is.
  */
 
 const NOW = Date.parse('2026-09-28T12:00:00.000Z');
@@ -16,6 +17,8 @@ const NEXT_WEEK = '2026-10-03T09:00:00.000Z';
 
 function account(over: Partial<CodexLogin> = {}): CodexLogin {
   return {
+    // Who signed it in (migration 0371).
+    userId: 'u1',
     state: 'ACTIVE',
     email: 'lin@example.com',
     plan: 'pro',
@@ -36,7 +39,7 @@ const pool = (login: CodexLogin | null): ProviderPool => ({
   engine: 'codex',
   login,
   resetsAt: null,
-  unavailable: login ? null : 'the pool "My Codex" has no ChatGPT account signed in — sign in on its page',
+  unavailable: login ? null : 'the pool "My Codex" has no ChatGPT account signed in — sign one in on its page',
   members: [],
 });
 
@@ -80,6 +83,37 @@ describe('withLogin', () => {
     // A reading from before its window turned over is no reason to wait.
     expect(loginSpentUntil(account({ usage: windows(100, 40) }), Date.parse(LATER) + 1)).toBeUndefined();
     expect(withLogin(pool(account({ usage: windows(23, 41) })), NOW).members[0].state).toBe('AVAILABLE');
+  });
+
+  it('draws each account of a pool that holds several as a member of its own, the first the one a session runs on', () => {
+    const first = account();
+    const second = account({ email: 'hl.work@gmail.com', fingerprint: '…7QX4', linkedAt: NEXT_WEEK });
+    const drawn = withLogin({ ...pool(null), login: first, logins: [first, second] }, NOW);
+    expect(drawn.members.map((member) => [member.label, member.next])).toEqual([
+      ['lin@example.com', true],
+      ['hl.work@gmail.com', false],
+    ]);
+    expect(drawn.members.map((member) => member.id)).toEqual(['login:…AB12', 'login:…7QX4']);
+    expect(drawn.unavailable).toBeNull();
+    // An account OpenAI signed out is its own row's business: the pool runs on the others.
+    const oneOut = withLogin(
+      { ...pool(null), login: second, logins: [second, account({ state: 'SIGNED_OUT' })] },
+      NOW,
+    );
+    expect(oneOut.members.map((member) => member.state)).toEqual(['AVAILABLE', 'SIGNED_OUT']);
+    expect(oneOut.unavailable).toBeNull();
+  });
+
+  it('waits for the first account to free up, once every one of them is spent', () => {
+    const spent = account({ usage: windows(100, 40) });
+    const barelySpent = account({ email: 'hl.work@gmail.com', fingerprint: '…7QX4', usage: windows(100, 100) });
+    const drawn = withLogin({ ...pool(null), login: spent, logins: [spent, barelySpent] }, NOW);
+    expect(drawn.members.map((member) => [member.state, member.next])).toEqual([
+      ['SPENT', false],
+      ['SPENT', false],
+    ]);
+    // The EARLIEST of the two: one account freeing up is enough for a session to continue.
+    expect(drawn.resetsAt).toBe(LATER);
   });
 
   it('leaves every other kind of pool as it was', () => {

@@ -298,10 +298,15 @@ final class Phase2LogicTests: XCTestCase {
         // Absent windows are skipped; present ones keep /usage order (5-hour first).
         XCTAssertEqual(u.rows.map(\.key), ["fiveHour", "sevenDayOpus"])
         XCTAssertEqual(u.rows.map(\.percent), [12, 92])
-        XCTAssertEqual(u.primaryPercent, 12)           // binding window = 5-hour
+        // The one number is the window that stops the login — Opus's week, closest to its limit —
+        // not the first window. (The 5-hour reading is past its reset by now, so it reads 0% too.)
+        XCTAssertEqual(u.flatSnapshot.bindingRow()?.key, "sevenDayOpus")
+        XCTAssertEqual(u.flatSnapshot.bindingRow()?.percent, 92)
         XCTAssertNil(u.snapshot(for: "opencode"))      // never show Claude quota for OpenCode
+        XCTAssertNil(u.snapshot(for: "antigravity"))   // …nor for Antigravity, which has no plan usage
+        XCTAssertNil(AgentDefaults.planUsage(for: "antigravity", runner: u, configured: nil))
         XCTAssertNil(PlanUsage(fiveHour: nil, sevenDay: nil, sevenDayOpus: nil,
-                               sevenDaySonnet: nil, fetchedAt: nil).primaryPercent)
+                               sevenDaySonnet: nil, fetchedAt: nil).flatSnapshot.bindingRow())
 
         let codex = PlanUsage(provider: "codex", rateLimits: [
             PlanUsageRateLimit(limitId: "codex",
@@ -314,11 +319,45 @@ final class Phase2LogicTests: XCTestCase {
         XCTAssertEqual(codex.rows.map(\.percent), [22, 35, 90])
     }
 
+    /// Web's `bindingPlanUsageRow` over `currentPlanUsageRows`, for the composer's pill and /status.
+    func testPlanUsageBindingRowIsTheWindowThatStopsTheLogin() {
+        let now = Date(timeIntervalSince1970: 1_790_960_178)   // 2026-10-02T16:56:18Z
+        let at = { (hours: Double) in
+            ISO8601DateFormatter().string(from: now.addingTimeInterval(hours * 3600))
+        }
+        // jianghailong.rd on wikova: a 5-hour reading from before that window rolled over, and a
+        // week that is spent until Monday.
+        let rd = PlanUsageSnapshot(provider: "claude",
+                                   fiveHour: .init(utilization: 6, resetsAt: at(-5.5)),
+                                   sevenDay: .init(utilization: 100, resetsAt: at(66)))
+        XCTAssertEqual(rd.currentRows(at: now).map(\.percent), [0, 100])
+        XCTAssertNil(rd.currentRows(at: now).first?.window.resetsAt)
+        XCTAssertEqual(rd.currentRows(at: now.addingTimeInterval(-6 * 3600)).map(\.percent), [6, 100])
+        XCTAssertEqual(rd.bindingRow(at: now)?.key, "sevenDay")
+
+        // Two spent: the login is back when the later one resets.
+        let both = PlanUsageSnapshot(provider: "claude",
+                                     fiveHour: .init(utilization: 100, resetsAt: at(0.5)),
+                                     sevenDay: .init(utilization: 100, resetsAt: at(66)))
+        XCTAssertEqual(both.bindingRow(at: now)?.key, "sevenDay")
+        // None spent: the one closest to its limit, a tie going to the first.
+        XCTAssertEqual(PlanUsageSnapshot(provider: "claude", fiveHour: .init(utilization: 1),
+                                         sevenDay: .init(utilization: 59)).bindingRow(at: now)?.key, "sevenDay")
+        XCTAssertEqual(PlanUsageSnapshot(provider: "claude", fiveHour: .init(utilization: 40),
+                                         sevenDay: .init(utilization: 40)).bindingRow(at: now)?.key, "fiveHour")
+        // A spent window past its reset stops nothing; the runner's own fractional-second stamps read.
+        let rolledOver = PlanUsageSnapshot(provider: "claude",
+                                           fiveHour: .init(utilization: 100, resetsAt: "2026-10-02T11:29:59.657029+00:00"),
+                                           sevenDay: .init(utilization: 59, resetsAt: at(100)))
+        XCTAssertEqual(rolledOver.bindingRow(at: now)?.key, "sevenDay")
+        XCTAssertEqual(rolledOver.bindingRow(at: now)?.percent, 59)
+    }
+
     func testPlanUsageSelectsKimiWithoutClaudeFallback() {
         let legacyClaude = PlanUsage(
             fiveHour: .init(utilization: 17),
             sevenDay: .init(utilization: 42))
-        XCTAssertEqual(legacyClaude.snapshot(for: "claude")?.primaryPercent, 17)
+        XCTAssertEqual(legacyClaude.snapshot(for: "claude")?.rows.first?.percent, 17)
         XCTAssertNil(legacyClaude.snapshot(for: "kimi"))
 
         let kimi = PlanUsageSnapshot(provider: "kimi", primary: .init(utilization: 63))
@@ -330,7 +369,7 @@ final class Phase2LogicTests: XCTestCase {
         XCTAssertEqual(nested.snapshots.map(\.0), ["Claude quota", "Codex quota", "Kimi quota"])
 
         let flatKimi = PlanUsage(provider: "kimi", primary: .init(utilization: 71))
-        XCTAssertEqual(flatKimi.snapshot(for: "kimi")?.primaryPercent, 71)
+        XCTAssertEqual(flatKimi.snapshot(for: "kimi")?.rows.first?.percent, 71)
         XCTAssertNil(flatKimi.snapshot(for: "claude"))
         XCTAssertEqual(flatKimi.snapshots.first?.0, "Kimi quota")
     }
@@ -348,10 +387,10 @@ final class Phase2LogicTests: XCTestCase {
 
         // Built-in Claude runs on the runner's own login.
         XCTAssertEqual(AgentDefaults.planUsage(for: "claude", runner: runner,
-                                               configured: configured)?.primaryPercent, 100)
+                                               configured: configured)?.bindingRow()?.percent, 100)
         // A configured Anthropic account reports its own subscription.
         XCTAssertEqual(AgentDefaults.planUsage(for: "anthropic-2", runner: runner,
-                                               configured: configured)?.primaryPercent, 9)
+                                               configured: configured)?.bindingRow()?.percent, 9)
         // A metered key has no window at all — no gauge, rather than the runner's.
         XCTAssertNil(AgentDefaults.planUsage(for: "deepseek", runner: runner,
                                              configured: configured))
@@ -422,9 +461,9 @@ final class Phase2LogicTests: XCTestCase {
         XCTAssertTrue(ComposerSlash.matches(items: scoped, token: nil, scope: nil).isEmpty)
     }
 
-    /// Runtime-owned registries are isolated: Codex and OpenCode only keep local Orbit commands,
-    /// Kimi only sees tagged Kimi entries, and Claude/custom providers accept legacy nil + Claude
-    /// tags.
+    /// Runtime-owned registries are isolated: Codex, OpenCode and Antigravity only keep local Orbit
+    /// commands, Kimi only sees tagged Kimi entries, and Claude/custom providers accept legacy nil +
+    /// Claude tags.
     func testSlashForProvider() {
         let items = ComposerHostCommand.slashItems + [
             SlashCommandInfo(name: "commit", type: "command"),
@@ -434,6 +473,9 @@ final class Phase2LogicTests: XCTestCase {
         XCTAssertEqual(ComposerSlash.forProvider(items: items, provider: "codex").map(\.name),
                        ["status"])
         XCTAssertEqual(ComposerSlash.forProvider(items: items, provider: "opencode").map(\.name),
+                       ["status"])
+        // agy is started with --disable-slash-commands: slash text is an ordinary prompt there.
+        XCTAssertEqual(ComposerSlash.forProvider(items: items, provider: "antigravity").map(\.name),
                        ["status"])
         XCTAssertEqual(ComposerSlash.forProvider(items: items, provider: "claude").map(\.name),
                        ["status", "commit", "loop"])

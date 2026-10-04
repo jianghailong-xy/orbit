@@ -7,8 +7,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The steps of an integration job, against real repositories
@@ -153,6 +155,78 @@ func TestIntegrationRebaseLandsAndVerifies(t *testing.T) {
 	}
 }
 
+// J-S4 and TASK_BRANCH promotion must not replay commits the target already contains just because
+// the session recorded an older upstream base. A base beyond the fork still excludes session setup.
+func TestIntegrationRebaseSessionBaseAnchor(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"LAND_TASK", "LAND_PROMOTION"} {
+		for _, basePosition := range []string{"before_fork", "at_fork", "after_fork"} {
+			t.Run(kind+"/"+basePosition, func(t *testing.T) {
+				t.Parallel()
+				r := newIntegrationRepo(t)
+				upstream := r.rev("main")
+				target := "main"
+				if kind == "LAND_TASK" {
+					target = "project/line"
+					r.checkoutNew(target, upstream)
+				}
+				// Replaying the first target commit onto its tip conflicts with the second edit.
+				r.write("shared.txt", "first target edit\n")
+				r.commit("target first edit")
+				r.write("shared.txt", "second target edit\n")
+				targetTip := r.commit("target second edit")
+				r.push(target)
+
+				sessionBase := upstream
+				sourceBase := targetTip
+				if basePosition == "after_fork" {
+					sourceBase = upstream
+				}
+				r.checkoutNew("task/anchor", sourceBase)
+				switch basePosition {
+				case "at_fork":
+					sessionBase = targetTip
+				case "after_fork":
+					r.write("session-baseline.txt", "session setup, excluded from the task\n")
+					sessionBase = r.commit("session setup")
+				}
+				r.write("task.txt", "task's own change\n")
+				r.commit("task change")
+				r.push("task/anchor")
+
+				// Build the expected tree independently: target tip plus only the task's change.
+				r.checkoutNew("expected", targetTip)
+				r.write("task.txt", "task's own change\n")
+				r.commit("expected tree")
+				expectedTree := r.rev("HEAD^{tree}")
+				r.checkout("main")
+
+				command := r.command("task/anchor", target)
+				if kind == "LAND_PROMOTION" {
+					command = r.promotionCommand(kind, "task/anchor", "TASK_BRANCH")
+				}
+				command.SessionBaseSha = sessionBase
+				result := runIntegrationJob(command, silent)
+				if result.State != "LANDED" {
+					t.Fatalf("state = %s (%s %s), conflicts = %v, want LANDED", result.State, result.ErrorCode, result.Phase, result.Conflicts)
+				}
+				if result.LandedTreeSha != expectedTree || result.TestedTreeSha != expectedTree {
+					t.Fatalf("landed/tested trees = %s/%s, want target plus task tree %s", result.LandedTreeSha, result.TestedTreeSha, expectedTree)
+				}
+				if got := r.originRev("refs/heads/" + target); got != result.LandedSha {
+					t.Fatalf("target tip = %s, want landed commit %s", got, result.LandedSha)
+				}
+				if parent := r.rev(result.LandedSha + "^"); parent != targetTip {
+					t.Fatalf("landed parent = %s, want target tip %s", parent, targetTip)
+				}
+				if commits, err := git(r.work, "rev-list", "--count", targetTip+".."+result.LandedSha); err != nil || commits != "1" {
+					t.Fatalf("commits added to target = %q (%v), want only the task's one commit", commits, err)
+				}
+			})
+		}
+	}
+}
+
 // TestIntegrationAbsorbsUpstreamBeforeLanding is J-S2: a project branch takes main's new commits by
 // MERGE, never by rewriting itself, and the branch's own old tip stays an ancestor of what lands.
 func TestIntegrationAbsorbsUpstreamBeforeLanding(t *testing.T) {
@@ -189,6 +263,213 @@ func TestIntegrationAbsorbsUpstreamBeforeLanding(t *testing.T) {
 	}
 	if result.LandedTreeSha != result.TestedTreeSha {
 		t.Fatalf("landed tree %q != tested tree %q", result.LandedTreeSha, result.TestedTreeSha)
+	}
+}
+
+// The ledger both sides of the 2026-10-03 conflict wrote to (project 34Y7My8sqhKLWtmCQYv1l): the
+// project branch added 0368 and main added 0367 and 0370, each at the end of the same file.
+const (
+	lineLedger     = "0366 base\n0368 the line\n"
+	mainLedger     = "0366 base\n0367 main\n0370 main\n"
+	resolvedLedger = "0366 base\n0367 main\n0368 the line\n0370 main\n"
+)
+
+// contestedLine is a project branch and a main that have each changed the ledger since the branch
+// was cut, so absorbing main into the branch's tip conflicts whatever a task carries (J-S2).
+func contestedLine(t *testing.T, r *integrationRepo) (lineTip, mainTip string) {
+	t.Helper()
+	r.write("ledger.txt", "0366 base\n")
+	r.commit("the ledger")
+	r.push("main")
+	r.checkoutNew("project/line", "main")
+	r.write("ledger.txt", lineLedger)
+	lineTip = r.commit("project branch: 0368")
+	r.push("project/line")
+	r.checkout("main")
+	r.write("ledger.txt", mainLedger)
+	mainTip = r.commit("main: 0367 and 0370")
+	r.push("main")
+	return lineTip, mainTip
+}
+
+// absorbMain merges main into the branch that is checked out and resolves the ledger the way the
+// 2026-10-03 resolution did: every entry kept, in number order.
+func absorbMain(t *testing.T, r *integrationRepo) string {
+	t.Helper()
+	if out, err := git(r.work, "merge", "--no-commit", "main"); err == nil {
+		t.Fatalf("expected the ledger to conflict, got %q", out)
+	}
+	r.write("ledger.txt", resolvedLedger)
+	mustRun(t, r.work, "git", "add", "-A")
+	mustRun(t, r.work, "git", "commit", "--quiet", "--no-edit")
+	return r.rev("HEAD")
+}
+
+// TestIntegrationLandsASourceThatAlreadyAbsorbedUpstream is §3.1 M3. A source that contains the
+// upstream tip and the line's tip has made J-S2's merge itself, conflict resolved, so the job does
+// not make it again on the line's tip: the source lands as it is, by J-S4's MERGE, and the tree that
+// lands is the source's own. Before this, J-S2 merged main into the line first, met the conflict the
+// source had already resolved, and every landing of that line stopped at MAIN_SYNC.
+func TestIntegrationLandsASourceThatAlreadyAbsorbedUpstream(t *testing.T) {
+	t.Parallel()
+	r := newIntegrationRepo(t)
+	lineTip, mainTip := contestedLine(t, r)
+	r.checkoutNew("task/absorbed", lineTip)
+	r.write("work.txt", "the task's own work\n")
+	r.commit("task work")
+	sourceSha := absorbMain(t, r)
+	r.push("task/absorbed")
+	r.checkout("main")
+
+	// The checks run on the tree that lands, and that tree carries both sides of the ledger.
+	check := IntegrationCheckSpec{
+		Name:             "MERGE_CHECK",
+		Command:          "grep -qx '0368 the line' ledger.txt && grep -qx '0370 main' ledger.txt",
+		ExpectedExitCode: 0,
+		TimeoutSeconds:   60,
+	}
+	command := r.command("task/absorbed", "project/line", check)
+	command.SessionBaseSha = lineTip
+	var phases []string
+	result := runIntegrationJob(command, func(phase string, _ *IntegrationUpstreamMoved) {
+		phases = append(phases, phase)
+	})
+	if result.State != "LANDED" {
+		t.Fatalf("state = %s (%s %s, conflicts %v), want LANDED", result.State, result.ErrorCode, result.Phase, result.Conflicts)
+	}
+	if slices.Contains(phases, "MAIN_SYNC") || result.MainSyncSha != "" {
+		t.Fatalf("the job absorbed main again (phases %v, mainSyncSha %q)", phases, result.MainSyncSha)
+	}
+	if !slices.Contains(phases, "MERGE") {
+		t.Fatalf("phases = %v, want the source landed by MERGE", phases)
+	}
+	sourceTree := r.rev(sourceSha + "^{tree}")
+	if result.TestedTreeSha != sourceTree || result.LandedTreeSha != sourceTree {
+		t.Fatalf("tested %q, landed %q, want the source's own tree %q", result.TestedTreeSha, result.LandedTreeSha, sourceTree)
+	}
+	if got := r.originRev("refs/heads/project/line"); got != result.LandedSha {
+		t.Fatalf("origin holds %s, the result claims %s", got, result.LandedSha)
+	}
+	// A merge commit onto the line's tip: the branch moves forward and nothing is rewritten.
+	parents, _ := git(r.work, "rev-list", "--parents", "-n", "1", result.LandedSha)
+	if want := result.LandedSha + " " + lineTip + " " + sourceSha; parents != want {
+		t.Fatalf("landed commit and parents = %q, want %q", parents, want)
+	}
+	if !isAncestor(r.work, mainTip, result.LandedSha) {
+		t.Fatal("main's tip is not an ancestor of what landed")
+	}
+	if body, _ := git(r.work, "show", result.LandedSha+":ledger.txt"); body+"\n" != resolvedLedger {
+		t.Fatalf("the resolution did not survive: %q", body)
+	}
+	if len(result.Checks) != 1 || result.Checks[0].ExitCode == nil || *result.Checks[0].ExitCode != 0 {
+		t.Fatalf("checks = %+v, want the merge check to have passed on the source's tree", result.Checks)
+	}
+}
+
+// TestIntegrationMainSyncConflictStandsWhenTheSourceLacksATip is the other side of M3: a source that
+// does not contain both tips this job fetched has not made this absorb, so J-S2 makes it on the
+// line's tip as before and reports the conflict it meets there. The line does not move.
+func TestIntegrationMainSyncConflictStandsWhenTheSourceLacksATip(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		// Builds the source branch from the line's tip, and may move main or the line afterwards.
+		build func(t *testing.T, r *integrationRepo, lineTip string)
+	}{
+		{
+			name: "it never absorbed main",
+			build: func(t *testing.T, r *integrationRepo, lineTip string) {
+				r.checkoutNew("task/source", lineTip)
+				r.write("work.txt", "the task's own work\n")
+				r.commit("task work")
+				r.push("task/source")
+			},
+		},
+		{
+			name: "main moved after it absorbed main",
+			build: func(t *testing.T, r *integrationRepo, lineTip string) {
+				r.checkoutNew("task/source", lineTip)
+				absorbMain(t, r)
+				r.push("task/source")
+				r.checkout("main")
+				r.write("elsewhere.txt", "main moved on\n")
+				r.commit("main moved")
+				r.push("main")
+			},
+		},
+		{
+			name: "the line moved after it absorbed main",
+			build: func(t *testing.T, r *integrationRepo, lineTip string) {
+				r.checkoutNew("task/source", lineTip)
+				absorbMain(t, r)
+				r.push("task/source")
+				r.checkout("project/line")
+				r.write("other.txt", "another task landed\n")
+				r.commit("the line moved")
+				r.push("project/line")
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newIntegrationRepo(t)
+			lineTip, _ := contestedLine(t, r)
+			tc.build(t, r, lineTip)
+			r.checkout("main")
+			before := r.originRev("refs/heads/project/line")
+
+			command := r.command("task/source", "project/line")
+			command.SessionBaseSha = lineTip
+			var phases []string
+			result := runIntegrationJob(command, func(phase string, _ *IntegrationUpstreamMoved) {
+				phases = append(phases, phase)
+			})
+			if result.State != "CONFLICT" || result.Phase != "MAIN_SYNC" {
+				t.Fatalf("state = %s / %s (%s), want CONFLICT / MAIN_SYNC", result.State, result.Phase, result.ErrorCode)
+			}
+			if !slices.Contains(phases, "MAIN_SYNC") {
+				t.Fatalf("phases = %v, want the absorb attempted", phases)
+			}
+			if len(result.Conflicts) != 1 || result.Conflicts[0] != "ledger.txt" {
+				t.Fatalf("conflicts = %v, want [ledger.txt]", result.Conflicts)
+			}
+			if got := r.originRev("refs/heads/project/line"); got != before {
+				t.Fatalf("the target moved: %s -> %s", before, got)
+			}
+			if result.LandedSha != "" || result.MainSyncSha != "" {
+				t.Fatalf("a conflict reported landed %q, main sync %q", result.LandedSha, result.MainSyncSha)
+			}
+		})
+	}
+}
+
+// TestIntegrationTheUpstreamTipIsNotAnAbsorb: a branch that IS the upstream tip contains both tips
+// when the line is behind main, and still has nothing of its own. It stays J-S3's NOTHING_TO_LAND,
+// measured on the upstream (0300, 0346), and is not landed as a bare main sync.
+func TestIntegrationTheUpstreamTipIsNotAnAbsorb(t *testing.T) {
+	t.Parallel()
+	r := newIntegrationRepo(t)
+	r.checkoutNew("project/line", "main")
+	r.push("project/line")
+	before := r.originRev("refs/heads/project/line")
+	r.checkout("main")
+	r.write("upstream.txt", "main moved on\n")
+	mainTip := r.commit("main moved")
+	r.push("main")
+	r.checkoutNew("orbit/rollout", mainTip)
+	r.push("orbit/rollout")
+	r.checkout("main")
+
+	command := r.command("orbit/rollout", "project/line")
+	command.SessionBaseSha = mainTip
+	result := runIntegrationJob(command, silent)
+	if result.State != "NOTHING_TO_LAND" {
+		t.Fatalf("state = %s (%s %s), want NOTHING_TO_LAND", result.State, result.ErrorCode, result.Phase)
+	}
+	if result.SourceOnUpstream == nil || !*result.SourceOnUpstream {
+		t.Fatalf("sourceOnUpstream = %v, want a measured true", result.SourceOnUpstream)
+	}
+	if got := r.originRev("refs/heads/project/line"); got != before {
+		t.Fatalf("the target moved: %s -> %s", before, got)
 	}
 }
 
@@ -817,6 +1098,136 @@ func TestAutomaticPromotionWithNoCheckedTipLandsNothing(t *testing.T) {
 	}
 	if got := r.originRev("refs/heads/main"); got != checked.UpstreamSha {
 		t.Fatalf("main moved to %s, want it left at %s", got, checked.UpstreamSha)
+	}
+}
+
+// ownerLanding is the LAND_PROMOTION an owner confirmed (M-T4): the same facts automaticLanding
+// carries, without the mark — so it lands onto an upstream that moved since the check rather than
+// handing the candidate back (M5, M-T12).
+func ownerLanding(r *integrationRepo, sourceSha string, checked integrationResult) IntegrationJobCommand {
+	land := r.promotionCommand("LAND_PROMOTION", "project/p", "PROJECT_BRANCH")
+	land.SourceSha = sourceSha
+	land.UpstreamShaChecked = checked.UpstreamSha
+	land.MergeTreeSha = checked.TestedTreeSha
+	return land
+}
+
+// moveOriginMainAhead moves main at the origin WITHOUT moving this checkout's remote-tracking ref:
+// a push by URL updates no `refs/remotes/*`. The next fetch in this repository therefore has a ref
+// update to perform — which is what a competing fetch takes the lock for — rather than nothing to
+// do.
+func moveOriginMainAhead(t *testing.T, r *integrationRepo) string {
+	t.Helper()
+	r.checkoutNew("moved-main", "main")
+	r.write("upstream-moved.txt", "another landing\n")
+	moved := r.commit("main moved")
+	mustRun(t, r.work, "git", "push", "--quiet", r.origin, "HEAD:refs/heads/main")
+	r.checkout("main")
+	mustRun(t, r.work, "git", "branch", "-D", "moved-main")
+	return moved
+}
+
+// holdRefLock takes the lock git itself takes on a remote-tracking ref, the way a fetch competing
+// with the job in the same repository holds it while it updates that ref.
+func holdRefLock(t *testing.T, r *integrationRepo, ref string) string {
+	t.Helper()
+	lock := filepath.Join(r.work, ".git", "refs", "remotes", "origin", ref+".lock")
+	if err := os.MkdirAll(filepath.Dir(lock), 0o755); err != nil {
+		t.Fatalf("could not make the ref's directory: %v", err)
+	}
+	if err := os.WriteFile(lock, nil, 0o644); err != nil {
+		t.Fatalf("could not take the ref lock: %v", err)
+	}
+	return lock
+}
+
+// releaseRefLockOnFirstRetry makes the competing process finish at the moment the job's first
+// attempt has failed — the pause before it tries again, which is a moment nothing outside the fetch
+// can observe.
+func releaseRefLockOnFirstRetry(t *testing.T, lock string) {
+	t.Helper()
+	restore := integrationFetchLockPause
+	released := false
+	integrationFetchLockPause = func(d time.Duration) {
+		if !released {
+			released = true
+			_ = os.Remove(lock)
+		}
+		restore(d)
+	}
+	t.Cleanup(func() {
+		integrationFetchLockPause = restore
+		_ = os.Remove(lock)
+	})
+}
+
+// TestPromoteFetchRefLockRetriesAndLands is the 2026-10-02 incident (project 34Yjjgt2ERe9tU5TUmjAP),
+// reproduced against the real thing.
+//
+// `git fetch <remote> <ref>` does not only write FETCH_HEAD: it updates
+// `refs/remotes/<remote>/<branch>`, and that ref is shared by every job and every session worktree
+// of this checkout. Two fetches arriving together and the second one's ref update is refused with
+// "cannot lock ref …". Before this, that lost race ended the job — reported as BASE_REF_NOT_FOUND,
+// "the upstream branch does not exist", which sent a reader to look at a branch that was never the
+// problem — and the promotion it was a step of went BLOCKED. Here the lock is held the way a
+// competing fetch holds it, and released as soon as the job has lost once, which is what the other
+// process does a moment later: the job waits, fetches again, and lands.
+func TestPromoteFetchRefLockRetriesAndLands(t *testing.T) {
+	r := newIntegrationRepo(t)
+	sourceSha, checked := checkedProjectBranch(t, r)
+	moved := moveOriginMainAhead(t, r)
+
+	releaseRefLockOnFirstRetry(t, holdRefLock(t, r, "main"))
+
+	landed := runIntegrationJob(ownerLanding(r, sourceSha, checked), silent)
+	if landed.ErrorCode == "BASE_REF_NOT_FOUND" {
+		t.Fatalf("a ref another process was updating was reported as a missing branch: %v", landed.ErrorDetail)
+	}
+	if landed.State != "LANDED" {
+		t.Fatalf("landing state = %s (%s %s), want LANDED after the retry: %v",
+			landed.State, landed.ErrorCode, landed.Phase, landed.ErrorDetail)
+	}
+	if got := r.originRev("refs/heads/main"); got != landed.LandedSha {
+		t.Fatalf("origin main is %s, the result claims %s", got, landed.LandedSha)
+	}
+	// The fetch that was retried is the one that read the upstream, so the landing is onto the tip
+	// the origin had by then — the one the checkpoint did not see.
+	if parent, _ := git(r.work, "rev-parse", landed.LandedSha+"^1"); parent != moved {
+		t.Fatalf("the merge's first parent is %s, want the upstream tip that moved %s", parent, moved)
+	}
+}
+
+// TestPromoteFetchRefLockThatOutlivesItsRetriesIsNotABranchThatIsMissing: the lock is held for every
+// attempt. What the job then reports is the fetch failing — FETCH_FAILED, a condition a rerun
+// answers — and NOT BASE_REF_NOT_FOUND, which is a statement about the upstream branch and sends the
+// reader to check whether it exists.
+func TestPromoteFetchRefLockThatOutlivesItsRetriesIsNotABranchThatIsMissing(t *testing.T) {
+	r := newIntegrationRepo(t)
+	sourceSha, checked := checkedProjectBranch(t, r)
+	moved := moveOriginMainAhead(t, r)
+
+	lock := holdRefLock(t, r, "main")
+	restore := integrationFetchLockPause
+	// Three attempts, at once: the lock is the fact under test, not the wait between them.
+	integrationFetchLockPause = func(time.Duration) {}
+	t.Cleanup(func() {
+		integrationFetchLockPause = restore
+		_ = os.Remove(lock)
+	})
+
+	result := runIntegrationJob(ownerLanding(r, sourceSha, checked), silent)
+	if result.State != "ERROR" || result.Phase != "FETCH" {
+		t.Fatalf("result = %s %s (%s), want an ERROR in FETCH", result.State, result.Phase, result.ErrorCode)
+	}
+	if result.ErrorCode != "FETCH_FAILED" {
+		t.Fatalf("errorCode = %q, want FETCH_FAILED — a lock another process held is not a missing branch",
+			result.ErrorCode)
+	}
+	if detail, _ := result.ErrorDetail["detail"].(string); !strings.Contains(detail, "cannot lock ref") {
+		t.Fatalf("the error does not carry git's own words: %v", result.ErrorDetail)
+	}
+	if got := r.originRev("refs/heads/main"); got != moved {
+		t.Fatalf("main is %s, want it left at %s — a failed FETCH lands nothing", got, moved)
 	}
 }
 

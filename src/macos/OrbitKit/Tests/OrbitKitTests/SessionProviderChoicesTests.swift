@@ -13,7 +13,7 @@ final class SessionProviderChoicesTests: XCTestCase {
         models: [ConfiguredProviderModel(value: "x-1", label: "X 1")],
         defaultModel: "x-1", presetSlug: nil)
 
-    func testAlwaysOffersTheThreeEnginesWithNothingConfigured() {
+    func testAlwaysOffersTheEnginesWithNothingConfigured() {
         let choices = SessionProviderChoices.choices(configured: [])
         XCTAssertEqual(choices.map(\.slug), ["claude", "codex", "kimi"])
         XCTAssertTrue(choices.allSatisfy { $0.kind == .engine })
@@ -27,6 +27,29 @@ final class SessionProviderChoicesTests: XCTestCase {
 
     func testNeverOffersOpenCodeBecauseItIsNotALoginEngine() {
         XCTAssertFalse(SessionProviderChoices.choices(configured: []).contains { $0.slug == "opencode" })
+    }
+
+    /// The compatibility entry is offered only with a server-confirmed environment key.
+    func testOffersAntigravityAsAnEngineWithTheModelTheRunnerReportsFirst() {
+        let agy = RunnerModelCatalog(antigravity: [
+            RunnerModelInfo(value: "gemini-3.8-flash", label: "Gemini 3.8 Flash",
+                            reasoningLevels: ["low", "medium", "high"]),
+            RunnerModelInfo(value: "gemini-3.1-pro", label: "Gemini 3.1 Pro", reasoningLevels: ["low", "high"]),
+        ])
+        let row = SessionProviderChoices.choices(configured: [], catalog: agy,
+                                                  antigravityKeyAvailable: true).first { $0.slug == "antigravity" }
+        XCTAssertEqual(row?.kind, .engine)
+        XCTAssertEqual(row?.label, "Antigravity")
+        // Its own mark rather than the Gemini preset's, which is the Gemini API through another CLI.
+        XCTAssertEqual(row?.brandKey, "antigravity")
+        XCTAssertEqual(row?.modelLabel, "Gemini 3.8 Flash")
+        XCTAssertNil(row?.accounts)
+        XCTAssertEqual(row?.labelDetail, "env key")
+        // Before a runner reports its catalogue, the picker names the preset's default.
+        XCTAssertEqual(SessionProviderChoices.choices(configured: [], antigravityKeyAvailable: true)
+            .first { $0.slug == "antigravity" }?.modelLabel, "Gemini 3.8 Flash")
+        XCTAssertEqual(SessionProviderChoices.current("antigravity", in: SessionProviderChoices.choices(configured: []),
+                                                      configured: []).kind, .engine)
     }
 
     func testDropsAConfiguredRowShadowingABuiltInSlug() {
@@ -140,6 +163,37 @@ final class SessionProviderChoicesTests: XCTestCase {
         XCTAssertEqual(choices.map(\.slug), ["opencode"])
     }
 
+    /// Antigravity is its own runtime too: with no Gemini key connected, a session on it has nowhere
+    /// to move — and none of the Claude or Kimi rows may be offered as if it did.
+    func testSameRuntimeLeavesAntigravityAlone() {
+        let configured = [anthropic, anthropic2, moonshot]
+        let choices = SessionProviderChoices.sameRuntime(
+            "antigravity", in: SessionProviderChoices.choices(configured: configured),
+            configured: configured)
+        XCTAssertEqual(choices.map(\.slug), ["antigravity"])
+        XCTAssertEqual(SessionProviderChoices.executingRuntime("antigravity", configured: configured),
+                       "antigravity")
+    }
+
+    /// A Gemini key borrows Antigravity, so it and the engine are the same CLI with different keys:
+    /// each is offered to the other, and to nobody else. Mirrors web's sameRuntimeChoices case.
+    func testAGeminiKeySharesTheAntigravityRuntime() {
+        let gemini = ConfiguredProvider(slug: "gemini", label: "Gemini", runtime: "antigravity",
+                                        models: [ConfiguredProviderModel(value: "gemini-3.8-flash",
+                                                                         label: "Gemini 3.8 Flash")],
+                                        defaultModel: "gemini-3.8-flash", presetSlug: "gemini",
+                                        modelsFromRuntime: true)
+        let configured = [anthropic, moonshot, gemini]
+        let choices = SessionProviderChoices.choices(configured: configured, antigravityKeyAvailable: true)
+        XCTAssertEqual(SessionProviderChoices.executingRuntime("gemini", configured: configured), "antigravity")
+        for from in ["antigravity", "gemini"] {
+            XCTAssertEqual(SessionProviderChoices.sameRuntime(from, in: choices, configured: configured)
+                .map(\.slug), ["antigravity", "gemini"])
+        }
+        XCTAssertFalse(SessionProviderChoices.sameRuntime("anthropic", in: choices, configured: configured)
+            .map(\.slug).contains("gemini"))
+    }
+
     func testSameRuntimeLeavesALoneProviderAloneSoTheMenuCanBeHidden() {
         XCTAssertEqual(
             SessionProviderChoices.sameRuntime("claude", in: SessionProviderChoices.choices(configured: []),
@@ -212,6 +266,74 @@ final class SessionProviderChoicesTests: XCTestCase {
         XCTAssertNil(choices.first { $0.slug == "moonshot" }?.unavailable)
     }
 
+    func testAntigravityReadinessBlocksBothGeminiAndTheEnvironmentEntry() {
+        let gemini = ConfiguredProvider(slug: "gemini", label: "Gemini", runtime: "antigravity",
+                                        models: [], defaultModel: nil, presetSlug: "gemini")
+        for (state, reason) in [(RunnerAntigravityState(supported: false, installed: false), "Update runner"),
+                                (RunnerAntigravityState(supported: true, installed: false), "Not installed")] {
+            let choices = SessionProviderChoices.choices(configured: [gemini], antigravity: state,
+                                                         antigravityKeyAvailable: true)
+            for slug in ["antigravity", "gemini"] {
+                let row = choices.first { $0.slug == slug }
+                XCTAssertEqual(row?.unavailable, reason)
+                XCTAssertEqual(row?.fixEngine, "antigravity")
+            }
+        }
+        let ready = SessionProviderChoices.choices(configured: [gemini],
+                                                   engines: [health("antigravity", installed: true, auth: "no")],
+                                                   antigravity: RunnerAntigravityState(supported: true, installed: true),
+                                                   antigravityKeyAvailable: true)
+        XCTAssertNil(ready.first { $0.slug == "antigravity" }?.unavailable)
+        XCTAssertNil(ready.first { $0.slug == "gemini" }?.unavailable)
+        XCTAssertEqual(ready.first { $0.slug == "gemini" }?.labelDetail, "Antigravity CLI")
+    }
+
+    func testAntigravityVisibilityUsesOnlyServerKeyAvailability() {
+        let gemini = ConfiguredProvider(slug: "gemini", label: "Gemini", runtime: "antigravity",
+                                        models: [], defaultModel: "gemini-3.8-flash", presetSlug: "gemini")
+        let rawAuth = [health("antigravity", installed: true, auth: "yes")]
+        let hidden = SessionProviderChoices.choices(configured: [gemini], engines: rawAuth,
+                                                     antigravityKeyAvailable: false)
+        XCTAssertFalse(hidden.contains { $0.slug == "antigravity" }, "raw runner auth is not a client-side key source")
+        XCTAssertEqual(hidden.first { $0.slug == "gemini" }?.labelDetail, "Antigravity CLI")
+        let visible = SessionProviderChoices.choices(configured: [gemini],
+                            antigravity: RunnerAntigravityState(supported: true, envKeyAvailable: true))
+        XCTAssertEqual(visible.first { $0.slug == "antigravity" }?.labelDetail, "env key")
+        let workspaceNoKey = SessionProviderChoices.choices(configured: [gemini],
+                            antigravity: RunnerAntigravityState(supported: true, envKeyAvailable: true),
+                            antigravityKeyAvailable: false)
+        XCTAssertFalse(workspaceNoKey.contains { $0.slug == "antigravity" })
+    }
+
+    func testAnExistingAntigravitySessionKeepsItsCurrentChoiceAndCanSwitchToGemini() {
+        let gemini = ConfiguredProvider(slug: "gemini", label: "Gemini", runtime: "antigravity",
+                                        models: [], defaultModel: "gemini-3.8-flash", presetSlug: "gemini")
+        let all = SessionProviderChoices.choices(configured: [gemini])
+        XCTAssertFalse(all.contains { $0.slug == "antigravity" })
+        XCTAssertEqual(SessionProviderChoices.sameRuntime("gemini", in: all, configured: [gemini]).map(\.slug), ["gemini"])
+        XCTAssertEqual(SessionProviderChoices.sameRuntime("antigravity", in: all, configured: [gemini]).map(\.slug),
+                       ["antigravity", "gemini"])
+        let current = SessionProviderChoices.current("antigravity", in: all, configured: [gemini],
+                                            antigravity: RunnerAntigravityState(supported: false))
+        XCTAssertEqual(current.modelLabel, "Gemini 3.8 Flash")
+        XCTAssertEqual(current.labelDetail, "env key")
+        XCTAssertEqual(current.unavailable, "Update runner")
+        XCTAssertEqual(current.fixEngine, "antigravity")
+    }
+
+    func testWorkspaceKeyAvailabilityMapDecodesAndUsesTheSelectedRunner() throws {
+        let runner = try JSONDecoder().decode(Runner.self, from: Data(#"{"id":"r1","name":"HPC","antigravity":{"supported":true,"installed":true,"version":"1.0.0","envKeyAvailable":true}}"#.utf8))
+        let workspace = try JSONDecoder().decode(Agent.self, from: Data(#"{"id":"w1","name":"repo","env":{"GEMINI_API_KEY":"present"},"antigravityKeyAvailableByRunner":{"r1":false,"r2":true}}"#.utf8))
+        XCTAssertEqual(runner.antigravity?.version, "1.0.0")
+        XCTAssertTrue(SessionProviderChoices.antigravityKeyAvailable(workspace: nil, runner: runner))
+        XCTAssertFalse(SessionProviderChoices.antigravityKeyAvailable(workspace: workspace, runner: runner),
+                       "neither raw env nor the runner boolean overrides the workspace result")
+        let noMap = try JSONDecoder().decode(Agent.self, from: Data(#"{"id":"w1","name":"repo"}"#.utf8))
+        XCTAssertFalse(SessionProviderChoices.antigravityKeyAvailable(workspace: noMap, runner: runner))
+        let session = try JSONDecoder().decode(Session.self, from: Data(#"{"id":"s1","status":"PENDING","agent":{"id":"w1","antigravityKeyAvailableByRunner":{"r1":true}}}"#.utf8))
+        XCTAssertEqual(session.agent?.antigravityKeyAvailableByRunner, ["r1": true])
+    }
+
     func testAnEngineTheRunnerHasClaimedNothingAboutStaysRunnable() {
         XCTAssertTrue(SessionProviderChoices.choices(configured: [], engines: nil)
             .allSatisfy { $0.unavailable == nil })
@@ -264,7 +386,8 @@ final class SessionProviderChoicesTests: XCTestCase {
         let choices = SessionProviderChoices.choices(
             configured: withPools([anthropic, anthropic2, deepseek], [pool]), catalog: opus5, pools: [pool])
         XCTAssertEqual(choices.map(\.slug),
-                       ["claude", "codex", "kimi", "claude-accounts", "anthropic", "anthropic-2", "deepseek"])
+                       ["claude", "codex", "kimi", "claude-accounts", "anthropic", "anthropic-2",
+                        "deepseek"])
         let tile = choices.first { $0.slug == "claude-accounts" }
         XCTAssertEqual(tile?.kind, .pool)
         XCTAssertEqual(tile?.poolSize, 2)
@@ -338,11 +461,14 @@ final class SessionProviderChoicesTests: XCTestCase {
     private let codexCatalog = RunnerModelCatalog(
         codex: [RunnerModelInfo(value: "gpt-5.6-sol", label: "GPT-5.6 Sol")])
 
-    private func sharedPool(_ keys: [SharedPoolKey],
+    /// A shared pool as its maker reads it — or, `added`, as somebody its maker added does.
+    private func sharedPool(_ keys: [SharedPoolKey], added: Bool = false,
                             monthEnds: String = "2026-10-01T00:00:00.000Z") -> ProviderPool {
         SharedPools.asProviderPool(SharedPool(
             id: "pool-2", slug: "team-codex", label: "Team Codex",
             window: SharedPoolWindow(start: "2026-09-01T00:00:00.000Z", end: monthEnds),
+            people: [SharedPoolPerson(userId: "wikova", name: "Wikova", role: .admin, creator: true, you: !added)]
+                + (added ? [SharedPoolPerson(userId: "me", name: "Me", you: true)] : []),
             keys: keys))
     }
 
@@ -410,6 +536,75 @@ final class SessionProviderChoicesTests: XCTestCase {
             .first { $0.slug == "team-codex" }
         XCTAssertEqual(tile?.unavailable, "No key can run")
         XCTAssertNil(tile?.fixEngine, "nothing on a runner gives it a key that can run")
+    }
+
+    /// Somebody a pool's maker added reads the same words its maker does: since 2026-10-03 the pool's
+    /// ChatGPT accounts run their sessions too, so what the pool holds is what they can run on.
+    func testAPoolSomebodyItsMakerAddedReadsSaysThePoolsOwnWords() {
+        let refused = SharedPoolKey(id: "k", label: "orbit-org-1", fingerprint: "sk-…0000", state: .invalid,
+                                    contributor: PoolKeyContributor(userId: "wikova", name: "Wikova"))
+        func tile(_ pool: ProviderPool) -> ProviderChoice? {
+            SessionProviderChoices.choices(configured: withPools([], [pool]), pools: [pool])
+                .first { $0.slug == "team-codex" }
+        }
+        XCTAssertEqual(tile(sharedPool([], added: true))?.unavailable, "No keys")
+        XCTAssertEqual(tile(sharedPool([refused], added: true))?.unavailable, "No key can run")
+        XCTAssertNil(tile(sharedPool([refused], added: true))?.fixEngine)
+        XCTAssertEqual(tile(sharedPool([]))?.unavailable, "No keys", "its maker reads the pool's own words")
+        XCTAssertNil(tile(sharedPool([sharedKey("orbit-org-1")], added: true))?.unavailable,
+                     "a key of it can run: the pool takes the pick")
+    }
+
+    /// A pool of somebody's own, read by one of the people they added: its ChatGPT accounts run their
+    /// sessions too (2026-10-03), so the pool is pickable with no key in it at all — and greyed as
+    /// "Signed out" only once every account is out and no key can run.
+    func testAPoolOfSomebodysOwnIsPickableForThemOnItsAccounts() {
+        func tile(_ logins: [CodexLogin], _ keys: [SharedPoolKey] = []) -> ProviderChoice? {
+            let pool = SharedPools.asProviderPool(SharedPool(
+                id: "pool-2", slug: "team-codex", label: "Team Codex", shared: false,
+                logins: logins,
+                people: [SharedPoolPerson(userId: "wikova", name: "Wikova", role: .admin, creator: true),
+                         SharedPoolPerson(userId: "me", name: "Me", you: true)],
+                keys: keys))
+            return SessionProviderChoices.choices(configured: withPools([], [pool]), pools: [pool])
+                .first { $0.slug == "team-codex" }
+        }
+        let account = CodexLogin(state: "ACTIVE", email: "wikova@orbitd.io", fingerprint: "…7QX4", next: true)
+        XCTAssertNil(tile([account])?.unavailable, "an account of it can run: the pool takes the pick")
+        XCTAssertEqual(tile([account])?.poolSize, 1)
+        XCTAssertNil(tile([account])?.poolUnit, "an account is not a key")
+        let out = CodexLogin(state: "SIGNED_OUT", email: "wikova@orbitd.io", fingerprint: "…7QX4", next: true)
+        XCTAssertEqual(tile([out])?.unavailable, "Signed out")
+        XCTAssertNil(tile([out], [sharedKey("orbit-org-1", you: true)])?.unavailable,
+                     "a key of theirs can run")
+    }
+
+    /// A Codex pool of one's own runs on its owner's ChatGPT accounts through the Codex CLI: the picker
+    /// offers it as Codex — its mark, and the CLI whose absence blocks it — though nobody else uses it and
+    /// it carries no shared view.
+    func testAChatGPTPoolOfOnesOwnIsOfferedAsCodex() {
+        let login = CodexLogin(email: "wikova@orbitd.io", fingerprint: "…7QX4")
+        let drawn = CodexLoginPool.drawn(slug: "my-codex", logins: [login])
+        let pool = ProviderPool(id: "pool-3", slug: "my-codex", label: "My Codex", members: drawn.members,
+                                engine: "codex", login: login, logins: [login])
+        XCTAssertNil(pool.shared)
+        let choices = SessionProviderChoices.choices(
+            configured: withPools([], [pool]), catalog: codexCatalog,
+            engines: [health("claude", installed: false, auth: "no"),
+                      health("codex", installed: true, auth: "unknown")],
+            pools: [pool])
+        let tile = choices.first { $0.slug == "my-codex" }
+        XCTAssertEqual(tile?.brandKey, "openai")
+        XCTAssertEqual(tile?.modelLabel, "GPT-5.6 Sol")
+        XCTAssertNil(tile?.unavailable, "the Claude CLI's absence is nothing to a pool that runs Codex")
+        XCTAssertNil(tile?.poolUnit, "its members are accounts")
+        let noCodex = SessionProviderChoices.choices(
+            configured: withPools([], [pool]),
+            engines: [health("claude", installed: true, auth: "yes"),
+                      health("codex", installed: false, auth: "unknown")],
+            pools: [pool]).first { $0.slug == "my-codex" }
+        XCTAssertEqual(noCodex?.unavailable, "Not installed")
+        XCTAssertEqual(noCodex?.fixEngine, "codex")
     }
 
     /// A Codex session may move onto a shared pool — the same CLI — and a Claude one may not, however

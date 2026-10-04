@@ -102,6 +102,7 @@ func startCodexAppServerProbe(t *testing.T) *codexAppServerProbe {
 	env, home := isolatedCodexProbeEnv(t)
 	cmd := exec.Command(exe, "app-server", "--stdio", "-c",
 		fmt.Sprintf("sqlite_home=%q", filepath.Join(home, "state")))
+	configureCodexProbeProcess(cmd)
 	cmd.Env = env
 	stdinR, stdinW, err := os.Pipe()
 	if err != nil {
@@ -119,10 +120,12 @@ func startCodexAppServerProbe(t *testing.T) *codexAppServerProbe {
 	stdoutW.Close()
 	p := &codexAppServerProbe{t: t, cmd: cmd, in: stdinW, out: bufio.NewReaderSize(stdoutR, 1<<20)}
 	t.Cleanup(func() {
-		stdinW.Close()
-		_ = cmd.Process.Kill()
-		_ = cmd.Wait()
-		stdoutR.Close()
+		if err := stopCodexProbeProcess(cmd, stdinW); err != nil {
+			t.Errorf("app-server probe cleanup: %v", err)
+		}
+		if err := stdoutR.Close(); err != nil {
+			t.Errorf("app-server probe stdout cleanup: %v", err)
+		}
 	})
 	// A cold app-server can spend a while bringing up its state before it answers; bound the
 	// whole exchange rather than any single read.

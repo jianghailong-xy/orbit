@@ -27,6 +27,8 @@ import {
   resetRunner,
 } from '../lib/codexResetCredit.fixtures';
 import { PlanUsageIndicator, type PlanUsageAccount } from './PlanUsageIndicator';
+import { ToastViewport } from './ToastViewport';
+import { clearToasts } from '../lib/toastStore';
 
 /**
  * The Plan usage pill and its Codex reset credit, pressed in a real DOM: the popover's keyboard path,
@@ -164,6 +166,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  await act(async () => clearToasts());
   await unmount();
   document.body.innerHTML = '';
   Object.assign(CODEX_RESET_CLIENT_TIMING, TIMING);
@@ -187,6 +190,7 @@ async function mount(runner: CodexResetRunner, reset = true, account?: PlanUsage
                 reset={reset ? { runner, workspaceId: 'Workspace1' } : undefined}
                 account={account}
               />
+              <ToastViewport />
             </MemoryRouter>
           </AntApp>
         </ConfigProvider>
@@ -234,7 +238,7 @@ const button = (name: string) =>
   Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((each) => each.textContent?.trim() === name) ??
   null;
 const toastText = () =>
-  Array.from(document.querySelectorAll('.ant-message'))
+  Array.from(document.querySelectorAll('.toast-viewport'))
     .map((each) => each.textContent)
     .join(' ');
 
@@ -355,6 +359,44 @@ describe('the Plan usage pill', () => {
     await mount(resetRunner(new Date()), false);
     await openUsage();
     expect(usagePanel()!.querySelector('.cu-account')).toBeNull();
+  });
+});
+
+describe("the pill's one number", () => {
+  type Reading = { utilization: number; hours: number };
+  const usage = (now: Date, primary: Reading, secondary: Reading) => ({
+    ...resetRunner(now),
+    planUsage: {
+      codex: {
+        provider: 'codex',
+        primary: {
+          utilization: primary.utilization,
+          windowDurationMins: 300,
+          resetsAt: new Date(now.getTime() + primary.hours * 3600_000).toISOString(),
+        },
+        secondary: {
+          utilization: secondary.utilization,
+          windowDurationMins: 7 * 24 * 60,
+          resetsAt: new Date(now.getTime() + secondary.hours * 3600_000).toISOString(),
+        },
+      },
+    },
+  });
+
+  it('is the window that stops the login, not the first one', async () => {
+    // 6% of the 5-hour window says nothing of a week that is spent.
+    await mount(usage(new Date(), { utilization: 6, hours: 2 }, { utilization: 100, hours: 66 }), false);
+    expect(pill().getAttribute('aria-label')).toBe('Plan usage 100%');
+    expect(pill().classList.contains('full')).toBe(true);
+  });
+
+  it('reads a window past its reset as the fresh one it now is, on the pill and in the popover', async () => {
+    await mount(usage(new Date(), { utilization: 100, hours: -1 }, { utilization: 59, hours: 66 }), false);
+    expect(pill().getAttribute('aria-label')).toBe('Plan usage 59%');
+    await openUsage();
+    const rows = [...usagePanel()!.querySelectorAll('.cu-row')].map((row) => row.textContent);
+    expect(rows[0]).toBe('5h limit0%');
+    expect(rows[1]).toMatch(/^Weekly limit59%Resets /);
   });
 });
 

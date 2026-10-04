@@ -1,11 +1,14 @@
 import type { MergeRecovery, MergeRecoveryAction } from '@orbit/shared';
 import type {
   BgShell,
+  ConfirmationReturnCard,
+  ConfirmationReviewRequestCard,
   ConversationTurnKind,
   OpenItemDeliveryCard,
   ProjectStartedCard,
   SessionCapabilities,
   SessionMessageCard,
+  SessionMoveTargets,
   SessionRequestView,
   SessionTurnIntent,
   SessionTurnPlacement,
@@ -368,6 +371,9 @@ export const createInteractiveSession = (body: {
   /** Compose from a `!cmd` draft: the server seeds the first turn as a shell command
    *  (run on the runner, bypassing claude) instead of a normal message. */
   shell?: boolean;
+  /** Composed on a folder's page: the session starts filed in that folder, which has to be one of
+   *  `workspaceId`'s (docs/session-folders-move-design.md §3.2). */
+  folderId?: string;
 }) =>
   api<{ id: string }>('/sessions', {
     method: 'POST',
@@ -620,6 +626,10 @@ export interface ActiveSessionTurn {
   openItemDelivery?: OpenItemDeliveryCard;
   /** The same for the message telling a coordinator its project was started (`ProjectStartedCard`). */
   projectStarted?: ProjectStartedCard;
+  /** A confirmation request handed to this conversation to review, and a reviewer's return handed to
+   *  the run (docs/owner-confirmation-review-contract.md §2 D7, §8 B3). Orbit's turns. */
+  confirmationReviewRequest?: ConfirmationReviewRequestCard;
+  confirmationReturn?: ConfirmationReturnCard;
   /** Another Orbit session's message (`SessionMessageCard`): who sent it, as the runner's echo will
    *  carry it. Its words are that session's, not the reader's. Absent on every turn nobody's session
    *  sent. */
@@ -849,6 +859,42 @@ export const restoreSession = (sessionId: string) =>
 export const purgeSession = (sessionId: string) =>
   api(`/sessions/${sessionId}/purge`, { method: 'DELETE' });
 
+// ── Session folders (docs/session-folders-move-design.md §3) ──
+
+/** A folder the owner files sessions in. It belongs to one workspace, a session is in at most one,
+ *  and it is filing only: nothing that runs a session reads it. */
+export interface SessionFolder {
+  id: string;
+  workspaceId: string;
+  name: string;
+}
+
+/** The server trims the name and holds it to 1–60 characters; a name the workspace already has is
+ *  a 409. */
+export const createSessionFolder = (body: { workspaceId: string; name: string }) =>
+  api<SessionFolder>('/session-folders', { method: 'POST', body });
+
+export const renameSessionFolder = (id: string, name: string) =>
+  api<SessionFolder>(`/session-folders/${id}`, { method: 'PATCH', body: { name } });
+
+/** Deletes the folder only: the sessions in it go back to their workspace's list. */
+export const deleteSessionFolder = (id: string) =>
+  api(`/session-folders/${id}`, { method: 'DELETE' });
+
+/** File a session in one of its workspace's folders, or in none (`folderId: null`); with a
+ *  `workspaceId`, move an ended session to that workspace (and folder). A move the server refuses
+ *  is a 409 whose message is the reason, in English, shown as it is. */
+export const moveSession = (sessionId: string, body: { folderId: string | null; workspaceId?: string }) =>
+  api<{ id: string; workspaceId: string | null; folderId: string | null }>(`/sessions/${sessionId}/move`, {
+    method: 'POST',
+    // An explicit null rather than an omitted key: "in no folder" is what the request asks for.
+    body: { folderId: body.folderId, ...(body.workspaceId ? { workspaceId: body.workspaceId } : {}) },
+  });
+
+/** What the Move dialog's Move to Another Workspace group and its confirmation need. */
+export const getSessionMoveTargets = (sessionId: string) =>
+  api<SessionMoveTargets>(`/sessions/${sessionId}/move-targets`);
+
 // Pin/unpin a session to the top of the session list (personal ordering; ordering only).
 export const pinSession = (sessionId: string) =>
   api(`/sessions/${sessionId}/pin`, { method: 'POST' });
@@ -867,13 +913,11 @@ export const getSessionRetryMessage = (sessionId: string) =>
 
 // Re-send another session's message from the failure card (docs/session-request-reply-contract.md
 // §2.1): the server re-sends it as the automatic retry would — signed by that session, with the
-// request it was — instead of this page sending the words again in the owner's own name. Keyed like
-// any send, so a replay of a lost response is the same re-send.
-export const resendSessionRetryMessage = (sessionId: string, clientTurnId: string) =>
-  api<{ turnId: string; placement?: string }>(`/sessions/${sessionId}/retry-message`, {
-    method: 'POST',
-    body: { clientTurnId },
-  });
+// request it was — instead of this page sending the words again in the owner's own name. It names no
+// key: the server derives one from the failed message, so a double tap or a response lost and clicked
+// again is the turn already queued rather than a second re-send (§2.1, §8 criterion 19).
+export const resendSessionRetryMessage = (sessionId: string) =>
+  api<{ turnId: string; placement?: string }>(`/sessions/${sessionId}/retry-message`, { method: 'POST' });
 
 // Turn off / put back the retry armed on this session by a spent quota or a transient provider
 // error. Arming is automatic when one of those kills a turn; `armAutoRetry` exists so the card's
@@ -1241,6 +1285,8 @@ export interface SessionChangedFile {
  * existing row fields remain open. */
 export type SessionListItem = Record<string, any> & {
   id: string;
+  /** The folder of its workspace it is filed in; null (or absent, from an older server) for none. */
+  folderId?: string | null;
   runState?: string | null;
   lifecycleState?: string | null;
   filingState?: string | null;
@@ -1260,6 +1306,37 @@ export interface MergeRepairSession {
   sessionState?: string | null;
   error?: string | null;
   completedAt?: string | null;
+}
+
+/** The tiers a task can be suggested at (`task.modelHint`, docs/model-routing-design.md §3.1). */
+export type ModelHintLevel = 'S' | 'M' | 'L' | 'XL';
+
+/** One tier of a task's Suggested picker, resolved by the server for the task's engine on its
+ *  Agent's runner (`modelHintOptions`, §7.5). model, label and effort are null where the engine has
+ *  no tier table or no runner has reported its models. */
+export interface ModelHintOption {
+  level: ModelHintLevel;
+  provider: string | null;
+  model: string | null;
+  label: string | null;
+  effort: string | null;
+}
+
+/** The routing decision a task run was planned with (§7.5), as the task detail's runs and the
+ *  session detail carry it. `level` null = not routed; `applied` false = shadow, what smart
+ *  selection would have picked while the run used the Agent's own model. */
+export interface TaskRunRoute {
+  level: ModelHintLevel | null;
+  provider: string;
+  model: string | null;
+  effort: string | null;
+  applied: boolean;
+  /** One tier above the previous run, because that run failed. */
+  escalated: boolean;
+  /** The router's own sentences, shown as they are. */
+  reasons: string[];
+  policyVersion: number;
+  decidedAt: string;
 }
 
 /** A single session's detail, as returned by GET /sessions/:id. Only the fields the web
@@ -1292,6 +1369,8 @@ export interface SessionDetail {
   source?: string | null;
   assignedRunnerId: string | null;
   provider?: string | null;
+  /** The routing decision this task run was planned with; null on any other session. */
+  route?: TaskRunRoute | null;
   /** On an account pool: the member its last claim dispatched on (null before the first). */
   poolMemberProviderId?: string | null;
   /** On a shared pool: the key its last claim chose (null before the first, or when none could run). */

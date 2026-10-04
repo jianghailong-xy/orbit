@@ -3,6 +3,7 @@ import {
   SessionLifecycleState,
   type ProjectIntegrationSettings,
   type ProjectListIntegration,
+  type ProjectListCoordinatorActivity,
   type TaskIntegrationView,
   type TaskStatus,
 } from '@orbit/shared';
@@ -78,6 +79,7 @@ import {
   attentionChipOf,
   integrationChipOf,
   projectAttentionSections,
+  projectIsWorking,
   type ProjectAttentionSummary,
 } from '../lib/projectAttention';
 import {
@@ -132,6 +134,7 @@ interface Project {
   /** Where this project's finished work lands, when anybody has decided (§7.1 V1). Absent on a
    *  server that predates the field, null on a project that has not decided and not integrated. */
   integration?: ProjectListIntegration | null;
+  coordinatorActivity?: ProjectListCoordinatorActivity | null;
 }
 
 /** One stated criterion, plus the two facts the server offers about the work filed under it.
@@ -228,17 +231,18 @@ export function projectOpenViewFromParam(value: string | null): OpenProjectView 
 /**
  * Whether an OPEN project belongs in one of the operational views.
  *
- * This reads the task rollup, not the attention lane. A quiet run still IS running even though it
+ * This reads execution facts, not the attention lane. A quiet run still IS running even though it
  * moves into Needs attention, and must remain findable from Running. Running wins when a project
  * also has ready tasks, keeping the two narrower views mutually exclusive.
  */
 export function matchesOpenProjectView(
-  project: Pick<Project, 'status' | 'buckets'>,
+  project: Pick<Project, 'status' | 'buckets' | 'integration' | 'coordinatorActivity'>,
   view: OpenProjectView,
 ): boolean {
   if (project.status !== 'OPEN') return false;
-  if (view === 'RUNNING') return project.buckets.running > 0;
-  if (view === 'READY') return project.buckets.running === 0 && project.buckets.ready > 0;
+  const working = projectIsWorking(project);
+  if (view === 'RUNNING') return working;
+  if (view === 'READY') return !working && project.buckets.ready > 0;
   return true;
 }
 
@@ -464,7 +468,6 @@ export function ProjectsPage() {
             const runnerId = workspaceRunnerId(workspace);
             return runnerId !== null && onlineRunnerIds.has(runnerId);
           }),
-          runnerList,
         )
       : undefined;
     if (first) {
@@ -1041,7 +1044,7 @@ export function ProjectDetailPage() {
   const reviewStart = useMutation({
     mutationFn: () => openProjectCoordinator(id!),
     onSuccess: (result) => navigate(coordinatorIntentPath(result.sessionId, START_PROJECT_INTENT)),
-    onError: (error) => toast.error(error.message),
+    onError: (error) => toast.error("Couldn't open the coordinator conversation", error.message),
   });
   // "Start…" while nobody has asked: the same card, over this page.
   const [starting, setStarting] = useState(false);
@@ -2039,6 +2042,7 @@ const LANDED_STATES: ReadonlySet<TaskIntegrationView['state']> = new Set([
 ]);
 
 export function taskIntegrationStage(task: ProjectTask): 'integrating' | 'landed' | null {
+  if (projectTaskWorkStateOf(task) !== 'DONE') return null;
   const state = task.integration?.state;
   if (!state) return null;
   if (INTEGRATING_STATES.has(state)) return 'integrating';
@@ -2090,7 +2094,7 @@ export function projectTaskIntegrationTag(
       return {
         text: integration.checksRunningForMs === null
           ? 'Integrating'
-          : `Integrating · checks ${formatSpan(integration.checksRunningForMs)}`,
+          : 'Integrating · checking',
         color: 'processing',
       };
     case 'CONFLICT':
@@ -2173,7 +2177,7 @@ export function projectTaskGroups(items: ProjectTask[]): ProjectTaskGroup[] {
     groups.push({
       key: 'integrating',
       level: 0,
-      heading: 'Integrating · checks run on the combined tree',
+      heading: 'Pending landing',
       tasks: integrating,
     });
   }

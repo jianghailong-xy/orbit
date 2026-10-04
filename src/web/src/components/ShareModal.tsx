@@ -197,7 +197,16 @@ export function ShareModal({
       qc.setQueryData(key, (old: Awaited<ReturnType<typeof getShareLink>> | undefined) => ({ ...old, link }));
       refreshShown();
     },
-    onError: (e: Error) => message.error(e.message),
+    // An empty body is Access → Anyone with the link, the press that turns the link on.
+    onError: (e: Error, body) =>
+      message.error(
+        body.include
+          ? "Couldn't change what the link includes"
+          : body.expiresAt !== undefined
+            ? "Couldn't change when the link expires"
+            : "Couldn't turn on the link",
+        e.message,
+      ),
   });
   const offMut = useMutation({
     mutationFn: () => turnOffShareLink(kind, rootId),
@@ -208,7 +217,7 @@ export function ShareModal({
       setExpiryChoice(null);
       refreshShown();
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => message.error("Couldn't turn off the link", e.message),
   });
 
   if (!spec) return null;
@@ -221,7 +230,7 @@ export function ShareModal({
   const copy = (text: string, done: string) => {
     void copyText(text).then((ok) => {
       if (!ok) {
-        message.error('Could not copy');
+        message.error("Couldn't copy the link");
         return;
       }
       message.success(done);

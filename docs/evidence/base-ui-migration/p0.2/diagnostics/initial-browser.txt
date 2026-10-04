@@ -1,0 +1,738 @@
+
+> @orbit/web@0.1.0 test:ui-migration
+> playwright test --config ui-migration/playwright.config.mjs --update-snapshots=all --grep-invert record browser performance
+
+[WebServer] (node:3899785) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 96 tests using 1 worker
+
+(node:3899860) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/breakpoint-599-share.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/breakpoint-599-dialog.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/breakpoint-601-share.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/breakpoint-601-dialog.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/breakpoint-639-projects.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/breakpoint-639-graph.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/breakpoint-641-projects.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/breakpoint-641-graph.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/breakpoint-959-wiki.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/breakpoint-959-session.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/breakpoint-961-wiki.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/breakpoint-961-session.png, writing actual.
+  ✓   1 [chromium-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (9.6s)
+  ✘   2 [chromium-light-desktop] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-1: task share Escape restores focus (2.1s)
+  ✘   3 [chromium-light-desktop] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-2: task share Done restores focus (2.5s)
+/root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/task-detail.png is re-generated, writing actual.
+/root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/task-detail.png is re-generated, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/task-share-dialog.png, writing actual.
+  ✓   4 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › task (3.6s)
+  ✓   5 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › share (550ms)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/project-overview.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/project-graph.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/project-graph-fullscreen.png, writing actual.
+  ✓   6 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (3.2s)
+/root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/wiki-home.png is re-generated, writing actual.
+/root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/wiki-home.png is re-generated, writing actual.
+  ✓   7 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (1.4s)
+  ✓   8 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (933ms)
+/root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/profile-validation.png is re-generated, writing actual.
+/root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/profile-validation.png is re-generated, writing actual.
+  ✓   9 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (1.3s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/notification-error.png, writing actual.
+  ✓  10 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › session (4.0s)
+  ✘  11 [chromium-light-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (15.4s)
+(node:3900471) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-desktop/projects-error.png, writing actual.
+  ✓  12 [chromium-light-desktop] › ui-migration/states.browser.mjs:21:3 › controlled error › projects error and retry (2.0s)
+(node:3900590) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -  13 [chromium-light-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✘  14 [chromium-light-phone] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-1: task share Escape restores focus (2.0s)
+  ✘  15 [chromium-light-phone] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-2: task share Done restores focus (2.4s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/task-detail.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/task-share-dialog.png, writing actual.
+  ✓  16 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › task (3.4s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/task-public-share.png, writing actual.
+  ✓  17 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › share (480ms)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/projects-list.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/project-overview.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/project-graph.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/project-graph-fullscreen.png, writing actual.
+  ✓  18 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › projects (2.9s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/wiki-home.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/wiki-contents.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/wiki-new-entry.png, writing actual.
+  ✓  19 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (1.5s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/settings.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/settings-saved.png, writing actual.
+  ✓  20 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › settings (833ms)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/profile.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/profile-validation.png, writing actual.
+  ✓  21 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › profile (1.2s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/session-idle.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/session-streaming.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/notification-error.png, writing actual.
+  ✓  22 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › session (3.6s)
+  ✘  23 [chromium-light-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (15.3s)
+(node:3901258) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-light-phone/projects-error.png, writing actual.
+  ✓  24 [chromium-light-phone] › ui-migration/states.browser.mjs:21:3 › controlled error › projects error and retry (1.9s)
+(node:3901367) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/breakpoint-599-share.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/breakpoint-599-dialog.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/breakpoint-601-share.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/breakpoint-601-dialog.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/breakpoint-639-projects.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/breakpoint-639-graph.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/breakpoint-641-projects.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/breakpoint-641-graph.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/breakpoint-959-wiki.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/breakpoint-959-session.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/breakpoint-961-wiki.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/breakpoint-961-session.png, writing actual.
+  ✓  25 [chromium-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (9.5s)
+  ✘  26 [chromium-dark-desktop] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-1: task share Escape restores focus (2.1s)
+  ✘  27 [chromium-dark-desktop] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-2: task share Done restores focus (2.5s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/task-detail.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/task-share-dialog.png, writing actual.
+  ✓  28 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task (3.7s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/task-public-share.png, writing actual.
+  ✓  29 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › share (543ms)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/projects-list.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/project-overview.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/project-graph.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/project-graph-fullscreen.png, writing actual.
+  ✓  30 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (3.2s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/wiki-home.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/wiki-new-entry.png, writing actual.
+  ✓  31 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (1.4s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/settings.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/settings-saved.png, writing actual.
+  ✓  32 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (918ms)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/profile.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/profile-validation.png, writing actual.
+  ✓  33 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (1.3s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/session-idle.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/session-streaming.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/notification-error.png, writing actual.
+  ✓  34 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › session (4.0s)
+  ✘  35 [chromium-dark-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (15.4s)
+(node:3901883) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-desktop/projects-error.png, writing actual.
+  ✓  36 [chromium-dark-desktop] › ui-migration/states.browser.mjs:21:3 › controlled error › projects error and retry (2.0s)
+(node:3902025) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -  37 [chromium-dark-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✘  38 [chromium-dark-phone] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-1: task share Escape restores focus (2.2s)
+  ✘  39 [chromium-dark-phone] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-2: task share Done restores focus (2.8s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/task-detail.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/task-share-dialog.png, writing actual.
+  ✓  40 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › task (3.4s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/task-public-share.png, writing actual.
+  ✓  41 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › share (501ms)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/projects-list.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/project-overview.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/project-graph.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/project-graph-fullscreen.png, writing actual.
+  ✓  42 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › projects (2.9s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/wiki-home.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/wiki-contents.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/wiki-new-entry.png, writing actual.
+  ✓  43 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (1.6s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/settings.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/settings-saved.png, writing actual.
+  ✓  44 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › settings (802ms)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/profile.png, writing actual.
+  ✘  45 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › profile (15.8s)
+(node:3902453) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/session-idle.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/session-streaming.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/notification-error.png, writing actual.
+  ✓  46 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › session (3.8s)
+  ✘  47 [chromium-dark-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (15.3s)
+(node:3902700) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/projects-error.png, writing actual.
+  ✓  48 [chromium-dark-phone] › ui-migration/states.browser.mjs:21:3 › controlled error › projects error and retry (2.0s)
+(node:3902794) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/breakpoint-599-share.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/breakpoint-599-dialog.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/breakpoint-601-share.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/breakpoint-601-dialog.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/breakpoint-639-projects.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/breakpoint-639-graph.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/breakpoint-641-projects.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/breakpoint-641-graph.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/breakpoint-959-wiki.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/breakpoint-959-session.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/breakpoint-961-wiki.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/breakpoint-961-session.png, writing actual.
+  ✓  49 [webkit-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (11.3s)
+  ✘  50 [webkit-light-desktop] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-1: task share Escape restores focus (2.6s)
+  ✘  51 [webkit-light-desktop] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-2: task share Done restores focus (3.3s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/task-detail.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/task-share-dialog.png, writing actual.
+  ✓  52 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › task (4.3s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/task-public-share.png, writing actual.
+  ✓  53 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › share (769ms)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/projects-list.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/project-overview.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/project-graph.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/project-graph-fullscreen.png, writing actual.
+  ✓  54 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (3.8s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/wiki-home.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/wiki-new-entry.png, writing actual.
+  ✓  55 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (1.8s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/settings.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/settings-saved.png, writing actual.
+  ✓  56 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (1.2s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/profile.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/profile-validation.png, writing actual.
+  ✓  57 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (1.6s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/session-idle.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/session-streaming.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/notification-error.png, writing actual.
+  ✓  58 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › session (4.7s)
+  ✘  59 [webkit-light-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (15.6s)
+(node:3904643) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-desktop/projects-error.png, writing actual.
+  ✓  60 [webkit-light-desktop] › ui-migration/states.browser.mjs:21:3 › controlled error › projects error and retry (3.5s)
+(node:3905089) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -  61 [webkit-light-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✘  62 [webkit-light-phone] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-1: task share Escape restores focus (2.7s)
+  ✘  63 [webkit-light-phone] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-2: task share Done restores focus (3.4s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/task-detail.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/task-share-dialog.png, writing actual.
+  ✓  64 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › task (3.7s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/task-public-share.png, writing actual.
+  ✓  65 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › share (692ms)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/projects-list.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/project-overview.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/project-graph.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/project-graph-fullscreen.png, writing actual.
+  ✓  66 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › projects (3.4s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/wiki-home.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/wiki-contents.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/wiki-new-entry.png, writing actual.
+  ✓  67 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (2.0s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/settings.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/settings-saved.png, writing actual.
+  ✓  68 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › settings (1.0s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/profile.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/profile-validation.png, writing actual.
+  ✓  69 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › profile (1.5s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/session-idle.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/session-streaming.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/notification-error.png, writing actual.
+  ✓  70 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › session (4.2s)
+  ✘  71 [webkit-light-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (15.6s)
+(node:3906802) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-light-phone/projects-error.png, writing actual.
+  ✓  72 [webkit-light-phone] › ui-migration/states.browser.mjs:21:3 › controlled error › projects error and retry (3.4s)
+(node:3906936) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/breakpoint-599-share.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/breakpoint-599-dialog.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/breakpoint-601-share.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/breakpoint-601-dialog.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/breakpoint-639-projects.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/breakpoint-639-graph.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/breakpoint-641-projects.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/breakpoint-641-graph.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/breakpoint-959-wiki.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/breakpoint-959-session.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/breakpoint-961-wiki.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/breakpoint-961-session.png, writing actual.
+  ✓  73 [webkit-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (11.3s)
+  ✘  74 [webkit-dark-desktop] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-1: task share Escape restores focus (2.6s)
+  ✘  75 [webkit-dark-desktop] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-2: task share Done restores focus (3.3s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/task-detail.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/task-share-dialog.png, writing actual.
+  ✓  76 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task (4.0s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/task-public-share.png, writing actual.
+  ✓  77 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › share (794ms)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/projects-list.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/project-overview.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/project-graph.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/project-graph-fullscreen.png, writing actual.
+  ✓  78 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (3.9s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/wiki-home.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/wiki-new-entry.png, writing actual.
+  ✓  79 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (1.8s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/settings.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/settings-saved.png, writing actual.
+  ✓  80 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (1.3s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/profile.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/profile-validation.png, writing actual.
+  ✓  81 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (1.8s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/session-idle.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/session-streaming.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/notification-error.png, writing actual.
+  ✓  82 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › session (4.8s)
+  ✘  83 [webkit-dark-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (15.6s)
+(node:3909525) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-desktop/projects-error.png, writing actual.
+  ✓  84 [webkit-dark-desktop] › ui-migration/states.browser.mjs:21:3 › controlled error › projects error and retry (3.5s)
+(node:3909693) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -  85 [webkit-dark-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✘  86 [webkit-dark-phone] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-1: task share Escape restores focus (2.6s)
+  ✘  87 [webkit-dark-phone] › ui-migration/known-failures.browser.mjs:10:3 › P0.2-FOCUS-2: task share Done restores focus (3.3s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/task-detail.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/task-action-hover.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/task-action-focus.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/task-action-menu.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/task-share-dialog.png, writing actual.
+  ✓  88 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › task (3.9s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/task-public-share.png, writing actual.
+  ✓  89 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › share (688ms)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/projects-list.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/projects-search-empty.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/project-overview.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/project-graph.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/project-graph-fullscreen.png, writing actual.
+  ✓  90 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › projects (3.4s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/wiki-home.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/wiki-contents.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/wiki-new-entry.png, writing actual.
+  ✓  91 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (1.9s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/settings.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/settings-saved.png, writing actual.
+  ✓  92 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › settings (1.0s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/profile.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/profile-validation.png, writing actual.
+  ✓  93 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › profile (1.4s)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/session-idle.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/session-streaming.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/session-composer-focus.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/session-attachment-menu.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/session-attachment-staged.png, writing actual.
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/notification-error.png, writing actual.
+  ✓  94 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › session (4.2s)
+  ✘  95 [webkit-dark-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (15.6s)
+(node:3911031) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/docs/evidence/base-ui-migration/p0.2/screenshots/webkit-dark-phone/projects-error.png, writing actual.
+  ✓  96 [webkit-dark-phone] › ui-migration/states.browser.mjs:21:3 › controlled error › projects error and retry (3.4s)
+
+
+  1) [chromium-light-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('img', { name: 'loading', exact: true })
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('img', { name: 'loading', exact: true }) with timeout 15000ms
+      - waiting for getByRole('img', { name: 'loading', exact: true })
+
+
+      10 |     await expect(page.getByRole('textbox', { name: 'Search projects' })).toBeEnabled();
+      11 |     await expect(page.locator('.project-row')).toHaveCount(0);
+    > 12 |     await expect(page.getByRole('img', { name: 'loading', exact: true })).toBeVisible();
+         |                                                                           ^
+      13 |     await capture('projects-loading');
+      14 |     api.release();
+      15 |     await expect(page.locator('.project-row')).toHaveCount(1);
+        at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/src/web/ui-migration/states.browser.mjs:12:75
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-chromium-light-desktop/attachments/computed-styles-and-timings-9a6b5e7469c12628aeb0fdba5bcf0f8d50f19673.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-light-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('img', { name: 'loading', exact: true })
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('img', { name: 'loading', exact: true }) with timeout 15000ms
+      - waiting for getByRole('img', { name: 'loading', exact: true })
+
+
+      10 |     await expect(page.getByRole('textbox', { name: 'Search projects' })).toBeEnabled();
+      11 |     await expect(page.locator('.project-row')).toHaveCount(0);
+    > 12 |     await expect(page.getByRole('img', { name: 'loading', exact: true })).toBeVisible();
+         |                                                                           ^
+      13 |     await capture('projects-loading');
+      14 |     api.release();
+      15 |     await expect(page.locator('.project-row')).toHaveCount(1);
+        at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/src/web/ui-migration/states.browser.mjs:12:75
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-chromium-light-phone/attachments/computed-styles-and-timings-97a984c0acc4f81e158eb9ddaba276e524cb52e3.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-chromium-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-chromium-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-chromium-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium-dark-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('img', { name: 'loading', exact: true })
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('img', { name: 'loading', exact: true }) with timeout 15000ms
+      - waiting for getByRole('img', { name: 'loading', exact: true })
+
+
+      10 |     await expect(page.getByRole('textbox', { name: 'Search projects' })).toBeEnabled();
+      11 |     await expect(page.locator('.project-row')).toHaveCount(0);
+    > 12 |     await expect(page.getByRole('img', { name: 'loading', exact: true })).toBeVisible();
+         |                                                                           ^
+      13 |     await capture('projects-loading');
+      14 |     api.release();
+      15 |     await expect(page.locator('.project-row')).toHaveCount(1);
+        at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/src/web/ui-migration/states.browser.mjs:12:75
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-chromium-dark-desktop/attachments/computed-styles-and-timings-d81412bcd4be53b41e24e6cfa5cb8a54f820ce9b.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-chromium-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › profile ──────────────────────────
+
+    Error: expect(locator).toBeDisabled() failed
+
+    Locator: getByRole('button', { name: 'Save', exact: true })
+    Expected: disabled
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeDisabled" getByRole('button', { name: 'Save', exact: true }) with timeout 15000ms
+      - waiting for getByRole('button', { name: 'Save', exact: true })
+
+
+       at page-scenarios.mjs:118
+
+      116 |   await page.getByRole('button', { name: 'Save', exact: true }).click();
+      117 |   await expect(page.getByText('Name saved', { exact: true })).toBeVisible();
+    > 118 |   await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+          |                                                                         ^
+      119 |   await page.getByRole('button', { name: 'Change password', exact: true }).click();
+      120 |   await expect(page.getByText('Enter your current password', { exact: true })).toBeVisible();
+      121 |   await expect(page.getByText('Enter a new password', { exact: true })).toBeVisible();
+        at profileScenario (/root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/src/web/ui-migration/page-scenarios.mjs:118:73)
+
+    attachment #1: profile (image/png) ─────────────────────────────────────────────────────────────
+    Expected: ../../docs/evidence/base-ui-migration/p0.2/screenshots/chromium-dark-phone/profile.png
+    Received: .ui-migration-results/pages.browser.mjs-profile-chromium-dark-phone/profile-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-profile-chromium-dark-phone/attachments/computed-styles-and-timings-e941fdde0a918692a9df461b90c6a3328b01ca14.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/pages.browser.mjs-profile-chromium-dark-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/pages.browser.mjs-profile-chromium-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/pages.browser.mjs-profile-chromium-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [chromium-dark-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('img', { name: 'loading', exact: true })
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('img', { name: 'loading', exact: true }) with timeout 15000ms
+      - waiting for getByRole('img', { name: 'loading', exact: true })
+
+
+      10 |     await expect(page.getByRole('textbox', { name: 'Search projects' })).toBeEnabled();
+      11 |     await expect(page.locator('.project-row')).toHaveCount(0);
+    > 12 |     const loading = page.locator('main [aria-busy="true"]');
+         |                                                             ^
+      13 |     await expect(loading).toBeVisible();
+      14 |     await capture('projects-loading', { loading });
+      15 |     api.release();
+        at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/src/web/ui-migration/states.browser.mjs:12:75
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-chromium-dark-phone/attachments/computed-styles-and-timings-e1078b8b76584a778daa3a367b392b168efd2f67.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-chromium-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-chromium-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-chromium-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) [webkit-light-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('img', { name: 'loading', exact: true })
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('img', { name: 'loading', exact: true }) with timeout 15000ms
+      - waiting for getByRole('img', { name: 'loading', exact: true })
+
+
+      10 |     await expect(page.getByRole('textbox', { name: 'Search projects' })).toBeEnabled();
+      11 |     await expect(page.locator('.project-row')).toHaveCount(0);
+    > 12 |     const loading = page.locator('main [aria-busy="true"]');
+         |                                                             ^
+      13 |     await expect(loading).toBeVisible();
+      14 |     await capture('projects-loading', { loading });
+      15 |     api.release();
+        at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/src/web/ui-migration/states.browser.mjs:12:75
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-webkit-light-desktop/attachments/computed-styles-and-timings-c87d4c9d374536f1ef93ed7e779cdcf39f588e3a.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  7) [webkit-light-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('img', { name: 'loading', exact: true })
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('img', { name: 'loading', exact: true }) with timeout 15000ms
+      - waiting for getByRole('img', { name: 'loading', exact: true })
+
+
+      10 |     await expect(page.getByRole('textbox', { name: 'Search projects' })).toBeEnabled();
+      11 |     await expect(page.locator('.project-row')).toHaveCount(0);
+    > 12 |     const loading = page.locator('main [aria-busy="true"]');
+         |                                                             ^
+      13 |     await expect(loading).toBeVisible();
+      14 |     await capture('projects-loading', { loading });
+      15 |     api.release();
+        at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/src/web/ui-migration/states.browser.mjs:12:75
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-webkit-light-phone/attachments/computed-styles-and-timings-188624aed62d82e9d4908e024cad855369200d37.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-webkit-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8) [webkit-dark-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('img', { name: 'loading', exact: true })
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('img', { name: 'loading', exact: true }) with timeout 15000ms
+      - waiting for getByRole('img', { name: 'loading', exact: true })
+
+
+      10 |     await expect(page.getByRole('textbox', { name: 'Search projects' })).toBeEnabled();
+      11 |     await expect(page.locator('.project-row')).toHaveCount(0);
+    > 12 |     const loading = page.locator('main [aria-busy="true"]');
+         |                                                             ^
+      13 |     await expect(loading).toBeVisible();
+      14 |     await capture('projects-loading', { loading });
+      15 |     api.release();
+        at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/src/web/ui-migration/states.browser.mjs:12:75
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-webkit-dark-desktop/attachments/computed-styles-and-timings-567a15b2829e910cef8d0569323bb5eca5e07751.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-webkit-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  9) [webkit-dark-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('img', { name: 'loading', exact: true })
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('img', { name: 'loading', exact: true }) with timeout 15000ms
+      - waiting for getByRole('img', { name: 'loading', exact: true })
+
+
+      10 |     await expect(page.getByRole('textbox', { name: 'Search projects' })).toBeEnabled();
+      11 |     await expect(page.locator('.project-row')).toHaveCount(0);
+    > 12 |     const loading = page.locator('main [aria-busy="true"]');
+         |                                                             ^
+      13 |     await expect(loading).toBeVisible();
+      14 |     await capture('projects-loading', { loading });
+      15 |     api.release();
+        at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/src/web/ui-migration/states.browser.mjs:12:75
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    .ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-webkit-dark-phone/attachments/computed-styles-and-timings-1fff27fae44ea72df2ee594a0ca40cb6261364f6.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-webkit-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/states.browser.mjs-control-74696-rojects-loading-and-release-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  9 failed
+    [chromium-light-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release 
+    [chromium-light-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release 
+    [chromium-dark-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release 
+    [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › profile ───────────────────────────
+    [chromium-dark-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release 
+    [webkit-light-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release 
+    [webkit-light-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release 
+    [webkit-dark-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release 
+    [webkit-dark-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release 
+  4 skipped
+  83 passed (6.3m)
+npm error Lifecycle script `test:ui-migration` failed with error:
+npm error code 1
+npm error path /root/.orbit/worktrees/***/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /root/.orbit/worktrees/***/src/web
+npm error command failed
+npm error command sh -c playwright test --config ui-migration/playwright.config.mjs --update-snapshots=all --grep-invert 'record browser performance'

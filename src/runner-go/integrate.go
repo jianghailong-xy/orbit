@@ -36,6 +36,21 @@ const integrateScratchPrefix = "_integrate-"
 // race forever is a queue that never reports anything.
 const integrationRefetchRounds = 2
 
+// How many times one fetch is tried again when git refused to take a ref's lock because another
+// process was updating the same ref at that moment, and how long the wait before each further try
+// is (it doubles). Three attempts inside under a second: long enough for the fetch that beat this
+// one to be over, short enough that a repository genuinely wedged on a stale `.lock` is reported
+// rather than waited on.
+const (
+	integrationFetchLockAttempts = 3
+	integrationFetchLockWait     = 200 * time.Millisecond
+)
+
+// integrationFetchLockPause is the wait between two attempts at a ref another process was holding.
+// A variable only so a test can take that other process's lock away at the moment the first attempt
+// has failed, which is a moment nothing outside this function can observe.
+var integrationFetchLockPause = func(d time.Duration) { time.Sleep(d) }
+
 // The most check output a result carries, per §2.1. The control plane clips it again; this keeps a
 // runaway command from putting a gigabyte on the wire in the first place.
 const integrationOutputTail = 16 * 1024
@@ -149,14 +164,14 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 	if !local {
 		// The target may legitimately not exist yet (a project branch nobody has pushed), so the
 		// two refs are fetched separately and only upstream's absence is fatal.
-		if _, err := git(repoRoot, "fetch", remote, cmd.UpstreamRef); err != nil {
-			return errorResult("FETCH", "BASE_REF_NOT_FOUND", map[string]any{
-				"ref": cmd.UpstreamRef, "detail": gitStderr(err),
-			})
+		if err := integrationFetch(repoRoot, remote, cmd.UpstreamRef); err != nil {
+			return fetchRefFailure("FETCH", cmd.UpstreamRef, err, "BASE_REF_NOT_FOUND")
 		}
-		if _, err := git(repoRoot, "fetch", remote, cmd.TargetRef); err != nil {
-			// Not an error: a first landing creates the branch.
-			_ = err
+		// A failure here is not an error — a first landing creates the branch — unless it is a ref
+		// another process was holding: this fetch is what brings the tip the job is about to work
+		// from, and reading it out of a ref nobody just updated is a guess about the remote.
+		if err := integrationFetch(repoRoot, remote, cmd.TargetRef); err != nil && isRefLockConflict(err) {
+			return fetchRefFailure("FETCH", cmd.TargetRef, err, "FETCH_FAILED")
 		}
 	}
 	upstreamSha, err := integrationTip(repoRoot, remote, cmd.UpstreamRef, local)
@@ -192,16 +207,25 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 	// ── J-S2 MAIN_SYNC ────────────────────────────────────────────────────────────────────────
 	// Only a project branch absorbs upstream: on a MAIN line the target IS upstream.
 	base := targetSha
+	absorbedBySource := false
 	if cmd.TargetRef != cmd.UpstreamRef && !isAncestor(scratch, upstreamSha, targetSha) {
-		report("MAIN_SYNC", nil)
-		merged, conflicts, err := integrationMerge(scratch, upstreamSha,
-			fmt.Sprintf("Merge %s into %s", cmd.UpstreamRef, cmd.TargetRef))
-		if err != nil {
-			result.State, result.Phase, result.Conflicts = "CONFLICT", "MAIN_SYNC", conflicts
-			return result
+		if sourceCarriesTheAbsorb(scratch, sourceSha, targetSha, upstreamSha) {
+			// The source has already made this merge, with whatever resolution it took (§3.1 M3).
+			// Making it again on the target's tip asks git for that resolution a second time, and
+			// conflicts where the source already answered — so nothing is merged here, and J-S4
+			// lands the source as it is.
+			absorbedBySource = true
+		} else {
+			report("MAIN_SYNC", nil)
+			merged, conflicts, err := integrationMerge(scratch, upstreamSha,
+				fmt.Sprintf("Merge %s into %s", cmd.UpstreamRef, cmd.TargetRef))
+			if err != nil {
+				result.State, result.Phase, result.Conflicts = "CONFLICT", "MAIN_SYNC", conflicts
+				return result
+			}
+			result.MainSyncSha = merged
+			base = merged
 		}
-		result.MainSyncSha = merged
-		base = merged
 	}
 
 	// ── J-S3 already contained ────────────────────────────────────────────────────────────────
@@ -242,10 +266,11 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 	fork, _ := git(scratch, "merge-base", sourceSha, base)
 	merges, _ := git(scratch, "rev-list", "--merges", fork+".."+sourceSha)
 	var tested string
-	if strings.TrimSpace(merges) != "" {
+	if absorbedBySource || strings.TrimSpace(merges) != "" {
 		// A source that contains merge commits carries somebody's conflict resolutions inside
 		// them. A rebase would replay the sides and ask for those resolutions again; a merge keeps
-		// them (§2.4 J-S4).
+		// them (§2.4 J-S4). A source that absorbed the upstream itself always comes this way: the
+		// target's tip is its ancestor, so the merge is exactly the source's tree.
 		report("MERGE", nil)
 		merged, conflicts, err := integrationMerge(scratch, sourceSha,
 			fmt.Sprintf("Merge %s into %s", cmd.SourceRef, cmd.TargetRef))
@@ -257,7 +282,9 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 	} else {
 		report("REBASE", nil)
 		onto := fork
-		if cmd.SessionBaseSha != "" && isAncestor(scratch, cmd.SessionBaseSha, sourceSha) {
+		// A session base at or before the fork would replay commits base already contains. Keep
+		// the fork then; only a session base beyond it that is still on the source overrides it.
+		if cmd.SessionBaseSha != "" && isAncestor(scratch, cmd.SessionBaseSha, sourceSha) && !isAncestor(scratch, cmd.SessionBaseSha, fork) {
 			onto = cmd.SessionBaseSha
 		}
 		rebased, conflicts, err := integrationRebase(scratch, base, onto, sourceSha)
@@ -335,7 +362,7 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 	// ── J-S7 VERIFY ───────────────────────────────────────────────────────────────────────────
 	report("VERIFY", nil)
 	if !local {
-		if _, err := git(repoRoot, "fetch", remote, cmd.TargetRef); err != nil {
+		if err := integrationFetch(repoRoot, remote, cmd.TargetRef); err != nil {
 			result.State, result.Phase, result.ErrorCode = "ERROR", "VERIFY", "LANDED_TREE_MISMATCH"
 			result.ErrorDetail = map[string]any{"detail": "could not read the target back: " + gitStderr(err)}
 			return result
@@ -362,6 +389,26 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 	}
 	result.State, result.Phase = "LANDED", "VERIFY"
 	return result
+}
+
+// sourceCarriesTheAbsorb reports a source that has already done J-S2's merge itself: it contains
+// the upstream tip and the target tip this job fetched (§3.1 M3).
+//
+// THE CONFLICT THIS EXISTS FOR (2026-10-03, project 34Y7My8sqhKLWtmCQYv1l). The project branch and
+// main had each added a migration to the same ledger, so absorbing main into the branch conflicted.
+// J-S2 tried that absorb on the target's own tip before it looked at the source, so a branch that
+// had merged both tips and resolved the ledger met the conflict it had already resolved, and so did
+// the task reopened to rework it: every landing on that line stopped at MAIN_SYNC.
+//
+// Both tips, measured on this job's fetch. A source that absorbed an upstream that has moved since,
+// or that was cut from a target tip that has moved since, does not carry this absorb, and J-S2
+// makes it as before: a conflict there is still the MAIN_SYNC conflict it always was.
+//
+// Not the upstream tip itself, which has nothing of its own to land. Taking this path for it would
+// push a bare main sync and turn J-S3's NOTHING_TO_LAND (0300) into a landing.
+func sourceCarriesTheAbsorb(dir, sourceSha, targetSha, upstreamSha string) bool {
+	return sourceSha != upstreamSha &&
+		isAncestor(dir, upstreamSha, sourceSha) && isAncestor(dir, targetSha, sourceSha)
 }
 
 // promoteOnce is one pass at merging a project's finished work into its upstream
@@ -397,15 +444,11 @@ func promoteOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report int
 	// ── M-S1 FETCH ────────────────────────────────────────────────────────────────────────────
 	report("FETCH", nil)
 	if !local {
-		if _, err := git(repoRoot, "fetch", remote, cmd.UpstreamRef); err != nil {
-			return errorResult("FETCH", "BASE_REF_NOT_FOUND", map[string]any{
-				"ref": cmd.UpstreamRef, "detail": gitStderr(err),
-			})
+		if err := integrationFetch(repoRoot, remote, cmd.UpstreamRef); err != nil {
+			return fetchRefFailure("FETCH", cmd.UpstreamRef, err, "BASE_REF_NOT_FOUND")
 		}
-		if _, err := git(repoRoot, "fetch", remote, cmd.SourceRef); err != nil {
-			return errorResult("FETCH", "SOURCE_BRANCH_MISSING", map[string]any{
-				"ref": cmd.SourceRef, "detail": gitStderr(err),
-			})
+		if err := integrationFetch(repoRoot, remote, cmd.SourceRef); err != nil {
+			return fetchRefFailure("FETCH", cmd.SourceRef, err, "SOURCE_BRANCH_MISSING")
 		}
 	}
 	upstreamSha, err := integrationTip(repoRoot, remote, cmd.UpstreamRef, local)
@@ -474,10 +517,12 @@ func promoteOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report int
 	var tested string
 	if taskBranch {
 		// The task's own branch replayed onto the upstream tip, anchored the way every other rebase
-		// in this file is: at the session's recorded base when that is still an ancestor of the
-		// source, and at the fork point otherwise (J-S4).
-		onto, _ := git(scratch, "merge-base", sourceSha, upstreamSha)
-		if cmd.SessionBaseSha != "" && isAncestor(scratch, cmd.SessionBaseSha, sourceSha) {
+		// in this file is (J-S4): use the fork when the session base is at or before it, avoiding
+		// replay of commits already in upstream; only a session base beyond the fork that is still
+		// an ancestor of the source overrides it.
+		fork, _ := git(scratch, "merge-base", sourceSha, upstreamSha)
+		onto := fork
+		if cmd.SessionBaseSha != "" && isAncestor(scratch, cmd.SessionBaseSha, sourceSha) && !isAncestor(scratch, cmd.SessionBaseSha, fork) {
 			onto = cmd.SessionBaseSha
 		}
 		rebased, conflicts, rebaseErr := integrationRebase(scratch, upstreamSha, onto, sourceSha)
@@ -584,7 +629,7 @@ func promoteOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report int
 	// ── VERIFY ────────────────────────────────────────────────────────────────────────────────
 	report("VERIFY", nil)
 	if !local {
-		if _, err := git(repoRoot, "fetch", remote, cmd.UpstreamRef); err != nil {
+		if err := integrationFetch(repoRoot, remote, cmd.UpstreamRef); err != nil {
 			result.State, result.Phase, result.ErrorCode = "ERROR", "VERIFY", "LANDED_TREE_MISMATCH"
 			result.ErrorDetail = map[string]any{"detail": "could not read the upstream back: " + gitStderr(err)}
 			return result
@@ -807,6 +852,53 @@ func removeIntegrationWorktree(repoRoot, scratch string) {
 	_, _ = git(repoRoot, "worktree", "remove", "--force", scratch)
 	_ = os.RemoveAll(scratch)
 	_, _ = git(repoRoot, "worktree", "prune")
+}
+
+// integrationFetch fetches one remote ref into this checkout's remote-tracking copy, trying again
+// when the only thing in the way was another process updating that same ref.
+//
+// THE FAILURE THIS EXISTS FOR (2026-10-02, project 34Yjjgt2ERe9tU5TUmjAP). `git fetch <remote> <ref>`
+// does not only write FETCH_HEAD: it updates `refs/remotes/<remote>/<branch>` as well, and that ref
+// is SHARED — every integration job, every session worktree and every `git fetch` in this repository
+// writes it. Two of them arriving together and the second one's ref update is refused with
+//
+//	error: cannot lock ref 'refs/remotes/origin/main': is at 0ca3c834… but expected 869e718b…
+//
+// which is not an answer about anything the job asked for: the ref moved between this fetch reading
+// it and writing it, so the same fetch, run again, simply works. It was reported as
+// BASE_REF_NOT_FOUND — a code that means the upstream branch does not exist, and that a reader acts
+// on by going to look at the branch — and the promotion it was a step of went BLOCKED over a race
+// it would have won a moment later.
+func integrationFetch(repoRoot, remote, ref string) error {
+	var err error
+	for attempt := 0; attempt < integrationFetchLockAttempts; attempt++ {
+		if attempt > 0 {
+			integrationFetchLockPause(integrationFetchLockWait << (attempt - 1))
+		}
+		if _, err = git(repoRoot, "fetch", remote, ref); err == nil || !isRefLockConflict(err) {
+			return err
+		}
+	}
+	return err
+}
+
+// isRefLockConflict reports git refusing to take a ref's lock: another process holds the `.lock`
+// file, or moved the ref between this fetch's read of it and its write. Both spellings say "cannot
+// lock ref", and neither is a statement about the branch the job asked for.
+func isRefLockConflict(err error) bool {
+	return err != nil && strings.Contains(gitStderr(err), "cannot lock ref")
+}
+
+// fetchRefFailure is what a fetch that got nowhere is reported as: `branchCode` for a failure that
+// is about the ref itself — it is not there — and FETCH_FAILED for the one that is about the
+// machinery, a ref lock that outlived its retries. The second is deliberately not a code a reader
+// could act on by going to look at a branch.
+func fetchRefFailure(phase, ref string, err error, branchCode string) integrationResult {
+	code := branchCode
+	if isRefLockConflict(err) {
+		code = "FETCH_FAILED"
+	}
+	return errorResult(phase, code, map[string]any{"ref": ref, "detail": gitStderr(err)})
 }
 
 // integrationTip resolves a ref to a commit: the remote-tracking copy when the remote is the

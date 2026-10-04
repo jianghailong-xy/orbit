@@ -533,6 +533,8 @@ func wikiEffectOf(route string, body map[string]interface{}, landing int) string
 		return once(written...) // a section whose stored fingerprint is the write's is left as it is
 	case strings.HasSuffix(route, "article-plan"):
 		return once() // the default topics, for a space with none
+	case strings.HasSuffix(route, "maintenance/advance"):
+		return once(str("to")) // the position alone, by compare-and-set: a cursor at or past the token moves nothing
 	case strings.HasSuffix(route, "cursor") || strings.HasSuffix(route, "maintenance/finish"):
 		if outcome := str("outcome"); outcome != "" && outcome != "succeeded" {
 			return each() // one more consecutive failure each time it lands
@@ -638,6 +640,10 @@ func TestWikiRetryResendsOnlyTheWritesTheServerRecordsOnce(t *testing.T) {
 		}},
 		{"a truncated run's cursor", "POST cursor", false, 0, func(tr *Transport) error {
 			_, err := tr.advanceWikiCursor("s", "space-1", map[string]interface{}{"outcome": "truncated", "error": "cut short"})
+			return err
+		}},
+		{"the cursor's move once a run's ops are recorded", "POST maintenance/advance", true, 1, func(tr *Transport) error {
+			_, err := tr.advanceWikiMaintenance("s", "space-1", map[string]interface{}{"to": "tok-1"})
 			return err
 		}},
 		{"a succeeded run's end", "POST maintenance/finish", true, 1, func(tr *Transport) error {

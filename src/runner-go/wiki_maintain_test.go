@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // `orbit wiki maintain` and `orbit wiki check` (contract `maintenance.job`, criterion 3), against a fake
@@ -62,11 +63,19 @@ type fakeMaintainDoor struct {
 	material  map[string]string
 	withdraw  func(body map[string]interface{}) (int, string)
 	proposals func(body map[string]interface{}) (int, string)
+	// override answers a route, "METHOD path" under the space, in place of everything above: a server that
+	// answers 5xx (contract `maintenance.job.recovery.inSession`).
+	override map[string]func() (int, string)
+	// watermark is the space's cursor as the door keeps it ("" before anything moved it, read as tok-watermark):
+	// moved by POST …/maintenance/advance and by a succeeded finish, and where the first page of a run starts —
+	// pages[watermark], when there is one. advanceMissing is a server that predates the advance route.
+	watermark      string
+	advanceMissing bool
 }
 
 func newFakeMaintainDoor(t *testing.T) *fakeMaintainDoor {
 	t.Helper()
-	d := &fakeMaintainDoor{pages: map[string]string{}, verified: map[string]bool{}}
+	d := &fakeMaintainDoor{pages: map[string]string{}, verified: map[string]bool{}, override: map[string]func() (int, string){}}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		request := maintainRequest{method: r.Method, path: r.URL.Path, query: r.URL.Query(), session: r.Header.Get("X-Orbit-Session-Id")}
 		if raw, _ := io.ReadAll(r.Body); len(raw) > 0 {
@@ -80,11 +89,20 @@ func newFakeMaintainDoor(t *testing.T) *fakeMaintainDoor {
 		status, body := http.StatusNotFound, `{"message":"no such route"}`
 		path := strings.TrimPrefix(r.URL.Path, "/api/runner/wiki/spaces/space-1/")
 		switch {
+		case d.override[r.Method+" "+path] != nil:
+			status, body = d.override[r.Method+" "+path]()
 		case r.Method == http.MethodGet && path == "maintenance/run" && d.context != nil:
 			status, body = d.context()
 		case r.Method == http.MethodGet && path == "dossiers":
 			after := r.URL.Query().Get("after")
+			d.mu.Lock()
+			start := d.watermark
+			d.mu.Unlock()
 			page, ok := d.pages[after]
+			if from, moved := d.pages[start]; after == "" && start != "" && moved {
+				// A page starts at the later of `after` and the cursor: a run after one that moved it reads on from there.
+				page, ok, after = from, true, start
+			}
 			if !ok {
 				page = maintainPage(after, false)
 			}
@@ -159,8 +177,27 @@ func newFakeMaintainDoor(t *testing.T) *fakeMaintainDoor {
 			status, body = d.withdraw(request.body)
 		case r.Method == http.MethodPost && path == "plan/proposals" && d.proposals != nil:
 			status, body = d.proposals(request.body)
+		case r.Method == http.MethodPost && path == "maintenance/advance" && d.advanceMissing:
+			status, body = http.StatusNotFound, `{"message":"Cannot POST `+r.URL.Path+`","error":"Not Found","statusCode":404}`
+		case r.Method == http.MethodPost && path == "maintenance/advance":
+			to, _ := request.body["to"].(string)
+			d.mu.Lock()
+			moved := to != firstNonEmpty(d.watermark, "tok-watermark")
+			if moved {
+				d.watermark = to
+			}
+			position := firstNonEmpty(d.watermark, "tok-watermark")
+			d.mu.Unlock()
+			raw, _ := json.Marshal(map[string]interface{}{"advanced": moved,
+				"state": map[string]interface{}{"position": position, "backlog": 0, "consecutiveFailures": 0}})
+			status, body = http.StatusOK, string(raw)
 		case r.Method == http.MethodPost && path == "maintenance/finish":
 			outcome, _ := request.body["outcome"].(string)
+			if to, _ := request.body["to"].(string); outcome == "succeeded" && to != "" {
+				d.mu.Lock()
+				d.watermark = to
+				d.mu.Unlock()
+			}
 			advanced := outcome == "succeeded"
 			raw, _ := json.Marshal(map[string]interface{}{"advanced": advanced, "outcome": outcome,
 				"state": map[string]interface{}{"position": map[bool]string{true: "tok-expect", false: ""}[advanced], "backlog": 0, "consecutiveFailures": map[bool]int{true: 0, false: 1}[advanced]}})
@@ -501,7 +538,7 @@ func TestWikiMaintainRunsThePipelineAndAdvancesTheCursor(t *testing.T) {
 		}
 	}
 	// After its own ops, the run asks what ended sessions left waiting: nothing, here.
-	want := []string{"GET maintenance/run", "GET dossiers", "POST maintenance/changesets", "GET verifications",
+	want := []string{"GET maintenance/run", "GET dossiers", "POST maintenance/changesets", "POST maintenance/advance", "GET verifications",
 		"POST verifications", "GET maintenance/verifications", "GET anchors", "GET maintenance/docs", "POST maintenance/finish"}
 	if !reflect.DeepEqual(steps, want) {
 		t.Errorf("the run went %v\nwant %v", steps, want)
@@ -961,7 +998,8 @@ func TestWikiMaintainLeavesAnOpWithoutAVerdictToTheNextRun(t *testing.T) {
 }
 
 // What stops the verification still fails the run: the model's endpoint refusing the token stops it at the first
-// op — every op after would be refused the same way — and the run ends failed at verify, its cursor unmoved.
+// op — every op after would be refused the same way — and the run ends failed at verify, with the cursor where the
+// run moved it once its ops were recorded (TestWikiMaintainCursorAdvance… pins that moment).
 func TestWikiMaintainStillFailsWhenTheVerificationIsRefusedTheToken(t *testing.T) {
 	f := newMaintainFixture(t)
 	door := newFakeMaintainDoor(t)
@@ -980,10 +1018,10 @@ func TestWikiMaintainStillFailsWhenTheVerificationIsRefusedTheToken(t *testing.T
 	wikiMaintainSession(t, door.URL, vllm)
 
 	summary, err := runMaintainCLI(t)
-	if err == nil || !strings.Contains(err.Error(), "401") || !strings.Contains(err.Error(), "the cursor did not move") {
+	if err == nil || !strings.Contains(err.Error(), "401") || !strings.Contains(err.Error(), "the cursor had already moved past the sessions whose ops it recorded") {
 		t.Fatalf("a refused token in the verification = %v, want the run failed", err)
 	}
-	if summary.Outcome != "failed" || summary.Advanced {
+	if summary.Outcome != "failed" || !summary.Advanced || !summary.Report.CursorAdvanced {
 		t.Errorf("summary = %+v", summary)
 	}
 	end := finished(t, door)
@@ -1517,25 +1555,57 @@ func TestWikiMaintainIsRefusedToAnyButAMaintenanceRun(t *testing.T) {
 
 // ── What it is made of ──────────────────────────────────────────────────────────────────────────
 
-// The maintenance session's one Bash call is the whole run: Claude Code must neither kill it at two
-// minutes nor move it to the background, where a session with no Read could never learn how it ended.
+// The maintenance session's one Bash call is the whole run — a plan job's draft, revision or build too, whose
+// sessions the server claims with the same clean start: Claude Code must neither kill it at two minutes nor
+// move it to the background, where a session with no Read could never learn how it ended. Five hours when
+// the model names no timeout, with no env block in the settings to outrank the environment; and since a
+// timeout the call names wins, the system prompt tells the model to name the five hours, and never to run a
+// call the tool cut off again (2026-10-03: 600000, cut off at ten minutes, then again with 1800000).
 func TestWikiMaintainCleanStartLetsTheRunFinish(t *testing.T) {
-	job := maintenanceJob(t)
-	_, env, _ := startMaintenance(t, job, true)
 	budget := strconv.FormatInt(wikiMaintainRunBudget.Milliseconds(), 10)
-	for key, want := range map[string]string{
-		"BASH_DEFAULT_TIMEOUT_MS":              budget,
-		"BASH_MAX_TIMEOUT_MS":                  budget,
-		"CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1",
-	} {
-		if env[key] != want {
-			t.Errorf("%s=%q, want %q", key, env[key], want)
-		}
-	}
 	// Five hours: the same clean start runs a plan job's draft (wiki_plan_draft.go), whose four steps and
 	// three gate rounds take longer on a shared GPU than a maintenance run's three hours.
 	if budget != "18000000" {
 		t.Errorf("the run's budget is %s ms, want five hours", budget)
+	}
+	for _, task := range []struct{ title, command string }{
+		{"Wiki maintenance: a space", "orbit wiki maintain"},
+		{"Wiki plan draft: a space", "orbit wiki plan draft"},
+		{"Wiki plan redraft: a space", "orbit wiki plan revise"},
+		{"Wiki documents: a space", "orbit wiki docs build"},
+	} {
+		t.Run(task.command, func(t *testing.T) {
+			job := maintenanceJob(t)
+			job.Title, job.Prompt = task.title, "Run this once, with the Bash tool: "+task.command+" --space "+maintenanceSpaceID
+			args, env, _ := startMaintenance(t, job, true)
+			def, defErr := strconv.ParseInt(env["BASH_DEFAULT_TIMEOUT_MS"], 10, 64)
+			most, mostErr := strconv.ParseInt(env["BASH_MAX_TIMEOUT_MS"], 10, 64)
+			if defErr != nil || mostErr != nil || time.Duration(def)*time.Millisecond < 5*time.Hour || most < def {
+				t.Errorf("BASH_DEFAULT_TIMEOUT_MS=%q BASH_MAX_TIMEOUT_MS=%q: want five hours at least, and the most no less",
+					env["BASH_DEFAULT_TIMEOUT_MS"], env["BASH_MAX_TIMEOUT_MS"])
+			}
+			if env["CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"] != "1" {
+				t.Errorf("CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=%q, want 1", env["CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"])
+			}
+			path, _ := argAfter(args, "--settings")
+			raw, err := os.ReadFile(path)
+			var settings map[string]interface{}
+			if err != nil || json.Unmarshal(raw, &settings) != nil {
+				t.Fatalf("the settings %s could not be read: %v %s", path, err, raw)
+			}
+			if block, outranks := settings["env"]; outranks {
+				t.Errorf("the settings carry an env block, which outranks the environment: %v", block)
+			}
+			prompt, _ := argAfter(args, "--system-prompt")
+			for _, want := range []string{
+				"with the Bash tool and `timeout: " + budget + "`, never a shorter one",
+				"a command the Bash tool came back from before it ended — it timed out, or was cut off — is never run again",
+			} {
+				if !strings.Contains(prompt, want) {
+					t.Errorf("the system prompt does not say %q: %s", want, prompt)
+				}
+			}
+		})
 	}
 }
 
@@ -1580,6 +1650,11 @@ func TestWikiMaintainIsTheContractsCommand(t *testing.T) {
 			t.Errorf("rules.%s = %v, this build has %d", name, rules[name], value)
 		}
 	}
+	// How long a run waits for a server that answers 5xx or nothing at all (`recovery.rules.serverWaitMinutes`).
+	recovery := job["recovery"].(map[string]interface{})["rules"].(map[string]interface{})
+	if got := time.Duration(recovery["serverWaitMinutes"].(float64)) * time.Minute; got != wikiMaintainServerWait || wikiServerWait.budget != got {
+		t.Errorf("recovery.rules.serverWaitMinutes = %v, this build waits %s", recovery["serverWaitMinutes"], wikiServerWait.budget)
+	}
 	cli := job["cli"].(map[string]interface{})
 	if cli["maintainPrecondition"] != wikiMaintainPrecondition || cli["checkPrecondition"] != wikiCheckPrecondition {
 		t.Errorf("the preconditions drifted from the contract:\n%q\n%q", cli["maintainPrecondition"], cli["checkPrecondition"])
@@ -1602,6 +1677,7 @@ func TestWikiMaintainIsTheContractsCommand(t *testing.T) {
 	maintenance := wikiContract(t)["agentSurface"].(map[string]interface{})["doors"].(map[string]interface{})["runner"].(map[string]interface{})["maintenanceRoutes"].([]interface{})
 	for name, path := range map[string]string{
 		"context": "GET /api/runner/wiki/spaces/:id/maintenance/run", "propose": "POST /api/runner/wiki/spaces/:id/maintenance/changesets",
+		"advance":   "POST /api/runner/wiki/spaces/:id/maintenance/advance",
 		"adoptions": "GET /api/runner/wiki/spaces/:id/" + wikiAdoptedVerifications.route,
 		"adopt":     "POST /api/runner/wiki/spaces/:id/" + wikiAdoptedVerifications.route,
 		"finish":    "POST /api/runner/wiki/spaces/:id/maintenance/finish", "check": "GET /api/runner/wiki/spaces/:id/maintenance/check",
@@ -1697,5 +1773,185 @@ func TestWikiCheckRefusesWhatIsNotAToken(t *testing.T) {
 	if err := cmdWikiCLI([]string{"check", "--space", "space-1"}, strings.NewReader(""), io.Discard); err == nil ||
 		!strings.Contains(err.Error(), "--expect-cursor is required") {
 		t.Errorf("a check with no token: %v", err)
+	}
+}
+
+// ── When the Orbit server does not answer (contract `maintenance.job.recovery.inSession`) ──────────
+
+// withFakeServerWait gives the run's wait for the server a clock of the test's own, which moves only when the
+// run waits; the steps and the budget are the production ones.
+func withFakeServerWait(t *testing.T) *fakeWikiRetry {
+	t.Helper()
+	f := &fakeWikiRetry{now: time.Date(2026, 10, 1, 13, 33, 0, 0, time.UTC)}
+	previous := wikiServerWait
+	wikiServerWait = wikiServerWaitPolicy{first: previous.first, max: previous.max, budget: previous.budget, now: f.clock, sleep: f.sleep}
+	t.Cleanup(func() { wikiServerWait = previous })
+	return f
+}
+
+// serverDown is what the server answered on 2026-10-01 while its disk was full.
+func serverDown() (int, string) {
+	return http.StatusInternalServerError, `{"statusCode":500,"message":"Internal server error"}`
+}
+
+// answersAfter answers as serverDown the first `down` times it is asked, and as `up` after.
+func answersAfter(down int, up func() (int, string)) func() (int, string) {
+	var mu sync.Mutex
+	asked := 0
+	return func() (int, string) {
+		mu.Lock()
+		asked++
+		n := asked
+		mu.Unlock()
+		if n <= down {
+			return serverDown()
+		}
+		return up()
+	}
+}
+
+// serverAnswers is the session's own verification list, empty: the read a waiting run asks the server.
+func serverAnswers() (int, string) {
+	return http.StatusOK, `{"spaceId":"space-1","mode":"tiered","items":[],"next":""}`
+}
+
+// The retry the task's prompt allows, on 2026-10-01 13:33: started while the server's disk was full, it was
+// answered 500 at once and spent. Now a run waits for the server before it starts, and starts once it answers.
+func TestWikiMaintainWaitsForTheServerBeforeItStarts(t *testing.T) {
+	f := newMaintainFixture(t)
+	door := newFakeMaintainDoor(t)
+	door.context = answersAfter(1, maintainContext(f, "tiered", 0, "tok-expect"))
+	door.override["GET verifications"] = answersAfter(2, serverAnswers)
+	clock := withFakeServerWait(t)
+	wikiMaintainSession(t, door.URL, nil)
+
+	summary, err := runMaintainCLI(t)
+	if err != nil || summary.Outcome != "succeeded" || !summary.Advanced || summary.FailureKind != "" {
+		t.Fatalf("orbit wiki maintain = %v, %+v: want the run to start once the server answered, and succeed", err, summary)
+	}
+	if got := len(door.of(http.MethodGet, "maintenance/run")); got != 2 {
+		t.Errorf("the run's start was asked %d times, want twice: once into the 500, once after the server answered", got)
+	}
+	if got, want := clock.waited(), []time.Duration{5 * time.Second, 10 * time.Second, 20 * time.Second}; !reflect.DeepEqual(got, want) {
+		t.Errorf("the run waited %v, want %v: from 5s, doubling, until the server answered", got, want)
+	}
+	if got := len(door.of(http.MethodGet, "verifications")); got != 3 {
+		t.Errorf("the server was asked %d times whether it answers, want 3", got)
+	}
+	if body := finished(t, door); body["outcome"] != "succeeded" {
+		t.Errorf("the run told the server %v, want succeeded", body)
+	}
+}
+
+// A run that stopped on the server waits for it before it reports the stop — a failure's report is sent once —
+// says the failure was the infrastructure's, and tells the session it may run again, the server being back.
+func TestWikiMaintainWaitsForTheServerBeforeItReportsAStopOnIt(t *testing.T) {
+	f := newMaintainFixture(t)
+	door := newFakeMaintainDoor(t)
+	door.context = maintainContext(f, "tiered", 0, "tok-expect")
+	door.override["GET anchors"] = serverDown
+	door.override["GET verifications"] = answersAfter(1, serverAnswers)
+	clock := withFakeServerWait(t)
+	wikiMaintainSession(t, door.URL, nil)
+
+	summary, err := runMaintainCLI(t)
+	if err == nil || !strings.Contains(err.Error(), "the run may be run once more") {
+		t.Fatalf("orbit wiki maintain = %v: want a failure the session may run again", err)
+	}
+	if summary.Outcome != "failed" || summary.FailureKind != "infra" || summary.ServerGone {
+		t.Errorf("summary %+v: want an infrastructure failure, the server back", summary)
+	}
+	body := finished(t, door)
+	if body["outcome"] != "failed" || body["failureKind"] != "infra" || !strings.HasPrefix(fmt.Sprint(body["error"]), "anchors: ") {
+		t.Errorf("the run told the server %v: want failed, infra, stopped at the anchors", body)
+	}
+	if got, want := clock.waited(), []time.Duration{5 * time.Second, 10 * time.Second}; !reflect.DeepEqual(got, want) {
+		t.Errorf("the run waited %v before it reported the stop, want %v", got, want)
+	}
+	lastAsk, report := -1, -1
+	for i, call := range door.calls() {
+		switch {
+		case call.method == http.MethodGet && strings.HasSuffix(call.path, "/space-1/verifications"):
+			lastAsk = i
+		case call.method == http.MethodPost && strings.HasSuffix(call.path, "/maintenance/finish"):
+			report = i
+		}
+	}
+	if lastAsk < 0 || report < lastAsk {
+		t.Errorf("the stop was reported at request %d, the server last asked at %d: want the report after it answered", report, lastAsk)
+	}
+	if text := describeWikiMaintainSummary(summary); !strings.Contains(text, "The failure was the infrastructure's") ||
+		!strings.Contains(text, "the run may be run once more") {
+		t.Errorf("what the session reads does not say whose the failure was:\n%s", text)
+	}
+}
+
+// A server that does not come back within the wait: nothing is reported into it, and the session is told the
+// failure was the infrastructure's and not to run it again — before the run started, or after a step stopped.
+func TestWikiMaintainEndsAsAnInfrastructureFailureWhenTheServerDoesNotComeBack(t *testing.T) {
+	for _, c := range []struct{ name, at string }{{"before the run starts", "start"}, {"after a step stopped on it", "anchors"}} {
+		t.Run(c.name, func(t *testing.T) {
+			f := newMaintainFixture(t)
+			door := newFakeMaintainDoor(t)
+			door.context = maintainContext(f, "tiered", 0, "tok-expect")
+			if c.at == "start" {
+				door.context = serverDown
+			}
+			door.override["GET anchors"] = serverDown
+			door.override["GET verifications"] = serverDown
+			clock := withFakeServerWait(t)
+			wikiMaintainSession(t, door.URL, nil)
+
+			summary, err := runMaintainCLI(t)
+			if err == nil || !strings.Contains(err.Error(), "Do not run it again in this session") {
+				t.Fatalf("orbit wiki maintain = %v: want an infrastructure failure the session does not run again", err)
+			}
+			if !summary.ServerGone || summary.FailureKind != "infra" || summary.Outcome != "failed" {
+				t.Errorf("summary %+v: want the server gone, an infrastructure failure", summary)
+			}
+			if n := len(door.of(http.MethodPost, "maintenance/finish")); n != 0 {
+				t.Errorf("the run sent %d reports into a server that was down", n)
+			}
+			var waited time.Duration
+			for _, d := range clock.waited() {
+				waited += d
+			}
+			if waited > wikiMaintainServerWait || waited < wikiMaintainServerWait-time.Minute {
+				t.Errorf("the run waited %s for the server, want about %s and never more", waited, wikiMaintainServerWait)
+			}
+			if c.at == "start" && len(door.of(http.MethodGet, "dossiers")) != 0 {
+				t.Error("a run that never started read dossiers")
+			}
+			if text := describeWikiMaintainSummary(summary); !strings.Contains(text, "Do not run it again in this session") {
+				t.Errorf("what the session reads does not tell it to stop:\n%s", text)
+			}
+		})
+	}
+}
+
+// A step the server answered with a refusal failed on the run's own account: nothing is waited for, and the
+// report says the failure was the run's.
+func TestWikiMaintainCallsAStepTheServerRefusedTheRunsOwnFailure(t *testing.T) {
+	f := newMaintainFixture(t)
+	door := newFakeMaintainDoor(t)
+	door.context = maintainContext(f, "tiered", 0, "tok-expect")
+	door.override["GET anchors"] = func() (int, string) {
+		return http.StatusBadRequest, `{"statusCode":400,"message":"repo is not a clone of the space's repository"}`
+	}
+	clock := withFakeServerWait(t)
+	wikiMaintainSession(t, door.URL, nil)
+
+	summary, err := runMaintainCLI(t)
+	if err == nil || strings.Contains(err.Error(), "may be run once more") {
+		t.Fatalf("orbit wiki maintain = %v: want the run's own failure", err)
+	}
+	if summary.FailureKind != "content" || summary.ServerGone {
+		t.Errorf("summary %+v: want the run's own failure", summary)
+	}
+	if body := finished(t, door); body["failureKind"] != "content" {
+		t.Errorf("the run told the server %v: want failureKind content", body)
+	}
+	if len(clock.waited()) != 0 || len(door.of(http.MethodGet, "verifications")) != 0 {
+		t.Errorf("the run waited %v for a server that answered", clock.waited())
 	}
 }

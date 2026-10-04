@@ -51,10 +51,24 @@ func TestMain(m *testing.M) {
 	if dir := os.Getenv(fakeVerifyClaudeDirEnv); dir != "" {
 		os.Exit(runFakeVerifyClaude(dir))
 	}
+	// This binary as the real `orbit hook …`, when a real agy runs an Antigravity session's approval
+	// gate (antigravity_approval_contract_test.go): the hooks name the runner's own executable, which
+	// under test is this one. Ahead of the MCP stand-in, whose variable the hooks inherit through agy.
+	if len(os.Args) > 1 && os.Args[1] == "hook" {
+		cmdHook(os.Args[2:])
+		os.Exit(0)
+	}
 	// This binary as the real `orbit mcp`, when a real Claude Code starts it from a maintenance run's
 	// MCP config (wiki_maintenance_session_test.go) — rather than the whole suite again.
 	if os.Getenv(testOrbitMCPEnv) != "" {
 		cmdMcp()
+		os.Exit(0)
+	}
+	// This binary as the `orbit` CLI itself, when a real Claude Code's Bash runs `orbit wiki …` from a
+	// maintenance run — bare, off a link named orbit on its PATH, or by this binary's own path, as the run's
+	// rules name the CLI (wiki_maintenance_session_test.go). `go test` never starts it with a subcommand.
+	if len(os.Args) > 1 && os.Args[1] == "wiki" {
+		main()
 		os.Exit(0)
 	}
 	clearCallingSession()

@@ -6,6 +6,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
 import { RunnerEngines } from './RunnerEngines';
+import { clickRunnerMenuItem, openRunnerMenu, runnerMenuItem } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
 /**
@@ -76,9 +77,12 @@ let host: HTMLDivElement | null = null;
 
 beforeAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  // Remove asks in an antd popup, which measures itself with a ResizeObserver jsdom does not have.
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
 });
 afterAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+  vi.unstubAllGlobals();
 });
 
 afterEach(() => {
@@ -117,16 +121,26 @@ function mount(runners: Runner[]) {
 }
 
 const rows = (el: ParentNode, selector: string) => [...el.querySelectorAll<HTMLElement>(selector)];
-const labels = (el: ParentNode) => rows(el, 'button').map((b) => b.textContent?.trim());
-const button = (el: ParentNode, label: string) => {
-  const found = rows(el, 'button').find((b) => b.textContent?.trim() === label);
-  if (!found) throw new Error(`no "${label}" button in ${el.textContent}`);
-  return found as HTMLButtonElement;
-};
 const click = async (el: HTMLElement) => {
   await act(async () => {
     el.click();
   });
+};
+/** The confirmation's own Remove, once its popup is drawn (a portal, a few frames late on a slow host). */
+const confirmation = async () => {
+  let ok: HTMLButtonElement | undefined;
+  await act(async () => {
+    await vi.waitFor(
+      () => {
+        ok = [...document.querySelectorAll<HTMLButtonElement>('.ant-popconfirm button')].find(
+          (b) => b.textContent?.trim() === 'Remove',
+        );
+        expect(ok).toBeDefined();
+      },
+      { timeout: 20_000, interval: 20 },
+    );
+  });
+  return ok!;
 };
 
 /** The account rows, in the order the page drew them. */
@@ -136,40 +150,44 @@ const removals = () =>
   apiMock.mock.calls.filter(([path, options]) => (options?.method ?? 'GET') === 'DELETE' && String(path).includes('/accounts/'));
 
 describe('removing one Codex account from a runner', () => {
-  it('offers Remove on the accounts the runner added, and never on Default', () => {
+  it('offers Remove account in added accounts’ menus, and never on Default', async () => {
     const page = mount([runner([DEFAULT, WORK, PERSONAL])]);
     const [defaultRow, workRow, personalRow] = accountsOf(page);
 
-    expect(labels(defaultRow)).not.toContain('Remove');
-    expect(labels(workRow)).toContain('Remove');
-    expect(labels(personalRow)).toContain('Remove');
+    expect((await openRunnerMenu(defaultRow)).textContent).not.toContain('Remove account');
+    expect(await runnerMenuItem(workRow, 'Remove account')).toBeTruthy();
+    expect(await runnerMenuItem(personalRow, 'Remove account')).toBeTruthy();
   });
 
-  it('still draws the removed account its own row, sign-in and quota until the machine says it is gone', () => {
+  it('still draws the removed account its own row, sign-in and quota until the machine says it is gone', async () => {
     const page = mount([runner([DEFAULT, WORK])]);
     const [, workRow] = accountsOf(page);
 
     expect(workRow.querySelector('.re-name')?.textContent).toBe('Work');
     expect(workRow.querySelector('.re-meta')?.textContent).toContain('~/.orbit/codex-accounts/3fa91c2e');
-    expect(button(workRow, 'Re-sign in')).toBeTruthy();
+    expect(await runnerMenuItem(workRow, 'Re-sign in')).toBeTruthy();
   });
 
   it('asks the control plane to remove the account the row is for, and no other', async () => {
     const page = mount([runner([DEFAULT, WORK, PERSONAL])]);
     const [, , personalRow] = accountsOf(page);
 
-    await click(button(personalRow, 'Remove'));
+    // It asks first — the slot's sign-in goes from the machine — and sends nothing until answered.
+    await clickRunnerMenuItem(personalRow, 'Remove account');
+    const ok = await confirmation();
+    expect(removals()).toEqual([]);
+    await click(ok);
 
     expect(removals().map(([path]) => path)).toEqual([
       `/runners/${RUNNER_ID}/accounts/codex/7c21de40`,
     ]);
   });
 
-  it('is offered nowhere on a machine that is offline, which cannot carry it out', () => {
+  it('is disabled on a machine that is offline, which cannot carry it out', async () => {
     const page = mount([runner([DEFAULT, WORK], { online: false })]);
     const [, workRow] = accountsOf(page);
 
-    expect(button(workRow, 'Remove').disabled).toBe(true);
+    expect((await runnerMenuItem(workRow, 'Remove account')).getAttribute('aria-disabled')).toBe('true');
   });
 });
 
@@ -187,6 +205,9 @@ describe('the note raised by one account signed in twice', () => {
     );
 
     await click(personalRow.querySelector('.re-dup .re-link') as HTMLButtonElement);
+    const ok = await confirmation();
+    expect(removals()).toEqual([]);
+    await click(ok);
 
     expect(removals().map(([path]) => path)).toEqual([
       `/runners/${RUNNER_ID}/accounts/codex/7c21de40`,
@@ -207,6 +228,7 @@ describe('the note raised by one account signed in twice', () => {
     // person reading "this is the same account" is looking.
     const noteRemove = workRow.querySelector('.re-dup .re-link') as HTMLButtonElement;
     await click(noteRemove);
+    await click(await confirmation());
 
     expect(removals().map(([path]) => path)).toEqual([
       `/runners/${RUNNER_ID}/accounts/codex/3fa91c2e`,
@@ -241,7 +263,7 @@ describe('a removal the machine would not do', () => {
     expect(personalRow.querySelector('.re-panel.bad')).toBeNull();
   });
 
-  it('shows the account as going while the machine has yet to answer', () => {
+  it('shows the account as going while the machine has yet to answer', async () => {
     const page = mount([
       runner([DEFAULT, WORK], {
         accountRemove: { engine: 'codex', account: WORK.id, status: 'pending', message: null },
@@ -249,7 +271,7 @@ describe('a removal the machine would not do', () => {
     ]);
     const [, workRow] = accountsOf(page);
 
-    expect(button(workRow, 'Remove').disabled).toBe(true);
+    expect((await runnerMenuItem(workRow, 'Remove account')).getAttribute('aria-disabled')).toBe('true');
     expect(workRow.querySelector('.re-panel.bad')).toBeNull();
   });
 });

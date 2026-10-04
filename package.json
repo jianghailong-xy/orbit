@@ -1,6 +1,6 @@
 {
   "name": "orbit",
-  "version": "0.1.204",
+  "version": "0.1.210",
   "private": true,
   "description": "Orbit — AI Agent task scheduling platform (control plane + distributed coding-agent runners)",
   "license": "MIT",
@@ -10,6 +10,7 @@
     "src/web"
   ],
   "overrides": {
+    "basic-ftp": "^6.2.1",
     "deepmerge-ts": "^8.0.2",
     "mysql2": "^3.24.3",
     "multer": "^2.4.0"
@@ -43,6 +44,6 @@
     "github-slugger": "2.0.0",
     "markdown-it": "15.0.2",
     "markdown-link-check": "3.15.0",
-    "markdownlint-cli2": "0.23.3"
+    "markdownlint": "0.41.1"
   }
 }

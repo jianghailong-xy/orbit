@@ -979,6 +979,14 @@ final class TasksModel {
         }
     }
 
+    /// Suggest a tier (nil = No suggestion) for this task's runs. The coordinator's reason is
+    /// cleared with it: it was written for the tier being replaced (`TaskDetailLogic.modelHintRequest`).
+    func setModelHint(_ id: String, _ level: String?) async {
+        _ = await mutate(id) {
+            _ = try await self.api.updateTask(id, TaskDetailLogic.modelHintRequest(level))
+        }
+    }
+
     @discardableResult
     func addComment(_ id: String, _ body: String, mentions: [String] = []) async -> Bool {
         await mutate(id) {

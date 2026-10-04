@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { App, Button, Input, Modal, Select } from 'antd';
+import { Button, Input, Modal, Select } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import { KIND_SPECS, WIKI_LIMITS, type WikiFieldSchema, type WikiKind } from '@orbit/shared';
 import { WIKI_KIND_LABELS, WIKI_NEW_ENTRY, wikiKindWord } from '../lib/wiki';
+import { useToast } from '../lib/toast';
 import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
 import { proposeToWiki, useWikiWrite, wikiIdempotencyKey } from '../lib/wikiWrites';
 
@@ -43,7 +44,7 @@ function NewEntryModal({ spaceId, onClose }: { spaceId: string; onClose: () => v
   const [title, setTitle] = useState('');
   const [summary, setSummary] = useState('');
   const [fields, setFields] = useState<Record<string, unknown>>({});
-  const { message } = App.useApp();
+  const toast = useToast();
   const write = useWikiWrite((body: Parameters<typeof proposeToWiki>[1]) => proposeToWiki(spaceId, body));
 
   const spec = KIND_SPECS[kind];
@@ -54,10 +55,10 @@ function NewEntryModal({ spaceId, onClose }: { spaceId: string; onClose: () => v
         idempotencyKey: wikiIdempotencyKey('wiki-new'),
         ops: [{ op: 'add', entry: { kind, title: title.trim(), summary: summary.trim(), fields } as never }],
       });
-      message.success('Recorded');
+      toast.success('Entry recorded', title.trim());
       onClose();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : 'The server refused it');
+      toast.error("Couldn't record the entry", error instanceof Error ? error.message : undefined);
     }
   };
 

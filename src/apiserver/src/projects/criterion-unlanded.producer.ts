@@ -61,6 +61,8 @@ export interface CriterionUnlandedDelivery {
    * merge has not settled anything a machine may act on.
    */
   blockerKind?: string;
+  /** The coordinator-first delivery review, when the stop concerns landing rather than the ruler. */
+  review?: { reason: string; itemId: string | null };
 }
 
 /**

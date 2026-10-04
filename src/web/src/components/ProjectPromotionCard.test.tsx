@@ -23,6 +23,8 @@ import {
   UNDER_AUTOMATIC,
   type PromotionProjectView,
 } from './ProjectPromotionCard';
+import { SHORTCUT_HINT } from './CardHotkey';
+import { CriteriaDecisionCard, type PendingCriteriaDecisionRow } from './CriteriaDecisionCard';
 import { FROM_ORBIT } from './ProjectProgressStatus';
 
 /**
@@ -320,13 +322,14 @@ describe('state A — the checks passed and it is waiting on you', () => {
 describe('state B — you confirmed it and main moved since the check', () => {
   const rechecking = promotion({
     state: 'RECHECKING',
+    execution: { state: 'RUNNING', phase: 'CHECK', startedAt: at(2 * MINUTE) },
     recheckedAt: at(2 * MINUTE),
     recheck: { upstreamMovedBy: 1, startedAt: at(2 * MINUTE), typicalMs: 6 * MINUTE + 12 * 1000 },
   });
 
   it('says how far main moved, and how long a check like this one takes', () => {
     const html = card(rechecking);
-    expect(html).toContain('Merging project/bg-jobs into main…');
+    expect(html).toContain('Re-checking project/bg-jobs before merging into main…');
     expect(html).toContain('main moved 1 commit since the check');
     expect(html).toContain('re-checking the combined tree');
     expect(html).toContain('(2m of ~6m)');
@@ -334,6 +337,7 @@ describe('state B — you confirmed it and main moved since the check', () => {
 
   it('counts the commits main moved in the plural', () => {
     const html = card(promotion({
+      ...rechecking,
       state: 'RECHECKING',
       recheckedAt: at(2 * MINUTE),
       recheck: { upstreamMovedBy: 3, startedAt: at(2 * MINUTE), typicalMs: 6 * MINUTE },
@@ -343,6 +347,7 @@ describe('state B — you confirmed it and main moved since the check', () => {
 
   it('says less rather than inventing a count or a typical the runner never reported', () => {
     const html = card(promotion({
+      ...rechecking,
       state: 'RECHECKING',
       recheckedAt: at(2 * MINUTE),
       recheck: { upstreamMovedBy: null, startedAt: at(2 * MINUTE), typicalMs: null },
@@ -358,21 +363,54 @@ describe('state B — you confirmed it and main moved since the check', () => {
 
   it('cannot be merged again, and can be called back', () => {
     const html = card(rechecking);
-    expect(html).toContain(MERGING);
+    expect(html).toContain('Re-checking…');
     expect(html).toContain(CANCEL_MERGE);
     // The one that says "it is happening" is the one that cannot be pressed.
-    expect(html).toMatch(/<button[^>]*disabled[^>]*>(?:(?!<\/button>).)*Merging/);
+    expect(html).toMatch(/<button[^>]*disabled[^>]*>(?:(?!<\/button>).)*Re-checking/);
     // State B is untouched by state D's readout: the press is still `Merging…`, and the mark is
     // still on the Status row rather than over the button.
     expect(html).toContain('promotion-spin');
     expect(html).not.toContain(RESOLVING);
   });
 
-  it('draws a confirmed merge that has not had to re-check as the same card', () => {
-    const html = card(promotion({ state: 'CONFIRMED' }));
+  it('draws a confirmed merge as running only when its runner has started', () => {
+    const html = card(promotion({
+      state: 'CONFIRMED', execution: { state: 'RUNNING', phase: 'VERIFY', startedAt: at(MINUTE) },
+    }));
     expect(html).toContain('Merging project/bg-jobs into main…');
     expect(html).toContain(MERGING);
     expect(html).not.toContain('main moved since the check');
+    expect(html).toContain('verifying the tested tree');
+  });
+
+  it('keeps a confirmed or rechecking merge queued until a runner claims it', () => {
+    for (const state of ['CONFIRMED', 'RECHECKING'] as const) {
+      const html = card(promotion({
+        ...rechecking, state, execution: { state: 'QUEUED', phase: null, startedAt: at(MINUTE) },
+      }));
+      expect(html).toContain('Merge queued: project/bg-jobs into main');
+      expect(html).toContain('confirmed — queued to merge into main');
+      expect(html).not.toContain('promotion-spin');
+      expect(html).not.toContain('re-checking the combined tree');
+      expect(html).not.toContain(MERGING);
+    }
+  });
+
+  it('does not invent execution when a server has no active job reading', () => {
+    const html = card(promotion({ state: 'CONFIRMED' }));
+    expect(html).toContain('Merge confirmed: project/bg-jobs into main');
+    expect(html).toContain('waiting for merge execution');
+    expect(html).not.toContain('promotion-spin');
+    expect(html).not.toContain(MERGING);
+  });
+
+  it('stops describing an old re-check once the runner is pushing, and cannot cancel that push', () => {
+    const html = card(promotion({
+      ...rechecking, execution: { state: 'RUNNING', phase: 'PUSH', startedAt: at(MINUTE) },
+    }));
+    expect(html).toContain('publishing the tested tree to main');
+    expect(html).not.toContain('re-checking the combined tree');
+    expect(html).toMatch(/<button[^>]*disabled[^>]*>(?:(?!<\/button>).)*Cancel/);
   });
 });
 
@@ -405,6 +443,16 @@ describe('state C — it merged, and the card is the receipt', () => {
 
   it('asks for nothing: a receipt has no presses', () => {
     expect(card(merged)).not.toContain('<button');
+  });
+
+  it('only names criteria whose landing reading actually says on upstream', () => {
+    const html = card(merged, { project: project({ acceptanceCriteriaItems: [
+      { ordinal: 1, satisfied: true, landing: 'UNKNOWN' },
+      { ordinal: 2, satisfied: true, landing: 'ON_INTEGRATION_LINE' },
+      { ordinal: 3, satisfied: true, landing: 'LANDED' },
+    ] }) });
+    expect(html).toContain('criterion 3 show “on main”');
+    expect(html).not.toContain('criteria 1, 2');
   });
 });
 
@@ -699,6 +747,115 @@ describe('the presses', () => {
       method: 'POST',
       body: { sourceSha: promotion().sourceSha },
     });
+  });
+
+  /** One keypress, as the browser delivers it: on the window, with whatever focus is standing. */
+  async function key(init: KeyboardEventInit = {}) {
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...init }),
+      );
+    });
+  }
+
+  it('merges on ⌘/Ctrl + Enter, says so on the button, and leaves the bare key alone', async () => {
+    apiMock.mockResolvedValue({ ...promotion(), state: 'CONFIRMED' });
+    await draw(
+      <ProjectPromotionCard
+        projectId={PROJECT_ID}
+        promotion={promotion()}
+        item={null}
+        project={project()}
+        now={NOW}
+      />,
+    );
+    expect(press(MERGE_TO_MAIN).querySelector('.approval-kbd')?.textContent).toBe(SHORTCUT_HINT);
+
+    await key();
+    expect(apiMock, 'the bare key merged').not.toHaveBeenCalled();
+
+    await key({ metaKey: true });
+    await until(() => apiMock.mock.calls.length > 0, 'the confirm');
+    // The same request the button sends: the confirm door, naming the SHA the card was drawn from.
+    expect(apiMock.mock.calls).toEqual([
+      [
+        `/projects/${PROJECT_ID}/promotions/${PROMOTION_ID}/confirm`,
+        { method: 'POST', body: { sourceSha: promotion().sourceSha } },
+      ],
+    ]);
+  });
+
+  it('waits its turn under the ruler’s card, whichever of the two started asking first', async () => {
+    // The coordinator conversation of the owner's report (2026-10-03): the ruler's card drawn above
+    // the merge, both asking. The merge was asking first; the keys still go to the card on top, and
+    // come down to the merge once the ruler's question is no longer open (`CardHotkey.ts`).
+    apiMock.mockResolvedValue({ ...promotion(), state: 'CONFIRMED' });
+    const decide = vi.fn();
+    const ruler: PendingCriteriaDecisionRow = {
+      intentId: '4TdXP1ChQx7vLmN3pR5sT8',
+      projectId: PROJECT_ID,
+      commitToken: 'token-4TdXP1ChQx7vLmN3pR5sT8',
+      actionDigest: 'a'.repeat(64),
+      filedAt: at(MINUTE),
+      ageSeconds: 60,
+      baselineSeal: 'b'.repeat(64),
+      currentSeal: 'b'.repeat(64),
+      proposed: [],
+      diff: { entries: [], sameCount: 0, changedCount: 0, newCount: 0, removedCount: 0 },
+      supersededIntentId: null,
+      decidability: { decidable: true, refusal: null, requiredAction: null },
+    };
+    const screen = (rulerBusy: boolean): JSX.Element => (
+      <>
+        <CriteriaDecisionCard
+          standing={{ state: 'DECIDABLE', intentId: ruler.intentId, row: ruler }}
+          busy={rulerBusy}
+          onDecide={decide}
+        />
+        <ProjectPromotionCard
+          projectId={PROJECT_ID}
+          promotion={promotion()}
+          item={null}
+          project={project()}
+          now={NOW}
+        />
+      </>
+    );
+    /** Which card the one hint on screen is drawn in. */
+    const hinted = (): string[] =>
+      [...host.querySelectorAll('.approval-kbd')].map((hint) => hint.closest('.approval-card')!.id);
+
+    await draw(screen(true));
+    expect(hinted(), 'the merge was asking alone').toEqual([`promotion-${PROMOTION_ID}`]);
+
+    await draw(screen(false));
+    expect(hinted(), 'the card on top took the keys').toEqual([`criteria-decision-${ruler.intentId}`]);
+    await key({ metaKey: true });
+    expect(decide.mock.calls).toEqual([['APPROVE']]);
+    expect(apiMock, 'one chord answered both cards').not.toHaveBeenCalled();
+
+    // The ruler's answer is on its way, so its card stops asking and the merge is next.
+    await draw(screen(true));
+    expect(hinted()).toEqual([`promotion-${PROMOTION_ID}`]);
+    await key({ metaKey: true });
+    await until(() => apiMock.mock.calls.length > 0, 'the confirm');
+    expect(apiMock.mock.calls[0]![0]).toBe(`/projects/${PROJECT_ID}/promotions/${PROMOTION_ID}/confirm`);
+    expect(decide).toHaveBeenCalledTimes(1);
+  });
+
+  it('holds no key while the merge it would make is already under way', async () => {
+    await draw(
+      <ProjectPromotionCard
+        projectId={PROJECT_ID}
+        promotion={promotion({ state: 'CONFIRMED' })}
+        item={null}
+        project={project()}
+        now={NOW}
+      />,
+    );
+    expect(host.querySelector('.approval-kbd')).toBeNull();
+    await key({ metaKey: true });
+    expect(apiMock).not.toHaveBeenCalled();
   });
 
   it('declines at the decline door, which merges nothing', async () => {

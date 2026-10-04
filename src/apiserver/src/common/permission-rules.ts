@@ -88,8 +88,13 @@ export function permissionRuleToken(rule: StoredPermissionRule): string {
  * what this workspace's owner has already approved permanently. Order is stable (base first)
  * and duplicates collapse, so re-approving something already granted is a no-op.
  *
- * Only claude's runtime receives the workspace's rules, because it is the one that reads this
- * list as a NARROWING allowlist in the grammar the rules are stored in. OpenCode maps an entry
+ * Only claude's and antigravity's runtimes receive the workspace's rules, because they are the ones
+ * that read this list as a NARROWING allowlist in the grammar the rules are stored in: claude as
+ * `--allowedTools`, agy through the runner, which writes each rule as its own scoped
+ * `permissions.allow` entry (`Bash(git:*)` → `command(git)`, `Read(<path>)` → `read_file(<path>)`,
+ * docs/antigravity-runtime-contract.md §5.1). In the modes that never ask (Plan, Don't Ask) that
+ * is the one way a standing grant reaches agy: it refuses whatever needs approval there, so a rule
+ * someone already answered "always allow" to is exactly what this list is for. OpenCode maps an entry
  * onto a whole-tool permission (it already drops scoped rules rather than broaden them, but a
  * tool-wide one would still open a tool its guarded modes gate), and Kimi pastes the list into
  * the prompt as "only use these tools". Handing either the same rules would change what they do
@@ -109,7 +114,7 @@ export function dispatchAllowedTools(
   rules: readonly PermissionRule[],
 ): string[] {
   const out = [...base];
-  if (provider !== AgentProvider.CLAUDE) return out;
+  if (provider !== AgentProvider.CLAUDE && provider !== AgentProvider.ANTIGRAVITY) return out;
   const seen = new Set(out);
   for (const rule of normalizePermissionRules(rules)) {
     const token = permissionRuleToken(rule);
@@ -128,10 +133,17 @@ export function dispatchAllowedTools(
  * the rule not to cover this call — and this one, which knows strictly less, must not overrule
  * that. OpenCode never asks at all. So this is the set of runtimes that can ask but have nowhere
  * to put an allowlist, which is exactly the gap this matching exists to close.
+ *
+ * Antigravity asks through Orbit's approval hook in Default and Accept Edits, where agy's own
+ * allowlist is switched off (it runs under `--dangerously-skip-permissions`, contract §14). The hook
+ * matches the rules it was started with the way Kimi's bridge does — never a command prefix — so it
+ * is in the same position as Kimi, and this is also how an "always allow" given during a session
+ * covers the next call of that session.
  */
 const SERVER_MATCHED_RUNTIMES: ReadonlySet<string> = new Set([
   AgentProvider.CODEX,
   AgentProvider.KIMI,
+  AgentProvider.ANTIGRAVITY,
 ]);
 
 /** Whether this runtime's approvals are matched here at all — checked before the rules are even

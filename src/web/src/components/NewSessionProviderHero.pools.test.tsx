@@ -113,7 +113,9 @@ describe('an account pool in the New Session picker', () => {
     expect(card.querySelector('.np-pool-badge')?.getAttribute('aria-label')).toBe('2 accounts');
 
     await click(card);
-    expect(rows()).toEqual(['Claude', 'Codex', 'Kimi', 'Claude accounts', 'DeepSeek', 'Pin a specific account', 'Connect a provider…']);
+    expect(rows()).toEqual([
+      'Claude', 'Codex', 'Kimi', 'Claude accounts', 'DeepSeek', 'Pin a specific account', 'Connect a provider…',
+    ]);
     expect(rowNamed('Claude accounts')?.querySelector('.np-pool-badge')?.textContent).toBe('2');
     const pin = rowNamed('Pin a specific account')!;
     expect(pin.getAttribute('aria-expanded')).toBe('false');
@@ -121,7 +123,8 @@ describe('an account pool in the New Session picker', () => {
     await click(pin);
     expect(pin.getAttribute('aria-expanded')).toBe('true');
     expect(rows()).toEqual([
-      'Claude', 'Codex', 'Kimi', 'Claude accounts', 'DeepSeek', 'Pin a specific account', 'Work', 'Home', 'Connect a provider…',
+      'Claude', 'Codex', 'Kimi', 'Claude accounts', 'DeepSeek', 'Pin a specific account', 'Work', 'Home',
+      'Connect a provider…',
     ]);
     // Pinning one account is a real pick: it dispatches that account's own slug.
     await click(rowNamed('Home'));

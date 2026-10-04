@@ -109,14 +109,14 @@ export const POOL_LOGIN_TOKEN_PREFIX = 'orbit-gwl-';
 /**
  * mintPoolGatewayToken for a Codex pool of one person's own (migration 0324): the same build-by-build
  * token, kept in `pool_login_token` and prefixed POOL_LOGIN_TOKEN_PREFIX so the gateway knows to look for
- * it there. It is bound to `accountId`, the account the pool holds at this build — taking that account out
- * of the pool deletes the token — or to none when the pool holds none, which the gateway answers with that.
- * Earlier tokens of the same session on the same pool stay good and move with it; its tokens for another
- * pool, and its expired or revoked ones, are deleted.
+ * it there. It names no account (migration 0355): the account its requests go out on is the session's own
+ * (`session.pool_codex_account_id`, which the claim records), so the token authenticates (pool, owner,
+ * session) alone and no account's removal reaches it. Earlier tokens of the same session on the same pool
+ * stay good and move with it; its tokens for another pool, and its expired or revoked ones, are deleted.
  */
 export async function mintPoolLoginToken(
   db: Prisma.TransactionClient | PrismaService,
-  binding: { poolId: string; userId: string; sessionId: string; accountId: string | null },
+  binding: { poolId: string; userId: string; sessionId: string },
   now: Date,
 ): Promise<string> {
   const token = `${POOL_LOGIN_TOKEN_PREFIX}${generateToken(32)}`;
@@ -165,7 +165,7 @@ export async function sharedPoolKeyCandidates(
     where: { poolId },
     orderBy: { id: 'asc' },
     select: {
-      id: true, contributorId: true, label: true, enabled: true, state: true, shareCap: true, spentUntil: true,
+      id: true, contributorId: true, label: true, enabled: true, state: true, shareCap: true, spentUntil: true, pausedUntil: true,
     },
   });
   const spent = await db.poolUsage.findMany({

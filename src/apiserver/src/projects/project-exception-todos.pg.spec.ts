@@ -605,6 +605,19 @@ async function claimedLanding(
   w: World,
   label: string,
 ): Promise<{ task: Attempt; job: IntegrationJobCommand }> {
+  const a = await queuedLanding(stack, w, label);
+  const claimed = await stack.jobs.dispatch({
+    runnerId: w.runnerId,
+    leaseOwner: `lease-${label}`,
+    draining: false,
+    capabilities: [INTEGRATION_JOB_CLAIM],
+  });
+  assert.equal(claimed.length, 1, `the DONE queued no landing — ${await jobsOf(stack.db, w.projectId)}`);
+  return { task: a, job: claimed[0]! };
+}
+
+/** `claimedLanding` up to the heartbeat: the task DONE, its session finished, its landing queued. */
+async function queuedLanding(stack: Stack, w: World, label: string): Promise<Attempt> {
   const a = await attempt(stack, w, label, {
     acceptance: { command: 'exit 0', expectedExitCode: 0 },
     branch: `orbit/${label}`,
@@ -638,15 +651,7 @@ async function claimedLanding(
       worktreeDirty: false,
     },
   });
-
-  const claimed = await stack.jobs.dispatch({
-    runnerId: w.runnerId,
-    leaseOwner: `lease-${label}`,
-    draining: false,
-    capabilities: [INTEGRATION_JOB_CLAIM],
-  });
-  assert.equal(claimed.length, 1, `the DONE queued no landing — ${await jobsOf(stack.db, w.projectId)}`);
-  return { task: a, job: claimed[0]! };
+  return a;
 }
 
 /** The result a runner posts for a job that did not land, over the route it posts it on. */
@@ -1006,6 +1011,9 @@ test('the evidence judgment settles the task, and answers the failure item an ea
       const w = await world(stack, 'judgment-settles', 'PARKED');
       const a = await strandedAttempt(stack, w, 'judgment-settles', 'EVIDENCE_JUDGMENT');
       const criterionKey = await statedCriterion(stack, w, JUDGED_CRITERION);
+      // Declared through the edit door: declaring the criterion, not being filed under the project,
+      // is what holds the task to the wording its evidence quotes below.
+      await stack.tasks.update(w.ownerId, a.taskId, { criterionKey });
       await stack.db.toolCall.create({
         data: {
           sessionId: a.sessionId,
@@ -1493,6 +1501,72 @@ test('a landing answers the conflict item an earlier generation of the same task
     }
   });
 
+test('a MAIN_SYNC conflict holds the line\'s other landings, but not the next landing of the task it stopped',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      // §3.1 M2 and M3. The absorb of the upstream conflicted, so every other landing on the line
+      // would meet the same paths: they wait. The conflicted task's own next landing does not: its
+      // branch changed, and a branch that now contains both tips is how the conflict is resolved.
+      // Before this, that landing waited on the item it was there to answer.
+      const w = await integratingWorld(stack, 'main-sync-held', 'PARKED');
+      const { task, job } = await claimedLanding(stack, w, 'main-sync-held');
+      await reportFailure(stack, w, job, {
+        state: 'CONFLICT',
+        phase: 'MAIN_SYNC',
+        sourceSha: 'a'.repeat(40),
+        targetShaBefore: 'c'.repeat(40),
+        conflicts: ['src/apiserver/src/tasks/task-judgment-data-preserved.spec.ts'],
+      });
+      const item = await onlyItemFor(stack.db, w, task.taskId, 'the absorb conflicted');
+      assert.equal(item.state, 'OPEN');
+
+      // The other task finishes after the line's starting beat, as it would in real time: within that
+      // beat its DONE back-queues every finished task of the project (L3 step 4), this one included.
+      await stack.db.projectCodebase.updateMany({
+        where: { projectId: w.projectId },
+        data: { integrationStartedAt: new Date(Date.now() - 60_000) },
+      });
+      const other = await queuedLanding(stack, w, 'main-sync-held-other');
+      const heartbeat = (lease: string) => stack.jobs.dispatch({
+        runnerId: w.runnerId,
+        leaseOwner: lease,
+        draining: false,
+        capabilities: [INTEGRATION_JOB_CLAIM],
+      });
+      assert.deepEqual(await heartbeat('lease-held'), [], 'another task\'s landing waits while the absorb is unresolved');
+
+      await stack.tasks.update(w.ownerId, task.taskId, { status: DeclaredTaskStatus.IN_PROGRESS });
+      await rework(stack, w, task, 'main-sync-held');
+      const claimed = await heartbeat('lease-rework');
+      const landingOf = async (jobId: string) => (await stack.db.projectIntegrationJob.findUniqueOrThrow({
+        where: { id: jobId },
+        select: { taskId: true, generation: true },
+      }));
+      assert.deepEqual(
+        await Promise.all(claimed.map((row) => landingOf(row.jobId))),
+        [{ taskId: task.taskId, generation: 2 }],
+        `the conflicted task's next landing is claimed, and only it — ${await jobsOf(stack.db, w.projectId)}`,
+      );
+
+      // It lands, by J-S4 MERGE on the runner, and the landing answers the item.
+      assert.equal((await reportLanding(stack, w, claimed[0]!)).accepted, true);
+      const [after] = (await items(stack.db, w.projectId)).filter((row) => row.id === item.id);
+      assert.equal(after?.state, 'RESOLVED');
+      assert.equal(after?.resolution, 'LANDED');
+
+      // The line moves on its own from there: the other task's landing is claimed.
+      const next = await heartbeat('lease-after');
+      const nextTasks = await Promise.all(next.map((row) => landingOf(row.jobId)));
+      assert.ok(
+        nextTasks.some((row) => row.taskId === other.taskId),
+        `the other task's landing is still held — ${await jobsOf(stack.db, w.projectId)}`,
+      );
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
 test('cancelling the task closes the integration item its conflict left open',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
@@ -1760,6 +1834,51 @@ test('an item no door delivered reaches the coordinator when its own turn ends',
   }
 });
 
+/** What the coordinator's account answered on 2026-10-02 for eight hours: every turn turned away. */
+const RATE_LIMITED =
+  'API Error: Request rejected (429) · This request would exceed your account\'s rate limit. Please try again later.';
+
+/**
+ * The coordinator's running turn fails the way a rate-limited account fails it, reported through the
+ * door the runner reports it on. What that leaves is a conversation that is down, not over: FAILED,
+ * with no end recorded and still Open (`conversationIsDown`, §4.4 X-D6).
+ */
+async function knockDown(stack: Stack, w: World): Promise<void> {
+  const outcome = await stack.api.turnComplete({ id: w.runnerId }, w.coordinatorSessionId!, {
+    turnId: w.runningTurnId!,
+    status: SharedRunStatus.FAILED,
+    result: RATE_LIMITED,
+  });
+  assert.deepEqual(outcome, { ok: true, status: RunStatus.FAILED });
+}
+
+/**
+ * The owner retries the coordinator and the retried turn ends — the committed fact an item a down
+ * conversation kept is handed over on (§4.4 X-D4 3). The retry is the product's own door; the claim
+ * and the poll stand in for the runner, as they do in `rework`.
+ */
+async function retryCoordinator(stack: Stack, w: World): Promise<void> {
+  const coordinator = w.coordinatorSessionId!;
+  const retried = await stack.sessions.resume(w.ownerId, coordinator, {
+    clientTurnId: randomUUID(),
+    content: 'try again',
+  });
+  // The runner's claim of a revived conversation, which `claimed` stands in for on a live one: it is
+  // RUNNING, and owned by the process this fixture reports as — no lease owner — rather than by the
+  // hand-off the revive leaves on it for whichever process takes it next.
+  await stack.db.session.updateMany({
+    where: { id: coordinator, status: RunStatus.PENDING },
+    data: { status: RunStatus.RUNNING, inboxLeaseOwner: null },
+  });
+  const delivered = await dequeue(stack, coordinator, w.runnerId);
+  assert.equal(delivered?.turnId, retried.turnId, 'the retried turn was handed to the runner');
+  await answerTurn(stack, w.runnerId, coordinator, retried.turnId, 'back on the project');
+  await stack.api.turnComplete({ id: w.runnerId }, coordinator, {
+    turnId: retried.turnId,
+    status: SharedRunStatus.SUCCEEDED,
+  });
+}
+
 test('an item whose coordinator has ended, or that has none, goes to the owner', { skip, timeout: 180_000 }, async () => {
   const stack = await connect();
   try {
@@ -1780,12 +1899,69 @@ test('an item whose coordinator has ended, or that has none, goes to the owner',
     const unowned = await onlyItemFor(stack.db, orphan, b.taskId, 'the runner turn wrote FAILED');
     assert.equal(unowned.assignee, 'OWNER');
     assert.equal(unowned.assigneeReason, 'NO_COORDINATOR');
+
+    // Down and then filed as Completed by its owner is over: somebody closed it.
+    const closed = await world(stack, 'coordinator-down-completed', 'RUNNING');
+    await knockDown(stack, closed);
+    await stack.sessions.complete(closed.ownerId, closed.coordinatorSessionId!);
+    const c = await attempt(stack, closed, 'coordinator-down-completed', { taskStatus: TaskStatus.IN_PROGRESS });
+    await failTurn(stack, closed, c);
+    const filed = await onlyItemFor(stack.db, closed, c.taskId, 'the runner turn wrote FAILED');
+    assert.equal(filed.assignee, 'OWNER');
+    assert.equal(filed.assigneeReason, 'COORDINATOR_ENDED');
   } finally {
     await stack.db.$disconnect();
   }
 });
 
-test('a queued item turn drained by the coordinator\'s failed turn is returned and goes to the owner, not lost',
+test('items opened while the coordinator is down stay the coordinator\'s, and reach it once a retry brings it back',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      // 2026-10-02: the coordinator sat FAILED on 429s for eight hours, and a merge conflict opened
+      // meanwhile went straight to the owner as COORDINATOR_ENDED. A run that failed is not a
+      // conversation anybody ended (§4.4 X-D6).
+      const w = await integratingWorld(stack, 'down', 'RUNNING');
+      const coordinator = w.coordinatorSessionId!;
+      await knockDown(stack, w);
+
+      const { task, job } = await claimedLanding(stack, w, 'down');
+      await reportFailure(stack, w, job, {
+        state: 'CONFLICT',
+        phase: 'MERGE',
+        sourceSha: 'a'.repeat(40),
+        targetShaBefore: 'c'.repeat(40),
+        conflicts: ['src/apiserver/src/tasks/task-judgment-data-preserved.spec.ts'],
+      });
+      const failed = await attempt(stack, w, 'down-failed', { taskStatus: TaskStatus.IN_PROGRESS });
+      await failTurn(stack, w, failed);
+
+      const conflict = await onlyItemFor(stack.db, w, task.taskId, 'the runner reported a conflict');
+      const failure = await onlyItemFor(stack.db, w, failed.taskId, 'the runner turn wrote FAILED');
+      for (const item of [conflict, failure]) {
+        assert.equal(item.assignee, 'COORDINATOR', `${item.kind} waits for the conversation that is down`);
+        assert.equal(item.assigneeReason, 'DEFAULT');
+        assertEscalatesAfterDefault(item);
+      }
+      assert.deepEqual(await itemTurns(stack.db, coordinator), [], 'a FAILED conversation is not written to');
+      assert.deepEqual(await deliveries(stack.db, w.projectId), [], 'and nothing says it was');
+      const down = await stack.db.session.findUniqueOrThrow({ where: { id: coordinator } });
+      assert.equal(down.status, RunStatus.FAILED, 'nor revived to be told');
+
+      await retryCoordinator(stack, w);
+
+      const turns = await itemTurns(stack.db, coordinator);
+      assert.deepEqual(
+        turns.map((t) => ({ key: t.clientTurnId, status: t.status })),
+        [conflict, failure].map((item) => ({ key: turnKey(item), status: 'PENDING' })),
+        'the end of the retried turn is where both are delivered',
+      );
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('a queued item turn drained by the coordinator\'s failed turn is returned, stays the coordinator\'s, and is queued afresh once it is back',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
     try {
@@ -1798,11 +1974,7 @@ test('a queued item turn drained by the coordinator\'s failed turn is returned a
       assert.equal(queued?.status, 'PENDING', `nothing was queued — ${await factsAbout(stack.db, w, a.taskId)}`);
 
       // The coordinator's running turn fails, and its queue is drained with it.
-      await stack.api.turnComplete({ id: w.runnerId }, coordinator, {
-        turnId: w.runningTurnId!,
-        status: SharedRunStatus.FAILED,
-        result: 'API Error: 500 upstream',
-      });
+      await knockDown(stack, w);
 
       const [drained] = await itemTurns(stack.db, coordinator);
       assert.equal(drained?.status, 'ANSWERED');
@@ -1812,8 +1984,30 @@ test('a queued item turn drained by the coordinator\'s failed turn is returned a
       assert.equal(returned?.returnCode, 'SESSION_ENDED');
       const [after] = (await items(stack.db, w.projectId)).filter((row) => row.id === item.id);
       assert.equal(after?.state, 'OPEN');
-      assert.equal(after?.assignee, 'OWNER', 'an item its coordinator can no longer read is the owner\'s');
-      assert.equal(after?.assigneeReason, 'COORDINATOR_ENDED');
+      // Down, not over (§4.4 X-D5): the run failed, and nobody ended the conversation.
+      assert.equal(after?.assignee, 'COORDINATOR', 'a conversation whose run failed still has it');
+      assert.equal(after?.assigneeReason, 'DEFAULT');
+      assert.ok(
+        after!.assignedAt.getTime() > item.assignedAt.getTime(),
+        'the assignment is re-made, so the next delivery has a key of its own',
+      );
+      assert.equal(after!.waitingSince.getTime(), item.waitingSince.getTime(), 'the wait goes on');
+      assert.equal(after!.escalateAt?.getTime(), item.escalateAt?.getTime(), 'and so does the clock');
+
+      await retryCoordinator(stack, w);
+
+      const turns = await itemTurns(stack.db, coordinator);
+      assert.deepEqual(
+        turns.map((t) => ({ key: t.clientTurnId, status: t.status })),
+        [
+          { key: turnKey(item), status: 'ANSWERED' },
+          { key: turnKey(after!), status: 'PENDING' },
+        ],
+        'told afresh once it is back, under the assignment the drain re-made',
+      );
+      const [rearmed] = await deliveries(stack.db, w.projectId);
+      assert.equal(rearmed?.returnedAt, null, 'the delivery is live again');
+      assert.equal(rearmed?.clientTurnId, turnKey(after!));
     } finally {
       await stack.db.$disconnect();
     }

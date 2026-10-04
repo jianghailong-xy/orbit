@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, RunStatus, TaskStatus } from '@prisma/client';
+import { Prisma, TaskStatus } from '@prisma/client';
 import {
   SESSION_CREATED_TASKS_DEFAULT_LIMIT,
   SESSION_CREATED_TASKS_MAX_LIMIT,
@@ -7,6 +7,7 @@ import {
   type SessionCreatedTasks,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { sessionCarriesTaskSql } from '../sessions/task-work-carrier';
 import { TasksService } from './tasks.service';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -42,6 +43,11 @@ const STATUS_GROUP_SQL = Prisma.raw(
     .join(' ')} END`,
 );
 
+/** Every status `STATUS_GROUP` places, as a SQL array: the page's first rows are read per status. */
+const STATUSES_SQL = Prisma.raw(
+  `ARRAY[${Object.keys(STATUS_GROUP).map((status) => `'${status}'`).join(', ')}]::task_status[]`,
+);
+
 /** A task another one took over, and names: the only kind whose chain is walked. */
 const takenOver = (alias: string) =>
   Prisma.raw(`(${alias}."terminal_reason" = 'SUPERSEDED' AND ${alias}."superseded_by_task_id" IS NOT NULL)`);
@@ -66,8 +72,8 @@ interface PickedRow {
  *    SESSION_CREATED_TASKS_MAX_HOPS; a successor that was deleted empties the pointer (SET NULL),
  *    so that task simply draws itself.
  *  - `running`/`queued` are `TasksService.withRunning`'s, the task list's and the link card's. The
- *    statement only has to know which rows COULD be live — the ones with a PENDING or RUNNING
- *    session, as many as the owner has runs live or queued, not as many as the session has tasks —
+ *    statement only has to know which rows COULD be live — the ones a work session carries, as many
+ *    as the owner has runs live, queued or waiting to be woken, not as many as the session has tasks —
  *    and returns all of those plus the first `limit` of the rest in status order. Every other row
  *    has no live session, so its group is its status, and the page is exact once the live ones are
  *    placed by the flags.
@@ -119,51 +125,69 @@ export class SessionCreatedTasksService {
                  ORDER BY w."origin_id", w."depth" DESC) e
          ORDER BY e."head_id", e."origin_created_at", e."origin_id"
       ),
-      line AS (
-        -- A task of this session that nothing took over is its own row — and may itself be the end
-        -- another of this session's tasks reached.
-        SELECT t."id", t."status", t."created_at", r."replaces_id"
+      -- A task of this session that nothing took over is its own row — and may itself be the end
+      -- another of this session's tasks reached. Nothing took over exactly the tasks no walk starts
+      -- from; asked that way, task_owner_creator_session_status_created_id_idx holds every column
+      -- read here. NOT MATERIALIZED: shared by its three readers it was a tuplestore of every row,
+      -- 4.6 MB written to disk per call on the 110k-task session and read back twice.
+      own AS NOT MATERIALIZED (
+        SELECT t."id", t."status", t."created_at"
           FROM "task" t
-          LEFT JOIN reached r ON r."head_id" = t."id"
          WHERE t."owner_id" = ${ownerId}::uuid
            AND t."creator_session_id" = ${sessionId}::uuid
-           AND ${takenOver('t')} IS NOT TRUE
-        UNION ALL
-        -- Every other end is a row of its own.
-        SELECT t."id", t."status", t."created_at", r."replaces_id"
+           AND t."id" NOT IN (SELECT w."origin_id" FROM walk w)
+      ),
+      -- Every other end is a row of its own.
+      beyond AS (
+        SELECT t."id", t."status", t."created_at"
           FROM reached r
           JOIN "task" t ON t."id" = r."head_id"
          WHERE t."creator_session_id" IS DISTINCT FROM ${sessionId}::uuid
             OR ${takenOver('t')} IS TRUE
       ),
-      -- The tasks withRunning could call running or queued: the same sessions it groups.
+      -- The tasks withRunning could call running or queued: the same carriers it reads
+      -- (sessions/task-work-carrier.ts), parked sessions with something to wake them included.
       busy AS (
-        SELECT DISTINCT s."task_id"
-          FROM "session" s
-         WHERE s."owner_id" = ${ownerId}::uuid
-           AND s."task_id" IS NOT NULL
-           AND s."status" IN (${RunStatus.PENDING}::run_status, ${RunStatus.RUNNING}::run_status)
+        SELECT DISTINCT carrier."task_id"
+          FROM "session" carrier
+         WHERE carrier."owner_id" = ${ownerId}::uuid
+           AND carrier."task_id" IS NOT NULL
+           AND ${Prisma.raw(sessionCarriesTaskSql('carrier'))}
       ),
       tally AS (
         SELECT count(*)::int AS "total",
                (count(*) FILTER (WHERE l."status" = ${TaskStatus.FAILED}::task_status))::int AS "failed",
                (count(*) FILTER (WHERE l."status" = ${TaskStatus.DONE}::task_status))::int AS "done"
-          FROM line l
+          FROM (SELECT o."status" FROM own o UNION ALL SELECT e."status" FROM beyond e) l
       ),
+      -- Every row that could be live, looked up by id, and the first "limit" of the rest in status
+      -- order. Each of those is among the first "limit" of its own status, so each status gives its
+      -- newest "limit" straight off the index: a handful of entries however many rows the session has.
       picked AS (
-        SELECT l."id", l."replaces_id"
-          FROM line l
-         WHERE l."id" IN (SELECT b."task_id" FROM busy b)
+        SELECT o."id" FROM own o WHERE o."id" IN (SELECT b."task_id" FROM busy b)
         UNION ALL
-        (SELECT l."id", l."replaces_id"
-           FROM line l
-          WHERE l."id" NOT IN (SELECT b."task_id" FROM busy b)
+        SELECT e."id" FROM beyond e WHERE e."id" IN (SELECT b."task_id" FROM busy b)
+        UNION ALL
+        (SELECT l."id"
+           FROM (SELECT c."id", c."status", c."created_at"
+                   FROM unnest(${STATUSES_SQL}) AS s("status")
+                  CROSS JOIN LATERAL (
+                    SELECT o."id", o."status", o."created_at"
+                      FROM own o
+                     WHERE o."status" = s."status"
+                       AND o."id" NOT IN (SELECT b."task_id" FROM busy b)
+                     ORDER BY o."created_at" DESC, o."id" DESC
+                     LIMIT ${limit}::int) c
+                 UNION ALL
+                 SELECT e."id", e."status", e."created_at"
+                   FROM beyond e
+                  WHERE e."id" NOT IN (SELECT b."task_id" FROM busy b)) l
           ORDER BY ${STATUS_GROUP_SQL}, l."created_at" DESC, l."id" DESC
           LIMIT ${limit}::int)
       )
-      SELECT y."total", y."failed", y."done", p."id", p."replaces_id"
+      SELECT y."total", y."failed", y."done", p."id", r."replaces_id"
         FROM tally y
-        LEFT JOIN picked p ON true`);
+        LEFT JOIN (picked p LEFT JOIN reached r ON r."head_id" = p."id") ON true`);
 
     const { total, failed, done } = picked[0];
     const lines = picked.filter((row): row is PickedRow & { id: string } => row.id !== null);

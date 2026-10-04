@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { PauseAccountDto } from '../common/account-pause';
 import { PublicIdPipe } from '../common/public-id';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
@@ -99,6 +100,16 @@ export class ProvidersController {
     return this.providers.addPoolMember(user.userId, id, dto.providerId);
   }
 
+  @Post('pools/:id/members/:memberId/pause')
+  pausePoolMember(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('memberId', PublicIdPipe.allowingPrefixed('login:')) memberId: string,
+    @Body() dto: PauseAccountDto,
+  ) {
+    return this.providers.pausePoolMember(user.userId, id, memberId, dto.durationMinutes);
+  }
+
   @Delete('pools/:id/members/:providerId')
   removePoolMember(
     @CurrentUser() user: AuthUser,
@@ -109,7 +120,7 @@ export class ProvidersController {
   }
 
   // One of the caller's pools, as its page reads it: the members it holds and — for a Codex pool of
-  // their own — the ChatGPT account it runs on (migration 0323), by email and masked either way. Another
+  // their own — the ChatGPT accounts it holds (migration 0323), by email and masked either way. Another
   // owner's pool answers 404, as it does on every route here.
   @Get('pools/:id')
   getPool(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
@@ -122,7 +133,7 @@ export class ProvidersController {
   // credential, encrypted, and answers with the account; DELETE gives the attempt up. Nothing any of them
   // returns carries a token: an account is named by its email and `…AB12`.
   //
-  // Only the owner of the pool reaches any of this — another user's pool is not found, and the account
+  // Only the owner of the pool reaches any of this — another user's pool is not found, and an account
   // can be signed in, polled, cancelled or signed out by nobody else.
   @Post('pools/:id/codex-login')
   startCodexLogin(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
@@ -139,10 +150,16 @@ export class ProvidersController {
     return this.codexLogin.cancel(user.userId, id);
   }
 
-  // The account out of the pool: the tokens this server held for it go with it. The next sign-in (by the
-  // owner, the only one who can) is what puts an account back.
+  // One account out of the pool, named by its fingerprint (`?fingerprint=…AB12`, as every response names
+  // it) — with none, the pool's first, its `login`: the tokens this server held for it go with it, and the
+  // pool's other accounts stay. The next sign-in (by the owner, the only one who can) is what puts an
+  // account back.
   @Delete('pools/:id/codex-login/account')
-  signOutCodexLogin(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
-    return this.codexLogin.signOut(user.userId, id);
+  signOutCodexLogin(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Query('fingerprint') fingerprint?: string,
+  ) {
+    return this.codexLogin.signOut(user.userId, id, fingerprint);
   }
 }

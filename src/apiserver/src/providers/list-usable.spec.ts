@@ -44,12 +44,17 @@ test('every built-in engine is listed alongside the configured providers', async
 
   assert.deepEqual(
     listed.map((p) => p.slug),
-    ['claude', 'codex', 'kimi', 'opencode', 'deepseek'],
+    ['claude', 'codex', 'kimi', 'opencode', 'antigravity', 'deepseek'],
   );
   // Which of the two a slug is, since only one of them takes a label or a model list.
   assert.deepEqual(
     listed.filter((p) => p.builtin).map((p) => p.slug),
-    ['claude', 'codex', 'kimi', 'opencode'],
+    ['claude', 'codex', 'kimi', 'opencode', 'antigravity'],
+  );
+  // A built-in runs on itself: Antigravity is agy, not a provider borrowing some other CLI.
+  assert.deepEqual(
+    listed.find((p) => p.slug === 'antigravity'),
+    { slug: 'antigravity', runtime: 'antigravity', builtin: true },
   );
 });
 
@@ -74,7 +79,8 @@ test('the query matches the check task and session writes run', async () => {
   await serviceFor([], captured).listUsable('user-1');
 
   assert.deepEqual(captured.where, {
-    slug: { not: 'opencode' },
+    // Not the compatibility rows migrations 0080 and 0367 parked on the two built-in names.
+    slug: { notIn: ['opencode', 'antigravity'] },
     enabled: true,
     OR: [{ ownerId: null }, { ownerId: 'user-1' }],
   });
@@ -88,9 +94,10 @@ test("the caller's own account pools are listed by name, on Claude, and only the
     { slug: 'claude-accounts', label: 'Claude accounts' },
   ]).listUsable('user-1');
 
-  // Their own account pools, and the shared pools they are in (migration 0321) — nobody else's.
+  // Their own account pools, and the Codex pools they are one of the people of — a shared pool
+  // (migration 0321), or somebody else's own pool its owner added them to (migration 0358) — nobody else's.
   assert.deepEqual(captured.poolWhere, {
-    OR: [{ ownerId: 'user-1', shared: false }, { shared: true, people: { some: { userId: 'user-1' } } }],
+    OR: [{ ownerId: 'user-1', shared: false }, { engine: 'codex', people: { some: { userId: 'user-1' } } }],
   });
   assert.deepEqual(listed.at(-1), {
     slug: 'claude-accounts',

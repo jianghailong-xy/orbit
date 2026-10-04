@@ -3,16 +3,15 @@ import Observation
 import OrbitKit
 
 /// Drives the Agents section: its Workspace list plus edit/delete. macOS keeps the historical
-/// runner grouping; iOS flattens the same stable order and shows Runner as row metadata instead.
+/// runner grouping; iOS follows the web's workspace order and shows Runner as row metadata.
 /// Owned by `AppModel` so the list and the edit form share it. Runner names are best-effort.
 @MainActor
 @Observable
 final class AgentsModel {
     private(set) var items: [Agent] = []
     private(set) var runnerNames: [String: String] = [:]
-    /// Runner ids in the order `GET /runners` returns them (the user's persisted runner order), so
-    /// flat iOS Workspace rows and macOS groups match the web sidebar. Empty until that fetch lands,
-    /// which leaves Runner order first-seen.
+    /// Runner ids in the order `GET /runners` returns them, for the macOS sidebar's groups.
+    /// Empty until that fetch lands, which leaves Runner order first-seen.
     private(set) var runnerOrder: [String] = []
     /// runnerId → is-online, for iOS Workspace folder badges.
     /// Populated from the same best-effort `runners()` fetch that feeds `runnerNames`.
@@ -118,6 +117,16 @@ final class AgentsModel {
         if let pools = try? await api.providerPools() { providerPools = pools }
     }
 
+    func pausePoolMember(_ pool: ProviderPool, member: PoolMember, durationMinutes: Int?) async -> String? {
+        do {
+            try await api.pausePoolMember(poolID: pool.id, memberID: member.id, durationMinutes: durationMinutes)
+            await reloadPools()
+            return nil
+        } catch {
+            return APIClient.failureReason(error)
+        }
+    }
+
     /// "Sign in with ChatGPT": the page to open and the one-time code, from the server's device sign-in.
     func startCodexLogin(_ pool: ProviderPool) async throws -> CodexLoginAttempt {
         try await api.startCodexLogin(poolID: pool.id)
@@ -132,10 +141,11 @@ final class AgentsModel {
         _ = try? await api.cancelCodexLogin(poolID: pool.id)
     }
 
-    /// Sign the pool's account out: the server deletes the sign-in it held. Why it didn't, or nil.
-    func signOutCodexLogin(_ pool: ProviderPool) async -> String? {
+    /// Sign one of the pool's accounts out: the server deletes the sign-in it held, and the pool's other
+    /// accounts stay. Why it didn't, or nil.
+    func signOutCodexLogin(_ pool: ProviderPool, _ login: CodexLogin) async -> String? {
         do {
-            try await api.signOutCodexLogin(poolID: pool.id)
+            try await api.signOutCodexLogin(poolID: pool.id, fingerprint: login.fingerprint)
             await reloadPools()
             return nil
         } catch {
@@ -256,6 +266,22 @@ final class AgentsModel {
         guard let index = agentSessions.firstIndex(where: { $0.id == id }) else { return }
         agentSessions[index] = agentSessions[index].settingTitle(title)
     }
+
+    #if os(iOS)
+    /// File this pane's row in a folder on the spot, for the same reason: a Completed row isn't in
+    /// the Open snapshot. See `AppModel.moveSession`.
+    func applyMovedSession(_ id: String, folderID: String?) {
+        guard let index = agentSessions.firstIndex(where: { $0.id == id }) else { return }
+        agentSessions[index] = agentSessions[index].settingFolder(folderID)
+    }
+
+    /// Take a row moved to another workspace out of this pane's list, which is one workspace's — for
+    /// the same reason: a Completed row isn't in the Open snapshot. See `AppModel.moveSession(_:to:…)`.
+    func applyMovedSession(_ id: String, toWorkspace workspaceID: String) {
+        guard lastSessionQuery?.agentID != workspaceID else { return }
+        agentSessions = SessionFilter.removing(id, from: agentSessions)
+    }
+    #endif
 
     /// Update relation metadata even in this pane's independently loaded Completed/Trash rows.
     /// Open rows are refreshed through `applyOpenSnapshot`, but those two scopes otherwise wait for

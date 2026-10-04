@@ -11,6 +11,7 @@ import { Alert, Button, Popconfirm, Spin, Tag, Typography } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { encodeId } from '../lib/idCodec';
+import { runningLabel } from '../lib/projectDependencyGraph';
 import {
   projectReadyToRunQuery,
   type ProjectReadyToRunItem,
@@ -55,7 +56,7 @@ export function runReadyTaskMutationOptions(
       message.success('Run started');
       return refreshTaskScheduleViews(qc, taskId, projectId);
     },
-    onError: (error: Error) => message.error(error.message),
+    onError: (error: Error) => message.error("Couldn't start the task", error.message),
   };
 }
 
@@ -82,7 +83,7 @@ export function resumePausedListMutationOptions(
         qc.invalidateQueries({ queryKey: ['task-lists'] }),
       ]);
     },
-    onError: (error: Error) => message.error(error.message),
+    onError: (error: Error) => message.error("Couldn't resume the task list", error.message),
   };
 }
 
@@ -307,7 +308,9 @@ function ReadyTaskRow({
           {runState === 'RUNNING' ? (
             <>
               <LoadingOutlined aria-hidden spin style={{ color: 'var(--brand)' }} />
-              Work in progress
+              {/* What the run is doing — a turn, a background job, a wake-up it waits for — when
+                  the server says; an older one does not, and the row reads as it always has. */}
+              {runningLabel(item) ?? 'Work in progress'}
             </>
           ) : runState === 'QUEUED' ? (
             <>

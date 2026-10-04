@@ -111,7 +111,7 @@ test('a project that has never run anything starts on claude', async () => {
 });
 
 test('a built-in engine slug overrides the seed without a provider lookup', async () => {
-  for (const slug of ['claude', 'codex', 'kimi', 'opencode']) {
+  for (const slug of ['claude', 'codex', 'kimi', 'opencode', 'antigravity']) {
     const fixture = makeService('claude');
     await fixture.service.create('owner-1', {
       prompt: 'Fix the login timeout',
@@ -146,16 +146,17 @@ test('a configured provider the caller can reach overrides the seed', async () =
 });
 
 /**
- * The pre-generated session id is Claude's alone: Codex and Kimi mint their own thread after the
- * process starts, and one they never issued turns their first spawn into a resume of a
- * conversation that does not exist. Which CLI runs a configured provider is on its row, not in
- * its slug, so the row has to be consulted before that id is minted.
+ * The pre-generated session id is Claude's alone: Codex, Kimi and Antigravity mint their own
+ * thread after the process starts, and one they never issued turns their first spawn into a resume
+ * of a conversation that does not exist. Which CLI runs a configured provider is on its row, not
+ * in its slug, so the row has to be consulted before that id is minted.
  */
 test('a configured provider gets a pre-generated session id only if it borrows Claude', async () => {
   const cases = [
     { slug: 'deepseek', runtime: 'claude', pregenerated: true },
     { slug: 'moonshot', runtime: 'kimi', pregenerated: false },
-    { slug: 'gemini', runtime: 'codex', pregenerated: false },
+    { slug: 'openai', runtime: 'codex', pregenerated: false },
+    { slug: 'gemini', runtime: 'antigravity', pregenerated: false },
   ];
   for (const { slug, runtime, pregenerated } of cases) {
     const fixture = makeService('claude', [{ slug, runtime }]);

@@ -22,6 +22,7 @@ import { HttpAdapterHost, NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import {
   CreatorType,
+  type Prisma,
   type PrismaClient,
   RunnerStatus,
   RunStatus,
@@ -536,5 +537,199 @@ test('the tasks a session created: its row, its counts, its order, and the task 
     for (const answer of answers) {
       assert.doesNotMatch(answer.text, UUID_ANYWHERE, answer.text.slice(0, 2_000));
     }
+  });
+});
+
+/**
+ * What the row costs the database, beside what it answers: however many tasks the session created,
+ * the read writes no temp file.
+ *
+ * It used to. The session's rows were one CTE that the counts, the live rows and the first rows all
+ * read, so PostgreSQL held every one of them in a tuplestore, and a tuplestore that outgrows
+ * work_mem goes to disk: 4.6 MB per call for the pipeline session that created 109,879 tasks, read
+ * back twice, every 15 seconds while one of its rows was running. Production runs a 4 MB work_mem;
+ * here it is PostgreSQL's floor, 64 kB, so two thousand tasks stand in for a hundred thousand. The
+ * paired positive holds the same rows the way the old read did, on the same fixture and setting,
+ * and must spill: otherwise the fixture is too small for zero to mean anything.
+ *
+ * It is also the fixture on which reading each status's newest rows has something to cut: the
+ * statuses the page reaches hold more rows than the page, OPEN and IN_PROGRESS interleave inside
+ * one group, and of the three live rows one is the end of a chain another session took over.
+ */
+test('the row writes no temp file, however many tasks the session created', {
+  skip: !URL, concurrency: 1, timeout: 300_000,
+}, async (t) => {
+  const url = URL!;
+  assertCoordinatorPgUrlIsIsolated(url);
+  const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
+  await sql.connect();
+  const db: PrismaClient = prismaClientFor(url);
+  t.after(async () => {
+    await db.$disconnect().catch(() => undefined);
+    await sql.end().catch(() => undefined);
+  });
+  await verifyCoordinatorPgIdentity(sql);
+  const prisma = db as unknown as PrismaService;
+  const tasks = new TasksService(
+    prisma,
+    {} as never,
+    new Proxy({}, { get: () => () => undefined }) as unknown as RealtimeService,
+  );
+  const createdTasks = new SessionCreatedTasksService(prisma, tasks);
+
+  interface PlanNode {
+    'Node Type': string;
+    'Temp Written Blocks'?: number;
+    Plans?: PlanNode[];
+  }
+  /** Every node of `text`'s executed plan that wrote temp blocks, at a 64 kB work_mem. */
+  const spillsOf = async (text: string, values: unknown[]): Promise<string[]> => {
+    await sql.query('BEGIN');
+    try {
+      await sql.query(`SET LOCAL work_mem = '64kB'`);
+      const explained = await sql.query(`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${text}`, values);
+      const spilled: string[] = [];
+      const visit = (node: PlanNode): void => {
+        const written = node['Temp Written Blocks'] ?? 0;
+        if (written > 0) spilled.push(`${node['Node Type']}: ${written} temp blocks written`);
+        for (const child of node.Plans ?? []) visit(child);
+      };
+      visit(explained.rows[0]['QUERY PLAN'][0].Plan);
+      return spilled;
+    } finally {
+      await sql.query('ROLLBACK');
+    }
+  };
+
+  const ownerId = randomUUID();
+  await db.user.create({
+    data: { id: ownerId, email: `spill-${RUN}-${ownerId}@created-tasks.invalid`, name: 'spill', passwordHash: 'x' },
+  });
+  async function conversation(title: string): Promise<string> {
+    const id = randomUUID();
+    await db.session.create({
+      data: {
+        id, ownerId, creatorId: ownerId, title, prompt: title,
+        status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+      },
+    });
+    return id;
+  }
+  const here = await conversation('A pipeline that files two thousand tasks');
+  const elsewhere = await conversation('Where one of them was redone');
+  const run = (taskId: string, status: RunStatus) =>
+    db.session.create({
+      data: {
+        id: randomUUID(), ownerId, creatorId: ownerId, taskId,
+        title: `run of ${taskId}`, prompt: 'do the thing', status,
+        dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+      },
+    });
+
+  // A minute apart, oldest first: 25 FAILED, 5 CANCELLED, 400 DONE, and OPEN and IN_PROGRESS
+  // interleaved through the rest.
+  const statusOf = (i: number): TaskStatus =>
+    i % 80 === 7 ? TaskStatus.FAILED
+      : i % 400 === 13 ? TaskStatus.CANCELLED
+        : i % 5 === 0 ? TaskStatus.DONE
+          : i % 3 === 0 ? TaskStatus.IN_PROGRESS
+            : TaskStatus.OPEN;
+  const filed = Array.from({ length: 2_000 }, (_, i) => ({ id: randomUUID(), status: statusOf(i), createdAt: at(i) }));
+  await db.task.createMany({
+    data: filed.map((row, i) => ({
+      id: row.id, ownerId, title: `task ${i}`,
+      creatorType: CreatorType.USER, creatorId: ownerId, creatorSessionId: here,
+      completionCriterion: 'EVIDENCE_JUDGMENT' as const,
+      status: row.status, autoRunWhenReady: false, createdAt: row.createdAt,
+    })),
+  });
+  // The newest failure, redone by another session and running there; one OPEN row running here,
+  // one IN_PROGRESS row queued.
+  const failedNewest = filed.filter((row) => row.status === TaskStatus.FAILED).at(-1)!;
+  const redo = { id: randomUUID(), status: TaskStatus.OPEN, createdAt: at(2_000) };
+  await db.task.create({
+    data: {
+      id: redo.id, ownerId, title: 'redone elsewhere',
+      creatorType: CreatorType.USER, creatorId: ownerId, creatorSessionId: elsewhere,
+      completionCriterion: 'EVIDENCE_JUDGMENT', status: redo.status, autoRunWhenReady: false,
+      createdAt: redo.createdAt,
+    },
+  });
+  await db.task.update({
+    where: { id: failedNewest.id },
+    data: { supersededByTaskId: redo.id, terminalReason: 'SUPERSEDED', supersededAt: new Date() },
+  });
+  const runningHere = filed[1_234];
+  const queuedHere = filed[1_503];
+  assert.deepEqual([runningHere.status, queuedHere.status], [TaskStatus.OPEN, TaskStatus.IN_PROGRESS]);
+  await run(redo.id, RunStatus.RUNNING);
+  await run(runningHere.id, RunStatus.RUNNING);
+  await run(queuedHere.id, RunStatus.PENDING);
+  await sql.query('ANALYZE task');
+  await sql.query('ANALYZE session');
+
+  /** The row, worked out from the fixture rather than read back: Failed, Running, Queued, … */
+  const rows = [...filed.filter((row) => row.id !== failedNewest.id), redo].map((row) => ({
+    ...row,
+    running: row.id === redo.id || row.id === runningHere.id,
+    queued: row.id === queuedHere.id,
+  }));
+  const GROUP: Record<TaskStatus, number> = { FAILED: 0, OPEN: 3, IN_PROGRESS: 3, DONE: 4, CANCELLED: 5 };
+  const groupOf = (row: (typeof rows)[number]) => (row.running ? 1 : row.queued ? 2 : GROUP[row.status]);
+  const firstRows = (limit: number) => [...rows]
+    .sort((a, b) => groupOf(a) - groupOf(b) || b.createdAt.getTime() - a.createdAt.getTime())
+    .slice(0, limit)
+    .map((row) => row.id);
+
+  await t.test('holding the session’s rows at once spills on this fixture', async () => {
+    const held = await spillsOf(
+      `WITH held AS MATERIALIZED (
+         SELECT t."id", t."status", t."created_at"
+           FROM "task" t WHERE t."owner_id" = $1::uuid AND t."creator_session_id" = $2::uuid
+       )
+       SELECT count(*) FROM held`,
+      [ownerId, here],
+    );
+    assert.notDeepEqual(held, [], 'a tuplestore of these rows outgrows 64 kB');
+  });
+
+  await t.test('the statement the row sends writes none', async () => {
+    let sent: Prisma.Sql | undefined;
+    const capturing = {
+      session: { findFirst: async () => ({ id: here }) },
+      task: { findMany: async () => [] },
+      project: { findMany: async () => [] },
+      $queryRaw: async (query: Prisma.Sql) => {
+        sent = query;
+        return [{ total: 0, failed: 0, done: 0, id: null, replaces_id: null }];
+      },
+    } as unknown as PrismaService;
+    const flags = { withRunning: async (_owner: string, given: unknown[]) => given } as unknown as TasksService;
+    await new SessionCreatedTasksService(capturing, flags).read(ownerId, here, String(SESSION_CREATED_TASKS_MAX_LIMIT));
+    assert.ok(sent, 'the statement was captured');
+    assert.deepEqual(await spillsOf(sent.text, sent.values), []);
+  });
+
+  await t.test('and still answers every count, and the first rows of all two thousand', async () => {
+    const counts = {
+      total: rows.length,
+      running: 2,
+      failed: rows.filter((row) => row.status === TaskStatus.FAILED).length,
+      done: rows.filter((row) => row.status === TaskStatus.DONE).length,
+    };
+    assert.deepEqual(counts, { total: 2_000, running: 2, failed: 24, done: 400 });
+    for (const limit of [3, 20, 26, SESSION_CREATED_TASKS_MAX_LIMIT]) {
+      const answer = await createdTasks.read(ownerId, here, String(limit));
+      const { total, running, failed, done } = answer;
+      assert.deepEqual({ total, running, failed, done }, counts, `limit=${limit}: the counts are the session's`);
+      assert.deepEqual(answer.items.map((item) => item.id), firstRows(limit), `limit=${limit}: the first rows`);
+    }
+    // At the largest page the order reaches past the failures into both live groups and group 3.
+    const page = await createdTasks.read(ownerId, here, String(SESSION_CREATED_TASKS_MAX_LIMIT));
+    assert.deepEqual(
+      [...new Set(page.items.map((item) => (item.running ? 'running' : item.queued ? 'queued' : item.status)))],
+      ['FAILED', 'running', 'queued', 'OPEN', 'IN_PROGRESS'],
+    );
+    assert.deepEqual(page.items.find((item) => item.id === redo.id)?.replaces, { id: failedNewest.id, title: `task ${filed.indexOf(failedNewest)}` });
   });
 });

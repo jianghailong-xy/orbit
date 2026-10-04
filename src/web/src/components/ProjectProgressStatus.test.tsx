@@ -120,6 +120,25 @@ const CONFLICT = item({
   }),
 });
 
+/** A delivery whose coordinator has to decide the landing: files outside the declaration
+ *  (`blocker-disposition.ts` §4 on the server). */
+const REVIEW = item({
+  itemId: '5uQ5yXbG1u6pBkkrc2ZLz8',
+  kind: 'DELIVERY_REVIEW',
+  title: 'Changed files it didn’t declare: ③ 实现所有者收尾门与 Done 优先语义',
+  detailLine: '2 files outside its declaration · src/shared/src/project-done.ts · +1',
+  waitingSince: at(3 * MINUTE),
+  escalateAt: inFuture(117 * MINUTE),
+  facts: facts({
+    task: { id: '34Y7Utvsd47A14DjMzIzD', title: '③ 实现所有者收尾门与 Done 优先语义' },
+    files: ['src/shared/src/project-done.ts', 'src/apiserver/src/projects/project-done-request.ts'],
+    review: {
+      reason: 'OUTSIDE_DECLARED_SCOPE',
+      declaredPaths: ['src/apiserver/src/projects/project-owner-done.pg.spec.ts'],
+    },
+  }),
+});
+
 /** The tail of the failing check's output, longer than the block keeps folded — what a reader needs
  *  from a log is its END, so the folded form has to be the last lines and not the first. */
 const CHECK_TAIL = [
@@ -198,6 +217,38 @@ const ESCALATED = item({
   // should have had it, the run, and stopping the task — and no `RETRY`, because the work is the
   // coordinator's to run again, not the owner's.
   actions: ['ASK_COORDINATOR_AGAIN', 'OPEN_TASK_SESSION', 'CANCEL_TASK'],
+});
+
+/** A failed check of the merge into main that escalated to the owner: about the candidate, not a
+ *  task. What the server lists for one while the project has a coordinator conversation to ask: the
+ *  way back to it, and the merge card the row leads to. */
+const ESCALATED_MERGE_CHECK = item({
+  itemId: '5xQwJrT2mNcV8bLpZ0aYkE',
+  kind: 'INTEGRATION_CHECK_FAILED',
+  title: 'Checks failed on the combined tree: merging the project branch into main',
+  detailLine: '',
+  assignee: 'OWNER',
+  assigneeReason: 'ESCALATED',
+  waitingSince: at(2 * HOUR + 6 * MINUTE),
+  escalateAt: at(6 * MINUTE),
+  escalatedAt: at(6 * MINUTE),
+  taskId: null,
+  sessionId: null,
+  promotionId: '3fFMHLbE7JTsr3vHFOzIDM',
+  delivery: { state: 'NOT_REQUIRED', sessionId: null, at: null },
+  actions: ['ASK_COORDINATOR_AGAIN', 'REVIEW'],
+  facts: facts({
+    targetRef: 'main',
+    check: {
+      name: 'MERGE_CHECK',
+      command: 'npm test',
+      expectedExitCode: 0,
+      exitCode: 1,
+      timedOut: false,
+      durationMs: 4 * MINUTE + 2 * 1000,
+      outputTail: 'FAIL src/web/src/components/ProjectsPage.test.tsx',
+    },
+  }),
 });
 
 const PAUSED = item({
@@ -332,6 +383,18 @@ describe('ProjectOpenItems — the project page’s Open items card', () => {
     // this card and which is where what would land and what the checks came to are said (§7.5).
     expect(html).toContain('Review');
     expect(html).toContain('href="#promotion-3fFMHLbE7JTsr3vHFOzIDM"');
+  });
+
+  it('leads an escalated merge-into-main failure to the merge card too, leaving the hand-back to its card', () => {
+    const html = paint(
+      { needsYou: [ESCALATED_MERGE_CHECK], withCoordinator: [] },
+      () => <ProjectOpenItems projectId={PROJECT_ID} now={NOW} />,
+    );
+
+    // A row is a way in (§7.2 V5): the hand-back writes, so it is the card's press, not the row's.
+    expect(html).toContain('Checks failed on the combined tree: merging the project branch into main');
+    expect(html).toContain('href="#promotion-3fFMHLbE7JTsr3vHFOzIDM"');
+    expect(html).not.toContain('Ask the coordinator again');
   });
 
   it('renders the pause card first', () => {
@@ -699,6 +762,29 @@ describe('the exception card’s fact block', () => {
     expect(html).toContain('nothing landed');
   });
 
+  it('draws a delivery review as the coordinator’s: what changed beside what was declared', () => {
+    const TASK = '③ 实现所有者收尾门与 Done 优先语义';
+    const html = card(REVIEW);
+
+    expect(html).toContain('Changed files it didn’t declare');
+    expect(html).not.toContain(`Changed files it didn’t declare: ${TASK}`);
+    expect(html).toContain(`<span class="criteria-decision-k">Task</span><span class="criteria-decision-v">${TASK}</span>`);
+    expect(html).toContain('src/shared/src/project-done.ts');
+    expect(html).toContain('<span class="criteria-decision-k">Declared</span>');
+    expect(html).toContain('src/apiserver/src/projects/project-owner-done.pg.spec.ts');
+    expect(html).not.toContain('push to the task branch');
+    expect(html).toContain('Owner: coordinator');
+    expect(html.indexOf('Open task session')).toBeLessThan(html.indexOf('Retry'));
+
+    const refused = card({
+      ...REVIEW,
+      title: `Git refused to merge it: ${TASK}`,
+      facts: { ...REVIEW.facts!, review: { reason: 'MERGE_REFUSED_BY_GIT', declaredPaths: [] } },
+    });
+    expect(refused).toContain('Git refused to merge it');
+    expect(refused).toContain('no paths');
+  });
+
   it('names the task in its own row rather than in the heading', () => {
     const html = card(CHECK_FAILED);
     const TASK = '核实 ScheduleWakeup 是否随 warm 回收丢失';
@@ -781,6 +867,30 @@ describe('the exception cards’ presses', () => {
     expect(html).not.toContain('Retry');
   });
 
+  it('sends an escalated merge-into-main failure back to its coordinator, beside the merge card', () => {
+    const html = card(ESCALATED_MERGE_CHECK);
+
+    expect(html).toContain('Now yours — no one acted on this for 2h');
+    expect(html).toContain('Ask the coordinator again');
+    expect(html).toContain('href="#promotion-3fFMHLbE7JTsr3vHFOzIDM"');
+    // About the candidate and no task: nothing here runs, opens or stops one.
+    expect(html).not.toContain('Retry');
+    expect(html).not.toContain('Open task session');
+    expect(html).not.toContain('Cancel task');
+  });
+
+  it('leaves a merge approval to its own card, with no way back to the coordinator', () => {
+    // The merge card is the owner's to decide, and drawn by `ProjectPromotionCard`: the exception
+    // cards draw nothing for it, beside an escalated failure of the same candidate that they do draw.
+    const html = paint(
+      { needsYou: [PROMOTION, ESCALATED_MERGE_CHECK], withCoordinator: [] },
+      () => <ExceptionCards projectId={PROJECT_ID} now={NOW} />,
+    );
+
+    expect(html).not.toContain('Approve merge to main');
+    expect(html.match(/Ask the coordinator again/g) ?? []).toHaveLength(1);
+  });
+
   it('leaves out a press this row carries no target for', () => {
     // An item whose task is gone — no `taskId` to run or stop. It is still readable, and the two
     // presses that need a task are not drawn rather than drawn dead.
@@ -850,6 +960,16 @@ describe('the exception card’s action row', () => {
       { label: 'Ask the coordinator again', weight: 'primary' },
       { label: 'Open task session', weight: 'secondary' },
       { label: 'Cancel task', weight: 'link' },
+      { label: 'Mark as handled', weight: 'link' },
+    ]);
+  });
+
+  it('leads an escalated merge-into-main failure with the way back to the coordinator', () => {
+    // No task to open or stop: the press is the hand-back, and the merge card and the owner's own
+    // "handled" are the links behind it.
+    expect(actionRow(card(ESCALATED_MERGE_CHECK))).toEqual([
+      { label: 'Ask the coordinator again', weight: 'primary' },
+      { label: 'Review', weight: 'link' },
       { label: 'Mark as handled', weight: 'link' },
     ]);
   });
@@ -1186,6 +1306,17 @@ describe('the exception cards’ presses, through their doors', () => {
       `/projects/${PROJECT_ID}/open-items/${ESCALATED.itemId}/return-to-coordinator`,
       { method: 'POST', body: {} },
     );
+  });
+
+  it('hands an escalated merge-into-main failure back through the same door, by the item', async () => {
+    await press({ needsYou: [PROMOTION, ESCALATED_MERGE_CHECK], withCoordinator: [] }, 'Ask the coordinator again');
+
+    expect(apiMock).toHaveBeenCalledWith(
+      `/projects/${PROJECT_ID}/open-items/${ESCALATED_MERGE_CHECK.itemId}/return-to-coordinator`,
+      { method: 'POST', body: {} },
+    );
+    // Only the item was handed back: nothing was written about the merge it is about.
+    expect(apiMock.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(1);
   });
 });
 

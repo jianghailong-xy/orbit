@@ -100,7 +100,6 @@ final class CreatedTasksWiringTests: XCTestCase {
                            "the card spells \(word.debugDescription) itself")
         }
         for use in ["SessionCreatedTasksCopy.line(tasks)", "SessionCreatedTasksCopy.title",
-                    "SessionCreatedTasksCopy.viewAll", "SessionCreatedTasksCopy.openProject",
                     "SessionCreatedTasksCopy.replaces(", "SessionCreatedTasksCopy.separator"] {
             XCTAssertTrue(card.contains(use), "the card no longer reads \(use)")
         }
@@ -137,16 +136,14 @@ final class CreatedTasksWiringTests: XCTestCase {
         XCTAssertTrue(viewAll.contains("tasks?.showCreated(in:"))
     }
 
-    /// On a phone the card's three ways out — a task row, `Open project ›`, `View all in Tasks ›` —
-    /// open over the console, on its own stack, so the back swipe returns to the conversation. A
-    /// move to the Tasks or Projects section left the swipe that section's list (the owner's report,
+    /// On a phone the card's task rows open over the console, on its own stack, so the back swipe
+    /// returns to the conversation. A move to the Tasks or Projects section left the swipe that
+    /// section's list (the owner's report,
     /// 2026-09-25). The wide shells keep the section move; the view decides which, not the model.
-    func testOnAPhoneTheCardsWaysOutOpenOverTheConsole() throws {
+    func testOnAPhoneTheCardsTaskRowsOpenOverTheConsole() throws {
         let card = code(try source("Views/CreatedTasksCard.swift"))
         XCTAssertTrue(card.contains("openPage(.taskDetail(taskID: row.id)) { app.route(to: .task(row.id)) }"),
                       "a row opens its task over the console on a phone, in the Tasks pane otherwise")
-        XCTAssertTrue(card.contains("openPage(.projectDetail(projectID: project.id)) { app.openProject(project.id) }"))
-        XCTAssertTrue(card.contains("openPage(.createdTasks(sessionID: console.sessionID))"))
         let open = try slice(card, from: "private func openPage(", to: "\n    }")
         XCTAssertTrue(open.contains("if overConsole { app.push(page) } else { elsewhere() }"),
                       "a push on the stack on screen — the console's — where the console says so")
@@ -176,8 +173,8 @@ final class CreatedTasksWiringTests: XCTestCase {
 
     /// The same rule for every other door out of a conversation (the owner, 2026-09-25: "change them
     /// to the same behaviour"): a link in the transcript — as prose or as a card — and the Watching
-    /// card's target rows and `Manage in Watches ›` all hand the console's answer to the model, which
-    /// pushes a task, another session or the Following page over the console on a phone.
+    /// card's target rows all hand the console's answer to the model, which pushes a task or another
+    /// session over the console on a phone.
     func testEveryDoorOutOfAConversationPushesOverItOnAPhone() throws {
         let app = code(try source("AppModel.swift"))
         let opener = try slice(app, from: "func openFromConversation(_ route: Route, overConsole: Bool) {",
@@ -220,11 +217,9 @@ final class CreatedTasksWiringTests: XCTestCase {
         let watching = code(try source("Views/WatchingCard.swift"))
         XCTAssertTrue(watching.contains("model.openFromConversation(destination, overConsole: overConsole)"),
                       "a watch's target opens over the conversation")
-        XCTAssertTrue(watching.contains("if overConsole { model.push(.watches) } else { model.selectedSection = .following }"),
-                      "and so does the Following page its strip leads to")
     }
 
-    /// An open card in the band never draws as a header and a footer with nothing between them (the
+    /// An open card in the band never draws as a header with no visible rows (the
     /// owner's report, 2026-09-25: the Watching strip opened above an open Tasks created here card
     /// took the band's whole share and left the card's rows at no height). The strip's facts are
     /// capped and scroll inside; each list keeps two rows however little room is left.

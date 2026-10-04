@@ -2,11 +2,11 @@ import type { SessionListView } from './queries';
 
 // Touch swipe actions on a session row, laid out the way the iOS list lays them out
 // (`SessionRowActions.swift`): a rightward swipe reveals the positive actions on the leading edge,
-// a leftward one reveals Delete on the trailing edge. Pure, so a gesture's outcome is testable
-// without mounting the workspace.
+// a leftward one reveals Delete on the trailing edge, with Move and Share inside it. Pure, so a
+// gesture's outcome is testable without mounting the workspace.
 
 export type SwipeSide = 'leading' | 'trailing';
-export type SwipeAction = 'complete' | 'restore' | 'pin' | 'delete' | 'purge';
+export type SwipeAction = 'complete' | 'restore' | 'pin' | 'share' | 'move' | 'delete' | 'purge';
 
 /** Width of one revealed action button (px). */
 export const SWIPE_ACTION_WIDTH = 72;
@@ -20,12 +20,22 @@ const FULL_SWIPE_FRACTION = 0.6;
 /**
  * The actions each edge reveals, outermost first. As on iOS: a full swipe performs the first
  * leading action, Pin rides along everywhere but Trash, and Delete is never a full swipe — in Trash
- * it is the permanent purge.
+ * it is the permanent purge. Share and Move sit inside Delete, so the row reads Share · Move ·
+ * Delete from left to right (docs/session-folders-move-design.md §2); Trash has neither, since a
+ * trashed session can't be shared or filed.
  */
 export function sessionSwipeActions(view: SessionListView): Record<SwipeSide, SwipeAction[]> {
   if (view === 'trash') return { leading: ['restore'], trailing: ['purge'] };
-  return { leading: [view === 'completed' ? 'restore' : 'complete', 'pin'], trailing: ['delete'] };
+  return {
+    leading: [view === 'completed' ? 'restore' : 'complete', 'pin'],
+    trailing: ['delete', 'move', 'share'],
+  };
 }
+
+/** One edge's actions in the order they sit on screen, left to right: the leading edge's outermost
+ *  is at the row's left end, the trailing edge's at its right end. */
+export const swipeActionsOnScreen = (side: SwipeSide, actions: readonly SwipeAction[]): SwipeAction[] =>
+  side === 'leading' ? [...actions] : [...actions].reverse();
 
 export interface SwipeWidths {
   leadingWidth: number;

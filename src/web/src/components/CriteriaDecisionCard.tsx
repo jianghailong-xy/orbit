@@ -1,7 +1,8 @@
-import { useEffect, useState, type JSX } from 'react';
+import { useEffect, useRef, useState, type JSX } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert } from 'antd';
 import { CardActionButton, CardActions } from './CardAction';
+import { SHORTCUT_HINT, useApproveHotkey, useCardKeyClaim } from './CardHotkey';
 import { api } from '../api';
 import { pendingCriteriaDecisionsQuery } from '../lib/queries';
 
@@ -755,6 +756,10 @@ function ProposedChanges({ diff }: { diff: CriteriaProposalDiff }): JSX.Element 
  * loses its fill as well as its strength while it is disabled. A stale card is the state that rule
  * was written for: it keeps the live one's layout, dimmed whole (`is-stale`, see `isStale`), and
  * can do none of what the live one can.
+ *
+ * While it can be answered it also asks for the keyboard (`CardHotkey.ts`): ⌘/Ctrl + Enter is
+ * `Approve & re-seal`, the chord rather than the bare key because this press moves the ruler. A
+ * static render never holds it.
  */
 export function CriteriaDecisionCard({
   standing,
@@ -771,8 +776,12 @@ export function CriteriaDecisionCard({
   const stale = staleExplanation(standing);
   const row =
     standing.state === 'DECIDABLE' || standing.state === 'BASE_SEAL_MOVED' ? standing.row : null;
+  const anchor = useRef<HTMLDivElement>(null);
+  const keys = useCardKeyClaim(answerable && !busy, anchor);
+  useApproveHotkey(keys, () => onDecide('APPROVE'));
   return (
     <div
+      ref={anchor}
       className={`approval-card criteria-decision${isStale(standing) ? ' is-stale' : ''}`}
       id={`criteria-decision-${standing.intentId}`}
     >
@@ -844,6 +853,7 @@ export function CriteriaDecisionCard({
           onClick={() => onDecide('APPROVE')}
         >
           {APPROVE_LABEL}
+          {keys && <span className="approval-kbd">{SHORTCUT_HINT}</span>}
         </CardActionButton>
         <CardActionButton
           tone="secondary"
@@ -1224,7 +1234,9 @@ export function SessionCriteriaDecisionCard({
       // read, and only the window that pressed was handed the reply — so it is handed on before the
       // read comes back and the card gives way to that receipt.
       onDecided?.(result);
-      void qc.invalidateQueries({
+      // Returned rather than fired off, so the card stays busy until the read has caught up with
+      // the press: between the two it is still DECIDABLE, and the keys would walk back to it.
+      return qc.invalidateQueries({
         queryKey: pendingCriteriaDecisionsQuery(projectId ?? '').queryKey,
       });
     },
