@@ -101,6 +101,17 @@ export interface TransactionUnit {
  */
 export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
+    at: 'push/push.controller.ts#register',
+    shape: 'TX_RETRIED',
+    locks: 'device_token rows and unique indexes for the token and Android installation. The user FK takes FOR KEY SHARE; no user graph mutex or other business row is locked.',
+    identity: 'The globally unique token and (platform, bundle_id, environment, installation_id). One Android binding survives per installation; iOS retains its token upsert.',
+    isolation: 'SERIALIZABLE',
+    attempts: 4,
+    replay: 'Re-read the token and remove the previous installation binding inside each transaction. A rollback discards the new row and key; only the committed key is returned. A permanent unique collision is answered 409 for the client to register its current token again.',
+    effects: 'None. No push is sent during registration; the response only returns the committed binding key.',
+    answer: 'Typed 503 from the shared boundary after transient retry exhaustion. The client serializes registration and retries the current login/token.',
+  },
+  {
     at: 'runner-api/integration-job-relay.ts#applyIntegrationJobResult',
     shape: 'TX_RETRIED',
     locks: 'project_integration_job (rank 60) by primary key, then whatever the writes it implies take: session_merge_receipt (rank 60) for a landing, task_comment (rank 30\'s child, locked through its task foreign key FOR KEY SHARE) for the signal a no-commit answer leaves, project_open_item (rank 60) for a failure, the project_promotion row (rank 60) and its project_open_item card (rank 60) for a promotion\'s transition — and, when that transition takes it out of the live states (a MERGED one, or the candidate `refileCandidateBehindTheWork` retires), the OPEN failure items about it (rank 60, `closePromotionItems`) — and — for a landing that answered ALREADY_LANDED about a branch the task work did not end on — one more project_integration_job row (rank 60) for the generation that branch is owed (`queueLandingBehindTheWork`), as there are one project_promotion row (rank 60), one project_open_item card (rank 60) and one CHECK_PROMOTION row (rank 60) for the candidate a task\'s work is owed when a check found it was looking at a branch the work did not end on (`refileCandidateBehindTheWork`). Nothing above rank 60 is locked — the foreign keys of those children take `session`, `task` and `project` FOR KEY SHARE, which no status write conflicts with, and the job row itself is the only thing two runners could both want.',
@@ -1892,9 +1903,8 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "providers/shared-pools.service.ts#setRole", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "providers/shared-pools.service.ts#update", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "providers/shared-pools.service.ts#updateKey", class: "ONE_ROW_BY_KEY", statements: 1 },
-  { at: "push/push.controller.ts#register", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "push/push.controller.ts#unregister", class: "ONE_ROW_CAS", statements: 1 },
-  { at: "push/push.service.ts#deliver", class: "ONE_ROW_CAS", statements: 1, note: "Runs inside the APNs delivery loop: the HTTP call is what decides the delete, so the write is a consequence of an external action rather than the other way round. Nothing about it is transactional and nothing re-sends the notification." },
+  { at: "push/push.service.ts#deliver", class: "ONE_ROW_CAS", statements: 1, note: "Runs inside the APNs/FCM delivery loop: a dead-token response deletes only the matching registration snapshot. The HTTP call decides the delete; no database retry re-sends a notification." },
   { at: "realtime/realtime.service.ts#drainCommitRequests", class: "ONE_ROW_CAS", statements: 1 },
   { at: "realtime/realtime.service.ts#drainMergeRequests", class: "ONE_ROW_CAS", statements: 1 },
   { at: "realtime/realtime.service.ts#failAbandonedWorktreeOperations", class: "MANY_ROWS", statements: 2 },

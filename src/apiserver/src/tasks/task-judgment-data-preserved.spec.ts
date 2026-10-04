@@ -1869,7 +1869,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // replaced or dropped, so it is not another writer of the DONE fence and names none of the six
       // preserved objects. No INSERT, UPDATE or DELETE: nothing is backfilled — every stored account
       // reads as not paused, and a pause is written only when somebody asks for one.
-      '0374_account_pause'],
+      '0374_account_pause',
+      // Android push registration (0375) adds one nullable TEXT column and one unique index to
+      // device_token only. No existing token, user FK, task, project, acceptance row, fence,
+      // function or trigger is changed, and there is no DML or preserved object in its scope.
+      '0375_android_push_installation'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
