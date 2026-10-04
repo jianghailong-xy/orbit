@@ -33,6 +33,8 @@ final class ConsoleRegistry {
     @ObservationIgnored var accountDefaultPermissionMode: () -> String? = { nil }
     @ObservationIgnored var rememberDefaultPermissionMode: (String) -> Void = { _ in }
     @ObservationIgnored var accountDefaultModels: () -> [String: String] = { [:] }
+    /// Apply the app's cached session and catalog before a new console can be rendered.
+    @ObservationIgnored var seedSessionContext: (ConsoleModel) -> Void = { _ in }
 
     private var models: [String: ConsoleModel] = [:]
     /// The one session whose SSE stream is currently running (at most one), or nil when no console is
@@ -218,6 +220,7 @@ final class ConsoleRegistry {
             self.report(settled, detail)
         }
         wireAccountDefaults(model)
+        seedSessionContext(model)
         if let record = pendingRecords.removeValue(forKey: sessionID) { model.openRecord(record) }
         return model
     }
