@@ -61,7 +61,9 @@ for (const motion of ['no-preference', 'reduce']) {
     expect(connected.every((s) => s.animation === (motion === 'reduce' ? 'orbit-toast-fade' : 'orbit-toast-exit'))).toBe(true);
     expect(new Set(connected.map((s) => s.owner)).size).toBe(2);
     for (let i = 1; i < connected.length; i++) {
-      expect(connected[i].progress, 'reparenting must not restart exit').toBeGreaterThanOrEqual(connected[i - 1].progress);
+      // CSS serializes the visible opacity; raw effect progress can differ by
+      // sub-ULP rounding when a delay replaces elapsed animation time.
+      expect(connected[i].opacity, 'reparenting must not restart exit').toBeLessThanOrEqual(connected[i - 1].opacity);
     }
     expect(samples.at(-1).connected).toBe(false);
     await expect(region(page)).toHaveCount(0);
