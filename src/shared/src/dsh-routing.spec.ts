@@ -96,7 +96,10 @@ describe('P1a dsh shared routing', () => {
         );
         expect(semantics.honored).toBe(false);
         expect(semantics.unapproved).toBe('deny');
+        expect(semantics.mode).toBe(mode ?? PermissionMode.DONT_ASK);
         expect(semantics.approvalSupport).toBe('partial');
+        expect(semantics.note).toContain('does not support these permission modes');
+        expect(semantics.note).toContain('rejected until an enforced file policy is available');
         expect(semantics.shortNote).toContain('session configuration is rejected');
         expect(semantics.note).not.toMatch(/runs as Default|runs as Don't Ask/);
       }

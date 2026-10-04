@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 
-// Exact new scenario names, independent of what the test runner happens to discover.
+// Exact mandatory scenario names, independent of what the test runner happens to discover.
 const sharedNames = [
   'P1a registers a resident ACP runtime without claiming steer support',
   'P1a keeps the legacy DeepSeek preset on Claude and adds an explicit Harness API Key preset',
@@ -15,7 +15,22 @@ const sharedNames = [
   'P1a refuses unsupported Harness permission and fast-mode claims including defaults',
   'P1a preserves other built-in model and transport routes',
 ];
+export const permissionRegressionNames = [
+  'an ask-me mode is honored only where the runtime can reach a human',
+  "Don't Ask means deny everywhere a runtime can withhold, and is unenforced on Codex",
+  'Auto and Bypass are honored by supported runtimes and rejected on DeepSeek Harness',
+  'Auto is unavailable on DeepSeek Harness and only Claude gates it per model',
+  'DeepSeek Harness rejects every permission mode with partial approval and explanatory notes',
+  'Auto on a Claude model without it is disclosed, not hidden',
+  'a caveat is carried as data exactly when the mode is not honored',
+  'approval support is reported per runtime',
+  'a session payload carries the semantics of the runtime that runs it',
+  'a custom provider omits the field rather than guessing its borrowed runtime',
+  'a row with no provider information still derives lifecycle capabilities',
+  'an Antigravity session payload says what its mode means on agy, not on Claude',
+];
 const apiCases = {
+  'common/permission-semantics': permissionRegressionNames,
   'common/dsh-runtime-routing': [
     'P1a runtime identity keeps legacy DeepSeek and other engines compatible',
     'P1a dsh initializes its own session id and preserves opaque live model defaults',
@@ -67,6 +82,7 @@ const guardNames = [
   'acceptance guard rejects absent or inconsistent summaries',
   'acceptance guard rejects failed skipped and empty Vitest reports',
   'acceptance guard rejects missing executables and startup failures',
+  'acceptance guard requires every named permission regression without skips',
 ];
 
 export function assertTapResults(output, names) {
@@ -84,6 +100,7 @@ export function assertTapResults(output, names) {
 }
 
 export function assertVitestResults(report, names) {
+  assert.ok(names.length > 0, 'no mandatory scenarios declared');
   assert.equal(report.success, true, 'Vitest did not succeed');
   assert.equal(report.numTotalTests, names.length, 'missing shared scenarios');
   assert.equal(report.numPassedTests, names.length, 'shared scenarios did not all pass');

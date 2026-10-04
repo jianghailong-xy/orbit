@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# P1a acceptance: fresh builds and every named new routing scenario must run and pass.
+# P1a acceptance: fresh builds and every named routing and permission regression must run and pass.
 set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"

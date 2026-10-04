@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { assertTapResults, assertVitestResults, runLogged } from '../scripts/test-dsh-routing.mjs';
+import { assertTapResults, assertVitestResults, permissionRegressionNames, runLogged } from '../scripts/test-dsh-routing.mjs';
 
 const tap = 'TAP version 13\nok 1 - required\n1..1\n# tests 1\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n';
 
@@ -39,6 +39,7 @@ test('acceptance guard rejects failed skipped and empty Vitest reports', () => {
   assert.throws(() => assertVitestResults({ ...report, testResults: [] }, ['required']));
   assert.throws(() => assertVitestResults({ ...report, success: false }, ['required']));
   assert.throws(() => assertVitestResults(report, ['unmatched']));
+  assert.throws(() => assertVitestResults({ success: true, numTotalTests: 0, numPassedTests: 0, testResults: [] }, []));
 });
 
 test('acceptance guard rejects missing executables and startup failures', () => {
@@ -49,5 +50,17 @@ test('acceptance guard rejects missing executables and startup failures', () => 
     assert.throws(() => runLogged(process.execPath, ['-e', 'process.exit(17)'], log), /exit 17/);
   } finally {
     rmSync(scratch, { recursive: true, force: true });
+  }
+});
+
+test('acceptance guard requires every named permission regression without skips', () => {
+  const count = permissionRegressionNames.length;
+  const results = permissionRegressionNames.map((name, index) => `ok ${index + 1} - ${name}\n`);
+  const summary = `1..${count}\n# tests ${count}\n# pass ${count}\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n`;
+  const output = `TAP version 13\n${results.join('')}${summary}`;
+  assertTapResults(output, permissionRegressionNames);
+  for (const result of results) {
+    assert.throws(() => assertTapResults(output.replace(result, ''), permissionRegressionNames));
+    assert.throws(() => assertTapResults(output.replace(result, result.trimEnd() + ' # SKIP\n'), permissionRegressionNames));
   }
 });
