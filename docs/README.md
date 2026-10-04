@@ -63,6 +63,8 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 ## Architecture
 
 - [Architecture overview](architecture.md) — components, data flow, execution model, and trust boundaries.
+- [Managed runner deployment and data contract](managed-runner-design.md) — default disabled Kubernetes runners,
+  per-user Ceph RBD storage, lifecycle, fencing, client status, and isolated test prerequisites.
 - [Interactive runner sessions](interactive-claude-runner-design.md) — the original long-lived session design.
 - [Session lifecycle](session-lifecycle-design.md) — run state, lifecycle state, and task state.
 - [Realtime control-plane stream](realtime-control-plane-stream.md) — user-level SSE events and replay.

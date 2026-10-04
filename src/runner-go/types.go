@@ -708,6 +708,7 @@ type ArtifactCommand struct {
 	RequestID string `json:"requestId"`
 	SessionID string `json:"sessionId"`
 	Path      string `json:"path"`
+	Source    string `json:"source,omitempty"`
 }
 
 type ArtifactResultRequest struct {
@@ -715,6 +716,7 @@ type ArtifactResultRequest struct {
 	Status       string `json:"status"` // "uploaded" | "missing" | "error"
 	AttachmentID string `json:"attachmentId,omitempty"`
 	Message      string `json:"message,omitempty"`
+	ErrorCode    string `json:"errorCode,omitempty"`
 }
 
 // CommitResultRequest mirrors @orbit/shared SessionCommitResultRequest: the outcome of a

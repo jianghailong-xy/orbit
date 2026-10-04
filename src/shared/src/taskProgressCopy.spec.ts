@@ -19,6 +19,18 @@ import {
 const golden = JSON.parse(readFileSync(path.resolve(__dirname, 'taskProgressCopy.golden.json'), 'utf8'));
 
 describe('taskProgressCopy — golden table', () => {
+  it('retains optional workflow transcript linkage without requiring it from older runners', () => {
+    const progress = parseTaskProgress({
+      toolUseId: 'workflow',
+      agents: [
+        { index: 1, label: 'reader', transcriptKey: 'workflow:workflow-agent:a' },
+        { index: 2, label: 'legacy' },
+        { index: 3, label: 'invalid', transcriptKey: 12 },
+      ],
+    })!;
+    expect(progress.agents.map((agent) => agent.transcriptKey)).toEqual(['workflow:workflow-agent:a', undefined, undefined]);
+  });
+
   for (const c of golden.cases) {
     it(c.name, () => {
       const p = parseTaskProgress(c.progress)!;
