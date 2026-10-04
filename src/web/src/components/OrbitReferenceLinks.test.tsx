@@ -172,3 +172,6 @@ describe('orbit-* references outside the transcript open their page in the app',
     });
   });
 });
+
+// The card's content/decision contract is tested inline; real dialogs are covered in ReviewCard.test.tsx.
+vi.mock('./ReviewCard', () => import('../test/inlineReviewCard'));
