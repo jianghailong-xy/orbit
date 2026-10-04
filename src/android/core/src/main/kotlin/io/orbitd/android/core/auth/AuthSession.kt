@@ -1,0 +1,276 @@
+package io.orbitd.android.core.auth
+
+import io.orbitd.android.core.net.ApiRequest
+import io.orbitd.android.core.net.ApiResponse
+import io.orbitd.android.core.net.HttpMethod
+import io.orbitd.android.core.net.HttpRequest
+import io.orbitd.android.core.net.HttpTransport
+import io.orbitd.android.core.net.ServerAddress
+import io.orbitd.android.core.protocol.LoginRequest
+import io.orbitd.android.core.protocol.LoginResponse
+import io.orbitd.android.core.protocol.ProtocolException
+import io.orbitd.android.core.protocol.RefreshRequest
+import io.orbitd.android.core.protocol.User
+import io.orbitd.android.core.protocol.Wire
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.encodeToString
+
+/** Identity, not value equality: logging in again as the same user still invalidates old work. */
+class SessionHandle internal constructor(val account: AccountKey)
+class SessionChanged : CancellationException("The login session changed")
+enum class SignOutReason { USER, SWITCHED, EXPIRED, STORAGE }
+
+sealed interface AuthState {
+    data object Restoring : AuthState
+    data class SignedOut(val server: ServerAddress?, val reason: SignOutReason? = null) : AuthState
+    data class SigningIn(val server: ServerAddress) : AuthState
+    data class SignedIn(val handle: SessionHandle, val user: User) : AuthState
+}
+
+/** Shared by directory, session and business pages; capture a handle before starting work. */
+interface OrbitApi {
+    suspend fun request(handle: SessionHandle, request: ApiRequest): ApiResponse
+}
+
+class AuthSession(
+    private val transport: HttpTransport,
+    private val credentials: CredentialStore,
+    private val instances: InstanceStore,
+    private val data: SessionDataStore,
+    private val clientVersion: String,
+    private val allowLoopbackHttp: Boolean = false,
+    private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
+) : OrbitApi {
+    private class Epoch(val server: ServerAddress, dispatcher: CoroutineDispatcher) {
+        val job = SupervisorJob()
+        val scope = CoroutineScope(job + dispatcher)
+        var handle: SessionHandle? = null
+        var tokens: LoginResponse? = null
+        var version = 0L
+        var refreshing: Pair<Long, Deferred<LoginResponse>>? = null
+    }
+
+    private val lock = Mutex()
+    private val revocations = CoroutineScope(SupervisorJob() + dispatcher)
+    private val mutableState = MutableStateFlow<AuthState>(AuthState.Restoring)
+    val state: StateFlow<AuthState> = mutableState.asStateFlow()
+    private var epoch: Epoch? = null
+    private var initialized = false
+
+    init { require(clientVersion.matches(Regex("[A-Za-z0-9.+-]{1,32}"))) }
+
+    suspend fun restore() = withContext(NonCancellable) {
+        lock.withLock {
+            if (initialized) return@withLock
+            initialized = true
+            var server: ServerAddress? = null
+            try {
+                server = instances.load()?.let { ServerAddress.parse(it, allowLoopbackHttp) }
+                val stored = credentials.load()
+                if (stored == null) {
+                    data.clearAll()
+                    mutableState.value = AuthState.SignedOut(server)
+                } else {
+                    val savedServer = ServerAddress.parse(stored.server, allowLoopbackHttp)
+                    if (server != null && server != savedServer) throw SecureStorageException()
+                    server = savedServer
+                    instances.save(savedServer.value)
+                    val next = Epoch(savedServer, dispatcher)
+                    epoch = next
+                    activateLocked(next, stored.credentials)
+                }
+            } catch (_: Exception) {
+                retireLocked(server, SignOutReason.STORAGE)
+            }
+        }
+    }
+
+    suspend fun selectServer(server: ServerAddress) = withContext(NonCancellable) {
+        lock.withLock {
+            initialized = true
+            retireLocked(server, SignOutReason.SWITCHED)
+            instances.save(server.value)
+        }
+    }
+
+    /** Also switches accounts: old requests/data are invalidated before the login leaves the device. */
+    suspend fun login(server: ServerAddress, email: String, password: String): SessionHandle {
+        val next = withContext(NonCancellable) {
+            lock.withLock {
+                initialized = true
+                retireLocked(server, SignOutReason.SWITCHED)
+                instances.save(server.value)
+                Epoch(server, dispatcher).also {
+                    epoch = it
+                    mutableState.value = AuthState.SigningIn(server)
+                }
+            }
+        }
+        try {
+            return owned(next) {
+                val response = sendPublic(next.server, "login", Wire.json.encodeToString(LoginRequest(email, password)))
+                val tokens = Wire.decode(response.requireSuccess().body, LoginResponse.serializer())
+                lock.withLock {
+                    requireCurrent(next)
+                    credentials.save(StoredSession(server.value, tokens))
+                    activateLocked(next, tokens)
+                }
+            }
+        } catch (error: Exception) {
+            withContext(NonCancellable) {
+                lock.withLock {
+                    if (epoch === next) retireLocked(server, if (error is SecureStorageException) SignOutReason.STORAGE else null)
+                }
+            }
+            throw error
+        }
+    }
+
+    suspend fun logout() = withContext(NonCancellable) {
+        lock.withLock {
+            initialized = true
+            retireLocked(currentServer(), SignOutReason.USER)
+        }
+    }
+
+    override suspend fun request(handle: SessionHandle, request: ApiRequest): ApiResponse {
+        val current = lock.withLock { current(handle) }
+        return owned(current) {
+            val (first, version) = lock.withLock {
+                requireCurrent(current)
+                current.tokens!! to current.version
+            }
+            var response = transport.execute(HttpRequest(current.server, request, clientVersion, first.accessToken))
+            lock.withLock { requireCurrent(current) }
+            if (response.status == 401) {
+                val fresh = refresh(current, version)
+                lock.withLock { requireCurrent(current) }
+                response = transport.execute(HttpRequest(current.server, request, clientVersion, fresh.accessToken))
+                withContext(NonCancellable) {
+                    lock.withLock {
+                        requireCurrent(current)
+                        if (response.status == 401) {
+                            retireLocked(current.server, SignOutReason.EXPIRED)
+                            throw SessionChanged()
+                        }
+                    }
+                }
+            }
+            lock.withLock { requireCurrent(current) }
+            response.requireSuccess()
+        }
+    }
+
+    suspend fun readData(handle: SessionHandle, kind: DataKind, key: String): ByteArray? = lock.withLock {
+        current(handle)
+        data.read(handle.account, kind, key)
+    }
+
+    suspend fun writeData(handle: SessionHandle, kind: DataKind, key: String, bytes: ByteArray) = lock.withLock {
+        current(handle)
+        data.write(handle.account, kind, key, bytes)
+    }
+
+    private suspend fun refresh(current: Epoch, rejectedVersion: Long): LoginResponse {
+        val flight = lock.withLock {
+            requireCurrent(current)
+            // A delayed 401 for a previous access token reuses the already committed rotation.
+            if (current.version != rejectedVersion) return current.tokens!!
+            current.refreshing?.takeIf { it.first == rejectedVersion }?.second
+                ?: current.scope.async(start = CoroutineStart.LAZY) { rotate(current) }.also {
+                    current.refreshing = rejectedVersion to it
+                    it.start()
+                }
+        }
+        // This flight belongs to the session, not to any one waiting page/request.
+        return flight.await()
+    }
+
+    private suspend fun rotate(current: Epoch): LoginResponse {
+        try {
+            val old = lock.withLock { requireCurrent(current); current.tokens!! }
+            val response = sendPublic(current.server, "refresh", Wire.json.encodeToString(RefreshRequest(old.refreshToken)))
+            val fresh = Wire.decode(response.requireSuccess().body, LoginResponse.serializer())
+            if (fresh.user.id != old.user.id || fresh.refreshToken == old.refreshToken) throw ProtocolException()
+            return lock.withLock {
+                requireCurrent(current)
+                credentials.save(StoredSession(current.server.value, fresh))
+                current.tokens = fresh
+                current.version++
+                mutableState.value = AuthState.SignedIn(current.handle!!, fresh.user)
+                fresh
+            }
+        } catch (error: Exception) {
+            withContext(NonCancellable) {
+                lock.withLock {
+                    if (epoch === current) retireLocked(current.server, SignOutReason.EXPIRED)
+                }
+            }
+            // Even a lost refresh response can have consumed the token: never replay it.
+            throw error
+        }
+    }
+
+    private suspend fun sendPublic(server: ServerAddress, operation: String, body: String): ApiResponse =
+        transport.execute(HttpRequest(server, ApiRequest(listOf("auth", operation), HttpMethod.POST,
+            body = body.encodeToByteArray()), clientVersion))
+
+    private fun activateLocked(current: Epoch, tokens: LoginResponse): SessionHandle {
+        val handle = SessionHandle(AccountKey(current.server.value, tokens.user.id))
+        current.tokens = tokens
+        current.handle = handle
+        mutableState.value = AuthState.SignedIn(handle, tokens.user)
+        return handle
+    }
+
+    /** Runs under the lock with cancellation masked, so a half-cleared session cannot be restored. */
+    private suspend fun retireLocked(server: ServerAddress?, reason: SignOutReason?) {
+        val old = epoch
+        epoch = null
+        mutableState.value = AuthState.SignedOut(server, reason)
+        old?.job?.cancel(SessionChanged())
+        val oldRefresh = old?.tokens?.refreshToken
+        old?.tokens = null
+        old?.refreshing = null
+        if (old != null && oldRefresh != null) revocations.launch {
+            withTimeoutOrNull(5_000) {
+                try { sendPublic(old.server, "logout", Wire.json.encodeToString(RefreshRequest(oldRefresh))) }
+                catch (_: Exception) { /* Local logout is authoritative when offline. */ }
+            }
+        }
+        try { credentials.clear() } finally { data.clearAll() }
+    }
+
+    private fun currentServer(): ServerAddress? = epoch?.server ?: when (val value = state.value) {
+        is AuthState.SignedOut -> value.server
+        else -> null
+    }
+
+    private fun current(handle: SessionHandle): Epoch = epoch?.takeIf { it.handle === handle }
+        ?: throw SessionChanged()
+
+    private fun requireCurrent(current: Epoch) {
+        if (epoch !== current) throw SessionChanged()
+    }
+
+    private suspend fun <T> owned(current: Epoch, block: suspend () -> T): T {
+        val work = current.scope.async { block() }
+        try { return work.await() } finally { work.cancel() }
+    }
+}
