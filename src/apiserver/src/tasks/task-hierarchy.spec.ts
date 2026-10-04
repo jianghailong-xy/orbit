@@ -52,6 +52,9 @@ function serviceOn(models: Record<string, unknown>, calls: string[] = []) {
     // "nothing checks it" and stays out of `calls`. Answered here rather than by the default row
     // below, which would read as a check whose title and verdict are missing.
     if (sql.includes('check_task')) return [];
+    // The detail's LAND_TASK view is another read without locks or hierarchy admission. These
+    // fixtures have no landing attempts; keep this hydration separate from the write ordering.
+    if (sql.includes('AS "jobGeneration"') && sql.includes('AS "isCode"')) return [];
     // Status writes perform a post-commit completeness read for their realtime invalidation. Keep
     // that distinct from the hierarchy admission/locking statements these tests pin down.
     if (sql.includes('changed(id) AS') && sql.includes('family_probe(id) AS')) {

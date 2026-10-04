@@ -2880,6 +2880,7 @@ export class ProjectsService {
           openItemId: null,
           jobId: null,
           checksRunningForMs: null,
+          landTask: null,
         },
         childCount: _count.children,
         // Never spread-with-fallback into nothing: a row that somehow missed the graph pass still
