@@ -33,15 +33,14 @@ import {
 import { formatResetTime } from '../lib/providerPools';
 import { runnersQuery } from '../lib/queries';
 import { ago, engineVersionNumber, updateNoteOf } from '../lib/runnerEngines';
-import { ENGINE_PRESET } from '../lib/sessionProviderChoices';
+import { ENGINE_PRESET, ENGINE_SLUGS } from '../lib/sessionProviderChoices';
 import { useToast } from '../lib/toast';
 import { ProviderTile } from './ProviderGallery';
 import { ENGINE_NAME, RunnerSignIn } from './RunnerSignIn';
 import type { Runner } from './TasksSidePanel';
 
-// Every engine a runner can sign into, in display order. Derived from ENGINE_NAME — a
-// `Record<LoginEngine, …>` — so adding another login can't silently skip this page. Antigravity
-// has an installation row of its own and never contributes to the signed-in summaries.
+// Login engines contribute to signed-in summaries. Antigravity has an installation row of its
+// own and never contributes to those summaries.
 const ENGINES = Object.keys(ENGINE_NAME) as LoginEngine[];
 
 // Which runner cards the user opened. Cards start folded — three engines per machine adds up
@@ -973,9 +972,9 @@ function AntigravityRow({ runner, focused }: { runner: Runner; focused?: boolean
   return (
     <div className={`re-row${focused ? ' focused' : ''}`} ref={row} data-engine="antigravity">
       <div className="re-id">
-        <ProviderTile slug="antigravity" label="Antigravity CLI" size={28} />
+        <ProviderTile slug="antigravity" label="Antigravity" size={28} />
         <div style={{ minWidth: 0 }}>
-          <div className="re-name">Antigravity CLI</div>
+          <div className="re-name">Antigravity</div>
           <div className="re-meta" style={{ whiteSpace: 'normal' }}>{meta}</div>
         </div>
       </div>
@@ -1061,7 +1060,10 @@ function RunnerEngineCard({
         </Link>
       </div>
       {collapsed ? null : engines ? (
-        ENGINES.map((engine) => {
+        ENGINE_SLUGS.map((engine) => {
+          if (engine === 'antigravity') {
+            return <AntigravityRow key={engine} runner={runner} focused={focusEngine === engine} />;
+          }
           const health = engines.find((e) => e.engine === engine);
           const accounts = accountRowsOf(engine, health, runner.install);
           // Read across the whole group, since a repeat is a fact about two of its rows.
@@ -1102,12 +1104,14 @@ function RunnerEngineCard({
       ) : (
         // Never three rows of "Unknown": this runner hasn't told us anything, which is a
         // different fact from "nothing is installed" and has a different fix.
-        <div className="re-unreported">
-          This runner hasn&apos;t reported its engines yet. Update it to the latest version — an
-          older runner can&apos;t be signed in or installed from here.
-        </div>
+        <>
+          <div className="re-unreported">
+            This runner hasn&apos;t reported its engines yet. Update it to the latest version — an
+            older runner can&apos;t be signed in or installed from here.
+          </div>
+          <AntigravityRow runner={runner} focused={focusEngine === 'antigravity'} />
+        </>
       )}
-      {!collapsed && <AntigravityRow runner={runner} focused={focusEngine === 'antigravity'} />}
     </div>
   );
 }

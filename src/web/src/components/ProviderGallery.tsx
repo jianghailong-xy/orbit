@@ -4,8 +4,9 @@ import { PROVIDER_PRESETS, type ProviderBrand, type RunnerEngineHealth } from '@
 import { api } from '../api';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
+import antigravityLogo from '../assets/antigravity-color.svg';
 import { runnersQuery } from '../lib/queries';
-import { ENGINE_PRESET, runtimeSummary } from '../lib/sessionProviderChoices';
+import { ENGINE_PRESET, providerDisplayLabel, runtimeSummary } from '../lib/sessionProviderChoices';
 
 /** Just the part of a runner this gallery reads: which engines it is signed into, and its name. */
 interface SignedInRunner {
@@ -22,8 +23,8 @@ export function brandFor(slug: string, label: string): ProviderBrand {
   return { mono: (label.trim()[0] ?? '?').toUpperCase(), from: '#9aa0a8', to: '#6b7178' };
 }
 
-// The square logo tile: the vendor's brand glyph (white) over its brand gradient — falling back to
-// a monogram when no glyph is known, or a dashed neutral "+" tile for "Custom".
+// Antigravity uses its official full-color artwork; other vendors use a white glyph over their
+// brand gradient, or a monogram when no glyph is known.
 export function ProviderTile({
   slug,
   label,
@@ -56,6 +57,7 @@ export function ProviderTile({
   }
   const brand = brandFor(slug, label);
   const glyph = PROVIDER_GLYPHS[slug];
+  const fullColor = slug === 'antigravity' || slug === 'gemini';
   return (
     <div
       className="provider-tile"
@@ -63,10 +65,13 @@ export function ProviderTile({
         width: size,
         height: size,
         borderRadius: radius,
-        background: `linear-gradient(135deg, ${brand.from}, ${brand.to})`,
+        background: fullColor ? '#fff' : `linear-gradient(135deg, ${brand.from}, ${brand.to})`,
+        border: fullColor ? '1px solid #e5e7eb' : undefined,
       }}
     >
-      {glyph ? (
+      {fullColor ? (
+        <img src={antigravityLogo} alt="" width={Math.round(size * 0.75)} height={Math.round(size * 0.75)} />
+      ) : glyph ? (
         <svg
           viewBox="0 0 24 24"
           width={Math.round(size * 0.56)}
@@ -129,7 +134,7 @@ export function ProviderGallery() {
             {/* The check rides on the logo's corner rather than the row, so marking a card costs
                 no width — these names already fill it. */}
             <span className="pc-logo">
-              <ProviderTile slug={p.slug} label={p.label} />
+              <ProviderTile slug={p.slug} label={providerDisplayLabel(p.label, p.slug)} />
               {count > 0 && (
                 <span className="pc-check" aria-hidden="true">
                   ✓
@@ -137,7 +142,7 @@ export function ProviderGallery() {
               )}
             </span>
             <div style={{ minWidth: 0 }}>
-              <div className="pc-name">{p.label}</div>
+              <div className="pc-name">{providerDisplayLabel(p.label, p.slug)}</div>
               <div className={`pc-sub${!count && signedInOn.has(p.slug) ? ' pc-local' : ''}`}>
                 {count === 0
                   ? (signedInOn.get(p.slug)

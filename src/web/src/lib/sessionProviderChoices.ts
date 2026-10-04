@@ -27,8 +27,8 @@ import {
 export const ENGINE_SLUGS = [
   AgentProvider.CLAUDE,
   AgentProvider.CODEX,
-  AgentProvider.KIMI,
   AgentProvider.ANTIGRAVITY,
+  AgentProvider.KIMI,
 ] as const;
 
 export type ProviderChoiceKind = 'engine' | 'byok' | 'pool';
@@ -114,6 +114,10 @@ const ENGINE_LABELS: Record<string, string> = {
   [AgentProvider.ANTIGRAVITY]: 'Antigravity',
 };
 
+/** Use the runtime's name for the Gemini preset while preserving names the user gave their keys. */
+export const providerDisplayLabel = (label: string, presetSlug?: string | null): string =>
+  presetSlug === 'gemini' && label === 'Gemini' ? 'Antigravity' : label;
+
 /** One line about a provider's endpoint, for the gallery card and the connect form's identity bar.
  *  Claude and Codex borrow a CLI to speak a dialect the vendor exposes for it, so the dialect is
  *  the useful fact. Kimi and Antigravity are a CLI on its vendor's own API, where it isn't. */
@@ -135,9 +139,7 @@ export const ENGINE_PRESET: Record<string, string> = {
   [AgentProvider.KIMI]: 'moonshot',
 };
 
-// An engine whose vendor ships no preset carrying its mark. Antigravity is Google's, and Google's
-// preset (Gemini) now runs on it, but that preset is named for the models a Gemini key buys while
-// the engine is the CLI that drives them — two products, so two logos.
+// Antigravity's environment key and configured Gemini keys share one runtime identity.
 const ENGINE_BRAND: Record<string, { brand: ProviderBrand; glyphKey: string }> = {
   [AgentProvider.ANTIGRAVITY]: {
     brand: { mono: 'A', from: '#3186ff', to: '#00b95c' },
@@ -158,6 +160,7 @@ export function brandForProvider(
   label: string,
   presetSlug?: string | null,
 ): { brand: ProviderBrand; glyphKey?: string } {
+  if ((presetSlug ?? slug) === 'gemini') return ENGINE_BRAND[AgentProvider.ANTIGRAVITY];
   const presetKey = presetSlug ?? ENGINE_PRESET[slug];
   const preset = presetKey ? PROVIDER_PRESETS.find((p) => p.slug === presetKey) : undefined;
   if (preset) return { brand: preset.brand, glyphKey: preset.slug };
@@ -212,8 +215,8 @@ function antigravityBlocker(state?: RunnerAntigravityState, health?: RunnerEngin
 }
 
 /**
- * The picker's contents: the engines, then the configured providers in the order the API
- * returned them.
+ * The picker's contents: the engines, with Antigravity keys beside their engine, then the other
+ * configured providers in the order the API returned them.
  *
  * Engines carry the health the runner last reported, because an engine choice is a claim about
  * someone else's machine. Not installed there, or installed but signed out → listed with the
@@ -321,16 +324,21 @@ export function providerChoices(
       const blocker = runtime === AgentProvider.ANTIGRAVITY ? antigravityBlocker(antigravity, health) : byokBlocker(health);
       return {
         slug: p.slug,
-        label: p.label,
+        label: providerDisplayLabel(p.label, p.presetSlug),
         kind: 'byok' as const,
-        ...(runtime === AgentProvider.ANTIGRAVITY ? { labelDetail: 'Antigravity CLI' } : {}),
+        ...(runtime === AgentProvider.ANTIGRAVITY ? { labelDetail: 'API key' } : {}),
         ...brandForProvider(p.slug, p.label, p.presetSlug),
         modelLabel: defaultModelLabel(p.slug, modelCatalog, configured, runtimeDefaultModels),
         ...(blocker ? { unavailable: blocker, fixEngine: runtime } : {}),
         ...(pooled.has(p.slug) ? { inPool: true } : {}),
       };
     });
-  return [...engines, ...accountPools, ...byok];
+  const antigravityKeys = byok.filter((choice) => runtimeForProvider(choice.slug, configured) === AgentProvider.ANTIGRAVITY);
+  return [
+    ...engines.flatMap((choice) => choice.slug === AgentProvider.KIMI ? [...antigravityKeys, choice] : [choice]),
+    ...accountPools,
+    ...byok.filter((choice) => !antigravityKeys.includes(choice)),
+  ];
 }
 
 /**

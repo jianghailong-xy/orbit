@@ -9,6 +9,7 @@ import { routeId } from '../lib/idCodec';
 import { providersQuery, runnersQuery } from '../lib/queries';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { poolEligibleCount, poolRefusals, providerPoolsQuery } from '../lib/providerPools';
+import { providerDisplayLabel } from '../lib/sessionProviderChoices';
 import { ownPoolWithAccess, poolAccessQuery, sharedPoolAsProviderPool, sharedPoolsQuery } from '../lib/sharedPools';
 import { AccountPools, PoolHint } from '../components/AccountPools';
 import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
@@ -84,9 +85,9 @@ export function ProvidersPage() {
       // vendor: its logo (by preset, not by the row's identifier) and the name it was given.
       render: (_, p) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-          <ProviderTile slug={p.presetSlug ?? p.slug} label={p.label} size={32} />
+          <ProviderTile slug={p.presetSlug ?? p.slug} label={providerDisplayLabel(p.label, p.presetSlug)} size={32} />
           <div style={{ minWidth: 0 }}>
-            <div className="prov-cell-name">{p.label}</div>
+            <div className="prov-cell-name">{providerDisplayLabel(p.label, p.presetSlug)}</div>
             {p.runtime === 'antigravity' && (
               <div className="prov-runtime">
                 <div>Runs on the Antigravity CLI</div>
@@ -156,7 +157,7 @@ export function ProvidersPage() {
               size="small"
               type="text"
               icon={<EditOutlined />}
-              aria-label={`Edit ${p.label}`}
+              aria-label={`Edit ${providerDisplayLabel(p.label, p.presetSlug)}`}
               onClick={() => navigate(`/providers/${p.id}`)}
             />
           ) : (
@@ -164,9 +165,9 @@ export function ProvidersPage() {
               Edit
             </Button>
           )}
-          <Popconfirm title={`Delete ${p.label}?`} onConfirm={() => deleteMut.mutate(p.id)}>
+          <Popconfirm title={`Delete ${providerDisplayLabel(p.label, p.presetSlug)}?`} onConfirm={() => deleteMut.mutate(p.id)}>
             {isMobile ? (
-              <Button size="small" type="text" danger icon={<DeleteOutlined />} aria-label={`Delete ${p.label}`} />
+              <Button size="small" type="text" danger icon={<DeleteOutlined />} aria-label={`Delete ${providerDisplayLabel(p.label, p.presetSlug)}`} />
             ) : (
               <Button size="small" danger>
                 Delete
