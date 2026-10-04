@@ -398,14 +398,19 @@ class ComposerDeviceTest {
         return find(systemRoot())
     }
     private fun selectFilesRoot(name:String) {
-        systemClick("Show roots")
+        fun visibleRoot()=systemFind(refresh=true) { node ->
+            val bounds=android.graphics.Rect();node.getBoundsInScreen(bounds)
+            node.isVisibleToUser && !bounds.isEmpty && node.text?.toString()?.equals(name,true)==true &&
+                generateSequence(node.parent) { it.parent }.any { it.viewIdResourceName?.endsWith(":id/roots_list")==true }
+        }
+        if (visibleRoot()==null) systemClick("Show roots",touch=true)
+        instrument.uiAutomation.waitForIdle(500,5000)
         var root:AccessibilityNodeInfo?=null
         compose.waitUntil(5000) {
-            root=systemFind { node -> node.text?.toString()?.equals(name,true)==true &&
-                generateSequence(node.parent) { it.parent }.any { it.viewIdResourceName?.endsWith(":id/roots_list")==true } }
+            root=visibleRoot()
             root!=null
         }
-        clickNode(root!!)
+        clickNode(root!!,touch=true)
     }
     private fun systemClick(text:String,touch:Boolean=false) {
         var found:AccessibilityNodeInfo?=null
