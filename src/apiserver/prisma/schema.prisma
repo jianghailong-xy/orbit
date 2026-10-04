@@ -310,7 +310,7 @@ model User {
   taskLists        TaskList[] // task lists this user owns (tenant scope)
   projects         Project[] // projects this user owns (tenant scope)
   attachments      Attachment[] // blobs this user uploaded (tenant scope)
-  deviceTokens     DeviceToken[] // registered iOS devices for APNs push
+  deviceTokens     DeviceToken[] // APNs (iOS) and FCM (Android) registrations
   modelProviders   ModelProvider[] // personal (BYOK) model providers
   providerPools    ProviderPool[] // account pools of those providers, each dispatchable by its own slug
   poolPlaces       ProviderPoolPerson[] // the shared pools this user is in (migration 0321)
@@ -369,10 +369,9 @@ model RefreshToken {
   @@map("refresh_token")
 }
 
-/// An iOS device's APNs token, owner-scoped, so the server can push "needs your reply" alerts to a
-/// user's phones/iPads. One row per device (`token` unique) — re-registering upserts, and a token
-/// handed to a different user re-points its `userId`. `environment` selects the APNs host
-/// (production for App Store/TestFlight, sandbox for dev builds). Registered via POST /api/push/register.
+/// Owner-scoped APNs/FCM registration. Token uniqueness is global; Android also replaces the
+/// installation's previous token atomically. Legacy iOS rows keep a NULL installation identity.
+/// `environment` selects the APNs host; Android accepts only production (FCM has no APNs sandbox).
 model DeviceToken {
   id          String   @id @default(uuid(7)) @db.Uuid
   userId      String   @map("user_id") @db.Uuid
@@ -381,9 +380,11 @@ model DeviceToken {
   platform    String   @default("ios")
   environment String   @default("production")
   bundleId    String   @map("bundle_id")
+  installationId String? @map("installation_id") // Android install UUID, stable across token/account changes
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
+  @@unique([platform, bundleId, environment, installationId], map: "device_token_installation_key")
   @@index([userId])
   @@map("device_token")
 }

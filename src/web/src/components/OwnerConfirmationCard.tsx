@@ -21,6 +21,7 @@ import { markdownToPlainLines } from '../lib/markdownText';
 import { ownerConfirmationQuery } from '../lib/queries';
 import { CardActionButton, CardActions } from './CardAction';
 import { ENTER_HINT, useDecisionCardKeys } from './CardHotkey';
+import { ReviewCard } from './ReviewCard';
 import { PROVENANCE_LABEL } from './CriteriaDecisionCard';
 import { revealOwnerConfirmationCard } from './DecisionRail';
 import { decisionReceiptTime } from './EvidenceDecisionCard';
@@ -656,14 +657,16 @@ export function OwnerConfirmationCard({
               description={error.message}
             />
           ) : null}
-          <OwnerConfirmationActions
-            disabled={busy}
-            confirmDisabled={!reviewAnswersComplete(waiting.review, choices)}
-            keys={keys}
-            onConfirm={() => onDecide('CONFIRM')}
-            onSendBack={onSendBack}
-          />
         </section>
+      </div>
+      <div className="owner-confirmation-footer">
+        <OwnerConfirmationActions
+          disabled={busy}
+          confirmDisabled={!reviewAnswersComplete(waiting.review, choices)}
+          keys={keys}
+          onConfirm={() => onDecide('CONFIRM')}
+          onSendBack={onSendBack}
+        />
       </div>
     </div>
   );
@@ -688,6 +691,7 @@ export function SessionOwnerConfirmationCard({
    *  title, and the send that follows presses the door. */
   onSendBack: (waiting: OwnerConfirmationWaiting, title: string) => void;
 }): JSX.Element | null {
+  const [reviewOpen, setReviewOpen] = useState(false);
   const qc = useQueryClient();
   const location = useLocation();
   const read = useQuery({
@@ -747,18 +751,22 @@ export function SessionOwnerConfirmationCard({
   };
   const chatAbout = (): void => {
     if (!read.data || !waiting) return;
+    setReviewOpen(false);
     onSendBack(waiting, read.data.title);
   };
   const asking = waiting !== null && read.data !== undefined && !answer.isPending;
   const anchor = useRef<HTMLDivElement>(null);
   const keys = useDecisionCardKeys({
-    confirmEnabled: asking && answered,
+    confirmEnabled: reviewOpen && asking && answered,
     onConfirm: () => decide('CONFIRM'),
     anchor,
   });
 
   if (!taskId || !read.data || !waiting) return null;
   return (
+    <ReviewCard id="owner-confirmation-preview" title={OWNER_CONFIRMATION_HEADING} summary={read.data.title}
+      meta="Review the report and what confirming changes"
+      open={reviewOpen} onOpenChange={setReviewOpen}>
     <OwnerConfirmationCard
       ref={anchor}
       key={waiting.requestId}
@@ -772,6 +780,7 @@ export function SessionOwnerConfirmationCard({
       onDecide={decide}
       onSendBack={chatAbout}
     />
+    </ReviewCard>
   );
 }
 

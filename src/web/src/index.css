@@ -13572,6 +13572,18 @@ button.chat-jump-start:hover {
 /* ============================================================================
    Provider onboarding — logo gallery + guided add flow (ProvidersPage).
    ========================================================================== */
+.prov-page-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px 12px;
+}
+.prov-page-sub {
+  flex-basis: 100%;
+  color: var(--text-3);
+  font-size: 12px;
+}
 .provider-gallery {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -13807,17 +13819,21 @@ button.chat-jump-start:hover {
 }
 .re-sec-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 10px;
   margin-bottom: 10px;
 }
 .re-sec-head h3 {
+  flex: none;
   margin: 0;
   font-size: 14px;
   font-weight: 650;
   color: var(--text-1);
 }
 .re-sec-sub {
+  order: 1;
+  flex-basis: 100%;
   font-size: 12px;
   color: var(--text-3);
 }
@@ -14100,9 +14116,10 @@ button.chat-jump-start:hover {
 }
 @media (max-width: 700px) {
   /* Keep the name and its actions together. Status and quota get their own lines so Add account
-     and Sign in can both remain visible without squeezing the account's state. */
+     and Sign in can both remain visible without squeezing the account's state. Reserve room for
+     the engine name and let the action column shrink so its buttons can wrap on a small phone. */
   .re-runner-card .re-row {
-    grid-template-columns: minmax(0, 1fr) max-content;
+    grid-template-columns: minmax(112px, 1fr) minmax(0, max-content);
     gap: 8px 10px;
   }
   .re-runner-card .re-row > .re-act {
@@ -16455,18 +16472,26 @@ button.chat-jump-start:hover {
    the page reads as stopped. Full width above the cells, with the same hairline under it that
    separates the cells from each other.
 
-   The ring is the Integrating cell's own mark, and it wears that cell's brand blue while the
-   combined-tree checks run. QUEUED is the third label's grey instead: nothing is being computed, the
-   job is waiting its turn, and a row that spun through that would be reporting work that is not
-   happening. The words `checking` and `queued` say both states without colour or motion — which is
-   what lets the two decorative channels be dropped under `prefers-reduced-motion` below. */
+   The ring uses brand blue while a fresh read reports a running job. Queued jobs and unavailable
+   updates remain grey and still. The state words carry the meaning without colour or motion,
+   including under `prefers-reduced-motion` below. */
 .project-landing {
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 13.5px;
+}
+.project-landing-heading {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--border-subtle);
-  font-size: 13.5px;
+}
+.project-landing-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-3);
 }
 .project-landing-ring {
   display: inline-flex;
@@ -16485,14 +16510,14 @@ button.chat-jump-start:hover {
 .project-landing-running .project-landing-word {
   color: var(--brand);
 }
-/* The row's flexible middle: the task's title, or "N jobs". It truncates rather than wrapping —
-   one row, always the same height — and it is what keeps the state and the clock right-aligned. */
+/* The task has its own line so the phase and elapsed clock stay readable on a phone. */
 .project-landing-what {
-  flex: 1;
-  min-width: 0;
+  margin-top: 8px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
   color: var(--text-1);
 }
 .project-landing-state,
@@ -16509,6 +16534,26 @@ button.chat-jump-start:hover {
 .project-landing-running .project-landing-clock {
   color: var(--brand);
 }
+.project-landing-state {
+  margin-left: auto;
+}
+.project-manual-task {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  margin-top: 10px;
+  color: var(--text-2);
+}
+.project-manual-open {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--bg-hover-strong);
+  font-weight: 600;
+}
 @keyframes project-landing-spin {
   to {
     transform: rotate(360deg);
@@ -16521,6 +16566,14 @@ button.chat-jump-start:hover {
 }
 .project-work-overview > header {
   flex-wrap: wrap;
+}
+.project-overview-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@media (max-width: 640px) {
+  .project-overview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 @media (max-width: 920px) {
   .project-command-center {
@@ -20835,6 +20888,32 @@ a.wkctx-title:hover { text-decoration: underline; }
   gap: 8px;
   padding: 2px 0;
   font-size: 12px;
+}
+button.agent-progress-agent {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+button.agent-progress-agent:hover {
+  background: var(--bg-hover);
+}
+.agent-progress-caret {
+  flex: none;
+  font-size: 10px;
+  color: var(--text-3);
+}
+.agent-progress-transcript {
+  margin: 4px 0 8px 8px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border-subtle);
+}
+.chat-workflow-source > summary {
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--text-3);
+  cursor: pointer;
 }
 .agent-progress-label {
   flex: none;

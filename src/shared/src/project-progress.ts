@@ -118,6 +118,18 @@ export interface ProjectIntegrationInFlight<Instant = string> {
   state: 'RUNNING' | 'QUEUED';
   /** What "for how long" counts from: the claim for a running job, the enqueue for a queued one. */
   startedAt: Instant;
+  /** Last report from the runner; absent on older servers and null before a claim. */
+  heartbeatAt?: Instant | null;
+}
+
+/** The integration claim's existing lease window, also used to stop stale activity indicators. */
+export const INTEGRATION_CLAIM_STALE_MS = 10 * 60 * 1_000;
+
+/** All ready OPEN tasks with neither automatic dispatch nor a schedule, and one task to open. */
+export interface ProjectManualReady {
+  count: number;
+  taskId: string;
+  title: string;
 }
 
 /**

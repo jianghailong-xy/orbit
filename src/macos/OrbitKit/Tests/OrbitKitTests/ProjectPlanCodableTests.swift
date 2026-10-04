@@ -8,6 +8,14 @@ final class ProjectPlanCodableTests: XCTestCase {
         try JSONDecoder().decode(T.self, from: Data(json.utf8))
     }
 
+    func testManualReadySummaryIsIndependentOfTheReturnedItemsAndOptionalOnOlderServers() throws {
+        let queue = try decode(ProjectReadyToRun.self, #"{"readyCount":8,"items":[],"manualReady":{"count":7,"taskId":"t","title":"Manual task"}}"#)
+        XCTAssertEqual(queue.manualReady, .init(count: 7, taskId: "t", title: "Manual task"))
+        XCTAssertTrue(queue.items.isEmpty)
+        XCTAssertNil(try decode(ProjectReadyToRun.self, #"{"readyCount":8}"#).manualReady)
+        XCTAssertNil(try decode(ProjectReadyToRun.self, #"{"manualReady":null}"#).manualReady)
+    }
+
     func testTheProjectDocumentCarriesItsBlockersAndItsTallyByStatus() throws {
         let document = try decode(ProjectDocument.self, """
         {"id":"34B3oMDNcPv6okwPtIy3d","title":"iOS 客户端性能与内存优化","status":"OPEN",
