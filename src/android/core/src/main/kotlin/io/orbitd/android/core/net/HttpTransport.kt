@@ -24,6 +24,7 @@ class ApiRequest(
     body: ByteArray? = null,
     val contentType: String = "application/json; charset=utf-8",
     val maxResponseBytes: Long? = null,
+    val onUploadProgress: ((Long, Long) -> Unit)? = null,
 ) {
     val path = path.toList()
     val query = query.toList()
@@ -68,7 +69,16 @@ class OkHttpTransport : HttpTransport {
             object : RequestBody() {
                 override fun contentType() = api.contentType.toMediaType()
                 override fun contentLength() = it.size.toLong()
-                override fun writeTo(sink: BufferedSink) { sink.write(it) }
+                override fun writeTo(sink: BufferedSink) {
+                    var written = 0
+                    api.onUploadProgress?.invoke(0, it.size.toLong())
+                    while (written < it.size) {
+                        val count = minOf(64 * 1024, it.size - written)
+                        sink.write(it, written, count)
+                        written += count
+                        api.onUploadProgress?.invoke(written.toLong(), it.size.toLong())
+                    }
+                }
                 // Also disables OkHttp's HTTP 503/408 follow-ups for rotating refresh requests.
                 override fun isOneShot() = true
             }

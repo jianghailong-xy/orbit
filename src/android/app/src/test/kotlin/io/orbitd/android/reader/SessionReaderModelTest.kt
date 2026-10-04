@@ -17,6 +17,8 @@ class SessionReaderModelTest {
         val calls = mutableListOf<ApiRequest>()
         var held: CompletableDeferred<Unit>? = null
         var aroundMissing = false
+        var firstPage: CompletableDeferred<Unit>? = null
+        var empty = false
         private fun rows(first: Int, last: Int) = (first..last).map { RunEvent("assistant", it.toLong(), buildJsonObject { put("text", "Record $it") }) }
         val auth = AuthSession(HttpTransport { request ->
             val api = request.api; calls += api
@@ -36,7 +38,7 @@ class SessionReaderModelTest {
                             EventPage(rows(100, 299), true, 299, 100, RecordAnchor("event", "record", 180))
                         }
                         "after" in query -> EventPage(emptyList())
-                        else -> EventPage(rows(801, 1000), true)
+                        else -> { firstPage?.await(); if (empty) EventPage(emptyList()) else EventPage(rows(801, 1000), true) }
                     }
                     Wire.json.encodeToString(EventPage.serializer(), page)
                 }
@@ -68,6 +70,15 @@ class SessionReaderModelTest {
             return reader().also { test.runCurrent() }
         }
         fun reader(record: String? = null, restoreSavedRecord: Boolean = false) = SessionReaderModel(auth, handle, store, "s", test.backgroundScope, record, restoreSavedRecord)
+    }
+    @Test fun emptyFirstPageFinishesLoadingEvenWhenEventListIdentityDoesNotChange() = runTest {
+        val rig = Rig(this); rig.empty = true; rig.firstPage = CompletableDeferred()
+        val reader = rig.start()
+        assertFalse(reader.state.value.window.seeded)
+        rig.firstPage!!.complete(Unit); runCurrent()
+        assertTrue(reader.state.value.session!!.fresh)
+        assertTrue(reader.state.value.window.seeded)
+        assertTrue(reader.state.value.window.events.isEmpty())
     }
     @Test fun bookmarkRestoresHistoryOfflineBySequenceAndOffset() = runTest {
         val rig = Rig(this); val reader = rig.start()

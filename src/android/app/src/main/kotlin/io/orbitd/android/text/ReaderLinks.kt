@@ -3,23 +3,17 @@ package io.orbitd.android.text
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import io.orbitd.android.attachments.AttachmentActions
 import io.orbitd.android.core.auth.*
 import io.orbitd.android.core.net.ApiRequest
 import io.orbitd.android.navigation.*
@@ -31,9 +25,10 @@ import java.util.Base64
 import java.util.concurrent.TimeUnit
 
 /** Only API paths can receive credentials. External image requests use a separate, bare client. */
-class ReaderResources(val auth: AuthSession, val handle: SessionHandle, val sessionId: String? = null) {
+class ReaderResources(val auth: AuthSession, val handle: SessionHandle, val sessionId: String? = null,
+    val available: () -> Boolean = { true }, val metadata: (String) -> Pair<String, String>? = { null }) {
     suspend fun bytes(source: String): ByteArray {
-        if ((auth.state.value as? AuthState.SignedIn)?.handle !== handle) throw SessionChanged()
+        if ((auth.state.value as? AuthState.SignedIn)?.handle !== handle || !available()) throw SessionChanged()
         val request = resourceRequest(source, sessionId)
         val bytes = if (request != null) auth.request(handle, request).body else withContext(Dispatchers.IO) {
             if (source.startsWith("data:image/") && source.substringBefore(',').endsWith(";base64")) {
@@ -53,7 +48,7 @@ class ReaderResources(val auth: AuthSession, val handle: SessionHandle, val sess
             }
         }
         require(bytes.size <= MAX_BYTES)
-        if ((auth.state.value as? AuthState.SignedIn)?.handle !== handle) throw SessionChanged()
+        if ((auth.state.value as? AuthState.SignedIn)?.handle !== handle || !available()) throw SessionChanged()
         return bytes
     }
     companion object {
@@ -79,28 +74,16 @@ val LocalReaderResources = staticCompositionLocalOf<ReaderResources?> { null }
 @Composable
 fun rememberReaderLinkHandler(resources: ReaderResources, open: (OrbitRoute) -> Unit): (String) -> Unit {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val latestOpen by rememberUpdatedState(open)
     var file by remember { mutableStateOf<String?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
-    var busy by remember { mutableStateOf(false) }
-    val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { destination ->
-        val source = file
-        if (destination != null && source != null) scope.launch {
-            busy = true
-            try {
-                val bytes = resources.bytes(source)
-                withContext(Dispatchers.IO) { context.contentResolver.openOutputStream(destination)?.use { it.write(bytes) } ?: error("Unavailable destination") }
-                file = null
-            } catch (cancel: CancellationException) { throw cancel }
-            catch (_: Exception) { message = "Couldn't download that file. Retry when Orbit is connected." }
-            finally { busy = false }
-        }
+    LaunchedEffect(resources.available()) { if (!resources.available()) file = null }
+    file?.takeIf { resources.available() }?.let { source ->
+        val info = resources.metadata(source)
+        val name = info?.first ?: source.substringAfterLast('/').substringAfter(':').ifBlank { "orbit-file" }
+        val mime = info?.second ?: android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(name.substringAfterLast('.', "")) ?: "application/octet-stream"
+        AttachmentActions(name, mime, { resources.bytes(source) }) { file = null }
     }
-    file?.let { source -> AlertDialog(onDismissRequest = { if (!busy) file = null }, title = { Text("File") },
-        text = { Column { Text(source); if (busy) LinearProgressIndicator(Modifier.fillMaxWidth()) } },
-        confirmButton = { TextButton(enabled = !busy, onClick = { save.launch(source.substringAfterLast('/').substringAfter(':').ifBlank { "orbit-file" }) }) { Text("Download") } },
-        dismissButton = { TextButton(enabled = !busy, onClick = { file = null }) { Text("Close") } }) }
     message?.let { AlertDialog(onDismissRequest = { message = null }, text = { Text(it) }, confirmButton = {
         TextButton(onClick = { message = null }) { Text("OK") }
     }) }
@@ -152,14 +135,9 @@ fun TranscriptImage(source: String, alt: String, open: (String) -> Unit) {
         if (alt.isNotBlank()) Text(alt, style = MaterialTheme.typography.bodySmall)
         if (!source.startsWith("data:")) TextButton(onClick = { open(source) }) { Text("Open image") }
     }
-    if (zoom && bitmap != null) Dialog({ zoom = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        var scale by remember { mutableFloatStateOf(1f) }
-        var x by remember { mutableFloatStateOf(0f) }; var y by remember { mutableFloatStateOf(0f) }
-        Surface(Modifier.fillMaxSize().safeDrawingPadding()) { Column {
-            TextButton(onClick = { zoom = false }) { Text("Close image") }
-            Image(bitmap!!.asImageBitmap(), alt.ifBlank { "Image" }, Modifier.fillMaxSize().pointerInput(Unit) {
-                detectTransformGestures { _, pan, amount, _ -> scale = (scale * amount).coerceIn(1f, 5f); x += pan.x; y += pan.y }
-            }.graphicsLayer { scaleX = scale; scaleY = scale; translationX = x; translationY = y }, contentScale = ContentScale.Fit)
-        } }
+    if (zoom && bitmap != null && resources?.available() == true) {
+        val info = resources.metadata(source)
+        AttachmentActions(info?.first ?: alt.ifBlank { "image.png" }, info?.second ?: "image/*",
+            { resources.bytes(source) }, closeLabel = "Close image") { zoom = false }
     }
 }

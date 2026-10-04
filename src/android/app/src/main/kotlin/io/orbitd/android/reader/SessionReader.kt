@@ -18,6 +18,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
+import io.orbitd.android.composer.SessionComposer
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.*
@@ -40,7 +41,17 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         if (route.recordId != null && state.window.seeded && !state.loading && state.targetSeq != null) recordOpened = true
     }
     val rows = remember(state.window.events) { transcriptRows(state.window.events) }
-    val resources = remember(handle, route.id) { ReaderResources(app.session, handle, route.id) }
+    val readable by rememberUpdatedState(!state.denied)
+    val attachmentMetadata by rememberUpdatedState(state.window.events.flatMap { event ->
+        (event.fields["attachments"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
+    }.associateBy { ObjectId.canonical(it.string("id").orEmpty()) })
+    val resources = remember(handle, route.id) { ReaderResources(app.session, handle, route.id,
+        available = { readable }, metadata = { source ->
+            attachmentMetadata[ObjectId.canonical(source.removePrefix("orbit-attachment:"))]?.let {
+                (it.string("name") ?: it.string("fileName") ?: "Attachment") to
+                    (it.string("mime") ?: it.string("mimeType") ?: "application/octet-stream")
+            }
+        }) }
     val openLink = rememberReaderLinkHandler(resources) { next ->
         if (next.destination == Destination.SESSION && ObjectId.same(next.id, route.id) &&
             next.recordId != null && next.recordId == route.recordId) model.openRecord(next.recordId)
@@ -95,12 +106,15 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         }
     }
     CompositionLocalProvider(LocalReaderResources provides resources) {
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+        val composerHeight = if (maxHeight < 320.dp) maxHeight else maxHeight * 0.65f
         Column(Modifier.fillMaxSize()) {
             val session = state.session
             val detail = session?.snapshot?.detail
             if (state.denied) {
                 StatusMessage("Session unavailable", if (session?.error?.httpStatus == 403) "You don't have permission to access this item." else "This item is no longer available.", model::retry)
             } else {
+                Column(Modifier.weight(1f).fillMaxWidth()) {
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = { details = true }, enabled = detail != null) { Text(detail?.string("title") ?: "Session details") }
@@ -121,7 +135,6 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                             .then(if (reconnecting) Modifier else Modifier.clearAndSetSemantics { })) { Text("Retry") }
                 }
                 state.error?.let { StatusMessage("Couldn't load messages", it, model::retry) }
-                if (!state.window.seeded) LoadingMessage("Loading messages…")
                 // Capture all lazy intervals in this composition, preserving A05's measurement fix.
                 val displayedRows = rows
                 val displayedWindow = state.window
@@ -134,6 +147,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     awaitEachGesture { awaitFirstDown(requireUnconsumed = false); follow = false }
                 }.testTag("transcript-list"), state = list,
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    if (!displayedWindow.seeded) item(key = "loading") { LoadingMessage("Loading messages…") }
                     item(key = "older") {
                         if (displayedWindow.hasOlder) TextButton(enabled = !displayedLoading, onClick = { follow = false; model.older() }) { Text(if (displayedLoading) "Loading messages…" else "Load earlier messages") }
                     }
@@ -159,7 +173,10 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     }, enabled = rows.any { it.event.type == "user" }) { Text("Last question") }
                     TextButton(onClick = { follow = true; model.latest() }) { Text("Jump to latest") }
                 }
+                }
+                Box(Modifier.heightIn(max = composerHeight)) { SessionComposer(app, handle, route.id!!, state.session) }
             }
+        }
         }
         if (details && !state.denied) SessionDetails(state.session, api, openLink) { details = false }
         action?.let { DirectoryActionDialog(it, api, data.copy(fresh = data.fresh && state.session?.fresh == true), { action = it }) {
