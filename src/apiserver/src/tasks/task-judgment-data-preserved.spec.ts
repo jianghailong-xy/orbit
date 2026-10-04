@@ -1879,7 +1879,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // device_token only. No existing token, user FK, task, project, acceptance row, fence,
       // function or trigger is changed, and there is no DML or preserved object in its scope.
       // Renumbered before landing because the delivery-review migration already occupies 0375.
-      '0376_android_push_installation'],
+      '0376_android_push_installation',
+      // DeepSeek Harness runner admission (0377): one new session acquisition trigger and its
+      // function, plus a replacement of 0367/0372's Antigravity claim function that excludes
+      // discriminator-marked native dsh sessions from a colliding configured provider lookup.
+      // The new function reads model_provider and locks the authorized runner FOR SHARE NOWAIT;
+      // neither function writes another relation or touches a preserved ledger, task, project,
+      // criterion, enum, acceptance object or DONE fence. No stored row is rewritten, and no
+      // existing trigger, table, column, constraint, index or type is dropped or altered.
+      '0377_dsh_runner_gate'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

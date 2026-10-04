@@ -62,17 +62,17 @@ test('P1a existing DeepSeek configuration keeps Claude for new tasks', async () 
 });
 
 test('P1a historical DeepSeek model pins stay on Claude', () => {
-  for (const runtime of ['claude', undefined]) {
-    const row = { ...legacyDeepSeek(), runtime: runtime as never };
+  for (const model of ['deepseek-chat', 'deepseek-reasoner']) {
+    const row = legacyDeepSeek();
     const before = { ...row };
     const exec = resolveProviderExec({
-      declaredProvider: 'deepseek', customRow: row, sessionModel: 'deepseek-reasoner',
+      declaredProvider: 'deepseek', customRow: row, sessionModel: model,
       runtimeDefaultModels: { dsh: OPAQUE_MODEL },
       modelCatalog: { dsh: [{ value: OPAQUE_MODEL, label: 'Harness' }] },
     });
     assert.equal(exec.provider, AgentProvider.CLAUDE);
-    assert.equal(exec.model, 'deepseek-reasoner');
-    assert.equal(exec.env?.ANTHROPIC_MODEL, 'deepseek-reasoner');
+    assert.equal(exec.model, model);
+    assert.equal(exec.env?.ANTHROPIC_MODEL, model);
     assert.deepEqual(row, before);
   }
 });

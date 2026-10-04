@@ -206,6 +206,7 @@ import {
 } from './transcript-around';
 import { EngineSignedOutConflict, engineSignInAction, signedOutEngineRefusal } from './engine-signin-preflight';
 import { antigravityState, hasGeminiEnvKey } from '../common/antigravity-readiness';
+import { DSH_RUNNER_UPGRADE_ERROR } from '../runner-api/runner-provider-support';
 import { ACCOUNT_ID_PATTERN } from '../runners/dto';
 import {
   accountLabel,
@@ -964,11 +965,10 @@ export class SessionsService {
         }
         if (!configured && borrowedRuntime) await this.assertUsablePool(ownerId, dto.provider);
       }
-    } else if (!providerBuiltin) {
-      // Inherited from the workspace, so it hasn't been looked up yet. A row that has since been
-      // deleted or disabled leaves this null: dispatch falls back to Claude, and so does the
-      // runtime below. A pool is not let off that way: one with no account that can run is refused
-      // here as it is when named, or the new session would start on the runner's own login.
+    } else if (!isBuiltinProvider(provider, providerBuiltin)) {
+      providerBuiltin = false;
+      // Inherited from the workspace: a removed/disabled provider cannot substitute the runner's
+      // own Claude login for the configured endpoint the caller inherited.
       const configured = await this.prisma.modelProvider.findFirst({
         where: { slug: provider, enabled: true, OR: [{ ownerId: null }, { ownerId }] },
         select: { runtime: true },
@@ -976,7 +976,12 @@ export class SessionsService {
       borrowedRuntime = configured
         ? configured.runtime
         : await accountPoolRuntime(this.prisma, ownerId, provider);
+      if (!borrowedRuntime) throw new BadRequestException(`provider not available: "${provider}"`);
       if (!configured && borrowedRuntime) await this.assertUsablePool(ownerId, provider);
+    }
+    if (borrowedRuntime && (!Object.values(AgentProvider).includes(borrowedRuntime as AgentProvider) ||
+      borrowedRuntime === AgentProvider.OPENCODE)) {
+      throw new BadRequestException(`provider runtime not available: "${borrowedRuntime}"`);
     }
     await this.assertOwnedRefs(ownerId, { workspaceId: dto.workspaceId, assignedRunnerId });
     // §3.2: a session opened from a folder's page is filed in that folder, which has to be one of
@@ -994,6 +999,14 @@ export class SessionsService {
         : null;
       if (!folder) throw new BadRequestException('folderId must be a folder of this workspace');
     }
+    // provider is the identity stored on the row; runtime is which built-in CLI actually
+    // drives it (a custom provider borrows Claude/Codex/Kimi), and decides the pre-generated
+    // session-id and effort normalization. A borrowed runtime is authoritative here: giving a
+    // Codex/Kimi session a Claude-style id it never created makes its very first spawn a resume
+    // of a conversation that doesn't exist.
+    const runtime = borrowedRuntime
+      ? normalizeRuntimeProvider(borrowedRuntime)
+      : normalizeRuntimeProvider(provider, providerBuiltin);
     // A mode the target machine cannot run at all: Bypass on a runner deployed as root, which
     // claude refuses by exiting inside its own startup — five seconds in, with the refusal on
     // stderr and a bare FAILED in every UI. Which of the two outcomes below applies turns on who
@@ -1009,7 +1022,7 @@ export class SessionsService {
     // The lookup sits behind the mode test, so no caller that named a runnable mode pays for it.
     let rootRefusedFallback: PermissionMode | undefined;
     const requestedMode = dto.permissionMode ?? accountPermissionMode;
-    if (requestedMode && ROOT_REFUSED_PERMISSION_MODES.has(requestedMode)) {
+    if (runtime !== AgentProvider.DSH && requestedMode && ROOT_REFUSED_PERMISSION_MODES.has(requestedMode)) {
       const target = await this.prisma.runner.findUnique({
         where: { id: assignedRunnerId },
         select: { name: true, runsAsRoot: true },
@@ -1087,31 +1100,26 @@ export class SessionsService {
           )
         : titleFromPrompt(dto.prompt));
     let branch = enableWorktree ? makeBranchName(title) : null;
-    // provider is the identity stored on the row; runtime is which built-in CLI actually
-    // drives it (a custom provider borrows Claude/Codex/Kimi), and decides the pre-generated
-    // session-id and effort normalization. A borrowed runtime is authoritative here: giving a
-    // Codex/Kimi session a Claude-style id it never created makes its very first spawn a resume
-    // of a conversation that doesn't exist.
-    const runtime = borrowedRuntime
-      ? normalizeRuntimeProvider(borrowedRuntime)
-      : normalizeRuntimeProvider(provider, providerBuiltin);
-    // P4 has not yet verified an Orbit permission policy for Harness. Refuse account/code
-    // defaults as well as explicit picks, before writing a runnable session or a fabricated id.
-    if (runtime === AgentProvider.DSH) {
-      normalizeBuiltinPermissionMode(
-        runtime,
-        dto.model ?? '',
-        resolvePermissionMode(dto.permissionMode ?? accountPermissionMode, null),
-      );
-    }
     // Refuse now if the machine this is bound for cannot start it at all, rather than creating a
     // session (and, on the runner, a git checkout) that dies a second later with the same message.
     // Only for a runtime signed out on an online runner — see signedOutEngineRefusal for
     // everything this deliberately lets through.
     const targetRunner = await this.prisma.runner.findFirst({
       where: { id: assignedRunnerId, ownerId },
-      select: { name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true, accountNames: true, accountPauses: true, planUsage: true, capabilities: true },
+      select: { name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true, accountNames: true, accountPauses: true, planUsage: true, capabilities: true, capabilitiesReportedAt: true },
     });
+    if (runtime === AgentProvider.DSH) {
+      if (!targetRunner?.capabilitiesReportedAt || !targetRunner.capabilities?.includes('provider:dsh')) {
+        throw new ConflictException(DSH_RUNNER_UPGRADE_ERROR);
+      }
+      // P4 has not yet verified an Orbit permission policy for Harness. The runner upgrade
+      // refusal comes first so an older machine receives the availability action it needs.
+      normalizeBuiltinPermissionMode(
+        runtime,
+        dto.model ?? '',
+        resolvePermissionMode(dto.permissionMode ?? accountPermissionMode, null),
+      );
+    }
     // The Codex or Claude account this session runs on: the one picked for it — which pins it there —
     // else, when its workspace leaves the account to Orbit, the runner's account whose quota resets
     // soonest (automaticAccount), which Orbit may move it off when that account's usage limit stops
@@ -7324,7 +7332,7 @@ export class SessionsService {
       const current = await tx.session.findUniqueOrThrow({
         where: { id },
         include: {
-          assignedRunner: { select: { id: true, status: true, lastHeartbeatAt: true } },
+          assignedRunner: { select: { id: true, status: true, lastHeartbeatAt: true, capabilities: true, capabilitiesReportedAt: true } },
         },
       });
       // Everything was locked in the order project → task → session, but the SESSION was the last
@@ -7455,6 +7463,9 @@ export class SessionsService {
         customRow: next.customRow,
       });
       if (resumeRuntime === AgentProvider.DSH) {
+        if (!current.assignedRunner?.capabilitiesReportedAt || !current.assignedRunner.capabilities?.includes('provider:dsh')) {
+          throw new ConflictException(DSH_RUNNER_UPGRADE_ERROR);
+        }
         normalizeBuiltinPermissionMode(
           resumeRuntime,
           dto.model ?? current.model ?? '',
@@ -7829,7 +7840,14 @@ export class SessionsService {
       : await tx.modelProvider.findFirst({
           where: { slug: declared, OR: [{ ownerId: null }, { ownerId: session.ownerId }] },
         });
+    const fromPool = isBuiltinProvider(declared, session.providerBuiltin) || currentRow
+      ? null
+      : await accountPoolRuntime(tx, session.ownerId, declared);
+    if (!isBuiltinProvider(declared, session.providerBuiltin) && !currentRow && !fromPool) {
+      throw new BadRequestException(`provider not available: "${declared}"`);
+    }
     if (requested === undefined || requested === declared) {
+      if (currentRow?.enabled === false) throw new BadRequestException('provider is disabled');
       return {
         provider: declared,
         providerBuiltin: session.providerBuiltin,
@@ -7864,10 +7882,6 @@ export class SessionsService {
     if (poolRuntime) await this.assertUsablePool(session.ownerId, requested, tx);
     // A session already on a pool has no row either, and runs on that pool's engine — a shared pool's
     // on Codex, which the Claude a slug nothing holds falls back to would misread.
-    const fromPool =
-      isBuiltinProvider(declared, session.providerBuiltin) || currentRow
-        ? null
-        : await accountPoolRuntime(tx, session.ownerId, declared);
     const from =
       fromPool ??
       execRuntime({
@@ -7950,7 +7964,7 @@ export class SessionsService {
         include: {
           workspace: true,
           assignedRunner: {
-            select: { runtimeDefaultModels: true, modelCatalog: true, runsAsRoot: true, engines: true },
+            select: { runtimeDefaultModels: true, modelCatalog: true, runsAsRoot: true, engines: true, capabilities: true, capabilitiesReportedAt: true },
           },
           // The account-level permission default, which replaced the per-workspace one.
           owner: { select: { preferences: true } },
@@ -7961,9 +7975,12 @@ export class SessionsService {
       }
       const next = await this.resolveProviderSwitch(tx, session, dto.provider);
       const accounts = await this.accountOnProviderSwitch(tx, id, next, dto.account);
+      const poolRuntime = isBuiltinProvider(next.provider, next.providerBuiltin) || next.customRow
+        ? null
+        : await accountPoolRuntime(tx, ownerId, next.provider);
       const exec = resolveProviderExec({
-        declaredProvider: next.provider,
-        declaredProviderBuiltin: next.providerBuiltin,
+        declaredProvider: poolRuntime ?? next.provider,
+        declaredProviderBuiltin: poolRuntime ? true : next.providerBuiltin,
         customRow: next.customRow,
         sessionModel: dto.model ?? (next.keepsModel ? session.model : null),
         usesRuntimeDefaultModel: session.usesRuntimeDefaultModel,
@@ -7975,6 +7992,10 @@ export class SessionsService {
         claudeAccount: accounts.claudeAccount ?? session.claudeAccount ?? session.workspace?.claudeAccount,
         runnerEngines: session.assignedRunner?.engines,
       });
+      if (exec.provider === AgentProvider.DSH && (!session.assignedRunner?.capabilitiesReportedAt ||
+        !session.assignedRunner.capabilities?.includes('provider:dsh'))) {
+        throw new ConflictException(DSH_RUNNER_UPGRADE_ERROR);
+      }
       const requestedPermissionMode =
         (dto.permissionMode as PermissionMode | undefined) ??
         resolvePermissionMode(session.permissionMode, session.owner);

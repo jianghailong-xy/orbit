@@ -49,7 +49,7 @@ function createFixture(
       workspace_id: 'workspace-1', provider: options.seed ?? 'claude',
       provider_builtin: !options.seed || options.seed === 'claude',
     }],
-    runner: { findFirst: async () => ({ id: 'runner-1' }) },
+    runner: { findFirst: async () => ({ id: 'runner-1', capabilities: ['provider:dsh'], capabilitiesReportedAt: new Date() }) },
     user: { findUnique: async () => ({ preferences: options.preferences ?? {} }) },
     task: { findFirst: async () => ({
       id: 'task-1', projectId: null, verifiesTaskId: null, pinnedRevision: null,
@@ -83,7 +83,7 @@ function historyFixture(
     model: 'deepseek-flash', permissionMode: 'default', usesRuntimeDefaultModel: true,
     runtimeSessionId: historicalId, numTurns: 3, startedAt: now,
     status: RunStatus.FAILED, assignedRunnerId: 'runner-1',
-    assignedRunner: { id: 'runner-1', status: 'ONLINE', lastHeartbeatAt: now },
+    assignedRunner: { id: 'runner-1', status: 'ONLINE', lastHeartbeatAt: now, capabilities: ['provider:dsh'], capabilitiesReportedAt: now },
     workspace: null, cancelRequestedAt: null, completedAt: null, archivedAt: null,
     deletedAt: null, mergeStatus: null, commitStatus: null,
     ...overrides,

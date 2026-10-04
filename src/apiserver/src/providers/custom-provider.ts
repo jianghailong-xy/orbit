@@ -90,11 +90,12 @@ export function declaredReasoningLevels(
 }
 
 function runtimeOf(row: ModelProviderRow): AgentProvider {
+  if (row.runtime === AgentProvider.CLAUDE) return AgentProvider.CLAUDE;
   if (row.runtime === AgentProvider.CODEX) return AgentProvider.CODEX;
   if (row.runtime === AgentProvider.KIMI) return AgentProvider.KIMI;
   if (row.runtime === AgentProvider.ANTIGRAVITY) return AgentProvider.ANTIGRAVITY;
   if (row.runtime === AgentProvider.DSH) return AgentProvider.DSH;
-  return AgentProvider.CLAUDE;
+  throw new BadRequestException(`provider runtime not available: "${row.runtime}"`);
 }
 
 /**
@@ -166,8 +167,8 @@ export async function sessionExecRuntime(
  * each enabled configured row of theirs — or a shared one — that borrows it, the way a Gemini key
  * runs on Antigravity under a slug of its own. This is what a runner-capability gate has to ask
  * (ADVERTISED_RUNTIMES): a runner that never advertised the runtime is handed that runtime's job
- * whichever of these slugs the session names. A disabled row dispatches as Claude (execRuntime), so
- * it is not one of them. The claim SQL (QueueService.trySessionClaim) and migration 0372's trigger
+ * whichever of these slugs the session names. A disabled row cannot dispatch, so it is not one of
+ * them. The claim SQL (QueueService.trySessionClaim) and migration 0372's trigger
  * ask the same question of the same rows.
  */
 export async function providerSlugsOn(
@@ -180,6 +181,22 @@ export async function providerSlugsOn(
     select: { slug: true },
   });
   return [runtime, ...borrowing.map((row) => row.slug)];
+}
+
+/** A dsh keyword collision stays configured: only its row's actual runtime decides its gate. */
+export async function providerDispatchWhereOn(
+  db: Prisma.TransactionClient,
+  ownerId: string,
+  runtime: AgentProvider,
+): Promise<Prisma.SessionWhereInput> {
+  const slugs = await providerSlugsOn(db, ownerId, runtime);
+  return runtime === AgentProvider.DSH
+    ? { OR: [
+        { provider: runtime, providerBuiltin: true },
+        { provider: { in: slugs.slice(1) }, providerBuiltin: false },
+      ] }
+    : { provider: { in: slugs }, ...(slugs.includes(AgentProvider.DSH)
+        ? { NOT: { provider: AgentProvider.DSH, providerBuiltin: true } } : {}) };
 }
 
 /**
@@ -296,13 +313,12 @@ function injectedEnv(row: ModelProviderRow, model: string): Record<string, strin
 /**
  * Resolve how to actually run a (possibly custom) provider at dispatch: the runner-facing
  * built-in runtime, the model to pass, and the process env. For a configured provider
- * the runner never learns its slug — it just receives a Claude/Codex/Kimi/Antigravity job whose
- * env points at the provider's endpoint, so the runner needs no changes. A built-in may also resolve
- * directly to Kimi, OpenCode or Antigravity; a configured row can borrow Antigravity (a Gemini key)
+ * the runner never learns its slug — it receives the borrowed runtime with an environment pointing
+ * at the provider's endpoint. A configured row can borrow Claude, Codex, Kimi, Antigravity or dsh,
  * but not OpenCode.
  *
- * `customRow` is null for a built-in provider, or for a slug whose ModelProvider was
- * deleted/disabled (a safe fallback to the claude default rather than a dispatch failure).
+ * `customRow` is null only for a built-in runtime at dispatch. Unresolved, disabled and unknown
+ * configured runtimes are refused before a runner-facing job can be built.
  */
 export function resolveProviderExec(args: {
   declaredProvider?: string | null;
@@ -350,6 +366,12 @@ export function resolveProviderExec(args: {
   reasoningLevels?: string[];
 } {
   const { customRow, sessionModel, workspaceModel, workspaceEnv } = args;
+  if (customRow && !customRow.enabled) {
+    throw new BadRequestException('provider is disabled');
+  }
+  if (!customRow && !isBuiltinProvider(args.declaredProvider, args.declaredProviderBuiltin)) {
+    throw new BadRequestException(`provider not available: "${args.declaredProvider}"`);
+  }
   const legacyInheritance = args.usesRuntimeDefaultModel === false;
   if (customRow && customRow.enabled) {
     const runtime = execRuntime(args);
@@ -376,7 +398,7 @@ export function resolveProviderExec(args: {
       ...(reasoningLevels ? { reasoningLevels } : {}),
     };
   }
-  // Built-in (or stale/disabled custom slug → treat as claude). The runtime authenticates itself:
+  // Built-in: the runtime authenticates itself.
   // each runner carries its own `claude auth login`, and a session that finds it missing surfaces
   // the sign-in card (RunnerSignIn) rather than the control plane holding a credential for it.
   const provider = execRuntime(args);
