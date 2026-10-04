@@ -120,6 +120,25 @@ const CONFLICT = item({
   }),
 });
 
+/** A delivery whose coordinator has to decide the landing: files outside the declaration
+ *  (`blocker-disposition.ts` §4 on the server). */
+const REVIEW = item({
+  itemId: '5uQ5yXbG1u6pBkkrc2ZLz8',
+  kind: 'DELIVERY_REVIEW',
+  title: 'Changed files it didn’t declare: ③ 实现所有者收尾门与 Done 优先语义',
+  detailLine: '2 files outside its declaration · src/shared/src/project-done.ts · +1',
+  waitingSince: at(3 * MINUTE),
+  escalateAt: inFuture(117 * MINUTE),
+  facts: facts({
+    task: { id: '34Y7Utvsd47A14DjMzIzD', title: '③ 实现所有者收尾门与 Done 优先语义' },
+    files: ['src/shared/src/project-done.ts', 'src/apiserver/src/projects/project-done-request.ts'],
+    review: {
+      reason: 'OUTSIDE_DECLARED_SCOPE',
+      declaredPaths: ['src/apiserver/src/projects/project-owner-done.pg.spec.ts'],
+    },
+  }),
+});
+
 /** The tail of the failing check's output, longer than the block keeps folded — what a reader needs
  *  from a log is its END, so the folded form has to be the last lines and not the first. */
 const CHECK_TAIL = [
@@ -741,6 +760,29 @@ describe('the exception card’s fact block', () => {
     expect(html).toContain('project/bg-jobs');
     expect(html).toContain('b70a446');
     expect(html).toContain('nothing landed');
+  });
+
+  it('draws a delivery review as the coordinator’s: what changed beside what was declared', () => {
+    const TASK = '③ 实现所有者收尾门与 Done 优先语义';
+    const html = card(REVIEW);
+
+    expect(html).toContain('Changed files it didn’t declare');
+    expect(html).not.toContain(`Changed files it didn’t declare: ${TASK}`);
+    expect(html).toContain(`<span class="criteria-decision-k">Task</span><span class="criteria-decision-v">${TASK}</span>`);
+    expect(html).toContain('src/shared/src/project-done.ts');
+    expect(html).toContain('<span class="criteria-decision-k">Declared</span>');
+    expect(html).toContain('src/apiserver/src/projects/project-owner-done.pg.spec.ts');
+    expect(html).not.toContain('push to the task branch');
+    expect(html).toContain('Owner: coordinator');
+    expect(html.indexOf('Open task session')).toBeLessThan(html.indexOf('Retry'));
+
+    const refused = card({
+      ...REVIEW,
+      title: `Git refused to merge it: ${TASK}`,
+      facts: { ...REVIEW.facts!, review: { reason: 'MERGE_REFUSED_BY_GIT', declaredPaths: [] } },
+    });
+    expect(refused).toContain('Git refused to merge it');
+    expect(refused).toContain('no paths');
   });
 
   it('names the task in its own row rather than in the heading', () => {

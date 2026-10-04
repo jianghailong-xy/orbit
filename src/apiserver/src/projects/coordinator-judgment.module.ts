@@ -13,6 +13,7 @@ import { CriterionUnlandedProducer } from './criterion-unlanded.producer';
 import { DependentReadyProducer } from './dependent-ready.producer';
 import { ProjectFuseService } from './project-fuse.service';
 import { ProjectOpenItemService } from './project-open-item.service';
+import { PROJECT_OPEN_ITEM_DELIVERY } from './project-open-item';
 import { ProjectSettledUnmergedProducer } from './project-settled-unmerged.producer';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { TaskDispatchRefusalProducer } from './task-dispatch-refusal.producer';
@@ -74,6 +75,7 @@ import { WakeDispositionService } from './wake-disposition.service';
     CoordinatorWakeService,
     CompletionInputRouter,
     ProjectOpenItemService,
+    { provide: PROJECT_OPEN_ITEM_DELIVERY, useExisting: ProjectOpenItemService },
     CoordinatorConvergenceService,
     ProjectFuseService,
     CoordinatorJudgmentService,

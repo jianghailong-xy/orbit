@@ -712,7 +712,7 @@ interface ProjectPromotionView {
 |---|---|---|
 | `id` | uuid(7) PK | |
 | `project_id` / `owner_id` | uuid | FK `project` CASCADE |
-| `kind` | text | CHECK ∈ {`INTEGRATION_CONFLICT`, `INTEGRATION_CHECK_FAILED`, `INTEGRATION_ERROR`, `TASK_FAILED`, `PROMOTION_APPROVAL`, `COORDINATOR_QUESTION`, `FUSE_PAUSED`} |
+| `kind` | text | CHECK ∈ {`INTEGRATION_CONFLICT`, `INTEGRATION_CHECK_FAILED`, `INTEGRATION_ERROR`, `TASK_FAILED`, `PROMOTION_APPROVAL`, `COORDINATOR_QUESTION`, `FUSE_PAUSED`, `START_REQUEST`, `DONE_REQUEST`, `DELIVERY_REVIEW`} |
 | `state` | text | CHECK ∈ {`OPEN`, `RESOLVED`, `SUPERSEDED`} |
 | `assignee` | text | CHECK ∈ {`COORDINATOR`, `OWNER`} |
 | `assignee_reason` | text | CHECK ∈ {`DEFAULT`, `NO_COORDINATOR`, `COORDINATOR_ENDED`, `CHAIN_LIMIT`, `ESCALATED`, `HANDED_OVER`} |
@@ -767,6 +767,7 @@ CHECK：`(state = 'OPEN') = (resolved_at IS NULL)`；`kind ∈ {PROMOTION_APPROV
 | `PROMOTION_APPROVAL` | OWNER | 晋升 `READY`（M-T2） | `PA:<promotionId>` | `ProjectPromotionView` 的快照 | 确认 → `APPROVED`；Not now → `DECLINED`；新候选 → `SUPERSEDED` |
 | `COORDINATOR_QUESTION` | OWNER | `ask_owner` 提交（§5.2） | `CQ:<clientQuestionId>` | `{ question, options: [{ label, description? }], recommendedOption?, blocksTaskIds[], ifUnanswered }` | owner 答复 → `ANSWERED`；提问会话撤回 → `WITHDRAWN` |
 | `FUSE_PAUSED` | OWNER | 暂停段插入（§6.3） | `FP:<episodeId>` | `{ dimension, observed, limit, spendToday, heldCount }` | 恢复 → `RESUMED` |
+| `DELIVERY_REVIEW` | COORDINATOR（Automatic 且有活着的协调会话；否则 OWNER） | `CRITERION_UNLANDED` 读到声明外改动或 git 拒绝合并 | `DR:<reason>:<taskId>` | `{ reason, paths[], declaredPaths[], criterionKey }` | 重开 → `RETRIED`；取消 → `TASK_CLOSED`；取代 → `SUCCESSOR_FILED`；成果落地 → `LANDED`（仅 git 拒绝的读数）；`open_item_resolve` → `HANDLED` |
 
 三种集成类待办的 payload 另带 `failureClass`（`CONFLICT` / `CHECK_FAILED` / `CHECK_TIMED_OUT` / `ERROR`）与 `generation`；由 `integration_retry` 要求的那一代失败时再带 `retry: { retryOfJobId, failureClass, reason, requestedBySessionId }`（J-T1b）。
 

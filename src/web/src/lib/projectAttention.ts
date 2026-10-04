@@ -404,6 +404,7 @@ const COORDINATOR_LEAD_COPY: Record<CoordinatorLeadKind, string> = {
   INTEGRATION_CHECK_FAILED: 'checks failed',
   INTEGRATION_ERROR: 'handling an integration error',
   TASK_FAILED: 'handling a failed task',
+  DELIVERY_REVIEW: 'reviewing a delivery',
 };
 
 /**

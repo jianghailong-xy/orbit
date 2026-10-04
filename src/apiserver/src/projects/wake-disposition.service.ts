@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
@@ -14,8 +14,10 @@ import { readTaskCriterionChange } from '../tasks/task-completion-criterion-chan
 import {
   BLOCKER_KIND_FOR,
   type BlockerDisposition,
+  type BlockerRoute,
   type DeliveryObservations,
   blockerDisposition,
+  blockerRoute,
   declaredPaths,
 } from './blocker-disposition';
 import { CoordinatorDeliveryService } from './coordinator-delivery.service';
@@ -35,6 +37,14 @@ import {
 import { criterionKeyOf } from './project-acceptance';
 import { openFuseEpisodeId, refusingWhileFusePaused } from './project-fuse';
 import {
+  DELIVERY_REVIEW_KIND,
+  PROJECT_OPEN_ITEM_DELIVERY,
+  type ProjectOpenItemDelivery,
+  type DeliveryReviewReason,
+  deliveryReviewKey,
+  recordDeliveryReview,
+} from './project-open-item';
+import {
   LANDING_SERVING_WORK_SELECT,
   type CriterionWithLandingFacts,
   type LandingBranches,
@@ -47,10 +57,13 @@ import { CriterionState, criterionCoverage, wakeDisposition } from './wake-dispo
 
 /** The blocker one delivery raised, for a caller that has to report that it stopped. */
 export interface RaisedBlocker extends BlockerDisposition {
-  /** The work the blocker is about. */
+  /** The work the question is about. */
   taskId: string;
-  /** The episode row, including the existing row when this delivery added nothing. */
+  route: BlockerRoute;
+  /** The blocker row, or null when the question went to an exception item. */
   blockerId: string | null;
+  /** The exception item, or null when this went to a blocker or was already open. */
+  itemId: string | null;
 }
 
 /** How long a HUMAN-recovery blocker waits before it reads as overdue (BL5's escalation alarm). */
@@ -123,6 +136,9 @@ export class WakeDispositionService {
     private readonly prisma: PrismaService,
     private readonly judgments: CoordinatorJudgmentService,
     private readonly deliveries: CoordinatorDeliveryService,
+    @Optional()
+    @Inject(PROJECT_OPEN_ITEM_DELIVERY)
+    private readonly openItems?: ProjectOpenItemDelivery,
   ) {}
 
   /**
@@ -414,16 +430,46 @@ export class WakeDispositionService {
   async raiseBlockerIfNeeded(fact: WakeFact): Promise<RaisedBlocker | null> {
     const stopped = await this.blockerFor(fact);
     if (!stopped) return null;
+    const reason = stopped.disposition.reason;
+    if (blockerRoute(reason) === 'EXCEPTION_ITEM' && isDeliveryReviewReason(reason)) {
+      return {
+        ...stopped.disposition,
+        taskId: stopped.taskId,
+        route: 'EXCEPTION_ITEM',
+        blockerId: null,
+        itemId: await this.fileDeliveryReview(fact.projectId, stopped, reason),
+      };
+    }
     return {
       ...stopped.disposition,
       taskId: stopped.taskId,
+      route: 'OWNER_BLOCKER',
       blockerId: await this.raiseBlocker(fact.projectId, stopped.taskId, stopped.disposition),
+      itemId: null,
     };
+  }
+
+  private async fileDeliveryReview(
+    projectId: string,
+    stopped: StoppedDelivery,
+    reason: DeliveryReviewReason,
+  ): Promise<string | null> {
+    const filed = await withTransactionRetry(this.prisma, (tx) => recordDeliveryReview(tx, {
+      projectId,
+      taskId: stopped.taskId,
+      sessionId: stopped.sessionId,
+      reason,
+      paths: stopped.disposition.paths,
+      declaredPaths: stopped.observed.declaredPaths,
+      criterionKey: stopped.criterionKey,
+    }), loggedRetry(this.logger, 'wakeDisposition.fileDeliveryReview'));
+    await this.openItems?.deliverForTasks([stopped.taskId]);
+    return filed?.itemId ?? null;
   }
 
   /** Deliver the human-owned episode to Automatic's standing coordinator after it is committed. */
   async notifyCoordinatorOfBlocker(fact: WakeFact, blocker: RaisedBlocker): Promise<void> {
-    if (!blocker.blockerId) return;
+    if (blocker.route !== 'OWNER_BLOCKER' || !blocker.blockerId) return;
     const task = await this.prisma.task.findUnique({
       where: { id: blocker.taskId },
       select: {
@@ -463,14 +509,12 @@ export class WakeDispositionService {
    * is the only moment a blocker may be written. Asking twice costs one repeated read and buys the
    * property that matters — nothing is written on the strength of a fact nobody authorized.
    */
-  private async blockerFor(
-    fact: WakeFact,
-  ): Promise<{ taskId: string; disposition: BlockerDisposition } | null> {
+  private async blockerFor(fact: WakeFact): Promise<StoppedDelivery | null> {
     if (fact.event !== 'CRITERION_UNLANDED') return null;
 
     for (const delivery of await this.deliveriesUnder(fact)) {
       const disposition = blockerDisposition(delivery.observed);
-      if (disposition) return { taskId: delivery.taskId, disposition };
+      if (disposition) return { ...delivery, disposition };
     }
     return null;
   }
@@ -483,9 +527,7 @@ export class WakeDispositionService {
    * by several. Nothing here decides anything: `blocker-disposition.ts` §2 says which row each
    * observation is, and this is that reading, spelled once.
    */
-  private async deliveriesUnder(
-    fact: WakeFact,
-  ): Promise<Array<{ taskId: string; observed: DeliveryObservations }>> {
+  private async deliveriesUnder(fact: WakeFact): Promise<ObservedDelivery[]> {
     const stated = await this.prisma.projectAcceptanceCriterionDefinition.findMany({
       where: { projectId: fact.projectId },
       select: {
@@ -511,7 +553,7 @@ export class WakeDispositionService {
               where: { startsTaskWork: true, deletedAt: null },
               orderBy: { createdAt: 'desc' },
               take: 1,
-              select: { changedFiles: true },
+              select: { id: true, changedFiles: true },
             },
           },
         },
@@ -524,6 +566,8 @@ export class WakeDispositionService {
       .filter((row) => criterionSubjectId(fact.projectId, criterionKeyOf(row.id)) === fact.subjectId)
       .flatMap((row) => row.servingTasks.map((task) => ({
         taskId: task.id,
+        sessionId: task.sessions[0]?.id ?? null,
+        criterionKey: criterionKeyOf(row.id),
         observed: {
           // Written prose only: the record the criterion-change door keeps in the same column says
           // the criterion moved, not that one does not apply (`blocker-disposition.ts` §2).
@@ -626,18 +670,37 @@ export class WakeDispositionService {
   async resolveLandedBlockers(projectIds: ReadonlyArray<string | null | undefined>): Promise<number> {
     const ids = [...new Set(projectIds.filter((id): id is string => !!id))];
     if (ids.length === 0) return 0;
-    const open = await this.prisma.projectBlocker.findMany({
-      where: {
-        projectId: { in: ids },
-        resolvedAt: null,
-        subjectType: 'TASK',
-        OR: LANDED_WORK_REASONS.map((reason) => ({ dedupeKey: { startsWith: dispositionKey(reason) } })),
-      },
-      select: { id: true, projectId: true, subjectId: true },
-    });
-    if (open.length === 0) return 0;
+    const [open, reviews] = await Promise.all([
+      this.prisma.projectBlocker.findMany({
+        where: {
+          projectId: { in: ids },
+          resolvedAt: null,
+          subjectType: 'TASK',
+          OR: LANDED_WORK_REASONS.map((reason) => ({ dedupeKey: { startsWith: dispositionKey(reason) } })),
+        },
+        select: { id: true, projectId: true, subjectId: true },
+      }),
+      this.prisma.projectOpenItem.findMany({
+        where: {
+          projectId: { in: ids },
+          kind: DELIVERY_REVIEW_KIND,
+          state: 'OPEN',
+          dedupeKey: { startsWith: deliveryReviewKey('MERGE_REFUSED_BY_GIT', '') },
+          taskId: { not: null },
+        },
+        select: { id: true, projectId: true, taskId: true },
+      }),
+    ]);
+    if (open.length === 0 && reviews.length === 0) return 0;
     const receipts = await this.prisma.sessionMergeReceipt.findMany({
-      where: { taskId: { in: [...new Set(open.map((blocker) => blocker.subjectId))] } },
+      where: {
+        taskId: {
+          in: [...new Set([
+            ...open.map((blocker) => blocker.subjectId),
+            ...reviews.map((review) => review.taskId!).filter(Boolean),
+          ])],
+        },
+      },
       orderBy: { createdAt: 'asc' },
       select: { taskId: true, result: true, targetBranch: true },
     });
@@ -646,13 +709,17 @@ export class WakeDispositionService {
       select: { projectId: true, upstreamRef: true, integrationRef: true },
     });
 
+    const landingOf = (projectId: string, taskId: string) => {
+      const branches = landingBranchesFor(
+        codebases.find((codebase) => codebase.projectId === projectId) ?? null,
+      );
+      return receipts.find((receipt) => receipt.taskId === taskId
+        && receiptIsLandingEvidence(receipt, branches));
+    };
+
     let resolved = 0;
     for (const blocker of open) {
-      const branches = landingBranchesFor(
-        codebases.find((codebase) => codebase.projectId === blocker.projectId) ?? null,
-      );
-      const landed = receipts.find((receipt) => receipt.taskId === blocker.subjectId
-        && receiptIsLandingEvidence(receipt, branches));
+      const landed = landingOf(blocker.projectId, blocker.subjectId);
       if (!landed) continue;
       const now = new Date();
       const { count } = await this.prisma.projectBlocker.updateMany({
@@ -666,8 +733,39 @@ export class WakeDispositionService {
       });
       resolved += count;
     }
+    for (const review of reviews) {
+      if (!review.taskId) continue;
+      const landed = landingOf(review.projectId, review.taskId);
+      if (!landed) continue;
+      const { count } = await this.prisma.projectOpenItem.updateMany({
+        where: { id: review.id, state: 'OPEN' },
+        data: {
+          state: 'RESOLVED',
+          resolution: 'LANDED',
+          resolvedAt: new Date(),
+          resolvedBy: 'PLATFORM',
+          resolutionNote: `the work landed on ${landed.targetBranch}`,
+        },
+      });
+      resolved += count;
+    }
     return resolved;
   }
+}
+
+interface ObservedDelivery {
+  taskId: string;
+  sessionId: string | null;
+  criterionKey: string;
+  observed: DeliveryObservations;
+}
+
+interface StoppedDelivery extends ObservedDelivery {
+  disposition: BlockerDisposition;
+}
+
+function isDeliveryReviewReason(reason: BlockerDisposition['reason']): reason is DeliveryReviewReason {
+  return reason === 'OUTSIDE_DECLARED_SCOPE' || reason === 'MERGE_REFUSED_BY_GIT';
 }
 
 /** The reasons whose blocker a landing ends — see `resolveLandedBlockers`. */

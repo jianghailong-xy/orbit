@@ -41,7 +41,7 @@ import type { Runner } from './TasksSidePanel';
 
 // Login engines contribute to signed-in summaries. Antigravity has an installation row of its
 // own and never contributes to those summaries.
-const ENGINES = Object.keys(ENGINE_NAME) as LoginEngine[];
+const ENGINES = (Object.keys(ENGINE_NAME) as LoginEngine[]).filter((engine) => engine !== 'antigravity');
 
 // Which runner cards the user opened. Cards start folded — three engines per machine adds up
 // fast, and a runner that is set up and quiet has nothing to say beyond its summary line — so
