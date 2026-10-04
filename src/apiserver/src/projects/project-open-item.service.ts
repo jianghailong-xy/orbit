@@ -50,6 +50,8 @@ import {
   deliveryReviewDetailLine,
   markOpenItemsHandling,
   openItemActions,
+  openItemRequiredAction,
+  primaryAction,
   openItemFacts,
   openItemMessage,
   openItemOwed,
@@ -200,6 +202,18 @@ export interface OpenItemRow {
     | 'RESUME'
     | 'ANSWER'
   >;
+  /** The server's one-sentence next step, optional for rolling-version readers. */
+  requiredAction?: string;
+  /** The first compact door for this row, when one exists. */
+  primaryAction?:
+    | 'REVIEW'
+    | 'OPEN_COORDINATOR'
+    | 'OPEN_TASK_SESSION'
+    | 'RETRY'
+    | 'CANCEL_TASK'
+    | 'ASK_COORDINATOR_AGAIN'
+    | 'RESUME'
+    | 'ANSWER';
   /** What was asked, for a `COORDINATOR_QUESTION`; null for every other kind (§5.2, §4.8). */
   question: CoordinatorQuestion | null;
   /** What a `START_REQUEST` asks — the "Start this project?" card's source; null for every other
@@ -2116,6 +2130,31 @@ export class ProjectOpenItemService {
           promotionId: row.promotionId,
           fuseEpisodeId: row.fuseEpisodeId,
           askable,
+          payload: row.payload,
+        }),
+        requiredAction: openItemRequiredAction({
+          kind: row.kind,
+          assignee: row.assignee,
+          taskId: row.taskId,
+          promotionId: row.promotionId,
+          fuseEpisodeId: row.fuseEpisodeId,
+          askable,
+          payload: row.payload,
+          state: 'OPEN',
+          handledBy: handledBy.get(row.id) ?? [],
+          handoverNote: row.handoverNote,
+        }),
+        primaryAction: primaryAction({
+          kind: row.kind,
+          assignee: row.assignee,
+          taskId: row.taskId,
+          promotionId: row.promotionId,
+          fuseEpisodeId: row.fuseEpisodeId,
+          askable,
+          payload: row.payload,
+          state: 'OPEN',
+          handledBy: handledBy.get(row.id) ?? [],
+          handoverNote: row.handoverNote,
         }),
         handling: handlingOf(row, inFlight),
         outcome: null,
@@ -2151,6 +2190,17 @@ export class ProjectOpenItemService {
         // there is nothing to press.
         delivery: { state: 'NOT_REQUIRED', sessionId: null, at: null },
         actions: [],
+        requiredAction: openItemRequiredAction({
+          kind: row.kind,
+          assignee: row.assignee,
+          taskId: row.taskId,
+          promotionId: row.promotionId,
+          fuseEpisodeId: row.fuseEpisodeId,
+          payload: row.payload,
+          state: row.state,
+          handledBy: handledBy.get(row.id) ?? [],
+          handoverNote: row.handoverNote,
+        }),
         handling: null,
         outcome: {
           state: row.state as OpenItemOutcome['state'],

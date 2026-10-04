@@ -187,10 +187,12 @@ export interface ControlSessionSummary {
    *  plane, means "unchanged". */
   confirmationUnderReview?: ConfirmationUnderReview | null;
   /** Which of the four owner items are waiting on this conversation, oldest first (§7.6 V13) — so
-   *  the "needs you" banner can name one and open its card instead of only counting. Always sent
-   *  by a server that knows about them, as `[]` when none: a client folds this summary into a row
-   *  it holds, and an item that was answered clears the banner by arriving as an empty list. An
-   *  absent key is an older control plane, and leaves whatever the row had. */
+   *  the "needs you" banner can name one and open its card instead of only counting. Each item may
+   *  also carry the server-derived `need` short phrase (for example "Checks failed"); it is
+   *  optional so an older control plane can still be folded safely. Always sent by a server that
+   *  knows about them, as `[]` when none: a client folds this summary into a row it holds, and an
+   *  item that was answered clears the banner by arriving as an empty list. An absent key is an
+   *  older control plane, and leaves whatever the row had. */
   ownerItems?: SessionOwnerItem[];
   /** The sessions this one asked for a reply and is still waiting on (`session_send` /
    *  `project_send` with `expectReply`, docs/session-request-reply-contract.md §6), oldest first.
