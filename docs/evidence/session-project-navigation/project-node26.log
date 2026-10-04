@@ -1,0 +1,12 @@
+
+ RUN  v5.0.2 /root/.orbit/worktrees/46f37386-850f-5112-86bc-3661e03dc7eb/src/web
+
+
+ Test Files  5 passed (5)
+      Tests  100 passed (100)
+   Start at  16:46:50
+   Duration  25.23s (tests 68%, import 14%, transform 10%, environment 8%)
+
+    Isolate  5 workers spawned · ~447ms startup each (spawn + environment, per file)
+             at least ~1.79s faster with isolate: false — reuses workers across files instead of one per file
+

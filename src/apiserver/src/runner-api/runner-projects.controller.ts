@@ -22,6 +22,7 @@ import {
   CreateProjectDto,
   HandOverOpenItemDto,
   RecordMergeEvidenceDto,
+  RequestProjectDoneDto,
   RequestProjectStartDto,
   ResolveOpenItemDto,
   ResolveProjectBlockerDto,
@@ -76,7 +77,7 @@ export class RunnerProjectsController {
     private readonly acceptance: ProjectAcceptanceService,
     private readonly handoffs: ProjectHandoffService,
     private readonly orchestration: RunnerOrchestrationAuthorizer,
-    // Only `askOwner`, `requestStart`, `resolveOpenItem`, `retryIntegration` and
+    // Only `askOwner`, `requestStart`, `requestDone`, `resolveOpenItem`, `retryIntegration` and
     // `retryPromotionCheck` need it. Defaulted for the reason
     // `ProjectsService`'s own late parameters are: Nest injects by type rather than by position,
     // while the specs that build this controller by hand to exercise one route would each have to
@@ -449,6 +450,27 @@ export class RunnerProjectsController {
     @Body() dto: RequestProjectStartDto,
   ) {
     return this.openItems.requestStart(runner.ownerId, id, sessionId?.trim(), dto);
+  }
+
+  /**
+   * A coordinator asking the account owner to record its project done (`project_request_done`).
+   *
+   * Filed and returned, like a start request: the owner answers on the "Is this project done?" card.
+   * The project is checked first — one that is not ready is 409 `DONE_REQUEST_NOT_READY` with every
+   * finding and nothing filed, and one that is comes back with the warnings the owner reads beside it.
+   *
+   * X-Orbit-Session-Id is the authority, checked by the service against the project's own
+   * coordinator pointer, exactly as for `requestStart`. No orchestration credential: the request
+   * records nothing — the owner's press on the card does.
+   */
+  @Post('projects/:id/done-requests')
+  requestDone(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') sessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: RequestProjectDoneDto,
+  ) {
+    return this.openItems.requestDone(runner.ownerId, id, sessionId?.trim(), dto);
   }
 
   /**

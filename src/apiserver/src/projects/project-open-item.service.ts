@@ -14,14 +14,18 @@ import { Prisma } from '@prisma/client';
 
 import {
   COORDINATOR_LEAD_KINDS,
+  type DoneRequest,
   type OpenItemFacts,
   type OpenItemHandling,
   type OpenItemOutcome,
+  type ProjectDoneNotReadyBody,
+  type ProjectDoneRequestFiled,
   type ProjectStartNotReadyBody,
   type ProjectStartRequest,
   type ProjectStartRequestBody,
   type ProjectStartRequestFiled,
   type ProjectStartSettings,
+  type RequestProjectDoneBody,
 } from '@orbit/shared';
 
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
@@ -82,6 +86,19 @@ import {
   supersedeStaleStartRequest,
 } from './project-start-request';
 import { doorsForOpenItem } from './open-item-doors';
+import {
+  DONE_REQUEST_COORDINATOR_ONLY,
+  DONE_REQUEST_DEDUPE_KEY,
+  DONE_REQUEST_KIND,
+  DONE_REQUEST_NOT_READY,
+  DONE_REQUEST_TITLE,
+  MAX_DONE_REQUEST_JUDGMENT,
+  doneReadiness,
+  doneRequestDetailLine,
+  normalizeDoneRequestGaps,
+  readDoneState,
+  supersedeStaleDoneRequest,
+} from './project-done-request';
 
 /**
  * Who is asking for an item to be put in front of the project's coordinator conversation.
@@ -186,6 +203,9 @@ export interface OpenItemRow {
   /** What a `START_REQUEST` asks — the "Start this project?" card's source; null for every other
    *  kind. */
   startRequest: ProjectStartRequest | null;
+  /** What a `DONE_REQUEST` asks — the "Is this project done?" card's source; null for every other
+   *  kind. */
+  doneRequest: DoneRequest | null;
   /** What the item's payload holds, as the rows its card draws (§7.5); null when the payload is
    *  not a shape this build reads, which leaves the card drawing what it drew before. */
   facts: OpenItemFacts | null;
@@ -268,13 +288,14 @@ export interface PromotionCheckRetried {
   handlingItemIds: string[];
 }
 
-/** The project's open exceptions, split by who is expected to act (§4.8), the coordinator's open
- *  request to start it — beside them rather than among them (`ProjectOpenItemsView`) — and what the
- *  coordinator closed in the last day (§4.7 H5). */
+/** The project's open exceptions, split by who is expected to act (§4.8), and the coordinator's
+ *  open requests to start it and to record it done — beside them rather than among them
+ *  (`ProjectOpenItemsView`) — plus what the coordinator closed in the last day (§4.7 H5). */
 export interface ProjectOpenItems {
   needsYou: OpenItemRow[];
   withCoordinator: OpenItemRow[];
   startRequest: OpenItemRow | null;
+  doneRequest: OpenItemRow | null;
   settled: OpenItemRow[];
 }
 
@@ -775,6 +796,156 @@ export class ProjectOpenItemService {
         superseded: open ? { itemId: open.id } : null,
       };
     }, loggedRetry(this.logger, 'projectOpenItem.requestStart'));
+  }
+
+  /**
+   * The coordinator asks the account owner to record the project done (`project_request_done`,
+   * `project-done-request.ts`).
+   *
+   * Filed and returned at once, like a start request: the owner answers on the "Is this project
+   * done?" card. Only the conversation the project is coordinated from may ask, and only while the
+   * project is OPEN.
+   *
+   * One transaction under the project row (FOR NO KEY UPDATE, the lock the owner's DONE takes
+   * first): a request and the owner's record of the same project are ordered, so no request is filed
+   * about a project that has just been recorded done. The project is checked under it, and one that
+   * is not ready is refused with every finding, writing nothing; one that is supersedes the request
+   * already open, if any, and files this one — unless it is that same request again, which writes
+   * nothing.
+   */
+  async requestDone(
+    ownerId: string,
+    projectId: string,
+    actingSessionId: string | undefined,
+    body: RequestProjectDoneBody,
+  ): Promise<ProjectDoneRequestFiled> {
+    const judgment = typeof body.judgment === 'string' ? body.judgment.trim() : '';
+    if (!judgment) {
+      throw new BadRequestException(
+        'judgment is required: your call on whether the project is done, in a sentence or two — the '
+          + 'first thing the owner reads on the card',
+      );
+    }
+    if (judgment.length > MAX_DONE_REQUEST_JUDGMENT) {
+      throw new BadRequestException(`judgment is at most ${MAX_DONE_REQUEST_JUDGMENT} characters`);
+    }
+    const normalized = normalizeDoneRequestGaps(body.gaps);
+    if ('problem' in normalized) throw new BadRequestException(normalized.problem);
+    const { gaps } = normalized;
+    const asking = actingSessionId?.trim();
+    return withTransactionRetry(this.prisma, async (tx) => {
+      const [project] = await tx.$queryRaw<Array<{
+        status: string;
+        coordinatorSessionId: string | null;
+      }>>(Prisma.sql`
+        SELECT "status"::text AS "status", "coordinator_session_id" AS "coordinatorSessionId"
+          FROM "project"
+         WHERE "id" = ${projectId}::uuid AND "owner_id" = ${ownerId}::uuid
+           FOR NO KEY UPDATE`);
+      if (!project) throw new NotFoundException('project not found');
+      if (!asking || asking !== project.coordinatorSessionId) {
+        throw new ForbiddenException({
+          code: DONE_REQUEST_COORDINATOR_ONLY,
+          message:
+            'only the conversation coordinating this project may ask its owner to record it done. '
+            + 'The request is filed in the project’s name, so the session asking has to be the one '
+            + 'the project points at.',
+        });
+      }
+      if (project.status !== 'OPEN') {
+        throw new ConflictException(project.status === 'DONE'
+          ? {
+            code: 'PROJECT_ALREADY_DONE',
+            message: 'this project is already recorded done, so there is nothing to ask: nothing was '
+              + 'filed.',
+          }
+          : {
+            code: 'PROJECT_CANCELLED',
+            message: 'this project was cancelled, so there is nothing to ask: nothing was filed.',
+          });
+      }
+      const state = await readDoneState(tx, ownerId, projectId, asking);
+      const keys = new Set(state.criteria.map((criterion) => criterion.stated.key));
+      const stray = gaps.findIndex((gap) => !keys.has(gap.criterionKey));
+      if (stray >= 0) {
+        throw new BadRequestException(
+          `gaps[${stray}] names criterion ${gaps[stray].criterionKey}, which this project does not `
+            + 'state: a gap is about one of the criteria project_get lists, by its key',
+        );
+      }
+      const findings = doneReadiness(state, gaps);
+      const refusals = findings.filter((finding) => finding.severity === 'REFUSE');
+      if (refusals.length > 0) {
+        const notReady: ProjectDoneNotReadyBody = {
+          code: DONE_REQUEST_NOT_READY,
+          message:
+            `this project is not ready to be recorded done: ${refusals.length} check`
+            + `${refusals.length === 1 ? '' : 's'} refused it, and nothing was filed`,
+          written: 0,
+          findings,
+        };
+        throw new ConflictException(notReady);
+      }
+      const request = {
+        criteriaDigest: state.criteriaDigest,
+        stateDigest: state.stateDigest,
+        judgment,
+        gaps,
+        warnings: findings,
+      } satisfies DoneRequest;
+      const open = await tx.projectOpenItem.findFirst({
+        where: { projectId, kind: DONE_REQUEST_KIND, state: 'OPEN' },
+        select: { id: true, payload: true },
+      });
+      if (open && canonicalJson(open.payload) === canonicalJson(request)) {
+        return { ...request, itemId: open.id, state: 'OPEN', alreadyOpen: true, superseded: null };
+      }
+      const now = new Date();
+      // Named before either write, so the request it replaces can say which one did — a row that is
+      // no longer OPEN is final (`project_open_item_terminal_guard`) and cannot be told afterwards.
+      const itemId = randomUUID();
+      if (open) {
+        await tx.projectOpenItem.updateMany({
+          where: { id: open.id, state: 'OPEN' },
+          data: {
+            state: 'SUPERSEDED',
+            resolvedAt: now,
+            resolvedBy: 'COORDINATOR',
+            resolvedBySessionId: asking,
+            supersededByItemId: itemId,
+            resolutionNote: 'the coordinator asked again',
+          },
+        });
+      }
+      await tx.projectOpenItem.create({
+        data: {
+          id: itemId,
+          projectId,
+          ownerId,
+          kind: DONE_REQUEST_KIND satisfies OpenItemKind,
+          state: 'OPEN',
+          assignee: 'OWNER' satisfies OpenItemAssignee,
+          assigneeReason: 'DEFAULT' satisfies OpenItemAssigneeReason,
+          askedBySessionId: asking,
+          dedupeKey: DONE_REQUEST_DEDUPE_KEY,
+          title: DONE_REQUEST_TITLE,
+          payload: request as unknown as Prisma.InputJsonValue,
+          waitingSince: now,
+          assignedAt: now,
+          // The owner's from the start, so there is nobody to escalate to — and no reminder: the
+          // card stays in front of them until they answer it or the project moves under it.
+          escalateAt: null,
+        },
+        select: { id: true },
+      });
+      return {
+        ...request,
+        itemId,
+        state: 'OPEN',
+        alreadyOpen: false,
+        superseded: open ? { itemId: open.id } : null,
+      };
+    }, loggedRetry(this.logger, 'projectOpenItem.requestDone'));
   }
 
   /**
@@ -1678,6 +1849,11 @@ export class ProjectOpenItemService {
     await this.guarded('supersedeStaleStartRequest', async () => {
       await supersedeStaleStartRequest(this.prisma, ownerId, projectId);
     });
+    // And a done request about a project that has moved since — its criteria, its tasks or where
+    // their work has landed — for the same reason (`project-done-request.ts`).
+    await this.guarded('supersedeStaleDoneRequest', async () => {
+      await supersedeStaleDoneRequest(this.prisma, ownerId, projectId);
+    });
     // Whether there is a conversation to ask again — the SAME predicate `returnToCoordinator`
     // refuses on, minus the switch, which is not part of it: the press is the owner's own, so a
     // switched-off coordinator still has somewhere to put the item (`deliver`). Drawn the other way
@@ -1811,6 +1987,9 @@ export class ProjectOpenItemService {
       const startRequest = row.kind === START_REQUEST_KIND
         ? (row.payload as unknown as ProjectStartRequest)
         : null;
+      const doneRequest = row.kind === DONE_REQUEST_KIND
+        ? (row.payload as unknown as DoneRequest)
+        : null;
       const title = row.taskId ? titles.get(row.taskId) : undefined;
       return {
         itemId: row.id,
@@ -1820,9 +1999,12 @@ export class ProjectOpenItemService {
           ? questionDetailLine(question)
           : startRequest
             ? startRequestDetailLine(projectId, startRequest)
-            : detailLine(row.kind, row.payload),
+            : doneRequest
+              ? doneRequestDetailLine(doneRequest)
+              : detailLine(row.kind, row.payload),
         question,
         startRequest,
+        doneRequest,
         facts: openItemFacts(
           row.kind,
           row.payload,
@@ -1873,6 +2055,7 @@ export class ProjectOpenItemService {
         detailLine: detailLine(row.kind, row.payload),
         question: null,
         startRequest: null,
+        doneRequest: null,
         facts: openItemFacts(
           row.kind,
           row.payload,
@@ -1906,9 +2089,11 @@ export class ProjectOpenItemService {
       };
     });
     return {
-      needsYou: view.filter((row) => row.assignee === 'OWNER' && row.kind !== START_REQUEST_KIND),
+      needsYou: view.filter((row) => row.assignee === 'OWNER'
+        && row.kind !== START_REQUEST_KIND && row.kind !== DONE_REQUEST_KIND),
       withCoordinator: view.filter((row) => row.assignee === 'COORDINATOR'),
       startRequest: view.find((row) => row.kind === START_REQUEST_KIND) ?? null,
+      doneRequest: view.find((row) => row.kind === DONE_REQUEST_KIND) ?? null,
       settled: settledView,
     };
   }

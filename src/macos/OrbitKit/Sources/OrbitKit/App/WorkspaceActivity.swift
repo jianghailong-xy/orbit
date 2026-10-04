@@ -38,13 +38,21 @@ public enum WorkspaceActivityLogic {
     /// One session's half of `runningWorkspaceIDs`: its row draws the spinner. A folder row reads
     /// the same answer for the sessions filed in it (`SessionFolderGrouping`).
     static func isRunning(_ session: Session) -> Bool {
-        if case .spinner = SessionStatusGlyph.make(for: session).shape { return true }
+        isRunning(session, watching: nil)
+    }
+
+    static func isRunning(_ session: Session, watching: WatchSessionSummary?) -> Bool {
+        if case .spinner = SessionStatusGlyph.make(for: session, watching: watching).shape { return true }
         return false
     }
 
     /// One session's half of `jobWorkspaceIDs`: its row's glyph breathes.
     static func isRunningJob(_ session: Session) -> Bool {
-        SessionStatusGlyph.make(for: session).pulse
+        isRunningJob(session, watching: nil)
+    }
+
+    static func isRunningJob(_ session: Session, watching: WatchSessionSummary?) -> Bool {
+        SessionStatusGlyph.make(for: session, watching: watching).pulse
     }
 }
 

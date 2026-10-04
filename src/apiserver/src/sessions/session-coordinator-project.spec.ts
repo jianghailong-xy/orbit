@@ -49,6 +49,14 @@ function sessionRow(coordinatorForProject: { id: string; title: string } | null)
 function serviceFor(row: ReturnType<typeof sessionRow>) {
   const calls: any[] = [];
   const prisma = {
+    $queryRaw: async () => [{
+      projectMembership: row.coordinatorForProject ? {
+        projectId: row.coordinatorForProject.id,
+        projectTitle: row.coordinatorForProject.title,
+        projectStatus: 'OPEN',
+        role: 'COORDINATOR',
+      } : null,
+    }],
     session: {
       findFirst: async (args: any) => {
         calls.push(args);
@@ -68,6 +76,12 @@ test('the detail names the project a coordinator session coordinates', async () 
 
   assert.equal(detail.projectId, PROJECT_ID);
   assert.equal(detail.projectTitle, '实施 Project 公平调度域改造');
+  assert.deepEqual(detail.projectMembership, {
+    projectId: PROJECT_ID,
+    projectTitle: '实施 Project 公平调度域改造',
+    projectStatus: 'OPEN',
+    role: 'COORDINATOR',
+  });
   // Reached through the unique index behind Project.coordinatorSessionId, in the same read.
   assert.deepEqual(calls[0].include.coordinatorForProject, { select: { id: true, title: true } });
   // The join itself is not part of the payload — only the two flattened fields are.
@@ -81,4 +95,5 @@ test('an ordinary session says so with nulls rather than by omission', async () 
 
   assert.equal(detail.projectId, null);
   assert.equal(detail.projectTitle, null);
+  assert.equal(detail.projectMembership, null);
 });

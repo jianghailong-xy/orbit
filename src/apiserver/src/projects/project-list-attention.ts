@@ -9,6 +9,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { escalatesAt } from './open-item-escalation.service';
 import { openItemOwed, ownerItemKind } from './project-open-item';
+import { DONE_REQUEST_KIND } from './project-done-request';
 import { START_REQUEST_KIND } from './project-start-request';
 
 export type ProjectAttentionSeverity = 'INFO' | 'WARNING' | 'CRITICAL';
@@ -30,6 +31,7 @@ export interface ProjectListAttention extends WireProjectListAttention<Date> {
   ownerItems: Array<WireProjectListOwnerItem<Date>>;
   coordinatorItems: WireProjectListCoordinatorItems<Date> | null;
   startRequest: { waitingSince: Date } | null;
+  doneRequest: { waitingSince: Date } | null;
 }
 
 export function emptyProjectListAttention(): ProjectListAttention {
@@ -43,6 +45,7 @@ export function emptyProjectListAttention(): ProjectListAttention {
     ownerItems: [],
     coordinatorItems: null,
     startRequest: null,
+    doneRequest: null,
   };
 }
 
@@ -111,6 +114,7 @@ export async function readProjectListAttention(
       ownerItems: [],
       coordinatorItems: null,
       startRequest: null,
+      doneRequest: null,
     });
   }
   // A project with items and no open blockers is the common case, not an edge one: the blockers
@@ -131,6 +135,15 @@ export async function readProjectListAttention(
     if (row.kind === START_REQUEST_KIND) {
       if (!project.startRequest || row.oldestWaitingSince < project.startRequest.waitingSince) {
         project.startRequest = { waitingSince: row.oldestWaitingSince };
+      }
+      continue;
+    }
+    // Its counterpart at the other end ("Ready to close"): the coordinator asking to record an OPEN
+    // project done. The read below leaves out a request on a project that is no longer OPEN, as the
+    // needs-you count does (`projectsReadyToClose`).
+    if (row.kind === DONE_REQUEST_KIND) {
+      if (!project.doneRequest || row.oldestWaitingSince < project.doneRequest.waitingSince) {
+        project.doneRequest = { waitingSince: row.oldestWaitingSince };
       }
       continue;
     }
@@ -250,5 +263,6 @@ async function readOpenItems(
      WHERE item.state = 'OPEN' ${narrowed}
        AND (item.kind <> 'START_REQUEST' OR proj.started_at IS NULL)
        AND ${openItemOwed('item')}
+       AND (item.kind <> 'DONE_REQUEST' OR proj."status" = 'OPEN')
      GROUP BY item.project_id, item.kind, item.assignee, item.assignee_reason`);
 }

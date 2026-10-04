@@ -1,4 +1,5 @@
 import {
+  ProjectStatus,
   RunStatus,
   SessionEndReason,
   SessionFilingState,
@@ -104,6 +105,14 @@ export interface ControlEvent {
   data: Record<string, unknown>;
 }
 
+/** Project membership derived from coordinator, task, context, judgment or root-session links. */
+export interface SessionProjectMembership {
+  projectId: string;
+  projectTitle: string;
+  projectStatus: `${ProjectStatus}`;
+  role: 'COORDINATOR' | 'TASK' | 'CONTEXT' | 'JUDGMENT' | 'CHILD';
+}
+
 /** `data` for `session.created` / `session.updated`: the slim list-row summary, field-aligned
  *  with the `GET /sessions` list response so the client can upsert it verbatim. */
 export interface ControlSessionSummary {
@@ -136,6 +145,8 @@ export interface ControlSessionSummary {
   /** Project relation projected onto a coordinator Session. Optional for rolling-version peers. */
   projectId?: string | null;
   projectTitle?: string | null;
+  /** Always sent by current servers; null clears membership, absence supports older peers. */
+  projectMembership?: SessionProjectMembership | null;
   /** Active control-plane repair facts involving this exact Session. Always sent by current
    *  servers (including `[]` on recovery) so a stream upsert can both install and clear one. */
   controlPlaneObligations?: Array<{
