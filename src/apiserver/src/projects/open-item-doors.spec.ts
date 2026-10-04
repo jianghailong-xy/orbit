@@ -32,10 +32,7 @@ const CONTROLLER_FILES = [
   'projects/project-integration-retry.controller.ts',
 ].map((file) => path.join(SRC, file));
 
-const EXPECTED_GAPS = [
-  'PROMOTION_CONFLICT_BOTH_ASSIGNEES',
-  'MAIN_SYNC_CONFLICT_COORDINATOR',
-] as const;
+const EXPECTED_GAPS = [] as const;
 
 function mcpNames(source: string): Set<string> {
   return new Set([...source.matchAll(/"name"\s*:\s*"([^"]+)"/g)].map((match) => match[1]));
@@ -75,9 +72,9 @@ function allRouteMetadata(): Set<string> {
   return routes;
 }
 
-test('the matrix has one resolving door per applicable cell, with only the declared gaps', () => {
+test('the matrix has one resolving door per applicable cell and no unresolved conflict gaps', () => {
   assert.deepEqual([...KNOWN_GAPS], [...EXPECTED_GAPS]);
-  assert.equal(KNOWN_GAPS.length, 2);
+  assert.equal(KNOWN_GAPS.length, 0);
   assert.ok(OPEN_ITEM_DOOR_TABLE.length > 0);
 
   for (const cell of OPEN_ITEM_DOOR_TABLE) {
@@ -95,13 +92,26 @@ test('the matrix has one resolving door per applicable cell, with only the decla
   }
 });
 
-test('promotion gaps are limited to conflicts, and owner landings have a retry door', () => {
+test('conflicts name their branch-changing repair doors, and owner landings have a retry door', () => {
   const promotionConflicts = OPEN_ITEM_DOOR_TABLE.filter((cell) =>
     (cell.sourceJob === 'CHECK_PROMOTION' || cell.sourceJob === 'LAND_PROMOTION')
+    && cell.todoType.startsWith('INTEGRATION_')
     && cell.failureClass === 'CONFLICT');
   assert.ok(promotionConflicts.length > 0);
-  assert.ok(promotionConflicts.every((cell) =>
-    knownGapsForCell(cell).includes('PROMOTION_CONFLICT_BOTH_ASSIGNEES')));
+  assert.ok(promotionConflicts.every((cell) => {
+    assert.deepEqual(knownGapsForCell(cell), []);
+    return cell.doors.some((door) => door.name === 'task_create'
+      && door.mcp === 'task_create' && door.capability === 'REPAIR'
+      && door.implemented && door.resolving);
+  }));
+
+  const promotionMergeConflicts = OPEN_ITEM_DOOR_TABLE.filter((cell) =>
+    cell.todoType === 'INTEGRATION_CONFLICT'
+    && cell.sourceJob === 'CHECK_PROMOTION'
+    && cell.failureClass === 'CONFLICT');
+  assert.equal(promotionMergeConflicts.length, 2, 'one sync-task door for each assignee');
+  assert.ok(promotionMergeConflicts.every((cell) =>
+    cell.doors.some((door) => door.id === 'task-create-sync' && door.holder === cell.assignee)));
 
   const promotionFailures = OPEN_ITEM_DOOR_TABLE.filter((cell) =>
     (cell.sourceJob === 'CHECK_PROMOTION' || cell.sourceJob === 'LAND_PROMOTION')
@@ -114,8 +124,11 @@ test('promotion gaps are limited to conflicts, and owner landings have a retry d
   const mainSyncConflict = OPEN_ITEM_DOOR_TABLE.filter((cell) =>
     cell.sourceJob === 'MAIN_SYNC' && cell.failureClass === 'CONFLICT' && cell.assignee === 'COORDINATOR');
   assert.ok(mainSyncConflict.length > 0);
-  assert.ok(mainSyncConflict.every((cell) =>
-    knownGapsForCell(cell).includes('MAIN_SYNC_CONFLICT_COORDINATOR')));
+  assert.ok(mainSyncConflict.every((cell) => {
+    assert.deepEqual(knownGapsForCell(cell), []);
+    assert.ok(cell.doors.some((door) => door.name === 'task_comment' && door.mcp === 'task_comment'));
+    return cell.doors.some((door) => door.name === 'task_reopen' && door.resolving);
+  }));
 
   const ownerLanding = OPEN_ITEM_DOOR_TABLE.filter((cell) =>
     (cell.sourceJob === 'LAND_TASK' || cell.sourceJob === 'MAIN_SYNC')
