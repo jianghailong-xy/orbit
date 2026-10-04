@@ -19,6 +19,7 @@ import {
   IntegrationJobResultRequest,
   RunEventType,
   RunStatus as SharedRunStatus,
+  uuidToBase62,
 } from '@orbit/shared';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -1096,6 +1097,162 @@ test('the door\'s edges: only the coordinator, with a reason, one check at a tim
       const conflict = await denied(() => retryCandidate(stack, c, conflicted.id));
       assert.equal(conflict.code, 'INTEGRATION_RETRY_NOT_APPLICABLE');
       assert.match(conflict.message, /only a project branch that changed answers one/);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+// ── the owner asking the coordinator again about a merge into main ────────────────────────────
+
+test('escalated merge into main: the owner\'s card offers "Ask the coordinator again"; pressed, the coordinator\'s re-check is accepted as it was before the clock ran out, and Automatic merges as it would have',
+  { skip, timeout: 240_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'promo-ask-again');
+      const blocked = await blockedCandidate(stack, w);
+      await escalate(stack, blocked.itemId);
+
+      // The owner's card: the way back to the coordinator, beside the merge card the row leads to.
+      let read = await stack.openItems.list(w.ownerId, w.projectId);
+      const owners = read.needsYou.find((row) => row.itemId === blocked.itemId);
+      assert.ok(owners, 'the escalated item is in the owner\'s group');
+      assert.equal(owners!.kind, 'INTEGRATION_CHECK_FAILED');
+      assert.equal(owners!.promotionId, blocked.promotionId);
+      assert.equal(owners!.taskId, null, 'about the candidate, and about no task');
+      assert.equal(owners!.assigneeReason, 'ESCALATED');
+      assert.deepEqual(owners!.actions, ['ASK_COORDINATOR_AGAIN', 'REVIEW']);
+      const before = await denied(() => retryCandidate(stack, w, blocked.promotionId));
+      assert.equal(before.code, 'INTEGRATION_RETRY_OWNER_ITEM', 'until the press, the re-check is the owner\'s');
+
+      // The press: the item is the coordinator's again, and it is told afresh how to answer it.
+      const returned = await stack.openItems.returnToCoordinator(w.ownerId, w.projectId, blocked.itemId);
+      assert.equal(returned.assignee, 'COORDINATOR');
+      const handed = await item(stack.db, blocked.itemId);
+      assertStillOpen(handed, 'the item handed back');
+      assert.equal(handed.assignee, 'COORDINATOR');
+      assert.equal(handed.assigneeReason, 'DEFAULT');
+      assert.equal(handed.escalatedAt, null);
+      // A turn of its own, keyed by the new assignment (`assigned_at` moves with `waiting_since`), not
+      // the one the item was first delivered in.
+      const told = await toldAbout(stack.db, w.coordinatorSessionId, blocked.itemId);
+      assert.equal(told.length, 2, 'delivered when it opened, and again when the owner handed it back');
+      const fresh = await stack.db.conversationTurn.findMany({
+        where: {
+          sessionId: w.coordinatorSessionId,
+          clientTurnId: `open-item:v1:${blocked.itemId}:${returned.waitingSince.getTime()}`,
+        },
+        select: { content: true },
+      });
+      assert.equal(fresh.length, 1, 'the hand-back is a fresh turn on the coordinator');
+      assert.match(fresh[0]!.content ?? '', /integration_retry/);
+      assert.match(fresh[0]!.content ?? '', new RegExp(`promotionId 传 ${uuidToBase62(blocked.promotionId)}`));
+      read = await stack.openItems.list(w.ownerId, w.projectId);
+      assert.equal(read.needsYou.some((row) => row.itemId === blocked.itemId), false);
+      assert.deepEqual(read.withCoordinator.find((row) => row.itemId === blocked.itemId)?.actions, ['REVIEW'],
+        'the coordinator\'s own item is not asked again');
+
+      // The coordinator's re-check door takes it, on the authority it had before the item escalated.
+      const retried = await retryCandidate(stack, w, blocked.promotionId);
+      assert.equal(retried.retryOfJobId, blocked.checkJobId);
+      assert.deepEqual(retried.handlingItemIds, [blocked.itemId], 'handed back, the decision came with it');
+      const recheck = await onlyClaim(stack, w, 'CHECK_PROMOTION');
+      assert.equal(recheck.jobId, retried.jobId);
+      const checked = await report(stack, w, recheck, cleanCheck(LINE_FIRST));
+      assert.equal(checked.accepted, true);
+      const row = await item(stack.db, blocked.itemId);
+      assert.equal(row.resolution, 'HANDLED');
+      assert.equal(row.resolvedBy, 'COORDINATOR');
+      assert.equal(row.resolvedBySessionId, w.coordinatorSessionId);
+      assert.equal(row.resolvedByJobId, retried.jobId);
+      // Automatic's own rule over a clean check (M-T11), exactly as if the clock had never run out.
+      assert.equal(checked.openItemId, null, 'no owner card is opened');
+      assert.deepEqual(await stack.db.projectPromotion.findUniqueOrThrow({
+        where: { id: blocked.promotionId },
+        select: { state: true, confirmedAutomatically: true, confirmedByUserId: true },
+      }), { state: 'CONFIRMED', confirmedAutomatically: true, confirmedByUserId: null });
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('not Automatic: asked again, the coordinator re-checks the blocked merge, and the merge card that follows keeps "Review" alone and stays the owner\'s to merge',
+  { skip, timeout: 240_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'promo-ask-manual', false);
+      const blocked = await blockedCandidate(stack, w);
+      let read = await stack.openItems.list(w.ownerId, w.projectId);
+      const born = read.needsYou.find((row) => row.itemId === blocked.itemId);
+      assert.equal(born?.assigneeReason, 'NO_COORDINATOR', 'the owner\'s from birth');
+      assert.deepEqual(born?.actions, ['ASK_COORDINATOR_AGAIN', 'REVIEW'],
+        'the conversation exists, so the press is offered whatever the switch says');
+
+      await stack.openItems.returnToCoordinator(w.ownerId, w.projectId, blocked.itemId);
+      const retried = await retryCandidate(stack, w, blocked.promotionId);
+      assert.deepEqual(retried.handlingItemIds, [blocked.itemId]);
+      const recheck = await onlyClaim(stack, w, 'CHECK_PROMOTION');
+      const checked = await report(stack, w, recheck, cleanCheck(LINE_FIRST));
+      const candidate = await stack.db.projectPromotion.findUniqueOrThrow({
+        where: { id: blocked.promotionId },
+        select: { state: true, confirmedAutomatically: true, openItemId: true },
+      });
+      assert.equal(candidate.state, 'READY', 'the re-check passing does not merge anything');
+      assert.equal(candidate.confirmedAutomatically, false);
+      assert.ok(candidate.openItemId);
+      assert.equal(checked.openItemId, candidate.openItemId);
+
+      // The merge card: the owner's, with the conversation there to ask, and still only "Review".
+      read = await stack.openItems.list(w.ownerId, w.projectId);
+      const approval = read.needsYou.find((row) => row.itemId === candidate.openItemId);
+      assert.equal(approval?.kind, 'PROMOTION_APPROVAL');
+      assert.equal(approval?.assignee, 'OWNER');
+      assert.deepEqual(approval?.actions, ['REVIEW'], 'a merge card is decided on its own card, never asked again');
+      const handBack = await stack.openItems.returnToCoordinator(w.ownerId, w.projectId, candidate.openItemId!)
+        .then(() => null, (error: unknown) => error);
+      assert.ok(handBack, 'pressed anyway, the merge card is not handed to the coordinator');
+      assert.deepEqual(await stack.db.projectOpenItem.findUniqueOrThrow({
+        where: { id: candidate.openItemId! }, select: { state: true, assignee: true },
+      }), { state: 'OPEN', assignee: 'OWNER' });
+
+      // Merging stays the owner's press: the coordinator can neither re-check a READY candidate, close
+      // its card nor confirm it; the owner's confirm does.
+      const recheckAgain = await denied(() => retryCandidate(stack, w, blocked.promotionId));
+      assert.equal(recheckAgain.code, 'INTEGRATION_RETRY_NOT_APPLICABLE');
+      assert.match(recheckAgain.message, /Merge to main/);
+      const closeCard = await denied(() => stack.openItems.resolveOpenItem(w.ownerId, w.projectId,
+        candidate.openItemId!, { note: 'merging' }, { kind: 'SESSION', sessionId: w.coordinatorSessionId }));
+      assert.equal(closeCard.code, 'OPEN_ITEM_HAS_ITS_OWN_DOOR');
+      const byCoordinator = await denied(() => stack.promotions.confirm(
+        { userId: w.ownerId, actingSessionId: w.coordinatorSessionId }, w.projectId, blocked.promotionId, LINE_FIRST));
+      assert.equal(byCoordinator.status, 403);
+      assert.equal(byCoordinator.code, 'PROMOTION_OWNER_ONLY');
+      await stack.promotions.confirm({ userId: w.ownerId }, w.projectId, blocked.promotionId, LINE_FIRST);
+      assert.deepEqual(await stack.db.projectPromotion.findUniqueOrThrow({
+        where: { id: blocked.promotionId },
+        select: { state: true, confirmedAutomatically: true, confirmedByUserId: true },
+      }), { state: 'CONFIRMED', confirmedAutomatically: false, confirmedByUserId: w.ownerId });
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('no conversation left to ask: an escalated merge-into-main item offers "Review" alone, and the press is refused',
+  { skip, timeout: 240_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'promo-ask-nobody');
+      const blocked = await blockedCandidate(stack, w);
+      await escalate(stack, blocked.itemId);
+      await stack.db.session.update({
+        where: { id: w.coordinatorSessionId },
+        data: { completedAt: new Date() },
+      });
+      const read = await stack.openItems.list(w.ownerId, w.projectId);
+      assert.deepEqual(read.needsYou.find((row) => row.itemId === blocked.itemId)?.actions, ['REVIEW']);
+      const pressed = await denied(() => stack.openItems.returnToCoordinator(w.ownerId, w.projectId, blocked.itemId));
+      assert.equal(pressed.status, 409);
+      assert.equal(pressed.code, 'OPEN_ITEM_NO_COORDINATOR');
+      assert.equal((await item(stack.db, blocked.itemId)).assignee, 'OWNER', 'nothing moved');
     } finally {
       await stack.db.$disconnect();
     }

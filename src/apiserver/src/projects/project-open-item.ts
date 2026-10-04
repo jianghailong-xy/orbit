@@ -154,8 +154,17 @@ export function openItemActions(source: OpenItemActionsSource): OpenItemAction[]
   if (source.fuseEpisodeId) return ['RESUME'];
   if (source.kind === 'COORDINATOR_QUESTION') return ['ANSWER'];
   // A merge into main is decided on its own card, which says what would land and what the checks
-  // came to (§7.5): the row is the way in.
-  if (source.promotionId) return ['REVIEW'];
+  // came to (§7.5): the row is the way in. An integration failure of that merge that has become the
+  // owner's also has the way back a task's item has (§4.7): the press puts it back in front of the
+  // coordinator, whose door for it is the candidate's re-check (`decidePromotionRetry`). The merge
+  // card itself is the owner's to decide and has no such way back.
+  if (source.promotionId) {
+    return source.assignee === 'OWNER'
+      && source.askable
+      && INTEGRATION_ITEM_KINDS.includes(source.kind as OpenItemKind)
+      ? ['ASK_COORDINATOR_AGAIN', 'REVIEW']
+      : ['REVIEW'];
+  }
   if (!source.taskId) return [];
   if (source.assignee === 'COORDINATOR') {
     // The coordinator's own: it can be looked at, run again, or stopped.

@@ -7,7 +7,7 @@ import {
   landingFailureClass,
   openItemKindForJobState,
 } from './project-integration-job';
-import { openItemMessage } from './project-open-item';
+import { openItemActions, openItemMessage } from './project-open-item';
 import { COORDINATOR_AUTHORITY, refuseHumanOnlyAction } from './coordinator-authority';
 import { promotionPrincipalRefusal } from './project-promotion';
 import { ownerConfirmationPrincipalRefusal } from '../tasks/task-owner-confirmation';
@@ -284,6 +284,25 @@ test('a candidate that is the owner\'s — escalated, or theirs from birth witho
 
   // "Ask the coordinator again" put the item in front of the coordinator, and the decision with it.
   assert.equal(decidePromotionRetry(candidate({ coordinatorEnabled: false })).ok, true);
+});
+
+test('the owner\'s item about a blocked merge offers "Ask the coordinator again" while there is a conversation to ask; the merge card never does', () => {
+  const about = { taskId: null, promotionId: CANDIDATE, fuseEpisodeId: null };
+  for (const kind of ['INTEGRATION_CONFLICT', 'INTEGRATION_CHECK_FAILED', 'INTEGRATION_ERROR']) {
+    assert.deepEqual(openItemActions({ ...about, kind, assignee: 'OWNER', askable: true }),
+      ['ASK_COORDINATOR_AGAIN', 'REVIEW'], kind);
+    assert.deepEqual(openItemActions({ ...about, kind, assignee: 'OWNER', askable: false }),
+      ['REVIEW'], `${kind}, with no conversation to ask`);
+    assert.deepEqual(openItemActions({ ...about, kind, assignee: 'COORDINATOR', askable: true }),
+      ['REVIEW'], `${kind}, already the coordinator's`);
+  }
+  // Deciding the merge is the owner's, on its own card: there is nothing to hand back.
+  assert.deepEqual(openItemActions({ ...about, kind: 'PROMOTION_APPROVAL', assignee: 'OWNER', askable: true }),
+    ['REVIEW']);
+  // A task's escalated item is what it was.
+  assert.deepEqual(openItemActions({
+    kind: 'TASK_FAILED', assignee: 'OWNER', taskId: TASK, promotionId: null, fuseEpisodeId: null, askable: true,
+  }), ['ASK_COORDINATOR_AGAIN', 'OPEN_TASK_SESSION', 'CANCEL_TASK']);
 });
 
 test('a candidate in flight, waiting on the owner\'s merge, ended, never checked or conflicted is refused, each saying why', () => {
