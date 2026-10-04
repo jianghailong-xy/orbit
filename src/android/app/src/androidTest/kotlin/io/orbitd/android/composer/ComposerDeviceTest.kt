@@ -163,12 +163,13 @@ class ComposerDeviceTest {
             control("""{"uploadFailures":1,"uploadDelay":0.3}""")
             compose.onNodeWithText("+").performClick(); compose.onNodeWithText("File",useUnmergedTree=true).performClick()
             selectFilesRoot("Downloads")
+            if (systemNode("List view") != null) systemClick("List view")
             compose.waitUntil(10000) { systemNode(fileName) != null }
             capture("system-files")
-            val bounds=android.graphics.Rect();systemNode(fileName)!!.getBoundsInScreen(bounds)
-            shellBytes("input swipe ${bounds.centerX()} ${bounds.centerY()} ${bounds.centerX()} ${bounds.centerY()} 700")
+            clickNode(systemNode(fileName)!!)
             capture("system-file-selected")
-            systemClick(if (systemNode("Select") != null) "Select" else "Open")
+            compose.waitUntil(5000) { model.state.value.draft.attachments.isNotEmpty() || systemNode("Select") != null || systemNode("Open") != null }
+            if (model.state.value.draft.attachments.isEmpty()) systemClick(if (systemNode("Select") != null) "Select" else "Open")
             compose.waitUntil(15000) { model.state.value.failures.isNotEmpty() }
             compose.onNodeWithText("Retry upload").performClick()
             compose.waitUntil(15000) { model.state.value.draft.attachments.singleOrNull()?.remoteId!=null }
@@ -242,15 +243,13 @@ class ComposerDeviceTest {
             compose.onNodeWithText("+").performClick();compose.onNodeWithText("Image",useUnmergedTree=true).performClick()
             if (Build.VERSION.SDK_INT < 33) {
                 selectFilesRoot("Images")
+                if (systemNode("List view") != null) systemClick("List view")
                 systemClick("Pictures")
             }
             var tile:AccessibilityNodeInfo?=null
             compose.waitUntil(10000) { tile=systemFind { it.contentDescription?.toString()?.let { label -> label.startsWith("Photo taken") || label.startsWith(photoName) } == true || it.text?.toString()==photoName };tile!=null }
             capture("native-photo-picker")
-            if (Build.VERSION.SDK_INT < 33) {
-                val bounds=android.graphics.Rect();tile!!.getBoundsInScreen(bounds)
-                shellBytes("input swipe ${bounds.centerX()} ${bounds.centerY()} ${bounds.centerX()} ${bounds.centerY()} 700")
-            } else clickNode(tile!!)
+            clickNode(tile!!)
             var add:AccessibilityNodeInfo?=null
             compose.waitUntil(5000) { add=systemFind { it.text?.toString()?.let { text -> text.startsWith("Add",true) || text.equals("Done",true) || text.equals("Open",true) || text.equals("Select",true) } == true };add!=null || model.state.value.draft.attachments.isNotEmpty() }
             add?.let(::clickNode)
@@ -365,8 +364,16 @@ class ComposerDeviceTest {
         while(!n.isClickable && n.parent!=null)n=n.parent
         if (n.isClickable) assertTrue(n.performAction(AccessibilityNodeInfo.ACTION_CLICK))
         else {
-            val bounds=android.graphics.Rect();node.getBoundsInScreen(bounds)
-            shellBytes("input tap ${bounds.centerX()} ${bounds.centerY()}")
+            val target=generateSequence(node) { it.parent }.firstOrNull { it.viewIdResourceName?.endsWith(":id/item_root")==true } ?: node
+            val bounds=android.graphics.Rect();target.getBoundsInScreen(bounds)
+            val time=SystemClock.uptimeMillis()
+            for (action in listOf(MotionEvent.ACTION_DOWN,MotionEvent.ACTION_UP)) {
+                val pointer=MotionEvent.PointerProperties().apply { id=0;toolType=MotionEvent.TOOL_TYPE_FINGER }
+                val position=MotionEvent.PointerCoords().apply { x=bounds.exactCenterX();y=bounds.exactCenterY();pressure=1f;size=1f }
+                val event=MotionEvent.obtain(time,SystemClock.uptimeMillis(),action,1,arrayOf(pointer),arrayOf(position),0,0,1f,1f,0,0,InputDevice.SOURCE_TOUCHSCREEN,0)
+                assertTrue(instrument.uiAutomation.injectInputEvent(event,true));event.recycle()
+                SystemClock.sleep(100)
+            }
         }
         SystemClock.sleep(300)
     }
