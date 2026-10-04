@@ -129,7 +129,7 @@ public enum SessionProviderChoices {
 
     /// Login engines, plus the environment-key Antigravity compatibility entry. The server's
     /// workspace/runner key availability determines whether Antigravity is offered.
-    public static let engineSlugs = ["claude", "codex", "kimi", "antigravity"]
+    public static let engineSlugs = ["claude", "codex", "antigravity", "kimi"]
 
     /// A built-in engine has no configured row, so it has no preset to inherit a look from. Borrow
     /// the vendor preset carrying the same mark: the engine and the BYOK provider are the same
