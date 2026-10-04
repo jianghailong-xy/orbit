@@ -37,7 +37,11 @@ data class RunEvent(
 }
 
 @Serializable
-data class EventPage(val events: List<RunEvent>, val hasMore: Boolean = false, val after: Long? = null)
+data class EventPage(val events: List<RunEvent>, val hasMore: Boolean = false, val after: Long? = null,
+    val before: Long? = null, val anchor: RecordAnchor? = null)
+
+@Serializable
+data class RecordAnchor(val kind: String, val id: String, val seq: Long)
 
 @Serializable
 data class ControlEvent(val type: String, val sessionId: String = "", val data: JsonObject = JsonObject(emptyMap()))
@@ -82,6 +86,7 @@ data class SessionState(
     val fresh: Boolean = false,
     val connection: ConnectionState = ConnectionState.STOPPED,
     val error: RealtimeError? = null,
+    val accessDenied: Boolean = false,
 )
 
 data class RealtimeState(
