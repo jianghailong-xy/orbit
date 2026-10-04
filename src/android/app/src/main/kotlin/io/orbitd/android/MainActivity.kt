@@ -39,6 +39,7 @@ import io.orbitd.android.directory.*
 import io.orbitd.android.navigation.*
 import io.orbitd.android.ui.OrbitTheme
 import io.orbitd.android.ui.LocalOrbitColors
+import io.orbitd.android.push.PushNoticeHost
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 
@@ -50,7 +51,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         if (savedInstanceState == null) acceptIntent(intent)
         val auth = ViewModelProvider(this, ViewModelProvider.AndroidViewModelFactory(application))[AuthViewModel::class.java]
-        setContent { OrbitTheme { OrbitShell(auth, application as OrbitApplication, incoming) } }
+        setContent { OrbitTheme { PushNoticeHost((application as OrbitApplication).push) { OrbitShell(auth, application as OrbitApplication, incoming) } } }
     }
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); acceptIntent(intent) }
     private fun acceptIntent(intent: Intent) {
