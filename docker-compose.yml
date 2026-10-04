@@ -195,12 +195,16 @@ services:
       DEEPSEEK_API_KEY: "${DEEPSEEK_API_KEY:-}"
       DEEPSEEK_BASE_URL: "${DEEPSEEK_BASE_URL:-https://api.deepseek.com}"
       DEEPSEEK_MODEL: "${DEEPSEEK_MODEL:-deepseek-chat}"
-      # Optional: APNs push for the iOS client ("needs your reply" alerts). Unset → PushService is
-      # a no-op (no pushes). APNS_KEY is the base64 of the AuthKey_XXXX.p8 auth key.
+      # Optional independent push channels. APNS_KEY is base64 of AuthKey_XXXX.p8.
       APNS_KEY: "${APNS_KEY:-}"
       APNS_KEY_ID: "${APNS_KEY_ID:-}"
       APNS_TEAM_ID: "${APNS_TEAM_ID:-}"
       APNS_BUNDLE_ID: "${APNS_BUNDLE_ID:-io.orbitd.app}"
+      # FCM HTTP v1 for GMS Android. PRIVATE_KEY is base64 of the service account PEM.
+      FCM_PROJECT_ID: "${FCM_PROJECT_ID:-}"
+      FCM_CLIENT_EMAIL: "${FCM_CLIENT_EMAIL:-}"
+      FCM_PRIVATE_KEY: "${FCM_PRIVATE_KEY:-}"
+      FCM_ANDROID_PACKAGE: "${FCM_ANDROID_PACKAGE:-io.orbitd.android}"
     depends_on:
       postgres:
         condition: service_healthy
