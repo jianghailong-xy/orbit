@@ -60,6 +60,25 @@ class EventTransportTest {
         }
     }
 
+    @Test fun hostnameReconnectFallsBackToTheReachableAddressAfterCancellation() = runBlocking {
+        MockWebServer().use { server ->
+            server.start(java.net.InetAddress.getByName("127.0.0.1"), 0)
+            val request = HttpRequest(ServerAddress.parse("http://localhost:${server.port}", allowLoopbackHttp = true),
+                ApiRequest(listOf("events")), "test", "fixture-token")
+            val transport = OkHttpEventTransport()
+            server.enqueue(MockResponse().setHeader("Content-Type", "text/event-stream")
+                .setBody("data: {\"type\":\"ping\"}\n\n".repeat(1000)).throttleBody(24, 50, TimeUnit.MILLISECONDS))
+            val opened = CompletableDeferred<Unit>()
+            val first = launch { transport.stream(request, { opened.complete(Unit) }, {}) }
+            withTimeout(3000) { opened.await() }
+            withTimeout(500) { first.cancelAndJoin() }
+            server.enqueue(MockResponse().setHeader("Content-Type", "text/event-stream").setBody("data: recovered\n\n"))
+            val frames = mutableListOf<SseFrame>()
+            withTimeout(3000) { transport.stream(request, {}, { frames += it }) }
+            assertEquals("recovered", frames.single().data)
+        }
+    }
+
     @Test fun redirectsAndWrongContentTypeAreNeverConsumed() = runBlocking {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setResponseCode(307).setHeader("Location", server.url("/leak")))

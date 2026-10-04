@@ -50,7 +50,10 @@ does not imply the directory REST read succeeded. Check `directoryFresh` and
 `directoryError`; use `directory == null` for a cold loading/empty distinction.
 
 Navigation calls `selectSession(id)` or `selectSession(null)`. Explicit
-navigation wins over restoring the last session. After a mutation, call
+navigation wins over restoring the last session. A choice binds to the current
+auth handle, so even a conflated rapid account/server switch cannot carry the
+old session ID into the new cache. A choice made while signed out remains a
+pending-login deep link and binds to the next handle. After a mutation, call
 `refreshDirectory()` and/or `refreshSession()` as appropriate. `close()` is for
 disposing the process owner/tests, not each Activity recreation. UI should not
 open its own SSE or persist these state objects.
@@ -82,7 +85,11 @@ deserialized from disk as actionable state.
 The SSE transport parses fragmented UTF-8, BOM, CR/LF/CRLF, multiline data,
 comments and IDs. Unterminated EOF frames are discarded, and frames are bounded
 at 4 MiB. Credentials are headers only, with `X-Orbit-Client: android/<version>`;
-redirects and implicit transport retries are disabled. AuthSession owns both
+redirects are disabled. This GET-only transport allows OkHttp connection
+recovery across stale sockets or alternate addresses of the same origin;
+otherwise cancelling one connection can strand a reachable IPv4 service behind
+an unavailable IPv6 address. Body failures return to the store's sinceSeq and
+backoff policy. A03's REST mutation retry policy is unchanged. AuthSession owns both
 streams and REST requests, including their shared refresh flight and epoch.
 A delayed stream retry-401 cannot revoke newer credentials. Errors originating
 from callbacks after headers are not treated as an authentication handshake.
@@ -120,7 +127,10 @@ handle checks; old callbacks and writes cannot populate a new account.
 
 The Activity START/STOP counter supports multi-window. A configuration change
 gets a 700 ms stop debounce; a real last STOP cancels both streams immediately.
-Only a validated default network permits connections. A change of network
+An available default network with INTERNET permits connection attempts even
+without VALIDATED: system public-network validation does not prove whether the
+configured Orbit server is reachable. Actual HTTP/SSE errors drive retries;
+there is no separate connectivity probe. A change of network
 identity reconnects even without an intermediate offline callback. No service
 or job keeps SSE alive in the background.
 
@@ -168,6 +178,9 @@ shared emulator or starts `orbit-ui-api29` through `orbit-ui-api35`, and restore
 network/rotation settings on exit. Supply a new evidence directory each run.
 It records APK hash/signature, device build, source SHA/dirty flag, JSON state,
 screenshots, request/cursor history, per-process logs and command exit codes.
+Probe records live in the app's internal files directory and are read through
+`run-as` on debuggable builds. API30 denies shell access to the external app
+directory; this is a harness access issue, not an application crash or lost cache.
 The normal run requires an actual Wi-Fi default network before starting and
 an actual cellular default afterward. The local API29 image produced no Wi-Fi
 scan results with emulator 37.2.12 (also after separately trying the legacy

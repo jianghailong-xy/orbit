@@ -23,11 +23,13 @@ interface EventTransport {
     suspend fun stream(request: HttpRequest, onOpen: suspend () -> Unit, onFrame: suspend (SseFrame) -> Unit)
 }
 
-/** No redirect, implicit retry, cookie jar, logging or background service. Every byte resets the
+/** No redirect, cookie jar, logging or background service. Every byte resets the
  * socket read timeout; the server's 20s ping makes 45s without bytes a dead connection. */
 class OkHttpEventTransport(readTimeoutMs: Long = 45_000) : EventTransport {
     private val client = OkHttpClient.Builder()
-        .followRedirects(false).followSslRedirects(false).retryOnConnectionFailure(false)
+        // Only GET is accepted below. Allow a stale socket / failed address to fall back to
+        // another address of this origin. Stream-body replay still belongs to RealtimeStore.
+        .followRedirects(false).followSslRedirects(false).retryOnConnectionFailure(true)
         .connectTimeout(10, TimeUnit.SECONDS).readTimeout(readTimeoutMs, TimeUnit.MILLISECONDS)
         .callTimeout(0, TimeUnit.MILLISECONDS).build()
 

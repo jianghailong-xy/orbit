@@ -25,9 +25,10 @@ class RealtimeLifecycle(private val application: Application, private val store:
         override fun onAvailable(network: Network) { currentNetwork = network }
         override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
             // Use the callback's capabilities, not a synchronous lookup racing a path change.
+            // Public-network validation does not determine reachability of the user's server.
+            // Let actual HTTP/SSE results and bounded retries decide; no extra probe service.
             if (network == currentNetwork && !closed) store.setNetwork(
-                capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-                    capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED), network.toString())
+                capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET), network.toString())
         }
         override fun onLost(network: Network) {
             if (network == currentNetwork && !closed) {

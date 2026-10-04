@@ -30,7 +30,7 @@ def main():
     server = fixture.server()
     package = "io.orbitd.android.debug"
     component = package + "/io.orbitd.android.realtime.RealtimeFixtureActivity"
-    state_path = f"/sdcard/Android/data/{package}/files/a04-realtime/state.json"
+    state_path = "files/a04-realtime/state.json"
     commands, phases = [], []
     gaps = (["Wi-Fi/cellular switch unavailable in this run; only a cellular network replacement is exercised"]
             if args.network_mode == "cellular-reconnect" else [])
@@ -49,7 +49,7 @@ def main():
         last = None
         while time.monotonic() < deadline:
             try:
-                last = json.loads(adb("shell", "cat", state_path, check=False))
+                last = json.loads(adb("shell", "run-as", package, "cat", state_path, check=False))
                 if predicate(last):
                     return last
             except (ValueError, KeyError, TypeError):
@@ -121,7 +121,7 @@ def main():
         adb("shell", "input", "keyevent", "KEYCODE_HOME")
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
-            marker = json.loads(adb("shell", "cat", state_path.replace("state.json", "lifecycle.json")))
+            marker = json.loads(adb("shell", "run-as", package, "cat", state_path.replace("state.json", "lifecycle.json")))
             if marker["pid"] == first["pid"] and marker["stage"] == "stopped":
                 break
             time.sleep(0.2)
@@ -154,6 +154,10 @@ def main():
     except Exception:
         error = traceback.format_exc()
         print(error, flush=True)
+        (output / "failure-logcat.txt").write_text(adb("logcat", "-d", "-v", "threadtime", "-s", "AndroidRuntime:E", check=False))
+        (output / "failure-state-read.txt").write_text(adb("shell", "run-as", package, "ls", "-l", state_path, check=False))
+        (output / "failure-activities.txt").write_text(adb("shell", "dumpsys", "activity", "activities", check=False))
+        (output / "failure.png").write_bytes(adb("exec-out", "screencap", "-p", binary=True, check=False))
     finally:
         # Restore the shared device before releasing ui.lock, even when a check failed.
         for key in ("accelerometer_rotation", "user_rotation"):

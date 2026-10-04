@@ -34,7 +34,7 @@ import kotlinx.coroutines.launch
  * event is needed to recover pending cards on the next foreground connection. */
 class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : AutoCloseable {
     private data class Network(val available: Boolean = false, val identity: String? = null)
-    private data class Selection(val id: String?, val revision: Long)
+    private data class Selection(val id: String?, val revision: Long, val handle: SessionHandle? = null)
     private class Resync : Exception()
     private val job = SupervisorJob(scope.coroutineContext[Job])
     private val owner = CoroutineScope(scope.coroutineContext + job)
@@ -51,7 +51,10 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
         owner.launch {
             auth.state.map { (it as? AuthState.SignedIn)?.handle }.distinctUntilChanged().collectLatest { handle ->
                 mutableState.value = RealtimeState(handle = handle)
-                if (handle != null) account(handle) else selection.value = Selection(null, 0)
+                if (handle != null) account(handle) else selection.update {
+                    // Preserve a pending-login deep link; retire only a spent account's choice.
+                    if (it.handle != null && !current(it.handle)) Selection(null, 0) else it
+                }
             }
         }
     }
@@ -59,7 +62,11 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
     fun setForeground(value: Boolean) { foreground.value = value }
     fun setNetwork(available: Boolean, identity: String? = null) { network.value = Network(available, identity) }
     fun selectSession(id: String?) {
-        selection.update { if (it.revision != 0L && it.id == id) it else Selection(id, it.revision + 1) }
+        val handle = (auth.state.value as? AuthState.SignedIn)?.handle
+        selection.update {
+            if (it.revision != 0L && it.id == id && it.handle === handle) it
+            else Selection(id, it.revision + 1, handle)
+        }
     }
     fun refreshDirectory() { directoryRevision.update { it + 1 } }
     fun refreshSession() { sessionRevision.update { it + 1 } }
@@ -81,7 +88,12 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
         val writes = Channel<Unit>(Channel.CONFLATED)
         publish(handle) { it.copy(directory = loaded.directory) }
         // Explicit navigation (including selecting the directory) wins over cold-start restoration.
-        selection.update { if (it.revision == 0L) Selection(loaded.lastSessionId, 1) else it }
+        selection.update {
+            // StateFlow may conflate SignedOut during a fast login. Selection ownership, not
+            // observing that intermediate value, decides whether this account may inherit it.
+            if (it.revision != 0L && (it.handle == null || it.handle === handle)) it.copy(handle = handle)
+            else Selection(loaded.lastSessionId, 1, handle)
+        }
         launch {
             for (ignored in writes) {
                 delay(100) // Coalesce a durable burst, never serialize every animation delta.
@@ -98,6 +110,7 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
             }
         }
         selection.collectLatest { focus ->
+            if (focus.handle !== handle) return@collectLatest
             cache.update { it.copy(lastSessionId = focus.id) }
             writes.trySend(Unit)
             publish(handle) { it.copy(session = focus.id?.let { id ->
