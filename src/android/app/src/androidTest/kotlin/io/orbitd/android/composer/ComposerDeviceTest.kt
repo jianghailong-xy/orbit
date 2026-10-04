@@ -403,7 +403,14 @@ class ComposerDeviceTest {
             node.isVisibleToUser && !bounds.isEmpty && node.text?.toString()?.equals(name,true)==true &&
                 generateSequence(node.parent) { it.parent }.any { it.viewIdResourceName?.endsWith(":id/roots_list")==true }
         }
-        if (visibleRoot()==null) systemClick("Show roots",touch=true)
+        compose.waitUntil(10000) { systemNode("Show roots")!=null || visibleRoot()!=null }
+        instrument.uiAutomation.waitForIdle(500,5000)
+        if (visibleRoot()==null) {
+            val alreadySelected=systemFind(refresh=true) { node -> node.isVisibleToUser && node.text?.toString()?.equals(name,true)==true &&
+                generateSequence(node.parent) { it.parent }.any { it.viewIdResourceName?.endsWith(":id/toolbar")==true } }
+            if (alreadySelected!=null) return
+            systemClick("Show roots",touch=true)
+        }
         instrument.uiAutomation.waitForIdle(500,5000)
         var root:AccessibilityNodeInfo?=null
         compose.waitUntil(5000) {
