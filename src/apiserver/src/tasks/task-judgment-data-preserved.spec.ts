@@ -1858,7 +1858,18 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // of the six preserved objects; no `project_acceptance_*` object is named. No INSERT, UPDATE or
       // DELETE. (Written as 0371 on its own branch and renumbered before it landed: 0371 is the pool
       // login person above, and 0372 is spelled by another branch not yet landed.)
-      '0373_owner_confirmation_reason'],
+      '0373_owner_confirmation_reason',
+      // An account paused by hand (0374, common/account-pause.ts): one nullable JSONB column on
+      // `runner` (`account_pauses`) and two nullable TIMESTAMPTZ(3) columns (`paused_at`,
+      // `paused_until`) on each of `provider_pool_member`, `pool_api_key` and `pool_codex_login`,
+      // none with a default, so every ADD COLUMN is catalog-only. Read against every claim above:
+      // none of those four relations is a preserved one, and no `task`, `session`, `project` or
+      // `project_acceptance_*` object is named, so the 0177 pair and every stored task and criterion
+      // row are out of its reach. No function, trigger, type, enum, constraint or index is created,
+      // replaced or dropped, so it is not another writer of the DONE fence and names none of the six
+      // preserved objects. No INSERT, UPDATE or DELETE: nothing is backfilled — every stored account
+      // reads as not paused, and a pause is written only when somebody asks for one.
+      '0374_account_pause'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
