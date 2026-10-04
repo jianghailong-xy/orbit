@@ -146,16 +146,31 @@ final class ProjectDetailModel {
         refreshing = true
         defer { refreshing = false }
         loadState.begin()
-        async let documentRead = api.project(projectID)
-        async let panoramaRead = api.projectPanorama(projectID)
-        async let integrationRead = api.projectIntegration(projectID)
-        async let openItemsRead = api.projectOpenItems(projectID: projectID)
-        async let coordinatorRead = api.projectCoordinatorStatus(projectID)
-        async let graphRead = refreshGraph ? api.projectDependencyGraph(projectID) : nil
-        async let queueRead = api.projectReadyToRun(projectID)
-        async let tasksRead = refreshedTaskWindow(count: max(100, tasks.count))
+        // Keep these reads concurrent without `async let`: iOS 27's concurrency runtime can abort
+        // while tearing down several async-let result buffers in one continuation. Explicit task
+        // handles keep each result on its own allocation and preserve the page's parallel reads.
+        let documentRead = Task { try await api.project(projectID) }
+        let panoramaRead = Task { try await api.projectPanorama(projectID) }
+        let integrationRead = Task { try await api.projectIntegration(projectID) }
+        let openItemsRead = Task { try await api.projectOpenItems(projectID: projectID) }
+        let coordinatorRead = Task { try await api.projectCoordinatorStatus(projectID) }
+        let graphRead: Task<ProjectDependencyGraph, Error>? = refreshGraph
+            ? Task { try await api.projectDependencyGraph(projectID) }
+            : nil
+        let queueRead = Task { try await api.projectReadyToRun(projectID) }
+        let tasksRead = Task { try await refreshedTaskWindow(count: max(100, tasks.count)) }
+        defer {
+            documentRead.cancel()
+            panoramaRead.cancel()
+            integrationRead.cancel()
+            openItemsRead.cancel()
+            coordinatorRead.cancel()
+            graphRead?.cancel()
+            queueRead.cancel()
+            tasksRead.cancel()
+        }
         do {
-            let fetched = try await documentRead
+            let fetched = try await documentRead.value
             document = fetched
             missing = false
             loadState.succeed()
@@ -165,8 +180,8 @@ final class ProjectDetailModel {
         } catch {
             loadState.fail()
         }
-        panorama = (try? await panoramaRead) ?? panorama
-        if let view = try? await integrationRead {
+        panorama = (try? await panoramaRead.value) ?? panorama
+        if let view = try? await integrationRead.value {
             integration = view
             integrationUnread = false
             integrationReadAt = Date()
@@ -175,21 +190,23 @@ final class ProjectDetailModel {
             integrationUnread = integration == nil
             integrationReadFailed = true
         }
-        if let items = try? await openItemsRead {
+        if let items = try? await openItemsRead.value {
             openItems = items
             openItemsUnread = false
         } else {
             openItemsUnread = openItems == nil
         }
-        coordinator = (try? await coordinatorRead) ?? coordinator
-        graph = (try? await graphRead) ?? graph
-        if let queue = try? await queueRead {
+        coordinator = (try? await coordinatorRead.value) ?? coordinator
+        if let graphRead {
+            graph = (try? await graphRead.value) ?? graph
+        }
+        if let queue = try? await queueRead.value {
             readyQueue = queue
             readyQueueUnread = false
         } else {
             readyQueueUnread = true
         }
-        if let page = try? await tasksRead {
+        if let page = try? await tasksRead.value {
             tasks = page.items
             nextTaskCursor = page.nextCursor
         }
