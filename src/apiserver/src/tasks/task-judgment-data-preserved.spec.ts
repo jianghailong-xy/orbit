@@ -1874,7 +1874,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // Delivery landing questions (0375): widen only project_open_item_kind_chk with
       // DELIVERY_REVIEW. Existing rows satisfy the replacement constraint; no task, project,
       // acceptance, DONE fence, trigger or function is rewritten and nothing is backfilled.
-      '0375_delivery_review_item'],
+      '0375_delivery_review_item',
+      // Open-item hand-over history (0376): three nullable columns and two checks on
+      // project_open_item only. No existing rows are rewritten, and the session id deliberately
+      // has no foreign key so purging a conversation cannot erase the owner's explanation.
+      '0376_open_item_hand_over'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -38,12 +38,11 @@ export type OpenItemDoorFailureClass = (typeof OPEN_ITEM_DOOR_FAILURE_CLASSES)[n
 export const OPEN_ITEM_DOOR_ASSIGNEES = ['COORDINATOR', 'OWNER'] as const;
 export type OpenItemDoorAssignee = (typeof OPEN_ITEM_DOOR_ASSIGNEES)[number];
 
-/** Stable names for the four intentional holes in this first matrix. */
+/** Stable names for the three intentional holes in this first matrix. */
 export const KNOWN_GAPS = [
   'PROMOTION_ITEMS_BOTH_ASSIGNEES',
   'MAIN_SYNC_CONFLICT_COORDINATOR',
   'OWNER_LAND_TASK_RERUN',
-  'HANDOVER_DOOR',
 ] as const;
 export type OpenItemDoorKnownGap = (typeof KNOWN_GAPS)[number];
 
@@ -54,8 +53,6 @@ export const KNOWN_GAP_DESCRIPTIONS: Readonly<Record<OpenItemDoorKnownGap, strin
     'a MAIN_SYNC conflict has no resolving coordinator door until the conflict-specific repair path lands',
   OWNER_LAND_TASK_RERUN:
     'an owner-assigned LAND_TASK item has no rerun door; the owner can only ask back or stop the task',
-  HANDOVER_DOOR:
-    'the open_item_hand_over MCP/route is not implemented yet',
 };
 
 export type OpenItemDoorKind = 'MCP' | 'ROUTE';
@@ -177,7 +174,7 @@ const handOver = (holder: OpenItemDoorAssignee): OpenItemDoor => door(
   {
     mcp: 'open_item_hand_over',
     route: '/runner/projects/:id/open-items/:itemId/hand-over',
-    implemented: false,
+    implemented: true,
     resolving: false,
   },
 );

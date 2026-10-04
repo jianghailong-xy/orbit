@@ -462,6 +462,8 @@ export interface ProjectOpenItemRow<Instant = string> {
   handling?: OpenItemHandling<Instant> | null;
   /** How it ended — only on a row of `settled`, and null on every open one. */
   outcome?: OpenItemOutcome<Instant> | null;
+  /** The coordinator's explanation when it deliberately handed the item to the owner. */
+  handoverNote?: string | null;
 }
 
 /** The project's open exceptions, split by who is expected to act (§4.8). */
