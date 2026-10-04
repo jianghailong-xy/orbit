@@ -263,21 +263,21 @@ function sigtermReport(run: CaseRun): string | null {
  * the end of its log with the marker it left there, the line saying how it ended, and a receipt
  * that says the same. Returns Node's report of the file, when it printed one.
  */
-function assertTimedOut(run: CaseRun, index: number): string | null {
+function assertTimedOut(run: CaseRun, index: number, timeout: number): string | null {
   assert.equal(run.status, 124, 'timeout reports the wall clock it enforced as 124');
-  assert.match(run.output, new RegExp(`full-api FAILED \\[${index}/1\\]: fake/hangs\\.spec\\.js TIMED_OUT exit=124 elapsed=\\d+s timeout=2`, 'u'));
+  assert.match(run.output, new RegExp(`full-api FAILED \\[${index}/1\\]: fake/hangs\\.spec\\.js TIMED_OUT exit=124 elapsed=\\d+s timeout=${timeout}`, 'u'));
   // The evidence a failure branch keyed on `not ok` throws away: with Node's report in the log,
   // `sed` starts at that line, below the marker -- and a case with neither printed nothing at all.
   const tail = run.output.indexOf(`==> full-api TIMED_OUT [${index}/1]: fake/hangs.spec.js: last 40 lines of `);
   assert.ok(tail >= 0, `the end of the log is printed under its own header:\n${run.output}`);
   assert.match(run.output.slice(tail), /^# marker: this case will outlive its wall clock$/mu, 'the tail of the log is printed');
-  assert.match(run.output.slice(tail), /^exit=124 elapsed=\d+s timeout=2 kind=TIMED_OUT$/mu);
+  assert.match(run.output.slice(tail), new RegExp(`^exit=124 elapsed=\\d+s timeout=${timeout} kind=TIMED_OUT$`, 'mu'));
   const report = sigtermReport(run);
 
   assert.ok(run.receipt, 'a timed-out case still leaves a receipt');
   assert.equal(run.receipt.failureKind, 'TIMED_OUT');
   assert.equal(run.receipt.exitCode, 124);
-  assert.equal(run.receipt.timeoutSeconds, 2);
+  assert.equal(run.receipt.timeoutSeconds, timeout);
   assert.ok(run.receipt.elapsedSeconds >= 1, `wall clock was recorded: ${run.receipt.elapsedSeconds}`);
   assert.equal(run.receipt.outcome, 'FAILED');
   // The one test Node counts is the file it reported; a case it did not report counted none.
@@ -290,13 +290,19 @@ function assertTimedOut(run: CaseRun, index: number): string | null {
 test('(i) a case killed by its own wall clock is reported as a timeout, with the log it did leave', () => {
   // Whether Node gets to report the file as `not ok` first is left to this host here; (i-a) and
   // (i-b) settle it each way. Asserted is only what has to be printed either way.
-  assertTimedOut(runCase(1, 'hangs.spec.js', HANGS, 2), 1);
+  //
+  // 15 seconds, not 2. The marker reaches the log only after two node boots -- the `node --test`
+  // runner and the child it starts for the spec -- and on a loaded machine those take seconds: with
+  // a thirteenth of a core the marker arrived 2.7-4.1s in, with a thirty-first 6.2-6.8s. Under 2s
+  // such a case was killed with an empty log, and the marker assertion went red for the machine's
+  // load rather than for the harness.
+  assertTimedOut(runCase(1, 'hangs.spec.js', HANGS, 15), 1, 15);
 });
 
 test('(i-a) a timed-out case still prints the log it left when Node reports the file as not ok', () => {
   const run = runCase(10, 'hangs.spec.js', hangsReported(10), 2, { preload: KEEP_RUNNER_ALIVE });
 
-  const report = assertTimedOut(run, 10);
+  const report = assertTimedOut(run, 10, 2);
   assert.ok(report, `Node reported the file as killed by SIGTERM:\n${run.tap}`);
   // Printed as any failed case's TAP is, and the end of the log after it.
   assert.ok(run.output.indexOf(report) < run.output.indexOf('==> full-api TIMED_OUT [10/1]'), run.output);
@@ -305,7 +311,7 @@ test('(i-a) a timed-out case still prints the log it left when Node reports the 
 test('(i-b) a timed-out case prints the log it left when Node exits before reporting the file', () => {
   const run = runCase(11, 'hangs.spec.js', HANGS_UNREPORTED, 2);
 
-  assert.equal(assertTimedOut(run, 11), null, `Node exited without reporting the file:\n${run.tap}`);
+  assert.equal(assertTimedOut(run, 11, 2), null, `Node exited without reporting the file:\n${run.tap}`);
 });
 
 test('(ii) a case that dies in bootstrap without producing TAP is reported as killed, not as a timeout', () => {

@@ -12,13 +12,16 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
-import type {
-  OpenItemFacts,
-  ProjectStartNotReadyBody,
-  ProjectStartRequest,
-  ProjectStartRequestBody,
-  ProjectStartRequestFiled,
-  ProjectStartSettings,
+import {
+  COORDINATOR_LEAD_KINDS,
+  type OpenItemFacts,
+  type OpenItemHandling,
+  type OpenItemOutcome,
+  type ProjectStartNotReadyBody,
+  type ProjectStartRequest,
+  type ProjectStartRequestBody,
+  type ProjectStartRequestFiled,
+  type ProjectStartSettings,
 } from '@orbit/shared';
 
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
@@ -39,6 +42,7 @@ import {
   TASK_FAILURE_CHAIN_LIMIT,
   conversationIsOver,
   coordinatorQuestion,
+  markOpenItemsHandling,
   openItemActions,
   openItemFacts,
   openItemMessage,
@@ -60,7 +64,9 @@ import {
   INTEGRATION_RETRY_REASON_REQUIRED,
   MAX_INTEGRATION_RETRY_REASON,
   decideIntegrationRetry,
+  decidePromotionRetry,
 } from './project-integration-retry';
+import { requeuePromotionCheck } from './project-promotion.service';
 import { FusePausedPayload, fusePausedDetailLine } from './project-fuse';
 import {
   START_REQUEST_COORDINATOR_ONLY,
@@ -172,6 +178,10 @@ export interface OpenItemRow {
   /** What the item's payload holds, as the rows its card draws (§7.5); null when the payload is
    *  not a shape this build reads, which leaves the card drawing what it drew before. */
   facts: OpenItemFacts | null;
+  /** The coordinator's rerun of it while that rerun is QUEUED or RUNNING (§4.7 H1), else null. */
+  handling: OpenItemHandling<Date> | null;
+  /** How it ended, on a row of `settled` (§4.7 H5); null on every open row. */
+  outcome: OpenItemOutcome<Date> | null;
 }
 
 /** A question filed, as `ask_owner` answers its caller (§5.2 R7). */
@@ -216,18 +226,41 @@ export interface IntegrationRetried {
   retryOfJobId: string;
   failureClass: RetryableLandingFailureClass;
   reason: string;
-  /** The coordinator's open items about the failed landing, now SUPERSEDED (RETRIED) with the
-   *  reason on them. Empty when none was open — it may already have been closed by hand. */
-  supersededItemIds: string[];
+  /** The coordinator's open items about the failed landing, now being handled by this rerun: OPEN
+   *  until it ends, then HANDLED or superseded by its own failure's item (§4.7 H1–H3). Empty when
+   *  none was open — it may already have been closed by hand. */
+  handlingItemIds: string[];
 }
 
-/** The project's open exceptions, split by who is expected to act (§4.8), and the coordinator's
- *  open request to start it — beside them rather than among them (`ProjectOpenItemsView`). */
+/** A blocked candidate's check the coordinator ran again (§4.7 H1), as `integration_retry` with a
+ *  `promotionId` answers it. */
+export interface PromotionCheckRetried {
+  promotionId: string;
+  /** The check this rerun queued. */
+  jobId: string;
+  generation: number;
+  /** The failed job it reruns — the candidate's check or its landing — and what that one failed of. */
+  retryOfJobId: string;
+  failureClass: RetryableLandingFailureClass;
+  reason: string;
+  /** The coordinator's open items about the candidate, now being handled by this check. */
+  handlingItemIds: string[];
+}
+
+/** The project's open exceptions, split by who is expected to act (§4.8), the coordinator's open
+ *  request to start it — beside them rather than among them (`ProjectOpenItemsView`) — and what the
+ *  coordinator closed in the last day (§4.7 H5). */
 export interface ProjectOpenItems {
   needsYou: OpenItemRow[];
   withCoordinator: OpenItemRow[];
   startRequest: OpenItemRow | null;
+  settled: OpenItemRow[];
 }
+
+/** How far back `settled` reaches, and how many it holds at most (§4.7 H5): enough for the card a
+ *  conversation drew to be seen changing state, not a history of the project. */
+const SETTLED_WITHIN_MS = 24 * 60 * 60 * 1_000;
+const SETTLED_SHOWN = 20;
 
 /** The item stopped being owed to the coordinator while its turn was being written. */
 class OpenItemNoLongerOwed extends Error {}
@@ -394,6 +427,7 @@ export class ProjectOpenItemService {
         title: true,
         payload: true,
         taskId: true,
+        promotionId: true,
         projectId: true,
         ownerId: true,
         project: { select: { coordinatorEnabled: true, coordinatorSessionId: true } },
@@ -435,6 +469,7 @@ export class ProjectOpenItemService {
           title: item.title,
           projectId: item.projectId,
           taskId: item.taskId,
+          promotionId: item.promotionId,
           payload: item.payload,
         }),
         intent: 'NEXT_TURN',
@@ -1047,7 +1082,7 @@ export class ProjectOpenItemService {
    * retry the platform refuses to make (J5). So the caller says why this run will come out
    * differently — the merge check's baseline was repaired, the failure was the machinery's, the check
    * ran out of time — and the sentence is kept on the generation it queued and on every item it
-   * supersedes.
+   * handles.
    *
    * WHO MAY ASK. The conversation the project is coordinated from, read at this moment, and nothing
    * else on this door: a task's own run does not decide what happens to its landing, and a coordinator
@@ -1057,11 +1092,12 @@ export class ProjectOpenItemService {
    * WHAT IT WRITES. One transaction under the task row (FOR NO KEY UPDATE, the lock the DONE
    * transaction holds): the decision over the facts read under it, then exactly one new LAND_TASK
    * generation (`queueLandingRetry`) carrying what it reruns, why and who asked, then the
-   * coordinator's open items about the failed landing SUPERSEDED with resolution RETRIED and the
-   * reason. A second call while that generation is queued or running is refused — the lock orders two
-   * concurrent ones, and J3's index would refuse the second row anyway. What happens next is the
-   * line's: a landing resolves what is open about it and continues to the project branch's merge check
-   * (§3.4), and a failure opens its own item, classified, for whoever the project routes it to.
+   * coordinator's open items about the failed landing marked as being HANDLED by that generation
+   * (§4.7 H1) — still OPEN, because nobody knows yet whether it lands. A second call while that
+   * generation is queued or running is refused — the lock orders two concurrent ones, and J3's index
+   * would refuse the second row anyway. What happens next is the line's: a landing makes those items
+   * HANDLED in the coordinator's name and continues to the project branch's merge check (§3.4), and a
+   * failure supersedes them with its own item, classified, for whoever the project routes it to.
    */
   async retryIntegration(
     ownerId: string,
@@ -1070,35 +1106,14 @@ export class ProjectOpenItemService {
     given: { reason?: string },
     actingSessionId: string | undefined,
   ): Promise<IntegrationRetried> {
-    const reason = typeof given?.reason === 'string' ? given.reason.trim() : '';
-    if (!reason) {
-      throw new BadRequestException({
-        code: INTEGRATION_RETRY_REASON_REQUIRED,
-        message:
-          'a reason is required: say why running this landing again will come out differently. A '
-          + 'rerun nobody explained is the silent retry the platform refuses to make.',
-      });
-    }
-    if (reason.length > MAX_INTEGRATION_RETRY_REASON) {
-      throw new BadRequestException({
-        code: INTEGRATION_RETRY_REASON_REQUIRED,
-        message: `a reason is at most ${MAX_INTEGRATION_RETRY_REASON} characters`,
-      });
-    }
+    const reason = rerunReason(given);
     const project = await this.prisma.project.findFirst({
       where: { id: projectId, ownerId },
       select: { coordinatorSessionId: true },
     });
     if (!project) throw new NotFoundException('project not found');
     const asking = actingSessionId?.trim();
-    const coordinatorOnly = (): ForbiddenException => new ForbiddenException({
-      code: INTEGRATION_RETRY_COORDINATOR_ONLY,
-      message:
-        'only the conversation this project is coordinated from may run one of its landings again. '
-        + 'A task\'s own run does not decide what happens to its landing, and the account owner\'s say '
-        + 'is the item about it.',
-    });
-    if (!asking || asking !== project.coordinatorSessionId) throw coordinatorOnly();
+    if (!asking || asking !== project.coordinatorSessionId) throw rerunCoordinatorOnly();
     const task = await this.prisma.task.findFirst({
       where: { id: taskId, ownerId },
       select: { projectId: true },
@@ -1126,7 +1141,7 @@ export class ProjectOpenItemService {
         where: { id: projectId },
         select: { coordinatorEnabled: true, coordinatorSessionId: true },
       });
-      if (current.coordinatorSessionId !== asking) throw coordinatorOnly();
+      if (current.coordinatorSessionId !== asking) throw rerunCoordinatorOnly();
       const newestLanding = await tx.projectIntegrationJob.findFirst({
         where: { taskId, kind: 'LAND_TASK' },
         orderBy: [{ generation: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
@@ -1169,19 +1184,7 @@ export class ProjectOpenItemService {
             + 'project no longer integrates on a branch of its own.',
         });
       }
-      if (decision.supersede.length > 0) {
-        await tx.projectOpenItem.updateMany({
-          where: { id: { in: decision.supersede }, state: 'OPEN' },
-          data: {
-            state: 'SUPERSEDED',
-            resolution: 'RETRIED',
-            resolvedAt: new Date(),
-            resolvedBy: 'COORDINATOR',
-            resolvedBySessionId: asking,
-            resolutionNote: reason,
-          },
-        });
-      }
+      await markOpenItemsHandling(tx, decision.handle, { jobId: queued.jobId, sessionId: asking, reason });
       return {
         taskId,
         jobId: queued.jobId,
@@ -1190,9 +1193,107 @@ export class ProjectOpenItemService {
         retryOfJobId: decision.retryOfJobId,
         failureClass: decision.failureClass,
         reason,
-        supersededItemIds: decision.supersede,
+        handlingItemIds: decision.handle,
       };
     }, loggedRetry(this.logger, 'projectOpenItem.retryIntegration'));
+  }
+
+  /**
+   * The project's coordinator runs a blocked candidate's check again (`integration_retry` with a
+   * `promotionId`, §4.7 H1): the item about a merge into main that names no task, which until now had
+   * no door the coordinator could answer it through — it waited, escalated on the clock, and sat in
+   * front of the owner however little of it was theirs.
+   *
+   * The same door as a task's landing, held to the same rules: a reason, the conversation the project
+   * is coordinated from, refused while anything about the candidate is in flight, refused for a
+   * conflict, and refused when an item about it is the account owner's — escalated, or theirs from
+   * birth in a project that is not Automatic (`decidePromotionRetry`). What it may rerun is the
+   * candidate's CHECK and nothing past it: a check that passes puts the candidate back in front of
+   * whoever confirms its merge — the owner's card, or the Automatic setting's own rule over a clean
+   * result (M-T11) — and this door is neither.
+   *
+   * WHAT IT WRITES. One transaction under the candidate row (FOR NO KEY UPDATE, the lock every other
+   * writer of a candidate takes by updating it): the decision over the facts read under it, then the
+   * next CHECK_PROMOTION generation with the candidate back in CHECKING (`requeuePromotionCheck`), then
+   * the coordinator's open items about the candidate marked as being handled by that check — still
+   * OPEN until it reports. A check that passes makes them HANDLED in the coordinator's name; one that
+   * fails again supersedes them with its own item.
+   */
+  async retryPromotionCheck(
+    ownerId: string,
+    projectId: string,
+    promotionId: string,
+    given: { reason?: string },
+    actingSessionId: string | undefined,
+  ): Promise<PromotionCheckRetried> {
+    const reason = rerunReason(given);
+    const project = await this.prisma.project.findFirst({
+      where: { id: projectId, ownerId },
+      select: { coordinatorSessionId: true },
+    });
+    if (!project) throw new NotFoundException('project not found');
+    const asking = actingSessionId?.trim();
+    if (!asking || asking !== project.coordinatorSessionId) throw rerunCoordinatorOnly();
+
+    return withTransactionRetry(this.prisma, async (tx) => {
+      const [locked] = await tx.$queryRaw<Array<{ state: string }>>(Prisma.sql`
+        SELECT "state" FROM "project_promotion"
+         WHERE "id" = ${promotionId}::uuid AND "project_id" = ${projectId}::uuid
+           AND "owner_id" = ${ownerId}::uuid
+         FOR NO KEY UPDATE`);
+      if (!locked) throw new NotFoundException('promotion not found in this project');
+      // Read again under the lock: the pointer can rotate, and the switch can move, while the call
+      // was on its way here.
+      const current = await tx.project.findUniqueOrThrow({
+        where: { id: projectId },
+        select: { coordinatorEnabled: true, coordinatorSessionId: true },
+      });
+      if (current.coordinatorSessionId !== asking) throw rerunCoordinatorOnly();
+      const newestJob = await tx.projectIntegrationJob.findFirst({
+        where: { promotionId },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        select: { id: true, kind: true, generation: true, state: true, checks: true },
+      });
+      const openItems = await tx.projectOpenItem.findMany({
+        where: { projectId, promotionId, kind: { in: [...INTEGRATION_ITEM_KINDS] }, state: 'OPEN' },
+        select: { id: true, kind: true, assignee: true, assigneeReason: true },
+        orderBy: [{ waitingSince: 'asc' }, { id: 'asc' }],
+      });
+      const decision = decidePromotionRetry({
+        coordinatorEnabled: current.coordinatorEnabled,
+        promotionState: locked.state,
+        newestJob,
+        openItems,
+      });
+      if (!decision.ok) throw new HttpException(decision.body, decision.status);
+
+      const queued = await requeuePromotionCheck(tx, {
+        promotionId,
+        retry: {
+          ofJobId: decision.retryOfJobId,
+          failureClass: decision.failureClass,
+          reason,
+          requestedBySessionId: asking,
+        },
+      });
+      if (!queued) {
+        throw new ConflictException({
+          code: INTEGRATION_RETRY_NOT_APPLICABLE,
+          message: 'the check could not be queued: this project no longer names the repository the '
+            + 'candidate was made in.',
+        });
+      }
+      await markOpenItemsHandling(tx, decision.handle, { jobId: queued.jobId, sessionId: asking, reason });
+      return {
+        promotionId,
+        jobId: queued.jobId,
+        generation: queued.generation,
+        retryOfJobId: decision.retryOfJobId,
+        failureClass: decision.failureClass,
+        reason,
+        handlingItemIds: decision.handle,
+      };
+    }, loggedRetry(this.logger, 'projectOpenItem.retryPromotionCheck'));
   }
 
   /**
@@ -1447,6 +1548,7 @@ export class ProjectOpenItemService {
         promotionId: true,
         fuseEpisodeId: true,
         assignedAt: true,
+        ...HANDLING_SELECT,
         deliveries: {
           where: { purpose: 'ITEM' },
           orderBy: { createdAt: 'desc' },
@@ -1458,6 +1560,55 @@ export class ProjectOpenItemService {
     const settled = await openItemsNoLongerOwed(this.prisma, open.map((row) => row.id));
     const rows = open.filter((row) => !settled.has(row.id));
     const keys = rows.flatMap((row) => row.deliveries);
+    // §4.7 H5: what the coordinator closed in the last day — handled, or superseded by the item its
+    // failed rerun opened — so the card a conversation drew for it is seen to end rather than vanish.
+    // The coordinator's own kinds only: a question, a merge card, a pause and a request each have a
+    // card of their own and a door that is not this one.
+    const closed = await this.prisma.projectOpenItem.findMany({
+      where: {
+        projectId,
+        kind: { in: [...COORDINATOR_LEAD_KINDS] },
+        resolvedBy: 'COORDINATOR',
+        resolvedAt: { gte: new Date(Date.now() - SETTLED_WITHIN_MS) },
+        OR: [
+          { state: 'RESOLVED', resolution: 'HANDLED' },
+          { state: 'SUPERSEDED', resolution: 'RETRIED' },
+        ],
+      },
+      orderBy: [{ resolvedAt: 'desc' }, { id: 'desc' }],
+      take: SETTLED_SHOWN,
+      select: {
+        id: true,
+        kind: true,
+        title: true,
+        payload: true,
+        assignee: true,
+        assigneeReason: true,
+        waitingSince: true,
+        escalatedAt: true,
+        taskId: true,
+        sessionId: true,
+        promotionId: true,
+        fuseEpisodeId: true,
+        state: true,
+        resolution: true,
+        resolvedAt: true,
+        resolvedBySessionId: true,
+        resolvedByJobId: true,
+        resolutionNote: true,
+        supersededByItemId: true,
+      },
+    });
+    // Which reruns are still in flight: an item is being handled only while the job its coordinator
+    // queued is QUEUED or RUNNING (§4.7 H1). A job that ended without a verdict on it — cancelled with
+    // its candidate, or answered "nothing to land" — leaves the item open and no longer handled.
+    const handlingJobIds = unique(rows.map((row) => row.handlingJobId));
+    const inFlight = new Map((handlingJobIds.length > 0
+      ? await this.prisma.projectIntegrationJob.findMany({
+          where: { id: { in: handlingJobIds }, state: { in: ['QUEUED', 'RUNNING'] } },
+          select: { id: true, kind: true, generation: true, state: true },
+        })
+      : []).map((job) => [job.id, job]));
     // When each of the coordinator's items goes to the owner, as the clock decides it (§4.6): a
     // conversation still carrying one moves that moment on, so it is read here rather than taken
     // from the column the item was opened with — which would have the card say "due" about an item
@@ -1474,7 +1625,7 @@ export class ProjectOpenItemService {
     // The tasks these items are about, read once for the whole page: the card's first row names
     // what the item is about, and a task's title is not a column of the item. A task that is gone
     // leaves the row undrawn rather than drawn empty.
-    const taskIds = unique(rows.map((row) => row.taskId));
+    const taskIds = unique([...rows, ...closed].map((row) => row.taskId));
     const tasks = taskIds.length > 0
       ? await this.prisma.task.findMany({
           where: { id: { in: taskIds } },
@@ -1550,12 +1701,55 @@ export class ProjectOpenItemService {
           fuseEpisodeId: row.fuseEpisodeId,
           askable,
         }),
+        handling: handlingOf(row, inFlight),
+        outcome: null,
+      };
+    });
+    const settledView = closed.map((row): OpenItemRow => {
+      const title = row.taskId ? titles.get(row.taskId) : undefined;
+      return {
+        itemId: row.id,
+        kind: row.kind as OpenItemKind,
+        title: row.title,
+        detailLine: detailLine(row.kind, row.payload),
+        question: null,
+        startRequest: null,
+        facts: openItemFacts(
+          row.kind,
+          row.payload,
+          row.taskId && title ? { id: row.taskId, title } : null,
+        ),
+        assignee: row.assignee as OpenItemAssignee,
+        assigneeReason: row.assigneeReason as OpenItemAssigneeReason,
+        waitingSince: row.waitingSince,
+        escalateAt: null,
+        escalatedAt: row.escalatedAt,
+        taskId: row.taskId,
+        sessionId: row.sessionId,
+        promotionId: row.promotionId,
+        fuseEpisodeId: row.fuseEpisodeId,
+        // Nobody is owed anything about a closed item, so nothing is on its way to anybody and
+        // there is nothing to press.
+        delivery: { state: 'NOT_REQUIRED', sessionId: null, at: null },
+        actions: [],
+        handling: null,
+        outcome: {
+          state: row.state as OpenItemOutcome['state'],
+          resolution: row.resolution as OpenItemOutcome['resolution'],
+          resolvedBy: 'COORDINATOR',
+          resolvedBySessionId: row.resolvedBySessionId,
+          resolvedAt: row.resolvedAt!,
+          note: row.resolutionNote,
+          jobId: row.resolvedByJobId,
+          supersededByItemId: row.supersededByItemId,
+        },
       };
     });
     return {
       needsYou: view.filter((row) => row.assignee === 'OWNER' && row.kind !== START_REQUEST_KIND),
       withCoordinator: view.filter((row) => row.assignee === 'COORDINATOR'),
       startRequest: view.find((row) => row.kind === START_REQUEST_KIND) ?? null,
+      settled: settledView,
     };
   }
 
@@ -1679,6 +1873,76 @@ export class ProjectOpenItemService {
       this.logger.warn(`${what} failed: ${error instanceof Error ? error.message : error}`);
     }
   }
+}
+
+/** The columns an item's handling is read from (§4.7 H1, migration 0368). */
+const HANDLING_SELECT = {
+  handlingJobId: true,
+  handlingSessionId: true,
+  handlingReason: true,
+  handlingStartedAt: true,
+} as const;
+
+/**
+ * The coordinator's rerun of an item, while it is in flight — or null: never handled, or the job it
+ * queued has already ended (in which case the result has either closed the item already, or ended
+ * without a verdict on it and left it open, unhandled, for the coordinator to decide again).
+ */
+function handlingOf(
+  row: {
+    handlingJobId: string | null;
+    handlingSessionId: string | null;
+    handlingReason: string | null;
+    handlingStartedAt: Date | null;
+  },
+  inFlight: ReadonlyMap<string, { kind: string; generation: number; state: string }>,
+): OpenItemHandling<Date> | null {
+  const job = row.handlingJobId ? inFlight.get(row.handlingJobId) : undefined;
+  if (!job || !row.handlingJobId || !row.handlingSessionId || !row.handlingStartedAt) return null;
+  return {
+    sessionId: row.handlingSessionId,
+    reason: row.handlingReason ?? '',
+    startedAt: row.handlingStartedAt,
+    jobId: row.handlingJobId,
+    jobKind: job.kind as OpenItemHandling['jobKind'],
+    generation: job.generation,
+    state: job.state as OpenItemHandling['state'],
+  };
+}
+
+/**
+ * The reason a rerun carries (J-T1b, §4.7 H1), trimmed and bounded — or the 400 the door answers
+ * without one. A rerun nobody explained is the silent retry the platform refuses to make (J5), so the
+ * sentence is required, and it is what the rerun's job and every item it handles keep.
+ */
+function rerunReason(given: { reason?: string } | undefined): string {
+  const reason = typeof given?.reason === 'string' ? given.reason.trim() : '';
+  if (!reason) {
+    throw new BadRequestException({
+      code: INTEGRATION_RETRY_REASON_REQUIRED,
+      message:
+        'a reason is required: say why running this landing again will come out differently. A '
+        + 'rerun nobody explained is the silent retry the platform refuses to make.',
+    });
+  }
+  if (reason.length > MAX_INTEGRATION_RETRY_REASON) {
+    throw new BadRequestException({
+      code: INTEGRATION_RETRY_REASON_REQUIRED,
+      message: `a reason is at most ${MAX_INTEGRATION_RETRY_REASON} characters`,
+    });
+  }
+  return reason;
+}
+
+/** Only the conversation the project is coordinated from reruns any of its integrations. */
+function rerunCoordinatorOnly(): ForbiddenException {
+  return new ForbiddenException({
+    code: INTEGRATION_RETRY_COORDINATOR_ONLY,
+    message:
+      'only the conversation this project is coordinated from may run one of its landings again. '
+      + 'A task\'s own run does not decide what happens to its landing, and the account owner\'s say '
+      + 'is the item about it.',
+  });
 }
 
 function unique(ids: ReadonlyArray<string | null | undefined>): string[] {

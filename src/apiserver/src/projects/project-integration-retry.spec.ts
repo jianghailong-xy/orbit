@@ -8,6 +8,9 @@ import {
   openItemKindForJobState,
 } from './project-integration-job';
 import { openItemMessage } from './project-open-item';
+import { COORDINATOR_AUTHORITY, refuseHumanOnlyAction } from './coordinator-authority';
+import { promotionPrincipalRefusal } from './project-promotion';
+import { ownerConfirmationPrincipalRefusal } from '../tasks/task-owner-confirmation';
 import {
   INTEGRATION_RETRY_IN_FLIGHT,
   INTEGRATION_RETRY_NOT_APPLICABLE,
@@ -15,7 +18,9 @@ import {
   INTEGRATION_RETRY_OWNER_BLOCKER,
   INTEGRATION_RETRY_OWNER_ITEM,
   IntegrationRetryFacts,
+  PromotionRetryFacts,
   decideIntegrationRetry,
+  decidePromotionRetry,
 } from './project-integration-retry';
 
 /**
@@ -68,7 +73,7 @@ test('a failed landing is classified off its structured result, never off its ou
   assert.deepEqual([...RETRYABLE_LANDING_FAILURE_CLASSES], ['CHECK_FAILED', 'CHECK_TIMED_OUT', 'ERROR']);
 });
 
-test('Automatic: a red, a timed-out or an errored landing of a DONE task is rerun, superseding the coordinator\'s items', () => {
+test('Automatic: a red, a timed-out or an errored landing of a DONE task is rerun, handling the coordinator\'s items', () => {
   for (const [state, checks, expected] of [
     ['CHECK_FAILED', [RED], 'CHECK_FAILED'],
     ['CHECK_FAILED', [SLOW], 'CHECK_TIMED_OUT'],
@@ -81,7 +86,7 @@ test('Automatic: a red, a timed-out or an errored landing of a DONE task is reru
       ok: true,
       retryOfJobId: 'job-7',
       failureClass: expected,
-      supersede: ['item-1'],
+      handle: ['item-1'],
     });
   }
   // The coordinator closed its item by hand (the state task ③ of 34Y7My8sqhKLWtmCQYv1l was left in):
@@ -90,7 +95,7 @@ test('Automatic: a red, a timed-out or an errored landing of a DONE task is reru
     ok: true,
     retryOfJobId: 'job-1',
     failureClass: 'CHECK_FAILED',
-    supersede: [],
+    handle: [],
   });
 });
 
@@ -218,4 +223,203 @@ test('a conflict\'s item sends the task back rather than to integration_retry', 
   assert.match(told, /integration_retry 也不接受冲突/);
   assert.match(told, /task_reopen 把任务退回返工/);
   assert.doesNotMatch(told, /reason 写明这次为什么会不同/);
+});
+
+// ── a blocked candidate's check (§4.7 H1): the item about a merge into main, which names no task ──
+
+const CANDIDATE = '01a0f5d0-0000-7000-8000-00000000000a';
+
+function candidate(over: Partial<PromotionRetryFacts> = {}): PromotionRetryFacts {
+  return {
+    coordinatorEnabled: true,
+    promotionState: 'BLOCKED',
+    newestJob: { id: 'check-1', kind: 'CHECK_PROMOTION', generation: 1, state: 'CHECK_FAILED', checks: [RED] },
+    openItems: [{ id: 'item-9', kind: 'INTEGRATION_CHECK_FAILED', assignee: 'COORDINATOR', assigneeReason: 'DEFAULT' }],
+    ...over,
+  };
+}
+
+function candidateRefusal(input: PromotionRetryFacts): { status: number; code: string; message: string } {
+  const decision = decidePromotionRetry(input);
+  assert.equal(decision.ok, false, 'the door would have queued a check');
+  if (decision.ok) throw new Error('unreachable');
+  return { status: decision.status, code: decision.body.code, message: decision.body.message };
+}
+
+test('a blocked candidate whose check was red, timed out or errored is checked again, handling the coordinator\'s items', () => {
+  for (const [kind, state, checks, expected] of [
+    ['CHECK_PROMOTION', 'CHECK_FAILED', [RED], 'CHECK_FAILED'],
+    ['CHECK_PROMOTION', 'CHECK_FAILED', [SLOW], 'CHECK_TIMED_OUT'],
+    ['CHECK_PROMOTION', 'ERROR', [], 'ERROR'],
+    // A landing into main that stopped is answered the same way: by checking the candidate again.
+    ['LAND_PROMOTION', 'CHECK_FAILED', [RED], 'CHECK_FAILED'],
+  ] as const) {
+    assert.deepEqual(decidePromotionRetry(candidate({
+      newestJob: { id: 'job-4', kind, generation: 2, state, checks },
+    })), { ok: true, retryOfJobId: 'job-4', failureClass: expected, handle: ['item-9'] }, `${kind} ${state}`);
+  }
+  // Closed by hand already, with Automatic on: the coordinator may still check it again.
+  assert.deepEqual(decidePromotionRetry(candidate({ openItems: [] })),
+    { ok: true, retryOfJobId: 'check-1', failureClass: 'CHECK_FAILED', handle: [] });
+});
+
+test('a candidate that is the owner\'s — escalated, or theirs from birth without Automatic — is refused; one handed back is not', () => {
+  const escalated = candidateRefusal(candidate({
+    openItems: [{ id: 'item-9', kind: 'INTEGRATION_CHECK_FAILED', assignee: 'OWNER', assigneeReason: 'ESCALATED' }],
+  }));
+  assert.equal(escalated.status, 409);
+  assert.equal(escalated.code, INTEGRATION_RETRY_OWNER_ITEM);
+  assert.match(escalated.message, /blocked merge into main is the account owner's/);
+  assert.match(escalated.message, /Ask the coordinator again/);
+
+  const ownersFromBirth = candidateRefusal(candidate({
+    coordinatorEnabled: false,
+    openItems: [{ id: 'item-9', kind: 'INTEGRATION_CHECK_FAILED', assignee: 'OWNER', assigneeReason: 'NO_COORDINATOR' }],
+  }));
+  assert.equal(ownersFromBirth.code, INTEGRATION_RETRY_OWNER_ITEM);
+
+  const nobodyHandedIt = candidateRefusal(candidate({ coordinatorEnabled: false, openItems: [] }));
+  assert.equal(nobodyHandedIt.status, 403);
+  assert.equal(nobodyHandedIt.code, INTEGRATION_RETRY_NOT_AUTOMATIC);
+
+  // "Ask the coordinator again" put the item in front of the coordinator, and the decision with it.
+  assert.equal(decidePromotionRetry(candidate({ coordinatorEnabled: false })).ok, true);
+});
+
+test('a candidate in flight, waiting on the owner\'s merge, ended, never checked or conflicted is refused, each saying why', () => {
+  for (const state of ['QUEUED', 'RUNNING']) {
+    const inFlight = candidateRefusal(candidate({
+      promotionState: 'CHECKING',
+      newestJob: { id: 'check-2', kind: 'CHECK_PROMOTION', generation: 2, state, checks: [] },
+    }));
+    assert.equal(inFlight.status, 409);
+    assert.equal(inFlight.code, INTEGRATION_RETRY_IN_FLIGHT);
+    assert.match(inFlight.message, new RegExp(`CHECK_PROMOTION \\(generation 2\\) is already ${state}`));
+  }
+  const waiting = candidateRefusal(candidate({
+    promotionState: 'READY',
+    newestJob: { id: 'check-2', kind: 'CHECK_PROMOTION', generation: 2, state: 'READY', checks: [] },
+  }));
+  assert.equal(waiting.code, INTEGRATION_RETRY_NOT_APPLICABLE);
+  assert.match(waiting.message, /Merge to main/, 'a candidate that passed is the owner\'s to merge, not this door\'s');
+  for (const state of ['MERGED', 'DECLINED', 'CANCELLED', 'SUPERSEDED']) {
+    const ended = candidateRefusal(candidate({ promotionState: state }));
+    assert.equal(ended.code, INTEGRATION_RETRY_NOT_APPLICABLE, state);
+    assert.match(ended.message, /next landing on the project branch makes a new candidate/);
+  }
+  assert.equal(candidateRefusal(candidate({ newestJob: null })).code, INTEGRATION_RETRY_NOT_APPLICABLE);
+  const conflicted = candidateRefusal(candidate({
+    newestJob: { id: 'check-1', kind: 'CHECK_PROMOTION', generation: 1, state: 'CONFLICT', checks: [] },
+  }));
+  assert.equal(conflicted.code, INTEGRATION_RETRY_NOT_APPLICABLE);
+  assert.match(conflicted.message, /only a project branch that changed answers one/);
+});
+
+test('a blocked candidate\'s item names the door that checks it again, and that the merge stays the owner\'s or Automatic\'s', () => {
+  const told = openItemMessage({
+    id: '01a0f5c9-0000-7000-8000-000000000005',
+    kind: 'INTEGRATION_CHECK_FAILED',
+    title: 'Checks failed on the combined tree: merging the project branch into main',
+    projectId: PROJECT,
+    taskId: null,
+    promotionId: CANDIDATE,
+    payload: { jobKind: 'CHECK_PROMOTION', check: RED, branchUnchanged: true, failureClass: 'CHECK_FAILED', generation: 1 },
+  });
+  assert.match(told, /这条待办身后没有任务/);
+  assert.match(told, /integration_retry（projectId 传 34Y7My8sqhKLWtmCQYv1l，promotionId 传 /);
+  assert.match(told, /合并照旧由账号所有者在卡上确认，或由 Automatic 设置按原来的规则自动合并/);
+  assert.match(told, /这条待办显示为处理中、仍然开着/);
+  assert.match(told, /检查通过了，它自动标为已处理（HANDLED）/);
+  assert.match(told, /它标为已取代（RETRIED），新的失败另开一条待办/);
+  assert.doesNotMatch(told, /今天也没有一条属于协调会话的重试门/, 'the old text sent the coordinator to the owner');
+
+  const again = openItemMessage({
+    id: '01a0f5c9-0000-7000-8000-000000000006',
+    kind: 'INTEGRATION_CHECK_FAILED',
+    title: 'Checks failed on the combined tree: merging the project branch into main',
+    projectId: PROJECT,
+    taskId: null,
+    promotionId: CANDIDATE,
+    payload: {
+      jobKind: 'CHECK_PROMOTION',
+      check: RED,
+      failureClass: 'CHECK_FAILED',
+      generation: 2,
+      retry: { retryOfJobId: '01a0f5c8-0000-7000-8000-000000000007', failureClass: 'CHECK_FAILED', reason: 'main\'s baseline was repaired' },
+    },
+  });
+  assert.match(again, /这是这个合入 main 的候选的第 2 次检查，由协调会话要求重跑/);
+  assert.match(again, /重跑的理由是「main's baseline was repaired」/);
+
+  const conflicted = openItemMessage({
+    id: '01a0f5c9-0000-7000-8000-000000000008',
+    kind: 'INTEGRATION_CONFLICT',
+    title: 'Merge conflict: merging the project branch into main',
+    projectId: PROJECT,
+    taskId: null,
+    promotionId: CANDIDATE,
+    payload: { jobKind: 'CHECK_PROMOTION', phase: 'MERGE', files: ['src/web/src/pages/ProjectsPage.tsx'], failureClass: 'CONFLICT', generation: 1 },
+  });
+  assert.match(conflicted, /integration_retry 也不接受冲突/);
+  assert.doesNotMatch(conflicted, /promotionId 传/);
+});
+
+test('a task landing\'s item says the rerun leaves it open and handled, and how it ends either way', () => {
+  const told = openItemMessage({
+    id: '01a0f5c9-0000-7000-8000-000000000009',
+    kind: 'INTEGRATION_CHECK_FAILED',
+    title: 'Checks failed on the combined tree: ③',
+    projectId: PROJECT,
+    taskId: TASK,
+    payload: { jobKind: 'LAND_TASK', check: RED, branchUnchanged: true, failureClass: 'CHECK_FAILED', generation: 1 },
+  });
+  assert.match(told, /用 integration_retry 重排后，这条待办显示为处理中、仍然开着/);
+  assert.match(told, /落地了，它自动标为已处理（HANDLED），记下你的会话和理由/);
+  assert.doesNotMatch(told, /它会带着你的理由被标成已取代/, 'the old text closed the item at the moment of the rerun');
+});
+
+/**
+ * What the handling door does NOT reach (§4.7 H1–H4). It reruns a check or a landing and ends the
+ * items about it, and every act that stays the account owner's stays exactly where it was: merging
+ * into main (the candidate it re-checks is merged by the owner's card or the Automatic setting's own
+ * rule, never by this door — and a candidate waiting on that card is refused here), confirming an
+ * OWNER_CONFIRMED task, and changing or confirming the acceptance criteria. Pinned beside the door so a
+ * later change to it has to read them.
+ */
+test('around the handling door, the owner-only acts stay the owner\'s', () => {
+  const owner = 'owner-1';
+  const coordinator = '34Y7Myo7G89Vk0fVpelbt';
+  // A merge into main is the owner's press: an agent session holding the owner's key is refused.
+  assert.match(promotionPrincipalRefusal(owner, { userId: owner, actingSessionId: coordinator }) ?? '',
+    /confirmed only by the account owner/);
+  assert.equal(promotionPrincipalRefusal(owner, { userId: owner }), null, 'the owner in the app is not');
+  // …and the re-check never stands in for it: a candidate that passed is refused, with the owner named.
+  const waiting = candidateRefusal(candidate({
+    promotionState: 'READY',
+    newestJob: { id: 'check-2', kind: 'CHECK_PROMOTION', generation: 2, state: 'READY', checks: [] },
+  }));
+  assert.equal(waiting.code, INTEGRATION_RETRY_NOT_APPLICABLE);
+  assert.match(waiting.message, /confirming the merge is theirs/);
+  // An OWNER_CONFIRMED task is confirmed by the owner in the app — never over the runner, coordinator
+  // included.
+  assert.ok(ownerConfirmationPrincipalRefusal(owner, { door: 'RUNNER', userId: owner, actingSessionId: coordinator }));
+  assert.ok(ownerConfirmationPrincipalRefusal(owner, { door: 'USER', userId: owner, actingSessionId: coordinator }));
+  assert.equal(ownerConfirmationPrincipalRefusal(owner, { door: 'USER', userId: owner }), null);
+  // The acceptance criteria — the exam — are edited and confirmed by a person, not by a judgment.
+  assert.equal(COORDINATOR_AUTHORITY.EDIT_ACCEPTANCE_CRITERIA, 'HUMAN_ONLY');
+  assert.equal(COORDINATOR_AUTHORITY.CONFIRM_ACCEPTANCE_CRITERIA, 'HUMAN_ONLY');
+  assert.equal(refuseHumanOnlyAction('JUDGMENT', 'EDIT_ACCEPTANCE_CRITERIA')?.code, 'ACCEPTANCE_CRITERIA_HUMAN_ONLY');
+  // And the items the door hands the coordinator are only ever its own: one the owner holds refuses it.
+  for (const decide of [
+    () => decideIntegrationRetry(facts({
+      openItems: [{ id: 'item-1', kind: 'INTEGRATION_CHECK_FAILED', assignee: 'OWNER', assigneeReason: 'ESCALATED' }],
+    })),
+    () => decidePromotionRetry(candidate({
+      openItems: [{ id: 'item-9', kind: 'INTEGRATION_CHECK_FAILED', assignee: 'OWNER', assigneeReason: 'ESCALATED' }],
+    })),
+  ]) {
+    const decision = decide();
+    assert.equal(decision.ok, false);
+    if (!decision.ok) assert.equal(decision.body.code, INTEGRATION_RETRY_OWNER_ITEM);
+  }
 });

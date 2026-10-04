@@ -189,6 +189,8 @@ interface JudgedTask {
 
 interface World extends Ids, JudgedTask {
   projectId: string;
+  /** The project's one criterion, which every task of the world declares. */
+  definitionId: string;
   coordinatorSessionId: string | null;
   /** A conversation of the same owner that took part in nothing: who reads when there is no
    *  coordinator. */
@@ -238,7 +240,7 @@ async function conversation(
 /** An EVIDENCE_JUDGMENT task filed under the project, the run working it, and a check to cite. */
 async function judgedTask(
   db: PrismaClient,
-  ids: Ids & { projectId: string },
+  ids: Ids & { projectId: string; definitionId: string },
   label: string,
 ): Promise<JudgedTask> {
   const taskId = randomUUID();
@@ -255,6 +257,10 @@ async function judgedTask(
       status: TaskStatus.IN_PROGRESS,
       completionCriterion: 'EVIDENCE_JUDGMENT',
       acceptanceCriteria: STANDARD,
+      // Declared against the criterion its evidence quotes: being filed under the project is not
+      // what holds a task to the project's wording, declaring the criterion is.
+      criterionDefinitionId: ids.definitionId,
+      criterionRevision: 1,
     },
   });
   const runSessionId = await conversation(db, ids, `${label} 执行会话`, { taskId });
@@ -344,11 +350,12 @@ async function world(
       contentHash: '0'.repeat(64),
     },
   });
-  const judged = await judgedTask(db, { ...ids, projectId }, label);
+  const judged = await judgedTask(db, { ...ids, projectId, definitionId }, label);
   return {
     ...ids,
     ...judged,
     projectId,
+    definitionId,
     coordinatorSessionId,
     readerSessionId,
     criterionKey: criterionKeyOf(definitionId),
