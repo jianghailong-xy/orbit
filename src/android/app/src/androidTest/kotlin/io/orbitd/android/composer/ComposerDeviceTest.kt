@@ -319,11 +319,8 @@ class ComposerDeviceTest {
     }
     private fun clickSendWhenEnabled() {
         compose.waitUntil(10000) { compose.onNodeWithTag("composer-send").fetchSemanticsNode().config.getOrNull(SemanticsProperties.Disabled)==null }
-        // Query platform screen coordinates after picker/dialog and busy/notice layout changes.
-        var node:AccessibilityNodeInfo?=null
-        compose.waitUntil(5000) { node=systemNode("Send") ?: systemNode("Stop"); node!=null }
-        val bounds=android.graphics.Rect();node!!.getBoundsInScreen(bounds)
-        shellBytes("input tap ${bounds.centerX()} ${bounds.centerY()}")
+        // The platform action targets the current button through dialog/window transitions.
+        systemClick(if (systemNode("Stop") != null) "Stop" else "Send")
     }
     private fun ready() { compose.waitUntil(10000) { app.realtime.state.value.session?.fresh==true && !model.state.value.busy };compose.waitForIdle() }
     private fun awaitText(text:String) { compose.waitUntil(15000) { compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() } }
