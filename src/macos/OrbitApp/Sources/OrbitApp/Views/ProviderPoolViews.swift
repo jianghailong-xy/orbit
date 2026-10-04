@@ -216,6 +216,7 @@ struct CodexPoolPageView: View {
     let accessActions: PoolAccessActions?
     /// Delete the pool (its owner) or leave it (anybody else).
     let exit: () async -> String?
+    var pause: ((PoolMember, Int?) async -> String?)? = nil
     var now: Date = Date()
 
     @State private var sheet: CodexPoolSheet?
@@ -362,7 +363,7 @@ struct CodexPoolPageView: View {
             PoolSectionHeader(title: CodexPoolPage.accountsHeader, count: page.accountsCount,
                               trailing: ProviderPools.headline(pool, now: now), reading: ProviderPools.headGauge(pool))
         } footer: {
-            Text(page.howSentence)
+            Text(page.howSentence + " Paused accounts are skipped for everyone in this pool.")
         }
     }
 
@@ -373,21 +374,29 @@ struct CodexPoolPageView: View {
             // people read — an own pool whose access is not in yet — the page's own presses stand.
             let canSignInAgain = page.access.map { SharedPoolPage.canSignInAgain(login, in: $0) } ?? page.mine
             let canSignOut = page.access.map { SharedPoolPage.canSignOut(login, in: $0) } ?? page.mine
-            CodexAccountRow(member: member, login: login, next: CodexLoginPool.showsNext(member, in: pool),
-                            tagged: page.tagged, canSignInAgain: canSignInAgain, canSignOut: canSignOut,
-                            contributor: contributorName(login), now: now,
-                            signInAgain: { sheet = .signIn(login) },
-                            signOut: { signingOut = login })
-                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    if canSignOut {
-                        Button(role: .destructive) { signingOut = login } label: {
-                            Label(CodexLoginPool.signOut, systemImage: "rectangle.portrait.and.arrow.right")
-                        }
+            VStack(alignment: .leading, spacing: 10) {
+                CodexAccountRow(member: member, login: login, next: CodexLoginPool.showsNext(member, in: pool),
+                                tagged: page.tagged, canSignInAgain: canSignInAgain, canSignOut: canSignOut,
+                                contributor: contributorName(login), now: now,
+                                signInAgain: { sheet = .signIn(login) },
+                                signOut: { signingOut = login })
+                pauseControls(member, canManage: canSignOut)
+                    .padding(.leading, 40)
+            }
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                if canSignOut {
+                    Button(role: .destructive) { signingOut = login } label: {
+                        Label(CodexLoginPool.signOut, systemImage: "rectangle.portrait.and.arrow.right")
                     }
                 }
+            }
         } else if let key = member.key, let access = page.access {
-            PoolKeyRow(key: key, pool: access, next: member.next, tagged: page.tagged) {
-                sheet = .replace(key)
+            VStack(alignment: .leading, spacing: 10) {
+                PoolKeyRow(key: key, pool: access, next: member.next, tagged: page.tagged) {
+                    sheet = .replace(key)
+                }
+                pauseControls(member, canManage: SharedPoolPage.canRemove(key, in: access))
+                    .padding(.leading, 40)
             }
             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                 if SharedPoolPage.canRemove(key, in: access) {
@@ -405,6 +414,14 @@ struct CodexPoolPageView: View {
                     .tint(.gray)
                 }
             }
+        }
+    }
+
+    private func pauseControls(_ member: PoolMember, canManage: Bool) -> some View {
+        AccountPauseControls(name: member.label, pausedUntil: member.pausedUntil,
+                             scope: page.people ? "Pool account · Paused for everyone in this pool" : "Pool account · This pool",
+                             canManage: canManage && pause != nil) { minutes in
+            await pause?(member, minutes)
         }
     }
 
@@ -1261,7 +1278,7 @@ private struct CodexAccountRow: View {
                         + (tagged ? Text(verbatim: " · ") + runsFor() : Text(verbatim: "")))
                         .font(.orbitLabel)
                         .foregroundStyle(.secondary)
-                    Text(status.label)
+                    Text(AccountPause.isPaused(member.pausedUntil, now: now) && login.active ? "Signed in" : status.label)
                         .font(.orbitListSubtitle)
                         .foregroundStyle(PoolTone.color(status.tone))
                     if member.state == .signedOut {
@@ -1717,11 +1734,12 @@ private struct CodexFactText: View {
 
 // MARK: - An account pool
 
-/// An account pool's page — the user's own Claude subscriptions under one name — read-only here: which
-/// account the next session starts on, and where each one stands. Adding or taking out an account is
+/// An account pool's page — the user's own Claude subscriptions under one name: which account the next
+/// session starts on, where each stands, and its pause controls. Adding or taking out an account is
 /// a key's business, which happens on the web.
 struct AccountPoolPageView: View {
     let pool: ProviderPool
+    var pause: ((PoolMember, Int?) async -> String?)? = nil
     var now: Date = Date()
 
     var body: some View {
@@ -1743,7 +1761,14 @@ struct AccountPoolPageView: View {
             }
             Section {
                 ForEach(pool.members) { member in
-                    AccountRow(member: member, now: now)
+                    VStack(alignment: .leading, spacing: 10) {
+                        AccountRow(member: member, now: now)
+                        AccountPauseControls(name: member.label, pausedUntil: member.pausedUntil,
+                                             scope: "Pool account · This pool", canManage: pause != nil) { minutes in
+                            await pause?(member, minutes)
+                        }
+                        .padding(.leading, 40)
+                    }
                 }
             } header: {
                 PoolSectionHeader(title: ProviderPools.accountsHeader, trailing: ProviderPools.headline(pool, now: now),

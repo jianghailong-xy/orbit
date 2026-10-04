@@ -130,7 +130,9 @@ private struct RunnerEngineContent: View {
                                               now: Date) -> some View {
         Section {
             ForEach(RunnerPageFormat.accountLines(health)) { line in
-                accountRow(line, login: login, offline: offline, now: now)
+                accountRow(line, login: login, offline: offline, now: now,
+                           canPause: RunnerPageFormat.keepsAccounts(engine)
+                               && (health.accounts ?? []).contains { $0.id == line.id })
                     // Rename stays out of the swipe actions: it opens an editor rather than performing
                     // the action, which is not what a swipe promises (SessionRowActions.swift).
                     .contextMenu {
@@ -188,7 +190,7 @@ private struct RunnerEngineContent: View {
 
     /// One account: its name and where it lives, where it stands, its windows — and its way (back) in.
     @ViewBuilder private func accountRow(_ line: RunnerPageFormat.AccountLine, login: LoginEngine, offline: Bool,
-                                         now: Date) -> some View {
+                                         now: Date, canPause: Bool) -> some View {
         let windows = RunnerPageFormat.accountWindows(runner, engine: engine, account: line.id)
         let status = RunnerPageFormat.authStatus(line.auth)
         let removal = RunnerPageFormat.removal(runner.accountRemove, engine: engine, account: line.id)
@@ -232,6 +234,13 @@ private struct RunnerEngineContent: View {
                 Button("Close") { closeSignIn() }
                     .buttonStyle(.borderless)
                     .font(.orbitLabel)
+            } else if canPause && (line.auth == "yes" || AccountPause.isPaused(line.pausedUntil, now: now)) {
+                AccountPauseControls(name: line.name, pausedUntil: line.pausedUntil,
+                                     scope: "Personal account · This runner. Paused sessions wait until it resumes or you switch accounts.",
+                                     signedInAction: { signingIn = line.id },
+                                     signInDisabled: offline || removal?.pending == true) { minutes in
+                    await runners.pauseAccount(runner.id, engine: login, account: line.id, durationMinutes: minutes)
+                }
             } else {
                 Button(line.auth == "yes" ? "Sign In Again" : RunnerPageCopy.RUNNER_SIGN_IN) {
                     signingIn = line.id

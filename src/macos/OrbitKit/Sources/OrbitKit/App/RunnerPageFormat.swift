@@ -312,6 +312,7 @@ public enum RunnerPageFormat {
         /// What a sign-in on this line names: the account, when the runner lists more than one; nil —
         /// the runner's own login, as every sign-in was before accounts — when it doesn't.
         public let signInAccount: String?
+        public let pausedUntil: String?
     }
 
     /// Every account an engine is signed into on that runner, Default first. One line for the
@@ -323,12 +324,12 @@ public enum RunnerPageFormat {
             return [AccountLine(id: CodexAccounts.defaultID,
                                 name: CodexAccounts.label(CodexAccounts.defaultID, accounts: accounts),
                                 home: (own?.home ?? own?.codexHome).map(tildePath),
-                                auth: health.auth, signInAccount: nil)]
+                                auth: health.auth, signInAccount: nil, pausedUntil: own?.pausedUntil)]
         }
         return accounts.map { account in
             AccountLine(id: account.id, name: CodexAccounts.label(account.id, accounts: accounts),
                         home: (account.home ?? account.codexHome).map(tildePath),
-                        auth: account.auth, signInAccount: account.id)
+                        auth: account.auth, signInAccount: account.id, pausedUntil: account.pausedUntil)
         }
     }
 

@@ -14,6 +14,8 @@ import {
   type RunnerInstallState,
 } from '@orbit/shared';
 import { api } from '../api';
+import { accountIsPaused, usePauseClock } from '../lib/accountPause';
+import { AccountPauseActions, AccountPauseStatus } from './AccountPause';
 import { routeId, encodeId } from '../lib/idCodec';
 import {
   accountDir,
@@ -242,16 +244,6 @@ function available(kind: RowKind, quota: Quota): boolean {
   return kind === 'in' && (bindingPlanUsageRow(quota.windows)?.window.utilization ?? 0) < 100;
 }
 
-function StatusTag({ status }: { status: { color: string; label: string } }) {
-  return (
-    <div className="re-status">
-      <Tag color={status.color} title={status.label}>
-        {status.label}
-      </Tag>
-    </div>
-  );
-}
-
 /** The quota column: each window with how much of it is used and when it resets, or why there is
  *  nothing to show. */
 function QuotaCell({ kind, quota }: { kind: RowKind; quota: Quota }) {
@@ -345,7 +337,8 @@ function EngineRow({
   });
 
   // Only one runtime's quota is this engine's; the others belong to the other rows.
-  const now = Date.now();
+  const single = engineKeepsAccounts(engine) && health?.accounts?.length === 1 ? health.accounts[0] : undefined;
+  const now = usePauseClock(single?.pausedUntil);
   const snapshot = planUsageSnapshotForProvider(runner.planUsage, engine);
   const quota = quotaOf(kind, snapshot, !!runner.online, now);
   // More than one Codex account: this row heads their group, and each account is a row of its own
@@ -354,7 +347,7 @@ function EngineRow({
   // What the head says for its group: how many of its accounts could take a session now.
   const ready = accounts.filter((account) => {
     const own = accountKindOf(account);
-    return available(own, quotaOf(own, accountPlanUsage(runner.planUsage, engine, account.id), !!runner.online, now));
+    return !accountIsPaused(account.pausedUntil, now) && available(own, quotaOf(own, accountPlanUsage(runner.planUsage, engine, account.id), !!runner.online, now));
   }).length;
   // "+ Account" is how a machine gets from one account to two, so it is not the group's to hold:
   // the Codex row offers it whenever the probe speaks for the engine, whether it heads a group yet
@@ -410,7 +403,7 @@ function EngineRow({
   };
 
   return (
-    <div className={`re-row${grouped ? ' re-grp' : ''}${focused ? ' focused' : ''}`} ref={row}>
+    <div className={`re-row${grouped ? ' re-grp' : ''}${focused ? ' focused' : ''}${accountIsPaused(single?.pausedUntil, now) ? ' account-paused' : ''}`} ref={row}>
       <div className="re-id">
         <ProviderTile slug={ENGINE_PRESET[engine]} label={ENGINE_NAME[engine]} size={28} />
         <div style={{ minWidth: 0 }}>
@@ -445,7 +438,7 @@ function EngineRow({
           for them, and its line runs the width of the row instead. */}
       {!grouped && (
         <>
-          <StatusTag status={statusOf(kind, quota, now)} />
+          <AccountPauseStatus until={single?.pausedUntil} now={now} detail={kind === 'in' ? 'Signed in' : undefined} status={statusOf(kind, quota, now)} />
           <QuotaCell kind={kind} quota={quota} />
         </>
       )}
@@ -460,6 +453,9 @@ function EngineRow({
           </Button>
         )}
         {/* A group's sign-ins are its accounts', each on its own row. */}
+        {!grouped && single && (kind === 'in' || accountIsPaused(single.pausedUntil, now)) && (
+          <AccountPauseActions name={accountNameOf(single)} until={single.pausedUntil} endpoint={`/runners/${runner.id}/accounts/${engine}/${single.id}/pause`} />
+        )}
         {!grouped && action()}
       </div>
 
@@ -702,7 +698,7 @@ function AccountRow({
   });
   // Each account's quota is its own: the runner reads every account in that account's CODEX_HOME,
   // and an account it has not read shows none rather than borrowing another's limit.
-  const now = Date.now();
+  const now = usePauseClock(account.pausedUntil);
   const snapshot = accountPlanUsage(runner.planUsage, engine, account.id);
   const quota = quotaOf(kind, snapshot, !!runner.online, now);
   const toggle = () => onSignIn(signIn === panel ? null : panel);
@@ -724,7 +720,7 @@ function AccountRow({
   );
 
   return (
-    <div className={`re-row re-acct${lastOfGroup ? ' re-acct-end' : ''}`}>
+    <div className={`re-row re-acct${lastOfGroup ? ' re-acct-end' : ''}${accountIsPaused(account.pausedUntil, now) ? ' account-paused' : ''}`}>
       <div className="re-id">
         <span className="re-rail" aria-hidden="true" />
         <div className="re-id-main" style={{ minWidth: 0 }}>
@@ -737,9 +733,10 @@ function AccountRow({
           </div>
         </div>
       </div>
-      <StatusTag status={statusOf(kind, quota, now)} />
+      <AccountPauseStatus until={account.pausedUntil} now={now} detail={kind === 'in' ? 'Signed in' : undefined} status={statusOf(kind, quota, now)} />
       <QuotaCell kind={kind} quota={quota} />
       <div className="re-act">
+        {(kind === 'in' || accountIsPaused(account.pausedUntil, now)) && <AccountPauseActions name={accountNameOf(account)} until={account.pausedUntil} endpoint={`/runners/${runner.id}/accounts/${engine}/${account.id}/pause`} />}
         {/* Default has nothing to remove: it is the CODEX_HOME the machine's own environment
             selects, the one `codex` typed in a terminal shares. Every other account is a slot this
             runner added, and this is the way back off the machine — the one thing the page could

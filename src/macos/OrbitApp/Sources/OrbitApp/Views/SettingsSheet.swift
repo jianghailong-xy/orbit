@@ -886,7 +886,7 @@ private struct ProvidersSettingsPage: View {
     }
 }
 
-/// An account pool's page: the pool as Providers last read it — read-only for a pool of Claude keys; for a
+/// An account pool's page: the pool as Providers last read it, with account pause controls; for a
 /// Codex pool of one's own, its page (`CodexPoolPageView`) with its people and keys read beside its ChatGPT
 /// accounts, run from here: an account signed in, in again or out, keys and people added and taken out,
 /// the pool deleted. Deleting the pool closes the page.
@@ -910,10 +910,26 @@ private struct AccountPoolSettingsPage: View {
                         signOut: { login in await agents.signOutCodexLogin(pool, login) },
                         refresh: { await agents.reloadPools() }),
                     accessActions: accessActions(page),
-                    exit: { await close(agents, pool) })
+                    exit: { await close(agents, pool) },
+                    pause: { member, minutes in
+                        let failure = await agents.pausePoolMember(pool, member: member, durationMinutes: minutes)
+                        if failure == nil { await model.sharedPools?.loadAccess(pool.id) }
+                        return failure
+                    })
                     .task { await model.sharedPools?.loadAccess(pool.id) }
+                    .task(id: page.pool.members.map(\.pausedUntil)) {
+                        await refreshAfterPauses(page.pool) {
+                            await agents.reloadPools()
+                            await model.sharedPools?.loadAccess(pool.id)
+                        }
+                    }
             } else {
-                AccountPoolPageView(pool: pool)
+                AccountPoolPageView(pool: pool, pause: { member, minutes in
+                    await agents.pausePoolMember(pool, member: member, durationMinutes: minutes)
+                })
+                .task(id: pool.members.map(\.pausedUntil)) {
+                    await refreshAfterPauses(pool) { await agents.reloadPools() }
+                }
             }
         } else {
             ContentUnavailableView(ProvidersOverview.poolGone, systemImage: "person.3")
@@ -947,7 +963,13 @@ private struct SharedPoolSettingsPage: View {
            let page = CodexPoolPage(own: nil, access: pool) {
             CodexPoolPageView(page: page, accountActions: accountActions(pools, pool),
                               accessActions: poolAccessActions(pools, pool),
-                              exit: { await close(pools, pool, delete: page.mine) })
+                              exit: { await close(pools, pool, delete: page.mine) },
+                              pause: { member, minutes in
+                                  await pools.pauseMember(pool, member: member, durationMinutes: minutes)
+                              })
+                .task(id: page.pool.members.map(\.pausedUntil)) {
+                    await refreshAfterPauses(page.pool) { await pools.load() }
+                }
         } else {
             ContentUnavailableView(ProvidersOverview.poolGone, systemImage: "person.3")
         }
@@ -970,6 +992,19 @@ private struct SharedPoolSettingsPage: View {
         if let failure = await pools.exit(pool, delete: delete) { return failure }
         dismiss()
         return nil
+    }
+}
+
+/// Re-read the server's NEXT selection as each pause expires while its page is open.
+private func refreshAfterPauses(_ pool: ProviderPool, refresh: () async -> Void) async {
+    let deadlines = Set(pool.members.compactMap(\.pausedUntil).compactMap(RelativeTime.parse))
+        .filter { $0 > Date() }.sorted()
+    for deadline in deadlines {
+        do {
+            try await Task.sleep(for: .seconds(max(0, deadline.timeIntervalSinceNow)))
+        } catch { return }
+        guard !Task.isCancelled else { return }
+        await refresh()
     }
 }
 

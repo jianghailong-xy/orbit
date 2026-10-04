@@ -7,6 +7,7 @@ import type {
   RunnerEngineUpdate,
 } from '@orbit/shared';
 import { ACCOUNT_ID_PATTERN } from '../runners/dto';
+import { runnerAccountPausedUntil } from './account-pause';
 
 /** The engines a runner can sign into (LoginEngine's full set), in the order they're shown. */
 export const LOGIN_ENGINES: readonly LoginEngine[] = ['claude', 'codex', 'kimi'];
@@ -189,16 +190,23 @@ export function sanitizeAccountNames(value: unknown): AccountNames {
  * `accountNames` is required on purpose: a select that forgets the column would otherwise compile, and
  * name every account the way the runner does whatever it was renamed to.
  */
-export function namedRunnerEngines(runner: { engines: unknown; accountNames: unknown }): RunnerEngineHealth[] | null {
+export function namedRunnerEngines(runner: { engines: unknown; accountNames: unknown; accountPauses?: unknown }): RunnerEngineHealth[] | null {
   const engines = sanitizeRunnerEngines(runner.engines);
   const names = sanitizeAccountNames(runner.accountNames);
   if (!engines) return engines;
   return engines.map((entry) => {
     const own = engineKeepsAccounts(entry.engine) ? names[entry.engine] : undefined;
-    if (!own || !entry.accounts) return entry;
+    if (!entry.accounts) return entry;
     return {
       ...entry,
-      accounts: entry.accounts.map((account) => (own[account.id] ? { ...account, name: own[account.id] } : account)),
+      accounts: entry.accounts.map((account) => {
+        const pausedUntil = runnerAccountPausedUntil(runner.accountPauses, entry.engine, account.id);
+        return {
+          ...account,
+          ...(own?.[account.id] ? { name: own[account.id] } : {}),
+          ...(pausedUntil ? { pausedUntil: pausedUntil.toISOString() } : {}),
+        };
+      }),
     };
   });
 }

@@ -53,7 +53,7 @@ test('dequeue row-locks runner ownership and stamps the engine generation with t
   const h = harness(true);
 
   assert.equal(await h.dequeue(SESSION_ID, RUNNER_ID, GENERATION), null);
-  assert.equal(h.rawCalls.length, 3);
+  assert.equal(h.rawCalls.length, 4);
 
   const lockSQL = renderRawQuery(h.rawCalls[0]).text;
   assert.match(lockSQL, /"assigned_runner_id" = \?::uuid[\s\S]*FOR UPDATE/);
@@ -65,10 +65,11 @@ test('dequeue row-locks runner ownership and stamps the engine generation with t
   assert.match(activeSQL, /"lease_owner" IS NOT DISTINCT FROM \?::uuid/);
   assert.match(activeSQL, /"retired_at" IS NULL/);
 
-  const leaseSQL = renderRawQuery(h.rawCalls[2]).text;
+  const leaseCall = h.rawCalls.at(-1)!;
+  const leaseSQL = renderRawQuery(leaseCall).text;
   assert.match(leaseSQL, /"lease_deadline_at" = now\(\) \+ \(\? \* interval '1 millisecond'\)/);
   assert.match(leaseSQL, /"lease_generation" = \?::uuid/);
-  assert.ok(h.rawCalls[2].slice(1).includes(GENERATION));
+  assert.ok(leaseCall.slice(1).includes(GENERATION));
 });
 
 test('an old long-poll generation cannot dequeue after release or replacement', async () => {

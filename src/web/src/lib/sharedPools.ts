@@ -1,6 +1,7 @@
 import { queryOptions } from '@tanstack/react-query';
 import { AgentProvider, type PlanUsageSnapshot } from '@orbit/shared';
 import { api } from '../api';
+import { accountIsPaused } from './accountPause';
 import { loginName, loginSpentUntil, loginState, type CodexLogin } from './codexLogin';
 import { encodeId } from './idCodec';
 import type { PoolMember, PoolMemberState, ProviderPool } from './providerPools';
@@ -47,6 +48,7 @@ export interface SharedPoolKey {
   fingerprint: string;
   state: PoolKeyState;
   enabled: boolean;
+  pausedUntil?: string | null;
   /** Whole dollars a month everyone but its contributor may spend on it; null = no cap. */
   shareCap: number | null;
   /** Out of budget until then — OpenAI answered `insufficient_quota` for it, and the page says
@@ -196,7 +198,8 @@ function loginMember(pool: SharedPool, login: SharedPoolLogin): PoolMember {
     planUsage: login.usage,
     state,
     resetsAt: state === 'SPENT' ? (loginSpentUntil(login) ?? null) : null,
-    next: login.next,
+    next: login.next && !accountIsPaused(login.pausedUntil),
+    pausedUntil: login.pausedUntil,
     login,
   };
 }
@@ -209,13 +212,18 @@ function loginMember(pool: SharedPool, login: SharedPoolLogin): PoolMember {
  */
 export function ownPoolWithAccess(own: ProviderPool, access: SharedPool): ProviderPool {
   const accounts = own.members;
-  const nextAccount =
-    accounts.find((member) => member.next) ?? accounts.find((member) => member.state === 'AVAILABLE');
+  // The own-pool list stays oldest first. When one is paused, use the shared view's
+  // server-selected login instead of inferring a replacement from that list.
+  const paused = accounts.some((member) => accountIsPaused(member.pausedUntil));
+  const serverNext = access.logins?.find((login) => login.next);
+  const nextAccount = paused
+    ? accounts.find((member) => member.login?.fingerprint === serverNext?.fingerprint && !accountIsPaused(member.pausedUntil))
+    : accounts.find((member) => member.next) ?? accounts.find((member) => member.state === 'AVAILABLE');
   const members = [
     ...accounts.map((member) => ({ ...member, next: member === nextAccount })),
     ...keyMembers(access).map((member) => (nextAccount ? { ...member, next: false } : member)),
   ];
-  const working = members.some((member) => member.state === 'AVAILABLE' || member.state === 'RUNNING');
+  const working = members.some((member) => !accountIsPaused(member.pausedUntil) && (member.state === 'AVAILABLE' || member.state === 'RUNNING'));
   const stops = members.flatMap((member) => (member.state === 'SPENT' && member.resetsAt ? [member.resetsAt] : []));
   // Whether waiting brings anything back: not when every account is signed out and every key refused or
   // switched off.
@@ -257,14 +265,15 @@ function keyMembers(pool: SharedPool): PoolMember[] {
       state,
       // A capped key comes back with the month; one out of budget, at OpenAI's own mark.
       resetsAt: state === 'SPENT' ? (key.spentUntil ?? pool.window.end) : null,
-      next: key.next,
+      next: key.next && !accountIsPaused(key.pausedUntil),
+      pausedUntil: key.pausedUntil,
       key,
     };
   });
 }
 
 function keysPool(pool: SharedPool, members: PoolMember[]): ProviderPool {
-  const free = members.some((member) => member.state === 'AVAILABLE' || member.state === 'RUNNING');
+  const free = members.some((member) => !accountIsPaused(member.pausedUntil) && (member.state === 'AVAILABLE' || member.state === 'RUNNING'));
   const accounts = members.flatMap((member) => (member.login ? [member.login] : []));
   // Whether waiting brings anything back: an account that is not signed out — a spent one comes back by
   // the hour — or a key OpenAI still takes that is switched on. A signed-out account, an off key and a

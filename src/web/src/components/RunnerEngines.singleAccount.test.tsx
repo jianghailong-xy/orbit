@@ -258,8 +258,11 @@ describe.each(ONE_ACCOUNT)('one Codex account — %s', (_, accountsOf) => {
         're-row',
         're-row',
       ]);
-      // The Codex row itself, string for string.
-      expect(codexRow(page)).toEqual(codex);
+      // A reported signed-in slot also supports a server-side pause, even offline.
+      const pausable = auth === 'yes' && !!accountsOf(auth).accounts?.length;
+      expect(codexRow(page)).toEqual(pausable ? {
+        ...codex, text: [...codex.text, 'Pause…'], buttons: ['Pause… · default', ...codex.buttons],
+      } : codex);
       // One account counts once, as the engine always did: on the section, and on a folded card.
       expect(page.querySelector('.re-sec-count')?.textContent).toBe(count);
       expect(summaryOf(box)).toBe(folded);
@@ -277,6 +280,7 @@ describe.each(ONE_ACCOUNT)('one Codex account — %s', (_, accountsOf) => {
       // the machine is offline.
       expect([...row.querySelectorAll<HTMLButtonElement>('.re-act button')].map(described)).toEqual([
         offline ? '+ Account · default · disabled' : '+ Account · default',
+        ...(auth === 'yes' && accountsOf(auth).accounts?.length ? ['Pause… · default'] : []),
         ...codex.buttons,
       ]);
       if (offline) return;

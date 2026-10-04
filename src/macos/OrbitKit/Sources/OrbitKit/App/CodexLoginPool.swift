@@ -52,7 +52,8 @@ public enum CodexLoginPool {
         return PoolMember(id: "login:\(login.fingerprint)", slug: slug, label: name(login),
                           presetSlug: "openai", enabled: true, planUsage: login.usage, state: state,
                           resetsAt: state == .spent ? spentUntil(login, now: now) ?? nil : nil,
-                          next: first && state == .available, login: login)
+                          next: first && state == .available && !AccountPause.isPaused(login.pausedUntil, now: now),
+                          login: login, pausedUntil: login.pausedUntil)
     }
 
     /// Where the account stands: OpenAI's refusal first, then a used-up window, else it runs.

@@ -209,7 +209,7 @@ describe('a runner with two Claude accounts', () => {
     const page = mount([runner({ accounts: [DEFAULT, WORK] })]);
     const [defaultRow, workRow] = rows(page, '.re-acct');
     // Default can be renamed like any other account, but never removed: it is the machine's own login.
-    expect(rows(defaultRow, 'button').map(labelOf)).toEqual(['Rename', 'Re-sign in']);
+    expect(rows(defaultRow, 'button').map(labelOf)).toEqual(['Rename', 'Pause…', 'Re-sign in']);
 
     // The press asks first: the slot's sign-in is deleted from the machine, and nothing is sent until
     // the question is answered.

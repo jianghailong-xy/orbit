@@ -42,6 +42,7 @@ import { PLAN_USAGE_CAS_ATTEMPTS, storeHeartbeatPlanUsage } from './codex-reset-
 import { accountAfterUsageLimit, accountSwitchNotice, runAccount } from '../providers/plan-usage-accounts';
 import { CLAUDE_ACCOUNT_MOVE_V1, CODEX_ACCOUNT_MOVE_V1 } from '../providers/account-move-capability';
 import { accountEnvVar } from '../providers/account';
+import { sessionAccountPausedUntil } from '../providers/plan-usage-accounts';
 import { dispatchCodexResetCommand, receiveCodexResetResult } from './codex-reset-relay';
 import {
   INTEGRATION_RESULT_REFUSAL_STATUS,
@@ -2970,12 +2971,14 @@ export class RunnerApiController {
      *  always has, and every gated runtime withholds. */
     declaredCapabilities: readonly string[] = [],
   ): Promise<RunInboxResponse | null> {
+    let pauseRequeued = false;
     // Retried whole. This is the inbox claim: it selects a queued turn under the Session row lock
     // and marks it in flight. A deadlock victim's claim never happened — the row is still queued —
     // so a re-run claims from the state that actually exists rather than reporting a turn it does
     // not own. The response is built from the winning attempt's read, and nothing is sent to the
     // runner until this returns.
     const outcome = await withTransactionRetry(this.prisma, async (tx) => {
+      pauseRequeued = false;
       // More than one inbox poller can briefly exist around a warm activation or runner
       // restart. Serialize them on the Session row so their NOT EXISTS(in-flight) checks
       // cannot both lease different messages from the same snapshot.
@@ -3056,6 +3059,75 @@ export class RunnerApiController {
         declaredCapabilities,
         leaseGeneration,
       );
+      // The pause may have been requested after the claim but before inbox delivery. Only
+      // executable work that has not started is held; control messages and the active turn stay.
+      if (owned[0].status === RunStatus.RUNNING) {
+        if (owned[0].providerBuiltin && (owned[0].provider === 'codex' || owned[0].provider === 'claude')) {
+          // Pause writes this same row. Hold the read until the lease commits, so a pause
+          // either precedes this turn or waits for its delivery and lets that turn finish.
+          await tx.$queryRaw`SELECT id FROM "runner" WHERE id = ${runnerId}::uuid FOR SHARE`;
+        }
+        const candidates = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT s.id FROM "session" s JOIN "runner" r ON r.id = s."assigned_runner_id"
+          WHERE s.id = ${sessionId}::uuid
+            AND (r."account_pauses" IS NOT NULL OR NOT s."provider_builtin")
+            AND EXISTS (SELECT 1 FROM "conversation_turn" t WHERE t."session_id" = s.id
+              AND t.kind = 'message' AND (t.status = 'PENDING'
+                OR (t.status = 'IN_FLIGHT' AND t."lease_deadline_at" < now())))
+            AND NOT EXISTS (SELECT 1 FROM "conversation_turn" t WHERE t."session_id" = s.id
+              AND t.kind IN ('message', 'shell') AND t.status = 'IN_FLIGHT'
+              AND (t."lease_deadline_at" IS NULL OR t."lease_deadline_at" > now()
+                OR (${leaseGeneration}::uuid IS NOT NULL AND t."lease_generation" = ${leaseGeneration}::uuid)))
+        `;
+        if (candidates.length) {
+          const session = await tx.session.findUniqueOrThrow({
+            where: { id: sessionId },
+            include: {
+              workspace: { select: { env: true, codexAccount: true, claudeAccount: true } },
+              assignedRunner: { select: { engines: true, accountPauses: true } },
+            },
+          });
+          const now = new Date();
+          const until = session.assignedRunner
+            ? sessionAccountPausedUntil(session, session.workspace, session.assignedRunner, now)
+            : null;
+          const pooledUntil = !isBuiltinProvider(session.provider, session.providerBuiltin) && session.provider
+            ? await this.queue.pausedPoolMemberUntil(session.ownerId, session.provider, session, now, tx)
+            : null;
+          if (until || pooledUntil) {
+            // Requeueing alone leaves a warm runner holding its local active-turn permit forever.
+            // Retire this process under the same lock, then return a committed ownership-loss 409
+            // below. The runner detaches without finalizing; a later claim takes a fresh generation.
+            const fence = owned[0].inboxLeaseGeneration ?? randomUUID();
+            await tx.$executeRaw`
+              INSERT INTO "inbox_lease_generation"
+                ("generation", "session_id", "lease_owner", "retired_at")
+              VALUES (${fence}::uuid, ${sessionId}::uuid, ${owned[0].inboxLeaseOwner}::uuid, now())
+              ON CONFLICT ("generation") DO UPDATE
+                SET "retired_at" = COALESCE("inbox_lease_generation"."retired_at", now())
+              WHERE "inbox_lease_generation"."session_id" = EXCLUDED."session_id"
+            `;
+            // An expired delivery would otherwise be retried by the lease query below.
+            // Preserve it for the next claim, after this account becomes available.
+            await tx.conversationTurn.updateMany({
+              where: { sessionId, kind: 'message', status: 'IN_FLIGHT', leaseDeadlineAt: { lt: now } },
+              data: { status: 'PENDING', deliveredAt: null, leaseDeadlineAt: null, leaseGeneration: null },
+            });
+            await tx.session.update({
+              where: { id: sessionId },
+              data: {
+                status: RunStatus.PENDING,
+                error: `Account paused until ${(until ?? pooledUntil)!.toISOString()}`,
+                inboxLeaseGeneration: fence,
+                inboxLeaseOwner: null,
+                engineTurnActive: false,
+              },
+            });
+            pauseRequeued = true;
+            return null;
+          }
+        }
+      }
       const rows = await tx.$queryRaw<Array<{
         id: string;
         seq: number;
@@ -3069,7 +3141,13 @@ export class RunnerApiController {
       }>>`
         UPDATE "conversation_turn"
           SET status = 'IN_FLIGHT',
-              "delivered_at" = now(),
+              -- The same engine deduplicates a re-delivery of its running turn. Keep
+              -- that turn's start time, including whether it preceded an account pause.
+              "delivered_at" = CASE
+                WHEN status = 'IN_FLIGHT' AND "lease_generation" IS NOT DISTINCT FROM ${leaseGeneration}::uuid
+                  THEN "delivered_at"
+                ELSE now()
+              END,
               "lease_deadline_at" = now() + (${INBOX_LEASE_MS} * interval '1 millisecond'),
               "lease_generation" = ${leaseGeneration}::uuid
         WHERE id = (
@@ -3430,6 +3508,12 @@ export class RunnerApiController {
     }, loggedRetry(this.logger, 'runnerApi.dequeueTurn', {
       transaction: { maxWait: RUNNER_POLL_TRANSACTION_MAX_WAIT_MS },
     }));
+    if (pauseRequeued) {
+      this.realtime.publishSessionUpdated(sessionId);
+      this.queue.notifySessionQueued();
+      // Outside the transaction: throwing before commit would roll back the pause and its fence.
+      throw new ConflictException('account is paused; inbox lease ownership was released');
+    }
     return outcome ?? null;
   }
 
@@ -6778,7 +6862,7 @@ export class RunnerApiController {
     if (session.provider === AgentProvider.CLAUDE) {
       const runner = await tx.runner.findUnique({
         where: { id: runnerId },
-        select: { planUsage: true, engines: true, accountNames: true, capabilities: true },
+        select: { planUsage: true, engines: true, accountNames: true, accountPauses: true, capabilities: true },
       });
       const move = runner?.capabilities.includes(CLAUDE_ACCOUNT_MOVE_V1)
         ? accountAfterUsageLimit(
@@ -6788,6 +6872,7 @@ export class RunnerApiController {
             runner.engines,
             runner.planUsage,
             new Date(),
+            runner.accountPauses,
           )
         : null;
       if (move && runner) {
@@ -6827,7 +6912,7 @@ export class RunnerApiController {
     const now = new Date();
     const runner = await tx.runner.findUnique({
       where: { id: runnerId },
-      select: { planUsage: true, engines: true, accountNames: true, capabilities: true },
+      select: { planUsage: true, engines: true, accountNames: true, accountPauses: true, capabilities: true },
     });
     const workspace = session.workspaceId
       ? await tx.workspace.findUnique({
@@ -6843,6 +6928,7 @@ export class RunnerApiController {
           runner.engines,
           runner.planUsage,
           now,
+          runner.accountPauses,
         )
       : null;
     if (move && runner) return { retryAt: now, move: { to: move.to, notice: accountSwitchNotice('codex', move, runner) } };
