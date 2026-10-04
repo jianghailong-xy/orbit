@@ -43,7 +43,7 @@ import { storeDerivedProjectStatus } from './project-done-derived';
 import { defaultStartLine, startProjectLine } from './project-integration-line';
 import { tellCoordinatorProjectStarted } from './project-started';
 import { START_REQUEST_KIND, answerStartRequests } from './project-start-request';
-import { DONE_REQUEST_KIND, answerDoneRequests } from './project-done-request';
+import { DONE_REQUEST_KIND, answerDoneRequests, doneRequestMoved } from './project-done-request';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 
 /** One stated criterion, as every read surface reports it. */
@@ -364,7 +364,9 @@ export class ProjectAcceptanceService {
    *      is a seal that is not the one standing now, read under that lock so no criteria edit can
    *      land between the comparison and the write.
    *   2. The request the press answers, when it answers one (`requestId`), FOR UPDATE (rank 60): it
-   *      must still be OPEN and about that same seal, or the press is a 409.
+   *      must still be OPEN and about that same seal — and, when it names the state it was made
+   *      about, about that same work (`doneRequestMoved`, read but not locked) — or the press is a
+   *      409.
    *   3. The project: DONE, `done_by = 'OWNER'`, the instant, the seal and the accepted gaps, in one
    *      statement.
    *   4. The open request, if any, resolved APPROVED by the owner at that instant with the gaps they
@@ -410,9 +412,13 @@ export class ProjectAcceptanceService {
       if (input.criteriaDigest !== version.digest) throw projectDoneCriteriaMoved(version.digest);
 
       if (requestId !== null) {
-        const [request] = await tx.$queryRaw<Array<{ state: string; payload: Prisma.JsonValue }>>(
+        const [request] = await tx.$queryRaw<Array<{
+          state: string;
+          payload: Prisma.JsonValue;
+          askedBySessionId: string | null;
+        }>>(
           Prisma.sql`
-            SELECT "state", "payload"
+            SELECT "state", "payload", "asked_by_session_id" AS "askedBySessionId"
               FROM "project_open_item"
              WHERE "id" = ${requestId}::uuid AND "project_id" = ${projectId}::uuid
                AND "owner_id" = ${ownerId}::uuid AND "kind" = ${DONE_REQUEST_KIND}
@@ -422,6 +428,14 @@ export class ProjectAcceptanceService {
         const asked = request.payload as unknown as Partial<DoneRequest> | null;
         if (asked?.criteriaDigest !== version.digest) {
           throw projectDoneRequestStale('was made about criteria that have changed since');
+        }
+        // And about the work: a request whose tasks, runs or landings have moved since is void even
+        // before a read of the open items gets round to superseding it (`project-done-request.ts`).
+        if (asked.stateDigest !== undefined
+          && (await doneRequestMoved(tx, ownerId, projectId, request)).length > 0) {
+          throw projectDoneRequestStale(
+            'was made about tasks, runs or landings that have changed since',
+          );
         }
       }
 
