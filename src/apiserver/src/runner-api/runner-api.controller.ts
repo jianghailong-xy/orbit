@@ -25,6 +25,7 @@ import {
 import type { Response } from 'express';
 import { PublicIdPipe } from '../common/public-id';
 import { MachineProtocol } from '../common/machine-protocol';
+import { readWorktreeArtifactRequest } from '../sessions/worktree-artifact';
 import { TasksService } from '../tasks/tasks.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import {
@@ -2992,12 +2993,52 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: ArtifactResultRequest,
   ): Promise<{ ok: true }> {
-    await this.assertSessionOwnership(sessionId, runner.id);
+    const session = await this.assertSessionOwnership(sessionId, runner.id);
     if (!dto?.requestId) throw new BadRequestException('requestId is required');
-    await this.prisma.conversationTurn.updateMany({
-      where: { id: dto.requestId, sessionId, kind: 'artifact' },
-      data: { status: 'ANSWERED', answeredAt: new Date() },
-    });
+    await withTransactionRetry(this.prisma, async (tx) => {
+      const turn = await tx.conversationTurn.findFirst({
+        where: { id: dto.requestId, sessionId, kind: 'artifact' },
+        select: { id: true, status: true, content: true, createdAt: true },
+      });
+      if (!turn) return;
+      const request = readWorktreeArtifactRequest(turn.content);
+      if (!request) {
+        // Legacy callers locate an unlinked upload by basename and only need an acknowledgement.
+        await tx.conversationTurn.updateMany({
+          where: { id: dto.requestId, sessionId, kind: 'artifact' },
+          data: { status: 'ANSWERED', answeredAt: new Date() },
+        });
+        return;
+      }
+      if (turn.status !== 'PENDING') return;
+      if (!['uploaded', 'missing', 'error'].includes(dto.status)) {
+        throw new BadRequestException('invalid artifact result status');
+      }
+      if (dto.status === 'uploaded' && (!dto.attachmentId || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(dto.attachmentId))) {
+        throw new BadRequestException('attachmentId is required');
+      }
+      const completed = await tx.conversationTurn.updateMany({
+        where: { id: turn.id, sessionId, kind: 'artifact', status: 'PENDING' },
+        data: {
+          status: 'ANSWERED', answeredAt: new Date(),
+          content: JSON.stringify({
+            source: request.source, path: request.path,
+            result: { status: dto.status, ...(dto.status === 'error' && dto.errorCode === 'too_large' ? { errorCode: dto.errorCode } : {}) },
+          }),
+        },
+      });
+      if (completed.count === 0) return;
+      if (dto.status === 'uploaded') {
+        const linked = await tx.attachment.updateMany({
+          where: {
+            id: dto.attachmentId, ownerId: session.ownerId, sessionId, turnId: null,
+            createdAt: { gte: turn.createdAt },
+          },
+          data: { turnId: turn.id },
+        });
+        if (linked.count !== 1) throw new BadRequestException('attachment does not belong to this file request');
+      }
+    }, loggedRetry(this.logger, 'runnerApi.artifactResult'));
     return { ok: true };
   }
 

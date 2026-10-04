@@ -752,20 +752,45 @@ func (t *Transport) fetchAttachment(ctx context.Context, sessionID, attID string
 	return data, nil
 }
 
+const maxSessionAttachmentBytes = 25 << 20
+
+var errAttachmentTooLarge = errors.New("File exceeds the 25 MiB limit")
+
 func (t *Transport) uploadSessionAttachment(ctx context.Context, sessionID, path, mimeType string) (string, error) {
-	if ctx == nil {
-		ctx = context.Background()
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", err
+	}
+	if !info.Mode().IsRegular() {
+		return "", errors.New("File is not a regular file")
 	}
 	file, err := os.Open(path)
 	if err != nil {
 		return "", err
 	}
 	defer file.Close()
+	return t.uploadSessionAttachmentFile(ctx, sessionID, file, mimeType, filepath.Base(path))
+}
+
+func (t *Transport) uploadSessionAttachmentFile(ctx context.Context, sessionID string, file *os.File, mimeType, filename string) (string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	info, err := file.Stat()
+	if err != nil {
+		return "", err
+	}
+	if !info.Mode().IsRegular() || info.Size() == 0 {
+		return "", errors.New("File is empty or is not a regular file")
+	}
+	if info.Size() > maxSessionAttachmentBytes {
+		return "", errAttachmentTooLarge
+	}
 
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
 	header := textproto.MIMEHeader{}
-	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="file"; filename="%s"`, escapeMultipartFilename(filepath.Base(path))))
+	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="file"; filename="%s"`, escapeMultipartFilename(filename)))
 	if mimeType != "" {
 		header.Set("Content-Type", mimeType)
 	}
@@ -773,8 +798,16 @@ func (t *Transport) uploadSessionAttachment(ctx context.Context, sessionID, path
 	if err != nil {
 		return "", err
 	}
-	if _, err := io.Copy(part, file); err != nil {
+	// The file may grow after Stat; read at most one byte beyond the upload limit.
+	n, err := io.Copy(part, io.LimitReader(file, maxSessionAttachmentBytes+1))
+	if err != nil {
 		return "", err
+	}
+	if n > maxSessionAttachmentBytes {
+		return "", errAttachmentTooLarge
+	}
+	if n == 0 {
+		return "", errors.New("File is empty")
 	}
 	if err := writer.Close(); err != nil {
 		return "", err
@@ -797,14 +830,14 @@ func (t *Transport) uploadSessionAttachment(ctx context.Context, sessionID, path
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("POST attachment %s -> %d %s", filepath.Base(path), resp.StatusCode, string(data))
+		return "", fmt.Errorf("POST attachment %s -> %d %s", filename, resp.StatusCode, string(data))
 	}
 	var out AttachmentCreateResponse
 	if err := json.Unmarshal(data, &out); err != nil {
 		return "", err
 	}
 	if out.ID == "" {
-		return "", fmt.Errorf("POST attachment %s returned empty id", filepath.Base(path))
+		return "", fmt.Errorf("POST attachment %s returned empty id", filename)
 	}
 	return out.ID, nil
 }

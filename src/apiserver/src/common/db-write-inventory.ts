@@ -101,6 +101,17 @@ export interface TransactionUnit {
  */
 export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
+    at: 'runner-api/runner-api.controller.ts#artifactResult',
+    shape: 'TX_RETRIED',
+    locks: 'conversation_turn by request id, then attachment by id. Attachment foreign keys only take FOR KEY SHARE on the session and the already locked turn.',
+    identity: 'The artifact request id and PENDING status; a completed or expired worktree request ignores repeated callbacks.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Re-read the request inside the transaction, conditionally complete it, and associate only a fresh unlinked attachment from the same owner and session. Rollback restores both rows; legacy callbacks retain their idempotent ANSWERED write.',
+    effects: 'None. The waiting file read observes bytes only after the receipt and attachment link commit together.',
+    answer: 'Typed 503 after retry exhaustion; the runner can resend the same callback.',
+  },
+  {
     at: 'push/push.controller.ts#register',
     shape: 'TX_RETRIED',
     locks: 'device_token rows and unique indexes for the token and Android installation. The user FK takes FOR KEY SHARE; no user graph mutex or other business row is locked.',
@@ -1924,7 +1935,6 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "realtime/reaper.service.ts#purgeTrash", class: "MANY_ROWS", statements: 1 },
   { at: "runner-api/codex-reset-plan-usage.ts#storeHeartbeatPlanUsage", class: "ONE_ROW_CAS", statements: 1, note: "A heartbeat's planUsage, compare-and-set on the stored value its Codex reset block was merged against (docs/codex-rate-limit-reset-contract.md §8). A lost race re-reads and merges again, at most PLAN_USAGE_CAS_ATTEMPTS times, then writes nothing and leaves the next heartbeat to report again; no attempt can store an older block over a newer one. Kept out of the heartbeat's own update, which stays one plain write to the hot runner row." },
   { at: "runner-api/codex-reset-plan-usage.ts#storeRefreshedCodexResetBlock", class: "ONE_ROW_CAS", statements: 1, note: "The block of a REFRESHED Codex reset result, compare-and-set into the stored Codex snapshot on the same terms as the heartbeat's planUsage write (docs/codex-rate-limit-reset-contract.md §6.3, §8): written only while planUsage is still the value it was ordered against, re-read at most PLAN_USAGE_CAS_ATTEMPTS times, never over a newer block and never into a runner with no Codex snapshot. The operation row was already settled by its own transition; this write is the planUsage half only." },
-  { at: "runner-api/runner-api.controller.ts#artifactResult", class: "ONE_ROW_CAS", statements: 1 },
   { at: "runner-api/runner-api.controller.ts#claudeHistoryResult", class: "ONE_ROW_CAS", statements: 1, note: "What one runner found under the directory it was asked about. The predicate is the asked-for path, not just the runner id: a scan that finishes after the person typing moved on matches no row, so an answer about an abandoned directory is dropped instead of becoming the verdict on the one in the field now. Re-POSTing the same answer writes the same values." },
   { at: "runner-api/runner-api.controller.ts#applyAccountRemoveResult", class: "ONE_ROW_CAS", statements: 2, note: "What one account removal came to, as the runner reports it. The predicate is the removal the report names — `pending`, the engine whose store it is in, the account, and the `codex_account_remove_at` it was asked at — not just the runner id: a report about a removal the row has moved past (the person asked again), about a different account, or about another engine's store, matches no row and is dropped. A success clears the failure message the last one left; re-POSTing the same outcome writes the same values. A success that applied then takes the removed account's key out of `account_names` with a second, hand-written UPDATE of the same row (fenced on the key being there, so a re-POST matches nothing): not atomic with the first, and it need not be — a name left behind names an account no report lists, which nothing shows." },
   { at: "runner-api/runner-api.controller.ts#createApproval", class: "INSERT", statements: 1 },
@@ -1991,6 +2001,7 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "sessions/sessions.service.ts#createAutoTags", class: "INSERT", statements: 1 },
   { at: "sessions/sessions.service.ts#decideApproval", class: "ONE_ROW_CAS", statements: 1 },
   { at: "sessions/sessions.service.ts#enqueueLegacyArtifactRequest", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "sessions/sessions.service.ts#getWorktreeFileForOwner", class: "ONE_ROW_CAS", statements: 2 },
   { at: "sessions/sessions.service.ts#persistLegacyArtifactAttachment", class: "INSERT", statements: 1 },
   { at: "sessions/sessions.service.ts#pin", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "sessions/sessions.service.ts#rememberForWorkspace", class: "INSERT", statements: 1 },

@@ -703,11 +703,18 @@ struct DiffFileView: View {
     private static let lineCap = 1200
 
     var body: some View {
+        if file.additions < 0 || file.deletions < 0 {
+            WorktreeFilePreview(worktree: console.worktree, file: file)
+                .id(file.path)
+        } else {
+            textDiff
+        }
+    }
+
+    @ViewBuilder private var textDiff: some View {
         let patch = console.worktree.diff.first { $0.path == file.path }
         ScrollView {
-            if file.additions < 0 || file.deletions < 0 {
-                placeholder("Binary file — no preview")
-            } else if let text = patch?.patch, !text.isEmpty {
+            if let text = patch?.patch, !text.isEmpty {
                 let (attr, trimmed) = Self.colorize(text)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(attr).font(.orbitDiffLine).textSelection(.enabled)
