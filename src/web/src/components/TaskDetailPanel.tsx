@@ -13,6 +13,7 @@ import {
 } from '@ant-design/icons';
 import { MentionDeliveryNotes } from './MentionDeliveryNotes';
 import { TaskInputs } from './TaskInputs';
+import { LandTaskStatus, landingBadge, landingIsLive } from './LandTaskStatus';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type { RunnerModelCatalog } from '@orbit/shared';
 import { Alert, Avatar, Button, Dropdown, Input, Modal, Popconfirm, Segmented, Select, Spin, Switch, Tooltip, Typography } from 'antd';
@@ -625,12 +626,14 @@ export function TaskDetailPanel({
     queryFn: () => api<any>(`/tasks/${taskId}`),
     // While the task has a busy (queued/running) session, poll so the 开始执行 button
     // leaves its running state once the run ends; stay idle otherwise.
-    // Poll while anything on this task is still moving. Two things can be:
+    // Poll while anything on this task is still moving. Three things can be:
     //
     //   a busy session — so the 开始执行 button leaves its running state when the run ends;
     //   a mention delivery that has not settled (§13.8). Its state changes on a background sweep
     //     with no request behind it, so without this the panel shows PENDING or BLOCKED for ever
     //     and a status nobody watches change is barely better than the log line it replaced.
+    //   its landing (§2.7a), which goes on after the task's own session has finished: as often as a
+    //     busy session while it runs, and more slowly while it waits, which can take hours.
     refetchInterval: (query) => {
       const data = query.state.data as any;
       const busy = (data?.sessions ?? []).some((session: any) => isSessionBusy(session));
@@ -641,7 +644,9 @@ export function TaskDetailPanel({
       const moving = (data?.comments ?? []).some((comment: any) =>
         (comment.deliveries ?? []).some((delivery: any) =>
           ['PENDING', 'DELIVERING', 'SESSION_CREATED', 'QUEUED'].includes(delivery.status)));
-      return busy || moving ? 4000 : false;
+      const landingLive = landingIsLive(data?.integration);
+      if (busy || moving || landingLive === 'RUNNING') return 4000;
+      return landingLive === 'QUEUED' ? 15_000 : false;
     },
   });
   const task = q.data ?? summary;
@@ -1077,6 +1082,7 @@ export function TaskDetailPanel({
   // §13.6: the chip says how the task ENDED, not only what its status column holds. A cancelled
   // attempt that was re-run reads as Superseded, in amber, because the work is still happening.
   const status = taskOutcomeChip(task);
+  const landing = landingBadge(q.data?.integration);
   const supersession = supersessionNote(task);
   const comments = q.data?.comments ?? [];
   const sessions = q.data?.sessions ?? [];
@@ -1244,6 +1250,10 @@ export function TaskDetailPanel({
           <div className="tdp-title">{task?.title ?? 'Loading…'}</div>
           <div className="tdp-meta">
             <span className={`tdp-badge tone-${status.tone}`}>{status.label}</span>
+            {/* DONE is not landed: the landing gets its own badge beside the status, never in it. */}
+            {landing && (
+              <span className={`tdp-badge tone-${landing.tone}`} data-landing-badge="">{landing.label}</span>
+            )}
             {supersession && <span className="tdp-meta-item muted">· {supersession}</span>}
             {task?.assignee && (
               <span className="tdp-meta-item">
@@ -1402,6 +1412,14 @@ export function TaskDetailPanel({
         <div className="tdp-empty">Failed to load task details.</div>
       ) : (
         <div className="tdp-body">
+          {/* Where the task's work stands after DONE (§2.7a): the newest landing attempt and why it
+              waits or where it stopped, apart from the status above. Nothing to press here. */}
+          {landing ? (
+            <section className="tdp-section" aria-label="Task landing">
+              <div className="tdp-section-title">Landing</div>
+              <LandTaskStatus integration={q.data.integration} taskStatus={q.data.status} />
+            </section>
+          ) : null}
           {/* The check that settles this row, under the row it checks — the relation the database
               has always held and no surface showed. Its title, its own state and the way in. */}
           {showVerifierCard && (

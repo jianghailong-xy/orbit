@@ -1,0 +1,10 @@
+.orbit-spinner { display: inline-flex; align-items: center; flex-direction: column; gap: 12px; color: var(--orbit-control-primary); font-family: var(--orbit-font-family); font-size: var(--orbit-font-size); line-height: var(--orbit-line-height); }
+.orbit-spinner-dots { position: relative; display: inline-block; font-size: 20px; line-height: 1; width: 1em; height: 1em; transform: rotate(45deg); animation: orbit-spinner-rotate 1.2s infinite linear; }
+.orbit-spinner-small .orbit-spinner-dots { font-size: 14px; }
+.orbit-spinner-dots > i { position: absolute; display: block; width: calc((1em - 2px) / 2); height: calc((1em - 2px) / 2); border-radius: 100%; background: currentColor; transform: scale(.75); opacity: .3; animation: orbit-spinner-pulse 1s infinite linear alternate; }
+.orbit-spinner-dots > i:nth-child(1) { top: 0; inset-inline-start: 0; }
+.orbit-spinner-dots > i:nth-child(2) { top: 0; inset-inline-end: 0; animation-delay: .4s; }
+.orbit-spinner-dots > i:nth-child(3) { bottom: 0; inset-inline-end: 0; animation-delay: .8s; }
+.orbit-spinner-dots > i:nth-child(4) { bottom: 0; inset-inline-start: 0; animation-delay: 1.2s; }
+@keyframes orbit-spinner-rotate { to { transform: rotate(405deg); } }
+@keyframes orbit-spinner-pulse { to { opacity: 1; } }

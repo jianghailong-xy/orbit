@@ -1,0 +1,5 @@
+{
+  "command": "npm run test:ui-controls -w @orbit/web",
+  "exitCode": 0,
+  "durationSeconds": 77.96503448486328
+}

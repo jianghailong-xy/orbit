@@ -3495,9 +3495,11 @@ html[data-theme='dark'] .session-tag-chip {
 }
 .session-row.active {
   background: var(--brand-tint);
+  --session-menu-surface: var(--brand-tint);
 }
 .session-row.active:hover {
   background: var(--brand-tint-hover);
+  --session-menu-surface: var(--brand-tint-hover);
 }
 .workspace-draft {
   display: flex;
@@ -4677,6 +4679,7 @@ html[data-theme='dark'] .session-tag-chip {
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.16);
 }
 .session-row {
+  --session-menu-surface: var(--bg-base);
   position: relative;
   display: flex;
   align-items: center;
@@ -4787,10 +4790,12 @@ html[data-theme='dark'] .session-tag-chip {
 @media (hover: hover) {
   .session-row:hover {
     background: var(--bg-hover);
+    --session-menu-surface: var(--bg-hover);
   }
 }
 .session-row.menu-open:not(.active) {
   background: var(--bg-hover);
+  --session-menu-surface: var(--bg-hover);
 }
 @media (min-width: 961px) {
   .session-row {
@@ -4906,12 +4911,25 @@ html[data-theme='dark'] .session-tag-chip {
 .session-preview.tone-review {
   color: var(--text-3);
 }
-/* A permanent action slot keeps text and hit targets stable as the pointer moves. */
+/* Float above full-width text without changing its layout when actions appear. */
 .session-right {
+  position: absolute;
+  top: 0;
+  right: 8px;
+  bottom: 0;
+  z-index: 1;
   display: flex;
-  flex: none;
   align-items: center;
   width: 32px;
+}
+.session-right::before {
+  content: '';
+  position: absolute;
+  inset: 0 -8px 0 -28px;
+  /* Composite translucent dark-mode tints onto an opaque surface before fading. */
+  background: linear-gradient(var(--session-menu-surface), var(--session-menu-surface)), var(--bg-base);
+  mask-image: linear-gradient(to right, transparent, #000 42%);
+  pointer-events: none;
 }
 /* Touch phones use swipes; narrow desktop windows still need the menu for mouse/keyboard. */
 @media (max-width: 960px) and (hover: none) and (pointer: coarse) {
@@ -4953,28 +4971,27 @@ html[data-theme='dark'] .session-tag-chip {
   height: 32px;
   padding: 0;
   border: 0;
-  background: transparent;
+  background: var(--bg-hover-strong);
+  color: var(--text-1);
   font: inherit;
   font-size: 16px;
   cursor: pointer;
 }
-/* Keep the slot stable and the button reachable by keyboard when hidden from the mouse. */
+/* Hide the button and its fade together, while keeping keyboard access. */
 @media (hover: hover) and (pointer: fine) {
-  .session-actions > .session-kebab {
+  .session-right {
     opacity: 0;
     pointer-events: none;
   }
-  .session-row:hover .session-actions > .session-kebab,
-  .session-row:focus-within .session-actions > .session-kebab,
-  .session-row.menu-open .session-actions > .session-kebab {
+  .session-row:hover .session-right,
+  .session-row:focus-within .session-right,
+  .session-row.menu-open .session-right {
     opacity: 1;
     pointer-events: auto;
   }
 }
-.session-actions > .session-kebab:hover,
-.session-row.menu-open .session-actions > .session-kebab {
-  background: var(--bg-hover-strong);
-  color: var(--text-1);
+.session-row.active .session-actions > .session-kebab {
+  background: color-mix(in srgb, var(--brand) 10%, var(--session-menu-surface));
 }
 .session-actions > .session-kebab:focus-visible {
   outline: 2px solid var(--brand);
@@ -15827,6 +15844,66 @@ button.chat-jump-start:hover {
 .project-integration-facts b {
   color: var(--text-1);
   font-weight: 600;
+}
+/* The current landings under the line (§2.7a): one compact block per task, in the task page's words. */
+.project-land-task {
+  border-top: 1px solid var(--border-subtle);
+  padding: 8px 10px;
+}
+.project-land-task-title {
+  display: inline-block;
+  margin-bottom: 4px;
+  font-weight: 600;
+  font-size: 12.5px;
+  color: var(--text-1);
+}
+.project-land-task-title:hover {
+  color: var(--brand);
+}
+/* A task's newest landing attempt: the task's status and the landing's apart, the reason, the facts. */
+.land-task-status {
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.land-task-status-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.land-task-task-state {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.land-task-generation,
+.land-task-step {
+  color: var(--text-3);
+}
+.land-task-reason {
+  margin-top: 5px;
+  color: var(--text-1);
+}
+.land-task-receipt {
+  margin-top: 5px;
+  color: var(--text-3);
+}
+.land-task-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 6px 0 0;
+}
+.land-task-facts > div {
+  display: flex;
+  gap: 5px;
+  min-width: 0;
+}
+.land-task-facts dt {
+  color: var(--text-3);
+}
+.land-task-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 /* A project nobody has started: one sentence beside the mark, wrapping under itself on a phone. */
 .project-integration-undecided {

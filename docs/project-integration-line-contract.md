@@ -360,7 +360,7 @@ export function receiptIsLandingEvidence(receipt: LandingReceiptFacts, branches:
 
 - `reason` 必填，去空白后非空且 ≤2000 字符，否则 400 `INTEGRATION_RETRY_REASON_REQUIRED`。
 - 只认该项目**当前**的协调会话，否则 403 `INTEGRATION_RETRY_COORDINATOR_ONLY`（任务自己的会话、别的项目的协调会话、不带头的调用都在此列）；任务不在该项目下 403 `INTEGRATION_RETRY_NOT_THIS_PROJECT`。
-- 任务须为 DONE，且最新一代 `LAND_TASK` 以 `CHECK_FAILED` 或 `ERROR` 结束，否则 409 `INTEGRATION_RETRY_NOT_APPLICABLE`。`CONFLICT` 也在此列：原样重跑会再冲突一次，冲突只由改过的分支解开（`task_reopen` 返工，或 successor）。最新一代仍 `QUEUED` / `RUNNING` 时 409 `INTEGRATION_RETRY_IN_FLIGHT`。
+- 任务须为 DONE，且最新一代 `LAND_TASK` 以 `CHECK_FAILED` 或 `ERROR` 结束，否则 409 `INTEGRATION_RETRY_NOT_APPLICABLE`。`CONFLICT` 也在此列：原样重跑会再冲突一次，冲突只由改过的分支解开（`task_reopen` 返工，或 successor）；`phase = MAIN_SYNC` 的冲突在项目线和 upstream 之间，改的是源分支对 upstream 的吸收，见 §3.1 M3，拒绝文案照此说。最新一代仍 `QUEUED` / `RUNNING` 时 409 `INTEGRATION_RETRY_IN_FLIGHT`。
 - 失败分类（`landingFailureClass`，只读作业的结构化结果、不读输出）：`CONFLICT`、`CHECK_FAILED`、`CHECK_TIMED_OUT`（某条检查 `timedOut`，即跑到它的预算被 runner 终止）、`ERROR`；可重跑的是后三类。
 - 该任务有 OPEN 的集成类待办归 owner（`ESCALATED`、非 Automatic 的 `NO_COORDINATOR` 等）→ 409 `INTEGRATION_RETRY_OWNER_ITEM`；该任务有未解决、等 owner 的 blocker → 409 `INTEGRATION_RETRY_OWNER_BLOCKER`。
 - 权限：有归协调会话的 OPEN 集成类待办即可——包括 owner 用「Ask the coordinator again」交回的那条，开关不论；没有 OPEN 待办（例如已被 `open_item_resolve` 手工关掉）时由 Automatic（`coordinator_enabled`）回答，关着 → 403 `INTEGRATION_RETRY_NOT_AUTOMATIC`。
@@ -413,9 +413,9 @@ interface IntegrationJobCommand {
 | 步 | 命令与判定 | 失败出口 |
 |---|---|---|
 | **J-S1 FETCH** | `git fetch <remote> <target_ref> <upstream_ref>`；T0 = 远端目标 tip（`PROJECT_BRANCH` 线目标不存在时 T0 = U）；U = 远端 upstream tip；S = `git rev-parse refs/heads/<源分支>` → `source_sha` | fetch 失败 → `ERROR / FETCH_FAILED`；源分支不存在 → `ERROR / SOURCE_BRANCH_MISSING`；upstream 不存在 → `ERROR / BASE_REF_NOT_FOUND` |
-| **J-S2 MAIN_SYNC**（仅 `PROJECT_BRANCH`） | U 不是 T0 的祖先时，在 T0 上 `git merge --no-ff -m "Merge <upstream> into <target>" U` → M = `main_sync_sha`，base = M；否则 base = T0 | 冲突 → `CONFLICT`（`phase = MAIN_SYNC`，冲突路径来自 `git diff --name-only --diff-filter=U`） |
+| **J-S2 MAIN_SYNC**（仅 `PROJECT_BRANCH`） | U 不是 T0 的祖先时：S 同时包含 U 与 T0、且 S ≠ U，说明源分支已经自己做过这次吸收（§3.1 M3），这里不再合，base = T0，J-S4 走 MERGE 模式；否则在 T0 上 `git merge --no-ff -m "Merge <upstream> into <target>" U` → M = `main_sync_sha`，base = M。U 是 T0 的祖先时 base = T0 | 冲突 → `CONFLICT`（`phase = MAIN_SYNC`，冲突路径来自 `git diff --name-only --diff-filter=U`）。源分支缺了本次 J-S1 取到的任一 tip（没吸收过，或吸收之后 upstream、项目分支又前进了），照旧在 T0 上合，冲突照旧报。S = U 不算吸收：它没有自己的东西，照旧合，由 J-S3 答 |
 | **J-S3 已包含** | S 是 base 的祖先：S **等于会话记录的 base**（分支停在 fork 点，自己没有提交）→ `NOTHING_TO_LAND`（0300），并实测 S 是否 U 的祖先，报为 `sourceOnUpstream`（0346）；否则 → `ALREADY_LANDED`。两者都不推送，丢弃 M | |
-| **J-S4 REBASE / MERGE** | fork = `git merge-base S base`；`git rev-list --merges fork..S` 非空 → **MERGE 模式** `git merge --no-ff S`（保住合并提交里的冲突解法）；否则 `git rebase --onto base anchor S`：anchor 默认取 fork，仅 `sessionBaseSha` 非空、是 S 的祖先且不是 fork 的祖先时取 `sessionBaseSha`（会话 base 早于或等于 fork 时用 fork，避免重放 base 已有的提交）。结果 C = `tested_sha` | 冲突 → `CONFLICT`（`phase = REBASE` 或 `MERGE`） |
+| **J-S4 REBASE / MERGE** | fork = `git merge-base S base`；`git rev-list --merges fork..S` 非空，或 J-S2 判定源分支已吸收 upstream → **MERGE 模式** `git merge --no-ff S`（保住合并提交里的冲突解法；后一种 T0 是 S 的祖先，合出来的树就是 S 的树）；否则 `git rebase --onto base anchor S`：anchor 默认取 fork，仅 `sessionBaseSha` 非空、是 S 的祖先且不是 fork 的祖先时取 `sessionBaseSha`（会话 base 早于或等于 fork 时用 fork，避免重放 base 已有的提交）。结果 C = `tested_sha` | 冲突 → `CONFLICT`（`phase = REBASE` 或 `MERGE`） |
 | **J-S5 CHECK** | 组合树自带 `scripts/worktree-overlay.sh` 时先运行它（见下方「检查前的铺环境」），再在 C 上依次跑任务验收命令（有 `acceptance_command` 时）与合并检查命令（有配置时），逐条比对退出码 | 铺环境失败或超时 → `ERROR / CHECK_TREE_UNPREPARED`；任一退出码不一致 → `CHECK_FAILED`（什么都不推送） |
 | **J-S6a 落地前核对** | `tested_tree_sha = git rev-parse C^{tree}`；要求 `HEAD = C` 且 `git status --porcelain --untracked-files=no` 为空（检查不得改动或提交已跟踪文件） | → `ERROR / CHECK_MUTATED_TREE` |
 | **J-S6 PUSH** | REMOTE：`git push <remote> C:<target_ref>`（不带 force，只能 fast-forward）；RUNNER_LOCAL：`git update-ref <target_ref> C T0`。随后在 workDir 前移本地目标 ref（同 `rebaseFastForward`：目标在根 checkout 上时 `merge --ff-only`，否则 `branch -f`） | 非 fast-forward 被拒 → 回 J-S1，至多 2 轮 → `ERROR / TARGET_MOVED`；其他 → `ERROR / PUSH_REJECTED` |
@@ -477,8 +477,67 @@ interface TaskIntegrationView {
   state: TaskIntegrationState; since: Date | null;
   handler: 'COORDINATOR' | 'OWNER' | null; openItemId: string | null;
   jobId: string | null; checksRunningForMs: number | null;
+  landTask?: LandTaskIntegrationView | null;
 }
 ```
+
+### 2.7a 当前 LAND_TASK（任务页与项目集成视图）
+
+任务 DONE 不等于已落地。`TaskIntegrationView.landTask` 是该任务**最新 generation** 的
+`LAND_TASK`（按 generation、created_at、id 取最新，只取本项目线上的作业），由作业行自己的字段给出；
+它与上面按「回执 → OPEN 待办 → 作业」派生的 `state` 并列，**不参与**那条优先级：较新的
+generation 排队或失败，不会把已有回执改回未落地。三处读同一个函数
+（`project-task-integration.ts` 的 `readTaskIntegrationViews`）：`GET /tasks/:id` 的
+`integration`、`GET /projects/:id/tasks` 每行的 `integration`、`GET /projects/:id/integration`
+的 `landTasks[].integration`。
+
+```ts
+interface LandTaskIntegrationView {
+  jobId: string;
+  state: IntegrationJobState;              // QUEUED / RUNNING / LANDED / CHECK_FAILED / CONFLICT / …
+  phase: IntegrationJobPhase | null;       // runner 当前步骤，或停下的那一步
+  generation: string;                      // 十进制字符串
+  queuedAt: Date;                          // 入队（created_at）
+  startedAt: Date | null;                  // 首次认领（started_at）
+  heartbeatAt: Date | null;                // 认领进程最近一次心跳 / 进度 / 结果
+  finishedAt: Date | null;                 // 终态写入
+  targetRef: string;                       // 入队时冻结的完整目标 ref
+  waitMs: number;                          // 排队时长，见下
+  blockingReason: { code; summary; jobId?; openItemId? } | null;
+}
+```
+
+`waitMs`：QUEUED 时为 `now - queuedAt`，一直累计；否则为 `(claimedAt ?? finishedAt) - queuedAt`，
+即到最近一次认领为止。太早认领、被送回 QUEUED 的作业（§2.6 judged too early）清掉认领但保留
+`started_at`，所以排队时长从入队算起，不从那次中断的启动算起。
+
+`blockingReason` 只在 QUEUED 与三种失败终态出现，由服务端给出 `code` 与一句可直接显示的
+`summary`；客户端只读它，不从任务 DONE、也不从异常卡是否存在去推断原因。QUEUED 的原因按
+`claimOne`（J-T2）的领取条件、依此顺序取第一条不满足的：
+
+| code | 条件 | summary 要点 |
+|---|---|---|
+| `CANCELLING` | `cancel_requested_at` 非空，领取跳过它 | 不会启动 |
+| `WAITING_TASK_WORK` | 任务仍有未结束的工作会话（J-T1a） | 等待落地：工作会话还在跑，分支还会动 |
+| `WAITING_MAIN_SYNC` | 同 serial_key 上另一任务的 MAIN_SYNC 冲突待办仍 OPEN（M2；冲突任务自己的后续 generation 豁免，M3） | 等待项目线同步：点名那次落地；附 `jobId`、`openItemId` |
+| `WAITING_RUNNER` | 工作会话所在 workspace 没有 runner；runner OFFLINE 或静默超过 90 s（与会话队列同一阈值）；DRAINING；心跳无租约或未声明 `integration-job/v1` | 等待 runner：点名 runner 与具体原因 |
+| `WAITING_SERIAL_SLOT` | 同 serial_key 已有 RUNNING 作业（J1） | 等待落地：点名正在跑的那次落地或晋升；附 `jobId` |
+| `WAITING_DISPATCH` | 以上都不成立 | 等待落地：下一次心跳认领 |
+
+阻塞作业属于其他账号时（serial_key 只是仓库 + ref），只给出原因，不给出它的 id 与标题。
+失败终态：`CONFLICT`（区分 MAIN_SYNC 与 REBASE / MERGE，附冲突文件数）、`CHECK_FAILED`（第一条
+未通过的检查及其退出码或超时）、`ERROR`（阶段与 error_code）。
+
+**项目集成视图的当前 LAND_TASK**（`ProjectIntegrationView.landTasks`）：取每个任务的最新
+generation，列出 (1) QUEUED / RUNNING 的，不论回执；(2) 停在 CONFLICT / CHECK_FAILED / ERROR、
+任务仍为 DONE、且之后没有回执落地其工作的；(3) 最近一次 LANDED / ALREADY_LANDED 的那一个。顺序：
+RUNNING、按入队顺序的 QUEUED、按结束时间倒序的失败、最后一次落地。数量受队列与失败数约束，
+不随项目历史增长。
+
+页面：任务页在状态徽标旁另起一枚落地徽标（如 `Done` · `Waiting to land`），并在 Landing 段落写
+`Task DONE`、落地状态、generation、原因与目标 ref、排队时长和四个时间；落地 RUNNING 时每 4 s、
+QUEUED 时每 15 s 重读。项目集成行下列出上述当前落地，链接到各自任务。两处均为只读：不新增重跑、
+合并、上线入口；PROMOTION_APPROVAL 与 owner-only 的门不变，这个读模型也不写任务状态。
 
 ### 2.8 测试
 
@@ -489,7 +548,7 @@ interface TaskIntegrationView {
 3. `case_check_failed_opens_item_nothing_lands`：检查失败 → `INTEGRATION_CHECK_FAILED` 待办、未落地
 4. `case_two_done_serialize_tree_equals_tested`：两条任务同时 DONE → 串行落地，两条作业都满足 `landed_tree_sha = tested_tree_sha`
 
-另建议：`src/apiserver/src/projects/integration-job-relay.pg.spec.ts`（J-T2 / J-T3 租约与 `STALE_CLAIM`）、`integration-enqueue-done-sites.spec.ts`（J-T1a 普查）、`src/runner-go/integrate_test.go`（J-S2 / J-S4 MERGE 模式 / J-S6a）。
+另建议：`src/apiserver/src/projects/integration-job-relay.pg.spec.ts`（J-T2 / J-T3 租约与 `STALE_CLAIM`）、`integration-enqueue-done-sites.spec.ts`（J-T1a 普查）、`src/runner-go/integrate_test.go`（J-S2 / J-S4 MERGE 模式 / J-S6a；M3 的两侧：已吸收 upstream 的源分支按 MERGE 落地、树等于源分支，缺任一 tip 的照旧报 MAIN_SYNC 冲突）。
 
 ---
 
@@ -497,11 +556,11 @@ interface TaskIntegrationView {
 
 ### 3.1 main 同步
 
-**M1**：只针对 `PROJECT_BRANCH` 线，发生在 `LAND_TASK` 的 J-S2。upstream tip 不是项目分支 tip 的祖先时，先生成吸收 upstream 的 merge 提交，再把任务 rebase 到它上面，二者一起检查、一起落地。项目分支上因此出现 merge 提交，旧 tip 仍是祖先。**不 rebase 项目分支，不 force push**（硬约束 3）。
+**M1**：只针对 `PROJECT_BRANCH` 线，发生在 `LAND_TASK` 的 J-S2。upstream tip 不是项目分支 tip 的祖先时，先生成吸收 upstream 的 merge 提交，再把任务 rebase 到它上面，二者一起检查、一起落地；源分支自己已经吸收过时不再生成（M3）。项目分支上因此出现 merge 提交，旧 tip 仍是祖先。**不 rebase 项目分支，不 force push**（硬约束 3）。
 
-**M2**：吸收时冲突 → 作业 `CONFLICT`（`phase = MAIN_SYNC`）+ `INTEGRATION_CONFLICT` 待办。只要这条待办 OPEN，同一 `serial_key` 上后续 `LAND_TASK` 不被领取，否则每条作业都会撞上同一个冲突、各开一张卡。
+**M2**：吸收时冲突 → 作业 `CONFLICT`（`phase = MAIN_SYNC`）+ `INTEGRATION_CONFLICT` 待办。只要这条待办 OPEN，同一 `serial_key` 上其他任务的 `LAND_TASK` 不被领取，否则每条作业都会撞上同一个冲突、各开一张卡。冲突任务自己的后续落地不扣（`integration-job-relay.ts#claimOne`）：M3 的解法放在它的源分支上，扣住它就是让它等那条它要关掉的待办，只有手关才放得出来。领取读不到 git，只认「同一任务」；源分支是否带着吸收由 runner 在 J-S2 判：两个 tip 都在 → J-S4 MERGE 落地，落地关掉待办（J-T5），排着的落地接着走；缺一个 → 照旧冲突，另开一条待办，其他任务继续等。
 
-**M3**：协调会话解决吸收冲突的方式：在一个会话 worktree 里从项目分支 tip 出发，merge upstream 并解决冲突，再调用 `integration_retry`。平台用 J-S4 的 MERGE 模式落地这条解决提交。rebase 会丢掉合并提交里的解法，这正是现有 `session_merge` 的已知缺陷。
+**M3**：吸收冲突先在项目线上解，再落地。解法放进冲突任务的源分支：任务的会话把项目分支 tip 和 upstream tip 合进源分支、解掉冲突，提交这个合并提交，任务原来的工作留着、不重做。协调者的做法：先 `task_comment` 写明这一轮只做这一件，再 `task_reopen`；任务再次 DONE 照 J-T1a 排下一代，M2 不扣它。J-S2 看到源分支同时包含本次 J-S1 取到的 upstream tip 与项目分支 tip（且不就是 upstream tip），就不再在项目分支 tip 上合 upstream，J-S4 用 MERGE 模式落地这条解决提交，结果树等于源分支。rebase 会丢掉合并提交里的解法，这正是现有 `session_merge` 的已知缺陷。落地前任一 tip 又前进了，源分支就缺了它，J-S2 照旧在项目分支 tip 上合、照旧冲突，要再合一次。这次落地不写 `main_sync_sha`：作业自己没做吸收，`rebase_base_sha` 是 T0；项目页和晋升卡的「synced with main」只按作业做过的吸收计时，这一次不移动它。`integration_retry` 仍拒收 `CONFLICT`（J-T1b）：同一个源分支原样重跑，在 J-S2 会再冲突一次。给协调者的处置文案（`project-open-item.ts#mainSyncNextStep`、`project-integration-retry.ts#notRetryable`）按此写：先在项目线上吸收 upstream，不让它重开任务去重做自己的工作。
 
 **M4**：upstream 前进本身不触发同步。没有哪个事实能说「现在该同步」而不引入时钟；同步发生在下一次集成或下一次晋升检查时。
 
