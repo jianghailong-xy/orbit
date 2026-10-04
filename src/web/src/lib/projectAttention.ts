@@ -6,6 +6,7 @@ import {
   type ProjectListAttention,
   type ProjectListCoordinatorActivity,
   type ProjectListIntegration,
+  type ProjectSidebarTaskCounts,
 } from '@orbit/shared';
 import type { ProjectSection, SectionProject } from '../components/ProjectSections';
 import type { ProjectPanoramaBuckets } from '../components/ProjectPanoramaHeader';
@@ -615,6 +616,8 @@ export interface SidebarProject {
   createdAt: string;
   lastActivityAt: string | null;
   buckets: Pick<ProjectPanoramaBuckets, 'running'>;
+  /** Absent on a server that predates sidebar task progress. */
+  taskCounts?: ProjectSidebarTaskCounts;
   attention?: Pick<ProjectAttentionSummary, 'ownerItems' | 'startRequest'> | null;
   /** Absent from a server that predates it; null on a project with no coordinator bound. */
   coordinatorActivity?: ProjectListCoordinatorActivity | null;

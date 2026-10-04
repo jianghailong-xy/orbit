@@ -368,7 +368,37 @@ test('the sidebar reads queued and running integration work once for the whole p
   assert.deepEqual(rows[0].integration,
     { line: 'PROJECT_BRANCH', ref: 'project/bg', activeJobCount: 1 });
   assert.deepEqual(rows[0].buckets, { running: 0 }, 'integration work is not a task session');
+  assert.deepEqual(rows[0].taskCounts, { done: 0, failed: 0, total: 0 });
   assert.equal(rows[1].integration, null);
+});
+
+test('the sidebar maps the maintained task tally and gives missing rollups zero counts', async () => {
+  let tallyReads = 0;
+  const service = serviceWith({
+    project: {
+      findMany: async (args: any) => {
+        assert.deepEqual(args.where, { ownerId: OWNER_ID, status: ProjectStatus.OPEN });
+        assert.ok(!('tasks' in args.select) && !('_count' in args.select),
+          'the polling project select does not aggregate task rows');
+        return [{ id: 'a1' }, { id: 'empty' }];
+      },
+    },
+    projectCodebase: { findMany: async () => [] },
+    $queryRaw: async (query: Prisma.Sql) => {
+      if (!query.sql.includes('"project_task_status_count"')) return [];
+      tallyReads += 1;
+      return [{
+        projectId: 'a1', running: 2, done: 3, failed: 4, total: 12,
+        lastActivityAt: null,
+      }];
+    },
+  });
+
+  const rows = await service.listSidebar(OWNER_ID);
+  assert.equal(tallyReads, 1, 'all project tallies ride in the sidebar reader');
+  assert.deepEqual(rows[0].taskCounts, { done: 3, failed: 4, total: 12 });
+  assert.deepEqual(rows[0].buckets, { running: 2 });
+  assert.deepEqual(rows[1].taskCounts, { done: 0, failed: 0, total: 0 });
 });
 
 // The sidebar's working dot and its order both read this, so it has to be the session list's own

@@ -445,10 +445,10 @@ const PROJECT_LIST_SELECT = {
 /**
  * A row of `GET /projects/sidebar`, as opposed to a project document.
  *
- * The rail draws four things of a project — it is working, it waits on the reader, how recently it
- * moved, and its title — and this is the select behind them. `goal`, `updatedAt` and the
- * coordination bindings are absent on purpose: nothing on the rail reads them, and the whole point
- * of this endpoint is that a 15-second poll does not carry what a page view carries.
+ * The rail draws activity, attention, title and task progress. This select supplies the project
+ * fields; `readProjectSidebarRollups` reads progress from the maintained status tally. `goal`,
+ * `updatedAt` and coordination bindings are absent on purpose: nothing on the rail reads them,
+ * and a 15-second poll does not carry what a page view carries.
  */
 const SIDEBAR_PROJECT_SELECT = {
   id: true,
@@ -2600,7 +2600,8 @@ export class ProjectsService {
    * every task of every project for a dot that reads one lane is what made a browser tab the
    * single largest consumer of this database (2026-09-29: ~5,400 calls/day, ~1.1s of PostgreSQL
    * execution each, ~100 minutes/day), so the rail got its own read: the same `running` count and
-   * the same `lastActivityAt`, from `readProjectSidebarRollups`.
+   * the same `lastActivityAt`, plus progress from the maintained task-status tally, through
+   * `readProjectSidebarRollups`.
    *
    * The fields it keeps are the ones `SidebarProject` declares — `buckets` carries `running` alone,
    * and `attention` is the same whole summary the index sends (its `ownerItems` and
@@ -2637,7 +2638,11 @@ export class ProjectsService {
       ...project,
       // A project with no tasks has no group in the aggregate, and reports nothing in flight and
       // no activity rather than making the client read two shapes.
-      ...(rollups.get(project.id) ?? { buckets: { running: 0 }, lastActivityAt: null }),
+      ...(rollups.get(project.id) ?? {
+        taskCounts: { done: 0, failed: 0, total: 0 },
+        buckets: { running: 0 },
+        lastActivityAt: null,
+      }),
       attention: attention.get(project.id) ?? emptyProjectListAttention(),
       coordinatorActivity: coordinatorActivityOf(coordinatorSession),
       integration: integration.get(project.id) ?? null,
