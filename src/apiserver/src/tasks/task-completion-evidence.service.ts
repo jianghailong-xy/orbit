@@ -806,7 +806,10 @@ export class TaskCompletionEvidenceService {
       // transaction that wrote the DONE, so the fact and the queueing commit together
       // (docs/project-integration-line-contract.md §2.3 J-T1a).
       if (settled && completed === TaskStatus.DONE) {
-        await enqueueForDoneTask(tx, ownerId, taskId);
+        await enqueueForDoneTask(tx, ownerId, taskId,
+          actor.type === CreatorType.USER
+            ? { userId: actor.id }
+            : { sessionId: decidingSession.id });
       }
       return { decision: decisionResponse(written), completed: settled };
     }, loggedRetry(this.logger, 'taskCompletionEvidence.decide'));

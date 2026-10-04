@@ -366,6 +366,68 @@ func TestIntegrationLandsASourceThatAlreadyAbsorbedUpstream(t *testing.T) {
 	}
 }
 
+// TestIntegrationNewSyncTaskResolvesPromotionMergeConflict is the companion to the MAIN_SYNC
+// task-reopen case above.  A promotion conflict has no task branch to send back, so the coordinator
+// files a fresh sync task from the project branch tip.  That task absorbs upstream and carries the
+// hand resolution; landing it must use J-S4 MERGE, preserve the resolution, and advance the line.
+func TestIntegrationNewSyncTaskResolvesPromotionMergeConflict(t *testing.T) {
+	t.Parallel()
+	r := newIntegrationRepo(t)
+	lineTip, mainTip := contestedLine(t, r)
+
+	// This is a new sync task: its source starts at the project line and contains no prior task work.
+	r.checkoutNew("task/sync", lineTip)
+	sourceSha := absorbMain(t, r)
+	r.push("task/sync")
+	r.checkout("main")
+	before := r.originRev("refs/heads/project/line")
+
+	check := IntegrationCheckSpec{
+		Name:             "MERGE_CHECK",
+		Command:          "grep -qx '0368 the line' ledger.txt && grep -qx '0370 main' ledger.txt",
+		ExpectedExitCode: 0,
+		TimeoutSeconds:   60,
+	}
+	command := r.command("task/sync", "project/line", check)
+	command.SessionBaseSha = lineTip
+	var phases []string
+	result := runIntegrationJob(command, func(phase string, _ *IntegrationUpstreamMoved) {
+		phases = append(phases, phase)
+	})
+
+	if result.State != "LANDED" {
+		t.Fatalf("state = %s (%s %s, conflicts %v), want LANDED", result.State, result.ErrorCode, result.Phase, result.Conflicts)
+	}
+	if result.MainSyncSha != "" || slices.Contains(phases, "MAIN_SYNC") {
+		t.Fatalf("the sync task was absorbed a second time (phases %v, mainSyncSha %q)", phases, result.MainSyncSha)
+	}
+	if !slices.Contains(phases, "MERGE") {
+		t.Fatalf("phases = %v, want MERGE mode", phases)
+	}
+	if result.TargetShaBefore != before || result.TargetShaBefore != lineTip {
+		t.Fatalf("target before = %q, want the project tip %q without a rewritten target", result.TargetShaBefore, lineTip)
+	}
+	if !isAncestor(r.work, lineTip, result.LandedSha) {
+		t.Fatal("the old project tip is not an ancestor of the landed commit: the line was force-rewritten")
+	}
+	if !isAncestor(r.work, mainTip, result.LandedSha) {
+		t.Fatal("upstream's tip is not an ancestor of the landed commit")
+	}
+	if got := r.originRev("refs/heads/project/line"); got != result.LandedSha {
+		t.Fatalf("origin holds %s, the result claims %s", got, result.LandedSha)
+	}
+	parents, _ := git(r.work, "rev-list", "--parents", "-n", "1", result.LandedSha)
+	if want := result.LandedSha + " " + lineTip + " " + sourceSha; parents != want {
+		t.Fatalf("landed commit and parents = %q, want %q", parents, want)
+	}
+	if body, _ := git(r.work, "show", result.LandedSha+":ledger.txt"); body+"\n" != resolvedLedger {
+		t.Fatalf("the sync task's resolution did not survive: %q", body)
+	}
+	if len(result.Checks) != 1 || result.Checks[0].ExitCode == nil || *result.Checks[0].ExitCode != 0 {
+		t.Fatalf("checks = %+v, want the merge check to have passed on the resolved tree", result.Checks)
+	}
+}
+
 // TestIntegrationMainSyncConflictStandsWhenTheSourceLacksATip is the other side of M3: a source that
 // does not contain both tips this job fetched has not made this absorb, so J-S2 makes it on the
 // line's tip as before and reports the conflict it meets there. The line does not move.

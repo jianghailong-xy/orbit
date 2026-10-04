@@ -2524,15 +2524,16 @@ model ProjectIntegrationJob {
   /// as well as on the promotion because the job is the record of what was sent out to be pushed.
   confirmedAutomatically Boolean @default(false) @map("confirmed_automatically")
 
-  /// A LAND_TASK generation a coordinator asked for through `integration_retry` (migration 0344,
-  /// contract §2.3 J-T1b): the failed generation it runs again, what that one failed of
-  /// (CHECK_FAILED, CHECK_TIMED_OUT or ERROR), the reason given, and the conversation that asked.
-  /// All four or none, held by a CHECK. `retryOfJobId` is a history reference with no relation: a
-  /// terminal job is never rewritten, so nothing may SET NULL it.
+  /// A LAND_TASK or CHECK_PROMOTION generation a coordinator or account owner asked for through
+  /// `integration_retry` (migrations 0344/0380, contract §2.3 J-T1b): the failed generation it runs
+  /// again, what that one failed of (CHECK_FAILED, CHECK_TIMED_OUT or ERROR), the reason given, and
+  /// exactly one requester (the coordinator session or owner user). `retryOfJobId` is a history
+  /// reference with no relation: a terminal job is never rewritten, so nothing may SET NULL it.
   retryOfJobId              String? @map("retry_of_job_id") @db.Uuid
   retryFailureClass         String? @map("retry_failure_class")
   retryReason               String? @map("retry_reason")
   retryRequestedBySessionId String? @map("retry_requested_by_session_id") @db.Uuid
+  retryRequestedByUserId    String? @map("retry_requested_by_user_id") @db.Uuid
 
   /// `ij:v1:<kind>:<taskId or promotionId>:<generation>` — enqueue is idempotent on the fact. The one
   /// exception is the landing J-T1e owes the work, keyed by the work's generation instead
@@ -2716,13 +2717,22 @@ model ProjectOpenItem {
   remindAt     DateTime? @map("remind_at") @db.Timestamptz(3)
   remindedAt   DateTime? @map("reminded_at") @db.Timestamptz(3)
 
-  /// The coordinator's rerun of the failure this item is about (`integration_retry`, migration 0368):
-  /// the job it queued, the conversation that asked, why, and when. History rather than foreign keys.
-  /// The item stays OPEN — being handled, not closed — while that job is QUEUED or RUNNING.
+  /// The coordinator's or owner's rerun of the failure this item is about (`integration_retry`,
+  /// migrations 0368/0380): the job it queued, the coordinator conversation or owner user that
+  /// asked, why, and when. History rather than foreign keys. The item stays OPEN — being handled,
+  /// not closed — while that job is QUEUED or RUNNING.
   handlingJobId     String?   @map("handling_job_id") @db.Uuid
   handlingSessionId String?   @map("handling_session_id") @db.Uuid
+  handlingUserId    String?   @map("handling_user_id") @db.Uuid
   handlingReason    String?   @map("handling_reason")
   handlingStartedAt DateTime? @map("handling_started_at") @db.Timestamptz(3)
+
+  /// The coordinator's explanation when it deliberately hands this item to the account owner.
+  /// These are history columns: the session is not a relation, so purging it does not erase the
+  /// owner's record of why the item was handed over.
+  handoverNote          String?   @map("handover_note")
+  handedOverAt          DateTime? @map("handed_over_at") @db.Timestamptz(3)
+  handedOverBySessionId String?   @map("handed_over_by_session_id") @db.Uuid
 
   resolution          String?
   resolvedAt          DateTime? @map("resolved_at") @db.Timestamptz(3)
@@ -2739,7 +2749,8 @@ model ProjectOpenItem {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  deliveries ProjectOpenItemDelivery[]
+  deliveries  ProjectOpenItemDelivery[]
+  fixingTasks Task[]                    @relation("TaskFixesOpenItem")
 
   @@index([projectId, state, waitingSince], map: "project_open_item_project_state_idx")
   @@map("project_open_item")
@@ -3989,6 +4000,11 @@ model Task {
   /// past the check.
   projectId        String?     @map("project_id") @db.Uuid
   project          Project?    @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  /// The open exception this task is the concrete fix for. This is deliberately distinct from
+  /// discovery provenance (`sourceTaskId`): one exception may have several fixing tasks, and
+  /// deleting the exception only detaches the link rather than deleting the work.
+  fixesOpenItemId String?          @map("fixes_open_item_id") @db.Uuid
+  fixesOpenItem   ProjectOpenItem? @relation("TaskFixesOpenItem", fields: [fixesOpenItemId], references: [id], onDelete: SetNull)
   /// Where this work was NOTICED, as opposed to which goal it counts towards (unit L2, migration
   /// 0150; contract §2 and §3 SC7). Four columns, and none of them authority.
   ///
@@ -4345,6 +4361,9 @@ model Task {
   /// Structured progress and the lifecycle epoch it belongs to (0271). Absent until the task first
   /// reports progress or is reopened.
   progress           TaskProgress?
+  /// A dedicated task_reopen door stays recorded until the next DONE queues its new landing
+  /// generation. This is an intent fence, not another task lifecycle or completion state.
+  reopenIntent       TaskReopenIntent?
   /// Verification conditions this task takes part in (§13.2): the ones it CONCLUDED as a verifier,
   /// the ones recorded ABOUT it as a subject, and the one it was filed to fix as a defect.
   verdictFailuresRaised   TaskVerificationFailure[] @relation("VerificationFailureVerifier")
@@ -4385,6 +4404,7 @@ model Task {
   /// new columns are read by, and each is one indexed lookup. Both are also the FKs' own lookup
   /// indexes, which is what keeps a project or parent delete from scanning the task table.
   @@index([projectId])
+  @@index([fixesOpenItemId], map: "task_fixes_open_item_idx")
   @@index([parentTaskId])
   /// Cover GET /projects' page-wide rollup without visiting the wide Task heap (154 MB for 111k
   /// rows on the production workload). Created PARTIAL for project tasks in migration 0178; the
@@ -4469,6 +4489,16 @@ model Task {
   /// 0120 used for (decision, project).
   @@unique([id, ownerId], map: "task_id_owner_id_key")
   @@map("task")
+}
+
+/// The explicit task_reopen door, consumed by the next DONE that queues a LAND_TASK. A side row
+/// keeps the marker out of Task's wide row and its status-trigger/foreign-key fan-out.
+model TaskReopenIntent {
+  taskId    String   @id @map("task_id") @db.Uuid
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("task_reopen_intent")
 }
 
 /// One routing decision per run request, including shadow and unrouted decisions.

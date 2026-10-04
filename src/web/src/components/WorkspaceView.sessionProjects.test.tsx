@@ -371,12 +371,14 @@ describe('project entries in the session list', { timeout: 60_000 }, () => {
     folders = [FOLDER, elsewhere];
     rows = [LOOSE, { ...COORDINATOR, folderId: FOLDER.id }, { ...TASK, folderId: elsewhere.id }];
     await mount(() => expect(mounted().querySelectorAll('.session-folder-row')).toHaveLength(2));
+    expect(mounted().querySelector('.session-search')).not.toBeNull();
     expect(projectRows()).toHaveLength(0);
     const folder = [...mounted().querySelectorAll<HTMLElement>('.session-folder-row')].find((el) => el.textContent?.includes(FOLDER.name))!;
     expect(folder.querySelector('.session-folder-count')?.textContent).toBe('2');
     await click(folder, 'the coordinator folder');
     await until(() => expect(titles()).toEqual(['Project Alpha']));
     expect(projectRows()).toHaveLength(1);
+    expect(mounted().querySelector('.session-search')).not.toBeNull();
   });
 
   it('keeps Trash sessions flat', async () => {

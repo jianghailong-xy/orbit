@@ -1174,6 +1174,7 @@ export function SessionProjectListRow({
       role="button"
       tabIndex={0}
       onClick={onOpen}
+      onContextMenu={(e) => { e.preventDefault(); onMenuOpenChange(true); }}
       onTouchStart={swipe?.onStart}
       onTouchMove={swipe?.onMove}
       onTouchEnd={swipe?.onEnd}
@@ -2077,10 +2078,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null); // the left session-list column, for arrow-key scrolling
 
-  // Every row in a list shares one swipe layout, so the edges' actions and widths are per view.
+  // Project pages mix Open and Completed; their rows use each session's lifecycle.
   const rowView = projectView ?? view;
-  const swipeActions = sessionSwipeActions(rowView);
-  const swipeSizes = swipeWidths(rowView);
+  const sessionRowView = useCallback((session: SessionListItem): SessionView => openProjectId
+    ? sessionLifecycleStateOf(session).toLowerCase() as SessionView : rowView, [openProjectId, rowView]);
   const onRowTouchStart = (e: ReactTouchEvent, session: any, canFullSwipe: boolean, projectId?: string): void => {
     if (!isMobile) return;
     const t = e.touches[0];
@@ -2091,7 +2092,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     const from = swipeOpen && swipeOpen.id === id ? swipeOpen.side : null;
     const geometry = projectId
       ? { leadingWidth: SWIPE_ACTION_WIDTH, trailingWidth: SWIPE_ACTION_WIDTH, fullSwipeAt: null, maxOffset: SWIPE_ACTION_WIDTH + 20 }
-      : swipeGeometry(rowView, e.currentTarget.getBoundingClientRect().width, canFullSwipe);
+      : swipeGeometry(sessionRowView(session), e.currentTarget.getBoundingClientRect().width, canFullSwipe);
     swipeRef.current = {
       session,
       id,
@@ -2135,7 +2136,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     const { open, fullSwipe } = settleSwipe(st.from, st.offset, st.geometry);
     setSwipeOpen(open ? { id: st.id, side: open } : null);
     setSwipeDrag(null);
-    if (fullSwipe) runSwipeAction(swipeActions.leading[0], st.session);
+    if (fullSwipe) runSwipeAction(sessionSwipeActions(sessionRowView(st.session)).leading[0], st.session);
   };
   // An OS-interrupted gesture (system swipe, incoming call) fires touchcancel, not touchend —
   // drop the drag and let the row settle back to its committed open/closed state.
@@ -2816,18 +2817,21 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     controlLive, needsYou: (s) => sessionLine(s, true, sessionWatching(watchingBySession, s.id)).tone === 'approval',
   });
   const projectSessionsQ = useQuery({
-    ...projectSessionsQuery({ projectId: openProjectId ?? '', view: effectiveView }),
+    ...projectSessionsQuery({ projectId: openProjectId ?? '', view: 'open' }),
     enabled: !!openProjectId,
     refetchInterval: controlLive ? PROJECT_SESSION_REFRESH_MS : 4000,
   });
-  const projectMembers = projectSessionsQ.data ?? [];
-  const pageCoordinator = projectMembers.find((s) => s.projectMembership?.role === 'COORDINATOR') ?? null;
-  const pageCoordinatorQ = useQuery({
-    ...projectSessionsQuery({ projectId: openProjectId ?? '', view: effectiveView === 'completed' ? 'open' : 'completed' }),
-    enabled: !!openProjectId && projectSessionsQ.isSuccess && !pageCoordinator,
+  const completedProjectSessionsQ = useQuery({
+    ...projectSessionsQuery({ projectId: openProjectId ?? '', view: 'completed' }),
+    enabled: !!openProjectId,
     refetchInterval: controlLive ? PROJECT_SESSION_REFRESH_MS : 4000,
   });
-  const pageMenuCoordinator = pageCoordinator ?? pageCoordinatorQ.data?.find((s) => s.projectMembership?.role === 'COORDINATOR') ?? null;
+  const projectMembers = useMemo(() => [...new Map(
+    [...(projectSessionsQ.data ?? []), ...(completedProjectSessionsQ.data ?? [])].map((s) => [s.id, s]),
+  ).values()].sort((a, b) => (Date.parse(b.lastTurnAt ?? b.createdAt ?? '') || 0) -
+    (Date.parse(a.lastTurnAt ?? a.createdAt ?? '') || 0)), [projectSessionsQ.data, completedProjectSessionsQ.data]);
+  const pageCoordinator = projectMembers.find((s) => s.projectMembership?.role === 'COORDINATOR') ?? null;
+  const pageMenuCoordinator = pageCoordinator;
   const pageProject = projectsQ.data?.find((p) => p.id === openProjectId);
   const pageProjectDetailsQ = useQuery({
     ...projectDetailsQuery(openProjectId ?? ''),
@@ -2841,7 +2845,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     total: Object.entries(pageTasksByStatus).reduce((total, [status, count]) => status === 'CANCELLED' ? total : total + count, 0),
   } : undefined);
   const pageProjectTitle = pageProject?.title ?? pageProjectDetailsQ.data?.title ?? projectMembers[0]?.projectMembership?.projectTitle ?? pageMenuCoordinator?.projectMembership?.projectTitle ?? 'Project';
-  const pageRunningCount = pageProject?.buckets.running ?? projectMembers.filter((s) => statusGlyphMotion(s) === 'spinner').length;
+  const pageRunningCount = projectMembers.filter((s) => statusGlyphMotion(s) === 'spinner').length;
   // The folder page the list is on: `?folder=<id>` on whichever route the console is at, so it
   // survives a reload and Back leaves it. Only a folder of this workspace, and only where the list
   // shows folders at all.
@@ -2902,7 +2906,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // is widening its window — `isPlaceholderData` is exactly that, since the guard above only
   // keeps rows within one scope. Neither is the ordinary background refresh, which must not
   // flash anything over rows that are already correct.
-  const loadingSessions = openProjectId ? projectSessionsQ.isPending : sessionsQ.isPending || sessionsQ.isPlaceholderData;
+  const loadingSessions = openProjectId ? projectSessionsQ.isPending || completedProjectSessionsQ.isPending : sessionsQ.isPending || sessionsQ.isPlaceholderData;
   const loadMoreSessions = useCallback(() => {
     if (!hasMoreSessions || sessionsQ.isFetching) return;
     setSessionLimit((n) => n + SESSION_PAGE_SIZE);
@@ -5767,9 +5771,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         e.stopPropagation();
         const row = orderedSessions.find((s) => s.id === menuOpenId);
         const source = selectedSession?.id === menuOpenId ? selectedSession : row;
+        const sourceView = source ? sessionRowView(source) : rowView;
         if (
-          !row || rowView !== 'open' || !source ||
-          !isCompleteShortcutEligible(source, sessionLifecycleStateOf(source, { listView: rowView }))
+          !row || sourceView !== 'open' || !source ||
+          !isCompleteShortcutEligible(source, sessionLifecycleStateOf(source, { listView: sourceView }))
         ) return;
         setMenuOpenId(null);
         requestComplete(row);
@@ -5786,7 +5791,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [menuOpenId, orderedSessions, rowView, selected, selectedSession, selectedLifecycleState, requestComplete]);
+  }, [menuOpenId, orderedSessions, rowView, sessionRowView, selected, selectedSession, selectedLifecycleState, requestComplete]);
   useEffect(() => {
     if (menuOpenId && !orderedSessions.some((s) => s.id === menuOpenId) &&
       !folderListing.projects.some((p) => p.id === menuOpenId)) setMenuOpenId(null);
@@ -8348,7 +8353,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             the header. ⌘K stays the primary way in; this is the only one on a touch device, where
             there's no keyboard to press it with and a `title` tooltip never shows — so the label
             and the target size have to carry it. */}
-        <div
+        {!openProjectId && <div
           className="session-search"
           role="button"
           tabIndex={0}
@@ -8362,7 +8367,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           <SearchOutlined />
           <span>Search sessions</span>
           {!isMobile && <kbd className="session-search-kbd">{SEARCH_HINT}</kbd>}
-        </div>
+        </div>}
         <div
           className="workspace-sessions session-col-list autohide-scrollbar"
           ref={listRef}
@@ -8370,7 +8375,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         >
           {openProjectId
             ? projectMembers.length === 0 && !loadingSessions &&
-              <div className="chat-note">{projectSessionsQ.isError ? 'Couldn’t load project sessions.' : 'No sessions in this project.'}</div>
+              <div className="chat-note">{projectSessionsQ.isError || completedProjectSessionsQ.isError ? 'Couldn’t load project sessions.' : 'No sessions in this project.'}</div>
             : openFolder
             ? listedSessions.length === 0 &&
               !loadingSessions && <div className="chat-note">No sessions in this folder.</div>
@@ -8419,12 +8424,6 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               {sec.sessions.map((s) => {
                 if (s.kind === 'project') {
                   const coordinator = s.coordinator;
-                  const openCoordinator = () => {
-                    if (!coordinator) return;
-                    navigateWithPaneSlide('push', () =>
-                      navigate(sessionPath(coordinator.id), { state: stampFromList() }),
-                    );
-                  };
                   const openTarget = () => {
                     if (swipeClickGuard.current) { swipeClickGuard.current = false; return; }
                     if (swipeOpen) { setSwipeOpen(null); return; }
@@ -8458,7 +8457,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                       } : undefined}
                       menu={{
                         items: [
-                          { key: 'coordinator', label: SESSION_PROJECT_COPY.openCoordinator, disabled: !coordinator },
+                          { key: 'session', label: SESSION_PROJECT_COPY.openSession, disabled: s.target.kind !== 'session' },
                           { key: 'sessions', label: SESSION_PROJECT_COPY.sessions },
                           { key: 'project', label: SESSION_PROJECT_COPY.openProject },
                           { type: 'divider' as const },
@@ -8468,7 +8467,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                         onClick: ({ key, domEvent }) => {
                           domEvent.stopPropagation();
                           setMenuOpenId(null);
-                          if (key === 'coordinator') openCoordinator();
+                          if (key === 'session') openTarget();
                           else if (key === 'sessions') enterProjectSessions(s.projectId);
                           else if (key === 'project') navigate(`/projects/${encodeId(s.projectId)}`);
                           else if (coordinator) runSwipeAction(key as SwipeAction, coordinator);
@@ -8478,11 +8477,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   );
                 }
                 const actionSession = selectedSession?.id === s.id ? selectedSession : s;
+                const memberView = sessionRowView(actionSession);
+                const swipeActions = sessionSwipeActions(memberView);
+                const swipeSizes = swipeWidths(memberView);
                 const canCompleteRow = sessionCapabilityOf(actionSession, 'canComplete', true);
                 const canRestoreRow = sessionCapabilityOf(actionSession, 'canRestore', true);
                 // Open and Completed rows open their transcript; only
                 // Trash rows stay closed.
-                const openable = rowView !== 'trash';
+                const openable = memberView !== 'trash';
                 // The selected row may have a fresher detail payload than the list poll. Use the
                 // merged row for both status surfaces so the banner and its list warning point at
                 // the same canonical obligation during that refresh gap.
@@ -8493,7 +8495,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   ? drag.dx
                   : restingOffset(swipeOpen?.id === s.id ? swipeOpen.side : null, swipeSizes);
                 // As on iOS, a full swipe runs the leading edge's first action only when it can run.
-                const canFullSwipe = rowView === 'open' ? canCompleteRow : canRestoreRow;
+                const canFullSwipe = memberView === 'open' ? canCompleteRow : canRestoreRow;
                 const swipeButtons = {
                   complete: { label: 'Complete', icon: <CheckOutlined />, disabled: !canCompleteRow },
                   restore: { label: 'Move to Open', icon: <UndoOutlined />, disabled: !canRestoreRow },
@@ -8524,7 +8526,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                       : isSessionLive(actionSession) ? 'Ends the run and moves to Completed' : undefined
                     : action === 'restore' && !canRestoreRow ? 'Move to Open unavailable right now' : undefined,
                 });
-                const menuItems: MenuProps['items'] = rowView === 'trash'
+                const menuItems: MenuProps['items'] = memberView === 'trash'
                   ? [menuItem('restore'), { type: 'divider' }, menuItem('purge')]
                   : [
                       ...swipeActions.leading.map(menuItem),
@@ -8553,7 +8555,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                           navigate(sessionPath(s.id), { state: stampFromList() }),
                         );
                     }}
-                    onTouchStart={(e) => onRowTouchStart(e, s, canFullSwipe)}
+                    onTouchStart={(e) => onRowTouchStart(e, actionSession, canFullSwipe)}
                     onTouchMove={onRowTouchMove}
                     onTouchEnd={onRowTouchEnd}
                     onTouchCancel={onRowTouchCancel}
