@@ -81,6 +81,7 @@ import {
   startRequestDetailLine,
   supersedeStaleStartRequest,
 } from './project-start-request';
+import { doorsForOpenItem } from './open-item-doors';
 
 /**
  * Who is asking for an item to be put in front of the project's coordinator conversation.
@@ -109,6 +110,12 @@ export const OPEN_ITEM_COORDINATOR_ONLY = 'OPEN_ITEM_COORDINATOR_ONLY';
 /** This kind is decided by a press of its own — confirming a merge, or resuming a paused project
  *  (§4.2, §4.7). */
 export const OPEN_ITEM_HAS_ITS_OWN_DOOR = 'OPEN_ITEM_HAS_ITS_OWN_DOOR';
+/** The explanation on a deliberate coordinator-to-owner hand-over is required. */
+export const OPEN_ITEM_HAND_OVER_NOTE_REQUIRED = 'OPEN_ITEM_HAND_OVER_NOTE_REQUIRED';
+/** A deliberate hand-over explanation is bounded like the other open-item prose. */
+export const OPEN_ITEM_HAND_OVER_NOTE_TOO_LONG = 'OPEN_ITEM_HAND_OVER_NOTE_TOO_LONG';
+/** Another item writer won the hand-over compare-and-set. */
+export const OPEN_ITEM_HAND_OVER_RACE = 'OPEN_ITEM_HAND_OVER_RACE';
 
 /**
  * The kinds this door ends, and what each ending is called (§4.2).
@@ -150,6 +157,7 @@ export interface OpenItemRow {
   waitingSince: Date;
   escalateAt: Date | null;
   escalatedAt: Date | null;
+  handoverNote: string | null;
   taskId: string | null;
   /** The attempt this item is about, when one is recorded: the run whose failure opened it. It is
    *  what the card's "Open task session" reaches, and a task can have had several. */
@@ -209,6 +217,16 @@ export interface OpenItemReturned {
   /** The wait starts over, which is the whole of what "ask again" gives the coordinator. */
   waitingSince: Date;
   escalateAt: Date;
+}
+
+/** The durable result of a coordinator deliberately handing an open item to the owner. */
+export interface OpenItemHandedOver {
+  itemId: string;
+  assignee: 'OWNER';
+  assigneeReason: 'HANDED_OVER';
+  handoverNote: string;
+  handedOverAt: Date;
+  handedOverBySessionId: string;
 }
 
 /** An item its assignee closed by hand, and what that ending is called (§4.7). */
@@ -931,6 +949,122 @@ export class ProjectOpenItemService {
   }
 
   /**
+   * The project's coordinator deliberately hands an item to the account owner (§4.7).
+   *
+   * This is a distinct edge from the escalation clock and from the automatic hand-offs in
+   * `handToOwner`: the coordinator is making a decision, so the explanation and the session that
+   * made it are retained on the item.  The assignment is one compare-and-set.  A competing fact,
+   * escalation or second press therefore cannot be reported as a hand-over it did not make.
+   */
+  async handOver(
+    ownerId: string,
+    projectId: string,
+    itemId: string,
+    given: { note: string },
+    actor: { kind: 'SESSION'; sessionId: string },
+  ): Promise<OpenItemHandedOver> {
+    const item = await this.prisma.projectOpenItem.findFirst({
+      where: { id: itemId, projectId, ownerId },
+      select: {
+        id: true,
+        kind: true,
+        state: true,
+        assignee: true,
+        assignedAt: true,
+        taskId: true,
+        promotionId: true,
+        fuseEpisodeId: true,
+        payload: true,
+        project: { select: { coordinatorSessionId: true } },
+      },
+    });
+    if (!item) throw new NotFoundException('item not found');
+    if (item.state !== 'OPEN') {
+      throw new ConflictException({
+        code: OPEN_ITEM_NOT_OPEN,
+        message: 'this item is no longer open, so there is nothing left to hand to the owner.',
+      });
+    }
+
+    // The capability table is the allow-list for this door.  In particular, a question, pause,
+    // promotion card or delivery review is not silently converted into an owner escalation just
+    // because it happens to have an OWNER assignee in another path.
+    const doorInput = {
+      kind: item.kind,
+      taskId: item.taskId,
+      promotionId: item.promotionId,
+      fuseEpisodeId: item.fuseEpisodeId,
+      payload: item.payload,
+    };
+    const coordinatorDoor = doorsForOpenItem({ ...doorInput, assignee: 'COORDINATOR' })
+      .find((candidate) => candidate.name === 'open_item_hand_over' && candidate.implemented);
+    const ownerDoor = doorsForOpenItem({ ...doorInput, assignee: 'OWNER' })
+      .find((candidate) => candidate.name === 'open_item_hand_over' && candidate.implemented);
+    if (item.assignee !== 'COORDINATOR' || !coordinatorDoor || !ownerDoor) {
+      throw new ConflictException({
+        code: OPEN_ITEM_NOT_COORDINATOR_ITEM,
+        message:
+          'this item is not the coordinator’s to hand over. Only an open item with the hand-over '
+          + 'door may be deliberately given to the account owner.',
+      });
+    }
+
+    const sessionId = actor.kind === 'SESSION' ? actor.sessionId?.trim() : '';
+    if (!sessionId || sessionId !== item.project.coordinatorSessionId) {
+      throw new ForbiddenException({
+        code: OPEN_ITEM_COORDINATOR_ONLY,
+        message:
+          'only the conversation coordinating this project may hand an item to the account owner.',
+      });
+    }
+
+    const note = typeof given?.note === 'string' ? given.note.trim() : '';
+    if (!note) {
+      throw new BadRequestException({
+        code: OPEN_ITEM_HAND_OVER_NOTE_REQUIRED,
+        message: 'a hand-over explanation is required.',
+      });
+    }
+    if (note.length > MAX_OPEN_ITEM_RESOLUTION_NOTE) {
+      throw new BadRequestException({
+        code: OPEN_ITEM_HAND_OVER_NOTE_TOO_LONG,
+        message: `a hand-over explanation is at most ${MAX_OPEN_ITEM_RESOLUTION_NOTE} characters`,
+      });
+    }
+
+    const [changed] = await this.prisma.$queryRaw<Array<{ handedOverAt: Date }>>(Prisma.sql`
+      UPDATE "project_open_item" item
+         SET "assignee" = 'OWNER', "assignee_reason" = 'HANDED_OVER',
+             "assigned_at" = now(), "escalate_at" = NULL,
+             "handover_note" = ${note}, "handed_over_at" = now(),
+             "handed_over_by_session_id" = ${sessionId}::uuid, "updated_at" = now()
+       WHERE item."id" = ${item.id}::uuid
+         AND item."project_id" = ${projectId}::uuid AND item."owner_id" = ${ownerId}::uuid
+         AND item."state" = 'OPEN' AND item."assignee" = 'COORDINATOR'
+         AND item."assigned_at" = ${item.assignedAt.toISOString()}::timestamptz
+         AND ${openItemOwed('item')}
+       RETURNING item."handed_over_at" AS "handedOverAt"`);
+    if (!changed) {
+      throw new ConflictException({
+        code: OPEN_ITEM_HAND_OVER_RACE,
+        message: 'this item changed while it was being handed over; read the project again.',
+      });
+    }
+
+    // The owner notification is deliberately after the CAS commit.  A failed push is harmless:
+    // the committed OWNER row is re-discovered by the normal owner-item notification sweep.
+    void this.push?.notifyOwnerItem(item.id);
+    return {
+      itemId: item.id,
+      assignee: 'OWNER',
+      assigneeReason: 'HANDED_OVER',
+      handoverNote: note,
+      handedOverAt: changed.handedOverAt,
+      handedOverBySessionId: sessionId,
+    };
+  }
+
+  /**
    * The assignee closes an item it has handled, saying why (§4.7's "标记已处理"; §5.2 R12 for a
    * question).
    *
@@ -1565,6 +1699,7 @@ export class ProjectOpenItemService {
         waitingSince: true,
         escalateAt: true,
         escalatedAt: true,
+        handoverNote: true,
         taskId: true,
         sessionId: true,
         promotionId: true,
@@ -1608,6 +1743,7 @@ export class ProjectOpenItemService {
         assigneeReason: true,
         waitingSince: true,
         escalatedAt: true,
+        handoverNote: true,
         taskId: true,
         sessionId: true,
         promotionId: true,
@@ -1697,6 +1833,7 @@ export class ProjectOpenItemService {
         waitingSince: row.waitingSince,
         escalateAt: goesAt.get(row.id) ?? row.escalateAt,
         escalatedAt: row.escalatedAt,
+        handoverNote: row.handoverNote,
         taskId: row.taskId,
         sessionId: row.sessionId,
         promotionId: row.promotionId,
@@ -1746,6 +1883,7 @@ export class ProjectOpenItemService {
         waitingSince: row.waitingSince,
         escalateAt: null,
         escalatedAt: row.escalatedAt,
+        handoverNote: row.handoverNote,
         taskId: row.taskId,
         sessionId: row.sessionId,
         promotionId: row.promotionId,

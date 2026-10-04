@@ -294,6 +294,9 @@ function notRetryable(state: string, failureClass: LandingFailureClass | null, p
 
 /** What each way an item reaches the owner means, for the one sentence a refusal gives it. */
 function ownerItemWhy(reasons: readonly string[]): string {
+  if (reasons.includes('HANDED_OVER')) {
+    return 'the coordinator handed it over because it could not settle it itself.';
+  }
   if (reasons.includes('ESCALATED')) {
     return 'it escalated to them because it waited longer than the project\'s escalation window.';
   }

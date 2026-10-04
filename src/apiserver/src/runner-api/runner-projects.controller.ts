@@ -20,6 +20,7 @@ import { type SessionLifecycleActor } from '../projects/attempt-budget';
 import {
   AskOwnerDto,
   CreateProjectDto,
+  HandOverOpenItemDto,
   RecordMergeEvidenceDto,
   RequestProjectStartDto,
   ResolveOpenItemDto,
@@ -474,6 +475,27 @@ export class RunnerProjectsController {
     @Body() dto: ResolveOpenItemDto,
   ) {
     return this.openItems.resolveOpenItem(runner.ownerId, id, itemId, dto, {
+      kind: 'SESSION',
+      sessionId: sessionId?.trim() ?? '',
+    });
+  }
+
+  /**
+   * A coordinator deliberately handing an open item to the account owner (§4.7).
+   *
+   * The acting session is the authority, checked against the project's coordinator pointer.  The
+   * service performs the capability-table check and the assignment CAS, then notifies the owner
+   * only after the OWNER row is committed.
+   */
+  @Post('projects/:id/open-items/:itemId/hand-over')
+  handOverOpenItem(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') sessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('itemId', PublicIdPipe) itemId: string,
+    @Body() dto: HandOverOpenItemDto,
+  ) {
+    return this.openItems.handOver(runner.ownerId, id, itemId, dto, {
       kind: 'SESSION',
       sessionId: sessionId?.trim() ?? '',
     });
