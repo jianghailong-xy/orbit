@@ -35,29 +35,35 @@ struct SettingsSheet: View {
         @Bindable var model = model
         NavigationStack(path: $model.nav.settingsPath) {
             SettingsHomeView()
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button { dismiss() } label: { Image(systemName: "xmark") }
-                            .accessibilityLabel("Close")
-                    }
-                }
+                .toolbar { closeButton }
                 .navigationDestination(for: NavNode.self) { node in
-                    switch node {
-                    case .settingsRunners:            RunnersSettingsList()
-                    case .runnerDetail(let runnerID): RunnerDetailView(runnerID: runnerID)
-                    case .runnerEngine(let runnerID, let engine): RunnerEnginePage(runnerID: runnerID, engine: engine)
-                    case .runnerName(let runnerID):   RunnerNamePage(runnerID: runnerID)
-                    case .settingsPage(let page):     SettingsPageView(page: page)
-                    case .accountPool(let poolID):    AccountPoolSettingsPage(poolID: poolID)
-                    case .sharedPool(let poolID):     SharedPoolSettingsPage(poolID: poolID)
-                    case .userDetail(let userID):     AdminUserDetailView(userID: userID)
-                    default:                          EmptyView()
+                    Group {
+                        switch node {
+                        case .settingsRunners:            RunnersSettingsList()
+                        case .runnerDetail(let runnerID): RunnerDetailView(runnerID: runnerID)
+                        case .runnerEngine(let runnerID, let engine): RunnerEnginePage(runnerID: runnerID, engine: engine)
+                        case .runnerName(let runnerID):   RunnerNamePage(runnerID: runnerID)
+                        case .settingsPage(let page):     SettingsPageView(page: page)
+                        case .accountPool(let poolID):    AccountPoolSettingsPage(poolID: poolID)
+                        case .sharedPool(let poolID):     SharedPoolSettingsPage(poolID: poolID)
+                        case .userDetail(let userID):     AdminUserDetailView(userID: userID)
+                        default:                          EmptyView()
+                        }
                     }
+                    .toolbar { closeButton }
                 }
         }
         // A sheet is a presentation of its own: without this, picking Light or Dark here would only
         // show once the sheet closed.
         .preferredColorScheme(model.preferredColorScheme)
+    }
+
+    private var closeButton: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            // Use the sheet's dismiss action at every depth, rather than popping a page.
+            Button { dismiss() } label: { Image(systemName: "xmark") }
+                .accessibilityLabel("Close")
+        }
     }
 }
 
