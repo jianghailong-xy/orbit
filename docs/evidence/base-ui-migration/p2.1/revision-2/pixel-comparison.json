@@ -1,0 +1,5569 @@
+{
+  "pairs": [
+    {
+      "ant": "chromium-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-bottom-drawer-input-focus.png",
+      "orbit": "chromium-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-bottom-drawer-input-focus.png",
+      "size": [
+        1280,
+        378
+      ],
+      "changedPixels": 38,
+      "rowBands": [
+        {
+          "firstRow": 338,
+          "lastRow": 343,
+          "pixels": 22
+        },
+        {
+          "firstRow": 364,
+          "lastRow": 369,
+          "pixels": 16
+        }
+      ],
+      "maxChannelDelta": 2,
+      "commonColorChanges": [
+        {
+          "ant": [
+            61,
+            61,
+            65,
+            255
+          ],
+          "orbit": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            64,
+            64,
+            68,
+            255
+          ],
+          "orbit": [
+            64,
+            64,
+            67,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            45,
+            45,
+            48,
+            255
+          ],
+          "orbit": [
+            45,
+            45,
+            47,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            54,
+            54,
+            58,
+            255
+          ],
+          "orbit": [
+            54,
+            54,
+            57,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            55,
+            55,
+            58,
+            255
+          ],
+          "orbit": [
+            54,
+            54,
+            57,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            56,
+            56,
+            60,
+            255
+          ],
+          "orbit": [
+            56,
+            56,
+            59,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            55,
+            55,
+            58,
+            255
+          ],
+          "orbit": [
+            54,
+            54,
+            58,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            61,
+            61,
+            64,
+            255
+          ],
+          "orbit": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "pixels": 2
+        }
+      ],
+      "bounds": [
+        16,
+        338,
+        92,
+        370
+      ],
+      "separatorRows": [
+        {
+          "y": 56,
+          "changedPixels": 0,
+          "antCenter": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "orbitCenter": [
+            60,
+            60,
+            64,
+            255
+          ]
+        },
+        {
+          "y": 329,
+          "changedPixels": 0,
+          "antCenter": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "orbitCenter": [
+            60,
+            60,
+            64,
+            255
+          ]
+        }
+      ],
+      "differenceLocations": {
+        "button rounded edge": 38
+      }
+    },
+    {
+      "ant": "chromium-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-bottom-drawer-input-hover.png",
+      "orbit": "chromium-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-bottom-drawer-input-hover.png",
+      "size": [
+        1280,
+        378
+      ],
+      "changedPixels": 51,
+      "rowBands": [
+        {
+          "firstRow": 97,
+          "lastRow": 100,
+          "pixels": 8
+        },
+        {
+          "firstRow": 102,
+          "lastRow": 102,
+          "pixels": 1
+        },
+        {
+          "firstRow": 123,
+          "lastRow": 123,
+          "pixels": 1
+        },
+        {
+          "firstRow": 125,
+          "lastRow": 126,
+          "pixels": 3
+        },
+        {
+          "firstRow": 338,
+          "lastRow": 343,
+          "pixels": 22
+        },
+        {
+          "firstRow": 364,
+          "lastRow": 369,
+          "pixels": 16
+        }
+      ],
+      "maxChannelDelta": 2,
+      "commonColorChanges": [
+        {
+          "ant": [
+            61,
+            61,
+            65,
+            255
+          ],
+          "orbit": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            64,
+            64,
+            68,
+            255
+          ],
+          "orbit": [
+            64,
+            64,
+            67,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            45,
+            45,
+            48,
+            255
+          ],
+          "orbit": [
+            45,
+            45,
+            47,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            46,
+            50,
+            63,
+            255
+          ],
+          "orbit": [
+            46,
+            51,
+            63,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            54,
+            54,
+            58,
+            255
+          ],
+          "orbit": [
+            54,
+            54,
+            57,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            55,
+            55,
+            58,
+            255
+          ],
+          "orbit": [
+            54,
+            54,
+            57,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            56,
+            56,
+            60,
+            255
+          ],
+          "orbit": [
+            56,
+            56,
+            59,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            55,
+            55,
+            58,
+            255
+          ],
+          "orbit": [
+            54,
+            54,
+            58,
+            255
+          ],
+          "pixels": 2
+        }
+      ],
+      "bounds": [
+        16,
+        97,
+        1256,
+        370
+      ],
+      "separatorRows": [
+        {
+          "y": 56,
+          "changedPixels": 0,
+          "antCenter": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "orbitCenter": [
+            60,
+            60,
+            64,
+            255
+          ]
+        },
+        {
+          "y": 329,
+          "changedPixels": 0,
+          "antCenter": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "orbitCenter": [
+            60,
+            60,
+            64,
+            255
+          ]
+        }
+      ],
+      "differenceLocations": {
+        "input rounded edge/shadow": 13,
+        "button rounded edge": 38
+      }
+    },
+    {
+      "ant": "chromium-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-bottom-drawer.png",
+      "orbit": "chromium-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-bottom-drawer.png",
+      "size": [
+        1280,
+        378
+      ],
+      "changedPixels": 38,
+      "rowBands": [
+        {
+          "firstRow": 338,
+          "lastRow": 343,
+          "pixels": 22
+        },
+        {
+          "firstRow": 364,
+          "lastRow": 369,
+          "pixels": 16
+        }
+      ],
+      "maxChannelDelta": 2,
+      "commonColorChanges": [
+        {
+          "ant": [
+            61,
+            61,
+            65,
+            255
+          ],
+          "orbit": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            64,
+            64,
+            68,
+            255
+          ],
+          "orbit": [
+            64,
+            64,
+            67,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            45,
+            45,
+            48,
+            255
+          ],
+          "orbit": [
+            45,
+            45,
+            47,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            54,
+            54,
+            58,
+            255
+          ],
+          "orbit": [
+            54,
+            54,
+            57,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            55,
+            55,
+            58,
+            255
+          ],
+          "orbit": [
+            54,
+            54,
+            57,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            56,
+            56,
+            60,
+            255
+          ],
+          "orbit": [
+            56,
+            56,
+            59,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            55,
+            55,
+            58,
+            255
+          ],
+          "orbit": [
+            54,
+            54,
+            58,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            61,
+            61,
+            64,
+            255
+          ],
+          "orbit": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "pixels": 2
+        }
+      ],
+      "bounds": [
+        16,
+        338,
+        92,
+        370
+      ],
+      "separatorRows": [
+        {
+          "y": 56,
+          "changedPixels": 0,
+          "antCenter": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "orbitCenter": [
+            60,
+            60,
+            64,
+            255
+          ]
+        },
+        {
+          "y": 329,
+          "changedPixels": 0,
+          "antCenter": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "orbitCenter": [
+            60,
+            60,
+            64,
+            255
+          ]
+        }
+      ],
+      "differenceLocations": {
+        "button rounded edge": 38
+      }
+    },
+    {
+      "ant": "chromium-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-confirm.png",
+      "orbit": "chromium-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-confirm.png",
+      "size": [
+        416,
+        138
+      ],
+      "changedPixels": 2,
+      "rowBands": [
+        {
+          "firstRow": 8,
+          "lastRow": 9,
+          "pixels": 2
+        }
+      ],
+      "maxChannelDelta": 1,
+      "commonColorChanges": [
+        {
+          "ant": [
+            40,
+            40,
+            43,
+            255
+          ],
+          "orbit": [
+            39,
+            39,
+            42,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            48,
+            48,
+            51,
+            255
+          ],
+          "orbit": [
+            47,
+            47,
+            50,
+            255
+          ],
+          "pixels": 1
+        }
+      ],
+      "bounds": [
+        0,
+        8,
+        1,
+        10
+      ],
+      "differenceLocations": {
+        "surface rounded edge": 2
+      }
+    },
+    {
+      "ant": "chromium-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-dialog.png",
+      "orbit": "chromium-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-dialog.png",
+      "size": [
+        520,
+        170
+      ],
+      "changedPixels": 0,
+      "rowBands": [],
+      "maxChannelDelta": 0,
+      "commonColorChanges": [],
+      "differenceLocations": {}
+    },
+    {
+      "ant": "chromium-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-right-drawer.png",
+      "orbit": "chromium-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-right-drawer.png",
+      "size": [
+        378,
+        900
+      ],
+      "changedPixels": 38,
+      "rowBands": [
+        {
+          "firstRow": 860,
+          "lastRow": 865,
+          "pixels": 22
+        },
+        {
+          "firstRow": 886,
+          "lastRow": 891,
+          "pixels": 16
+        }
+      ],
+      "maxChannelDelta": 2,
+      "commonColorChanges": [
+        {
+          "ant": [
+            61,
+            61,
+            65,
+            255
+          ],
+          "orbit": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            64,
+            64,
+            68,
+            255
+          ],
+          "orbit": [
+            64,
+            64,
+            67,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            45,
+            45,
+            48,
+            255
+          ],
+          "orbit": [
+            45,
+            45,
+            47,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            54,
+            54,
+            58,
+            255
+          ],
+          "orbit": [
+            54,
+            54,
+            57,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            55,
+            55,
+            58,
+            255
+          ],
+          "orbit": [
+            54,
+            54,
+            57,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            56,
+            56,
+            60,
+            255
+          ],
+          "orbit": [
+            56,
+            56,
+            59,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            55,
+            55,
+            58,
+            255
+          ],
+          "orbit": [
+            54,
+            54,
+            58,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            61,
+            61,
+            64,
+            255
+          ],
+          "orbit": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "pixels": 2
+        }
+      ],
+      "bounds": [
+        16,
+        860,
+        92,
+        892
+      ],
+      "separatorRows": [
+        {
+          "y": 56,
+          "changedPixels": 0,
+          "antCenter": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "orbitCenter": [
+            60,
+            60,
+            64,
+            255
+          ]
+        },
+        {
+          "y": 851,
+          "changedPixels": 0,
+          "antCenter": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "orbitCenter": [
+            60,
+            60,
+            64,
+            255
+          ]
+        }
+      ],
+      "differenceLocations": {
+        "button rounded edge": 38
+      }
+    },
+    {
+      "ant": "chromium-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-bottom-drawer-input-focus.png",
+      "orbit": "chromium-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-bottom-drawer-input-focus.png",
+      "size": [
+        390,
+        378
+      ],
+      "changedPixels": 25,
+      "rowBands": [
+        {
+          "firstRow": 95,
+          "lastRow": 101,
+          "pixels": 15
+        },
+        {
+          "firstRow": 127,
+          "lastRow": 131,
+          "pixels": 10
+        }
+      ],
+      "maxChannelDelta": 2,
+      "commonColorChanges": [
+        {
+          "ant": [
+            94,
+            115,
+            160,
+            255
+          ],
+          "orbit": [
+            95,
+            116,
+            160,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            43,
+            71,
+            136,
+            255
+          ],
+          "orbit": [
+            43,
+            70,
+            135,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            42,
+            84,
+            181,
+            255
+          ],
+          "orbit": [
+            43,
+            84,
+            181,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            37,
+            68,
+            138,
+            255
+          ],
+          "orbit": [
+            38,
+            68,
+            139,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            42,
+            85,
+            183,
+            255
+          ],
+          "orbit": [
+            43,
+            85,
+            183,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            37,
+            67,
+            137,
+            255
+          ],
+          "orbit": [
+            38,
+            68,
+            137,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            41,
+            78,
+            164,
+            255
+          ],
+          "orbit": [
+            41,
+            78,
+            165,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            44,
+            75,
+            151,
+            255
+          ],
+          "orbit": [
+            43,
+            75,
+            152,
+            255
+          ],
+          "pixels": 1
+        }
+      ],
+      "bounds": [
+        24,
+        95,
+        366,
+        132
+      ],
+      "separatorRows": [
+        {
+          "y": 56,
+          "changedPixels": 0,
+          "antCenter": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "orbitCenter": [
+            60,
+            60,
+            64,
+            255
+          ]
+        },
+        {
+          "y": 329,
+          "changedPixels": 0,
+          "antCenter": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "orbitCenter": [
+            60,
+            60,
+            64,
+            255
+          ]
+        }
+      ],
+      "differenceLocations": {
+        "outside rounded edges": 2,
+        "input rounded edge/shadow": 23
+      },
+      "outsideRoundedEdgePixels": [
+        {
+          "x": 64,
+          "y": 95,
+          "ant": [
+            94,
+            115,
+            160,
+            255
+          ],
+          "orbit": [
+            95,
+            116,
+            160,
+            255
+          ]
+        },
+        {
+          "x": 64,
+          "y": 96,
+          "ant": [
+            94,
+            115,
+            160,
+            255
+          ],
+          "orbit": [
+            95,
+            116,
+            160,
+            255
+          ]
+        }
+      ]
+    },
+    {
+      "ant": "chromium-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-bottom-drawer-input-hover.png",
+      "orbit": "chromium-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-bottom-drawer-input-hover.png",
+      "size": [
+        390,
+        378
+      ],
+      "changedPixels": 26,
+      "rowBands": [
+        {
+          "firstRow": 97,
+          "lastRow": 101,
+          "pixels": 12
+        },
+        {
+          "firstRow": 127,
+          "lastRow": 131,
+          "pixels": 14
+        }
+      ],
+      "maxChannelDelta": 1,
+      "commonColorChanges": [
+        {
+          "ant": [
+            68,
+            97,
+            158,
+            255
+          ],
+          "orbit": [
+            68,
+            97,
+            159,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            74,
+            109,
+            180,
+            255
+          ],
+          "orbit": [
+            73,
+            108,
+            179,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            81,
+            125,
+            214,
+            255
+          ],
+          "orbit": [
+            81,
+            125,
+            215,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            61,
+            79,
+            116,
+            255
+          ],
+          "orbit": [
+            62,
+            80,
+            117,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            75,
+            110,
+            181,
+            255
+          ],
+          "orbit": [
+            74,
+            109,
+            181,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            62,
+            79,
+            114,
+            255
+          ],
+          "orbit": [
+            61,
+            78,
+            114,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            67,
+            95,
+            156,
+            255
+          ],
+          "orbit": [
+            66,
+            95,
+            155,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            69,
+            96,
+            154,
+            255
+          ],
+          "orbit": [
+            68,
+            95,
+            153,
+            255
+          ],
+          "pixels": 1
+        }
+      ],
+      "bounds": [
+        24,
+        97,
+        366,
+        132
+      ],
+      "separatorRows": [
+        {
+          "y": 56,
+          "changedPixels": 0,
+          "antCenter": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "orbitCenter": [
+            60,
+            60,
+            64,
+            255
+          ]
+        },
+        {
+          "y": 329,
+          "changedPixels": 0,
+          "antCenter": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "orbitCenter": [
+            60,
+            60,
+            64,
+            255
+          ]
+        }
+      ],
+      "differenceLocations": {
+        "input rounded edge/shadow": 26
+      }
+    },
+    {
+      "ant": "chromium-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-bottom-drawer.png",
+      "orbit": "chromium-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-bottom-drawer.png",
+      "size": [
+        390,
+        378
+      ],
+      "changedPixels": 42,
+      "rowBands": [
+        {
+          "firstRow": 97,
+          "lastRow": 102,
+          "pixels": 24
+        },
+        {
+          "firstRow": 126,
+          "lastRow": 131,
+          "pixels": 18
+        }
+      ],
+      "maxChannelDelta": 2,
+      "commonColorChanges": [
+        {
+          "ant": [
+            61,
+            61,
+            65,
+            255
+          ],
+          "orbit": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            64,
+            64,
+            68,
+            255
+          ],
+          "orbit": [
+            64,
+            64,
+            67,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            45,
+            45,
+            48,
+            255
+          ],
+          "orbit": [
+            45,
+            45,
+            47,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            55,
+            55,
+            58,
+            255
+          ],
+          "orbit": [
+            54,
+            54,
+            57,
+            255
+          ],
+          "pixels": 3
+        },
+        {
+          "ant": [
+            56,
+            56,
+            60,
+            255
+          ],
+          "orbit": [
+            56,
+            56,
+            59,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            61,
+            61,
+            64,
+            255
+          ],
+          "orbit": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            45,
+            45,
+            48,
+            255
+          ],
+          "orbit": [
+            44,
+            44,
+            47,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            64,
+            64,
+            68,
+            255
+          ],
+          "orbit": [
+            63,
+            63,
+            67,
+            255
+          ],
+          "pixels": 2
+        }
+      ],
+      "bounds": [
+        24,
+        97,
+        366,
+        132
+      ],
+      "separatorRows": [
+        {
+          "y": 56,
+          "changedPixels": 0,
+          "antCenter": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "orbitCenter": [
+            60,
+            60,
+            64,
+            255
+          ]
+        },
+        {
+          "y": 329,
+          "changedPixels": 0,
+          "antCenter": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "orbitCenter": [
+            60,
+            60,
+            64,
+            255
+          ]
+        }
+      ],
+      "differenceLocations": {
+        "input rounded edge/shadow": 42
+      }
+    },
+    {
+      "ant": "chromium-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-confirm.png",
+      "orbit": "chromium-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-confirm.png",
+      "size": [
+        374,
+        138
+      ],
+      "changedPixels": 12,
+      "rowBands": [
+        {
+          "firstRow": 8,
+          "lastRow": 9,
+          "pixels": 2
+        },
+        {
+          "firstRow": 87,
+          "lastRow": 88,
+          "pixels": 7
+        },
+        {
+          "firstRow": 115,
+          "lastRow": 115,
+          "pixels": 3
+        }
+      ],
+      "maxChannelDelta": 1,
+      "commonColorChanges": [
+        {
+          "ant": [
+            54,
+            54,
+            58,
+            255
+          ],
+          "orbit": [
+            54,
+            54,
+            57,
+            255
+          ],
+          "pixels": 3
+        },
+        {
+          "ant": [
+            59,
+            59,
+            63,
+            255
+          ],
+          "orbit": [
+            59,
+            59,
+            62,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            59,
+            59,
+            62,
+            255
+          ],
+          "orbit": [
+            58,
+            58,
+            62,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            39,
+            39,
+            42,
+            255
+          ],
+          "orbit": [
+            40,
+            40,
+            43,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            47,
+            47,
+            50,
+            255
+          ],
+          "orbit": [
+            48,
+            48,
+            51,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            57,
+            57,
+            60,
+            255
+          ],
+          "orbit": [
+            57,
+            57,
+            61,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            58,
+            58,
+            62,
+            255
+          ],
+          "orbit": [
+            59,
+            59,
+            62,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            55,
+            55,
+            58,
+            255
+          ],
+          "orbit": [
+            54,
+            54,
+            57,
+            255
+          ],
+          "pixels": 1
+        }
+      ],
+      "bounds": [
+        0,
+        8,
+        269,
+        116
+      ],
+      "differenceLocations": {
+        "surface rounded edge": 2,
+        "button rounded edge": 10
+      }
+    },
+    {
+      "ant": "chromium-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-dialog.png",
+      "orbit": "chromium-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-dialog.png",
+      "size": [
+        374,
+        174
+      ],
+      "changedPixels": 22,
+      "rowBands": [
+        {
+          "firstRow": 8,
+          "lastRow": 9,
+          "pixels": 2
+        },
+        {
+          "firstRow": 75,
+          "lastRow": 76,
+          "pixels": 7
+        },
+        {
+          "firstRow": 106,
+          "lastRow": 106,
+          "pixels": 3
+        },
+        {
+          "firstRow": 122,
+          "lastRow": 123,
+          "pixels": 7
+        },
+        {
+          "firstRow": 150,
+          "lastRow": 150,
+          "pixels": 3
+        }
+      ],
+      "maxChannelDelta": 1,
+      "commonColorChanges": [
+        {
+          "ant": [
+            54,
+            54,
+            58,
+            255
+          ],
+          "orbit": [
+            54,
+            54,
+            57,
+            255
+          ],
+          "pixels": 6
+        },
+        {
+          "ant": [
+            59,
+            59,
+            63,
+            255
+          ],
+          "orbit": [
+            59,
+            59,
+            62,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            59,
+            59,
+            62,
+            255
+          ],
+          "orbit": [
+            58,
+            58,
+            62,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            57,
+            57,
+            60,
+            255
+          ],
+          "orbit": [
+            57,
+            57,
+            61,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            58,
+            58,
+            62,
+            255
+          ],
+          "orbit": [
+            59,
+            59,
+            62,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            55,
+            55,
+            58,
+            255
+          ],
+          "orbit": [
+            54,
+            54,
+            57,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            39,
+            39,
+            42,
+            255
+          ],
+          "orbit": [
+            40,
+            40,
+            43,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            47,
+            47,
+            50,
+            255
+          ],
+          "orbit": [
+            48,
+            48,
+            51,
+            255
+          ],
+          "pixels": 1
+        }
+      ],
+      "bounds": [
+        0,
+        8,
+        349,
+        151
+      ],
+      "differenceLocations": {
+        "surface rounded edge": 2,
+        "input rounded edge/shadow": 10,
+        "button rounded edge": 10
+      }
+    },
+    {
+      "ant": "chromium-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-right-drawer.png",
+      "orbit": "chromium-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-right-drawer.png",
+      "size": [
+        378,
+        844
+      ],
+      "changedPixels": 17,
+      "rowBands": [
+        {
+          "firstRow": 97,
+          "lastRow": 101,
+          "pixels": 8
+        },
+        {
+          "firstRow": 127,
+          "lastRow": 131,
+          "pixels": 9
+        }
+      ],
+      "maxChannelDelta": 1,
+      "commonColorChanges": [
+        {
+          "ant": [
+            55,
+            55,
+            58,
+            255
+          ],
+          "orbit": [
+            54,
+            54,
+            58,
+            255
+          ],
+          "pixels": 3
+        },
+        {
+          "ant": [
+            56,
+            56,
+            59,
+            255
+          ],
+          "orbit": [
+            56,
+            56,
+            60,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            61,
+            61,
+            64,
+            255
+          ],
+          "orbit": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            56,
+            56,
+            59,
+            255
+          ],
+          "orbit": [
+            55,
+            55,
+            58,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            56,
+            56,
+            60,
+            255
+          ],
+          "orbit": [
+            56,
+            56,
+            59,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            57,
+            57,
+            61,
+            255
+          ],
+          "orbit": [
+            56,
+            56,
+            60,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            59,
+            59,
+            62,
+            255
+          ],
+          "orbit": [
+            58,
+            58,
+            62,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            57,
+            57,
+            61,
+            255
+          ],
+          "orbit": [
+            57,
+            57,
+            60,
+            255
+          ],
+          "pixels": 1
+        }
+      ],
+      "bounds": [
+        25,
+        97,
+        354,
+        132
+      ],
+      "separatorRows": [
+        {
+          "y": 56,
+          "changedPixels": 0,
+          "antCenter": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "orbitCenter": [
+            60,
+            60,
+            64,
+            255
+          ]
+        },
+        {
+          "y": 795,
+          "changedPixels": 0,
+          "antCenter": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "orbitCenter": [
+            60,
+            60,
+            64,
+            255
+          ]
+        }
+      ],
+      "differenceLocations": {
+        "input rounded edge/shadow": 17
+      }
+    },
+    {
+      "ant": "chromium-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-bottom-drawer-input-focus.png",
+      "orbit": "chromium-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-bottom-drawer-input-focus.png",
+      "size": [
+        1280,
+        378
+      ],
+      "changedPixels": 47,
+      "rowBands": [
+        {
+          "firstRow": 338,
+          "lastRow": 343,
+          "pixels": 24
+        },
+        {
+          "firstRow": 364,
+          "lastRow": 369,
+          "pixels": 23
+        }
+      ],
+      "maxChannelDelta": 3,
+      "commonColorChanges": [
+        {
+          "ant": [
+            224,
+            226,
+            229,
+            255
+          ],
+          "orbit": [
+            225,
+            226,
+            229,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            245,
+            246,
+            247,
+            255
+          ],
+          "orbit": [
+            246,
+            247,
+            247,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            252,
+            252,
+            252,
+            255
+          ],
+          "orbit": [
+            252,
+            253,
+            253,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            225,
+            226,
+            229,
+            255
+          ],
+          "orbit": [
+            225,
+            227,
+            230,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            231,
+            232,
+            234,
+            255
+          ],
+          "orbit": [
+            231,
+            232,
+            235,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            235,
+            236,
+            238,
+            255
+          ],
+          "orbit": [
+            235,
+            237,
+            238,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            237,
+            238,
+            240,
+            255
+          ],
+          "orbit": [
+            238,
+            239,
+            241,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            236,
+            237,
+            238,
+            255
+          ],
+          "orbit": [
+            236,
+            237,
+            239,
+            255
+          ],
+          "pixels": 2
+        }
+      ],
+      "bounds": [
+        16,
+        338,
+        92,
+        370
+      ],
+      "separatorRows": [
+        {
+          "y": 56,
+          "changedPixels": 0,
+          "antCenter": [
+            236,
+            238,
+            241,
+            255
+          ],
+          "orbitCenter": [
+            236,
+            238,
+            241,
+            255
+          ]
+        },
+        {
+          "y": 329,
+          "changedPixels": 0,
+          "antCenter": [
+            236,
+            238,
+            241,
+            255
+          ],
+          "orbitCenter": [
+            236,
+            238,
+            241,
+            255
+          ]
+        }
+      ],
+      "differenceLocations": {
+        "button rounded edge": 47
+      }
+    },
+    {
+      "ant": "chromium-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-bottom-drawer-input-hover.png",
+      "orbit": "chromium-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-bottom-drawer-input-hover.png",
+      "size": [
+        1280,
+        378
+      ],
+      "changedPixels": 61,
+      "rowBands": [
+        {
+          "firstRow": 97,
+          "lastRow": 102,
+          "pixels": 9
+        },
+        {
+          "firstRow": 123,
+          "lastRow": 126,
+          "pixels": 5
+        },
+        {
+          "firstRow": 338,
+          "lastRow": 343,
+          "pixels": 24
+        },
+        {
+          "firstRow": 364,
+          "lastRow": 369,
+          "pixels": 23
+        }
+      ],
+      "maxChannelDelta": 3,
+      "commonColorChanges": [
+        {
+          "ant": [
+            224,
+            226,
+            229,
+            255
+          ],
+          "orbit": [
+            225,
+            226,
+            229,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            245,
+            246,
+            247,
+            255
+          ],
+          "orbit": [
+            246,
+            247,
+            247,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            252,
+            252,
+            252,
+            255
+          ],
+          "orbit": [
+            252,
+            253,
+            253,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            225,
+            226,
+            229,
+            255
+          ],
+          "orbit": [
+            225,
+            227,
+            230,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            208,
+            224,
+            255,
+            255
+          ],
+          "orbit": [
+            208,
+            223,
+            255,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            239,
+            245,
+            255,
+            255
+          ],
+          "orbit": [
+            239,
+            244,
+            255,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            231,
+            232,
+            234,
+            255
+          ],
+          "orbit": [
+            231,
+            232,
+            235,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            235,
+            236,
+            238,
+            255
+          ],
+          "orbit": [
+            235,
+            237,
+            238,
+            255
+          ],
+          "pixels": 2
+        }
+      ],
+      "bounds": [
+        16,
+        97,
+        1256,
+        370
+      ],
+      "separatorRows": [
+        {
+          "y": 56,
+          "changedPixels": 0,
+          "antCenter": [
+            236,
+            238,
+            241,
+            255
+          ],
+          "orbitCenter": [
+            236,
+            238,
+            241,
+            255
+          ]
+        },
+        {
+          "y": 329,
+          "changedPixels": 0,
+          "antCenter": [
+            236,
+            238,
+            241,
+            255
+          ],
+          "orbitCenter": [
+            236,
+            238,
+            241,
+            255
+          ]
+        }
+      ],
+      "differenceLocations": {
+        "input rounded edge/shadow": 14,
+        "button rounded edge": 47
+      }
+    },
+    {
+      "ant": "chromium-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-bottom-drawer.png",
+      "orbit": "chromium-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-bottom-drawer.png",
+      "size": [
+        1280,
+        378
+      ],
+      "changedPixels": 47,
+      "rowBands": [
+        {
+          "firstRow": 338,
+          "lastRow": 343,
+          "pixels": 24
+        },
+        {
+          "firstRow": 364,
+          "lastRow": 369,
+          "pixels": 23
+        }
+      ],
+      "maxChannelDelta": 3,
+      "commonColorChanges": [
+        {
+          "ant": [
+            224,
+            226,
+            229,
+            255
+          ],
+          "orbit": [
+            225,
+            226,
+            229,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            245,
+            246,
+            247,
+            255
+          ],
+          "orbit": [
+            246,
+            247,
+            247,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            252,
+            252,
+            252,
+            255
+          ],
+          "orbit": [
+            252,
+            253,
+            253,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            225,
+            226,
+            229,
+            255
+          ],
+          "orbit": [
+            225,
+            227,
+            230,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            231,
+            232,
+            234,
+            255
+          ],
+          "orbit": [
+            231,
+            232,
+            235,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            235,
+            236,
+            238,
+            255
+          ],
+          "orbit": [
+            235,
+            237,
+            238,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            237,
+            238,
+            240,
+            255
+          ],
+          "orbit": [
+            238,
+            239,
+            241,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            236,
+            237,
+            238,
+            255
+          ],
+          "orbit": [
+            236,
+            237,
+            239,
+            255
+          ],
+          "pixels": 2
+        }
+      ],
+      "bounds": [
+        16,
+        338,
+        92,
+        370
+      ],
+      "separatorRows": [
+        {
+          "y": 56,
+          "changedPixels": 0,
+          "antCenter": [
+            236,
+            238,
+            241,
+            255
+          ],
+          "orbitCenter": [
+            236,
+            238,
+            241,
+            255
+          ]
+        },
+        {
+          "y": 329,
+          "changedPixels": 0,
+          "antCenter": [
+            236,
+            238,
+            241,
+            255
+          ],
+          "orbitCenter": [
+            236,
+            238,
+            241,
+            255
+          ]
+        }
+      ],
+      "differenceLocations": {
+        "button rounded edge": 47
+      }
+    },
+    {
+      "ant": "chromium-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-confirm.png",
+      "orbit": "chromium-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-confirm.png",
+      "size": [
+        416,
+        138
+      ],
+      "changedPixels": 2,
+      "rowBands": [
+        {
+          "firstRow": 8,
+          "lastRow": 9,
+          "pixels": 2
+        }
+      ],
+      "maxChannelDelta": 4,
+      "commonColorChanges": [
+        {
+          "ant": [
+            218,
+            218,
+            218,
+            255
+          ],
+          "orbit": [
+            214,
+            214,
+            214,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            244,
+            244,
+            244,
+            255
+          ],
+          "orbit": [
+            240,
+            240,
+            240,
+            255
+          ],
+          "pixels": 1
+        }
+      ],
+      "bounds": [
+        0,
+        8,
+        1,
+        10
+      ],
+      "differenceLocations": {
+        "surface rounded edge": 2
+      }
+    },
+    {
+      "ant": "chromium-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-dialog.png",
+      "orbit": "chromium-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-dialog.png",
+      "size": [
+        520,
+        170
+      ],
+      "changedPixels": 0,
+      "rowBands": [],
+      "maxChannelDelta": 0,
+      "commonColorChanges": [],
+      "differenceLocations": {}
+    },
+    {
+      "ant": "chromium-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-right-drawer.png",
+      "orbit": "chromium-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-right-drawer.png",
+      "size": [
+        378,
+        900
+      ],
+      "changedPixels": 47,
+      "rowBands": [
+        {
+          "firstRow": 860,
+          "lastRow": 865,
+          "pixels": 24
+        },
+        {
+          "firstRow": 886,
+          "lastRow": 891,
+          "pixels": 23
+        }
+      ],
+      "maxChannelDelta": 3,
+      "commonColorChanges": [
+        {
+          "ant": [
+            224,
+            226,
+            229,
+            255
+          ],
+          "orbit": [
+            225,
+            226,
+            229,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            245,
+            246,
+            247,
+            255
+          ],
+          "orbit": [
+            246,
+            247,
+            247,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            252,
+            252,
+            252,
+            255
+          ],
+          "orbit": [
+            252,
+            253,
+            253,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            225,
+            226,
+            229,
+            255
+          ],
+          "orbit": [
+            225,
+            227,
+            230,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            231,
+            232,
+            234,
+            255
+          ],
+          "orbit": [
+            231,
+            232,
+            235,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            235,
+            236,
+            238,
+            255
+          ],
+          "orbit": [
+            235,
+            237,
+            238,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            237,
+            238,
+            240,
+            255
+          ],
+          "orbit": [
+            238,
+            239,
+            241,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            236,
+            237,
+            238,
+            255
+          ],
+          "orbit": [
+            236,
+            237,
+            239,
+            255
+          ],
+          "pixels": 2
+        }
+      ],
+      "bounds": [
+        16,
+        860,
+        92,
+        892
+      ],
+      "separatorRows": [
+        {
+          "y": 56,
+          "changedPixels": 0,
+          "antCenter": [
+            236,
+            238,
+            241,
+            255
+          ],
+          "orbitCenter": [
+            236,
+            238,
+            241,
+            255
+          ]
+        },
+        {
+          "y": 851,
+          "changedPixels": 0,
+          "antCenter": [
+            236,
+            238,
+            241,
+            255
+          ],
+          "orbitCenter": [
+            236,
+            238,
+            241,
+            255
+          ]
+        }
+      ],
+      "differenceLocations": {
+        "button rounded edge": 47
+      }
+    },
+    {
+      "ant": "chromium-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-bottom-drawer-input-focus.png",
+      "orbit": "chromium-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-bottom-drawer-input-focus.png",
+      "size": [
+        390,
+        378
+      ],
+      "changedPixels": 40,
+      "rowBands": [
+        {
+          "firstRow": 95,
+          "lastRow": 102,
+          "pixels": 20
+        },
+        {
+          "firstRow": 126,
+          "lastRow": 131,
+          "pixels": 20
+        }
+      ],
+      "maxChannelDelta": 3,
+      "commonColorChanges": [
+        {
+          "ant": [
+            69,
+            124,
+            255,
+            255
+          ],
+          "orbit": [
+            69,
+            125,
+            255,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            123,
+            132,
+            143,
+            255
+          ],
+          "orbit": [
+            124,
+            132,
+            143,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            103,
+            149,
+            255,
+            255
+          ],
+          "orbit": [
+            104,
+            150,
+            255,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            68,
+            124,
+            255,
+            255
+          ],
+          "orbit": [
+            69,
+            125,
+            255,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            133,
+            170,
+            255,
+            255
+          ],
+          "orbit": [
+            134,
+            171,
+            255,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            105,
+            150,
+            255,
+            255
+          ],
+          "orbit": [
+            106,
+            151,
+            255,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            106,
+            151,
+            255,
+            255
+          ],
+          "orbit": [
+            107,
+            151,
+            255,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            103,
+            149,
+            255,
+            255
+          ],
+          "orbit": [
+            105,
+            150,
+            255,
+            255
+          ],
+          "pixels": 1
+        }
+      ],
+      "bounds": [
+        24,
+        95,
+        366,
+        132
+      ],
+      "separatorRows": [
+        {
+          "y": 56,
+          "changedPixels": 0,
+          "antCenter": [
+            236,
+            238,
+            241,
+            255
+          ],
+          "orbitCenter": [
+            236,
+            238,
+            241,
+            255
+          ]
+        },
+        {
+          "y": 329,
+          "changedPixels": 0,
+          "antCenter": [
+            236,
+            238,
+            241,
+            255
+          ],
+          "orbitCenter": [
+            236,
+            238,
+            241,
+            255
+          ]
+        }
+      ],
+      "differenceLocations": {
+        "outside rounded edges": 2,
+        "input rounded edge/shadow": 38
+      },
+      "outsideRoundedEdgePixels": [
+        {
+          "x": 64,
+          "y": 95,
+          "ant": [
+            123,
+            132,
+            143,
+            255
+          ],
+          "orbit": [
+            124,
+            132,
+            143,
+            255
+          ]
+        },
+        {
+          "x": 64,
+          "y": 96,
+          "ant": [
+            123,
+            132,
+            143,
+            255
+          ],
+          "orbit": [
+            124,
+            132,
+            143,
+            255
+          ]
+        }
+      ]
+    },
+    {
+      "ant": "chromium-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-bottom-drawer-input-hover.png",
+      "orbit": "chromium-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-bottom-drawer-input-hover.png",
+      "size": [
+        390,
+        378
+      ],
+      "changedPixels": 17,
+      "rowBands": [
+        {
+          "firstRow": 97,
+          "lastRow": 97,
+          "pixels": 2
+        },
+        {
+          "firstRow": 99,
+          "lastRow": 100,
+          "pixels": 3
+        },
+        {
+          "firstRow": 128,
+          "lastRow": 131,
+          "pixels": 12
+        }
+      ],
+      "maxChannelDelta": 2,
+      "commonColorChanges": [
+        {
+          "ant": [
+            138,
+            177,
+            255,
+            255
+          ],
+          "orbit": [
+            139,
+            178,
+            255,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            198,
+            217,
+            255,
+            255
+          ],
+          "orbit": [
+            199,
+            218,
+            255,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            199,
+            218,
+            255,
+            255
+          ],
+          "orbit": [
+            200,
+            218,
+            255,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            171,
+            199,
+            255,
+            255
+          ],
+          "orbit": [
+            172,
+            199,
+            255,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            170,
+            198,
+            255,
+            255
+          ],
+          "orbit": [
+            171,
+            199,
+            255,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            155,
+            188,
+            255,
+            255
+          ],
+          "orbit": [
+            156,
+            189,
+            255,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            199,
+            217,
+            255,
+            255
+          ],
+          "orbit": [
+            200,
+            218,
+            255,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            153,
+            187,
+            255,
+            255
+          ],
+          "orbit": [
+            152,
+            186,
+            255,
+            255
+          ],
+          "pixels": 1
+        }
+      ],
+      "bounds": [
+        24,
+        97,
+        366,
+        132
+      ],
+      "separatorRows": [
+        {
+          "y": 56,
+          "changedPixels": 0,
+          "antCenter": [
+            236,
+            238,
+            241,
+            255
+          ],
+          "orbitCenter": [
+            236,
+            238,
+            241,
+            255
+          ]
+        },
+        {
+          "y": 329,
+          "changedPixels": 0,
+          "antCenter": [
+            236,
+            238,
+            241,
+            255
+          ],
+          "orbitCenter": [
+            236,
+            238,
+            241,
+            255
+          ]
+        }
+      ],
+      "differenceLocations": {
+        "input rounded edge/shadow": 17
+      }
+    },
+    {
+      "ant": "chromium-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-bottom-drawer.png",
+      "orbit": "chromium-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-bottom-drawer.png",
+      "size": [
+        390,
+        378
+      ],
+      "changedPixels": 50,
+      "rowBands": [
+        {
+          "firstRow": 97,
+          "lastRow": 102,
+          "pixels": 26
+        },
+        {
+          "firstRow": 126,
+          "lastRow": 131,
+          "pixels": 24
+        }
+      ],
+      "maxChannelDelta": 3,
+      "commonColorChanges": [
+        {
+          "ant": [
+            224,
+            226,
+            229,
+            255
+          ],
+          "orbit": [
+            225,
+            226,
+            229,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            245,
+            246,
+            247,
+            255
+          ],
+          "orbit": [
+            246,
+            247,
+            247,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            252,
+            252,
+            252,
+            255
+          ],
+          "orbit": [
+            252,
+            253,
+            253,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            231,
+            232,
+            234,
+            255
+          ],
+          "orbit": [
+            231,
+            232,
+            235,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            235,
+            236,
+            238,
+            255
+          ],
+          "orbit": [
+            235,
+            237,
+            238,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            236,
+            237,
+            238,
+            255
+          ],
+          "orbit": [
+            236,
+            237,
+            239,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            245,
+            246,
+            247,
+            255
+          ],
+          "orbit": [
+            246,
+            246,
+            247,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            231,
+            232,
+            234,
+            255
+          ],
+          "orbit": [
+            231,
+            233,
+            235,
+            255
+          ],
+          "pixels": 2
+        }
+      ],
+      "bounds": [
+        24,
+        97,
+        366,
+        132
+      ],
+      "separatorRows": [
+        {
+          "y": 56,
+          "changedPixels": 0,
+          "antCenter": [
+            236,
+            238,
+            241,
+            255
+          ],
+          "orbitCenter": [
+            236,
+            238,
+            241,
+            255
+          ]
+        },
+        {
+          "y": 329,
+          "changedPixels": 0,
+          "antCenter": [
+            236,
+            238,
+            241,
+            255
+          ],
+          "orbitCenter": [
+            236,
+            238,
+            241,
+            255
+          ]
+        }
+      ],
+      "differenceLocations": {
+        "input rounded edge/shadow": 50
+      }
+    },
+    {
+      "ant": "chromium-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-confirm.png",
+      "orbit": "chromium-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-confirm.png",
+      "size": [
+        374,
+        138
+      ],
+      "changedPixels": 2,
+      "rowBands": [
+        {
+          "firstRow": 8,
+          "lastRow": 9,
+          "pixels": 2
+        }
+      ],
+      "maxChannelDelta": 4,
+      "commonColorChanges": [
+        {
+          "ant": [
+            214,
+            214,
+            214,
+            255
+          ],
+          "orbit": [
+            218,
+            218,
+            218,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            240,
+            240,
+            240,
+            255
+          ],
+          "orbit": [
+            244,
+            244,
+            244,
+            255
+          ],
+          "pixels": 1
+        }
+      ],
+      "bounds": [
+        0,
+        8,
+        1,
+        10
+      ],
+      "differenceLocations": {
+        "surface rounded edge": 2
+      }
+    },
+    {
+      "ant": "chromium-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-dialog.png",
+      "orbit": "chromium-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-dialog.png",
+      "size": [
+        374,
+        174
+      ],
+      "changedPixels": 2,
+      "rowBands": [
+        {
+          "firstRow": 8,
+          "lastRow": 9,
+          "pixels": 2
+        }
+      ],
+      "maxChannelDelta": 4,
+      "commonColorChanges": [
+        {
+          "ant": [
+            214,
+            214,
+            214,
+            255
+          ],
+          "orbit": [
+            218,
+            218,
+            218,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            240,
+            240,
+            240,
+            255
+          ],
+          "orbit": [
+            244,
+            244,
+            244,
+            255
+          ],
+          "pixels": 1
+        }
+      ],
+      "bounds": [
+        0,
+        8,
+        1,
+        10
+      ],
+      "differenceLocations": {
+        "surface rounded edge": 2
+      }
+    },
+    {
+      "ant": "chromium-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-right-drawer.png",
+      "orbit": "chromium-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-right-drawer.png",
+      "size": [
+        378,
+        844
+      ],
+      "changedPixels": 41,
+      "rowBands": [
+        {
+          "firstRow": 97,
+          "lastRow": 102,
+          "pixels": 20
+        },
+        {
+          "firstRow": 126,
+          "lastRow": 131,
+          "pixels": 21
+        }
+      ],
+      "maxChannelDelta": 2,
+      "commonColorChanges": [
+        {
+          "ant": [
+            231,
+            232,
+            234,
+            255
+          ],
+          "orbit": [
+            231,
+            233,
+            235,
+            255
+          ],
+          "pixels": 6
+        },
+        {
+          "ant": [
+            225,
+            226,
+            229,
+            255
+          ],
+          "orbit": [
+            225,
+            227,
+            230,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            224,
+            226,
+            229,
+            255
+          ],
+          "orbit": [
+            225,
+            227,
+            230,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            235,
+            236,
+            238,
+            255
+          ],
+          "orbit": [
+            236,
+            237,
+            239,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            234,
+            235,
+            237,
+            255
+          ],
+          "orbit": [
+            235,
+            236,
+            238,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            224,
+            226,
+            229,
+            255
+          ],
+          "orbit": [
+            225,
+            227,
+            229,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            236,
+            237,
+            239,
+            255
+          ],
+          "orbit": [
+            236,
+            238,
+            239,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            243,
+            244,
+            245,
+            255
+          ],
+          "orbit": [
+            244,
+            245,
+            246,
+            255
+          ],
+          "pixels": 2
+        }
+      ],
+      "bounds": [
+        24,
+        97,
+        354,
+        132
+      ],
+      "separatorRows": [
+        {
+          "y": 56,
+          "changedPixels": 0,
+          "antCenter": [
+            236,
+            238,
+            241,
+            255
+          ],
+          "orbitCenter": [
+            236,
+            238,
+            241,
+            255
+          ]
+        },
+        {
+          "y": 795,
+          "changedPixels": 0,
+          "antCenter": [
+            236,
+            238,
+            241,
+            255
+          ],
+          "orbitCenter": [
+            236,
+            238,
+            241,
+            255
+          ]
+        }
+      ],
+      "differenceLocations": {
+        "input rounded edge/shadow": 41
+      }
+    },
+    {
+      "ant": "webkit-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-bottom-drawer-input-focus.png",
+      "orbit": "webkit-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-bottom-drawer-input-focus.png",
+      "size": [
+        1280,
+        378
+      ],
+      "changedPixels": 0,
+      "rowBands": [],
+      "maxChannelDelta": 0,
+      "commonColorChanges": [],
+      "separatorRows": [
+        {
+          "y": 56,
+          "changedPixels": 0,
+          "antCenter": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "orbitCenter": [
+            60,
+            60,
+            64,
+            255
+          ]
+        },
+        {
+          "y": 329,
+          "changedPixels": 0,
+          "antCenter": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "orbitCenter": [
+            60,
+            60,
+            64,
+            255
+          ]
+        }
+      ],
+      "differenceLocations": {}
+    },
+    {
+      "ant": "webkit-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-bottom-drawer-input-hover.png",
+      "orbit": "webkit-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-bottom-drawer-input-hover.png",
+      "size": [
+        1280,
+        378
+      ],
+      "changedPixels": 0,
+      "rowBands": [],
+      "maxChannelDelta": 0,
+      "commonColorChanges": [],
+      "separatorRows": [
+        {
+          "y": 56,
+          "changedPixels": 0,
+          "antCenter": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "orbitCenter": [
+            60,
+            60,
+            64,
+            255
+          ]
+        },
+        {
+          "y": 329,
+          "changedPixels": 0,
+          "antCenter": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "orbitCenter": [
+            60,
+            60,
+            64,
+            255
+          ]
+        }
+      ],
+      "differenceLocations": {}
+    },
+    {
+      "ant": "webkit-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-bottom-drawer.png",
+      "orbit": "webkit-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-bottom-drawer.png",
+      "size": [
+        1280,
+        378
+      ],
+      "changedPixels": 0,
+      "rowBands": [],
+      "maxChannelDelta": 0,
+      "commonColorChanges": [],
+      "separatorRows": [
+        {
+          "y": 56,
+          "changedPixels": 0,
+          "antCenter": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "orbitCenter": [
+            60,
+            60,
+            64,
+            255
+          ]
+        },
+        {
+          "y": 329,
+          "changedPixels": 0,
+          "antCenter": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "orbitCenter": [
+            60,
+            60,
+            64,
+            255
+          ]
+        }
+      ],
+      "differenceLocations": {}
+    },
+    {
+      "ant": "webkit-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-confirm.png",
+      "orbit": "webkit-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-confirm.png",
+      "size": [
+        416,
+        138
+      ],
+      "changedPixels": 17,
+      "rowBands": [
+        {
+          "firstRow": 1,
+          "lastRow": 1,
+          "pixels": 2
+        },
+        {
+          "firstRow": 4,
+          "lastRow": 5,
+          "pixels": 6
+        },
+        {
+          "firstRow": 132,
+          "lastRow": 133,
+          "pixels": 7
+        },
+        {
+          "firstRow": 136,
+          "lastRow": 136,
+          "pixels": 2
+        }
+      ],
+      "maxChannelDelta": 1,
+      "commonColorChanges": [
+        {
+          "ant": [
+            44,
+            44,
+            46,
+            255
+          ],
+          "orbit": [
+            44,
+            44,
+            47,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            49,
+            49,
+            52,
+            255
+          ],
+          "orbit": [
+            50,
+            50,
+            53,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            18,
+            18,
+            20,
+            255
+          ],
+          "orbit": [
+            19,
+            19,
+            21,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            50,
+            50,
+            53,
+            255
+          ],
+          "orbit": [
+            51,
+            51,
+            54,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            23,
+            23,
+            24,
+            255
+          ],
+          "orbit": [
+            23,
+            23,
+            25,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            45,
+            45,
+            48,
+            255
+          ],
+          "orbit": [
+            46,
+            46,
+            49,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            46,
+            46,
+            48,
+            255
+          ],
+          "orbit": [
+            46,
+            46,
+            49,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            27,
+            27,
+            28,
+            255
+          ],
+          "orbit": [
+            27,
+            27,
+            29,
+            255
+          ],
+          "pixels": 1
+        }
+      ],
+      "bounds": [
+        0,
+        1,
+        416,
+        137
+      ],
+      "differenceLocations": {
+        "surface rounded edge": 17
+      }
+    },
+    {
+      "ant": "webkit-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-dialog.png",
+      "orbit": "webkit-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-dialog.png",
+      "size": [
+        520,
+        170
+      ],
+      "changedPixels": 17,
+      "rowBands": [
+        {
+          "firstRow": 1,
+          "lastRow": 1,
+          "pixels": 2
+        },
+        {
+          "firstRow": 4,
+          "lastRow": 5,
+          "pixels": 6
+        },
+        {
+          "firstRow": 164,
+          "lastRow": 165,
+          "pixels": 7
+        },
+        {
+          "firstRow": 168,
+          "lastRow": 168,
+          "pixels": 2
+        }
+      ],
+      "maxChannelDelta": 1,
+      "commonColorChanges": [
+        {
+          "ant": [
+            44,
+            44,
+            46,
+            255
+          ],
+          "orbit": [
+            44,
+            44,
+            47,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            49,
+            49,
+            52,
+            255
+          ],
+          "orbit": [
+            50,
+            50,
+            53,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            18,
+            18,
+            20,
+            255
+          ],
+          "orbit": [
+            19,
+            19,
+            21,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            50,
+            50,
+            53,
+            255
+          ],
+          "orbit": [
+            51,
+            51,
+            54,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            23,
+            23,
+            24,
+            255
+          ],
+          "orbit": [
+            23,
+            23,
+            25,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            45,
+            45,
+            48,
+            255
+          ],
+          "orbit": [
+            46,
+            46,
+            49,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            46,
+            46,
+            48,
+            255
+          ],
+          "orbit": [
+            46,
+            46,
+            49,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            27,
+            27,
+            28,
+            255
+          ],
+          "orbit": [
+            27,
+            27,
+            29,
+            255
+          ],
+          "pixels": 1
+        }
+      ],
+      "bounds": [
+        0,
+        1,
+        520,
+        169
+      ],
+      "differenceLocations": {
+        "surface rounded edge": 17
+      }
+    },
+    {
+      "ant": "webkit-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-right-drawer.png",
+      "orbit": "webkit-dark-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-right-drawer.png",
+      "size": [
+        378,
+        900
+      ],
+      "changedPixels": 0,
+      "rowBands": [],
+      "maxChannelDelta": 0,
+      "commonColorChanges": [],
+      "separatorRows": [
+        {
+          "y": 56,
+          "changedPixels": 0,
+          "antCenter": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "orbitCenter": [
+            60,
+            60,
+            64,
+            255
+          ]
+        },
+        {
+          "y": 851,
+          "changedPixels": 0,
+          "antCenter": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "orbitCenter": [
+            60,
+            60,
+            64,
+            255
+          ]
+        }
+      ],
+      "differenceLocations": {}
+    },
+    {
+      "ant": "webkit-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-bottom-drawer-input-focus.png",
+      "orbit": "webkit-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-bottom-drawer-input-focus.png",
+      "size": [
+        390,
+        378
+      ],
+      "changedPixels": 0,
+      "rowBands": [],
+      "maxChannelDelta": 0,
+      "commonColorChanges": [],
+      "separatorRows": [
+        {
+          "y": 56,
+          "changedPixels": 0,
+          "antCenter": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "orbitCenter": [
+            60,
+            60,
+            64,
+            255
+          ]
+        },
+        {
+          "y": 329,
+          "changedPixels": 0,
+          "antCenter": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "orbitCenter": [
+            60,
+            60,
+            64,
+            255
+          ]
+        }
+      ],
+      "differenceLocations": {}
+    },
+    {
+      "ant": "webkit-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-bottom-drawer-input-hover.png",
+      "orbit": "webkit-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-bottom-drawer-input-hover.png",
+      "size": [
+        390,
+        378
+      ],
+      "changedPixels": 0,
+      "rowBands": [],
+      "maxChannelDelta": 0,
+      "commonColorChanges": [],
+      "separatorRows": [
+        {
+          "y": 56,
+          "changedPixels": 0,
+          "antCenter": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "orbitCenter": [
+            60,
+            60,
+            64,
+            255
+          ]
+        },
+        {
+          "y": 329,
+          "changedPixels": 0,
+          "antCenter": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "orbitCenter": [
+            60,
+            60,
+            64,
+            255
+          ]
+        }
+      ],
+      "differenceLocations": {}
+    },
+    {
+      "ant": "webkit-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-bottom-drawer.png",
+      "orbit": "webkit-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-bottom-drawer.png",
+      "size": [
+        390,
+        378
+      ],
+      "changedPixels": 0,
+      "rowBands": [],
+      "maxChannelDelta": 0,
+      "commonColorChanges": [],
+      "separatorRows": [
+        {
+          "y": 56,
+          "changedPixels": 0,
+          "antCenter": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "orbitCenter": [
+            60,
+            60,
+            64,
+            255
+          ]
+        },
+        {
+          "y": 329,
+          "changedPixels": 0,
+          "antCenter": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "orbitCenter": [
+            60,
+            60,
+            64,
+            255
+          ]
+        }
+      ],
+      "differenceLocations": {}
+    },
+    {
+      "ant": "webkit-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-confirm.png",
+      "orbit": "webkit-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-confirm.png",
+      "size": [
+        374,
+        138
+      ],
+      "changedPixels": 17,
+      "rowBands": [
+        {
+          "firstRow": 1,
+          "lastRow": 1,
+          "pixels": 2
+        },
+        {
+          "firstRow": 4,
+          "lastRow": 5,
+          "pixels": 6
+        },
+        {
+          "firstRow": 132,
+          "lastRow": 133,
+          "pixels": 7
+        },
+        {
+          "firstRow": 136,
+          "lastRow": 136,
+          "pixels": 2
+        }
+      ],
+      "maxChannelDelta": 1,
+      "commonColorChanges": [
+        {
+          "ant": [
+            44,
+            44,
+            46,
+            255
+          ],
+          "orbit": [
+            44,
+            44,
+            47,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            49,
+            49,
+            52,
+            255
+          ],
+          "orbit": [
+            50,
+            50,
+            53,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            18,
+            18,
+            20,
+            255
+          ],
+          "orbit": [
+            19,
+            19,
+            21,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            50,
+            50,
+            53,
+            255
+          ],
+          "orbit": [
+            51,
+            51,
+            54,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            23,
+            23,
+            24,
+            255
+          ],
+          "orbit": [
+            23,
+            23,
+            25,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            45,
+            45,
+            48,
+            255
+          ],
+          "orbit": [
+            46,
+            46,
+            49,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            46,
+            46,
+            48,
+            255
+          ],
+          "orbit": [
+            46,
+            46,
+            49,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            27,
+            27,
+            28,
+            255
+          ],
+          "orbit": [
+            27,
+            27,
+            29,
+            255
+          ],
+          "pixels": 1
+        }
+      ],
+      "bounds": [
+        0,
+        1,
+        374,
+        137
+      ],
+      "differenceLocations": {
+        "surface rounded edge": 17
+      }
+    },
+    {
+      "ant": "webkit-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-dialog.png",
+      "orbit": "webkit-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-dialog.png",
+      "size": [
+        374,
+        174
+      ],
+      "changedPixels": 17,
+      "rowBands": [
+        {
+          "firstRow": 1,
+          "lastRow": 1,
+          "pixels": 2
+        },
+        {
+          "firstRow": 4,
+          "lastRow": 5,
+          "pixels": 6
+        },
+        {
+          "firstRow": 167,
+          "lastRow": 168,
+          "pixels": 7
+        },
+        {
+          "firstRow": 171,
+          "lastRow": 171,
+          "pixels": 2
+        }
+      ],
+      "maxChannelDelta": 1,
+      "commonColorChanges": [
+        {
+          "ant": [
+            44,
+            44,
+            46,
+            255
+          ],
+          "orbit": [
+            44,
+            44,
+            47,
+            255
+          ],
+          "pixels": 4
+        },
+        {
+          "ant": [
+            49,
+            49,
+            52,
+            255
+          ],
+          "orbit": [
+            50,
+            50,
+            53,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            18,
+            18,
+            20,
+            255
+          ],
+          "orbit": [
+            19,
+            19,
+            21,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            50,
+            50,
+            53,
+            255
+          ],
+          "orbit": [
+            51,
+            51,
+            54,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            23,
+            23,
+            24,
+            255
+          ],
+          "orbit": [
+            23,
+            23,
+            25,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            45,
+            45,
+            48,
+            255
+          ],
+          "orbit": [
+            46,
+            46,
+            49,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            46,
+            46,
+            48,
+            255
+          ],
+          "orbit": [
+            46,
+            46,
+            49,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            27,
+            27,
+            28,
+            255
+          ],
+          "orbit": [
+            27,
+            27,
+            29,
+            255
+          ],
+          "pixels": 1
+        }
+      ],
+      "bounds": [
+        0,
+        1,
+        374,
+        172
+      ],
+      "differenceLocations": {
+        "surface rounded edge": 17
+      }
+    },
+    {
+      "ant": "webkit-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-right-drawer.png",
+      "orbit": "webkit-dark-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-right-drawer.png",
+      "size": [
+        378,
+        844
+      ],
+      "changedPixels": 0,
+      "rowBands": [],
+      "maxChannelDelta": 0,
+      "commonColorChanges": [],
+      "separatorRows": [
+        {
+          "y": 56,
+          "changedPixels": 0,
+          "antCenter": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "orbitCenter": [
+            60,
+            60,
+            64,
+            255
+          ]
+        },
+        {
+          "y": 795,
+          "changedPixels": 0,
+          "antCenter": [
+            60,
+            60,
+            64,
+            255
+          ],
+          "orbitCenter": [
+            60,
+            60,
+            64,
+            255
+          ]
+        }
+      ],
+      "differenceLocations": {}
+    },
+    {
+      "ant": "webkit-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-bottom-drawer-input-focus.png",
+      "orbit": "webkit-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-bottom-drawer-input-focus.png",
+      "size": [
+        1280,
+        378
+      ],
+      "changedPixels": 0,
+      "rowBands": [],
+      "maxChannelDelta": 0,
+      "commonColorChanges": [],
+      "separatorRows": [
+        {
+          "y": 56,
+          "changedPixels": 0,
+          "antCenter": [
+            236,
+            238,
+            241,
+            255
+          ],
+          "orbitCenter": [
+            236,
+            238,
+            241,
+            255
+          ]
+        },
+        {
+          "y": 329,
+          "changedPixels": 0,
+          "antCenter": [
+            236,
+            238,
+            241,
+            255
+          ],
+          "orbitCenter": [
+            236,
+            238,
+            241,
+            255
+          ]
+        }
+      ],
+      "differenceLocations": {}
+    },
+    {
+      "ant": "webkit-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-bottom-drawer-input-hover.png",
+      "orbit": "webkit-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-bottom-drawer-input-hover.png",
+      "size": [
+        1280,
+        378
+      ],
+      "changedPixels": 0,
+      "rowBands": [],
+      "maxChannelDelta": 0,
+      "commonColorChanges": [],
+      "separatorRows": [
+        {
+          "y": 56,
+          "changedPixels": 0,
+          "antCenter": [
+            236,
+            238,
+            241,
+            255
+          ],
+          "orbitCenter": [
+            236,
+            238,
+            241,
+            255
+          ]
+        },
+        {
+          "y": 329,
+          "changedPixels": 0,
+          "antCenter": [
+            236,
+            238,
+            241,
+            255
+          ],
+          "orbitCenter": [
+            236,
+            238,
+            241,
+            255
+          ]
+        }
+      ],
+      "differenceLocations": {}
+    },
+    {
+      "ant": "webkit-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-bottom-drawer.png",
+      "orbit": "webkit-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-bottom-drawer.png",
+      "size": [
+        1280,
+        378
+      ],
+      "changedPixels": 0,
+      "rowBands": [],
+      "maxChannelDelta": 0,
+      "commonColorChanges": [],
+      "separatorRows": [
+        {
+          "y": 56,
+          "changedPixels": 0,
+          "antCenter": [
+            236,
+            238,
+            241,
+            255
+          ],
+          "orbitCenter": [
+            236,
+            238,
+            241,
+            255
+          ]
+        },
+        {
+          "y": 329,
+          "changedPixels": 0,
+          "antCenter": [
+            236,
+            238,
+            241,
+            255
+          ],
+          "orbitCenter": [
+            236,
+            238,
+            241,
+            255
+          ]
+        }
+      ],
+      "differenceLocations": {}
+    },
+    {
+      "ant": "webkit-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-confirm.png",
+      "orbit": "webkit-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-confirm.png",
+      "size": [
+        416,
+        138
+      ],
+      "changedPixels": 8,
+      "rowBands": [
+        {
+          "firstRow": 1,
+          "lastRow": 1,
+          "pixels": 2
+        },
+        {
+          "firstRow": 4,
+          "lastRow": 5,
+          "pixels": 3
+        },
+        {
+          "firstRow": 132,
+          "lastRow": 132,
+          "pixels": 1
+        },
+        {
+          "firstRow": 136,
+          "lastRow": 136,
+          "pixels": 2
+        }
+      ],
+      "maxChannelDelta": 1,
+      "commonColorChanges": [
+        {
+          "ant": [
+            151,
+            151,
+            151,
+            255
+          ],
+          "orbit": [
+            150,
+            150,
+            150,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            250,
+            250,
+            250,
+            255
+          ],
+          "orbit": [
+            249,
+            249,
+            249,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            225,
+            225,
+            225,
+            255
+          ],
+          "orbit": [
+            224,
+            224,
+            224,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            228,
+            228,
+            228,
+            255
+          ],
+          "orbit": [
+            227,
+            227,
+            227,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            133,
+            133,
+            133,
+            255
+          ],
+          "orbit": [
+            132,
+            132,
+            132,
+            255
+          ],
+          "pixels": 1
+        }
+      ],
+      "bounds": [
+        2,
+        1,
+        416,
+        137
+      ],
+      "differenceLocations": {
+        "surface rounded edge": 8
+      }
+    },
+    {
+      "ant": "webkit-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-dialog.png",
+      "orbit": "webkit-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-dialog.png",
+      "size": [
+        520,
+        170
+      ],
+      "changedPixels": 8,
+      "rowBands": [
+        {
+          "firstRow": 1,
+          "lastRow": 1,
+          "pixels": 2
+        },
+        {
+          "firstRow": 4,
+          "lastRow": 5,
+          "pixels": 3
+        },
+        {
+          "firstRow": 164,
+          "lastRow": 164,
+          "pixels": 1
+        },
+        {
+          "firstRow": 168,
+          "lastRow": 168,
+          "pixels": 2
+        }
+      ],
+      "maxChannelDelta": 1,
+      "commonColorChanges": [
+        {
+          "ant": [
+            151,
+            151,
+            151,
+            255
+          ],
+          "orbit": [
+            150,
+            150,
+            150,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            250,
+            250,
+            250,
+            255
+          ],
+          "orbit": [
+            249,
+            249,
+            249,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            225,
+            225,
+            225,
+            255
+          ],
+          "orbit": [
+            224,
+            224,
+            224,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            228,
+            228,
+            228,
+            255
+          ],
+          "orbit": [
+            227,
+            227,
+            227,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            133,
+            133,
+            133,
+            255
+          ],
+          "orbit": [
+            132,
+            132,
+            132,
+            255
+          ],
+          "pixels": 1
+        }
+      ],
+      "bounds": [
+        2,
+        1,
+        520,
+        169
+      ],
+      "differenceLocations": {
+        "surface rounded edge": 8
+      }
+    },
+    {
+      "ant": "webkit-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-right-drawer.png",
+      "orbit": "webkit-light-desktop--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-right-drawer.png",
+      "size": [
+        378,
+        900
+      ],
+      "changedPixels": 0,
+      "rowBands": [],
+      "maxChannelDelta": 0,
+      "commonColorChanges": [],
+      "separatorRows": [
+        {
+          "y": 56,
+          "changedPixels": 0,
+          "antCenter": [
+            236,
+            238,
+            241,
+            255
+          ],
+          "orbitCenter": [
+            236,
+            238,
+            241,
+            255
+          ]
+        },
+        {
+          "y": 851,
+          "changedPixels": 0,
+          "antCenter": [
+            236,
+            238,
+            241,
+            255
+          ],
+          "orbitCenter": [
+            236,
+            238,
+            241,
+            255
+          ]
+        }
+      ],
+      "differenceLocations": {}
+    },
+    {
+      "ant": "webkit-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-bottom-drawer-input-focus.png",
+      "orbit": "webkit-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-bottom-drawer-input-focus.png",
+      "size": [
+        390,
+        378
+      ],
+      "changedPixels": 0,
+      "rowBands": [],
+      "maxChannelDelta": 0,
+      "commonColorChanges": [],
+      "separatorRows": [
+        {
+          "y": 56,
+          "changedPixels": 0,
+          "antCenter": [
+            236,
+            238,
+            241,
+            255
+          ],
+          "orbitCenter": [
+            236,
+            238,
+            241,
+            255
+          ]
+        },
+        {
+          "y": 329,
+          "changedPixels": 0,
+          "antCenter": [
+            236,
+            238,
+            241,
+            255
+          ],
+          "orbitCenter": [
+            236,
+            238,
+            241,
+            255
+          ]
+        }
+      ],
+      "differenceLocations": {}
+    },
+    {
+      "ant": "webkit-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-bottom-drawer-input-hover.png",
+      "orbit": "webkit-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-bottom-drawer-input-hover.png",
+      "size": [
+        390,
+        378
+      ],
+      "changedPixels": 0,
+      "rowBands": [],
+      "maxChannelDelta": 0,
+      "commonColorChanges": [],
+      "separatorRows": [
+        {
+          "y": 56,
+          "changedPixels": 0,
+          "antCenter": [
+            236,
+            238,
+            241,
+            255
+          ],
+          "orbitCenter": [
+            236,
+            238,
+            241,
+            255
+          ]
+        },
+        {
+          "y": 329,
+          "changedPixels": 0,
+          "antCenter": [
+            236,
+            238,
+            241,
+            255
+          ],
+          "orbitCenter": [
+            236,
+            238,
+            241,
+            255
+          ]
+        }
+      ],
+      "differenceLocations": {}
+    },
+    {
+      "ant": "webkit-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-bottom-drawer.png",
+      "orbit": "webkit-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-bottom-drawer.png",
+      "size": [
+        390,
+        378
+      ],
+      "changedPixels": 0,
+      "rowBands": [],
+      "maxChannelDelta": 0,
+      "commonColorChanges": [],
+      "separatorRows": [
+        {
+          "y": 56,
+          "changedPixels": 0,
+          "antCenter": [
+            236,
+            238,
+            241,
+            255
+          ],
+          "orbitCenter": [
+            236,
+            238,
+            241,
+            255
+          ]
+        },
+        {
+          "y": 329,
+          "changedPixels": 0,
+          "antCenter": [
+            236,
+            238,
+            241,
+            255
+          ],
+          "orbitCenter": [
+            236,
+            238,
+            241,
+            255
+          ]
+        }
+      ],
+      "differenceLocations": {}
+    },
+    {
+      "ant": "webkit-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-confirm.png",
+      "orbit": "webkit-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-confirm.png",
+      "size": [
+        374,
+        138
+      ],
+      "changedPixels": 8,
+      "rowBands": [
+        {
+          "firstRow": 1,
+          "lastRow": 1,
+          "pixels": 2
+        },
+        {
+          "firstRow": 4,
+          "lastRow": 5,
+          "pixels": 3
+        },
+        {
+          "firstRow": 132,
+          "lastRow": 132,
+          "pixels": 1
+        },
+        {
+          "firstRow": 136,
+          "lastRow": 136,
+          "pixels": 2
+        }
+      ],
+      "maxChannelDelta": 1,
+      "commonColorChanges": [
+        {
+          "ant": [
+            151,
+            151,
+            151,
+            255
+          ],
+          "orbit": [
+            150,
+            150,
+            150,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            250,
+            250,
+            250,
+            255
+          ],
+          "orbit": [
+            249,
+            249,
+            249,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            225,
+            225,
+            225,
+            255
+          ],
+          "orbit": [
+            224,
+            224,
+            224,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            228,
+            228,
+            228,
+            255
+          ],
+          "orbit": [
+            227,
+            227,
+            227,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            133,
+            133,
+            133,
+            255
+          ],
+          "orbit": [
+            132,
+            132,
+            132,
+            255
+          ],
+          "pixels": 1
+        }
+      ],
+      "bounds": [
+        2,
+        1,
+        374,
+        137
+      ],
+      "differenceLocations": {
+        "surface rounded edge": 8
+      }
+    },
+    {
+      "ant": "webkit-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-dialog.png",
+      "orbit": "webkit-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-dialog.png",
+      "size": [
+        374,
+        174
+      ],
+      "changedPixels": 8,
+      "rowBands": [
+        {
+          "firstRow": 1,
+          "lastRow": 1,
+          "pixels": 2
+        },
+        {
+          "firstRow": 4,
+          "lastRow": 5,
+          "pixels": 3
+        },
+        {
+          "firstRow": 167,
+          "lastRow": 167,
+          "pixels": 1
+        },
+        {
+          "firstRow": 171,
+          "lastRow": 171,
+          "pixels": 2
+        }
+      ],
+      "maxChannelDelta": 1,
+      "commonColorChanges": [
+        {
+          "ant": [
+            151,
+            151,
+            151,
+            255
+          ],
+          "orbit": [
+            150,
+            150,
+            150,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            250,
+            250,
+            250,
+            255
+          ],
+          "orbit": [
+            249,
+            249,
+            249,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            225,
+            225,
+            225,
+            255
+          ],
+          "orbit": [
+            224,
+            224,
+            224,
+            255
+          ],
+          "pixels": 2
+        },
+        {
+          "ant": [
+            228,
+            228,
+            228,
+            255
+          ],
+          "orbit": [
+            227,
+            227,
+            227,
+            255
+          ],
+          "pixels": 1
+        },
+        {
+          "ant": [
+            133,
+            133,
+            133,
+            255
+          ],
+          "orbit": [
+            132,
+            132,
+            132,
+            255
+          ],
+          "pixels": 1
+        }
+      ],
+      "bounds": [
+        2,
+        1,
+        374,
+        172
+      ],
+      "differenceLocations": {
+        "surface rounded edge": 8
+      }
+    },
+    {
+      "ant": "webkit-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--AntD-right-drawer.png",
+      "orbit": "webkit-light-phone--dialog-and-drawers-match-current-surfaces-geometry-typography-and-actions--Orbit-right-drawer.png",
+      "size": [
+        378,
+        844
+      ],
+      "changedPixels": 0,
+      "rowBands": [],
+      "maxChannelDelta": 0,
+      "commonColorChanges": [],
+      "separatorRows": [
+        {
+          "y": 56,
+          "changedPixels": 0,
+          "antCenter": [
+            236,
+            238,
+            241,
+            255
+          ],
+          "orbitCenter": [
+            236,
+            238,
+            241,
+            255
+          ]
+        },
+        {
+          "y": 795,
+          "changedPixels": 0,
+          "antCenter": [
+            236,
+            238,
+            241,
+            255
+          ],
+          "orbitCenter": [
+            236,
+            238,
+            241,
+            255
+          ]
+        }
+      ],
+      "differenceLocations": {}
+    }
+  ],
+  "pairCount": 48,
+  "identicalPairs": 18,
+  "changedPixels": 767
+}

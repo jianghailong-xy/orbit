@@ -1,0 +1,12 @@
+
+> @orbit/web@0.1.0 build
+> tsc -b && vite build
+
+src/components/ToastViewport.tsx(15,30): error TS7016: Could not find a declaration file for module 'react-dom'. '/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/node_modules/react-dom/index.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/react-dom` if it exists or add a new declaration (.d.ts) file containing `declare module 'react-dom';`
+src/lib/paneTransition.ts(1,27): error TS7016: Could not find a declaration file for module 'react-dom'. '/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/node_modules/react-dom/index.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/react-dom` if it exists or add a new declaration (.d.ts) file containing `declare module 'react-dom';`
+src/lib/sessionExport.tsx(9,38): error TS7016: Could not find a declaration file for module 'react-dom/server'. '/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/node_modules/react-dom/server.node.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/react-dom` if it exists or add a new declaration (.d.ts) file containing `declare module 'react-dom/server';`
+src/main.tsx(6,22): error TS7016: Could not find a declaration file for module 'react-dom/client'. '/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/node_modules/react-dom/client.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/react-dom` if it exists or add a new declaration (.d.ts) file containing `declare module 'react-dom/client';`

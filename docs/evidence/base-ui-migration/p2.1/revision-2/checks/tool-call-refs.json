@@ -1,0 +1,162 @@
+[
+  {
+    "id": "exec-63f6bdd6-2551-43be-98c2-001ee9946fd9",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "git commit -m \"feat(web): add Orbit dialogs drawers and async confirmation\""
+    ],
+    "exit_code": 0,
+    "status": "completed"
+  },
+  {
+    "id": "exec-a1d998eb-8b27-4250-975a-7356467d9ede",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "git commit -m \"test(web): record P2.1 overlay behavior and visual evidence\""
+    ],
+    "exit_code": 0,
+    "status": "completed"
+  },
+  {
+    "id": "exec-67f0c648-940d-4a78-9d31-549f27bff2c0",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 /tmp/orbit-p21-repair-run.py reproduce-divider node node_modules/@playwright/test/cli.js test --config src/web/ui-migration/overlays.config.mjs --project webkit-dark-desktop --grep 'surfaces, geometry'"
+    ],
+    "exit_code": 1,
+    "status": "failed"
+  },
+  {
+    "id": "exec-166ee74f-c9df-4425-9eb5-9c8c03758135",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 /tmp/orbit-p21-repair-run.py reproduce-divider-and-state node node_modules/@playwright/test/cli.js test --config src/web/ui-migration/overlays.config.mjs --project webkit-dark-desktop --project chromium-light-phone --grep 'surfaces, geometry'"
+    ],
+    "exit_code": 1,
+    "status": "failed"
+  },
+  {
+    "id": "exec-a63c1673-6219-482f-a74e-ae4860337c2c",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 /tmp/orbit-p21-repair-run.py reproduce-separator-color node node_modules/@playwright/test/cli.js test --config src/web/ui-migration/overlays.config.mjs --project webkit-dark-desktop --project chromium-light-phone --grep 'surfaces, geometry'"
+    ],
+    "exit_code": 1,
+    "status": "failed"
+  },
+  {
+    "id": "exec-b155106a-8090-4634-b933-05ddfeb1f611",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 /tmp/orbit-p21-repair-run.py fixture-types node node_modules/typescript/bin/tsc -p src/web/ui-migration/overlays.tsconfig.json --noEmit"
+    ],
+    "exit_code": 0,
+    "status": "completed"
+  },
+  {
+    "id": "exec-992b633b-130d-4263-afb8-937883ea3ef9",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 /tmp/orbit-p21-repair-run.py boundary-and-theme npm test -w @orbit/web -- src/lib/theme.test.tsx src/components/ui/boundary.test.ts"
+    ],
+    "exit_code": 0,
+    "status": "completed"
+  },
+  {
+    "id": "exec-f4861c00-0eb3-431b-ad4a-9fdc2108ad2a",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 /tmp/orbit-p21-repair-run.py web-build npm run build -w @orbit/web"
+    ],
+    "exit_code": 0,
+    "status": "completed"
+  },
+  {
+    "id": "exec-11d84034-77ad-4daa-843f-e2092af6eb5a",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 /tmp/orbit-p21-repair-run.py controls-regression npm run test:ui-controls -w @orbit/web"
+    ],
+    "exit_code": 0,
+    "status": "completed"
+  },
+  {
+    "id": "exec-25af6bf6-e929-4729-8b4f-ea4d241613f6",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 /tmp/orbit-p21-repair-run.py overlays-revision-2 npm run test:ui-overlays -w @orbit/web"
+    ],
+    "exit_code": 0,
+    "status": "completed"
+  },
+  {
+    "id": "exec-41d046c0-39bc-499a-9df4-c52ba0078d31",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 /tmp/orbit-p21-repair-run.py collect-overlays node src/web/ui-migration/collect-overlay-evidence.mjs docs/evidence/base-ui-migration/p2.1/revision-2/overlays-run"
+    ],
+    "exit_code": 0,
+    "status": "completed"
+  },
+  {
+    "id": "exec-591b92b3-637f-4ad7-8855-bb432d3a97f0",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 /tmp/orbit-p21-repair-run.py pixel-comparison python3 docs/evidence/base-ui-migration/p2.1/revision-2/analyze-pixels.py docs/evidence/base-ui-migration/p2.1/revision-2/overlays-run docs/evidence/base-ui-migration/p2.1/revision-2/pixel-comparison.json"
+    ],
+    "exit_code": 0,
+    "status": "completed"
+  },
+  {
+    "id": "exec-81acc7e8-370d-49c5-8c5a-3303ad81ec7c",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 /tmp/orbit-p21-repair-run.py pixel-comparison-final python3 docs/evidence/base-ui-migration/p2.1/revision-2/analyze-pixels.py docs/evidence/base-ui-migration/p2.1/revision-2/overlays-run docs/evidence/base-ui-migration/p2.1/revision-2/pixel-comparison.json"
+    ],
+    "exit_code": 0,
+    "status": "completed"
+  },
+  {
+    "id": "exec-0c94ffb8-1f87-4e3b-bd6e-e03fac2c3d0a",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 /tmp/orbit-p21-repair-run.py pixel-comparison-audited python3 docs/evidence/base-ui-migration/p2.1/revision-2/analyze-pixels.py docs/evidence/base-ui-migration/p2.1/revision-2/overlays-run docs/evidence/base-ui-migration/p2.1/revision-2/pixel-comparison.json"
+    ],
+    "exit_code": 0,
+    "status": "completed"
+  },
+  {
+    "id": "exec-32aba55a-11b3-4a52-8510-2cf543cf028d",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "git commit -m 'fix(web): preserve drawer separators and align overlay visual states'"
+    ],
+    "exit_code": 0,
+    "status": "completed"
+  },
+  {
+    "id": "exec-9cc0d064-ab2a-44b3-ad06-39c25183ca2d",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 /tmp/orbit-p21-repair-run.py audit-evidence python3 docs/evidence/base-ui-migration/p2.1/revision-2/audit-evidence.py"
+    ],
+    "exit_code": 0,
+    "status": "completed"
+  }
+]

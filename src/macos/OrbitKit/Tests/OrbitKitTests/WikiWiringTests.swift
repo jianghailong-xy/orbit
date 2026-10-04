@@ -222,6 +222,52 @@ final class WikiWiringTests: XCTestCase {
         XCTAssertTrue(screens.contains("await wiki.decide(card, action, reason: reason)"))
     }
 
+    /// Alerts say which write failed, while their message remains the server's reason.
+    func testWikiFailureAlertsNameTheActionAndKeepTheReason() throws {
+        let settings = code(try source("Views/WikiSettingsView.swift"))
+        XCTAssertTrue(settings.contains(".alert(WikiCopy.settingsSaveFailed, isPresented:"))
+        XCTAssertTrue(settings.contains("Text(notice ?? \"\")"))
+
+        let run = code(try source("Views/WikiRunView.swift"))
+        let revert = try slice(run, from: "if let answer = await wiki.revert(changeset) {", to: "} else {")
+        assertOrder(revert, ["noticeTitle = WikiCopy.runRevertFailed", "notice = answer"], "a failed revert")
+        let reject = try slice(run, from: "if let answer = await wiki.reject(id, reason: reason) {", to: "} else {")
+        assertOrder(reject, ["noticeTitle = WikiCopy.entryRejectFailed", "notice = answer"], "a failed rejection")
+        XCTAssertTrue(run.contains(".alert(noticeTitle, isPresented:"))
+        XCTAssertTrue(run.contains("Text(notice ?? \"\")"))
+
+        let plan = code(try source("Views/WikiDocScreens.swift"))
+        let draft = try slice(plan, from: "private func redraft(", to: "private func confirm(")
+        XCTAssertTrue(draft.contains("failure: String = WikiCopy.planDraftFailed"))
+        assertOrder(draft, ["noticeTitle = failure", "notice = refusal"], "a failed plan draft")
+        XCTAssertTrue(plan.contains("redraft(wiki, words, failure: WikiCopy.planRedraftFailed)"))
+        let confirm = try slice(plan, from: "private func confirm(", to: "private func accept(")
+        XCTAssertTrue(confirm.contains("noticeTitle = WikiCopy.planConfirmFailed"))
+        let accept = try slice(plan, from: "private func accept(", to: "private func reject(")
+        XCTAssertTrue(accept.contains("noticeTitle = edit ? WikiCopy.changeEditFailed : WikiCopy.changeAcceptFailed"))
+        let changeReject = try slice(plan, from: "private func reject(", to: "private func save(")
+        XCTAssertTrue(changeReject.contains("noticeTitle = WikiCopy.changeRejectFailed"))
+        XCTAssertTrue(plan.contains(".alert(noticeTitle, isPresented:"))
+        XCTAssertTrue(plan.contains("Text(notice ?? \"\")"))
+
+        let screens = code(try source("Views/WikiScreens.swift"))
+        let entry = try slice(screens, from: "struct WikiEntryView: View {", to: "private struct WikiEntryForm: View {")
+        for title in ["entrySaveFailed", "entrySupersedeFailed", "entryRetireFailed", "entryConfirmFailed", "entryRejectFailed"] {
+            XCTAssertTrue(entry.contains("WikiCopy.\(title)"), "the entry's failure lost \(title)")
+        }
+        XCTAssertTrue(entry.contains(".alert(noticeTitle, isPresented:"))
+        assertOrder(entry, ["noticeTitle = failure", "notice = answer"], "an entry's refusal")
+        XCTAssertTrue(screens.contains(".alert(WikiCopy.decideFailed, isPresented:"))
+
+        let model = code(try source("WikiModel.swift"))
+        let reason = try slice(model, from: "private static func refusal(_ error: Error) -> String {", to: "private func reloadAfterWrite()")
+        XCTAssertTrue(reason.contains("return message"), "server words remain the alert's message")
+        XCTAssertTrue(reason.contains("return APIClient.failureReason(error)"))
+        for file in [settings, run, plan, screens, model] {
+            XCTAssertFalse(file.contains("WikiCopy.refused"), "an action still has the generic refusal title")
+        }
+    }
+
     // MARK: the event, and the card
 
     /// `wiki.changed` re-reads the Wiki and nothing else: it has its own arm ahead of the default one

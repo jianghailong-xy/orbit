@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>落地会话 ③ 入口与列表</title>
+<link rel="stylesheet" href="kit.css"><script src="icons.js"></script></head>
+<body>
+<h1>③ 从哪里进落地会话，会话列表为什么不会被刷屏</h1>
+<p class="lede">一个 24 个任务的项目会落地二十多次，还有合入 main 和重跑。所以落地会话<b>默认不进平铺的会话列表</b>（<code>GET /sessions</code> 要带 <code>includeLanding=1</code> 才返回它们），这一期不加新的实时事件，按 §2.7a 的节奏轮询。它们只放在项目自己的 <b>Landings</b> 组里（随项目分组一起上线，在那之前不进任何列表），并从所有「说到这次落地」的地方链过去：Work overview、任务页、写代码的那个会话、协调会话里的待办卡，以及 agent 工具。<b>落地会话的 id 在入队时就生成了</b>，所以待办内容、NEXT_TURN 重放和链接从第一秒起就稳定，不会变。</p>
+
+<div class="row4">
+  <!-- a · project sessions page -->
+  <figure>
+    <span class="tag after">a · 项目会话页的 Landings 组</span>
+    <div class="phone grouped">
+      <div class="status"><span>15:47</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:11px"></i></span>5G <span class="batt">35</span></span></div>
+      <div class="snav"><span class="platter circle"><i data-ic="chevl" data-s="20" data-c="#000"></i></span><div class="tt"><b>项目收尾重做：协调者请求收尾…</b><small>Project · 31 sessions</small></div><span class="platter circle"><i data-ic="dots" data-s="22" data-c="#000"></i></span></div>
+      <div style="background:#fff;position:absolute;top:111px;left:0;right:0;bottom:0;border-radius:0">
+        <div class="shd">Coordinator</div>
+        <div class="srow2"><div class="t"><span class="title">项目收尾重做：协调者请求收尾…</span><i data-ic="ring" data-s="14" data-c="#8e8e93"></i><span class="time">1m</span></div>
+          <div class="sub"><span class="cb co">Coordinator</span><span class="pv">两个任务在落地，合入 main 在跑第 2 代检查</span></div></div>
+        <div class="mk" style="outline-offset:-2px;border-radius:4px"><span class="badge" style="position:absolute;top:-6px;right:6px">1</span>
+        <div class="shd">Landings <span class="n">3 open</span></div>
+        <div class="srow2"><div class="t"><span class="title">Merge to main</span><i data-ic="ring" data-s="14" data-c="#3E69F6"></i><span class="time">now</span></div>
+          <div class="sub"><span class="cb ld">Landing</span><span class="pv ink">Merge check · generation 2 · 14m</span></div></div>
+        <div class="srow2"><div class="t"><span class="title">Land · 零提交分支记 NOTHING_TO_LAND</span><i data-ic="ring" data-s="14" data-c="#3E69F6"></i><span class="time">now</span></div>
+          <div class="sub"><span class="cb ld">Landing</span><span class="pv ink">Checking · task acceptance · 3m</span></div></div>
+        <div class="srow2"><div class="t"><span class="title">Land · 收尾卡的 PATCH 只带浏览器凭证</span><span class="time">18m</span></div>
+          <div class="sub"><span class="cb ld">Landing</span><span class="pv redt">Checks failed · coordinator</span></div></div>
+        <div class="fold"><i data-ic="check" data-s="14" data-c="#248A3D" data-w="2.6"></i>21 landed · 1 nothing to land<span class="chev"><i data-ic="chevr" data-s="13" data-c="rgba(60,60,67,.35)" data-w="2.6"></i></span></div>
+        </div>
+        <div class="shd">Today</div>
+        <div class="srow2"><div class="t"><span class="title">零提交分支记 NOTHING_TO_LAND</span><span class="time">9m</span></div>
+          <div class="sub"><span class="pv">验收命令退出码 0，已提交 9c41e2a。</span></div></div>
+        <div class="srow2"><div class="t"><span class="title">收尾卡的 PATCH 只带浏览器凭证</span><span class="time">41m</span></div>
+          <div class="sub"><span class="pv">PATCH 只带浏览器凭证，序列化后不含 session 字段。</span></div></div>
+        <div class="srow2"><div class="t"><span class="title">判断：收尾缺口的确认方式</span><span class="time">2h</span></div>
+          <div class="sub"><span class="pv">一次确认全部缺口，理由逐条写进待办。</span></div></div>
+      </div>
+    </div>
+    <figcaption><b>a · 落地会话只出现在它的项目里</b>
+      <ol>
+        <li><span class="num">1</span>项目会话页（<code>docs/session-list-projects-design.md</code>）多出一个 <b>Landings</b> 组，角色是 <code>LANDING</code>。组里只列<b>没结案的</b>和<b>有待办的</b>，已经结案的折成一行（<i>21 landed · 1 nothing to land</i>），点开才能看到。</li>
+        <li>会话按「落地主体」建：一个任务从 DONE 到落上集成线算一段，一轮合入 main 算一个。重跑、候选、接管都只是会话里的几节，不另开会话。</li>
+        <li>主列表一行都不多：项目在主列表里仍然只占一个条目。项目分组还没上线时，落地会话<b>不进任何列表</b>，只能从链接进来。</li>
+        <li>行的第 2 行、状态点和会话页的副标题都要按 <code>kind</code> 分支（iOS <code>SessionLine.make</code>、<code>SessionHeader.subtitle</code>，web <code>sessionLine</code>、<code>statusLabel</code>，两端在同一个提交里改）。落地会话的 status 固定为 AWAITING_INPUT，如果不分支，会被写成 <i>Waiting for your reply · Open</i>。「在协调会话手里」用红色的失败色，琥珀色只表示在等你。</li>
+        <li>日常落地不推送通知。原有的待办推送和升级推送不变，只是卡片上的链接改成指向落地会话。</li>
+      </ol>
+    </figcaption>
+  </figure>
+
+  <!-- b · task page -->
+  <figure>
+    <span class="tag after">b · 任务页的 Landing 段</span>
+    <div class="phone grouped">
+      <div class="status"><span>15:47</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:11px"></i></span>5G <span class="batt">35</span></span></div>
+      <div class="nav"><span class="platter circle"><i data-ic="chevl" data-s="20" data-c="#000"></i></span><span class="ttl">Task</span><span class="platter circle"><i data-ic="dots" data-s="22" data-c="#000"></i></span></div>
+      <div class="head" style="padding-top:6px"><h2 style="font-size:22px">收尾卡的 PATCH 只带浏览器凭证</h2>
+        <div class="meta"><span class="pill" style="background:rgba(52,199,89,.16);color:var(--green-ink)">Done</span><span>not landed yet</span><span class="branch"><i data-ic="branch" data-s="13" data-c="rgba(60,60,67,.6)"></i>orbit/session-3f9a2c</span></div></div>
+      <div class="card mk"><span class="badge" style="position:absolute;top:-10px;right:-10px">1</span>
+        <div class="ch"><b>Landing</b><span class="sub">onto project/34Y7</span></div>
+        <div class="item" style="border-top:none;padding-top:6px">
+          <i data-ic="x" data-s="16" data-c="#E5281D" data-w="2.6"></i>
+          <div class="body"><div class="it">Landing checks failed</div>
+            <div class="id">generation 1 · stopped while checking<br>Task acceptance · exit 1 after 3m 52s<br>With the coordinator · 18m · goes to you in 1h 42m</div></div>
+        </div>
+        <div class="kv"><span>Started</span><span>15:20</span></div>
+        <div class="kv"><span>Ran on</span><span>runner wikova</span></div>
+        <div class="btn wide plain" style="margin-bottom:12px">Open landing</div>
+      </div>
+      <div class="card">
+        <div class="ch"><b>Runs</b><span class="right">1</span></div>
+        <div class="trow" style="border-top:none"><span class="tt">收尾卡的 PATCH 只带浏览器凭证</span><span class="ts main">Completed</span><svg class="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></div>
+      </div>
+      <div class="card">
+        <div class="ch"><b>Acceptance</b></div>
+        <div class="kv" style="border-top:none"><span>Command</span><span style="font:12px 'DejaVu Sans Mono',monospace">npm --prefix src/web test</span></div>
+        <div class="kv"><span>Last run</span><span class="redt">exit 1 · in the landing</span></div>
+      </div>
+    </div>
+    <figcaption><b>b · 任务页：落地有了自己的一段</b>
+      <ol>
+        <li><span class="num">1</span><b>Landing</b> 段写这一段落地当前的状态，用词照搬 web 的 <code>LandTaskStatus</code>（<i>Landing checks failed</i>、<i>generation N</i>、<i>stopped while …</i>）。<b>Open landing</b> 进入落地会话。iOS 开始解码 <code>landTasks</code>（今天任务行上只解码 state、handler、checksRunningForMs 三个字段，不解码 landTasks），web 的 <code>LandTaskStatus</code> 给每一代都加上链接。</li>
+        <li><b>Runs</b> 仍然只列 agent 干活的会话。落地会话不放在这里，否则一个任务看起来像跑了两次。</li>
+        <li>任务重开以后（冲突今天只能靠 <code>task_reopen</code> 返工），这一段<b>不结案</b>：返工完再次 DONE，新一代仍记在同一个落地会话里。</li>
+      </ol>
+    </figcaption>
+  </figure>
+
+  <!-- c · the source work session -->
+  <figure>
+    <span class="tag after">c · 写代码的那个会话</span>
+    <div class="phone grouped" style="background:#fff">
+      <div class="status"><span>15:47</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:11px"></i></span>5G <span class="batt">35</span></span></div>
+      <div class="snav"><span class="platter circle"><i data-ic="chevl" data-s="20" data-c="#000"></i></span><div class="tt"><b>零提交分支记 NOTHING_TO_LAND</b><small>Claude · Opus 5.5 · wikova</small></div><span class="platter circle"><i data-ic="dots" data-s="22" data-c="#000"></i></span></div>
+      <div class="ubub">零提交的源分支不要再写 ALREADY_LANDED，改成 NOTHING_TO_LAND，不写回执。</div>
+      <div class="abub">改好了。<code>applyResult</code> 遇到空源分支时返回 <code>NOTHING_TO_LAND</code>，不写 <code>session_merge_receipt</code>；补了 pg spec，覆盖空分支和已合并两种情况。<br><br>验收命令 <code>npm --prefix src/apiserver test -- integration</code> 退出码 0，已提交 <code>9c41e2a</code>。</div>
+      <div class="ended">Completed 15:41 · task marked Done</div>
+      <div class="floatchip mk" style="bottom:96px;left:90px;right:90px;border-radius:16px"><span class="badge" style="position:absolute;top:-10px;right:-12px">1</span><span class="lchip"><i data-ic="ring" data-s="13" data-c="#3E69F6" data-w="2.4"></i>Landing · checking · 3m<i data-ic="chevr" data-s="11" data-c="#3E69F6" data-w="2.6"></i></span></div>
+      <div class="composer">Message…</div>
+    </div>
+    <figcaption><b>c · 从源头也能找到它</b>
+      <ol>
+        <li><span class="num">1</span>作业的 <code>session_id</code> 仍然指向这个<b>源工作会话</b>（路由、base_sha、领取守卫、回执都依赖它，不改）。会话页底部根据它推导出一个小标签：<i>Landing · checking</i>、<i>Checks failed</i>，或者 <i>On project/34Y7 ✓</i>，点了进入落地会话。读取方式和 merge-repair 子会话一样。</li>
+        <li>标签说的是<b>集成线上的落地</b>，不是这个会话自己的 session merge，两套用词不混。</li>
+        <li>这个会话不会因为落地被唤醒，也不会多出轮次：落地的过程不写进这里的转录（G6 不变）。</li>
+      </ol>
+    </figcaption>
+  </figure>
+
+  <!-- d · coordinator item card -->
+  <figure>
+    <span class="tag after">d · 协调会话里的待办卡</span>
+    <div class="phone grouped" style="background:#fff">
+      <div class="status"><span>15:35</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:11px"></i></span>5G <span class="batt">35</span></span></div>
+      <div class="snav"><span class="platter circle"><i data-ic="chevl" data-s="20" data-c="#000"></i></span><div class="tt" style="text-align:center"><b>项目收尾重做… <span class="cb co" style="height:16px;line-height:16px;vertical-align:2px">Coordinator</span> ›</b><small style="justify-content:center">Working · Open · now</small></div><span class="platter circle"><i data-ic="dots" data-s="22" data-c="#000"></i></span></div>
+      <div class="exc mk" style="outline-offset:2px"><span class="badge" style="position:absolute;top:-10px;right:-10px">1</span>
+        <div class="eh"><i data-ic="warn" data-s="15" data-c="#B35A00"></i>Exception item<span class="kind">Integration error</span></div>
+        <div class="et">Integration error: merging the project branch into main</div>
+        <div class="eb">The integration job ended with TARGET_MOVED into refs/heads/main; the target branch did not move.</div>
+        <div class="ebox">The merge check passed; the push was refused because main moved 2 commits <b>outside the queue</b>:<br><code>c41e9a2</code> feat(ios): replace session share button…<br><code>8d07b31</code> fix(settings): keep close button visible…</div>
+        <div class="ec">The coordinator can:<span class="b">Review the merge</span></div>
+        <div class="el mk" style="outline-offset:2px;border-radius:4px"><span class="badge" style="position:absolute;top:-10px;right:-10px">2</span><span>Open the landing ↗</span></div>
+        <div class="ef">Item 34ZyX4FfUBH3N6mvhTZ4g · a notification, not an interruption</div>
+      </div>
+      <div class="abub">合并检查通过了，但 main 在队列外被推进了 2 个提交，推送被拒。我对 9f3c1e0 重跑合并检查（<code>decidePromotionRetry</code>），已排到第 2 代；通过后 Automatic 会直接合入。</div>
+      <div class="exc" style="background:#f7f7f9;box-shadow:inset 0 0 0 1px var(--sep)">
+        <div class="eh" style="color:var(--label-2)"><i data-ic="ring" data-s="14" data-c="#3E69F6"></i><span class="ink">Checking project/34Y7 before merging into main…</span></div>
+        <div class="eb mut" style="font-size:13px">Merge check · generation 2 · 2m 10s of 60m · output 1s ago</div>
+        <div class="el"><span>Watch ↗</span></div>
+      </div>
+      <div class="composer">Message the coordinator…</div>
+    </div>
+    <figcaption><b>d · 待办卡和合并卡都指向落地会话</b>
+      <ol>
+        <li><span class="num">1</span>失败待办的 payload 多了 <code>landingSessionId</code> 和 <code>upstreamMovedBy</code>：<b>是哪些提交、从队列外推进了 main</b>。这些都是平台量出来的事实，不是诊断。</li>
+        <li><span class="num">2</span>服务端决定的 <b>Open the landing</b> 动作（OPEN_LANDING）画在链接行里，和 <i>Open the task ↗</i>、<i>Open the failed session ↗</i> 并列，不放进「The coordinator can:」那一行。今天合入 main 的待办没有任何地方能点进这次合入：服务端只给它 <code>REVIEW</code>，卡片上也不画会话链接；待办行记的 sessionId 是最后一个落地任务的会话，和这件事无关。旧客户端画不出 OPEN_LANDING，所以原有动作暂时保留。待办标题和首句照用服务端原文，被 parity 测试钉住；这次的新事实放在下面的方框里。</li>
+        <li>今天两端在 CHECKING 时都不画合并卡。这一期加一张只读卡，只有 <b>Watch</b>，显示这一步的用时和预算；CHECKING 没有撤销门（applyCancel 只接受 CONFIRMED 和 RECHECKING），所以卡上不画 Cancel。</li>
+        <li>open-item:v1 的投递文本<b>一个字节都不改</b>，因为 G6 重放要逐字节比对。链接只放在 payload 和卡片动作里。agent 也能读：<code>session_get</code> 对 LANDING 返回 <code>landing</code> 视图；新增 <code>project_integration_get</code>，可以按作业、轮次、检查分页读日志，取代项目指令第 9–10 条里直接查生产库的写法。往落地会话 <code>session_send</code> 会返回 409 <code>SESSION_IS_PLATFORM_DRIVEN</code>，并指向协调会话。</li>
+      </ol>
+    </figcaption>
+  </figure>
+</div>
+</body></html>

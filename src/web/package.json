@@ -13,7 +13,9 @@
     "test:ui-foundation": "playwright test --config ui-migration/foundation.config.mjs",
     "pretest:ui-foundation": "npm run build -w @orbit/shared",
     "test:ui-controls": "playwright test --config ui-migration/controls.config.mjs",
-    "pretest:ui-controls": "npm run build -w @orbit/shared"
+    "pretest:ui-controls": "npm run build -w @orbit/shared",
+    "test:ui-overlays": "playwright test --config ui-migration/overlays.config.mjs",
+    "pretest:ui-overlays": "npm run build -w @orbit/shared"
   },
   "dependencies": {
     "@ant-design/icons": "^6.3.4",

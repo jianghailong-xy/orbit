@@ -800,3 +800,6 @@ describe('one waiting completion decision on the session page', () => {
     expect(scrolled).toEqual([page.querySelector('.evidence-decision')]);
   });
 });
+
+// The card's content/decision contract is tested inline; real dialogs are covered in ReviewCard.test.tsx.
+vi.mock('./ReviewCard', () => import('../test/inlineReviewCard'));

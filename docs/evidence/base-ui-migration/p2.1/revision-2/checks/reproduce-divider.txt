@@ -1,0 +1,48 @@
+[WebServer] (node:1608623) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 1 test using 1 worker
+
+(node:1608739) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 [webkit-dark-desktop] › src/web/ui-migration/overlays.browser.mjs:57:1 › dialog and drawers match current surfaces, geometry, typography and actions (17.7s)
+
+
+  1) [webkit-dark-desktop] › src/web/ui-migration/overlays.browser.mjs:57:1 › dialog and drawers match current surfaces, geometry, typography and actions 
+
+    Error: expect(locator).toBeFocused() failed
+
+    Locator:  getByRole('dialog')
+    Expected: focused
+    Received: inactive
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toBeFocused" getByRole('dialog') with timeout 15000ms
+      - waiting for getByRole('dialog')
+        34 × locator resolved to <div role="dialog" aria-modal="true" aria-labelledby="_r_4_" class="ant-drawer-section reference-surface">…</div>
+           - unexpected value "inactive"
+
+
+      65 |     await page.mouse.move(0, 0);
+      66 |     await overlay.focus();
+    > 67 |     await expect(overlay).toBeFocused();
+         |                           ^
+      68 |     await overlay.evaluate(async (el) => {
+      69 |       await Promise.all(el.getAnimations({ subtree: true })
+      70 |         .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity)
+        at measure (/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:67:27)
+        at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:110:17
+
+    Error Context: src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-webkit-dark-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [webkit-dark-desktop] › src/web/ui-migration/overlays.browser.mjs:57:1 › dialog and drawers match current surfaces, geometry, typography and actions 
