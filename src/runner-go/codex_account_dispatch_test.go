@@ -502,6 +502,52 @@ func TestCodexThreadStaysWhereItCannotBeCarried(t *testing.T) {
 	}
 }
 
+// Moved to another account and back, a Codex session resumes the turns it had on the other one. Its
+// thread is carried from the home its meta names — the one it last ran in — over whatever copy the
+// account it moves to kept from before, so the copy a session left behind never stands in for the thread
+// it has had since. (A Claude session has no such record, and its copies are dated instead:
+// carryClaudeConversation.)
+func TestCodexThreadMovedBackCarriesTheTurnsItHadOnTheOtherAccount(t *testing.T) {
+	m := newCodexAccountDispatchMachine(t)
+	m.signIn(t, m.work.Dir)
+	other, err := codexAccountKind.create("Other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.signIn(t, other.Dir)
+	const sessionID = "6f7a8b9c-adbe-4fc0-8123-5d6e7f809102"
+	const thread = "01a0f5f4-15d4-771c-a2c5-cf522cc709cd"
+	scratch := t.TempDir()
+	started := &ClaimedSession{SessionID: sessionID, SessionUUID: sessionID, Provider: providerCodex, RuntimeSessionID: thread}
+	writeSessionMetaWithCodexState(scratch, started, t.TempDir(), codexStateLayoutShared, codexStatePartition(m.work.Dir), m.work.Dir)
+	rel := filepath.Join("sessions", "2026", "10", "03", "rollout-2026-10-03T03-57-00-"+thread+".jsonl")
+	leftOnWork := `{"type":"session_meta","payload":{"id":"` + thread + `"}}` + "\n" + `{"type":"response_item","payload":{"type":"message","role":"user"}}` + "\n"
+	if err := os.MkdirAll(filepath.Dir(filepath.Join(m.work.Dir, rel)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(m.work.Dir, rel), []byte(leftOnWork), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	moveTo := func(home string) {
+		t.Helper()
+		job := &ClaimedSession{SessionID: sessionID, SessionUUID: sessionID, Provider: providerCodex, RuntimeSessionID: thread,
+			Agent: AgentExecConfig{Provider: providerCodex, Env: map[string]string{"CODEX_HOME": home}}}
+		if moved, err := moveCodexThreadToClaimedAccount(job, scratch, t.TempDir()); err != nil || !moved {
+			t.Fatalf("moving to %s: moved=%v err=%v", home, moved, err)
+		}
+	}
+
+	moveTo(other.Dir)
+	continued := leftOnWork + `{"type":"response_item","payload":{"type":"message","role":"assistant","content":"done on Other"}}` + "\n"
+	if err := os.WriteFile(filepath.Join(other.Dir, rel), []byte(continued), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	moveTo(m.work.Dir)
+	if got, err := os.ReadFile(filepath.Join(m.work.Dir, rel)); err != nil || string(got) != continued {
+		t.Fatalf("back on Work, the thread's rollout is not the one continued on Other: %q, %v", got, err)
+	}
+}
+
 // The runner says it can carry a conversation to another account, in the words the control plane asks
 // for: a session is moved to another Codex or Claude account only on a runner that declares
 // codex-account-move/v1 or claude-account-move/v1.

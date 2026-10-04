@@ -98,12 +98,14 @@ func ensureClaudeTranscript(ctx context.Context, t *Transport, job *ClaimedSessi
 	if carryMovedClaudeConversation(base, job, execDir, path) {
 		return true
 	}
-	if claudeTranscriptHasConversation(path) {
+	// A session moved to another of this machine's Claude accounts left its conversation in the one it
+	// ran on: carry that across whole, where the rebuild below would shorten a long one. Asked before the
+	// conversation here is trusted for the same reason: a session moved back to an account finds the copy
+	// it left here, without the turns it had on the other account since.
+	if carryClaudeConversation(base, execDir, job.SessionUUID, path) {
 		return true
 	}
-	// A session moved to another of this machine's Claude accounts left its conversation in the one it
-	// ran on: carry that across whole, where the rebuild below would shorten a long one.
-	if carryClaudeConversation(base, execDir, job.SessionUUID, path) {
+	if claudeTranscriptHasConversation(path) {
 		return true
 	}
 	events, err := fetchStoredEvents(ctx, t, job.SessionID)
