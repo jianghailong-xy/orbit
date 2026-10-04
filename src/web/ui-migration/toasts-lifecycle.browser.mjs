@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { expectExpired } from './toasts-checks.mjs';
 
 const button = (page, name) => page.getByRole('button', { name, exact: true });
 test.beforeEach(async ({ page }) => {
@@ -60,9 +61,10 @@ test('hover pause releases after a keyboard opened and closed overlay changes po
   await expect(page.getByRole('dialog', { name: 'Workspace editor', exact: true })).not.toBeVisible();
   await page.mouse.move(0, 0);
   await page.clock.runFor(6001);
-  const after = await region.count();
+  const after = await page.locator('.toast-slot:not(.toast-slot--leaving)').count();
   await info.attach('timer-after-portal', { body: JSON.stringify({ after, releasedAfterMs: 6001 }), contentType: 'application/json' });
   expect(after).toBe(0);
+  await expectExpired(page, 1);
 });
 
 
@@ -165,7 +167,7 @@ test('stationary hover stays paused across nested modal owners then resumes for 
   await page.clock.runFor(5999);
   await expect(region(page)).toBeVisible();
   await page.clock.runFor(1);
-  await expect(region(page)).toHaveCount(0);
+  await expectExpired(page);
   await attach(info, 'stationary-hover', { pausedAcrossFourTransfersMs: 40800, pausedBeforeTransfersMs: 10000, visibleAfterReleaseMs: 5999, expiredAfterReleaseMs: 6000 });
 });
 
@@ -182,7 +184,7 @@ test('unhovered notifications retain their original deadline through modal owner
   await page.clock.runFor(3799);
   await expect(region(page)).toBeVisible();
   await page.clock.runFor(1);
-  await expect(region(page)).toHaveCount(0);
+  await expectExpired(page);
   await attach(info, 'unchanged-deadline', { visibleAtTotalMs: 5999, expiredAtTotalMs: 6000 });
 });
 
@@ -243,7 +245,7 @@ test('a newly posted notification still plays its original entrance animation on
     const start = performance.now();
     let firstCardAt;
     const frame = () => {
-      const card = document.querySelector('.toast');
+      const card = document.querySelector('.toast-slot');
       if (card) {
         firstCardAt ??= performance.now();
         const s = getComputedStyle(card);
