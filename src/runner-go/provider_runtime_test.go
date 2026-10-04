@@ -6,6 +6,7 @@ import "testing"
 // property of the provider rather than something the session loop infers from its name.
 func TestProviderRuntimesDeclareOneTransportPerEngine(t *testing.T) {
 	want := map[string]providerTransport{
+		providerDsh:      transportJSONRPC,
 		providerClaude:   transportStreamJSON,
 		providerCodex:    transportJSONRPC,
 		providerKimi:     transportJSONRPC,
@@ -52,5 +53,21 @@ func TestRuntimeProviderResolvesEveryDeclaredRuntime(t *testing.T) {
 		if providerRuntimeFor(got).run == nil {
 			t.Fatalf("the default provider %q has no runtime", got)
 		}
+	}
+}
+
+func TestDshACPDispatchPreservesLegacyDeepSeek(t *testing.T) {
+	legacy := &ClaimedSession{Provider: "deepseek", SessionUUID: "legacy-claude-id"}
+	syncJobProvider(legacy)
+	if runtimeProvider(legacy) != providerClaude || legacy.RuntimeSessionID != "legacy-claude-id" {
+		t.Fatalf("legacy DeepSeek changed runtime identity: %+v", legacy)
+	}
+	harness := &ClaimedSession{Provider: providerDsh, SessionUUID: "orbit-id"}
+	syncJobProvider(harness)
+	if runtimeProvider(harness) != providerDsh || currentRuntimeSessionID(harness) != "" {
+		t.Fatalf("Harness must learn its own id from ACP: %+v", harness)
+	}
+	if providerRuntimeFor(providerDsh).steersMidTurn {
+		t.Fatal("dsh must not claim mid-turn steer")
 	}
 }
