@@ -115,6 +115,70 @@ class CardsDeviceTest {
         assertEquals("owner1", body.text("requestId")); assertEquals("record1", body.text("reviewRecordId")); capture("owner-recorded")
     }
 
+    @Test fun ownerQuestionsKeepEvidenceAndAnswersWithTheirQuestion() = journey("owner-question-evidence") {
+        login("owner-review")
+        val questions = http("/__review-corpus").objects("reviewQuestions")
+        val firstRefs = questions[0].strings("evidenceRefs")
+        val secondRefs = questions[1].strings("evidenceRefs")
+        // This first assertion also runs against the frozen, unmodified app APK.
+        compose.onAllNodesWithText("Show Evidence").assertCountEquals(2)
+        fun question(index: Int) = hasAnyAncestor(hasTestTag("owner-question:${questions[index].text("key")}"))
+        fun fold(index: Int, label: String) = compose.onNode(hasText(label) and question(index))
+        (firstRefs + secondRefs).forEach { compose.onNodeWithText(it).assertDoesNotExist() }
+        fold(0, "Show Evidence").performScrollTo().performClick()
+        firstRefs.forEach { compose.onNode(hasText(it) and question(0)).performScrollTo().assertIsDisplayed() }
+        secondRefs.forEach { compose.onNodeWithText(it).assertDoesNotExist() }
+        capture("owner-first-question-evidence")
+        fold(1, "Show Evidence").performScrollTo().performClick()
+        secondRefs.forEach { compose.onNode(hasText(it) and question(1)).performScrollTo().assertIsDisplayed() }
+        firstRefs.forEach { compose.onNode(hasText(it) and question(1)).assertDoesNotExist() }
+        fold(0, "Hide Evidence").performScrollTo().performClick()
+        firstRefs.forEach { compose.onNodeWithText(it).assertDoesNotExist() }
+        secondRefs.forEach { compose.onNode(hasText(it) and question(1)).performScrollTo().assertIsDisplayed() }
+        val confirm = "owner:${http("/__corpus").text("taskId")}:owner1:CONFIRM_OWNER"
+        compose.onNodeWithTag(confirm).assertIsEnabled()
+        questions.forEachIndexed { index, q ->
+            val recommended = q.objects("options")[q.number("recommendedOption")!!].text("label")!!
+            compose.onNode(hasText("$recommended · Recommended") and question(index)).assertIsSelected()
+        }
+        compose.onNode(hasText("Other") and question(1)).performScrollTo().performClick()
+        compose.onNodeWithTag(confirm).assertIsNotEnabled()
+        compose.onNode(hasText("Your answer") and question(1)).performScrollTo().performTextInput("Keep the rollout evidence open")
+        File(output,"owner-question-evidence-semantics.txt").writeText(compose.onRoot().printToString())
+        capture("owner-second-question-evidence")
+        press(confirm)
+        compose.waitUntil(15_000) { !http("/__stats").flag("pending") }
+        val body = http("/__stats").objects("journal").last().obj("body")!!
+        assertEquals("owner1", body.text("requestId")); assertEquals("record1", body.text("reviewRecordId"))
+        assertEquals(listOf(
+            buildJsonObject { put("key", questions[0].text("key")); put("option", questions[0].number("recommendedOption")) },
+            buildJsonObject { put("key", questions[1].text("key")); put("text", "Keep the rollout evidence open") }
+        ), body.objects("answers"))
+    }
+
+    @Test fun singleTaskShowsTheServerDestinationAndHonestFallbacks() = journey("single-task-destination") {
+        login("a4", "single-preview")
+        val destination = http("/__review-corpus").obj("taskCreatePreview")!!.objects("lists").first().text("title")!!
+        compose.onNodeWithText("Into $destination").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("approval:a4:CREATE_TASK").assertIsEnabled()
+        capture("single-task-server-list")
+        http("/__control", """{"case":"a4","mode":"single-no-preview"}""")
+        compose.runOnIdle { app.realtime.refreshSession() }; await("Into Legacy list")
+        compose.onNodeWithText("Into Legacy list").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Into $destination").assertDoesNotExist()
+        capture("single-task-fallback-list")
+        http("/__control", """{"case":"a4","mode":"single-no-lists"}""")
+        compose.runOnIdle { app.realtime.refreshSession() }
+        compose.waitUntil(15_000) { app.realtime.state.value.session?.snapshot?.approvals?.singleOrNull()?.obj("input")?.obj("preview")?.get("lists") == JsonArray(emptyList()) }
+        compose.onNodeWithText("Into $destination").assertDoesNotExist()
+        compose.onNodeWithText("Into Legacy list").assertDoesNotExist()
+        capture("single-task-no-destination")
+        press("approval:a4:CREATE_TASK"); await("Allowed · recorded by the server")
+        val journal = http("/__stats")
+        assertFalse(journal.flag("pending")); assertEquals("ALLOWED", journal.obj("final")?.text("status"))
+        assertEquals(buildJsonObject { put("behavior", "allow") }, journal.objects("journal").last()["body"])
+    }
+
     @Test fun dedicatedBusinessDoorsProduceSeparateRequestsAndRecordedStates() = journey("business-doors") {
         login("a3")
         val corpus = http("/__corpus")

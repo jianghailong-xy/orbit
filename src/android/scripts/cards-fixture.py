@@ -8,6 +8,7 @@ from urllib.parse import urlparse, parse_qs
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
 CORPUS = json.loads((ROOT / 'src/shared/src/interaction-cards.fixture.json').read_text())
+REVIEW = json.loads((ROOT / 'src/shared/src/interaction-cards-review.fixture.json').read_text())
 SID, PID, TID = (CORPUS[k] for k in ('sessionId', 'projectId', 'taskId'))
 WS = '01a0cca7-8609-70ed-a0e2-d4b55b832b61'
 def storage_id(value):
@@ -24,10 +25,16 @@ def snapshot():
     value = copy.deepcopy(CORPUS['snapshot'])
     value['detail'].update(title='Card verification', workspaceId=WS)
     value['approvals'] = [a for a in value['approvals'] if a['id'] == state['case'] and state['pending']]
+    for approval in value['approvals']:
+        if approval['id'] == 'a4':
+            if state['mode'] == 'single-preview': approval['input']['preview'] = copy.deepcopy(REVIEW['taskCreatePreview'])
+            elif state['mode'] == 'single-no-preview': approval['input']['listTitle'] = 'Legacy list'
+            elif state['mode'] == 'single-no-lists': approval['input']['preview'] = dict(REVIEW['taskCreatePreview'], lists=[])
     stand = value['standing']
     if state['case'] != 'evidence' or not state['pending']: stand['evidenceDecisions']['pending'] = []
     stand['evidenceDecisions']['count'] = len(stand['evidenceDecisions']['pending'])
-    if state['case'] != 'owner' or not state['pending']: stand['ownerConfirmation']['waiting'] = None
+    if state['case'] not in ('owner', 'owner-review') or not state['pending']: stand['ownerConfirmation']['waiting'] = None
+    elif state['case'] == 'owner-review': stand['ownerConfirmation']['waiting']['review']['review']['needsYou'] = copy.deepcopy(REVIEW['reviewQuestions'])
     if state['case'] != 'criteria' or not state['pending']: stand['criteriaDecisions']['pending'] = []
     if state['case'] != 'acceptance' or not state['pending']: stand['acceptanceConfirmation']['state'] = 'CONFIRMED'
     if state['case'] not in ('acceptance', 'start'): stand['project']['acceptanceCriteriaItems'] = []
@@ -83,6 +90,7 @@ class Handler(BaseHTTPRequestHandler):
         url = urlparse(self.path); path = normalize(url.path); query = parse_qs(url.query)
         if path == '/__stats': return self.reply(copy.deepcopy(state))
         if path == '/__corpus': return self.reply(CORPUS)
+        if path == '/__review-corpus': return self.reply(REVIEW)
         if self.headers.get('Authorization') != 'Bearer a08-fixture-access': return self.reply({}, 401)
         if state['denied'] and path.startswith('/api/sessions/' + SID): return self.reply({}, 403)
         value = snapshot(); stand = value['standing']

@@ -4,10 +4,10 @@ import XCTest
 
 /// Shared synthetic corpus with Android. This is protocol parity, not installed iOS evidence.
 final class InteractionCardsFixtureTests: XCTestCase {
-    private func corpus() throws -> [String: Any] {
+    private func corpus(_ name: String = "interaction-cards.fixture.json") throws -> [String: Any] {
         var directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         for _ in 0..<12 {
-            let file = directory.appendingPathComponent("src/shared/src/interaction-cards.fixture.json")
+            let file = directory.appendingPathComponent("src/shared/src/\(name)")
             if FileManager.default.fileExists(atPath: file.path) {
                 return try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
             }
@@ -71,5 +71,31 @@ final class InteractionCardsFixtureTests: XCTestCase {
             }
             XCTAssertEqual(try JSONSerialization.jsonObject(with: data) as? NSDictionary, body as NSDictionary, verb)
         }
+    }
+
+    func testRepairCasesUsePublicAssignmentVersionsAndPerQuestionEvidence() throws {
+        let repair = try corpus("interaction-cards-review.fixture.json")
+        let snapshot = try XCTUnwrap(corpus()["snapshot"] as? [String: Any])
+        let standing = try XCTUnwrap(snapshot["standing"] as? [String: Any])
+        let openItems = try XCTUnwrap(standing["openItems"] as? [String: Any])
+        let items = try XCTUnwrap(openItems["needsYou"] as? [[String: Any]])
+        let original = try XCTUnwrap(items.first { $0["itemId"] as? String == "x1" })
+        let changes = try XCTUnwrap(repair["exceptionAssignmentChanges"] as? [[String: Any]])
+        let assignments = try changes.map { try decode(ProjectOpenItemRow.self, original.merging($0) { _, new in new }) }
+        XCTAssertEqual(Set(assignments.map(\.itemId)).count, 1)
+        XCTAssertEqual(Set([assignments[0], assignments[2], assignments[4]].map(\.waitingSince)).count, 3)
+        let questions = try decode([ConfirmationNeedsYouItem].self, XCTUnwrap(repair["reviewQuestions"]))
+        XCTAssertEqual(questions.count, 2)
+        XCTAssertEqual(questions.map(\.recommendedOption), [0, 0])
+        XCTAssertFalse(try XCTUnwrap(questions[0].evidenceRefs).isEmpty)
+        XCTAssertTrue(Set(try XCTUnwrap(questions[0].evidenceRefs)).isDisjoint(with: try XCTUnwrap(questions[1].evidenceRefs)))
+        let approvals = try XCTUnwrap(snapshot["approvals"] as? [[String: Any]])
+        var input = try XCTUnwrap(approvals.first { $0["id"] as? String == "a4" }?["input"] as? [String: Any])
+        let preview = try XCTUnwrap(repair["taskCreatePreview"] as? [String: Any])
+        input["preview"] = preview
+        let card = try XCTUnwrap(Approvals.createPreview(toolName: "orbit_task_create", from: decode(JSONValue.self, input)))
+        let list = try XCTUnwrap((preview["lists"] as? [[String: Any]])?.first?["title"] as? String)
+        XCTAssertEqual(card.preview?.lists, [list])
+        XCTAssertTrue(card.detail.contains("into \(list)"))
     }
 }

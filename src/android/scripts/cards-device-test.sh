@@ -149,6 +149,7 @@ done
 } > "$output/conditions.txt"
 [[ "$("$adb" -s "$serial" shell cmd uimode night | awk '{print $NF}' | tr -d '\r')" == "${A08_NIGHT:-no}" ]] || { echo 'Requested night mode did not apply; not running under mislabeled conditions' >&2; exit 1; }
 cp "$(dirname "$0")/../../shared/src/interaction-cards.fixture.json" "$output/corpus.json"
+cp "$(dirname "$0")/../../shared/src/interaction-cards-review.fixture.json" "$output/review-corpus.json"
 python3 "$(dirname "$0")/cards-fixture.py" --port 18768 > "$output/fixture.log" 2>&1 &
 fixture_pid=$!
 for attempt in {1..30}; do
@@ -162,7 +163,7 @@ kill -0 "$fixture_pid"
 "$adb" -s "$serial" shell run-as "$package" mkdir -p files/a08-cards
 start="$("$adb" -s "$serial" shell date +%s | tr -d '\r').000"
 test_class=io.orbitd.android.cards.CardsDeviceTest
-test_selection="${A08_TEST:-$test_class#rememberUsesExactRuleAndServerRecord,$test_class#questionKeepsCustomAnswerThroughActivityRecreation,$test_class#otherEndWinsWithoutClaimingThisPressSucceeded,$test_class#lostResponseDoesNotResendOrClaimSuccess,$test_class#permissionRevocationWithdrawsTheEntireCard,$test_class#evidenceAndOwnerDecisionsBindDisplayedRevisions,$test_class#dedicatedBusinessDoorsProduceSeparateRequestsAndRecordedStates,$test_class#attachmentOnlyMessageKeepsAttachmentWithoutRawJson}"
+test_selection="${A08_TEST:-$test_class#rememberUsesExactRuleAndServerRecord,$test_class#questionKeepsCustomAnswerThroughActivityRecreation,$test_class#otherEndWinsWithoutClaimingThisPressSucceeded,$test_class#lostResponseDoesNotResendOrClaimSuccess,$test_class#permissionRevocationWithdrawsTheEntireCard,$test_class#evidenceAndOwnerDecisionsBindDisplayedRevisions,$test_class#ownerQuestionsKeepEvidenceAndAnswersWithTheirQuestion,$test_class#singleTaskShowsTheServerDestinationAndHonestFallbacks,$test_class#dedicatedBusinessDoorsProduceSeparateRequestsAndRecordedStates,$test_class#attachmentOnlyMessageKeepsAttachmentWithoutRawJson}"
 timeout 300 "$adb" -s "$serial" shell am instrument -w -r -e class "$test_selection" "$runner" > "$output/instrumentation.txt" 2>&1
 pid="$(sed -n 's/.*a08_pid=\([0-9]*\).*/\1/p' "$output/instrumentation.txt" | head -1)"
 [[ -n "$pid" ]]

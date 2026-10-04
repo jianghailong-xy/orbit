@@ -210,7 +210,8 @@ object CardCatalog {
             }
             add(InteractionCard("item:$itemId", if (kind == "COORDINATOR_QUESTION") CardFamily.OWNER_QUESTION else CardFamily.EXCEPTION,
                 if (kind == "FUSE_PAUSED") "Project paused" else row.text("title") ?: "Project item", row, session, project, itemId,
-                "${row["question"]}:${row["actions"]}:${row["assignee"]}:${row["taskId"]}:${row["fuseEpisodeId"]}", actions))
+                // Returning an OPEN item resets this public timestamp; later escalation reuses its itemId.
+                "${row["question"]}:${row["actions"]}:${row["assignee"]}:${row["taskId"]}:${row["fuseEpisodeId"]}:${row["waitingSince"]}", actions))
         }
         (standing["promotion"] as? JsonObject)?.let { row ->
             val promotion = row.text("promotionId") ?: return@let
