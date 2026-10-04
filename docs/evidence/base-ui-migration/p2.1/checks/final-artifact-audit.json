@@ -1,0 +1,17 @@
+{
+  "implementationCommit": "9429c189f604251685b26c0329b5dd31e7014b05",
+  "overlayStats": {
+    "startTime": "2026-10-04T04:21:32.021Z",
+    "duration": 215398.722,
+    "expected": 96,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "verifiedArtifacts": 224,
+  "pngCount": 128,
+  "behaviorJsonCount": 96,
+  "allArtifactHashesMatch": true,
+  "p0FailureImagesIdenticalToUnmodifiedHead": true,
+  "original252BaselinesUnchanged": true
+}
