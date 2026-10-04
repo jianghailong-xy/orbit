@@ -179,6 +179,53 @@ class CardsDeviceTest {
         assertEquals(buildJsonObject { put("behavior", "allow") }, journal.objects("journal").last()["body"])
     }
 
+    @Test fun reassignedExceptionAfterSentRestoresNewActions() = exceptionAssignments("assignment-sent")
+    @Test fun reassignedExceptionAfterLostResponseRestoresNewActions() = exceptionAssignments("assignment-lost")
+
+    private fun exceptionAssignments(mode: String) = journey(mode) {
+        login("x1", mode)
+        val before = http("/__stats").objects("journal").size
+        val patches = http("/__review-corpus").objects("exceptionAssignmentChanges")
+        val send = "item:x1:RETURN_COORDINATOR"
+        val resolve = "item:x1:MARK_HANDLED"
+        press(send); await(if (mode == "assignment-lost") "The request may have reached the server" else "Request accepted")
+        compose.onNodeWithTag(send).assertIsNotEnabled()
+        compose.activityRule.scenario.recreate(); await("Decisions and requests")
+        compose.waitUntil(15_000) { app.realtime.state.value.session?.fresh == true }
+        await(if (mode == "assignment-lost") "The request may have reached the server" else "Request accepted")
+        compose.onNodeWithTag(send).assertIsNotEnabled()
+        assertEquals(before + 1, http("/__stats").objects("journal").size)
+        fun assignment(index: Int) {
+            http("/__control", """{"assignment":$index,"mode":"assignment-sent"}""")
+            compose.runOnIdle { app.realtime.refreshSession() }
+            compose.waitUntil(15_000) {
+                val session = app.realtime.state.value.session
+                val items = session?.snapshot?.standing?.get("openItems") as? JsonObject
+                val rows = items?.objects(if (index % 2 == 0) "needsYou" else "withCoordinator")
+                session?.fresh == true && rows?.singleOrNull()?.text("waitingSince") == patches[index].text("waitingSince")
+            }
+        }
+        for (round in 1..2) {
+            assignment(round * 2 - 1)
+            compose.onNodeWithTag(send).assertDoesNotExist()
+            assignment(round * 2)
+            // A new assignment must be actionable, even when the previous reply was lost.
+            compose.onNodeWithTag(send).performScrollTo().assertIsEnabled()
+            compose.onNodeWithTag(resolve).assertIsEnabled()
+            assertEquals(before + round, http("/__stats").objects("journal").size)
+            capture("$mode-owner-round-$round")
+            if (round == 1) { press(send); await("Request accepted"); compose.onNodeWithTag(send).assertIsNotEnabled() }
+        }
+        press(resolve)
+        compose.onNodeWithTag(resolve).assertIsNotEnabled()
+        compose.onNodeWithText("Why is it no longer open?").performScrollTo().performTextInput("Reviewed the second assignment")
+        press(resolve); await("Request accepted")
+        val stats = http("/__stats")
+        assertEquals(before + 3, stats.objects("journal").size)
+        assertFalse(stats.flag("pending")); assertEquals("RESOLVED", stats.obj("final")?.text("state"))
+        assertEquals(buildJsonObject { put("note", "Reviewed the second assignment") }, stats.objects("journal").last()["body"])
+    }
+
     @Test fun dedicatedBusinessDoorsProduceSeparateRequestsAndRecordedStates() = journey("business-doors") {
         login("a3")
         val corpus = http("/__corpus")

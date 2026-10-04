@@ -19,7 +19,7 @@ def normalize(path):
     for value in (SID, PID, TID): path = path.replace(storage_id(value), value)
     return path
 LOCK = threading.RLock()
-state = {'case': 'a1', 'pending': True, 'denied': False, 'mode': '', 'journal': [], 'final': None}
+state = {'case': 'a1', 'pending': True, 'denied': False, 'mode': '', 'assignment': None, 'journal': [], 'final': None}
 
 def snapshot():
     value = copy.deepcopy(CORPUS['snapshot'])
@@ -39,6 +39,11 @@ def snapshot():
     if state['case'] != 'acceptance' or not state['pending']: stand['acceptanceConfirmation']['state'] = 'CONFIRMED'
     if state['case'] not in ('acceptance', 'start'): stand['project']['acceptanceCriteriaItems'] = []
     stand['openItems']['needsYou'] = [x for x in stand['openItems']['needsYou'] if x['itemId'] == state['case'] and state['pending']]
+    if state['assignment'] is not None and state['pending']:
+        item = next(x for x in CORPUS['snapshot']['standing']['openItems']['needsYou'] if x['itemId'] == 'x1')
+        item = dict(item, **REVIEW['exceptionAssignmentChanges'][state['assignment']])
+        stand['openItems']['needsYou'] = [item] if item['assignee'] == 'OWNER' else []
+        stand['openItems']['withCoordinator'] = [item] if item['assignee'] == 'COORDINATOR' else []
     stand['openItems']['startRequest'] = CORPUS['startItem'] if state['case'] == 'start' and state['pending'] else None
     if state['case'] != 'promotion': stand['promotion'] = None
     elif not state['pending']: stand['promotion']['state'] = 'CONFIRMED'
@@ -56,7 +61,9 @@ class Handler(BaseHTTPRequestHandler):
         path = normalize(urlparse(self.path).path)
         if path == '/__control':
             with LOCK:
-                if 'case' in body: state.update(case=body['case'], pending=True, denied=False, mode=body.get('mode', ''), final=None)
+                if 'case' in body: state.update(case=body['case'], pending=True, denied=False, mode=body.get('mode', ''), assignment=0 if body.get('mode', '').startswith('assignment-') else None, final=None)
+                if 'assignment' in body: state['assignment'] = body['assignment']
+                if 'mode' in body: state['mode'] = body['mode']
                 if 'pending' in body: state['pending'] = body['pending']
                 if 'denied' in body: state['denied'] = body['denied']
             return self.reply({'ok': True})
@@ -79,7 +86,15 @@ class Handler(BaseHTTPRequestHandler):
             elif state['case'] == 'promotion': result = {'state':'CONFIRMED','sourceSha':body.get('sourceSha')}
             else: result = {'recorded': True, 'decision':body.get('decision'), 'requestId':body.get('requestId')}
             state['final'] = result; row['final'] = result; row['status'] = 200
-            if state['mode'] in ('lost-response', 'lost-response-pending'):
+            if state['assignment'] is not None and path.endswith('/return-to-coordinator'):
+                returned = REVIEW['exceptionAssignmentChanges'][state['assignment'] + 1]
+                result = {'itemId':'x1', 'assignee':'COORDINATOR', 'waitingSince':returned['waitingSince'], 'escalateAt':returned['escalateAt']}
+                state['final'] = result; row['final'] = result
+                state['pending'] = True # Delayed standing read; control advances the committed assignment, then its escalation.
+            elif state['assignment'] is not None and path.endswith('/resolve'):
+                result = {'itemId':'x1', 'state':'RESOLVED', 'resolution':'HANDLED'}
+                state['final'] = result; row['final'] = result
+            if state['mode'] in ('lost-response', 'lost-response-pending', 'assignment-lost'):
                 row['lostResponse'] = True
                 if state['mode'] == 'lost-response-pending': state['pending'] = True # Delayed authority read while the response is lost.
                 self.close_connection = True
