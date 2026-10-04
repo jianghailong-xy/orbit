@@ -266,14 +266,16 @@ public struct ProjectIntegrationInFlight: Codable, Equatable, Sendable {
     public let state: String
     /// What "for how long" counts from: the claim for a running job, the enqueue for a queued one.
     public let startedAt: String
+    public let heartbeatAt: String?
 
     public init(taskTitle: String? = nil, state: String, startedAt: String,
-                kind: String? = nil, phase: String? = nil) {
+                kind: String? = nil, phase: String? = nil, heartbeatAt: String? = nil) {
         self.taskTitle = taskTitle
         self.kind = kind
         self.phase = phase
         self.state = state
         self.startedAt = startedAt
+        self.heartbeatAt = heartbeatAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -283,6 +285,7 @@ public struct ProjectIntegrationInFlight: Codable, Equatable, Sendable {
         phase = try c.decodeIfPresent(String.self, forKey: .phase)
         state = try c.decodeIfPresent(String.self, forKey: .state) ?? "QUEUED"
         startedAt = try c.decodeIfPresent(String.self, forKey: .startedAt) ?? ""
+        heartbeatAt = try c.decodeIfPresent(String.self, forKey: .heartbeatAt)
     }
 }
 

@@ -11,23 +11,20 @@ extension ProjectPage {
 
     // MARK: - Work overview: when the work is not moving
 
-    /// Ready work, and nothing starting it — unless nobody has started the project, when it is the
-    /// start that ready work is waiting for, and the Ready cell says so instead
-    /// (`readyUntilStarted`).
-    public static func stalledOnReady(_ b: ProjectPanoramaBuckets, started: Bool? = nil) -> Bool {
-        b.ready > 0 && b.running == 0 && started != false
+    /// Readiness is not a dispatch failure. Only the queue's explicit manual-start facts name work.
+    public static func manualReady(_ queue: ProjectReadyToRun?, status: ProjectStatus,
+                                   started: Bool? = nil, paused: Bool = false) -> ProjectReadyToRun.ManualReady? {
+        guard status == .open, started != false, !paused, let manual = queue?.manualReady,
+              manual.count > 0 else { return nil }
+        return manual
     }
 
-    public static let stalledTitle = "Dispatch needs attention"
+    public static let manualReadyTitle = "Ready to start"
+    public static let manualReadyPress = "Open task"
 
-    /// "7 tasks are ready, but nothing is running. Check the assignees' runner and provider."
-    public static func stalledSentence(ready: Int) -> String {
-        OrbitLinkCopy.stalled(ready: ready) + " Check the assignees' runner and provider."
+    public static func manualReadySentence(_ count: Int) -> String {
+        "\(count) task\(count == 1 ? " is" : "s are") set to start manually."
     }
-
-    /// The web's press goes to its Providers page; this client has none, and an engine signs in on
-    /// its runner's page.
-    public static let stalledPress = "Check runners"
 
     /// Every task settled and the goal still open: the in-between state, said out loud.
     public static func wrappingUp(status: ProjectStatus, _ b: ProjectPanoramaBuckets,

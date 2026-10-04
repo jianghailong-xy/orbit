@@ -7,14 +7,18 @@ final class ProjectPageSectionsTests: XCTestCase {
 
     // MARK: overview
 
-    func testReadyWorkWithNothingRunningIsSaidInTheBannersWords() {
-        let stalled = ProjectPanoramaBuckets(running: 0, ready: 7, done: 5, cancelled: 1)
-        XCTAssertTrue(ProjectPage.stalledOnReady(stalled))
-        XCTAssertFalse(ProjectPage.stalledOnReady(ProjectPanoramaBuckets(running: 1, ready: 7)))
-        XCTAssertEqual(ProjectPage.stalledSentence(ready: 7),
-                       "7 tasks are ready, but nothing is running. Check the assignees' runner and provider.")
-        XCTAssertEqual(ProjectPage.stalledSentence(ready: 1),
-                       "1 task is ready, but nothing is running. Check the assignees' runner and provider.")
+    func testOnlyExplicitManualWorkNamesATaskToStart() {
+        let manual = ProjectReadyToRun.ManualReady(count: 7, taskId: "t", title: "Check the lock order")
+        let queue = ProjectReadyToRun(readyCount: 7, manualReady: manual)
+        XCTAssertEqual(ProjectPage.manualReady(queue, status: .open), manual)
+        XCTAssertNil(ProjectPage.manualReady(queue, status: .open, started: false))
+        XCTAssertNil(ProjectPage.manualReady(queue, status: .open, paused: true))
+        XCTAssertNil(ProjectPage.manualReady(queue, status: .done))
+        XCTAssertNil(ProjectPage.manualReady(queue, status: .cancelled))
+        XCTAssertNil(ProjectPage.manualReady(ProjectReadyToRun(readyCount: 7), status: .open))
+        XCTAssertNil(ProjectPage.manualReady(nil, status: .open))
+        XCTAssertEqual(ProjectPage.manualReadySentence(7), "7 tasks are set to start manually.")
+        XCTAssertEqual(ProjectPage.manualReadySentence(1), "1 task is set to start manually.")
     }
 
     func testAnOpenProjectWhoseWorkHasAllSettledIsReadyToWrapUp() {

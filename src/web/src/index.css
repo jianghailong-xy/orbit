@@ -16455,18 +16455,26 @@ button.chat-jump-start:hover {
    the page reads as stopped. Full width above the cells, with the same hairline under it that
    separates the cells from each other.
 
-   The ring is the Integrating cell's own mark, and it wears that cell's brand blue while the
-   combined-tree checks run. QUEUED is the third label's grey instead: nothing is being computed, the
-   job is waiting its turn, and a row that spun through that would be reporting work that is not
-   happening. The words `checking` and `queued` say both states without colour or motion — which is
-   what lets the two decorative channels be dropped under `prefers-reduced-motion` below. */
+   The ring uses brand blue while a fresh read reports a running job. Queued jobs and unavailable
+   updates remain grey and still. The state words carry the meaning without colour or motion,
+   including under `prefers-reduced-motion` below. */
 .project-landing {
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 13.5px;
+}
+.project-landing-heading {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--border-subtle);
-  font-size: 13.5px;
+}
+.project-landing-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-3);
 }
 .project-landing-ring {
   display: inline-flex;
@@ -16485,14 +16493,14 @@ button.chat-jump-start:hover {
 .project-landing-running .project-landing-word {
   color: var(--brand);
 }
-/* The row's flexible middle: the task's title, or "N jobs". It truncates rather than wrapping —
-   one row, always the same height — and it is what keeps the state and the clock right-aligned. */
+/* The task has its own line so the phase and elapsed clock stay readable on a phone. */
 .project-landing-what {
-  flex: 1;
-  min-width: 0;
+  margin-top: 8px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
   color: var(--text-1);
 }
 .project-landing-state,
@@ -16509,6 +16517,26 @@ button.chat-jump-start:hover {
 .project-landing-running .project-landing-clock {
   color: var(--brand);
 }
+.project-landing-state {
+  margin-left: auto;
+}
+.project-manual-task {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  margin-top: 10px;
+  color: var(--text-2);
+}
+.project-manual-open {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--bg-hover-strong);
+  font-weight: 600;
+}
 @keyframes project-landing-spin {
   to {
     transform: rotate(360deg);
@@ -16521,6 +16549,14 @@ button.chat-jump-start:hover {
 }
 .project-work-overview > header {
   flex-wrap: wrap;
+}
+.project-overview-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@media (max-width: 640px) {
+  .project-overview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 @media (max-width: 920px) {
   .project-command-center {

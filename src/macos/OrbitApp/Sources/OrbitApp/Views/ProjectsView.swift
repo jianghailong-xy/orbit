@@ -47,9 +47,10 @@ enum ProjectPalette {
 struct ProjectGlyphMark: View {
     let glyph: ProjectPage.Glyph
     var size: CGFloat = 8
+    var tint: Color? = nil
 
     var body: some View {
-        let color = ProjectPalette.color(glyph)
+        let color = tint ?? ProjectPalette.color(glyph)
         Group {
             switch glyph {
             case .disc:
@@ -814,7 +815,9 @@ struct ProjectDetailView: View {
     private func landingRow(_ store: ProjectDetailModel) -> some View {
         if let integration = store.integration, integration.inFlight != nil {
             TimelineView(.periodic(from: .now, by: 1)) { context in
-                if let line = ProjectPage.landingLine(integration, now: context.date) {
+                if let line = ProjectPage.landingLine(integration, now: context.date,
+                                                     updatedAt: store.integrationReadAt,
+                                                     refreshFailed: store.integrationReadFailed) {
                     ProjectLandingRow(line: line)
                 }
             }
@@ -825,33 +828,52 @@ struct ProjectDetailView: View {
     private func overviewSection(_ store: ProjectDetailModel, _ document: ProjectDocument) -> some View {
         if let panorama = store.panorama {
             let buckets = panorama.buckets
+            let manual = buckets.ready > 0 ? ProjectPage.manualReady(
+                store.readyQueueUnread ? nil : store.readyQueue, status: document.status,
+                started: document.started, paused: document.pausedAt != nil) : nil
             // Ready work on a project nobody has started is waiting for the start, and says so.
             let cells = ProjectPage.overviewCells(buckets, taskCount: panorama.shape.taskCount,
-                                                  line: document.integration?.line, started: document.started)
-            let stalled = ProjectPage.stalledOnReady(buckets, started: document.started)
+                                                  line: document.integration?.line, started: document.started,
+                                                  paused: document.pausedAt != nil,
+                                                  manualReadyCount: manual?.count ?? 0)
             Section {
                 landingRow(store)
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12, alignment: .topLeading),
                                          count: compact ? 2 : 3),
                           alignment: .leading, spacing: 16) {
                     ForEach(cells) { cell in
-                        overviewCell(cell, attention: stalled && cell.key == "ready")
+                        overviewCell(cell)
                     }
                 }
                 .padding(.vertical, 6)
-                ProjectMeter(segments: cells.map { (value: $0.value, color: ProjectPalette.color($0.glyph)) },
+                ProjectMeter(segments: cells.map { (value: $0.value, color: overviewColor($0)) },
                              height: 8)
                     .padding(.vertical, 4)
-                if stalled {
-                    banner(glyph: .triangle, title: ProjectPage.stalledTitle,
-                           text: ProjectPage.stalledSentence(ready: buckets.ready)) {
-                        Button(ProjectPage.stalledPress) { model.selectedSection = .runners }
-                            .font(.orbitLabel.weight(.semibold))
-                            .buttonStyle(.bordered)
-                            .buttonBorderShape(.capsule)
-                            .controlSize(.small)
+                if let manual {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "play.circle").foregroundStyle(.secondary).padding(.top, 3)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(ProjectPage.manualReadyTitle).font(.orbitSubtext.weight(.semibold))
+                            Text(ProjectPage.manualReadySentence(manual.count))
+                                .font(.orbitLabel).foregroundStyle(.secondary)
+                            Button { openTask(manual.taskId) } label: {
+                                HStack {
+                                    Text(manual.title).font(.orbitMeta).lineLimit(2)
+                                    Spacer(minLength: 8)
+                                    Image(systemName: "chevron.forward").font(.orbitMeta)
+                                }
+                                .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            Button(ProjectPage.manualReadyPress) { openTask(manual.taskId) }
+                                .font(.orbitLabel.weight(.semibold))
+                                .buttonStyle(.bordered)
+                                .buttonBorderShape(.capsule)
+                                .controlSize(.small)
+                        }
                     }
-                    .listRowBackground(Color.orange.opacity(0.1))
+                    .padding(.vertical, 4)
+                    .listRowBackground(Color.secondary.opacity(0.04))
                 }
                 if ProjectPage.wrappingUp(status: document.status, buckets, inFlight: store.integration?.inFlight) {
                     banner(glyph: .check, title: ProjectPage.wrapUpTitle,
@@ -866,12 +888,15 @@ struct ProjectDetailView: View {
         }
     }
 
-    /// One lane: its shape and name, the number, and a line saying what the number counts. The one
-    /// cell that changes colour is Ready, and only while nothing is picking that work up.
-    private func overviewCell(_ cell: ProjectPage.OverviewCell, attention: Bool) -> some View {
+    private func overviewColor(_ cell: ProjectPage.OverviewCell) -> Color {
+        cell.key == "ready" || cell.key == "integrating" ? .secondary : ProjectPalette.color(cell.glyph)
+    }
+
+    /// One task lane; readiness and missing receipts carry no claim about a fault or live activity.
+    private func overviewCell(_ cell: ProjectPage.OverviewCell) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 5) {
-                ProjectGlyphMark(glyph: cell.glyph, size: 8)
+                ProjectGlyphMark(glyph: cell.glyph, size: 8, tint: overviewColor(cell))
                 Text(cell.label)
             }
             .font(.orbitLabel)
@@ -885,11 +910,6 @@ struct ProjectDetailView: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            if attention {
-                RoundedRectangle(cornerRadius: 10).fill(Color.orange.opacity(0.13)).padding(-6)
-            }
-        }
     }
 
     /// A banner under the meter: a shape, what is going on, and — when there is one — the press.

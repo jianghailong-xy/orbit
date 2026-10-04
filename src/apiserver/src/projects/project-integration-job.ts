@@ -180,7 +180,7 @@ export const DEFAULT_CHECK_TIMEOUT_SECONDS = 3_600;
  * minutes is long enough for a slow check to be mid-command and short enough that a runner that
  * died does not hold a repository's serial slot for an afternoon.
  */
-export const INTEGRATION_CLAIM_STALE_MS = 10 * 60 * 1_000;
+export { INTEGRATION_CLAIM_STALE_MS } from '@orbit/shared';
 
 /** How many jobs one runner is handed per heartbeat (J-T2's dispatch). */
 export const INTEGRATION_JOBS_PER_HEARTBEAT = 2;
