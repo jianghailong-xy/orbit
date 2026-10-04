@@ -9,10 +9,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.*
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
@@ -113,7 +115,10 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                     Text(if (reconnecting) "Saved messages · Reconnecting…" else sessionLabel(session),
                         Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
-                    if (reconnecting) TextButton(onClick = model::retry) { Text("Retry") }
+                    // Reserve the scaled button's height even while fresh, including 200% text.
+                    TextButton(onClick = model::retry, enabled = reconnecting,
+                        modifier = Modifier.alpha(if (reconnecting) 1f else 0f)
+                            .then(if (reconnecting) Modifier else Modifier.clearAndSetSemantics { })) { Text("Retry") }
                 }
                 state.error?.let { StatusMessage("Couldn't load messages", it, model::retry) }
                 if (!state.window.seeded) LoadingMessage("Loading messages…")

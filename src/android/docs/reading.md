@@ -114,10 +114,13 @@ held. The check clears old clipboard data, clicks the platform's floating Copy a
 Android framework resource ID, and verifies the newly copied substring.
 Selection gestures pause following without consuming the native selection gesture.
 
-The streaming case samples process PSS once per loop and HWUI `TOTAL_DURATION` via
+The instrumentation streaming case samples process PSS once per loop and HWUI `TOTAL_DURATION` via
 `Window.OnFrameMetricsAvailableListener`, including dropped callback counts. These are emulator
 instrumentation diagnostics, not D09's real-device `frameDurationCpuMs`/`frameOverrunMs` or a
-pass against those thresholds. The server emits 20 deltas/sec while connected, duplicates five
+pass against those thresholds. The Compose test clock also controls recomposition; wall-clock
+rendering evidence must use the standalone app without that test clock. The final evidence
+package includes the standalone native-UI driver, wall-clock samples and raw HWUI diagnostics.
+The server emits 20 deltas/sec while connected, duplicates five
 records and disconnects after each 1,200 deltas, and sends resync at 6,000. Capture actual wall
 duration/count/reconnect gaps; do not relabel this as an exact lossless 12,000-delta transport run.
 
