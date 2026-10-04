@@ -646,7 +646,9 @@ export type FirstIntegration =
       integrationRef: string;
       upstreamRef: string;
       source: IntegrationRefSource;
-      startedAt: Date;
+      /** Whether THIS call wrote `integration_started_at` (L3 step 3), rather than finding the line
+       *  already started by an earlier transaction. */
+      startedNow: boolean;
     }
   | { started: false; refusal: 'INTEGRATION_REPOSITORY_UNKNOWN' };
 
@@ -660,7 +662,8 @@ export type FirstIntegration =
  * and never again.
  *
  * What L3 also asks of this transaction — queueing the project's other finished code tasks onto
- * the line that just started — is the caller's: it owns the integration queue.
+ * the line that just started — is the caller's: it owns the integration queue. `startedNow` is how
+ * it knows it is that transaction.
  */
 export async function startOnFirstIntegration(
   tx: Prisma.TransactionClient,
@@ -674,7 +677,8 @@ export async function startOnFirstIntegration(
     row = await bind(tx, { ownerId: first.ownerId, projectId: first.projectId, canonicalRepoUrl: repository });
   }
 
-  if (!row.integrationStartedAt) {
+  const startedNow = !row.integrationStartedAt;
+  if (startedNow) {
     let integrationRef = row.integrationRef;
     if (row.integrationRefSource !== 'EXPLICIT') {
       integrationRef = await projectDefaultLine(tx, first.projectId) === 'PROJECT_BRANCH'
@@ -694,6 +698,6 @@ export async function startOnFirstIntegration(
     integrationRef: row.integrationRef,
     upstreamRef: row.upstreamRef,
     source: row.integrationRefSource as IntegrationRefSource,
-    startedAt: row.integrationStartedAt!,
+    startedNow,
   };
 }
