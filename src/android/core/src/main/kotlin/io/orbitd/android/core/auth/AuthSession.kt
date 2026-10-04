@@ -159,13 +159,17 @@ class AuthSession(
             var response = transport.execute(HttpRequest(current.server, request, clientVersion, first.accessToken))
             lock.withLock { requireCurrent(current) }
             if (response.status == 401) {
-                val fresh = refresh(current, version)
-                lock.withLock { requireCurrent(current) }
+                refresh(current, version)
+                val (fresh, retryVersion) = lock.withLock {
+                    requireCurrent(current)
+                    current.tokens!! to current.version
+                }
                 response = transport.execute(HttpRequest(current.server, request, clientVersion, fresh.accessToken))
                 withContext(NonCancellable) {
                     lock.withLock {
                         requireCurrent(current)
-                        if (response.status == 401) {
+                        // A delayed rejection of an older retry cannot clear a newer rotation.
+                        if (response.status == 401 && current.version == retryVersion) {
                             retireLocked(current.server, SignOutReason.EXPIRED)
                             throw SessionChanged()
                         }

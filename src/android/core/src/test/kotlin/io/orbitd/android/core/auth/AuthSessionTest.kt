@@ -1,5 +1,6 @@
 package io.orbitd.android.core.auth
 
+import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.net.ApiRequest
 import io.orbitd.android.core.net.ApiResponse
 import io.orbitd.android.core.net.NetworkException
@@ -144,6 +145,51 @@ class AuthSessionTest {
         assertEquals(1, h.refreshes.size)
         assertNull(h.credentials.value)
         assertEquals(SignOutReason.EXPIRED, (h.client.state.value as AuthState.SignedOut).reason)
+    }
+
+    @Test fun delayedRetry401DoesNotClearANewerCommittedRotation() = runTest {
+        val h = Harness(this)
+        val handle = h.seed()
+        h.client.writeData(handle, DataKind.DRAFT, "s1", byteArrayOf(1))
+        h.client.writeData(handle, DataKind.CACHE, "s1", byteArrayOf(2))
+        val retryStarted = CompletableDeferred<Unit>()
+        val releaseRetry = CompletableDeferred<Unit>()
+        var rotation = 0
+        h.handler = { req ->
+            when {
+                req.api.path.last() == "refresh" -> {
+                    assertTrue(Wire.decode(req.api.body!!, RefreshRequest.serializer()).refreshToken == tokens(version = rotation).refreshToken)
+                    response(tokens(version = ++rotation))
+                }
+                req.api.path.last() == "delayed" && req.accessToken == tokens(version = 1).accessToken -> {
+                    retryStarted.complete(Unit)
+                    releaseRetry.await()
+                    unauthorized()
+                }
+                req.accessToken == tokens(version = 2).accessToken -> ok()
+                else -> unauthorized()
+            }
+        }
+        val delayed = async { runCatching { h.client.request(handle, ApiRequest(listOf("delayed"))) } }
+        runCurrent()
+        assertTrue("first request is waiting for its v1 retry response", retryStarted.isCompleted)
+        assertEquals(1, h.refreshes.size)
+        // Another request's v1 rejection rotates to v2 before the delayed v1 rejection arrives.
+        assertEquals(200, h.client.request(handle, read).status)
+        assertTrue(h.credentials.value!!.credentials == tokens(version = 2))
+        val signedIn = h.client.state.value
+        releaseRetry.complete(Unit)
+        val failure = delayed.await().exceptionOrNull()
+        runCurrent()
+        assertSame("a superseded retry must not sign out the current session", signedIn, h.client.state.value)
+        assertTrue("the committed v2 pair must remain", h.credentials.value?.credentials == tokens(version = 2))
+        assertTrue(failure is ApiError && failure.status == 401)
+        assertArrayEquals(byteArrayOf(1), h.client.readData(handle, DataKind.DRAFT, "s1"))
+        assertArrayEquals(byteArrayOf(2), h.client.readData(handle, DataKind.CACHE, "s1"))
+        assertEquals(2, h.requests.count { it.api.path.last() == "delayed" })
+        assertEquals(2, h.refreshes.size)
+        assertFalse(h.requests.any { it.api.path.last() == "logout" })
+        assertEquals(200, h.client.request(handle, read).status)
     }
 
     @Test fun logoutOrSwitchDuringRefreshCannotResurrectTheOldSession() = runTest {
