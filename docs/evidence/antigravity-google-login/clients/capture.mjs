@@ -70,6 +70,7 @@ try {
         await hero.waitFor({ state: 'visible' });
         await hero.locator('button').first().click();
         await page.locator('.np-pop').waitFor({ state: 'visible' });
+        await page.waitForFunction(() => !/ant-zoom-big-(appear|enter)/.test(document.querySelector('.np-pop')?.className ?? ''));
         await capture(page, page.locator('.np-pop'), `${width}-selector`, errors);
       } finally { await context.close(); }
     }

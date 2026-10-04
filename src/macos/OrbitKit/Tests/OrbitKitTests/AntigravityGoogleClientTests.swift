@@ -69,6 +69,50 @@ final class AntigravityGoogleClientTests: XCTestCase {
         XCTAssertFalse(SessionProviderChoices.choices(configured: [], engines: out.engines, antigravity: out.antigravity).contains { $0.slug == "antigravity" })
         XCTAssertNil(SessionProviderChoices.choices(configured: [], engines: out.engines, antigravity: out.antigravity, antigravityKeyAvailable: true).first { $0.slug == "antigravity" }?.unavailable,
                      "a workspace's own GEMINI_API_KEY still runs on a signed-out runner")
+        let expired = try XCTUnwrap(data["expired"])
+        let workspaceKey = try XCTUnwrap(SessionProviderChoices.choices(configured: [], engines: expired.engines,
+            antigravity: expired.antigravity, antigravityKeyAvailable: true).first { $0.slug == "antigravity" })
+        XCTAssertNil(workspaceKey.unavailable, "a workspace key also bypasses a lapsed Google account")
+        XCTAssertEqual(workspaceKey.labelDetail, "env key", "this session spends the workspace key")
+    }
+
+    func testOldRunnerWithoutAntigravityHealthKeepsItsUpgradeEntry() throws {
+        for payload in [
+            #"{"id":"old","name":"Older runner","engines":[]}"#,
+            #"{"id":"old","name":"Older runner","engines":[],"antigravity":{"supported":false,"installed":null,"envKeyAvailable":false,"googleLogin":"needs_update"}}"#,
+        ] {
+            let runner = try JSONDecoder().decode(Runner.self, from: Data(payload.utf8))
+            let health = try XCTUnwrap(RunnerPageFormat.engines(runner).first { $0.engine == "antigravity" })
+            XCTAssertNil(health.installed)
+            XCTAssertEqual(RunnerPageFormat.engineStatus(health, runner: runner)?.text, "Update runner")
+            XCTAssertFalse(RunnerPageFormat.antigravityCanSignIn(runner))
+            XCTAssertEqual(EngineAuth.antigravityLoginHint(runner.antigravity?.googleLogin), "Update this runner to sign in with Google.")
+        }
+    }
+
+    func testMacOSRunnerWithAnEnvironmentKeyKeepsTheKeyAndUnsupportedLoginHint() throws {
+        let runner = try JSONDecoder().decode(Runner.self, from: Data(#"{"id":"mac","name":"Mac runner","engines":[{"engine":"antigravity","installed":true,"auth":"yes","authSource":"env_key"}],"antigravity":{"supported":true,"installed":true,"envKeyAvailable":true,"authSource":"env_key","googleLogin":"unsupported_platform"}}"#.utf8))
+        let health = try XCTUnwrap(RunnerPageFormat.engines(runner).first)
+        XCTAssertEqual(RunnerPageFormat.engineStatus(health, runner: runner)?.text, "env key")
+        XCTAssertFalse(RunnerPageFormat.antigravityCanSignIn(runner))
+        XCTAssertEqual(EngineAuth.antigravityLoginHint(runner.antigravity?.googleLogin), "Google sign-in is not supported on macOS runners yet. Use a Gemini API key.")
+        XCTAssertTrue(RunnerPageFormat.engineWindows(runner, engine: "antigravity").isEmpty)
+        let choice = try XCTUnwrap(SessionProviderChoices.choices(configured: [], engines: runner.engines,
+            antigravity: runner.antigravity).first { $0.slug == "antigravity" })
+        XCTAssertNil(choice.unavailable)
+        XCTAssertEqual(choice.labelDetail, "env key")
+    }
+
+    func testMissingCLITakesPrecedenceOverGoogleLoginAvailability() throws {
+        for login in ["available", "unsupported_platform", "needs_update"] {
+            let payload = """
+            {"id":"missing","name":"Runner without CLI","engines":[{"engine":"antigravity","installed":false,"auth":"unknown"}],"antigravity":{"supported":true,"installed":false,"envKeyAvailable":false,"googleLogin":"\(login)"}}
+            """
+            let runner = try JSONDecoder().decode(Runner.self, from: Data(payload.utf8))
+            let health = try XCTUnwrap(RunnerPageFormat.engines(runner).first)
+            XCTAssertEqual(RunnerPageFormat.engineStatus(health, runner: runner)?.text, "Not installed", login)
+            XCTAssertFalse(RunnerPageFormat.antigravityCanSignIn(runner), login)
+        }
     }
 
     func testZeroRemainingIsSpentAndSignedOutHasNoQuota() throws {
@@ -106,6 +150,8 @@ final class AntigravityGoogleClientTests: XCTestCase {
         XCTAssertTrue(relay.contains("PasteBackForm(model: model)"))
         XCTAssertTrue(relay.contains("console.runnerAntigravity?.googleLogin == .available"))
         XCTAssertTrue(relay.contains("EngineAuth.googleTermsURL"))
+        XCTAssertTrue(rows.contains("EngineAuth.antigravityLoginHint(runner.antigravity?.googleLogin)"))
+        XCTAssertTrue(rows.contains("GoogleSignInTermsView()"))
         XCTAssertTrue(rows.contains("remaining"))
     }
 }

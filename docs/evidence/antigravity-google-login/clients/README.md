@@ -1,8 +1,20 @@
 # Antigravity Google 登录：web 与 macOS/iOS 客户端证据
 
 任务 `34ZogkzPnQ44ODj72jrYb`，对应项目验收条目 2（`4q7GDYg6GzChkJE0bfhFGV`）。
-分支：`orbit/web-macos-ios-antigravity-google-683266`。
+当前复验分支：`orbit/web-macos-ios-antigravity-google-48cd37`。
 控制面契约来自第 3 步提交 `7cd0d809be5052ef1eadd2738a2217403767eeb9`，已以 `8725dd57d` 落在项目线上。
+
+## 2026-10-04 当前执行会话的补充审查与复验
+
+从已包含上一轮实现的 `80e7ad8fd` 开始，读取第 3 步提交说明后补了三个边界：失效 Google 登录不再禁用工作区自己的 `GEMINI_API_KEY`，选择器按实际路径显示 env key；原生 runner 页在旧 runner 未上报 Antigravity 时保留升级行；macOS runner 即使有 env key 也显示 Google 登录暂不支持。明确未安装 CLI 时仍优先显示 Not installed。
+
+- 当前源码的 `npm test -w @orbit/web`：294 文件、3617 用例通过，退出码 0；没有需要豁免的 web 失败。
+- `npm run build -w @orbit/web`：TypeScript 与生产构建通过，退出码 0。
+- Swift 6.1 Docker 的 OrbitKit `swift test --jobs 2`：2783 用例、5 跳过、0 失败，退出码 0；`AntigravityGoogleClientTests` 的 9 个用例实际执行并通过，证明 macOS/iOS 同源数据与视图接线。
+- web 回归实际提交了未登录和重新登录两条入口的合成授权码，并验证等待交换提示；没有进行真实 Google 授权。
+- Chromium 生产预览重新拍摄 1280px / 443px 共 16 张原图和 2 张总览；选择器取证等待展开动画完成，避免截图裁切。无浏览器异常或页面横向溢出。
+
+本会话测试原始输出保存在 uploads 的 `antigravity-clients/`；完整工具调用由本轮证据信封引用。新分支需重新 dispatch `client.yml`，必须实际通过 macOS OrbitKit 测试、OrbitApp 编译和 iOS Simulator 编译。该结果由协调会话提供，本轮最终证据补录；下方 CI 链接仅是历史。
 
 ## 2026-10-04 集成冲突后的复验
 

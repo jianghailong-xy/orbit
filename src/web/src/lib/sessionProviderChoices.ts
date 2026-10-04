@@ -251,11 +251,12 @@ export function providerChoices(
   antigravity?: RunnerAntigravityState,
   antigravityKeyAvailable: boolean = antigravity?.envKeyAvailable ?? false,
 ): ProviderChoice[] {
+  const usesGoogleAccount = antigravity?.authSource === 'google' && !(antigravityKeyAvailable && !antigravity.envKeyAvailable);
   const engines: ProviderChoice[] = ENGINE_SLUGS.filter(
     (slug) => slug !== AgentProvider.ANTIGRAVITY || antigravityKeyAvailable || antigravity?.authSource === 'google',
   ).map((slug) => {
     const health = engineHealth?.find((e) => e.engine === slug);
-    const blocker = slug === AgentProvider.ANTIGRAVITY ? antigravityBlocker(antigravity, health, !antigravityKeyAvailable || antigravity?.authSource === 'google') : engineBlocker(health);
+    const blocker = slug === AgentProvider.ANTIGRAVITY ? antigravityBlocker(antigravity, health, !antigravityKeyAvailable || usesGoogleAccount) : engineBlocker(health);
     const accounts =
       (slug === AgentProvider.CODEX || slug === AgentProvider.CLAUDE) && !blocker && (health?.accounts?.length ?? 0) >= 2
         ? health!.accounts!.map((account): AccountChoice => {
@@ -281,7 +282,7 @@ export function providerChoices(
       slug,
       label: ENGINE_LABELS[slug] ?? slug,
       kind: 'engine' as const,
-      ...(slug === AgentProvider.ANTIGRAVITY ? { labelDetail: antigravity?.authSource === 'google' ? 'Google account' : 'env key' } : {}),
+      ...(slug === AgentProvider.ANTIGRAVITY ? { labelDetail: usesGoogleAccount ? 'Google account' : 'env key' } : {}),
       ...brandForProvider(slug, ENGINE_LABELS[slug] ?? slug),
       modelLabel: defaultModelLabel(slug, modelCatalog, configured, runtimeDefaultModels),
       ...(blocker ? { unavailable: blocker, fixEngine: slug } : {}),

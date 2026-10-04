@@ -107,21 +107,29 @@ describe('Antigravity Google login across client surfaces', () => {
     expect(html).not.toContain('Antigravity needs a Gemini API key');
   });
 
-  it('starts the Antigravity paste-code relay from its row, including on re-login', async () => {
+  it.each(['signed-out', 'google'])('submits the pasted Google authorization code from the %s row', async (state) => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
     const popup = { document: { write: vi.fn(), close: vi.fn() }, location: { replace: vi.fn() }, close: vi.fn() };
     vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window);
-    vi.mocked(api).mockImplementation(async (path, options) => path.endsWith('/login') && options?.method === 'POST'
+    vi.mocked(api).mockImplementation(async (path, options) => (path.endsWith('/login') || path.endsWith('/login/code')) && options?.method === 'POST'
       ? { status: 'awaiting_code', engine: 'antigravity', url: 'https://example.test/authorize' } : { status: null });
     try {
-      await act(async () => { root.render(wrap(<RunnerEngines />, fixtures.google)); });
-      await act(async () => container.querySelector<HTMLButtonElement>('[data-engine="antigravity"] [aria-label="Re-sign in"]')!.click());
+      await act(async () => { root.render(wrap(<RunnerEngines />, fixtures[state])); });
+      await act(async () => container.querySelector<HTMLButtonElement>('[data-engine="antigravity"] .re-act button')!.click());
       await act(async () => container.querySelector<HTMLButtonElement>('.rsi-btn')!.click());
       await vi.waitFor(() => expect(vi.mocked(api)).toHaveBeenCalledWith(`/runners/${fixtures.google.id}/login`, { method: 'POST', body: { engine: 'antigravity' } }));
       await vi.waitFor(() => expect(container.querySelector('.rsi-input')).not.toBeNull());
       expect(popup.location.replace).toHaveBeenCalledWith('https://example.test/authorize');
+      const input = container.querySelector<HTMLInputElement>('.rsi-input')!;
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'google-authorization-code');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      await act(async () => container.querySelector<HTMLButtonElement>('.rsi-form .rsi-btn')!.click());
+      await vi.waitFor(() => expect(vi.mocked(api)).toHaveBeenCalledWith(`/runners/${fixtures.google.id}/login/code`, { method: 'POST', body: { code: 'google-authorization-code' } }));
+      await vi.waitFor(() => expect(container.textContent).toContain('Signing in with your code…'));
     } finally {
       await act(async () => root.unmount());
       container.remove();
