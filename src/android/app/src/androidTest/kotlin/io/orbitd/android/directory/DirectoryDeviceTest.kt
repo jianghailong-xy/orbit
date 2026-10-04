@@ -66,7 +66,7 @@ class DirectoryDeviceTest {
                 instrumentation.waitForIdleSync()
                 instrumentation.uiAutomation.waitForIdle(500, 5_000)
                 compose.onNodeWithText("Review navigation").assertIsDisplayed()
-                tap(compose.onNodeWithText("Search sessions"), false)
+                tap(compose.onNode(hasSetTextAction()), false)
                 awaitIme(true)
                 compose.onNodeWithText("Search sessions").performTextInput("Review")
                 compose.waitUntil(10_000) { compose.onAllNodesWithText("Same dataset across light and dark").fetchSemanticsNodes().isNotEmpty() }
@@ -76,7 +76,8 @@ class DirectoryDeviceTest {
                 key(KeyEvent.KEYCODE_BACK)
                 awaitIme(false)
                 compose.onNodeWithText("Review").assertIsDisplayed() // IME Back must keep the folder/search route.
-                tap(compose.onNodeWithText("Search sessions"), false)
+                instrumentation.uiAutomation.waitForIdle(500, 5_000)
+                tap(compose.onNode(hasSetTextAction()), false)
                 awaitIme(true)
                 hit.performScrollTo()
                 tap(hit, true)
