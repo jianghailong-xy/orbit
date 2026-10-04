@@ -61,28 +61,28 @@ class TranscriptDeviceTest {
         compose.onNodeWithTag("transcript-list").performScrollToNode(hasText("Load earlier messages"))
         val anchor = compose.onNodeWithTag("event:9801")
         anchor.assertIsDisplayed()
-        val before = anchor.fetchSemanticsNode().boundsInRoot.top
+        val before = screenTop(anchor)
         capture("prepend-before")
         compose.onNodeWithText("Load earlier messages").performClick()
         compose.waitUntil(10_000) { app.realtime.state.value.session?.transcript?.seeded == true && compose.onAllNodesWithText("Loading messages…").fetchSemanticsNodes().isEmpty() }
         compose.waitForIdle()
-        val after = compose.onNodeWithTag("event:9801").fetchSemanticsNode().boundsInRoot.top
+        val after = screenTop(compose.onNodeWithTag("event:9801"))
         val density = app.resources.displayMetrics.density
         File(evidence, "prepend.txt").writeText("seq=9801\nbeforePx=$before\nafterPx=$after\ndensity=$density\ndriftDp=${kotlin.math.abs(after-before)/density}\n")
         assertTrue("Prepending must retain the visible record within 8dp", kotlin.math.abs(after-before)/density <= 8f)
         capture("prepend-after")
         control("{\"stream\":true}")
         SystemClock.sleep(2_000)
-        val streamingPosition = compose.onNodeWithTag("event:9801").fetchSemanticsNode().boundsInRoot.top
+        val streamingPosition = screenTop(compose.onNodeWithTag("event:9801"))
         assertTrue(kotlin.math.abs(streamingPosition-after)/density <= 8f)
         control("{\"stream\":false}")
         capture("history-stream")
         compose.activityRule.scenario.recreate()
         compose.waitUntil(10_000) { compose.onAllNodesWithTag("event:9801").fetchSemanticsNodes().isNotEmpty() }
-        val firstAvailable = compose.onNodeWithTag("event:9801").fetchSemanticsNode().boundsInRoot.top
+        val firstAvailable = screenTop(compose.onNodeWithTag("event:9801"))
         capture("restored")
         compose.waitForIdle()
-        val restored = compose.onNodeWithTag("event:9801").fetchSemanticsNode().boundsInRoot.top
+        val restored = screenTop(compose.onNodeWithTag("event:9801"))
         File(evidence, "recreated-position.txt").writeText("beforePx=$after\nfirstAvailablePx=$firstAvailable\nsettledPx=$restored\ndensity=$density\n")
         assertTrue("Rotation/recreation preserves saved seq+offset", kotlin.math.abs(restored-after)/density <= 8f)
         // Rich message, image and object links use the product's one return stack.
@@ -288,6 +288,14 @@ class TranscriptDeviceTest {
         }
     }
     private fun scrollHistory() { compose.onNodeWithTag("transcript-list").performTouchInput { swipeDown(durationMillis = 500) } }
+    private fun screenTop(node: SemanticsNodeInteraction): Float {
+        val bounds = node.fetchSemanticsNode().boundsInWindow
+        val location = IntArray(2)
+        compose.runOnIdle { compose.activity.window.decorView.getLocationOnScreen(location) }
+        val top = bounds.top + location[1]
+        File(evidence, "screen-positions.txt").appendText("windowTop=${bounds.top} decorY=${location[1]} screenTop=$top\n")
+        return top
+    }
     private fun awaitText(text: String, substring: Boolean = false) {
         compose.waitUntil(15_000) { compose.onAllNodesWithText(text, substring = substring).fetchSemanticsNodes().isNotEmpty() }
     }

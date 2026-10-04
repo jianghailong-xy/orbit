@@ -113,6 +113,8 @@ background work and worktree diff. Native finger holds advance the Compose test 
 held. The check clears old clipboard data, clicks the platform's floating Copy action by its
 Android framework resource ID, and verifies the newly copied substring.
 Selection gestures pause following without consuming the native selection gesture.
+Recreation compares window coordinates plus the window's screen origin; Compose's root origin
+can change with Android 15 insets even when the message stays at the same screen position.
 
 The instrumentation streaming case samples process PSS once per loop and HWUI `TOTAL_DURATION` via
 `Window.OnFrameMetricsAvailableListener`, including dropped callback counts. These are emulator
