@@ -60,6 +60,8 @@ class AuthFlowDeviceTest {
             compose.onNodeWithText("Sign out").performClick()
             compose.waitUntil(10_000) { session.state.value is AuthState.SignedOut }
             runBlocking { assertNull(AndroidCredentialStore(compose.activity).load()) }
+            compose.onNodeWithText("Instance address").assertIsDisplayed()
+            compose.onNodeWithText("Signed in").assertDoesNotExist()
             capture("signed-out.png")
             val requests = List(5) { server.takeRequest(5, TimeUnit.SECONDS)!! }
             assertEquals(1, requests.count { it.path == "/api/auth/refresh" })
