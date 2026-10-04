@@ -18,6 +18,7 @@ def main():
     parser.add_argument("apk", type=pathlib.Path)
     parser.add_argument("output", type=pathlib.Path)
     parser.add_argument("--sdk", default="/opt/android-sdk")
+    parser.add_argument("--network-mode", choices=("wifi-cellular", "cellular-reconnect"), default="wifi-cellular")
     args = parser.parse_args()
     output = args.output
     output.mkdir(parents=True, exist_ok=True)
@@ -31,6 +32,8 @@ def main():
     component = package + "/io.orbitd.android.realtime.RealtimeFixtureActivity"
     state_path = f"/sdcard/Android/data/{package}/files/a04-realtime/state.json"
     commands, phases = [], []
+    gaps = (["Wi-Fi/cellular switch unavailable in this run; only a cellular network replacement is exercised"]
+            if args.network_mode == "cellular-reconnect" else [])
     started = time.time()
 
     def adb(*argv, check=True, binary=False):
@@ -82,12 +85,13 @@ def main():
             (output / filename).write_text(result.stdout)
         (output / "install.txt").write_text(adb("install", "-r", str(args.apk)))
         adb("reverse", "tcp:18769", "tcp:" + str(server.server_port))
-        adb("shell", "svc", "wifi", "enable")
+        adb("shell", "svc", "wifi", "enable" if not gaps else "disable")
         adb("shell", "svc", "data", "enable")
         adb("shell", "input", "keyevent", "KEYCODE_WAKEUP")
         adb("shell", "wm", "dismiss-keyguard")
         adb("shell", "am", "start", "-W", "-n", component, "--ez", "reset_fixture", "true")
-        first = phase("01-initial", lambda s: ready(s) and s["maxSeq"] == 2 and s["approvals"] == 1)
+        first = phase("01-initial", lambda s: ready(s) and s["maxSeq"] == 2 and s["approvals"] == 1 and
+                      s["networkTransport"] == ("WIFI" if not gaps else "CELLULAR"), timeout=60)
         assert fixture.stats["activeControl"] == fixture.stats["activeSession"] == 1
         old_connections = fixture.stats["sessionConnections"]
         fixture.drop()
@@ -102,8 +106,14 @@ def main():
         assert rotated["pid"] == first["pid"]
         assert fixture.stats["activeControl"] == fixture.stats["activeSession"] == 1
 
-        adb("shell", "svc", "wifi", "disable")
-        cellular = phase("04-network-switch", lambda s: ready(s) and s["defaultNetwork"] != rotated["defaultNetwork"] and s["defaultNetwork"] != "")
+        if gaps:
+            adb("shell", "svc", "data", "disable")
+            wait(lambda s: s["control"] == s["sessionConnection"] == "STOPPED")
+            adb("shell", "svc", "data", "enable")
+        else:
+            adb("shell", "svc", "wifi", "disable")
+        cellular = phase("04-cellular-replacement" if gaps else "04-network-switch",
+                         lambda s: ready(s) and s["defaultNetwork"] != rotated["defaultNetwork"] and s["networkTransport"] == "CELLULAR")
         assert cellular["seqs"] == [1, 2, 3]
         adb("shell", "svc", "data", "disable")
         phase("05-offline", lambda s: s["control"] == s["sessionConnection"] == "STOPPED" and not s["sessionFresh"])
@@ -126,7 +136,7 @@ def main():
         adb("shell", "am", "start", "-W", "-n", component)
         restored = phase("06-process-offline-cache", lambda s: s["pid"] != first["pid"] and s["directoryCached"] and
                          s["seqs"] == [1, 2, 3] and s["approvals"] == -1 and not s["sessionFresh"])
-        adb("shell", "svc", "wifi", "enable")
+        adb("shell", "svc", "data" if gaps else "wifi", "enable")
         phase("07-process-online-reconcile", lambda s: ready(s) and s["seqs"] == [1, 2, 3, 4] and s["approvals"] == s["queue"] == 0)
 
         fixture.resync()
@@ -140,7 +150,7 @@ def main():
         adb("shell", "am", "start", "-W", "-n", component)
         phase("10-foreground-reconcile", lambda s: ready(s) and s["maxSeq"] == 1211 and s["approvals"] == 0)
         assert not fixture.stats["errors"], fixture.stats["errors"]
-        status = "PASS"
+        status = "PARTIAL" if gaps else "PASS"
     except Exception:
         error = traceback.format_exc()
         print(error, flush=True)
@@ -164,9 +174,11 @@ def main():
             content = log.read_text(errors="replace")
             if any(secret in content for secret in ("a04-fixture-access", "a04-fixture-refresh", "a04-fixture-password")):
                 status, error = "FAILED", "Fixture credential found in " + log.name
-        (output / "report.json").write_text(json.dumps({"status": status, "error": error, "phases": phases,
+        (output / "report.json").write_text(json.dumps({"status": status, "error": error, "phases": phases, "gaps": gaps,
+            "networkMode": args.network_mode,
             "started": started, "finished": time.time(), "scope": "Controlled debug fixture; no physical-phone or production-server claim"}, ensure_ascii=False, indent=2))
-    if status != "PASS":
+        print(f"Result: {status}; gaps={gaps}", flush=True)
+    if status == "FAILED":
         raise SystemExit(1)
 
 

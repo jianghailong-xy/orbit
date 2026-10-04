@@ -1,9 +1,11 @@
 package io.orbitd.android.realtime
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.Application
 import android.content.Intent
 import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Bundle
 import android.os.Process
 import android.widget.TextView
@@ -74,13 +76,22 @@ class RealtimeFixtureActivity : Activity() {
         }
     }
 
+    @SuppressLint("SetTextI18n") // Fixed debug diagnostics, excluded from product UI and release.
     private fun render(state: RealtimeState) {
         val session = state.session
         val transcript = session?.transcript
+        val connectivity = getSystemService(ConnectivityManager::class.java)
+        val network = connectivity.activeNetwork
+        val capabilities = network?.let(connectivity::getNetworkCapabilities)
         val result = JSONObject().apply {
             put("pid", Process.myPid()); put("activityInstance", instance)
             put("sourceSha", BuildConfig.SOURCE_SHA); put("sourceDirty", BuildConfig.SOURCE_DIRTY)
-            put("defaultNetwork", getSystemService(ConnectivityManager::class.java).activeNetwork?.toString().orEmpty())
+            put("defaultNetwork", network?.toString().orEmpty())
+            put("networkTransport", when {
+                capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true -> "WIFI"
+                capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true -> "CELLULAR"
+                else -> "NONE_OR_OTHER"
+            })
             put("signedIn", state.handle != null); put("directoryCached", state.directory != null)
             put("directoryFresh", state.directoryFresh); put("sessionFresh", session?.fresh == true)
             put("control", state.controlConnection.name); put("sessionConnection", session?.connection?.name ?: "STOPPED")
