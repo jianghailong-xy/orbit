@@ -32,7 +32,8 @@ data class ComposerState(val draft: ComposerDraft = ComposerDraft(), val loaded:
     val busy: Boolean = false, val waiting: Boolean = false, val error: String? = null,
     val notice: String? = null, val uploads: Map<String, Float> = emptyMap(),
     val failures: Map<String, String> = emptyMap(), val catalog: ComposerCatalog? = null,
-    val catalogLoading: Boolean = false, val catalogError: String? = null)
+    val catalogLoading: Boolean = false, val catalogError: String? = null,
+    val acknowledgementPending: Boolean = false)
 
 data class ProviderOption(val id: String, val label: String, val runtime: String,
     val models: List<JsonObject>, val unavailable: String? = null)
@@ -58,7 +59,8 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
             "kimi" -> all.takeIf { it.text("provider") == "kimi" }
             else -> null
         } ?: return null
-        val account = detail.text("${provider}Account") ?: "default"
+        val account = detail.text("account") ?: detail.text("${provider}Account") ?: "default"
+        if (account == "automatic") return null // The server has not yet chosen the billed account.
         return if (account == "default") snapshot else (snapshot["accounts"] as? JsonObject)?.get(account) as? JsonObject
     }
     fun slashItems(provider: String, agentId: String?): List<JsonObject> =

@@ -30,8 +30,8 @@ fun NewSessionComposer(app: OrbitApplication, handle: SessionHandle, route: Orbi
         catch (cancel: CancellationException) { throw cancel }
         catch (e: Exception) { error = directoryError(e) }
     }
-    LaunchedEffect(state.draft.createdSessionId) {
-        state.draft.createdSessionId?.let { id ->
+    LaunchedEffect(state.draft.createdSessionId, state.acknowledgementPending) {
+        state.draft.createdSessionId?.takeUnless { state.acknowledgementPending }?.let { id ->
             open(OrbitRoute(Destination.SESSION, id, workspaceId = workspace, origin = route.origin))
             model.consumeCreated()
         }

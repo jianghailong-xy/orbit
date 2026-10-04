@@ -2,6 +2,7 @@ package io.orbitd.android.composer
 
 import android.content.*
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.*
 import android.provider.MediaStore
@@ -17,6 +18,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.orbitd.android.*
 import io.orbitd.android.attachments.importAttachment
+import io.orbitd.android.attachments.decodeAttachmentImage
 import io.orbitd.android.core.auth.AuthState
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.*
@@ -108,7 +110,7 @@ class ComposerDeviceTest {
         compose.waitUntil(5000) { stats()["config"]!!.jsonObject["model"]?.jsonPrimitive?.content == "fixture-model-2" }
         ready()
         compose.onNodeWithText("Second account").performScrollTo().performClick()
-        compose.waitUntil(5000) { stats()["config"]!!.jsonObject["account"]?.jsonPrimitive?.content == "second" }
+        compose.waitUntil(5000) { stats()["config"]!!.jsonObject["account"]?.jsonPrimitive?.content == "1a2b3c4d" }
         compose.onNodeWithText("Expired account · Not signed in").performScrollTo().assertIsNotEnabled()
         compose.onNodeWithText("Close").performClick()
         control("""{"status":"RUNNING"}"""); compose.runOnIdle { app.realtime.refreshSession() }; awaitText("Stop")
@@ -255,19 +257,19 @@ class ComposerDeviceTest {
     @Test fun nativePhotoPickerPngPreviewSaveAndPaste() = journey("photo-picker") {
         login()
         val resolver=app.contentResolver
-        val photoName="a07-picker-${java.util.UUID.randomUUID()}.png"
+        val photoName="a07-picker-${java.util.UUID.randomUUID()}.jpg"
         val uri=resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,ContentValues().apply {
-            put(MediaStore.Images.Media.DISPLAY_NAME,photoName);put(MediaStore.Images.Media.MIME_TYPE,"image/png")
+            put(MediaStore.Images.Media.DISPLAY_NAME,photoName);put(MediaStore.Images.Media.MIME_TYPE,"image/jpeg")
             put(MediaStore.Images.Media.RELATIVE_PATH,"Pictures");put(MediaStore.Images.Media.IS_PENDING,1)
             put(MediaStore.Images.Media.DATE_TAKEN,System.currentTimeMillis())
         })!!
-        val bitmap=Bitmap.createBitmap(128,96,Bitmap.Config.ARGB_8888).apply { eraseColor(android.graphics.Color.rgb(18,130,220)) }
-        resolver.openOutputStream(uri)!!.use { bitmap.compress(Bitmap.CompressFormat.PNG,100,it) };bitmap.recycle()
+        val original=instrument.context.assets.open("composer-images/exif-6.jpg").use { it.readBytes() }
+        resolver.openOutputStream(uri)!!.use { it.write(original) }
         resolver.update(uri,ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING,0) },null,null)
         // API29 DocumentsUI obtains image metadata from the media scan, unlike the new picker.
         val path=resolver.query(uri,arrayOf(MediaStore.Images.Media.DATA),null,null,null)!!.use { it.moveToFirst();it.getString(0) }
         val scanned=java.util.concurrent.CountDownLatch(1)
-        android.media.MediaScannerConnection.scanFile(app,arrayOf(path),arrayOf("image/png")) { _,_ -> scanned.countDown() }
+        android.media.MediaScannerConnection.scanFile(app,arrayOf(path),arrayOf("image/jpeg")) { _,_ -> scanned.countDown() }
         assertTrue(scanned.await(10,java.util.concurrent.TimeUnit.SECONDS))
         try {
             compose.onNodeWithText("+").performClick();compose.onNodeWithText("Image",useUnmergedTree=true).performClick()
@@ -287,6 +289,8 @@ class ComposerDeviceTest {
             val photo=model.state.value.draft.attachments.single()
             assertEquals("photo",photo.source);assertEquals("image/png",photo.mime)
             val bytes=runBlocking { model.attachmentBytes(photo.id) }
+            val converted=BitmapFactory.decodeByteArray(bytes,0,bytes.size)!!
+            try { assertEquals("48x72:BRYG",imageSignature(converted)) } finally { converted.recycle() }
             appClick("${photo.name} · ${photo.size/1024} KB")
             compose.waitUntil(5000) { compose.onAllNodesWithContentDescription("photo.png").fetchSemanticsNodes().isNotEmpty() }
             capture("photo-preview")
@@ -315,6 +319,8 @@ class ComposerDeviceTest {
             compose.onNodeWithText("+").performClick();compose.onNodeWithText("Paste image",useUnmergedTree=true).performClick()
             compose.waitUntil(10000) { model.state.value.draft.attachments.size==2 && model.state.value.draft.attachments.all { it.remoteId!=null } }
             assertTrue(model.state.value.draft.attachments.any { it.source=="paste" })
+            val pasted=model.state.value.draft.attachments.single { it.source=="paste" }
+            assertArrayEquals(bytes,runBlocking { model.attachmentBytes(pasted.id) })
             appClick("${photo.name} · ${photo.size/1024} KB")
             repeat(6) { round ->
                 appClick("Next image")
@@ -351,6 +357,9 @@ class ComposerDeviceTest {
         compose.onNodeWithTag("composer-input").performTextInput("新会话的首条消息")
         compose.activityRule.scenario.recreate()
         compose.onNodeWithTag("composer-input").assertTextContains("新会话的首条消息")
+        appClick("fixture-model"); awaitText("Automatic")
+        compose.onNodeWithText("Automatic").performScrollTo().performClick()
+        compose.onNodeWithText("Close").performClick()
         compose.waitUntil(10000) { compose.onNodeWithTag("composer-send").fetchSemanticsNode().config.getOrNull(SemanticsProperties.Disabled)==null }
         clickSendWhenEnabled()
         awaitText("Created conversation")
@@ -358,7 +367,107 @@ class ComposerDeviceTest {
         assertEquals(workspace,request["workspaceId"]!!.jsonPrimitive.content)
         assertEquals("新会话的首条消息",request["prompt"]!!.jsonPrimitive.content)
         assertNull(request["clientTurnId"])
+        assertNull(request["codexAccount"])
         capture("created-session")
+    }
+
+    @Test fun explicitRejectionRestoresMessageAndAttachmentThenResumes() = journey("rejected-send") {
+        login()
+        compose.runOnIdle { model.importAttachment(StagedAttachment("reject-file","retry.txt","text/plain"),
+            { StagedAttachment("reject-file","retry.txt","text/plain",4) to "keep".toByteArray() }, {}) }
+        compose.waitUntil(10000) { model.state.value.draft.attachments.singleOrNull()?.remoteId != null }
+        compose.onNodeWithTag("composer-input").performTextInput("拒绝后恢复同一草稿")
+        control("""{"rejectTurnOnce":true}"""); clickSendWhenEnabled()
+        compose.waitUntil(10000) { !model.state.value.busy && model.state.value.error != null }
+        assertNull(model.state.value.draft.pending)
+        compose.onNodeWithTag("composer-input").assertTextContains("拒绝后恢复同一草稿")
+        assertEquals("retry.txt",model.state.value.draft.attachments.single().name)
+        assertEquals(0,stats()["uniqueTurns"]!!.jsonPrimitive.int)
+        capture("409-restored")
+        ready(); clickSendWhenEnabled()
+        compose.waitUntil(10000) { !model.state.value.busy && model.state.value.draft.pending == null && model.state.value.draft.text.isEmpty() }
+        val sent=stats()["turns"]!!.jsonObject.values.single().jsonObject
+        assertTrue(sent["endpoint"]!!.jsonPrimitive.content.endsWith("/resume"))
+        assertEquals(1,sent["request"]!!.jsonObject["attachmentIds"]!!.jsonArray.size)
+        capture("resume-accepted")
+    }
+
+    @Test fun draftAccountUsageAndProviderSwitchMatchAutomaticCreate() = journey("draft-account") {
+        login(); compose.onNodeWithContentDescription("Back").performClick()
+        awaitText("New session"); compose.onAllNodesWithText("New session")[0].performClick()
+        compose.onNodeWithTag("composer-input").performTextInput("账户草稿")
+        fun choose(label:String, current:String="fixture-model") {
+            appClick(current); awaitText(label)
+            compose.onAllNodesWithText(label).onLast().performScrollTo().performClick()
+            compose.onNodeWithText("Close").performClick()
+        }
+        fun quota(label:String) {
+            appClick("Context: 0 tokens · Usage"); awaitText(label)
+            compose.onNodeWithText(label).assertIsDisplayed(); capture("usage-${label.hashCode()}")
+            compose.onNodeWithText("Close").performClick()
+        }
+        choose("Second account"); quota("Primary: 71%")
+        choose("Default"); quota("Primary: 23%")
+        choose("Automatic"); quota("No quota reported for this account.")
+        choose("claude"); quota("Primary: 11%")
+        choose("Claude account","claude-model"); quota("No quota reported for this account.")
+        choose("Automatic","claude-model"); clickSendWhenEnabled()
+        awaitText("Created conversation")
+        val request=stats()["creations"]!!.jsonArray.single().jsonObject
+        assertEquals("claude",request["provider"]!!.jsonPrimitive.content)
+        assertNull(request["claudeAccount"]); assertNull(request["codexAccount"])
+    }
+
+    @Test fun boundedConcurrentPhotosAndAllExifPreviews() = journey("image-bounds-exif") {
+        login()
+        val input=File(app.cacheDir,"large-rgba.png")
+        instrument.context.assets.open("composer-images/large-rgba.png").use { from -> input.outputStream().use { from.copyTo(it) } }
+        try {
+            val pid=Process.myPid()
+            compose.runOnIdle { for (source in listOf("photo","paste")) importAttachment(app,model,Uri.fromFile(input),source) }
+            compose.waitUntil(30000) { model.state.value.uploads.isEmpty() && model.state.value.draft.attachments.size==2 }
+            assertTrue(model.state.value.failures.toString(),model.state.value.failures.isEmpty())
+            for (attachment in model.state.value.draft.attachments) {
+                assertNotNull(attachment.remoteId)
+                val bytes=runBlocking { model.attachmentBytes(attachment.id) }
+                val bitmap=decodeAttachmentImage({ bytes.inputStream() })
+                try {
+                    assertEquals(1500,bitmap.width); assertEquals(1500,bitmap.height)
+                    assertEquals(9_000_000,bitmap.allocationByteCount)
+                    File(evidence,"large-image.txt").appendText("${attachment.source} pid=$pid input=${input.length()} converted=${bytes.size} pixels=${bitmap.width}x${bitmap.height} allocation=${bitmap.allocationByteCount} sha256=${sha(bytes)}\n")
+                } finally { bitmap.recycle() }
+            }
+            assertEquals(pid,Process.myPid())
+            assertEquals(2,stats()["attachments"]!!.jsonObject.size)
+            capture("large-images-uploaded")
+            for (attachment in model.state.value.draft.attachments.toList()) compose.runOnIdle { model.removeAttachment(attachment.id) }
+            val expected=listOf("72x48:RGBY","72x48:GRYB","72x48:YBGR","72x48:BYRG","48x72:RBGY","48x72:BRYG","48x72:YGBR","48x72:GYRB")
+            for (orientation in 1..8) {
+                val bytes=instrument.context.assets.open("composer-images/exif-$orientation.jpg").use { it.readBytes() }
+                val bitmap=decodeAttachmentImage({ bytes.inputStream() },maxDimension=2560)
+                try {
+                    assertEquals(expected[orientation-1],imageSignature(bitmap))
+                    File(evidence,"exif-previews.txt").appendText("EXIF=$orientation ${imageSignature(bitmap)} source=${sha(bytes)}\n")
+                } finally { bitmap.recycle() }
+                val file=StagedAttachment("exif-$orientation","EXIF-$orientation.jpg","image/jpeg",bytes.size)
+                compose.runOnIdle { model.importAttachment(file,{file to bytes},{}) }
+                compose.waitUntil(10000) { model.state.value.draft.attachments.singleOrNull()?.remoteId != null }
+                assertArrayEquals(bytes,runBlocking { model.attachmentBytes(file.id) })
+                appClick("${file.name} · ${file.size/1024} KB")
+                compose.waitUntil(5000) { compose.onAllNodesWithContentDescription(file.name).fetchSemanticsNodes().isNotEmpty() }
+                capture("exif-$orientation-preview")
+                appClick("Close attachment"); compose.runOnIdle { model.removeAttachment(file.id) }
+            }
+        } finally { input.delete() }
+    }
+
+    private fun imageSignature(image:Bitmap):String {
+        val colors=listOf(1 to 1,3 to 1,1 to 3,3 to 3).joinToString("") { (x,y) ->
+            val pixel=image.getPixel(image.width*x/4,image.height*y/4)
+            val r=android.graphics.Color.red(pixel);val g=android.graphics.Color.green(pixel);val b=android.graphics.Color.blue(pixel)
+            when { r>180 && g>180 -> "Y"; r>180 -> "R"; g>100 -> "G"; b>180 -> "B"; else -> "?" }
+        }
+        return "${image.width}x${image.height}:$colors"
     }
     private fun clickSendWhenEnabled() {
         compose.waitUntil(10000) { compose.onNodeWithTag("composer-send").fetchSemanticsNode().config.getOrNull(SemanticsProperties.Disabled)==null }

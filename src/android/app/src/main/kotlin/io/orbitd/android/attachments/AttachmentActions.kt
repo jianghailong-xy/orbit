@@ -66,12 +66,7 @@ private fun AttachmentContent(name: String, mime: String, bytes: suspend () -> B
             try {
                 val data = bytes()
                 value = withContext(Dispatchers.Default) {
-                    val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                    BitmapFactory.decodeByteArray(data, 0, data.size, opts)
-                    require(opts.outWidth > 0 && opts.outHeight > 0)
-                    var sample = 1
-                    while (opts.outWidth / sample > 1440 || opts.outHeight / sample > 2560) sample *= 2
-                    BitmapFactory.decodeByteArray(data, 0, data.size, BitmapFactory.Options().apply { inSampleSize = sample })
+                    decodeAttachmentImage({ data.inputStream() }, maxDimension = 2560)
                 }
             } catch (cancel: CancellationException) { throw cancel }
             catch (_: Exception) { error = "Couldn't load image. Retry or open the file." }

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """A07 loopback contract fixture. Records authenticated requests and accepted state, not a deployment."""
-import argparse, hashlib, json, socket, threading, time, uuid
+import argparse, hashlib, json, re, socket, threading, time, uuid
 from email.parser import BytesParser
 from email.policy import default
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -20,6 +20,7 @@ class State:
         self.rows=[]; self.turns={}; self.attachments={}; self.calls=[]; self.attempts={}; self.controls=[]
         self.losses=0; self.uploadFailures=0; self.uploadDelay=0; self.denial=0; self.config={}; self.expired=False; self.rotation=0
         self.status='AWAITING_INPUT'; self.revision=0; self.creations=[]; self.downloads=[]; self.discussion=False
+        self.rejectTurnOnce=False
     def detail(self):
         return {'id':SESSION,'title':'Composer conversation','workspaceId':WORKSPACE,'assignedRunnerId':RUNNER,
             'status':self.status,'runState':self.status,'lifecycleState':'OPEN','provider':'codex','model':'fixture-model',
@@ -56,7 +57,7 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/__control':
             with state.lock:
                 if body.get('reset'): state.reset()
-                for k in ['losses','uploadFailures','uploadDelay','denial','status','expired','discussion']:
+                for k in ['losses','uploadFailures','uploadDelay','denial','status','expired','discussion','rejectTurnOnce']:
                     if k in body: setattr(state,k,body[k])
             return self.reply({'ok':True})
         if path in ['/api/auth/login','/api/auth/refresh']:
@@ -69,6 +70,9 @@ class Handler(BaseHTTPRequestHandler):
         state.calls.append({'method':method,'path':self.path,'bodySha256':hashlib.sha256(raw).hexdigest(),
             'body':body if not multipart else {'multipartBytes':len(raw)}})
         if path=='/api/sessions' and method=='POST':
+            for field in ['codexAccount','claudeAccount']:
+                if field in body and not re.fullmatch(r'default|[0-9a-f]{8}',body[field]):
+                    return self.reply({'message':f'{field} must be default or an account id'},400)
             state.creations.append(body); return self.reply({'id':CREATED})
         if path=='/api/attachments':
             time.sleep(state.uploadDelay)
@@ -85,6 +89,9 @@ class Handler(BaseHTTPRequestHandler):
             with state.lock:
                 state.attempts[key]=state.attempts.get(key,0)+1
                 if key in state.turns and state.turns[key]['request']!=body: return self.reply({'message':'same key changed body'},409)
+                if key not in state.turns and path.endswith('/turns') and state.rejectTurnOnce:
+                    state.rejectTurnOnce=False; state.status='FAILED'
+                    return self.reply({'message':'the session has ended'},409)
                 if key not in state.turns:
                     turn=str(uuid.uuid4()); state.turns[key]={'turnId':turn,'request':body,'endpoint':path,'kind':'steer' if state.status=='RUNNING' else 'message'}
                     atts=[]
@@ -140,9 +147,9 @@ class Handler(BaseHTTPRequestHandler):
             if att: state.downloads.append({'path':path,'sha256':att['sha256']})
             return self.reply(att['bytes'],mime=att['mime']) if att else self.reply({},404)
         if path=='/api/runners': return self.reply([{'id':RUNNER,'name':'Fixture runner','online':True,'runsAsRoot':False,'capabilities':['codex-account-move/v1'],
-            'planUsage':{'codex':{'primary':{'utilization':23},'secondary':{'utilization':42},'fetchedAt':'2026-10-04T00:00:00Z'}},
-            'modelCatalog':{'codex':[{'value':'fixture-model','label':'Fixture One','reasoningLevels':['low','high'],'serviceTiers':['priority'],'permissionModes':['default','plan']},{'value':'fixture-model-2','label':'Fixture Two'}]},
-            'engines':[{'engine':'codex','installed':True,'auth':'yes','accounts':[{'id':'default','name':'Default','auth':'yes'},{'id':'second','name':'Second account','auth':'yes'},{'id':'expired','name':'Expired account','auth':'no'}]}]}])
+            'planUsage':{'codex':{'primary':{'utilization':23},'secondary':{'utilization':42},'fetchedAt':'2026-10-04T00:00:00Z','accounts':{'1a2b3c4d':{'primary':{'utilization':71}}}},'claude':{'primary':{'utilization':11}}},
+            'modelCatalog':{'codex':[{'value':'fixture-model','label':'Fixture One','reasoningLevels':['low','high'],'serviceTiers':['priority'],'permissionModes':['default','plan']},{'value':'fixture-model-2','label':'Fixture Two'}],'claude':[{'value':'claude-model','label':'Claude model'}]},
+            'engines':[{'engine':'codex','installed':True,'auth':'yes','accounts':[{'id':'default','name':'Default','auth':'yes'},{'id':'1a2b3c4d','name':'Second account','auth':'yes'},{'id':'deadbeef','name':'Expired account','auth':'no'}]}, {'engine':'claude','installed':True,'auth':'yes','accounts':[{'id':'default','name':'Default','auth':'yes'},{'id':'abcd1234','name':'Claude account','auth':'yes'}]}]}])
         if path=='/api/providers': return self.reply([{'slug':'custom-codex','label':'Custom account','runtime':'codex','models':[{'value':'custom-model','label':'Custom model'}]}])
         if path==f'/api/projects/{PROJECT}': return self.reply({'id':PROJECT,'title':'Composer discussion','acceptanceCriteriaItems':[{'ordinal':0,'text':'Keep the discussion draft'}]})
         if path==f'/api/projects/{PROJECT}/acceptance/confirmation': return self.reply({'state':'UNCONFIRMED','currentVersion':{'digest':'fixture-criteria-seal'}})

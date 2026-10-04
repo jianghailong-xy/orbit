@@ -3,7 +3,6 @@ package io.orbitd.android.attachments
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.OpenableColumns
 import io.orbitd.android.composer.ComposerModel
@@ -53,14 +52,13 @@ fun importAttachment(context: Context, model: ComposerModel, uri: Uri, source: S
                 }
                 override fun write(b: Int) { require(count < AttachmentLimits.MAX_FILE) { "File exceeds the 25MB limit" }; super.write(b) }
             }
-            resolver.openInputStream(uri)?.use { input ->
-                if (source == "file") input.copyTo(output)
-                else {
-                    val bitmap = BitmapFactory.decodeStream(input) ?: error("Couldn't read this image.")
-                    try { check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) { "Couldn't convert this image." } }
-                    finally { bitmap.recycle() }
-                }
-            } ?: error("File permission expired. Select the file again.")
+            fun open() = resolver.openInputStream(uri) ?: error("File permission expired. Select the file again.")
+            if (source == "file") open().use { it.copyTo(output) }
+            else {
+                val bitmap = decodeAttachmentImage(::open)
+                try { check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) { "Couldn't convert this image." } }
+                finally { bitmap.recycle() }
+            }
             val bytes = output.toByteArray()
             AttachmentLimits.rejection(source, mime, bytes.size)?.let { error(it) }
             placeholder.copy(name = name, mime = mime, size = bytes.size) to bytes

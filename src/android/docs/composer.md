@@ -43,6 +43,16 @@ creation remains visible with its content and instructs the user to inspect work
 it cannot be blindly replayed. Definite validation/permission rejection restores the draft.
 This API limitation is separate from same-clientTurnId retry for existing sessions.
 
+A failed pre-POST draft write restores editable text and attachments. A definite first-POST
+400/403/404/409/422 rejection does the same, so the next send re-reads capabilities and can resume.
+An uncertain delivery keeps its immutable outbox even if a later retry is refused. A successful
+create response keeps its known session id when local acknowledgement storage fails; the UI
+retries that write without another POST and navigates only after it succeeds. If the process is
+lost before that write succeeds, the saved create is still uncertain and is never blindly replayed.
+Create Automatic omits the provider account; Default/slot use codexAccount or claudeAccount.
+Existing-session account PATCH still sends `automatic`. Draft Usage follows the selected account;
+Automatic and unreported accounts show unknown. Changing provider clears the prior engine's slot.
+
 Catalogs use GET /runners (there is no GET /runners/:id), /providers, /providers/pools and
 /providers/shared-pools. Model values, reasoning levels, fast mode, root/Auto permission and
 account availability consume the existing capability contracts. Configured providers retain
@@ -67,6 +77,12 @@ The fixed Swift ComposerView / FileHandoff / Attachments and backend MAX_UPLOAD_
 | Pasted image URI | Decode and encode PNG; backend <=25 MiB |
 
 Do not silently apply the File 5 MiB cap to Photos/Paste. Boundary tests preserve that difference.
+Photo/Paste conversion first reads dimensions, then samples oversized images to at most 4 Mi pixels
+and a 4096-pixel side before allocating ARGB pixels. It normalizes all EXIF rotations and mirrors
+before PNG encoding. Ordinary images keep their dimensions. The bitmap budget is at most 16 MiB
+plus one orientation copy per import (two concurrent slots); encoded buffers/codec workspace are
+additional. File upload bytes are unchanged. Previews use the same orientation decoder with a
+2560-pixel side bound. This does not change either entry's encoded-byte limit.
 Persistable grants are taken where offered, bytes are copied into the account's private storage,
 and grants are released. Sign-out also releases grants left by an interrupted process; restoring
 the same login preserves them for a pending import. Older system file-picker photo fallbacks

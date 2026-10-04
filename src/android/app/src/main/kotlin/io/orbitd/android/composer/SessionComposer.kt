@@ -73,6 +73,10 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
                 state.error?.let { Text(it, color = MaterialTheme.colorScheme.error); TextButton(onClick = model::clearError) { Text("Dismiss error") } }
                 if (!state.loaded && !state.busy) TextButton(onClick = model::restore) { Text("Retry draft restore") }
                 state.notice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                if (state.acknowledgementPending) {
+                    Text("Session created. Save its confirmation to continue.")
+                    Button(enabled = !state.busy, onClick = model::retrySend) { Text("Retry saving confirmation") }
+                }
                 selectionNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 if (target == null && terminal(detail)) {
                     Text("Sending a message will resume this session in Open.", style = MaterialTheme.typography.bodySmall)
@@ -134,12 +138,12 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
                             onClick = { menu = false; model.control("auto-retry", HttpMethod.DELETE) })
                     }
                 }
-                TextButton(enabled = usable && !state.busy && draft.pending == null, modifier = Modifier.weight(1f),
+                TextButton(enabled = usable && !state.busy && draft.pending == null && draft.createdSessionId == null, modifier = Modifier.weight(1f),
                     onClick = { models = true; model.loadCatalog() }) {
                     Text(effective.text("model")?.ifBlank { "Runtime default" } ?: "Model", maxLines = 1)
                 }
                 val hasDraft = draft.text.isNotBlank() || draft.attachments.isNotEmpty()
-                Button(enabled = usable && !state.busy && !state.waiting && (if (running && !hasDraft) true else hasDraft && draft.pending == null),
+                Button(enabled = usable && !state.busy && !state.waiting && draft.createdSessionId == null && (if (running && !hasDraft) true else hasDraft && draft.pending == null),
                     onClick = { if (running && !hasDraft) model.control("interrupt") else model.send() }, modifier = Modifier.testTag("composer-send")) {
                     Text(if (state.waiting) "Uploading…" else if (state.busy) "Sending…" else if (running && !hasDraft) "Stop" else "Send")
                 }

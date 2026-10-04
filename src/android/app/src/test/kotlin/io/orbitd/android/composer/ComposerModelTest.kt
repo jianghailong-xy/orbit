@@ -27,6 +27,8 @@ class ComposerModelTest {
         val uploadStarts = Channel<Unit>(Channel.UNLIMITED)
         var deny = false
         var createLost = false
+        var rejectTurn = false
+        var failCreateAckSave = false
         fun auth() = AuthSession(HttpTransport { request ->
             val call = request.api; calls += call
             if (call.path.first() == "auth") return@HttpTransport ApiResponse(200, """{"accessToken":"access","refreshToken":"refresh","user":{"id":"u","email":"a@example.test","name":"A"}}""".toByteArray())
@@ -36,6 +38,7 @@ class ComposerModelTest {
                 call.path.first() == "workspaces" -> """{"id":"w","provider":"codex","runnerId":"r","enabled":true}"""
                 call.path == listOf("sessions") && call.method == HttpMethod.POST -> {
                     if (createLost) throw NetworkException()
+                    if (failCreateAckSave) failSave = true
                     """{"id":"created-session"}"""
                 }
                 call.path.first() == "attachments" -> {
@@ -45,6 +48,7 @@ class ComposerModelTest {
                     """{"id":"remote-${calls.count { it.path.first() == "attachments" }}"}"""
                 }
                 call.path.last() in setOf("turns", "resume") && call.method == HttpMethod.POST -> {
+                    if (rejectTurn) return@HttpTransport ApiResponse(409, "{\"message\":\"the session has ended\"}".toByteArray())
                     val raw = call.body!!.decodeToString(); val payload = Wire.json.parseToJsonElement(raw).jsonObject
                     val id = payload.text("clientTurnId")!!
                     // No packet may leave until a recoverable, identical outbox entry exists.
@@ -169,8 +173,8 @@ class ComposerModelTest {
         assertEquals(long, model.state.value.draft.text); assertEquals(1234, model.state.value.draft.selectionStart)
         assertEquals("", rig.model("other-session").state.value.draft.text)
         rig.failSave = true; model.send(); runCurrent(); assertTrue(rig.sends.isEmpty())
-        assertNotNull(model.state.value.draft.pending)
-        rig.failSave = false; model.retrySend(); runCurrent(); assertEquals(1, rig.sends.size)
+        assertNull(model.state.value.draft.pending); assertEquals(long, model.state.value.draft.text)
+        rig.failSave = false; model.send(); runCurrent(); assertEquals(1, rig.sends.size)
         rig.session.logout(); runCurrent(); assertTrue(rig.disk.isEmpty())
         model.edit("late account bytes", 0, 0); runCurrent(); assertTrue(rig.disk.isEmpty())
     }
@@ -246,5 +250,95 @@ class ComposerModelTest {
         assertNull(catalog.usage(obj("""{"provider":"opencode"}""")))
         assertEquals("member-plan",catalog.usage(obj("""{"provider":"pool"}"""))?.text("planType"))
         assertNull(catalog.usage(obj("""{"provider":"pool","poolMemberProviderId":"removed"}""")))
+    }
+    @Test fun createAccountUsesTheExistingAutomaticDefaultAndSlotContract() = runTest {
+        for (provider in listOf("codex", "claude")) for (account in listOf("automatic", "default", "1a2b3c4d")) {
+            val rig = Rig(this); rig.start(); val target = DraftTarget("w")
+            val model = ComposerModel(rig.session, rig.handle, target.key, backgroundScope, target); runCurrent()
+            model.config(buildJsonObject { put("provider", provider); put("account", account) }); runCurrent()
+            model.edit("create $provider $account", 0, 0); model.send(); runCurrent()
+            val body = Wire.json.parseToJsonElement(rig.calls.single { it.path == listOf("sessions") && it.method == HttpMethod.POST }.body!!.decodeToString()).jsonObject
+            assertEquals(if (account == "automatic") null else account, body.text("${provider}Account"))
+            assertNull(body["account"])
+            assertTrue(body.text("${provider}Account")?.matches(Regex("(?:default|[0-9a-f]{8})")) != false)
+        }
+        val rig = Rig(this); val model = rig.start()
+        model.config(buildJsonObject { put("account", "automatic") }, true); runCurrent()
+        assertEquals("automatic", Wire.json.parseToJsonElement(rig.calls.last().body!!.decodeToString()).jsonObject.text("account"))
+    }
+
+    @Test fun draftUsageFollowsSelectionAndProviderSwitchDoesNotCarryAnotherEnginesSlot() = runTest {
+        fun obj(s: String) = Wire.json.parseToJsonElement(s).jsonObject
+        val catalog = ComposerCatalog(obj("""{"planUsage":{"codex":{"planType":"default","accounts":{"1a2b3c4d":{"planType":"selected"},"abcd1234":{"planType":"workspace"}}},"claude":{"planType":"claude-default"}}}"""), emptyList())
+        val detail = obj("""{"provider":"codex","codexAccount":"abcd1234"}""")
+        for ((account, expected) in listOf("1a2b3c4d" to "selected", "default" to "default", "automatic" to null, "aaaaaaaa" to null)) {
+            assertEquals(expected, catalog.usage(JsonObject(detail + ("account" to JsonPrimitive(account))))?.text("planType"))
+        }
+        val rig = Rig(this); rig.start(); val target = DraftTarget("w")
+        val model = ComposerModel(rig.session, rig.handle, target.key, backgroundScope, target); runCurrent()
+        model.config(obj("""{"provider":"codex","account":"1a2b3c4d"}""")); runCurrent()
+        model.config(obj("""{"provider":"claude"}""")); runCurrent()
+        assertNull(model.state.value.draft.resumeConfig["account"])
+        assertEquals("claude-default", catalog.usage(JsonObject(detail + model.state.value.draft.resumeConfig))?.text("planType"))
+    }
+
+    @Test fun rejectedFirstSendRestoresAttachmentsAndRechecksResumeButUnknownRetryKeepsIdentity() = runTest {
+        val rig = Rig(this); val model = rig.start()
+        model.importAttachment(StagedAttachment("a", "file.txt", "text/plain"), { StagedAttachment("a", "file.txt", "text/plain", 1) to byteArrayOf(1) }, {})
+        model.state.first { it.uploads.isEmpty() }
+        model.edit("recover this", 0, 0); runCurrent()
+        rig.rejectTurn = true; model.send(); runCurrent()
+        assertNull(model.state.value.draft.pending)
+        assertEquals("recover this", model.state.value.draft.text)
+        assertEquals("a", model.state.value.draft.attachments.single().id)
+        rig.rejectTurn = false; rig.detail = """{"status":"FAILED","capabilities":{"canSend":false,"canResume":true}}"""
+        model.send(); runCurrent()
+        assertEquals(1, rig.calls.count { it.path.last() == "resume" && it.method == HttpMethod.POST })
+        assertEquals(1, rig.sends.size)
+        model.edit("unknown", 0, 0); rig.failPosts = 1; model.send(); runCurrent()
+        val pending = model.state.value.draft.pending!!
+        rig.rejectTurn = true; model.retrySend(); runCurrent()
+        assertEquals(pending, model.state.value.draft.pending)
+        model.close(); val restored = rig.cold()
+        assertEquals(pending, restored.state.value.draft.pending)
+    }
+
+    @Test fun definite409MustRestoreAnEditableDraft() = runTest {
+        val rig = Rig(this); val model = rig.start()
+        model.edit("must resume instead", 0, 0); runCurrent()
+        rig.rejectTurn = true; model.send(); runCurrent()
+        rig.detail = """{"status":"FAILED","capabilities":{"canSend":false,"canResume":true}}"""
+        model.retrySend(); runCurrent()
+        println("409: pending=${model.state.value.draft.pending?.endpoint}, text=${model.state.value.draft.text}, endpoints=${rig.calls.filter { it.method == HttpMethod.POST }.map { it.path }}")
+        assertNull("A definitive rejection must release pending so the message can resume", model.state.value.draft.pending)
+    }
+    @Test fun zeroPostCreateDiskFailureMustRemainSendable() = runTest {
+        val rig = Rig(this); rig.start(); val target = DraftTarget("w")
+        val model = ComposerModel(rig.session, rig.handle, target.key, backgroundScope, target); runCurrent()
+        model.edit("never submitted", 0, 0); runCurrent()
+        rig.failSave = true; model.send(); runCurrent()
+        rig.failSave = false; model.retrySend(); model.send(); runCurrent()
+        val count = rig.calls.count { it.path == listOf("sessions") && it.method == HttpMethod.POST }
+        println("create before POST disk failure: POST count=$count, pending=${model.state.value.draft.pending?.endpoint}, error=${model.state.value.error}")
+        assertEquals("After disk recovers, a never-submitted creation must be sendable", 1, count)
+    }
+    @Test fun knownCreatedIdMustSurviveAckDiskFailure() = runTest {
+        val rig = Rig(this); rig.start(); val target = DraftTarget("w")
+        val model = ComposerModel(rig.session, rig.handle, target.key, backgroundScope, target); runCurrent()
+        model.edit("created already", 0, 0); runCurrent()
+        rig.failCreateAckSave = true; model.send(); runCurrent()
+        assertEquals("created-session", model.state.value.draft.createdSessionId)
+        assertTrue(model.state.value.acknowledgementPending)
+        model.send(); model.config(buildJsonObject { put("provider", "claude") }); runCurrent()
+        rig.failSave = false; model.retrySend(); runCurrent()
+        println("create ACK disk failure: createdId=${model.state.value.draft.createdSessionId}, pending=${model.state.value.draft.pending?.endpoint}")
+        assertEquals("A successful response's known session id must remain recoverable", "created-session", model.state.value.draft.createdSessionId)
+        assertFalse(model.state.value.acknowledgementPending)
+        assertEquals(1, rig.calls.count { it.path == listOf("sessions") && it.method == HttpMethod.POST })
+        model.close()
+        val restored = ComposerModel(rig.session, rig.handle, target.key, backgroundScope, target); runCurrent()
+        assertEquals("created-session", restored.state.value.draft.createdSessionId)
+        restored.retrySend(); restored.send(); runCurrent()
+        assertEquals(1, rig.calls.count { it.path == listOf("sessions") && it.method == HttpMethod.POST })
     }
 }

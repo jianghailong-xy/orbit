@@ -117,7 +117,7 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
     }
 
     fun send() {
-        if (!state.value.loaded || state.value.busy || state.value.waiting || state.value.draft.pending != null) return
+        if (!state.value.loaded || state.value.busy || state.value.waiting || state.value.draft.pending != null || state.value.draft.createdSessionId != null) return
         mutable.update { it.copy(waiting = true, error = null, notice = null) }
         launch {
             try {
@@ -147,7 +147,7 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                         put("prompt", content); put("shell", shell)
                         draft.resumeConfig.text("account")?.let { account ->
                             val provider = draft.resumeConfig.text("provider") ?: detail.text("provider")
-                            if (provider in setOf("codex", "claude")) put("${provider}Account", account)
+                            if (provider in setOf("codex", "claude") && account != "automatic") put("${provider}Account", account)
                         }
                     } else {
                         if (endpoint == "resume") draft.resumeConfig["account"]?.let { put("account", it) }
@@ -157,13 +157,25 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                 }
                 val pending = PendingSend(id, endpoint, body, draft.text, draft.attachments)
                 mutable.update { it.copy(draft = it.draft.copy(text = "", selectionStart = 0, selectionEnd = 0, attachments = emptyList(), pending = pending)) }
-                persist() // A write failure prevents POST; the in-memory pending remains retryable.
-                transmit(pending)
+                try { persist() } catch (e: Exception) {
+                    // Nothing has left the device. In particular, create has no replay contract.
+                    restoreUnsent(pending)
+                    throw e
+                }
+                transmit(pending, firstAttempt = true)
             } finally { mutable.update { it.copy(busy = false, waiting = false) } }
         }
     }
     fun retrySend() {
         if (state.value.busy || state.value.waiting) return
+        if (state.value.acknowledgementPending) {
+            mutable.update { it.copy(busy = true, error = null) }
+            launch {
+                try { persist(); mutable.update { it.copy(acknowledgementPending = false) } }
+                finally { mutable.update { it.copy(busy = false) } }
+            }
+            return
+        }
         val pending = state.value.draft.pending ?: return
         // The existing create-session door has no public idempotency contract. Never replay an
         // ambiguous create and accidentally start a second agent. Existing turns remain replayable.
@@ -171,10 +183,17 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
         mutable.update { it.copy(busy = true, error = null) }
         launch { try { persist(); transmit(pending) } finally { mutable.update { it.copy(busy = false) } } }
     }
-    private suspend fun transmit(pending: PendingSend) {
+    private fun restoreUnsent(pending: PendingSend) {
+        mutable.update { it.copy(draft = it.draft.copy(pending = null, text = pending.text + it.draft.text,
+            selectionStart = pending.text.length, selectionEnd = pending.text.length,
+            attachments = pending.attachments + it.draft.attachments)) }
+    }
+    private suspend fun transmit(pending: PendingSend, firstAttempt: Boolean = false) {
         val accepted = try { api.mutation(pending.endpoint, pending.body) } catch (e: ApiError) {
-            if (pending.endpoint == "create" && e.status in setOf(400, 403, 404, 409, 422)) {
-                mutable.update { it.copy(draft = it.draft.copy(pending = null, text = pending.text + it.draft.text, attachments = pending.attachments + it.draft.attachments)) }
+            // A refusal of the first POST proves this operation was not accepted. A later refusal
+            // (e.g. access revoked after a lost ACK) cannot disprove an earlier accepted request.
+            if (firstAttempt && e.status in setOf(400, 403, 404, 409, 422)) {
+                restoreUnsent(pending)
                 persist()
             }
             throw e
@@ -188,11 +207,15 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
         // Persist acknowledgement before removing the retry. If disk fails, replay is still safe.
         val previous = state.value.draft
         val created = if (pending.endpoint == "create") accepted.text("id") ?: error("Creation response has no session id.") else null
-        mutable.update { it.copy(draft = it.draft.copy(pending = null, resumeConfig = JsonObject(emptyMap()), createdSessionId = created)) }
+        mutable.update { it.copy(draft = it.draft.copy(pending = null, resumeConfig = JsonObject(emptyMap()), createdSessionId = created),
+            acknowledgementPending = created != null) }
         try { persist() } catch (e: Exception) {
-            mutable.update { it.copy(draft = it.draft.copy(pending = pending, resumeConfig = previous.resumeConfig, createdSessionId = previous.createdSessionId)) }; throw e
+            // Once create returned an id, retry only its local ACK. Never turn known success back
+            // into an ambiguous create or POST it again. Navigation waits for the durable ACK.
+            if (created == null) mutable.update { it.copy(draft = it.draft.copy(pending = pending, resumeConfig = previous.resumeConfig)) }
+            throw e
         }
-        mutable.update { it.copy(notice = note, error = null) }
+        mutable.update { it.copy(notice = note, error = null, acknowledgementPending = false) }
         pending.attachments.forEach { auth.writeData(handle, DataKind.DRAFT, "$key:attachment:${it.id}", ByteArray(0)) }
         refresh()
     }
@@ -218,13 +241,18 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
         }
     }
     fun config(values: JsonObject, accountOnly: Boolean = false) {
-        if (state.value.busy || state.value.waiting || state.value.draft.pending != null) return
+        if (state.value.busy || state.value.waiting || state.value.draft.pending != null || state.value.draft.createdSessionId != null) return
         mutable.update { it.copy(busy = true, error = null) }
         launch {
             try {
                 val detail = api.detail()
                 if (target != null || terminal(detail) && !accountOnly) {
-                    mutable.update { it.copy(draft = it.draft.copy(resumeConfig = JsonObject(it.draft.resumeConfig + values)), notice = if (target == null) "Applies when this session resumes." else "Applies when this session starts.") }
+                    mutable.update {
+                        val config = it.draft.resumeConfig
+                        val changedProvider = values.text("provider")?.let { provider -> provider != (config.text("provider") ?: detail.text("provider")) } == true
+                        it.copy(draft = it.draft.copy(resumeConfig = JsonObject((if (changedProvider) config - "account" else config) + values)),
+                            notice = if (target == null) "Applies when this session resumes." else "Applies when this session starts.")
+                    }
                     persist()
                 } else {
                     api.mutation(if (accountOnly) "account" else "config", values, HttpMethod.PATCH)
