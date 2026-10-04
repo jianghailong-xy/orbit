@@ -53,7 +53,7 @@ class RealtimeFixtureActivity : Activity() {
     override fun onStop() { super.onStop(); lifecycleMarker("stopped") }
 
     private fun lifecycleMarker(stage: String) {
-        File(getExternalFilesDir(null), "a04-realtime").apply { mkdirs() }
+        File(filesDir, "a04-realtime").apply { mkdirs() }
             .resolve("lifecycle.json").writeText(JSONObject().apply {
                 put("pid", Process.myPid()); put("stage", stage); put("activityInstance", instance)
             }.toString())
@@ -110,7 +110,7 @@ class RealtimeFixtureActivity : Activity() {
             "Directory fresh ${state.directoryFresh} · cards fresh ${session?.fresh}\n" +
             "Durable ${transcript?.events?.size ?: 0} · seq ${transcript?.maxSeq ?: 0}\n" +
             "Approvals ${result.getInt("approvals")} · queued ${result.getInt("queue")}\n\n" + result.getString("text")
-        val directory = File(getExternalFilesDir(null), "a04-realtime").apply { mkdirs() }
+        val directory = File(filesDir, "a04-realtime").apply { mkdirs() }
         File(directory, "state.tmp").apply { writeText(result.toString()); renameTo(File(directory, "state.json")) }
     }
 

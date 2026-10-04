@@ -168,6 +168,9 @@ shared emulator or starts `orbit-ui-api29` through `orbit-ui-api35`, and restore
 network/rotation settings on exit. Supply a new evidence directory each run.
 It records APK hash/signature, device build, source SHA/dirty flag, JSON state,
 screenshots, request/cursor history, per-process logs and command exit codes.
+Probe records live in the app's internal files directory and are read through
+`run-as` on debuggable builds. API30 denies shell access to the external app
+directory; this is a harness access issue, not an application crash or lost cache.
 The normal run requires an actual Wi-Fi default network before starting and
 an actual cellular default afterward. The local API29 image produced no Wi-Fi
 scan results with emulator 37.2.12 (also after separately trying the legacy
