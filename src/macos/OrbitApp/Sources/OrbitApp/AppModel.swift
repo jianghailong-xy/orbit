@@ -727,6 +727,9 @@ final class AppModel {
         jobWorkspaceIDs = []
         projectCoordinators = [:]
         sessionFolders = []
+        projectSessions = []
+        projectSessionsAddress = nil
+        projectSessionsError = nil
         #endif
         sessionDetails.removeAll()
         resetNavigation()
@@ -1725,6 +1728,9 @@ final class AppModel {
         await loadSessions()
         await agents?.reloadCurrentSessions()
         sessionDetails.reconcile(with: agents?.agentSessions ?? [])
+        #if os(iOS)
+        if let address = nav.projectSessionsColumn { await loadProjectSessions(address) }
+        #endif
     }
 
     /// Float a result as a toast. What it asks of you decides how long it stays (`ToastItem.dwell`),
@@ -2021,6 +2027,53 @@ final class AppModel {
     // MARK: session folders (iOS — docs/session-folders-move-design.md §3–4)
 
     #if os(iOS)
+    private(set) var projectSessions: [Session] = []
+    private(set) var projectSessionsLoading = false
+    private(set) var projectSessionsError: String?
+    private var projectSessionsAddress: SessionProjectAddress?
+
+    var projectSessionsColumn: SessionProjectAddress? { nav.projectSessionsColumn }
+
+    func openProjectSessions(_ address: SessionProjectAddress) {
+        nav.enterProjectSessions(address)
+    }
+
+    func leaveProjectSessions(_ projectID: String? = nil) {
+        nav.leaveProjectSessions(projectID)
+    }
+
+    /// Project membership spans Workspaces; this request deliberately has no runner/agent filter.
+    func loadProjectSessions(_ address: SessionProjectAddress) async {
+        guard let api else { return }
+        if projectSessionsAddress != address {
+            projectSessionsAddress = address
+            projectSessions = []
+            projectSessionsError = nil
+        }
+        projectSessionsLoading = true
+        defer { if projectSessionsAddress == address { projectSessionsLoading = false } }
+        do {
+            let rows = try await api.listSessions(view: address.view, projectId: address.projectID)
+            guard projectSessionsAddress == address, !Task.isCancelled else { return }
+            // An older server may ignore projectId. It must never put unrelated sessions here.
+            projectSessions = rows.filter { $0.projectMembership?.projectId == address.projectID }
+            projectSessionsError = nil
+            for row in projectSessions { sessionDetails.store(row) }
+        } catch {
+            guard projectSessionsAddress == address, !Task.isCancelled else { return }
+            projectSessionsError = APIClient.failureReason(error)
+        }
+    }
+
+    /// A member may belong to another Workspace. Carry its record into the console's cache and
+    /// change the Workspace without replacing the project page underneath that console.
+    func openProjectMember(_ session: Session, push: Bool) {
+        sessionDetails.store(session)
+        if let agentID = session.agent?.id ?? session.agentId { selectedAgentID = agentID }
+        let node = NavNode.console(sessionID: session.id, origin: .list)
+        if push { self.push(node) } else { nav.selectConsole(node) }
+    }
+
     /// Load the owner's folder library: when a workspace's session list appears, and again when
     /// `folder.changed` says one was created, renamed or deleted, here or on another device.
     /// Best-effort like the tag library — an older server without the endpoint leaves it empty, and
