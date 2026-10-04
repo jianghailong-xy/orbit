@@ -9,10 +9,13 @@
     "preview": "vite preview",
     "test": "vitest run --maxWorkers=2",
     "test:ui-migration": "playwright test --config ui-migration/playwright.config.mjs",
-    "pretest:ui-migration": "npm run build -w @orbit/shared && npm run build"
+    "pretest:ui-migration": "npm run build -w @orbit/shared && npm run build",
+    "test:ui-foundation": "playwright test --config ui-migration/foundation.config.mjs",
+    "pretest:ui-foundation": "npm run build -w @orbit/shared"
   },
   "dependencies": {
     "@ant-design/icons": "^6.3.4",
+    "@base-ui/react": "1.8.0",
     "@dagrejs/dagre": "^3.0.0",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",

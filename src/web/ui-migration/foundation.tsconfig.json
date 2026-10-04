@@ -1,0 +1,10 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": { "types": ["vite/client", "node"] },
+  "include": [
+    "foundation.tsx",
+    "../src/lib/theme.test.tsx",
+    "../src/components/ui/boundary.test.ts"
+  ],
+  "exclude": []
+}

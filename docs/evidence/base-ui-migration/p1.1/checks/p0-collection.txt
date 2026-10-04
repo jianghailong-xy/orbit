@@ -1,0 +1,14 @@
+{
+  "destination": "/root/.orbit/worktrees/08eca834-d488-5ec2-9de0-175fca98a701/docs/evidence/base-ui-migration/p1.1/p0-regression",
+  "normalPassed": 77,
+  "expectedFailures": 16,
+  "screenshots": 252,
+  "stats": {
+    "startTime": "2026-10-03T20:27:29.574Z",
+    "duration": 226956.609,
+    "expected": 93,
+    "skipped": 11,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

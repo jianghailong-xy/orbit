@@ -1,6 +1,7 @@
 import { App as AntApp, ConfigProvider } from 'antd';
 import 'antd/dist/reset.css';
 import './index.css';
+import './components/ui/foundation.css';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
