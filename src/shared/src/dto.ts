@@ -418,8 +418,27 @@ export interface PlanUsageSnapshot {
    *  never carries a reset block — reset is Default's alone. Absent from older runners, and until the
    *  runner has read an account other than Default. */
   accounts?: Record<string, PlanUsageSnapshot>;
+  /** Antigravity only: the Google account's quota buckets from the runner's `/usage` probe
+   *  (docs/antigravity-runtime-contract.md §16.6), flattened across agy's model groups. */
+  buckets?: PlanUsageBucket[];
   /** ISO-8601 when the runner fetched this. */
   fetchedAt?: string;
+}
+
+/**
+ * One Antigravity Google quota bucket, as agy's `/usage` reports it. Unlike a PlanUsageWindow this
+ * says what is LEFT, as agy's own fraction: nothing is converted to a used percentage, and no
+ * absolute quota is inferred from it.
+ */
+export interface PlanUsageBucket {
+  /** agy's bucket id, e.g. `gemini-weekly`, `3p-5h` — which model group the limit belongs to. */
+  id: string;
+  /** The window it refills over, e.g. `weekly`, `5h`. */
+  window: string;
+  /** Share of the limit remaining, 0–1. Zero is a real answer: the bucket is spent. */
+  remainingFraction: number;
+  /** ISO-8601 when it refills; absent when agy gave none. */
+  resetTime?: string;
 }
 
 /** Provider quota for the account a runner is logged into. Old runners report a
@@ -949,20 +968,37 @@ export interface CodexRateLimitResetResultRefusal {
   code: CodexRateLimitResetResultRejection;
 }
 
-/** Engines a runner signs in with on its own machine, rather than using a configured API key. */
-export type LoginEngine = 'claude' | 'codex' | 'kimi';
+/**
+ * Engines a runner signs in with on its own machine, rather than using a configured API key.
+ * Antigravity signs in a Google account, and only on a runner that declares
+ * `antigravity-google-login/v1` (RunnerAntigravityState.googleLogin).
+ */
+export type LoginEngine = 'claude' | 'codex' | 'kimi' | 'antigravity';
 
-/** Engines with an install action in Providers; Antigravity has no sign-in action. */
-export type InstallEngine = LoginEngine | 'antigravity';
+/** Engines with an install action in Providers: every engine a runner signs in with. */
+export type InstallEngine = LoginEngine;
 
 /**
  * Every engine CLI a runner reports on, which is a wider set than the ones it can sign into:
- * OpenCode authenticates per-provider with no relayable flow, and Antigravity runs on a Gemini API
- * key in its environment, so neither is ever a sign-in row — but both are installed on the
- * machine, updated by the same periodic pass, and their versions drift like any other. Which of
- * these a given page offers to sign in is that page's question.
+ * OpenCode authenticates per-provider with no relayable flow, so it is never a sign-in row — but it
+ * is installed on the machine, updated by the same periodic pass, and its version drifts like any
+ * other. Which of these a given page offers to sign in is that page's question.
  */
-export type ReportedEngine = LoginEngine | 'opencode' | 'antigravity';
+export type ReportedEngine = LoginEngine | 'opencode';
+
+/** The credential a runner's built-in Antigravity runs on: its Google sign-in, or the
+ *  `GEMINI_API_KEY` in its own environment. A Google sign-in wins when both exist. */
+export type AntigravityAuthSource = 'google' | 'env_key';
+
+/**
+ * Whether Orbit can sign this runner's Antigravity into a Google account: `available`;
+ * `needs_update`, a runner that does not declare `antigravity-google-login/v1`; or
+ * `unsupported_platform`, one that reported an operating system other than Linux, which the
+ * sign-in does not support yet (show it as not supported, with the Gemini key as the way in). A
+ * runner that has not reported its OS is `available`: it refuses a platform it cannot do itself,
+ * and the relay reports that as the sign-in's failure.
+ */
+export type AntigravityGoogleLogin = 'available' | 'needs_update' | 'unsupported_platform';
 
 /** Control-plane answer for the Gemini runtime. No credential values leave the server. */
 export interface RunnerAntigravityState {
@@ -971,8 +1007,16 @@ export interface RunnerAntigravityState {
   /** Null until the runner has reported the CLI's installation state. */
   installed: boolean | null;
   version: string | null;
-  /** The runner process has a Gemini API key, independent of a workspace's environment. */
+  /** The runner can run built-in Antigravity on a credential of its own, independent of a
+   *  workspace's environment. The name is from when that could only be a Gemini API key: it now
+   *  also covers a Google sign-in, and `authSource` says which. */
   envKeyAvailable: boolean;
+  /** Which credential that is, as the runner last reported it: what a picker labels the engine
+   *  with. A runner from before Google sign-in names none, and the only credential it can mean is
+   *  the env key. `google` with `envKeyAvailable` false is a Google sign-in that has lapsed. Null
+   *  when the runner has neither. */
+  authSource: AntigravityAuthSource | null;
+  googleLogin: AntigravityGoogleLogin;
 }
 
 /** A workspace's built-in Antigravity availability, resolved for every runner its owner controls. */
@@ -985,21 +1029,25 @@ export type AntigravityKeyAvailableByRunner = Record<string, boolean>;
  * engines differ in kind: `claude auth login` prints a URL whose redirect_uri is Anthropic-hosted
  * and then waits for the code that page gives the user (`code` carries it back), while
  * `codex login --device-auth` prints a URL *and* a one-time code to enter there, then polls for
- * the approval itself. Kimi has its own runtime-managed sign-in flow. Either way the user's
- * browser never has to reach the runner — which plain
- * `codex login` would require, since it serves its callback on localhost on that machine.
+ * the approval itself. Kimi has its own runtime-managed sign-in flow, and Antigravity's Google
+ * sign-in pastes a code back like claude's. Either way the user's browser never has to reach the
+ * runner — which plain `codex login` would require, since it serves its callback on localhost on
+ * that machine.
  *
  * Redelivered every heartbeat until the runner's status report moves the server on, so both
- * actions must be idempotent on the runner.
+ * actions must be idempotent on the runner. `cancel` (Antigravity only, to a runner that declares
+ * `antigravity-google-login/v1`) is handed over once: it stops that attempt's sign-in on the
+ * machine, which puts back the Google login a replacement had set aside.
  */
 export interface LoginCommand {
-  action: 'start' | 'code';
+  action: 'start' | 'code' | 'cancel';
   /** Which CLI to sign in. Absent from an older control plane, which only ever drove claude. */
   engine?: LoginEngine;
   /** The authorization code the user pasted, for `code`. */
   code?: string;
   /** Identifies this sign-in, so the runner can tell a redelivered `start` from one the user
-   *  asked for again after cancelling — the latter must preempt whatever is still running. */
+   *  asked for again after cancelling — the latter must preempt whatever is still running. A `code`
+   *  and a `cancel` name it too, so neither can land on a sign-in that replaced theirs. */
   attempt?: string;
   /** Codex only: the account to sign in — `default`, or the id of a slot the runner added. Absent
    *  from a control plane older than accounts, which only ever signed in the runner's own
@@ -1088,6 +1136,14 @@ export interface RunnerEngineHealth {
    *  accounts takes it for. Absent from an older runner, and whenever the runner couldn't list its
    *  accounts — read as the one account every machine had before accounts. */
   accounts?: RunnerEngineAccount[];
+  /** Antigravity only: the credential `auth` is about — the runner's Google sign-in, which wins
+   *  when there is one, or the `GEMINI_API_KEY` in its environment. Absent when it has neither,
+   *  and from a runner older than Google sign-in. */
+  authSource?: AntigravityAuthSource;
+  /** Antigravity only: the Google account's quota, read by the same probe that answered `auth`.
+   *  Carries `provider`, `fetchedAt` and `buckets`, nothing else; present only while that sign-in
+   *  answers `yes`. */
+  planUsage?: PlanUsageSnapshot;
 }
 
 /**
@@ -1221,6 +1277,26 @@ export interface RunnerLoginState {
    *  names none — the runner's own login — and for a new account until the runner reports the
    *  slot it added. */
   account?: string | null;
+}
+
+/** `code` of the 409 a new session gets when its engine is signed out on an online runner. */
+export const ENGINE_SIGNED_OUT = 'ENGINE_SIGNED_OUT';
+
+/**
+ * The 409 body of a session create refused because the engine that would run it is signed out on
+ * the runner it is bound for. An availability refusal: signing in clears it, nothing else changes.
+ */
+export interface EngineSignedOutRefusal {
+  code: typeof ENGINE_SIGNED_OUT;
+  message: string;
+  /** The runtime that would have run the session. */
+  engine: string;
+  /** The runner it is bound for. */
+  runnerId: string;
+  /** The sign-in that clears it, when Orbit can start one from the browser: `POST
+   *  /runners/:runnerId/login` with this body. Set for Antigravity's Google sign-in on a runner that
+   *  can do it; absent otherwise, and the message names what can be done instead. */
+  signIn?: { engine: LoginEngine };
 }
 
 /**

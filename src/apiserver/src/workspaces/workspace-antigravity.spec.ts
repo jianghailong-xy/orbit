@@ -54,3 +54,27 @@ test('workspace create/update compute the key availability while returning only 
     'runner-key': true, 'runner-none': false, 'runner-unreported': false,
   });
 });
+
+test('a runner signed in with Google offers built-in Antigravity to every workspace without a key', async () => {
+  const stored = { id: 'workspace-1', runnerId: null, env: null };
+  const prisma = {
+    runner: {
+      findMany: async () => [
+        { id: 'runner-google', engines: [{ engine: 'antigravity', installed: true, auth: 'yes', authSource: 'google' }] },
+        // The probe could not reach Google this time: still offered, as session create still allows it.
+        { id: 'runner-google-unread', engines: [{ engine: 'antigravity', installed: true, auth: 'unknown', authSource: 'google' }] },
+        { id: 'runner-google-lapsed', engines: [{ engine: 'antigravity', installed: true, auth: 'no', authSource: 'google' }] },
+        { id: 'runner-env-key', engines: [{ engine: 'antigravity', installed: true, auth: 'yes', authSource: 'env_key' }] },
+      ],
+    },
+    workspace: { findFirst: async () => stored },
+    $queryRaw: async () => [],
+  };
+  const read = await new WorkspacesService(prisma as never).get('owner-1', 'workspace-1');
+  assert.deepEqual(read.antigravityKeyAvailableByRunner, {
+    'runner-google': true,
+    'runner-google-unread': true,
+    'runner-google-lapsed': false,
+    'runner-env-key': true,
+  });
+});

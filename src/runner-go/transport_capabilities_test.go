@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -22,6 +23,9 @@ func TestTransportAdvertisesSupportedProviders(t *testing.T) {
 		}
 		if got := r.Header.Get("X-Orbit-Supported-Providers"); got != runnerSupportedProviders {
 			t.Errorf("provider capability header = %q, want %q", got, runnerSupportedProviders)
+		}
+		if got := r.Header.Get("X-Orbit-Runner-Os"); got != runtime.GOOS {
+			t.Errorf("runner OS header = %q, want %q", got, runtime.GOOS)
 		}
 		if got := r.Header.Get(runnerWriteCapabilityRevisionHeader); got != "2" {
 			t.Errorf("runner capability revision = %q, want 2", got)
