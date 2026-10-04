@@ -341,7 +341,7 @@ struct SessionFolderPage: View {
 
     private func projectRow(_ row: SessionProjectRow) -> some View {
         let projectAddress = SessionProjectAddress(projectID: row.projectId, agentID: address.agentID, view: address.view)
-        return SessionProjectRowView(row: row, onOpen: {
+        let onOpen = {
             switch row.target {
             case .session(let id):
                 if let session = (app.sessions + (app.agents?.allSessions ?? [])).first(where: { $0.id == id }) {
@@ -349,10 +349,9 @@ struct SessionFolderPage: View {
                 }
             case .project: app.openProjectSessions(projectAddress)
             }
-        }, onSessions: { app.openProjectSessions(projectAddress) })
-        .sessionProjectRowActions(row, onCoordinator: {
-            if let coordinator = row.coordinator { app.openProjectMember(coordinator, push: rowNavigation == .push) }
-        }, onSessions: { app.openProjectSessions(projectAddress) }, onProject: {
+        }
+        return SessionProjectRowView(row: row, onOpen: onOpen, onSessions: { app.openProjectSessions(projectAddress) })
+        .sessionProjectRowActions(row, onOpen: onOpen, onSessions: { app.openProjectSessions(projectAddress) }, onProject: {
             app.openProject(row.projectId)
         }, onMove: { if let coordinator = row.coordinator { movingSession = coordinator } })
     }

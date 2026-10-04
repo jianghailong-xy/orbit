@@ -2,6 +2,11 @@ import XCTest
 @testable import OrbitKit
 
 final class SessionProjectCopyTests: XCTestCase {
+    func testRowMenuOpensTheSession() {
+        XCTAssertEqual(SessionProjectCopy.openSession, "Open Session")
+        XCTAssertEqual(SessionProjectCopy.openCoordinator, "Open Coordinator")
+    }
+
     func testProgressAndPageCountsUseTheDesignsWords() {
         XCTAssertEqual(SessionProjectCopy.progress(done: 0, total: 0), "0/0")
         XCTAssertEqual(SessionProjectCopy.progressHint(sessions: 5, running: 2), "5 sessions · 2 running")
