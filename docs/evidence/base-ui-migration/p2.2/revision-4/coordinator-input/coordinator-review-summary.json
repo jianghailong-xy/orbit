@@ -1,0 +1,35 @@
+{
+  "taskId": "34Za394q2ZEgr7TKprjkF",
+  "evidenceRevision": "3",
+  "sourceCommit": "489941cf0942f71edad00ecbc14d5a53aeb5da0b",
+  "root": "/tmp/orbit-p22-r3-coordinator-review-htl046lc",
+  "reviewScope": "Independent merge/evidence audit, same-source build/full Web tests, four relevant type checks, three test discovery lists and original 32-case nested choices entry suite. Only local choices port changed 4177 to14391.",
+  "merge": "Both parent-exclusive changes intact; exactly 3 combined config files and auto-combined UI README; 208 evidence files and95 source hash inputs verified; r2 evidence unchanged.",
+  "buildTest": {
+    "files": 295,
+    "passedTests": 3661,
+    "exitCode": 0
+  },
+  "types": "4 of4 passed after restoring omitted tsconfig.base.json from exact commit to reviewer archive. Initial setup failure retained separately.",
+  "discovery": {
+    "choices": 520,
+    "toasts": 232,
+    "p0": 112
+  },
+  "browser": {
+    "passed": 31,
+    "failed": 1,
+    "skipped": 0,
+    "flaky": 0,
+    "project": "chromium-dark-desktop",
+    "case": "reduce Dialog Popover Select exits restore one layer at a time",
+    "line": 94
+  },
+  "comparison": "Executor same32 suite previously31/32, failure same assertion in chromium-light-desktop, followed by5/5. Coordinator reproduced failure in dark desktop; no independent post-failure repeat to disguise current red.",
+  "finding": "Visible/focus assertions pass; immediate style read still locked. Exact dependency schedules unlock in0ms Timeout. Executor trace proves subsequent style empty; reviewer trace includes last locked snapshot1.154ms after read and does not alone establish eventual recovery. A reliable bounded post-close unlock verification is still needed.",
+  "recommendedDecision": "SEND_BACK focused on synchronization and evidence; do not infer confirmed production bug from timing failure, do not weaken immediate inner-layer lock/focus assertions.",
+  "setupNotes": [
+    "First helper archive hung after extraction, interrupted with exit130; extracted inputs and source provenance checked separately.",
+    "Initial shared build lacked reviewer tsconfig.base.json; restored exact same-commit file and all final checks passed. Neither is attributed to task delivery."
+  ]
+}

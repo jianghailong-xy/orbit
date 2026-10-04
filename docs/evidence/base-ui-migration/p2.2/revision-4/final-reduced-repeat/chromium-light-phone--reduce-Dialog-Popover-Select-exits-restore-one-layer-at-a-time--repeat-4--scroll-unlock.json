@@ -1,0 +1,60 @@
+{
+  "limitMs": 100,
+  "unlockedAfterMs": 53.79999998211861,
+  "firstRead": {
+    "phase": "first-read-after-hidden-and-focus",
+    "afterEscapeMs": 66.39999997615814,
+    "overflow": [
+      "visible",
+      "auto"
+    ],
+    "locked": false
+  },
+  "finalRead": {
+    "phase": "final-read",
+    "afterEscapeMs": 66.39999997615814,
+    "overflow": [
+      "visible",
+      "auto"
+    ],
+    "locked": false
+  },
+  "samples": [
+    {
+      "phase": "final-escape",
+      "afterEscapeMs": 0.19999998807907104,
+      "overflow": [
+        "visible",
+        "hidden"
+      ],
+      "locked": true
+    },
+    {
+      "phase": "style-change",
+      "afterEscapeMs": 53.79999998211861,
+      "overflow": [
+        "visible",
+        "auto"
+      ],
+      "locked": false
+    },
+    {
+      "phase": "first-read-after-hidden-and-focus",
+      "afterEscapeMs": 66.39999997615814,
+      "overflow": [
+        "visible",
+        "auto"
+      ],
+      "locked": false
+    },
+    {
+      "phase": "final-read",
+      "afterEscapeMs": 66.39999997615814,
+      "overflow": [
+        "visible",
+        "auto"
+      ],
+      "locked": false
+    }
+  ]
+}
