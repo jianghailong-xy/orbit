@@ -1,0 +1,68 @@
+{
+  "checks": [
+    {
+      "file": "checks/controls-browser.json",
+      "command": "npm run test:ui-controls -w @orbit/web",
+      "exitCode": 0,
+      "durationSeconds": 100.72856569290161
+    },
+    {
+      "file": "checks/final-public-boundary.json",
+      "command": "npm test -w @orbit/web -- src/lib/theme.test.tsx src/components/ui/boundary.test.ts",
+      "exitCode": 0,
+      "durationSeconds": 1.0144176483154297
+    },
+    {
+      "file": "checks/final-web-build.json",
+      "command": "npm run build -w @orbit/web",
+      "exitCode": 0,
+      "durationSeconds": 2.016146183013916
+    },
+    {
+      "file": "checks/foundation-browser.json",
+      "command": "npm run test:ui-foundation -w @orbit/web",
+      "exitCode": 0,
+      "durationSeconds": 89.46278691291809
+    },
+    {
+      "file": "checks/p0-browser-regression.json",
+      "command": "npm run test:ui-migration -w @orbit/web",
+      "exitCode": 0,
+      "durationSeconds": 270.536404132843
+    },
+    {
+      "file": "checks/public-boundary.json",
+      "command": "npm test -w @orbit/web -- src/lib/theme.test.tsx src/components/ui/boundary.test.ts",
+      "exitCode": 0,
+      "durationSeconds": 1.214979887008667
+    },
+    {
+      "file": "checks/typecheck-controls.json",
+      "command": "node node_modules/typescript/bin/tsc -p src/web/ui-migration/controls.tsconfig.json --noEmit",
+      "exitCode": 0,
+      "durationSeconds": 0.24614262580871582
+    },
+    {
+      "file": "checks/typecheck-foundation.json",
+      "command": "node node_modules/typescript/bin/tsc -p src/web/ui-migration/foundation.tsconfig.json --noEmit",
+      "exitCode": 0,
+      "durationSeconds": 0.26952433586120605
+    },
+    {
+      "file": "checks/web-build.json",
+      "command": "npm run build -w @orbit/web",
+      "exitCode": 0,
+      "durationSeconds": 1.890716552734375
+    },
+    {
+      "file": "checks/web-test.json",
+      "command": "npm run test -w @orbit/web",
+      "exitCode": 0,
+      "durationSeconds": 195.4902799129486
+    }
+  ],
+  "runtime": {
+    "node": "v26.10.0",
+    "npm": "11.19.1"
+  }
+}
