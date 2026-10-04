@@ -260,13 +260,18 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
 /// those would name work that is not what is being pushed.
 public struct ProjectIntegrationInFlight: Codable, Equatable, Sendable {
     public let taskTitle: String?
-    /// `RUNNING` while the combined-tree checks run, `QUEUED` while the job waits its turn.
+    public let kind: String?
+    public let phase: String?
+    /// `RUNNING` while the job runs, `QUEUED` while it waits its turn.
     public let state: String
     /// What "for how long" counts from: the claim for a running job, the enqueue for a queued one.
     public let startedAt: String
 
-    public init(taskTitle: String? = nil, state: String, startedAt: String) {
+    public init(taskTitle: String? = nil, state: String, startedAt: String,
+                kind: String? = nil, phase: String? = nil) {
         self.taskTitle = taskTitle
+        self.kind = kind
+        self.phase = phase
         self.state = state
         self.startedAt = startedAt
     }
@@ -274,6 +279,8 @@ public struct ProjectIntegrationInFlight: Codable, Equatable, Sendable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         taskTitle = try c.decodeIfPresent(String.self, forKey: .taskTitle)
+        kind = try c.decodeIfPresent(String.self, forKey: .kind)
+        phase = try c.decodeIfPresent(String.self, forKey: .phase)
         state = try c.decodeIfPresent(String.self, forKey: .state) ?? "QUEUED"
         startedAt = try c.decodeIfPresent(String.self, forKey: .startedAt) ?? ""
     }

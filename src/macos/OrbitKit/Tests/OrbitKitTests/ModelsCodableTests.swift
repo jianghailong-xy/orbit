@@ -55,6 +55,15 @@ final class ModelsCodableTests: XCTestCase {
         XCTAssertEqual(TaskStatus.inProgress.rawValue, "IN_PROGRESS")
     }
 
+    func testPromotionExecutionDecodesSeparatelyFromConfirmation() throws {
+        let json = #"{"promotionId":"pr-1","state":"CONFIRMED","execution":{"state":"QUEUED","phase":null,"startedAt":"2026-09-13T12:00:00Z"}}"#
+        let view = try JSONDecoder().decode(ProjectPromotionView.self, from: Data(json.utf8))
+        XCTAssertEqual(view.state, .confirmed)
+        XCTAssertEqual(view.execution?.state, "QUEUED")
+        XCTAssertNil(view.execution?.phase)
+        XCTAssertEqual(view.execution?.startedAt, "2026-09-13T12:00:00Z")
+    }
+
     func testNewSessionStateEnumsDecodeUnknownValuesLeniently() throws {
         XCTAssertEqual(try JSONDecoder().decode(SessionRunState.self,
                                                 from: Data(#""FUTURE_RUN_STATE""#.utf8)), .unknown)

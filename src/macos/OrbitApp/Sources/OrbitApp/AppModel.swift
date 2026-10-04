@@ -820,6 +820,7 @@ final class AppModel {
                     await self.refreshFocusedSessionDetailIfNeeded()
                     self.consoleRegistry?.flush(self.focusedConsoleSessionID)
                     await self.refreshWatchesIfDue()
+                    await self.projects?.refreshIfDue()
                 }
                 try? await Task.sleep(nanoseconds: 4_000_000_000)
             }

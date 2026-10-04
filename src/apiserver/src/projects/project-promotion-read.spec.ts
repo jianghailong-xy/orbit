@@ -58,6 +58,7 @@ function row(over: Record<string, unknown> = {}): Record<string, unknown> {
 
 /** Records what each read asked for, so a query that answers the wrong question can be seen. */
 interface Reads {
+  execution?: Record<string, unknown>;
   sync?: Record<string, unknown>;
   runs?: Record<string, unknown>;
   tasks?: Record<string, unknown>;
@@ -80,6 +81,7 @@ function prismaStub(
     syncAt?: Date | null;
     /** The finished checks of this project, newest first, as how long each one took in ms. */
     runs?: number[];
+    execution?: { state: string; phase: string | null; startedAt: Date | null; createdAt: Date } | null;
     reads?: Reads;
   } = {},
 ): PrismaService {
@@ -114,6 +116,10 @@ function prismaStub(
     },
     projectIntegrationJob: {
       findFirst: async (args: Record<string, unknown>) => {
+        if ((args.where as Record<string, unknown>).id) {
+          reads.execution = args;
+          return over.execution ?? null;
+        }
         reads.sync = args;
         return over.syncAt === undefined || over.syncAt === null
           ? null
@@ -254,6 +260,37 @@ test('a candidate that is not being re-checked carries no re-check at all', asyn
   });
 
   assert.equal(view?.recheck, null);
+});
+
+test('a confirmed merge reads its own landing job and reports queued independently of confirmation', async () => {
+  const reads: Reads = {};
+  const createdAt = new Date('2026-09-13T11:57:00.000Z');
+  const view = await current({
+    promotion: { state: 'CONFIRMED', landJobId: 'land-this-candidate' }, reads,
+    execution: { state: 'QUEUED', phase: null, startedAt: null, createdAt },
+  });
+  assert.deepEqual(view?.execution, { state: 'QUEUED', phase: null, startedAt: createdAt });
+  assert.deepEqual(reads.execution?.where, {
+    id: 'land-this-candidate', projectId: 'project-1', promotionId: '3fFMHLbE7JTsr3vHFOzIDM',
+    kind: 'LAND_PROMOTION', state: { in: ['QUEUED', 'RUNNING'] },
+  });
+});
+
+test('a merge reports the runner phase instead of treating RECHECKING as an ongoing check', async () => {
+  const createdAt = new Date('2026-09-13T11:57:00.000Z');
+  const startedAt = new Date('2026-09-13T11:58:00.000Z');
+  const view = await current({
+    promotion: { state: 'RECHECKING', landJobId: 'land-this-candidate', recheckedAt: startedAt },
+    execution: { state: 'RUNNING', phase: 'PUSH', startedAt, createdAt },
+  });
+  assert.deepEqual(view?.execution, { state: 'RUNNING', phase: 'PUSH', startedAt });
+});
+
+test('confirmation without a live job does not fabricate a running merge', async () => {
+  assert.equal((await current({ promotion: { state: 'CONFIRMED', landJobId: 'missing' } }))?.execution, null);
+  const reads: Reads = {};
+  assert.equal((await current({ promotion: { state: 'MERGED', landJobId: 'old-job' }, reads }))?.execution, null);
+  assert.equal(reads.execution, undefined, 'a terminal candidate never reads a job as current execution');
 });
 
 test('the answer to a confirmation is the same rows the card was drawn from', async () => {

@@ -1123,7 +1123,7 @@ interface ProjectListAttention {
 
 ### 7.2 项目详情（效果图 2）
 
-**V3（集成线一行）**：`⎇ <ref> · <n> commits ahead of main · synced with main <age> · Integrating <i> · Queued <q> · Merge check ✓ passing | ✕ failing on the branch tip`，右侧 `Integration settings`。`MAIN` 线显示 `main · Integrating <i> · Queued <q> · Merge check …`。数据取 `ProjectIntegrationView`。
+**V3（集成线一行）**：`⎇ <ref> · <n> commits ahead of main · synced with main <age> · Running jobs <i> · Queued <q> · Last landing check ✓ passing | ✕ failing | not checked`，右侧 `Integration settings`。`MAIN` 线显示 `main · Running jobs <i> · Queued <q> · Last landing check …`。数据取 `ProjectIntegrationView`。
 
 **V4（集成设置卡，效果图 6 ③）**：`Tasks land on`（`A project branch` · `project/<name>` / `Directly into main`，锁定后禁用并写明原因）、`Merge check`、`Escalate after`；写入 `PATCH /projects/:id/integration`。
 
@@ -1135,12 +1135,16 @@ interface ProjectListAttention {
 |---|---|---|
 | Running | `running` | active sessions |
 | Ready | `ready` | can start now |
-| Waiting | `blocked` | `for a prerequisite to land`（`waitingForLanding > 0`）/ `waiting on dependencies` |
-| ⟳ Integrating | `integrating`（DONE 代码任务，最新作业 QUEUED / RUNNING 或有 OPEN 集成类待办；MAIN 线含等待晋升确认） | checks running on the combined tree |
+| Waiting | `blocked` | `<waitingForLanding> waiting for a prerequisite to land`（`waitingForLanding > 0`，只说明其中这一部分）/ `waiting on dependencies` |
+| Pending landing | `integrating`（DONE 代码任务，集成已开始但尚无落地回执；包括排队、运行、失败、待处理） | finished work without a landing receipt |
 | ⎇ On project branch | `onIntegrationLine`（`MAIN` 线不显示） | not on main yet |
 | ✓ On main | `onUpstream` | landed on main |
 
 `doneNotIntegrated`（非代码任务、未开始集成项目的 DONE）、`failed`、`cancelled`、`awaitingVerification` 非零时才显示为附加格（附录 A-Q19）。
+
+动态行只描述实际 `QUEUED` / `RUNNING` 作业，优先运行中的作业，再选最早排队者。按 `kind` 区分 `Landing`、`Merge check`、`Merge to main`，按 runner `phase` 显示 fetching / syncing main / rebasing / merging / checking / verifying / pushing；缺少阶段时只说 running。队列中的作业始终说 queued。列表与侧栏的活动读数包含这些作业，但不把失败或等待批准当作运行。任务已 DONE 但仍有待落地工作、只在项目分支上，或存在在途作业时，不显示 Ready to wrap up。
+
+`Last landing check` 是最近完成 LAND_TASK 的实际检查结果，不证明当前分支 tip 的检查状态；没有检查记录就是 not checked。领先提交数标注 `at last measurement`，失败尝试不清除已有实测。正在处理旧异常的新作业，只有 `handlingJobId` 确实指向该作业时才以其 QUEUED / RUNNING 显示；异常在终态前仍保持 OPEN。
 
 **V7（协调会话卡，效果图 2 ③）**：新增两行，组件 `ProjectProgressStatus.tsx` 导出 `CoordinatorProgressRows`，由 `ProjectCoordinatorCard` 渲染：
 
@@ -1157,7 +1161,7 @@ interface ProjectListAttention {
 
 | 分组 | 成员 | 行内 tag |
 |---|---|---|
-| `Integrating · checks run on the combined tree` | `QUEUED` / `RUNNING` / `CONFLICT` / `CHECK_FAILED` / `ERROR` / `AWAITING_OWNER` | `Queued for integration`；`Integrating · checks <age>`；`Conflict · coordinator`；`Checks failed · coordinator`；`Integration error · coordinator`（负责人为 owner 时写 `· you`）；`Awaiting your approval` |
+| `Pending landing` | `QUEUED` / `RUNNING` / `CONFLICT` / `CHECK_FAILED` / `ERROR` / `AWAITING_OWNER` | `Queued for integration`；`Integrating · checking`；`Conflict · coordinator`；`Checks failed · coordinator`；`Integration error · coordinator`（负责人为 owner 时写 `· you`）；`Awaiting your approval` |
 | `Waiting · for a prerequisite to land` | 依赖未满足且 `landingWaitCount > 0` | `Waits for <n> task(s) to land` |
 | `Landed` | `ON_INTEGRATION_LINE` / `ON_UPSTREAM` | `On <ref>`（绿）；`On main`（实心绿，整行淡出） |
 

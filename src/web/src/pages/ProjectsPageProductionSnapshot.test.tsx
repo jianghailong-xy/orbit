@@ -451,7 +451,7 @@ describe('projects index — badges over the 2026-08-23 production snapshot', ()
   });
 
   it('badges the finished project nobody closed with its own count', () => {
-    expect(badges(html)).toContainEqual([NAME.sessionList, '12/12 settled · still open']);
+    expect(badges(html)).toContainEqual([NAME.sessionList, '12/12 tasks settled · project still open']);
   });
 
   it('moves only quiet ready queues to attention and leaves fresh queues in Ready', () => {

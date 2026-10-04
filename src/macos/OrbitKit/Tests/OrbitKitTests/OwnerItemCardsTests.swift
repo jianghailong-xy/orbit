@@ -244,7 +244,8 @@ final class OwnerItemCardsTests: XCTestCase {
     /// Mock 4's own candidate: the numbers in its four states are what these assertions read.
     private func candidate(_ state: PromotionState,
                            conflicts: [String] = [],
-                           merged: ProjectPromotionView.Merged? = nil) -> ProjectPromotionView {
+                           merged: ProjectPromotionView.Merged? = nil,
+                           execution: ProjectPromotionView.Execution? = nil) -> ProjectPromotionView {
         ProjectPromotionView(
             promotionId: "pr-1", state: state,
             sourceRef: "refs/heads/project/bg-jobs", sourceSha: "58f3a4711d0c",
@@ -255,7 +256,7 @@ final class OwnerItemCardsTests: XCTestCase {
                                             expectedExitCode: 0, exitCode: 0, timedOut: false,
                                             durationMs: 372_000)],
             conflicts: conflicts, landsAs: "MERGE_COMMIT",
-            askedAt: "2026-09-13T10:00:00Z", recheckedAt: nil, merged: merged)
+            askedAt: "2026-09-13T10:00:00Z", recheckedAt: nil, merged: merged, execution: execution)
     }
 
     /// Four states, four cards — and the two that are neither: a candidate still being checked is
@@ -274,7 +275,9 @@ final class OwnerItemCardsTests: XCTestCase {
     /// The headings, in mock 4's own words.
     func testTheMergeCardsHeadingsAreTheDesignsWords() {
         XCTAssertEqual(PromotionCards.title(candidate(.ready)), "Merge project/bg-jobs into main?")
-        XCTAssertEqual(PromotionCards.title(candidate(.rechecking)), "Merging project/bg-jobs into main…")
+        XCTAssertEqual(PromotionCards.title(candidate(.rechecking, execution: .init(
+            state: "RUNNING", phase: "CHECK", startedAt: "2026-09-13T12:00:00Z"))),
+                       "Re-checking project/bg-jobs before merging into main…")
         XCTAssertEqual(PromotionCards.title(candidate(.merged)), "✓ Merged into main")
         XCTAssertEqual(PromotionCards.title(candidate(.blocked, conflicts: ["a.go"])),
                        "project/bg-jobs can’t merge into main yet")
@@ -325,7 +328,8 @@ final class OwnerItemCardsTests: XCTestCase {
     /// who has it while they cannot merge — D's on its press rather than in a row of its own
     /// (owner decision 2026-09-24), which is why the press carries the wait.
     func testTheMergingAndBlockedCardsSayWhoHasIt() {
-        XCTAssertEqual(PromotionCards.mergingStatusLine(candidate(.rechecking)),
+        XCTAssertEqual(PromotionCards.mergingStatusLine(candidate(.rechecking, execution: .init(
+            state: "RUNNING", phase: "CHECK", startedAt: "2026-09-13T12:00:00Z"))),
                        "main moved since the check — re-checking the combined tree")
         XCTAssertEqual(PromotionCards.nothingToDo,
                        "nothing to do — it lands on its own if the re-check passes, and comes back "
@@ -357,6 +361,23 @@ final class OwnerItemCardsTests: XCTestCase {
                                             assignee: .coordinator)
         XCTAssertEqual(PromotionCards.resolvingLine(unreadable, now: now),
                        "Coordinator is resolving it")
+    }
+
+    func testConfirmationDoesNotInventARunningMerge() {
+        let unknown = candidate(.confirmed)
+        XCTAssertEqual(PromotionCards.title(unknown), "Merge confirmed: project/bg-jobs into main")
+        XCTAssertEqual(PromotionCards.mergingStatusLine(unknown), "confirmed — waiting for merge execution")
+        XCTAssertEqual(PromotionCards.mergingActionLabel(unknown), "Confirmed")
+        for state in [PromotionState.confirmed, .rechecking] {
+            let queued = candidate(state, execution: .init(state: "QUEUED", startedAt: "2026-09-13T12:00:00Z"))
+            XCTAssertEqual(PromotionCards.title(queued), "Merge queued: project/bg-jobs into main")
+            XCTAssertEqual(PromotionCards.mergingStatusLine(queued), "confirmed — queued to merge into main")
+            XCTAssertEqual(PromotionCards.mergingActionLabel(queued), "Queued")
+        }
+        let pushing = candidate(.rechecking, execution: .init(
+            state: "RUNNING", phase: "PUSH", startedAt: "2026-09-13T12:00:00Z"))
+        XCTAssertEqual(PromotionCards.mergingStatusLine(pushing), "confirmed — publishing the tested tree to main")
+        XCTAssertEqual(PromotionCards.mergingActionLabel(pushing), "Merging…")
     }
 
     /// D's press is word for word the browser's, by the constants it exports — the same parity the

@@ -2595,7 +2595,7 @@ export class ProjectsService {
   /**
    * The open projects the web sidebar's Projects group draws, and only what it draws them from.
    *
-   * `list`'s Open read is the same rows plus seven task lanes, the integration line and the whole
+   * `list`'s Open read is the same rows plus seven task lanes and the whole
    * attention summary, and the rail polls this every 15 seconds from every open tab. Classifying
    * every task of every project for a dot that reads one lane is what made a browser tab the
    * single largest consumer of this database (2026-09-29: ~5,400 calls/day, ~1.1s of PostgreSQL
@@ -2606,6 +2606,8 @@ export class ProjectsService {
    * and `attention` is the same whole summary the index sends (its `ownerItems` and
    * `startRequest` are what the row's amber count reads). Absent fields are absent for a reason:
    * depth here is paid for twice a minute by every open tab.
+   * Integration activity comes from a page-wide filtered count, so landing and merging keep the
+   * dot active after their task sessions finish, without counting stopped exceptions as work.
    *
    * `buckets.running` is the index's own number, not a second reading of IN_PROGRESS — see the
    * reader, which reaches it with the same `projectTaskWorkStateSql` the index uses. A rail that
@@ -2624,11 +2626,12 @@ export class ProjectsService {
       select: SIDEBAR_PROJECT_SELECT,
     });
     if (projects.length === 0) return [];
-    const [rollups, attention] = await Promise.all([
+    const [rollups, attention, integration] = await Promise.all([
       readProjectSidebarRollups(this.prisma, ownerId),
       // The same reader the index folds, narrowed to the projects this read returns, so the rail
       // and the page cannot disagree about what waits on the reader.
       readProjectListAttention(this.prisma, ownerId, ProjectStatus.OPEN),
+      readProjectIntegrationLines(this.prisma, projects.map((project) => project.id)),
     ]);
     return projects.map(({ coordinatorSession, ...project }) => ({
       ...project,
@@ -2637,6 +2640,7 @@ export class ProjectsService {
       ...(rollups.get(project.id) ?? { buckets: { running: 0 }, lastActivityAt: null }),
       attention: attention.get(project.id) ?? emptyProjectListAttention(),
       coordinatorActivity: coordinatorActivityOf(coordinatorSession),
+      integration: integration.get(project.id) ?? null,
     }));
   }
 

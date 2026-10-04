@@ -103,7 +103,7 @@ describe('projects index — the sort keys are on the rows they sort', () => {
       ['Orbit Agent Contract 与渐进式使用指南', 'Ready · no activity 2d'],
       ['iOS 客户端性能与内存优化', 'Ready · no activity 2d'],
       ['Project 多 Agent 协作与 Agent 级 Provider 调度', 'Ready · no activity 2d'],
-      ['Session 列表重设计：注意力收件箱 + 项目上卷', '12/12 settled · still open'],
+      ['Session 列表重设计：注意力收件箱 + 项目上卷', '12/12 tasks settled · project still open'],
     ]);
     for (const [title, reason] of expected) {
       expect(rowTextOf(html, title)).toContain(reason);

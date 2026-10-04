@@ -30,10 +30,12 @@ extension ProjectPage {
     public static let stalledPress = "Check runners"
 
     /// Every task settled and the goal still open: the in-between state, said out loud.
-    public static func wrappingUp(status: ProjectStatus, _ b: ProjectPanoramaBuckets) -> Bool {
+    public static func wrappingUp(status: ProjectStatus, _ b: ProjectPanoramaBuckets,
+                                 inFlight: ProjectIntegrationInFlight? = nil) -> Bool {
         let idle = b.running == 0 && b.ready == 0 && b.blocked == 0
         return status == .open && idle && b.awaitingVerification == 0 && b.failed == 0
             && b.done + b.cancelled > 0
+            && (b.integrating ?? 0) == 0 && (b.onIntegrationLine ?? 0) == 0 && inFlight == nil
     }
 
     public static let wrapUpTitle = "Ready to wrap up"
