@@ -494,6 +494,9 @@ interface ItemRow {
   assignee: string;
   assigneeReason: string;
   integrationJobId: string | null;
+  handlingJobId: string | null;
+  handlingSessionId: string | null;
+  handlingReason: string | null;
   payload: {
     failureClass?: string;
     generation?: number;
@@ -504,15 +507,18 @@ interface ItemRow {
   resolvedBy: string | null;
   resolvedBySessionId: string | null;
   resolutionNote: string | null;
+  supersededByItemId: string | null;
 }
 
 /** Every item about this task, oldest first. */
 function itemsOf(db: PrismaClient, taskId: string): Promise<ItemRow[]> {
   return db.$queryRaw<ItemRow[]>(Prisma.sql`
     SELECT "id", "kind", "state", "assignee", "assignee_reason" AS "assigneeReason",
-           "integration_job_id" AS "integrationJobId", "payload", "resolution",
+           "integration_job_id" AS "integrationJobId", "handling_job_id" AS "handlingJobId",
+           "handling_session_id" AS "handlingSessionId", "handling_reason" AS "handlingReason",
+           "payload", "resolution",
            "resolved_by" AS "resolvedBy", "resolved_by_session_id" AS "resolvedBySessionId",
-           "resolution_note" AS "resolutionNote"
+           "resolution_note" AS "resolutionNote", "superseded_by_item_id" AS "supersededByItemId"
       FROM "project_open_item"
      WHERE "task_id" = ${taskId}::uuid
      ORDER BY "created_at", "id"`);
@@ -540,7 +546,7 @@ async function denied(run: () => Promise<unknown>): Promise<{ status: number; co
 
 const REASON = 'the merge check\'s runner-go baseline was repaired; the red was the baseline\'s, not this delivery\'s';
 
-test('Automatic: the coordinator reruns a red landing with a reason — one new generation, the failure class and the reason kept, its item superseded',
+test('Automatic: the coordinator reruns a red landing with a reason — one new generation, the failure class and the reason kept, its item handled but still open',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
     try {
@@ -565,20 +571,22 @@ test('Automatic: the coordinator reruns a red landing with a reason — one new 
       assert.equal(retried.failureClass, 'CHECK_FAILED');
       assert.equal(retried.reason, REASON, 'the reason is kept as given, trimmed');
       assert.equal(retried.sourceRef, `refs/heads/${task.branch}`);
-      assert.deepEqual(retried.supersededItemIds, [opened!.id]);
+      assert.deepEqual(retried.handlingItemIds, [opened!.id]);
       assert.equal(second.retryOfJobId, job.jobId, 'the new generation names the one it reruns');
       assert.equal(second.retryFailureClass, 'CHECK_FAILED', 'and what that one failed of');
       assert.equal(second.retryReason, REASON, 'and why it was asked for');
       assert.equal(second.retryRequestedBySessionId, w.coordinatorSessionId, 'and who asked');
       assert.equal(second.sessionId, task.sessionId);
 
+      // §4.7 H1: asking for the rerun does not answer the item — the rerun has not landed yet.
       const [after] = await itemsOf(stack.db, task.taskId);
-      assert.equal(after?.state, 'SUPERSEDED', 'the item about the failed landing is answered by the rerun');
-      assert.equal(after?.resolution, 'RETRIED');
-      assert.equal(after?.resolvedBy, 'COORDINATOR');
-      assert.equal(after?.resolvedBySessionId, w.coordinatorSessionId);
-      assert.equal(after?.resolutionNote, REASON, 'with the reason on it');
-      assert.equal(after?.integrationJobId, job.jobId, 'and still pointing at the generation it was about');
+      assert.equal(after?.state, 'OPEN', 'the item about the failed landing stays open while the rerun is in flight');
+      assert.equal(after?.resolution, null);
+      assert.equal(after?.resolvedBy, null, 'and nobody is recorded as having handled it yet');
+      assert.equal(after?.handlingJobId, second.id, 'it names the generation that will answer it');
+      assert.equal(after?.handlingSessionId, w.coordinatorSessionId, 'who asked');
+      assert.equal(after?.handlingReason, REASON, 'and why');
+      assert.equal(after?.integrationJobId, job.jobId, 'and still points at the generation it was about');
       assert.equal(await taskStatus(stack.db, task.taskId), TaskStatus.DONE, 'the task itself is untouched');
       const receipts = await stack.db.sessionMergeReceipt.count({ where: { taskId: task.taskId } });
       assert.equal(receipts, 0, 'nothing claims the work landed before the line says so');
@@ -686,6 +694,14 @@ test('failing again: the next red opens a classified item for the coordinator, n
       assert.equal(second.payload.retry?.reason, REASON);
       assert.equal(second.payload.retry?.requestedBySessionId, w.coordinatorSessionId);
       assert.equal(answer.openItemId, second.id);
+      // §4.7 H3: the item the rerun was handling ends now, superseded by the one its failure opened.
+      const handled = all.find((item) => item.id !== second.id)!;
+      assert.equal(handled.state, 'SUPERSEDED');
+      assert.equal(handled.resolution, 'RETRIED');
+      assert.equal(handled.resolvedBy, 'COORDINATOR');
+      assert.equal(handled.resolvedBySessionId, w.coordinatorSessionId);
+      assert.equal(handled.resolutionNote, REASON);
+      assert.equal(handled.supersededByItemId, second.id, 'and points at the new failure');
 
       // Nothing about it reaches the owner: no owner item, no blocker.
       const owners = await stack.db.projectOpenItem.count({ where: { projectId: w.projectId, assignee: 'OWNER' } });
@@ -712,7 +728,7 @@ test('failing again: the next red opens a classified item for the coordinator, n
       assert.equal(third.generation, 3);
       assert.equal(third.retryOfJobId, retried.jobId);
       assert.equal(third.failureClass, 'CHECK_TIMED_OUT');
-      assert.deepEqual(third.supersededItemIds, [second.id]);
+      assert.deepEqual(third.handlingItemIds, [second.id]);
     } finally {
       await stack.db.$disconnect();
     }
@@ -810,7 +826,7 @@ test('the coordinator closed the item by hand: an Automatic project still reruns
       const retried = await retry(stack, w, task.taskId, REASON);
       assert.equal(retried.generation, 2);
       assert.equal(retried.retryOfJobId, job.jobId);
-      assert.deepEqual(retried.supersededItemIds, [], 'nothing was open to supersede');
+      assert.deepEqual(retried.handlingItemIds, [], 'nothing was open to handle');
       assert.equal((await itemsOf(stack.db, task.taskId))[0]?.resolutionNote,
         'the baseline is being repaired by another task; this landing is rerun once it is',
         'a closed item keeps the ending it got');
@@ -839,7 +855,7 @@ test('not Automatic: the failure is the owner\'s and the coordinator is refused 
       await stack.openItems.returnToCoordinator(w.ownerId, w.projectId, item!.id);
       const retried = await retry(stack, w, task.taskId, REASON);
       assert.equal(retried.generation, 2);
-      assert.deepEqual(retried.supersededItemIds, [item!.id]);
+      assert.deepEqual(retried.handlingItemIds, [item!.id]);
 
       // And a failure nobody handed over, in a project that is not Automatic, stays the owner's even
       // once its item is closed: the switch is the only standing grant, and it is off.

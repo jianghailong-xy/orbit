@@ -273,6 +273,7 @@ async function task(
   w: World,
   label: string,
   projectId: string | null,
+  declares?: string,
 ): Promise<string> {
   const taskId = randomUUID();
   await db.task.create({
@@ -289,6 +290,9 @@ async function task(
       // Its own stated standard, which is what a task in NO project is held to. Written on every
       // task here so the two lanes quote the same words and the cases differ in one thing only.
       acceptanceCriteria: STANDARD,
+      // A task filed under a project declares the criterion its evidence quotes: being filed there
+      // is not what holds it to the project's wording, declaring the criterion is.
+      ...(declares ? { criterionDefinitionId: declares, criterionRevision: 1 } : {}),
     },
   });
   return taskId;
@@ -370,7 +374,7 @@ test('a project nobody has opened a coordinator for records the fact and tells n
       const standing = await conversation(stack.db, w, '协调：还没被指派');
       const reader = await conversation(stack.db, w, '另一条会话');
       const { projectId, criterionKey } = await project(stack.db, w, 'unopened', null);
-      const taskId = await task(stack.db, w, 'unopened', projectId);
+      const taskId = await task(stack.db, w, 'unopened', projectId, criterionKey);
       const run = await conversation(stack.db, w, 'unopened 执行会话', { taskId });
       await citedToolCall(stack.db, run, 'toolu_unopened');
 
@@ -485,7 +489,7 @@ test('a task in no project derives no fact at all, and is still asked about',
       // task is one that this task moves.
       const standing = await conversation(stack.db, w, '协调：兄弟项目');
       const { projectId, criterionKey } = await project(stack.db, w, 'unfiled', standing);
-      const filed = await task(stack.db, w, 'filed', projectId);
+      const filed = await task(stack.db, w, 'filed', projectId, criterionKey);
       const filedRun = await conversation(stack.db, w, 'filed 执行会话', { taskId: filed });
       await citedToolCall(stack.db, filedRun, 'toolu_filed');
 
@@ -581,7 +585,7 @@ test('a coordinator that is the run being judged may not answer, and is not the 
       const w = await world(stack.db, 'selfcoord');
       const reader = await conversation(stack.db, w, '另一条会话');
       const { projectId, criterionKey } = await project(stack.db, w, 'selfcoord', null);
-      const taskId = await task(stack.db, w, 'selfcoord', projectId);
+      const taskId = await task(stack.db, w, 'selfcoord', projectId, criterionKey);
       // The collision: the project is coordinated FROM the conversation that is running the task,
       // which is what promoting an existing session to coordinator produces.
       const run = await conversation(stack.db, w, 'selfcoord 执行会话', { taskId });

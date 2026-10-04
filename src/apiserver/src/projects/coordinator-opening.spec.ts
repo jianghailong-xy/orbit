@@ -83,6 +83,11 @@ test('with Automatic on, the coordinator is told it judges task completion, and 
     assert.match(form, /task_start 不会重新排落地/);
     assert.match(form, /用 integration_retry 带理由重排一次，交付本身的问题用 task_reopen 退回返工/);
     assert.match(form, /这类落地去留由你判，不拿去问账号所有者/);
+    // A blocked merge into main names no task, and goes through the same door with the candidate's
+    // id — the merge itself staying the owner's or the Automatic setting's (§4.7 H1) — and a rerun
+    // leaves its item open, being handled, until its result is in.
+    assert.match(form, /同样用 integration_retry，传 promotionId 重跑那个候选的检查；合并本身仍由账号所有者或 Automatic 设置确认/);
+    assert.match(form, /重排或重跑之后待办显示为处理中，结果出来才标为已处理（HANDLED），或被新的失败取代/);
     // And not the conversational stance, whose second sentence is false with the switch on: wakes,
     // auto-run dispatch and the automatic merge into main all act on this project.
     assert.doesNotMatch(form, /推进靠的是跟人对话/);

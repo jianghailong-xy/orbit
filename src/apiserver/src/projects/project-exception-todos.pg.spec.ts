@@ -1006,6 +1006,9 @@ test('the evidence judgment settles the task, and answers the failure item an ea
       const w = await world(stack, 'judgment-settles', 'PARKED');
       const a = await strandedAttempt(stack, w, 'judgment-settles', 'EVIDENCE_JUDGMENT');
       const criterionKey = await statedCriterion(stack, w, JUDGED_CRITERION);
+      // Declared through the edit door: declaring the criterion, not being filed under the project,
+      // is what holds the task to the wording its evidence quotes below.
+      await stack.tasks.update(w.ownerId, a.taskId, { criterionKey });
       await stack.db.toolCall.create({
         data: {
           sessionId: a.sessionId,

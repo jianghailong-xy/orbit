@@ -1432,7 +1432,7 @@ func (t *Transport) resolveOpenItem(sessionID, id, itemID, note string) (json.Ra
 // retryIntegration asks for the next generation of a DONE task's failed landing, as the acting
 // session (contract §2.3 J-T1b). The session header is the authority the server checks against the
 // project's coordinator pointer; the reason travels as the body and is kept on the new generation and
-// on every item it supersedes. A refusal — in flight, the owner's, not this project's — travels as the
+// on every item it handles. A refusal — in flight, the owner's, not this project's — travels as the
 // server raised it.
 func (t *Transport) retryIntegration(sessionID, id, taskID, reason string) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
@@ -1444,6 +1444,25 @@ func (t *Transport) retryIntegration(sessionID, id, taskID, reason string) (json
 	var out json.RawMessage
 	err := t.doHeaders(nil, "POST",
 		"/runner/projects/"+url.PathEscape(id)+"/tasks/"+url.PathEscape(taskID)+"/integration/retry",
+		map[string]interface{}{"reason": reason}, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
+// retryPromotionCheck asks for a blocked candidate's check to run again, as the acting session
+// (contract §4.7 H1) — retryIntegration's door for an item that names no task. The session header is
+// the authority the server checks against the project's coordinator pointer; the reason travels as
+// the body and is kept on the new check and on every item it handles. A refusal travels as the server
+// raised it.
+func (t *Transport) retryPromotionCheck(sessionID, id, promotionID, reason string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	if err := validatePathSegmentID(promotionID); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST",
+		"/runner/projects/"+url.PathEscape(id)+"/promotions/"+url.PathEscape(promotionID)+"/integration/retry",
 		map[string]interface{}{"reason": reason}, &out, taskOpTimeout, sessionHeader(sessionID))
 	return out, err
 }

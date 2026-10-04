@@ -123,6 +123,10 @@ async function fixture(db: PrismaClient) {
         status: TaskStatus.OPEN,
         completionCriterion: 'EVIDENCE_JUDGMENT',
         acceptanceCriteria: 'an independent session decides the current evidence revision',
+        // Declared against the criterion its evidence quotes: being filed under the project is not
+        // what holds a task to the project's wording, declaring the criterion is.
+        criterionDefinitionId: criterionId,
+        criterionRevision: 1,
       },
     });
   }

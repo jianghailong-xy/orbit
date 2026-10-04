@@ -2711,11 +2711,22 @@ model ProjectOpenItem {
   remindAt     DateTime? @map("remind_at") @db.Timestamptz(3)
   remindedAt   DateTime? @map("reminded_at") @db.Timestamptz(3)
 
+  /// The coordinator's rerun of the failure this item is about (`integration_retry`, migration 0368):
+  /// the job it queued, the conversation that asked, why, and when. History rather than foreign keys.
+  /// The item stays OPEN — being handled, not closed — while that job is QUEUED or RUNNING.
+  handlingJobId     String?   @map("handling_job_id") @db.Uuid
+  handlingSessionId String?   @map("handling_session_id") @db.Uuid
+  handlingReason    String?   @map("handling_reason")
+  handlingStartedAt DateTime? @map("handling_started_at") @db.Timestamptz(3)
+
   resolution          String?
   resolvedAt          DateTime? @map("resolved_at") @db.Timestamptz(3)
   resolvedBy          String?   @map("resolved_by")
   resolvedByUserId    String?   @map("resolved_by_user_id") @db.Uuid
   resolvedBySessionId String?   @map("resolved_by_session_id") @db.Uuid
+  /// The integration job whose terminal state ended the item (0368): the coordinator's rerun that
+  /// landed or passed its check (HANDLED), or the one that failed again (SUPERSEDED / RETRIED).
+  resolvedByJobId     String?   @map("resolved_by_job_id") @db.Uuid
   resolutionNote      String?   @map("resolution_note")
   answer              Json?
   supersededByItemId  String?   @map("superseded_by_item_id") @db.Uuid

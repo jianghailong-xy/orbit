@@ -65,8 +65,13 @@ export type IntegrationRetryDecision =
       ok: true;
       retryOfJobId: string;
       failureClass: RetryableLandingFailureClass;
-      /** The open items the rerun supersedes: the coordinator's own, about this landing. */
-      supersede: string[];
+      /**
+       * The open items the rerun will be HANDLING: the coordinator's own, about this failure. They stay
+       * OPEN while the rerun is in flight and are ended by its result (§4.7 H1–H4) — HANDLED when it
+       * lands or passes, SUPERSEDED by the new item when it fails again — never at the moment it is
+       * asked for, because nobody knows yet which of the two it will be.
+       */
+      handle: string[];
     }
   | IntegrationRetryRefusal;
 
@@ -124,15 +129,8 @@ export function decideIntegrationRetry(facts: IntegrationRetryFacts): Integratio
     });
   }
 
-  const owners = facts.openItems.filter((item) => item.assignee !== 'COORDINATOR');
-  if (owners.length > 0) {
-    const reasons = [...new Set(owners.map((item) => item.assigneeReason))];
-    return refuse(409, INTEGRATION_RETRY_OWNER_ITEM,
-      'this failed landing is the account owner\'s: an open item about it is assigned to them '
-      + `(${reasons.join(', ')}) — ${ownerItemWhy(reasons)} Running it again is their decision; they `
-      + 'can hand the item back to you with "Ask the coordinator again", and then it is yours.',
-      { itemIds: owners.map((item) => item.id), assigneeReasons: reasons });
-  }
+  const owned = ownerItemRefusal(facts.openItems, 'failed landing');
+  if (owned) return owned;
   if (facts.ownerBlockers.length > 0) {
     return refuse(409, INTEGRATION_RETRY_OWNER_BLOCKER,
       'the account owner has an open blocker about this task waiting on their decision '
@@ -141,17 +139,122 @@ export function decideIntegrationRetry(facts: IntegrationRetryFacts): Integratio
       { blockerIds: facts.ownerBlockers.map((blocker) => blocker.id) });
   }
   const mine = facts.openItems.filter((item) => item.assignee === 'COORDINATOR');
-  if (mine.length === 0 && !facts.coordinatorEnabled) {
-    return refuse(403, INTEGRATION_RETRY_NOT_AUTOMATIC,
-      'this project is not Automatic, so a failed landing is the account owner\'s to decide and nothing '
-      + 'about this one has been handed to you. Ask them (ask_owner), or let them hand you the item.');
-  }
+  if (mine.length === 0 && !facts.coordinatorEnabled) return notAutomaticRefusal('a failed landing');
   return {
     ok: true,
     retryOfJobId: newest.id,
     failureClass,
-    supersede: mine.map((item) => item.id),
+    handle: mine.map((item) => item.id),
   };
+}
+
+/** What a blocked candidate's re-check is decided over, read in the retry's own transaction under the
+ *  candidate's row lock. */
+export interface PromotionRetryFacts {
+  /** The project's Automatic switch (`coordinator_enabled`). */
+  coordinatorEnabled: boolean;
+  /** Where the candidate is (`project_promotion.state`). */
+  promotionState: string;
+  /** The candidate's newest job — its check, or its landing — or null when it never had one. */
+  newestJob: { id: string; kind: string; generation: number; state: string; checks: unknown } | null;
+  /** The candidate's OPEN `INTEGRATION_*` items. */
+  openItems: ReadonlyArray<{ id: string; kind: string; assignee: string; assigneeReason: string }>;
+}
+
+/**
+ * Whether the coordinator may run a blocked candidate's check again (§4.7 H1) — the door for an item
+ * about a merge into main, which names no task and so had no way back for the coordinator at all: it
+ * waited, escalated, and sat in front of the owner (the MERGE_CHECK of 34Y7My8sqhKLWtmCQYv1l on
+ * 2026-10-02).
+ *
+ * The same three questions a task's landing is asked, asked of the candidate: is it blocked by a
+ * failure a rerun can answer, is that failure still the coordinator's, and may the coordinator decide
+ * it. What it reruns is the CHECK, whichever of the candidate's jobs failed: a passing check is what
+ * makes a candidate mergeable again, and the merge stays exactly as authorized as it was — the
+ * owner's card, or the Automatic setting's own rule over a clean result (M-T11). So this door can
+ * bring a candidate back to the question and never answers it; a candidate that already passed and
+ * is waiting on the owner is refused here, because the only thing left to do with it is theirs.
+ */
+export function decidePromotionRetry(facts: PromotionRetryFacts): IntegrationRetryDecision {
+  const newest = facts.newestJob;
+  if (newest && (newest.state === 'QUEUED' || newest.state === 'RUNNING')) {
+    return refuse(409, INTEGRATION_RETRY_IN_FLIGHT,
+      `this candidate's ${newest.kind} (generation ${newest.generation}) is already ${newest.state}: `
+      + 'nothing new is queued beside it. Wait for its result — if it fails, its own item reaches you.',
+      { newestJob: { jobId: newest.id, kind: newest.kind, generation: newest.generation, state: newest.state } });
+  }
+  if (facts.promotionState !== 'BLOCKED') {
+    return refuse(409, INTEGRATION_RETRY_NOT_APPLICABLE, candidateNotBlocked(facts.promotionState),
+      { promotionState: facts.promotionState });
+  }
+  if (newest === null) {
+    return refuse(409, INTEGRATION_RETRY_NOT_APPLICABLE,
+      'this candidate has no check or landing on record, so there is no failure to run again.',
+      { newestJob: null });
+  }
+  const failureClass: LandingFailureClass | null = landingFailureClass(newest);
+  if (!isRetryableLandingFailure(failureClass)) {
+    return refuse(409, INTEGRATION_RETRY_NOT_APPLICABLE, failureClass === 'CONFLICT'
+      ? 'this candidate stopped on a CONFLICT with the upstream, and checking the same commits again '
+        + 'conflicts the same way: only a project branch that changed answers one. File a task that '
+        + 'resolves it on the project branch — its landing makes the next candidate by itself, and that '
+        + 'one is checked again.'
+      : `this candidate's newest ${newest.kind} is ${newest.state}, which is not a failure a rerun `
+        + 'answers: only CHECK_FAILED, CHECK_TIMED_OUT and ERROR are run again.',
+    { newestJob: { jobId: newest.id, kind: newest.kind, generation: newest.generation, state: newest.state, failureClass } });
+  }
+  const owned = ownerItemRefusal(facts.openItems, 'blocked merge into main');
+  if (owned) return owned;
+  const mine = facts.openItems.filter((item) => item.assignee === 'COORDINATOR');
+  if (mine.length === 0 && !facts.coordinatorEnabled) return notAutomaticRefusal('a blocked merge into main');
+  return {
+    ok: true,
+    retryOfJobId: newest.id,
+    failureClass,
+    handle: mine.map((item) => item.id),
+  };
+}
+
+/** Why a candidate that is not BLOCKED has nothing for this door to do, and what answers it. */
+function candidateNotBlocked(state: string): string {
+  switch (state) {
+    case 'READY':
+      return 'this candidate passed its checks and is waiting on the account owner\'s "Merge to main": '
+        + 'there is no failed check to run again, and confirming the merge is theirs.';
+    case 'CHECKING':
+    case 'CONFIRMED':
+    case 'RECHECKING':
+      return `this candidate is ${state}: it is being checked or merged now, and its result reaches you `
+        + 'if it fails.';
+    default:
+      return `this candidate is ${state}, so nothing will merge it any more and there is nothing to run `
+        + 'again. The next landing on the project branch makes a new candidate by itself.';
+  }
+}
+
+/**
+ * An open item about this failure that is the account owner's makes running it again their decision —
+ * escalated because nobody acted in time, or theirs from birth in a project that is not Automatic.
+ */
+function ownerItemRefusal(
+  openItems: IntegrationRetryFacts['openItems'],
+  failure: string,
+): IntegrationRetryRefusal | null {
+  const owners = openItems.filter((item) => item.assignee !== 'COORDINATOR');
+  if (owners.length === 0) return null;
+  const reasons = [...new Set(owners.map((item) => item.assigneeReason))];
+  return refuse(409, INTEGRATION_RETRY_OWNER_ITEM,
+    `this ${failure} is the account owner's: an open item about it is assigned to them `
+    + `(${reasons.join(', ')}) — ${ownerItemWhy(reasons)} Running it again is their decision; they `
+    + 'can hand the item back to you with "Ask the coordinator again", and then it is yours.',
+    { itemIds: owners.map((item) => item.id), assigneeReasons: reasons });
+}
+
+/** No item about it was handed to the coordinator, and the switch that would have is off. */
+function notAutomaticRefusal(failure: string): IntegrationRetryRefusal {
+  return refuse(403, INTEGRATION_RETRY_NOT_AUTOMATIC,
+    `this project is not Automatic, so ${failure} is the account owner's to decide and nothing `
+    + 'about this one has been handed to you. Ask them (ask_owner), or let them hand you the item.');
 }
 
 /** Why a landing that ended this way is not run again, and what answers it instead. */
