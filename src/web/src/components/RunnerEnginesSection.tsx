@@ -60,7 +60,9 @@ export function useEngineUpdate(runnerId: string) {
 export function RunnerEnginesSection({ runner }: { runner: Runner }) {
   const message = useToast();
   const qc = useQueryClient();
-  const engines = runner.engines ?? null;
+  const engines: RunnerEngineHealth[] | null = !runner.engines ? null
+    : runner.engines.some((health) => health.engine === 'antigravity') ? runner.engines
+      : [...runner.engines, { engine: 'antigravity', installed: runner.antigravity?.installed ?? false, version: runner.antigravity?.version ?? undefined, auth: 'unknown' }];
   const relay = runner.install;
   const updating = relay?.mode === 'update';
   const inFlight = relay?.status === 'pending' || relay?.status === 'installing';
@@ -166,6 +168,9 @@ type Tone = 'ok' | 'warn' | 'muted';
  */
 function signInOf(runner: Runner, health: RunnerEngineHealth): { text: string; tone: Tone } {
   const none = { text: '—', tone: 'muted' as const };
+  if (health.engine === 'antigravity' && runner.engines?.find((engine) => engine.engine === 'antigravity')?.installed !== false && health.auth !== 'yes' && runner.antigravity?.installed !== false && runner.antigravity?.googleLogin !== 'available') {
+    return { text: runner.antigravity?.googleLogin === 'unsupported_platform' ? 'Not supported yet' : 'Update runner', tone: 'muted' };
+  }
   if (health.engine === 'opencode') {
     return health.installed ? none : { text: RUNNER_ENGINE_NOT_INSTALLED, tone: 'muted' };
   }
@@ -186,7 +191,6 @@ function signInOf(runner: Runner, health: RunnerEngineHealth): { text: string; t
     return none;
   }
   if (kind === 'in') return { text: health.engine === 'antigravity' ? (health.authSource === 'google' ? 'Google account' : 'env key') : RUNNER_ENGINE_SIGNED_IN, tone: 'ok' };
-  if (health.engine === 'antigravity' && runner.antigravity?.googleLogin !== 'available') return { text: runner.antigravity?.googleLogin === 'unsupported_platform' ? 'Not supported yet' : 'Update runner', tone: 'muted' };
   if (kind === 'out') return { text: RUNNER_ENGINE_SIGNED_OUT, tone: 'warn' };
   return none;
 }
@@ -194,6 +198,10 @@ function signInOf(runner: Runner, health: RunnerEngineHealth): { text: string; t
 function EngineLine({ runner, health }: { runner: Runner; health: RunnerEngineHealth }) {
   const note = health.installed ? updateNoteOf(health.update) : null;
   const signIn = signInOf(runner, health);
+  const googleLogin = health.engine === 'antigravity' ? (runner.antigravity?.googleLogin ?? 'needs_update') : undefined;
+  const loginHint = googleLogin === 'unsupported_platform'
+    ? 'Google sign-in is not supported on macOS runners yet. Use a Gemini API key.'
+    : googleLogin === 'needs_update' ? 'Update this runner to sign in with Google.' : null;
   // A quota belongs to a login that is in: signed out, its last reading is about a session that
   // can no longer start. Same reading Providers shows at the head of its row.
   const kind =
@@ -235,6 +243,7 @@ function EngineLine({ runner, health }: { runner: Runner; health: RunnerEngineHe
             )}
           </div>
         )}
+        {loginHint && <div className="re-panel-hint">{loginHint}</div>}
       </div>
       <div className={`rd-engine-auth ${signIn.tone}`}>{signIn.text}</div>
       <div className={`rd-engine-quota${quota.length === 0 && !signedIn ? ' empty' : ''}`}>

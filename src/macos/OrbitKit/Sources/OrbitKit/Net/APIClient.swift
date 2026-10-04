@@ -1411,6 +1411,18 @@ public final class APIClient: @unchecked Sendable {
                                           query: query, body: Optional<Empty>.none))
     }
 
+    /// Read the current worktree file, independently of transcript attachments or their caches.
+    /// The server confines the relative path to this session's worktree and bounds the runner read.
+    public func sessionWorktreeFile(sessionID: String, path: String) async throws -> Data {
+        var request = try makeRequest("sessions/\(sessionID)/worktree-file", method: "GET",
+                                      query: [URLQueryItem(name: "path", value: path)],
+                                      body: Optional<Empty>.none)
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+        request.timeoutInterval = 45
+        return try await send(request, cancellationAware: true)
+    }
+
     // MARK: - request plumbing
 
     /// How far a NAMED run request is resent when no answer comes back, and how long it waits.

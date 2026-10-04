@@ -8,10 +8,10 @@ import type { ProjectIntegrationView } from '@orbit/shared';
 import {
   PANORAMA_BUCKETS,
   ProjectPanoramaHeader,
+  ProjectPanoramaCard,
   integrationLanes,
   landingClock,
   landingLine,
-  stalledOnReady,
   type ProjectPanorama,
 } from './ProjectPanoramaHeader';
 
@@ -118,8 +118,7 @@ describe('ProjectPanoramaHeader', () => {
     expect(html).not.toContain('Check providers');
     // ...and the Ready cell drops its amber with it: nothing on this card is asking for attention.
     expect(html).not.toContain('var(--warning-bg)');
-    expect(stalledOnReady(panorama({ running: 2 }).buckets)).toBe(false);
-    expect(stalledOnReady(panorama().buckets)).toBe(true);
+    expect(render(newClient())).not.toContain('Dispatch needs attention');
   });
 
   it('separates every exhaustive bucket by shape, not by colour alone', () => {
@@ -173,7 +172,7 @@ describe('ProjectPanoramaHeader', () => {
     // zero is exactly the value this card exists to make visible.
     const flex = [...html.matchAll(/flex:(\d+(?:\.\d+)?)[^"]*;background:var\(--(brand|warning-solid|text-3|success)\)/g)];
     expect(flex.map((m) => [m[2], m[1]])).toEqual([
-      ['warning-solid', '4'],
+      ['text-3', '4'],
       ['text-3', '30'],
       ['success', '5'],
     ]);
@@ -238,7 +237,7 @@ describe('ProjectPanoramaHeader', () => {
     expect(lanes.find((lane) => lane.key === 'blocked')?.footnote)
       .toBe('1 waiting for a prerequisite to land');
     expect(lanes.find((lane) => lane.key === 'integrating')).toMatchObject({
-      label: 'Pending landing', value: 1, footnote: 'finished work without a landing receipt', glyph: 'hourglass',
+      label: 'Pending landing', value: 1, footnote: 'no landing receipt yet', glyph: 'hourglass',
     });
   });
 
@@ -409,13 +408,15 @@ describe('landingLine', () => {
       running: true,
       state: 'checking',
       clock: '1m 20s',
+      clockLabel: 'Elapsed', updated: null,
     });
     expect(
       landingLine(
         integration({ inFlight: { taskTitle: 'T1', state: 'QUEUED', startedAt: '2026-09-25T13:58:40Z' } }),
         now,
       ),
-    ).toEqual({ word: 'Integration', what: 'T1', running: false, state: 'queued', clock: '0m 40s' });
+    ).toEqual({ word: 'Integration', what: 'T1', running: false, state: 'queued', clock: '0m 40s',
+      clockLabel: 'Queued for', updated: null });
   });
 
   it.each([
@@ -437,6 +438,67 @@ describe('landingLine', () => {
       taskTitle: null, state: 'QUEUED', kind: 'LAND_PROMOTION', phase: 'CHECK', startedAt: '2026-09-25T13:58:00Z',
     } }), Date.parse('2026-09-25T13:59:20Z'))).toMatchObject({ word: 'Merge to main', state: 'queued', running: false });
   });
+
+  it('stops claiming live activity after a failed refresh and freezes the observed elapsed time', () => {
+    const readAt = Date.parse('2026-09-25T13:59:20Z');
+    const failed = { updatedAt: readAt, failed: true };
+    const line = landingLine(integration(), readAt + 60_000, failed);
+    expect(line).toMatchObject({ running: false, state: 'Update unavailable', clock: '1m 20s',
+      clockLabel: 'Elapsed', updated: 'Updated 1m ago' });
+    expect(landingLine(integration(), readAt + 120_000, failed)?.clock).toBe(line?.clock);
+    expect(landingLine(integration(), readAt + 91_000, { updatedAt: readAt })?.running).toBe(false);
+    expect(landingLine(integration(), readAt + 120_000, { updatedAt: readAt + 120_000 }))
+      .toMatchObject({ running: true, state: 'checking', updated: 'Updated just now' });
+  });
+
+  it('uses the runner heartbeat so a successful API refresh cannot make an offline job look active', () => {
+    const now = Date.parse('2026-09-25T14:10:00Z');
+    const view = integration({ inFlight: { ...integration().inFlight!, heartbeatAt: '2026-09-25T13:59:00Z' } });
+    expect(landingLine(view, now, { updatedAt: now })).toMatchObject({
+      running: false, state: 'Update unavailable', clock: '1m 0s', updated: 'Updated 11m ago',
+    });
+    expect(landingLine({ ...view, inFlight: { ...view.inFlight!, heartbeatAt: '2026-09-25T14:09:50Z' } }, now,
+      { updatedAt: now })).toMatchObject({ running: true, state: 'checking', updated: 'Updated just now' });
+  });
+});
+
+describe('manual ready work', () => {
+  const manual = { count: 1, taskId: 'manual-task', title: 'Check the lock order' };
+  function card(over: Partial<React.ComponentProps<typeof ProjectPanoramaCard>> = {}) {
+    return renderToStaticMarkup(<MemoryRouter><ProjectPanoramaCard
+      panorama={panorama({ ready: 1, running: 0 })} projectId={PROJECT} projectStatus="OPEN"
+      started manualReady={manual} {...over}
+    /></MemoryRouter>);
+  }
+
+  it('offers the named manual task without diagnosing a runner problem, including during landing', () => {
+    const html = card({ landing: landingLine(integration(), Date.parse('2026-09-25T13:59:20Z')) });
+    expect(html).toContain('Ready to start');
+    expect(html).toContain('1 task is set to start manually.');
+    expect(html).toContain('can start manually');
+    expect(html).toContain('Check the lock order');
+    expect(html).toContain(`/projects/${PROJECT}/tasks/manual-task`);
+    expect(html).toContain('Open task');
+    expect(html).toContain('Landing');
+    expect(html).not.toMatch(/Dispatch needs attention|Check providers|var\(--warning-bg\)/);
+  });
+
+  it('never infers manual dispatch from totals or a missing old-server field', () => {
+    expect(card({ manualReady: null })).not.toContain('Ready to start');
+    expect(card({ manualReady: null })).not.toContain('Dispatch needs attention');
+    expect(card({ panorama: panorama({ ready: 0 }) })).not.toContain('Ready to start');
+    expect(card({ manualReady: { ...manual, count: 8 } })).toContain('8 tasks are set to start manually.');
+  });
+
+  it('respects project start, pause, terminal state and public-page visibility', () => {
+    for (const over of [{ started: false }, { paused: true }, { projectStatus: 'DONE' as const },
+      { projectStatus: 'CANCELLED' as const }, { banners: false }]) {
+      expect(card(over)).not.toContain('Ready to start');
+    }
+    expect(card({ paused: true })).toContain('project is paused');
+    expect(card({ started: false })).toContain('starts when you start');
+    expect(card({ panorama: panorama({ ready: 1, running: 2 }) })).toContain('Ready to start');
+  });
 });
 
 describe('the landing row’s styles', () => {
@@ -453,7 +515,7 @@ describe('the landing row’s styles', () => {
     expect(css).toContain('@keyframes project-landing-spin');
     // The clock's digits must not shuffle the words beside them as they change.
     expect(css).toMatch(/\.project-landing-clock \{[\s\S]*?font-variant-numeric: tabular-nums;/);
-    // One row, always: the task title truncates rather than wrapping the card taller.
-    expect(css).toMatch(/\.project-landing-what \{[\s\S]*?text-overflow: ellipsis;/);
+    // The task gets two lines without squeezing the phase or elapsed time off a phone.
+    expect(css).toMatch(/\.project-landing-what \{[\s\S]*?-webkit-line-clamp: 2;/);
   });
 });

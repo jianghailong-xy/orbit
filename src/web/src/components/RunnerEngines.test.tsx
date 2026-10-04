@@ -412,6 +412,17 @@ describe('the "On your runners" section', () => {
     ).toBe('Installing…');
   });
 
+  it('counts only the login engines, whatever Antigravity reports beside them', () => {
+    const loggedIn = [health({}), health({ engine: 'codex' }), health({ engine: 'kimi' })];
+    for (const auth of ['yes', 'no', 'unknown'] as const) {
+      const box = runner({ engines: [...loggedIn, health({ engine: 'antigravity', auth })] });
+      expect(summaryOf(box), auth).toBe('All signed in');
+    }
+    expect(summaryOf(runner({ engines: [health({}), health({ engine: 'antigravity' })] }))).toBe(
+      '1 of 3 signed in',
+    );
+  });
+
   it('marks the one row a "Not signed in" link came here for', () => {
     const box = runner({
       engines: [

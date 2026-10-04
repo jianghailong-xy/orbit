@@ -1,0 +1,19 @@
+{
+  "id": "5QIADwGo78Af40fjzbX94R",
+  "taskId": "34Za393HPMLVyuXAdfv3j",
+  "evidenceId": "6CsR6TeDjB8ps7qCuWlKyU",
+  "evidenceRevision": "1",
+  "criterionRevision": "cd206584a9d27d9036c050801bd2415904c4e70102a00d82960a0a08b86e270b",
+  "evidenceDigest": "ffe383a7a318d204ca62bdfa3b18a565be0d38ddda5c1773e99a0ff2d0dadbf5",
+  "decision": "SEND_BACK",
+  "note": "第 1 版 SEND_BACK，仅返修已定位的外观保真及对照缺口，现有已证明的交互能力不作废。\n独立复核：从最终提交 83139cae1e747215e6d998d8072045d283841ed5 导出的隔离目录运行 test:ui-overlays，96/96 通过；组件边界/主题测试 6/6、fixture 类型检查及 Web build 均通过。224 份附件（128 PNG、96 JSON）哈希核对通过，P0.2 原始 252 张图未被覆盖。P0 8 项截图失败在未修改的父提交 297d33e97729c66ebdc8f2b63b0e094db1d9e8df 上复现，8 对实际图逐字节相同，因此不要求本任务修复这项旧问题，也不能称 P0 全绿。\n返修依据是本任务描述及项目作业指导中的“保持现有外观”：\n1. 暗色 right/bottom Drawer 的标题区底边与 footer 顶边存在确定性回归。以 overlays-complete 中 webkit-dark-desktop 的 AntD-bottom-drawer / Orbit-bottom-drawer 对为例，两图 1280×378，在 y=56 和 y=329 各整行：旧图 RGB(60,60,64)，新图 RGB(52,52,55) 与背景相同，合计 2560 像素；左右/手机和 Chromium 均能看到同类差异。Overlay.css 两处使用 --border-subtle，新图分隔线实际消失。请按真实旧组件的计算样式修正局部分隔线/语义变量；不改全局配色，不覆盖旧基线，不引入 .ant-* 内部依赖。\n2. overlays.browser.mjs 的 appearance 测量仅覆盖 root 与控件几何，没有检查 header/footer 的边框，所以当前“严格相等”不能证明该处外观。请补充真实对照的边框颜色/宽度/样式及必要状态断言，确保上述差异会被检查捕获；不要只写与新实现自洽的断言。\n3. 静态截图状态应一致。chromium-light-phone 的 bottom drawer 对照中，旧输入框灰边、新输入框蓝边，主要颜色从 RGB(222,224,227) 到 RGB(92,146,255)；暗色对应新图为 hover 色 RGB(85,133,232)。请核查并控制鼠标位置、焦点和动画稳定状态，用一致状态截取默认对照，并保留独立 hover/focus 行为检查。这里未认定为产品焦点回归；需要区分测试采样造成的状态差异与真实差异，不能一并叫抗锯齿噪声。\n下一版提交局部修复和可复核证据：新旧明暗/桌面手机/两引擎的分隔线计算值与截图、其余残余像素差异的解释；重新跑受影响的完整弹层矩阵、类型检查与 Web 构建，按共享变量影响补跑相关控件检查。保留原有关闭/焦点/嵌套共存/异步用例及历史基线，不放宽断言。说明真实手机、后端和原有 P0 失败的证据边界。实现继续由本任务会话完成，仍使用 codex / gpt-6-astra。",
+  "decidedAt": "2026-10-04T04:48:11.614Z",
+  "decidedByType": "AGENT",
+  "decidedById": "34ZHGcIxwsZUxkgh2z65V",
+  "decidingSessionId": "34ZYgWv9tyVjbJij7zwq5",
+  "publicId": "5QIADwGo78Af40fjzbX94R",
+  "taskPublicId": "34Za393HPMLVyuXAdfv3j",
+  "decidedByPublicId": "34ZHGcIxwsZUxkgh2z65V",
+  "evidencePublicId": "6CsR6TeDjB8ps7qCuWlKyU",
+  "decidingSessionPublicId": "34ZYgWv9tyVjbJij7zwq5"
+}

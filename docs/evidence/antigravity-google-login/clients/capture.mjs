@@ -59,7 +59,26 @@ try {
       const { context, page, errors, runner } = await pageFor(width, state);
       try {
         await page.goto(`${base}/providers?runner=${runner.id}&engine=antigravity`);
-        await capture(page, page.locator('[data-engine="antigravity"]'), `${width}-runner-${state}`, errors);
+        const row = page.locator('[data-engine="antigravity"]');
+        await row.waitFor({ state: 'visible' });
+        const text = await row.innerText();
+        const expected = {
+          'signed-out': ['Signed out', 'Sign in with Google', 'personal account sign-in through third-party tools; your account may be suspended.'],
+          google: ['Google account', '72% remaining', '18% remaining', 'resets'],
+          macos: ['Google sign-in is not supported on macOS runners yet.'],
+          old: ['Update this runner to sign in with Google.'],
+          'env-key': ['env key · runs on your Gemini key'],
+          unknown: ['Unknown'],
+        }[state];
+        for (const value of expected) assert.ok(text.includes(value), `${width}/${state}: missing ${value}`);
+        if (state === 'signed-out') assert.equal(await row.locator('a').getAttribute('href'), 'https://antigravity.google/terms');
+        if (state === 'google') {
+          assert.equal(await row.locator('.re-reset').count(), 2);
+          assert.equal(await row.getByRole('button', { name: 'More actions' }).count(), 1);
+        }
+        if (state === 'macos' || state === 'old') assert.equal(await row.getByRole('button').count(), 0);
+        if (state === 'unknown') assert.ok(!text.includes('% remaining') && !text.includes('Google account'));
+        await capture(page, row, `${width}-runner-${state}`, errors);
       } finally { await context.close(); }
     }
     {
@@ -70,6 +89,8 @@ try {
         await hero.waitFor({ state: 'visible' });
         await hero.locator('button').first().click();
         await page.locator('.np-pop').waitFor({ state: 'visible' });
+        await page.waitForTimeout(350); // Wait for the selector's entrance animation before capturing its text.
+        assert.match(await page.locator('.np-pop').innerText(), /Antigravity[\s\S]*Google account/);
         await capture(page, page.locator('.np-pop'), `${width}-selector`, errors);
       } finally { await context.close(); }
     }
@@ -77,6 +98,7 @@ try {
       const { context, page, errors } = await pageFor(width, 'signed-out');
       try {
         await page.goto(`${base}${SESSION_PATH}`);
+        await page.getByRole('button', { name: 'Sign in with Google' }).waitFor({ state: 'visible' });
         await capture(page, page.locator('.chat-authfix'), `${width}-auth-error`, errors);
       } finally { await context.close(); }
     }

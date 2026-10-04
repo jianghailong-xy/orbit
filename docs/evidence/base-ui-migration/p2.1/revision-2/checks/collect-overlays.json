@@ -1,0 +1,12 @@
+{
+  "command": [
+    "node",
+    "src/web/ui-migration/collect-overlay-evidence.mjs",
+    "docs/evidence/base-ui-migration/p2.1/revision-2/overlays-run"
+  ],
+  "cwd": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410",
+  "startedAt": "2026-10-04T05:05:56.964681+00:00",
+  "head": "83139cae1e747215e6d998d8072045d283841ed5",
+  "exitCode": 0,
+  "elapsedSeconds": 0.05
+}

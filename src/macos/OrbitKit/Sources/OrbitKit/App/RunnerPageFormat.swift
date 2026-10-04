@@ -154,11 +154,16 @@ public enum RunnerPageFormat {
     // MARK: Engines
 
     /// The engines a runner reports on, in the order its page lists them — runnerEngines.ts
-    /// `ENGINE_CLI_NAME`'s — and any the page doesn't know yet after them, as reported.
+    /// `ENGINE_CLI_NAME`'s — and any the page doesn't know yet after them, as reported. A runner
+    /// predating Antigravity keeps its row too, so the page can explain that it needs an update.
     public static let engineOrder = ["claude", "codex", "kimi", "opencode", "antigravity"]
 
     public static func engines(_ runner: Runner) -> [RunnerEngineHealth] {
-        let reported = runner.engines ?? []
+        var reported = runner.engines ?? []
+        if !reported.contains(where: { $0.engine == "antigravity" }) {
+            reported.append(RunnerEngineHealth(engine: "antigravity", installed: runner.antigravity?.installed,
+                                               version: runner.antigravity?.version))
+        }
         let known = engineOrder.compactMap { engine in reported.first { $0.engine == engine } }
         return known + reported.filter { !engineOrder.contains($0.engine) }
     }
@@ -225,15 +230,19 @@ public enum RunnerPageFormat {
     /// accounts is signed in only when every one of them is (web `signedIn`): a row that called the
     /// machine signed in over a signed-out account would hide the one thing it is there to say.
     public static func engineStatus(_ health: RunnerEngineHealth, runner: Runner? = nil) -> Status? {
+        if health.engine == "antigravity", let runner, health.installed != false, health.auth != "yes" {
+            switch runner.antigravity?.googleLogin {
+            case .unsupportedPlatform: return Status(text: "Not supported yet", tone: .muted)
+            case .available: break
+            default: return Status(text: "Update runner", tone: .muted)
+            }
+        }
         guard health.installed == true else {
             return Status(text: RunnerPageCopy.RUNNER_ENGINE_NOT_INSTALLED, tone: .muted)
         }
         guard loginEngine(health.engine) != nil else { return nil }
         if health.engine == "antigravity" {
             if health.auth == "yes" { return Status(text: health.authSource == "google" ? "Google account" : "env key", tone: .ok) }
-            if let runner, let hint = EngineAuth.antigravityLoginHint(runner.antigravity?.googleLogin) {
-                return Status(text: hint, tone: .muted)
-            }
             return authStatus(health.auth)
         }
         let accounts = health.accounts ?? []

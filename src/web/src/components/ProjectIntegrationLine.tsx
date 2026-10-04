@@ -1,5 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import type { ProjectIntegrationView } from '@orbit/shared';
+import { Link } from 'react-router-dom';
+import { LandTaskStatus } from './LandTaskStatus';
+import { projectTaskPath } from '../lib/projectTaskRoute';
 import {
   RUN_LINE_DECIDED_AT_START,
   RUN_LINE_SUGGESTED,
@@ -18,7 +21,7 @@ import { ago } from '../lib/watches';
  * is absorbed in the other direction; and none of that was visible anywhere, so a reader watching a
  * green project had no way to tell work that had shipped from work sitting on a branch. Five facts
  * answer it: which branch, how far ahead of main, when main last came in, what is in flight, and
- * what the last landing attempt's checks reported.
+ * what the last landing attempt's checks reported. Under them, each current landing (§2.7a).
  *
  * The settings that decide the line are no longer behind this row: they are the project's "How it
  * runs" block (`ProjectRunSettings`), with Automatic and the rest of what the start card set, so a
@@ -168,6 +171,21 @@ export function ProjectIntegrationLine({
           </span>
         </span>
       </div>
+      {/* The current landings (§2.7a): what the queue is doing, what stopped, what landed last —
+          each in the task page's own words, so a DONE task's landing is visible before anything
+          fails. Read-only; the doors that act on a stop are its exception card's. */}
+      {view.landTasks && view.landTasks.length > 0 ? (
+        <div className="project-land-tasks" aria-label="Current landings">
+          {view.landTasks.map((task) => (
+            <div className="project-land-task" key={task.taskId}>
+              <Link className="project-land-task-title" to={projectTaskPath(projectId, task.taskId)}>
+                {task.taskTitle}
+              </Link>
+              <LandTaskStatus integration={task.integration} />
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

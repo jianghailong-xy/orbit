@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Project overview — landing and manual start</title>
+<style>
+  :root {
+    --bg: #f2f2f7;
+    --ink: #111114;
+    --secondary: #85858b;
+    --blue: #3478f6;
+    --green: #31c65c;
+    --orange: #ff8d24;
+    --line: #e6e6ea;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; background: var(--bg); }
+  body {
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Liberation Sans", "WenQuanYi Zen Hei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  button { font: inherit; }
+  .phone { width: 430px; margin: auto; overflow: hidden; padding-bottom: 28px; }
+  .header { background: #fafafd; border-bottom: .5px solid #e5e5eb; }
+  .status { height: 58px; padding: 14px 35px 0 43px; display: flex; align-items: center; justify-content: space-between; }
+  .time { font-size: 19px; font-weight: 700; letter-spacing: -.5px; }
+  .status-right { display: flex; gap: 7px; align-items: center; font-size: 15px; font-weight: 600; }
+  .signal { height: 15px; display: flex; gap: 2px; align-items: end; }
+  .signal i { width: 3.5px; border-radius: 2px; background: #111; }
+  .battery { width: 28px; height: 15px; border-radius: 4px; background: #121214; color: white; font-size: 11px; text-align: center; line-height: 15px; position: relative; }
+  .battery:after { content: ""; width: 2px; height: 6px; position: absolute; right: -3px; top: 4.5px; border-radius: 1px; background: #aaa; }
+  .nav { height: 69px; display: flex; align-items: center; gap: 15px; padding: 3px 17px 11px; }
+  .nav-button { width: 48px; height: 48px; border: .7px solid #d5d5dd; border-radius: 50%; display: grid; place-items: center; background: linear-gradient(140deg, #fff, #f7f7fc); flex: none; }
+  .nav-button svg { width: 25px; height: 25px; fill: none; stroke: #111; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .nav-title { min-width: 0; text-align: center; flex: 1; }
+  .nav-title strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 18px; letter-spacing: -.3px; }
+  .nav-title span { display: block; color: var(--secondary); font-size: 13px; margin-top: 3px; }
+  .section-heading { display: flex; align-items: baseline; gap: 9px; padding: 29px 34px 13px; white-space: nowrap; }
+  h1, h2 { margin: 0; font-size: 22px; letter-spacing: -.65px; font-weight: 700; }
+  .section-heading .meta { font-size: 13px; color: var(--secondary); letter-spacing: -.3px; }
+  .card { margin: 0 17px; background: white; border-radius: 26px; overflow: hidden; }
+  .landing { padding: 18px 18px 16px; }
+  .landing-top { display: flex; align-items: center; gap: 8px; }
+  .landing-name { font-size: 16px; font-weight: 600; color: var(--blue); }
+  .icon { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  .landing-top .icon { color: var(--blue); }
+  .phase { margin-left: auto; font-size: 13px; color: #5c5c65; }
+  .landing-task { font-size: 14px; line-height: 1.5; margin: 10px 0 9px; }
+  .landing-meta { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; color: var(--secondary); }
+  .elapsed { color: #62626c; }
+  .elapsed b { color: var(--blue); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .divider { height: 1px; margin: 0 18px; background: var(--line); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 17px; row-gap: 20px; padding: 20px 18px 21px; }
+  .label { display: flex; align-items: center; gap: 6px; font-size: 15px; white-space: nowrap; }
+  .label .icon { width: 13px; height: 13px; }
+  .blue { color: var(--blue); }
+  .green { color: var(--green); }
+  .muted { color: #929298; }
+  .light { color: #bebec4; }
+  .value { font-size: 29px; line-height: 1.12; font-weight: 700; letter-spacing: -.8px; margin: 6px 0 3px; font-variant-numeric: tabular-nums; }
+  .foot { font-size: 12px; line-height: 1.35; color: var(--secondary); }
+  .meter-wrap { padding: 23px 18px; }
+  .meter { height: 8px; border-radius: 5px; display: flex; overflow: hidden; gap: 1.5px; }
+  .meter i { display: block; }
+  .manual { margin: 0; padding: 17px 18px 19px; background: #f7f8fb; border-top: 1px solid #eeeef2; }
+  .manual-heading { display: flex; align-items: center; gap: 9px; }
+  .manual-heading .icon { width: 17px; height: 17px; color: #707c92; }
+  .manual-heading strong { font-size: 16px; font-weight: 600; letter-spacing: -.15px; }
+  .manual p { margin: 6px 0 11px 26px; font-size: 13px; color: #7a7d86; line-height: 1.4; }
+  .task-link { display: flex; gap: 10px; align-items: center; margin-left: 26px; text-decoration: none; color: inherit; }
+  .task-link .task-name { flex: 1; min-width: 0; font-size: 12px; line-height: 1.5; color: #535967; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .task-link .chevron { color: #a5a9b2; width: 13px; height: 13px; }
+  .open-task { display: inline-block; margin: 12px 0 0 26px; padding: 6px 13px; border-radius: 20px; background: #e9edf6; color: var(--blue); font-size: 14px; font-weight: 600; text-decoration: none; }
+  .coordinator-heading { padding-top: 27px; }
+  .needs-you { font-size: 13px; font-weight: 600; color: var(--orange); background: #f8e6d9; border-radius: 12px; padding: 3px 9px; letter-spacing: -.15px; }
+  .coordinator { padding: 17px 18px; }
+  .coordinator strong { display: block; font-size: 15px; line-height: 1.55; }
+  .coordinator a { display: inline-block; margin-top: 12px; color: var(--blue); text-decoration: none; font-size: 14px; font-weight: 600; }
+  @media (max-width: 429px) {
+    .phone { width: 100%; }
+    .section-heading { padding-left: 30px; padding-right: 25px; }
+    .section-heading .meta { font-size: 12px; }
+    h1, h2 { font-size: 21px; }
+  }
+</style>
+<!-- Static proposal. Numbers reproduce the owner's screenshot; the timestamp is illustrative.
+     The neutral manual-start notice is based on the project's task read, not on ready/running totals.
+     No production code or dispatch policy is changed by this mock. -->
+<main class="phone">
+  <header class="header">
+    <div class="status"><span class="time">12:20</span><div class="status-right"><span class="signal"><i style="height:6px"></i><i style="height:9px"></i><i style="height:12px"></i><i style="height:15px"></i></span><span>5G</span><span class="battery">72</span></div></div>
+    <nav class="nav" aria-label="Project">
+      <span class="nav-button"><svg viewBox="0 0 24 24"><path d="m15 4-8 8 8 8"/></svg></span>
+      <div class="nav-title"><strong lang="zh">项目收尾重做：协调者请求收尾</strong><span>Open · 23 tasks</span></div>
+      <span class="nav-button"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12h0m4 0h0m4 0h0" stroke-width="3"/></svg></span>
+    </nav>
+  </header>
+
+  <div class="section-heading"><h1>Work overview</h1><span class="meta">23 tasks · 23 dependencies</span></div>
+  <section class="card" aria-label="Work overview">
+    <div class="landing">
+      <div class="landing-top">
+        <svg class="icon" viewBox="0 0 20 20"><path d="M16.6 6a7 7 0 0 0-11.8-1L2.8 7m0 0 .3-4m-.3 4 4-.3M3.4 14a7 7 0 0 0 11.8 1l2-2m0 0-.3 4m.3-4-4 .3"/></svg>
+        <span class="landing-name">Landing</span><span class="phase">Checking</span>
+      </div>
+      <div class="landing-task" lang="zh">修复 Automatic 模式下协调者处理范围与集成阻塞</div>
+      <div class="landing-meta"><span class="elapsed">Elapsed <b>15m 32s</b></span><span>Updated just now</span></div>
+    </div>
+    <div class="divider"></div>
+    <div class="grid">
+      <div><div class="label"><svg class="icon blue" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="currentColor" stroke="none"/></svg>Running</div><div class="value">0</div><div class="foot">task work in progress</div></div>
+      <div><div class="label"><svg class="icon muted" viewBox="0 0 16 16"><path d="m4 2 9 6-9 6Z" fill="currentColor" stroke="none"/></svg>Ready</div><div class="value">1</div><div class="foot">can start manually</div></div>
+      <div><div class="label"><svg class="icon muted" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2"/></svg>Waiting</div><div class="value">5</div><div class="foot">waiting on dependencies</div></div>
+      <div><div class="label"><svg class="icon muted" viewBox="0 0 16 16"><path d="M3.5 2h9m-9 12h9M4.5 2v2.5L11.5 11V14M11.5 2v2.5L4.5 11V14"/></svg>Pending landing</div><div class="value">3</div><div class="foot">no landing receipt yet</div></div>
+      <div><div class="label"><svg class="icon green" viewBox="0 0 16 16"><circle cx="4" cy="3" r="1.3"/><circle cx="4" cy="13" r="1.3"/><circle cx="12" cy="5" r="1.3"/><path d="M4 4.3v7.4m8-5.4c0 4-8 2-8 5"/></svg>On project branch</div><div class="value">0</div><div class="foot">not on main yet</div></div>
+      <div><div class="label"><svg class="icon green" viewBox="0 0 16 16"><path d="m2.5 8 3.5 4 7.5-9" stroke-width="2.1"/></svg>On main</div><div class="value">13</div><div class="foot">landed on main</div></div>
+      <div><div class="label"><svg class="icon light" viewBox="0 0 16 16"><path d="m3 13 10-10"/></svg>Cancelled</div><div class="value">1</div><div class="foot">closed without completion</div></div>
+    </div>
+    <div class="divider"></div>
+    <div class="meter-wrap"><div class="meter" role="img" aria-label="1 ready, 5 waiting, 3 pending landing, 13 on main, 1 cancelled"><i style="flex:1;background:#9ba5b7"></i><i style="flex:5;background:#8e8e94"></i><i style="flex:3;background:#bdc3d0"></i><i style="flex:13;background:var(--green)"></i><i style="flex:1;background:#c5c5cb"></i></div></div>
+    <div class="manual">
+      <div class="manual-heading"><svg class="icon" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8"/><path d="m8 6 6 4-6 4Z" stroke="none" fill="currentColor"/></svg><strong>Ready to start</strong></div>
+      <p>1 task is set to start manually.</p>
+      <a class="task-link" href="orbit-task:34Zq3OqfG9zIQQLOxQvCR"><span class="task-name" lang="zh">重述 0374 留下过期的 db-write-inventory 条目，并核对 dequeueTurn 暂停回退路径的锁序</span><svg class="icon chevron" viewBox="0 0 16 16"><path d="m6 3 5 5-5 5"/></svg></a>
+      <a class="open-task" href="orbit-task:34Zq3OqfG9zIQQLOxQvCR">Open task</a>
+    </div>
+  </section>
+
+  <div class="section-heading coordinator-heading"><h2>Coordinator</h2><span class="needs-you">Needs you</span></div>
+  <section class="card coordinator" aria-label="Coordinator">
+    <strong lang="zh">项目收尾重做：协调者请求收尾，证明不了的缺口由你一次确认</strong>
+    <a href="#coordinator">Reply to coordinator <span aria-hidden="true">›</span></a>
+  </section>
+</main>
+</html>

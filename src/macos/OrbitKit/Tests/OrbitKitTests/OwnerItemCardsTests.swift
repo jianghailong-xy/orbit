@@ -314,6 +314,33 @@ final class OwnerItemCardsTests: XCTestCase {
         XCTAssertEqual(PromotionCards.checksLine(failed), "✕ Failed on the combined tree · npm test · 48s")
     }
 
+    func testMergePreviewKeepsLongCommandsOutOfTheTranscript() {
+        let ready = candidate(.ready)
+        XCTAssertEqual(PromotionCards.previewTitle(ready), "Merge to main")
+        XCTAssertEqual(PromotionCards.previewCounts(ready), "7 commits · 4 tasks")
+        XCTAssertEqual(PromotionCards.previewChecks(ready), "✓ Checks passed")
+        XCTAssertEqual(PromotionCards.previewTitle(candidate(.declined)), PromotionCards.supersededTitle)
+        XCTAssertEqual(PromotionCards.previewTitle(candidate(.blocked)), "Merge to main blocked")
+    }
+
+    func testMergePreviewDoesNotReportPassedForMissingOrFailedChecks() {
+        func view(_ checks: [IntegrationCheckResult]) -> ProjectPromotionView {
+            ProjectPromotionView(promotionId: "pr-1", state: .ready, sourceRef: "project/long-branch",
+                                 sourceSha: "abc", upstreamRef: "main", taskIds: ["t1"], checks: checks)
+        }
+        let passed = IntegrationCheckResult(name: "build", command: "npm run build")
+        let failed = IntegrationCheckResult(name: "tests", command: "npm test", exitCode: 1)
+        let timedOut = IntegrationCheckResult(name: "tests", command: "npm test", timedOut: true)
+        let unfinished = IntegrationCheckResult(name: "tests", command: "npm test", exitCode: nil)
+        XCTAssertEqual(PromotionCards.previewChecks(view([])), "No checks recorded")
+        XCTAssertEqual(PromotionCards.previewChecks(view([failed, passed])), "✕ Checks failed")
+        XCTAssertEqual(PromotionCards.previewChecks(view([unfinished, passed])), "✕ Checks failed")
+        XCTAssertEqual(PromotionCards.previewChecks(view([timedOut, passed])), "Checks timed out")
+        XCTAssertEqual(PromotionCards.previewCounts(view([])), "1 task")
+        XCTAssertEqual(PromotionCards.checksLine(view([failed, passed])),
+                       "✕ Failed on the combined tree · npm test\n\n✓ Passed on the combined tree · npm run build")
+    }
+
     /// Only a READY candidate may be confirmed (§3.3): a blocked one's checks did not pass, and a
     /// confirmed one is already landing. The button follows the door rather than the other way round.
     func testOnlyAReadyCandidateIsConfirmable() {

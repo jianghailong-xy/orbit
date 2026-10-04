@@ -1,3 +1,5 @@
+import { COORDINATOR_AUTHORITY, type CoordinatorAction } from './coordinator-authority';
+
 /**
  * The four readings of a finished delivery that a machine must not settle, and the one blocker
  * each of them raises.
@@ -108,6 +110,23 @@ export const BLOCKER_KIND_FOR: Readonly<Record<BlockerReason, string>> = {
   // The kind that has always meant this.
   MERGE_REFUSED_BY_GIT: 'MERGE_CONFLICT',
 };
+
+/** The action a blocker asks for, used to route it without consulting the project switch. */
+export const BLOCKER_DECISION: Readonly<Record<BlockerReason, CoordinatorAction>> = {
+  CRITERION_EXEMPTION_ARGUED: 'EDIT_ACCEPTANCE_CRITERIA',
+  ACCEPTANCE_STANDARD_MOVED: 'CONFIRM_ACCEPTANCE_CRITERIA',
+  OUTSIDE_DECLARED_SCOPE: 'DECIDE_TASK_LANDING',
+  MERGE_REFUSED_BY_GIT: 'DECIDE_TASK_LANDING',
+};
+
+export type BlockerRoute = 'OWNER_BLOCKER' | 'EXCEPTION_ITEM';
+
+/** Human-only ruler changes stay owner-facing; landing choices go through an exception item. */
+export function blockerRoute(reason: BlockerReason): BlockerRoute {
+  return COORDINATOR_AUTHORITY[BLOCKER_DECISION[reason]] === 'HUMAN_ONLY'
+    ? 'OWNER_BLOCKER'
+    : 'EXCEPTION_ITEM';
+}
 
 /** Everything the fold may look at. Every field is an observation; none is a setting. */
 export interface DeliveryObservations {

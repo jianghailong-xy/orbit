@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import { currentProviderChoice, providerChoices } from '../lib/sessionProviderChoices';
 import { RunnerEngines } from './RunnerEngines';
+import { clickRunnerMenuItem } from './RunnerEngines.test-helpers';
 import { RunnerEnginesSection } from './RunnerEnginesSection';
 import { probeReportsSignedIn } from './RunnerSignIn';
 import { AuthErrorCtx, Transcript } from './Transcript';
@@ -29,6 +30,7 @@ describe('Antigravity Google login across client surfaces', () => {
     vi.mocked(api).mockResolvedValue({ status: null });
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
     vi.stubGlobal('matchMedia', (query: string) => ({ matches: false, media: query, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} }));
+    vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   });
   afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); localStorage.clear(); });
 
@@ -52,7 +54,7 @@ describe('Antigravity Google login across client surfaces', () => {
     expect(rendered.textContent).toContain('Weekly72% remaining');
     expect(rendered.textContent).toContain('5-hour18% remaining');
     expect(rendered.querySelectorAll('.re-reset')).toHaveLength(2);
-    expect(rendered.querySelector('[aria-label="Re-sign in"]')).not.toBeNull();
+    expect(rendered.querySelector('[aria-label="More actions"]')).not.toBeNull();
     const summary = renderToStaticMarkup(wrap(<RunnerEnginesSection runner={fixtures.google} />, fixtures.google));
     expect(summary).toContain('Google account');
     expect(summary).toContain('72% remaining');
@@ -63,14 +65,58 @@ describe('Antigravity Google login across client surfaces', () => {
     const rendered = row(state);
     expect(rendered.textContent).toContain(hint);
     expect(rendered.textContent).not.toContain('Sign in with Google');
+    expect(rendered.querySelector('[aria-label="More actions"]')).toBeNull();
+  });
+
+  it('keeps old runners visible on the runner page when they have not reported Antigravity', () => {
+    const runner = { ...fixtures.old, antigravity: undefined, engines: [{ engine: 'claude' as const, installed: true, auth: 'yes' as const }] };
+    const html = renderToStaticMarkup(wrap(<RunnerEnginesSection runner={runner} />, runner));
+    expect(html).toContain('Antigravity');
+    expect(html).toContain('Update runner');
+    expect(html).toContain('Update this runner to sign in with Google.');
+    expect(html).not.toContain('Sign in with Google');
+  });
+
+  it.each([['macos', 'not supported on macOS runners yet'], ['old', 'Update this runner']])('preserves the env-key identity and %s Google-login guidance on the runner page', (state, hint) => {
+    const runner = structuredClone(fixtures['env-key']);
+    runner.antigravity!.googleLogin = fixtures[state].antigravity!.googleLogin;
+    for (const view of [<RunnerEnginesSection runner={runner} />, <RunnerEngines />]) {
+      const html = renderToStaticMarkup(wrap(view, runner));
+      expect(html).toContain('env key');
+      expect(html).toContain(hint);
+      expect(html).not.toContain('remaining');
+      expect(html).not.toContain('Sign in with Google');
+      expect(html).not.toContain('aria-label="More actions"');
+    }
+  });
+
+  it('prioritizes an explicitly missing CLI over Google authentication on both runner surfaces', () => {
+    const runner = structuredClone(fixtures['signed-out']);
+    runner.engines![0].installed = false;
+    runner.antigravity!.installed = false;
+    const html = renderToStaticMarkup(wrap(<RunnerEngines />, runner));
+    const container = document.createElement('div');
+    container.innerHTML = html;
+    const rendered = container.querySelector('[data-engine="antigravity"]')!;
+    expect(rendered.textContent).toContain('Not installed');
+    expect(rendered.textContent).toContain('Install');
+    expect(rendered.textContent).not.toContain('Sign in with Google');
+    for (const antigravity of [runner.antigravity, undefined]) {
+      const summary = renderToStaticMarkup(wrap(<RunnerEnginesSection runner={{ ...runner, antigravity }} />, runner));
+      expect(summary).toContain('class="rd-engine-auth muted">Not installed');
+      expect(summary).not.toContain('class="rd-engine-auth muted">Update runner');
+    }
   });
 
   it('keeps the env-key explanation and never treats unknown as signed in', () => {
     expect(row('env-key').textContent).toContain('env key · runs on your Gemini key');
     const unknown = row('unknown');
     expect(unknown.textContent).toContain('Unknown');
-    expect(unknown.querySelector('[aria-label="Re-sign in"]')).toBeNull();
+    expect(unknown.querySelector('[aria-label="More actions"]')).toBeNull();
     expect(unknown.textContent).not.toContain('remaining');
+    const summary = renderToStaticMarkup(wrap(<RunnerEnginesSection runner={fixtures.unknown} />, fixtures.unknown));
+    expect(summary).not.toContain('Google account');
+    expect(summary).not.toContain('Signed in');
     expect(probeReportsSignedIn([fixtures['env-key']], fixtures.google.id, 'antigravity')).toBe(false);
     expect(probeReportsSignedIn([fixtures.google], fixtures.google.id, 'antigravity')).toBe(true);
   });
@@ -107,21 +153,31 @@ describe('Antigravity Google login across client surfaces', () => {
     expect(html).not.toContain('Antigravity needs a Gemini API key');
   });
 
-  it('starts the Antigravity paste-code relay from its row, including on re-login', async () => {
+  it.each(['signed-out', 'google'])('submits the pasted Google authorization code from the %s row', async (state) => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
     const popup = { document: { write: vi.fn(), close: vi.fn() }, location: { replace: vi.fn() }, close: vi.fn() };
     vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window);
-    vi.mocked(api).mockImplementation(async (path, options) => path.endsWith('/login') && options?.method === 'POST'
+    vi.mocked(api).mockImplementation(async (path, options) => (path.endsWith('/login') || path.endsWith('/login/code')) && options?.method === 'POST'
       ? { status: 'awaiting_code', engine: 'antigravity', url: 'https://example.test/authorize' } : { status: null });
     try {
-      await act(async () => { root.render(wrap(<RunnerEngines />, fixtures.google)); });
-      await act(async () => container.querySelector<HTMLButtonElement>('[data-engine="antigravity"] [aria-label="Re-sign in"]')!.click());
+      await act(async () => { root.render(wrap(<RunnerEngines />, fixtures[state])); });
+      const engineRow = container.querySelector<HTMLElement>('[data-engine="antigravity"]')!;
+      if (state === 'google') await clickRunnerMenuItem(engineRow, 'Re-sign in');
+      else await act(async () => engineRow.querySelector<HTMLButtonElement>('.re-act button')!.click());
       await act(async () => container.querySelector<HTMLButtonElement>('.rsi-btn')!.click());
       await vi.waitFor(() => expect(vi.mocked(api)).toHaveBeenCalledWith(`/runners/${fixtures.google.id}/login`, { method: 'POST', body: { engine: 'antigravity' } }));
       await vi.waitFor(() => expect(container.querySelector('.rsi-input')).not.toBeNull());
       expect(popup.location.replace).toHaveBeenCalledWith('https://example.test/authorize');
+      const input = container.querySelector<HTMLInputElement>('.rsi-input')!;
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'google-authorization-code');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      await act(async () => container.querySelector<HTMLButtonElement>('.rsi-form .rsi-btn')!.click());
+      await vi.waitFor(() => expect(vi.mocked(api)).toHaveBeenCalledWith(`/runners/${fixtures.google.id}/login/code`, { method: 'POST', body: { code: 'google-authorization-code' } }));
+      await vi.waitFor(() => expect(container.textContent).toContain('Signing in with your code…'));
     } finally {
       await act(async () => root.unmount());
       container.remove();

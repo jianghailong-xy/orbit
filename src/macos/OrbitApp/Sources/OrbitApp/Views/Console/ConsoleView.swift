@@ -28,12 +28,19 @@ struct ConsoleView: View {
     @Environment(AppModel.self) private var appModel
     /// The public read-only link's sheet — opened from the nav bar on iOS, the window toolbar on macOS.
     @State private var showShare = false
+    @State private var promotionReview: PromotionReviewTarget?
+    @State private var approvalReview: ApprovalReviewTarget?
+    @State private var approvalReviewDrafts = ApprovalReviewDrafts()
     #if os(iOS)
     /// Tapping the nav-bar title renames the session (web double-clicks its header title). Seeded
     /// from the session's own title — not `SessionHeader.title`, whose agent-name fallback would
     /// otherwise be typed in as if it were the name.
     @State private var renaming = false
     @State private var renameDraft = ""
+    @State private var taggingSession: Session?
+    @State private var movingSession: Session?
+    @State private var moveListed: [Session] = []
+    @State private var confirmPurge = false
     /// Gates the "needs you" banner to the compact shell — see the `safeAreaInset` below.
     @Environment(\.horizontalSizeClass) private var hSize
     /// A phone's stack: the project a coordinator's title opens goes over this console, so the back
@@ -65,7 +72,8 @@ struct ConsoleView: View {
             consoleID: ObjectIdentifier(console),
             progress: { console.state.taskProgress[$0] },
             isRunning: { id in console.state.background.contains { $0.id == id && $0.status == "running" } },
-            subagentItems: { console.state.subagentItems[$0] ?? [] })
+            subagentItems: { console.state.subagentItems[$0] ?? [] },
+            fullPayload: { await console.fullPayload(seq: $0) })
     }
 
     private func sessionImagePreview(_ console: ConsoleModel) -> SessionImagePreview {
@@ -76,7 +84,10 @@ struct ConsoleView: View {
             ns: imagePreviewNS,
             open: { key, fallback, fallbackIndex in
                 let pages = SessionPreviewImages
-                    .collect(console.state.items) { fetched.byCard[$0.id] ?? $0.resultImages }
+                    .collect(console.state.items,
+                             isAttachmentImage: { console.attachments.image(for: $0) != nil }) {
+                        fetched.byCard[$0.id] ?? $0.resultImages
+                    }
                     .compactMap { PreviewImage($0) }
                 if let index = pages.firstIndex(where: { $0.id == key }) {
                     imagePreviewPages = pages
@@ -194,6 +205,20 @@ struct ConsoleView: View {
                 .environment(\.sessionImagePreview, sessionImagePreview(console))
                 // The workspace's background agents and workflows, for the cards that draw them.
                 .environment(\.taskActivity, taskActivity(console))
+                .environment(\.openPromotionReview, { promotionID in
+                    promotionReview = PromotionReviewTarget(id: promotionID)
+                })
+                .sheet(item: $promotionReview) { target in
+                    PromotionReviewSheet(console: console, promotionID: target.id)
+                }
+                .environment(approvalReviewDrafts)
+                .environment(\.openApprovalReview, { target in
+                    approvalReview = target
+                })
+                .sheet(item: $approvalReview) { target in
+                    ApprovalReviewSheet(console: console, target: target)
+                        .environment(approvalReviewDrafts)
+                }
                 .imagePreview($imagePreviewTarget, images: imagePreviewPages, ns: imagePreviewNS,
                               store: registry.attachments)
             } else {
@@ -206,6 +231,11 @@ struct ConsoleView: View {
         // keeps this off-screen view cached, and at most one session ever streams.
         .task(id: sessionID) {
             _ = registry.model(for: sessionID, agentID: agentID)
+        }
+        .onChange(of: sessionID) { _, _ in
+            promotionReview = nil
+            approvalReview = nil
+            approvalReviewDrafts = ApprovalReviewDrafts()
         }
         #if os(iOS)
         // "Another session needs you", below the nav bar and above the transcript. Compact only:
@@ -235,7 +265,7 @@ struct ConsoleView: View {
         // console reverts to the large bar the moment the session is created — the reported gap.)
         .navigationBarTitleDisplayMode(.inline)
         // …and none at all while a phone's composer holds the keyboard (`foldsChrome`): back, the
-        // title and Share come back when the keyboard goes.
+        // title and session menu come back when the keyboard goes.
         .toolbar(foldsChrome(registry.peek(sessionID)) ? .hidden : .automatic, for: .navigationBar)
         // Inline title: the session name over a "state · when" subtitle, matching the web Agent
         // console header (`AgentView.tsx`). Centered/two-line — the system convention (Messages/Phone)
@@ -276,15 +306,44 @@ struct ConsoleView: View {
                     title
                 }
             }
-            // Public read-only share link (web parity: the "Share…" menu item on the Agent console).
             ToolbarItem(placement: .topBarTrailing) {
-                Button { showShare = true } label: {
-                    Image(systemName: "square.and.arrow.up")
+                if let session = appModel.session(id: sessionID) {
+                    sessionMenu(session)
+                } else {
+                    Button {} label: { Image(systemName: "ellipsis") }
+                        .disabled(true)
+                        .accessibilityLabel("Session actions")
                 }
-                .accessibilityLabel("Share session")
             }
         }
         .sessionRenameAlert(isPresented: $renaming, draft: $renameDraft, sessionID: sessionID)
+        .sheet(item: $taggingSession) { session in
+            SessionTagSheet(session: session)
+                .environment(appModel)
+                .task { await appModel.loadSessionTags() }
+        }
+        .sheet(item: $movingSession) { session in
+            if let workspace = sessionWorkspace(session) {
+                SessionMoveSheet(session: session, workspace: workspace, listed: moveListed)
+                    .environment(appModel)
+                    .task {
+                        await appModel.loadSessionFolders()
+                        let view: SessionView = session.effectiveLifecycleState == .completed ? .completed : .open
+                        if let baseURL = appModel.baseURL {
+                            let api = APIClient(baseURL: baseURL, tokenStore: appModel.tokenStore)
+                            if let listed = try? await api.listSessions(view: view), !Task.isCancelled {
+                                moveListed = listed.filter { ($0.agent?.id ?? $0.agentId) == workspace.id }
+                            }
+                        }
+                    }
+            }
+        }
+        .confirmationDialog("Delete permanently?", isPresented: $confirmPurge, titleVisibility: .visible) {
+            Button("Delete Permanently", role: .destructive) { appModel.purgeSession(sessionID) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This session and its full transcript will be permanently deleted. This can't be undone.")
+        }
         #else
         // The same link on macOS, from the window toolbar: a detail pane's own actions sit at
         // `.primaryAction` there, as the project and task pages' menus do.
@@ -303,6 +362,108 @@ struct ConsoleView: View {
             }
         }
     }
+
+    #if os(iOS)
+    private func sessionWorkspace(_ session: Session) -> Agent? {
+        appModel.agents?.items.first { $0.id == (session.agent?.id ?? session.agentId) }
+    }
+
+    private func sessionMenu(_ session: Session) -> some View {
+        Menu {
+            if session.effectiveLifecycleState == .trash {
+                Button { appModel.moveSessionToOpen(session.id) } label: {
+                    Label("Move to Open", systemImage: "tray.and.arrow.up")
+                }
+                .disabled(session.capabilities?.canRestore == false)
+                Divider()
+                Button(role: .destructive) { confirmPurge = true } label: {
+                    Label("Delete Permanently", systemImage: "trash.slash")
+                }
+            } else {
+                Section {
+                    Button { showShare = true } label: {
+                        Label(SharePanelCopy.share, systemImage: "square.and.arrow.up")
+                    }
+                    if let url = appModel.sessionWebURL(session.id) {
+                        Button {
+                            PlatformPasteboard.copyString(url.absoluteString)
+                            appModel.showToast(SharePanelCopy.linkCopied)
+                        } label: {
+                            Label(SharePanelCopy.copyLink, systemImage: "link")
+                        }
+                    }
+                }
+                Section {
+                    Button {
+                        renameDraft = session.title ?? ""
+                        renaming = true
+                    } label: {
+                        Label("Rename…", systemImage: "pencil")
+                    }
+                    Button { appModel.setPinned(session, pinned: session.pinnedAt == nil) } label: {
+                        Label(session.pinnedAt == nil ? "Pin" : "Unpin",
+                              systemImage: session.pinnedAt == nil ? "pin" : "pin.slash")
+                    }
+                    Button {
+                        let listed = session.effectiveLifecycleState == .completed
+                            ? (appModel.agents?.agentSessions ?? []) : appModel.sessions
+                        moveListed = listed.filter {
+                            ($0.agent?.id ?? $0.agentId) == (session.agent?.id ?? session.agentId)
+                        }
+                        movingSession = session
+                    } label: {
+                        Label("Move…", systemImage: "folder")
+                    }
+                    .disabled(sessionWorkspace(session) == nil)
+                    Button { taggingSession = session } label: {
+                        Label("Tags…", systemImage: "tag")
+                    }
+                }
+                if let taskID = session.taskId {
+                    Section {
+                        Button {
+                            appModel.openFromConversation(.task(taskID), overConsole: opensPagesOverConsole)
+                        } label: {
+                            Label("Open Task", systemImage: "arrow.up.right")
+                        }
+                    }
+                } else if let projectID = session.projectId {
+                    Section {
+                        Button {
+                            appModel.openProjectFromConversation(projectID, overConsole: opensPagesOverConsole)
+                        } label: {
+                            Label("Open Project", systemImage: "arrow.up.right")
+                        }
+                    }
+                }
+                Section {
+                    if session.effectiveLifecycleState == .completed {
+                        Button { appModel.moveSessionToOpen(session.id) } label: {
+                            Label("Move to Open", systemImage: "tray.and.arrow.up")
+                        }
+                        .disabled(session.capabilities?.canRestore == false)
+                    } else if session.effectiveLifecycleState == .open {
+                        Button { appModel.completeSession(session.id) } label: {
+                            Label("Complete Session", systemImage: "checkmark.circle")
+                            if session.effectiveRunState.isLive { Text("Stops the current run") }
+                        }
+                        .disabled(session.capabilities?.canComplete == false)
+                    }
+                }
+                Section {
+                    Button(role: .destructive) { appModel.deleteSession(session.id) } label: {
+                        Label("Move to Trash", systemImage: "trash")
+                        if session.effectiveRunState.isLive { Text("Stops the current run") }
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+        }
+        .menuOrder(.fixed)
+        .accessibilityLabel("Session actions")
+    }
+    #endif
 }
 
 /// The band's cards while a phone's composer holds the keyboard (`foldsChrome`): folded to no

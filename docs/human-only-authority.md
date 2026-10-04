@@ -27,6 +27,20 @@ session. `docs/project-done-gate.md` is the live page for what decides the value
 
 It is deliberately limited to those actions. It does not redesign authentication.
 
+## A delivery's landing is not a HUMAN_ONLY question
+
+What happens to a finished delivery that the platform could not land cleanly — files outside its
+declaration or a branch git refused — is `DECIDE_TASK_LANDING`, graded `COORDINATOR_BOUNDED` in
+`coordinator-authority.ts`. In an Automatic project these observations become a `DELIVERY_REVIEW`
+exception item for the coordinator; they reach the account owner only through the item's ordinary
+escalation or when no live coordinator exists. The coordinator may accept, return, replace, or
+explicitly retry where the failure class permits it, and every choice leaves a reason. It never
+changes the acceptance ruler and the platform never silently retries.
+
+Questions about the ruler remain owner-facing: a criterion exemption is
+`EDIT_ACCEPTANCE_CRITERIA`, and a moved standard is `CONFIRM_ACCEPTANCE_CRITERIA`. Those two
+`HUMAN_ONLY` routes are intentionally unchanged by the delivery review path.
+
 ## Decision
 
 `authorityPrincipal(undefined)` must **not** become a blanket refusal. A missing acting Session is

@@ -1,0 +1,69 @@
+{
+  "sourceCommit": "e3f53d40246c005aac7c3e1060f0734d38afbb47",
+  "revision2": {
+    "count": 256,
+    "allHashesMatch": true,
+    "types": {
+      ".png": 160,
+      ".json": 96
+    },
+    "stats": {
+      "startTime": "2026-10-04T05:01:00.078Z",
+      "duration": 229013.06199999998,
+      "expected": 96,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    }
+  },
+  "revision1": {
+    "count": 224,
+    "allHashesMatch": true,
+    "types": {
+      ".png": 128,
+      ".json": 96
+    },
+    "stats": {
+      "startTime": "2026-10-04T04:21:32.021Z",
+      "duration": 215398.722,
+      "expected": 96,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    }
+  },
+  "p0Baselines": {
+    "referenceCommit": "297d33e97729c66ebdc8f2b63b0e094db1d9e8df",
+    "count": 252,
+    "allUnchanged": true
+  },
+  "pixelComparison": {
+    "pairCount": 48,
+    "identicalPairs": 18,
+    "changedPixels": 767,
+    "differenceLocations": {
+      "button rounded edge": 360,
+      "input rounded edge/shadow": 291,
+      "surface rounded edge": 112,
+      "outside rounded edges": 4
+    },
+    "maxChannelDelta": 4,
+    "separatorRows": 64,
+    "separatorChangedPixels": 0
+  },
+  "controlsRegression": {
+    "startTime": "2026-10-04T05:01:59.720Z",
+    "duration": 89334.789,
+    "expected": 24,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "checks": {
+    "overlays-revision-2": 0,
+    "controls-regression": 0,
+    "fixture-types": 0,
+    "boundary-and-theme": 0,
+    "web-build": 0
+  }
+}

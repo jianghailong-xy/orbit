@@ -127,6 +127,25 @@ describe('an exception item delivered to the coordinator', () => {
     expect(el!.querySelector('details.oic-raw pre')?.textContent).toBe(TOLD);
   });
 
+  it('draws a delivery review as the coordinator’s decision, with the files it is about', async () => {
+    await mount([delivered({
+      ...CARD,
+      kind: 'DELIVERY_REVIEW',
+      title: 'Changed files it didn’t declare: 回填历史 user 事件的 controlPlaneNote',
+      files: ['src/web/src/index.css'],
+      targetRef: null,
+    })]);
+    const el = card();
+    expect(el, `no card was drawn:\n${container.innerHTML}`).not.toBeNull();
+    // Keep the native client's seven-label table stable; the review-specific explanation and facts
+    // carry the new distinction.
+    expect(el!.querySelector('.oic-kind')?.textContent).toBe('Exception item');
+    expect(el!.querySelector('.oic-why')?.textContent).toContain('the coordinator decides');
+    expect(el!.querySelector('.oic-why')?.textContent).toContain('asked only if');
+    expect([...el!.querySelectorAll('.oic-files li')].map((li) => li.textContent))
+      .toEqual(['src/web/src/index.css']);
+  });
+
   /**
    * The pair the sticky bar at the top of the transcript reads off the card's root — and the guard
    * that keeps a title already carrying its kind from being prefixed with it again. A failed task's

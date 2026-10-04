@@ -21,7 +21,6 @@ import XCTest
 final class OrbitLinkCopyParityTests: XCTestCase {
 
     private static let webCard = "src/web/src/components/OrbitLinkCard.tsx"
-    private static let webProjectPage = "src/web/src/components/ProjectPanoramaHeader.tsx"
 
     private enum ParityError: Error, CustomStringConvertible {
         case noRepo
@@ -204,9 +203,9 @@ final class OrbitLinkCopyParityTests: XCTestCase {
         assertBuilds(web, "value.toLocaleString('en-US')", "what groups a count")
     }
 
-    /// The stalled line is the project page's own sentence, word for word, on both ends — and the
-    /// web card says the same sentence its project page does.
-    func testTheStalledLineIsTheProjectsOwnSentence() throws {
+    /// The stalled line on a link card has the same sentence and pluralization in both clients.
+    /// The project page now describes manual readiness separately.
+    func testTheStalledLineMatchesTheWebLinkCard() throws {
         let web = try flat(Self.webCard)
         XCTAssertEqual(OrbitLinkCopy.stalled(ready: 1), "1 task is ready, but nothing is running.")
         XCTAssertEqual(OrbitLinkCopy.stalled(ready: 3), "3 tasks are ready, but nothing is running.")
@@ -214,10 +213,6 @@ final class OrbitLinkCopyParityTests: XCTestCase {
                      "the stalled sentence")
         assertBuilds(web, "const noun = ready === 1 ? 'task is' : 'tasks are';",
                      "the number in the stalled sentence")
-        // The page the sentence came from still says it.
-        let page = try flat(Self.webProjectPage)
-        XCTAssertTrue(page.contains("ready, but nothing is running."),
-                      "\(Self.webProjectPage) no longer carries the sentence the card copies")
     }
 
     /// A task's runs, its turns, and how its newest run came out — the three counts a task card

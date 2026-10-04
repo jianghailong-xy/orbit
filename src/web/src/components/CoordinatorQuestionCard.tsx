@@ -7,6 +7,7 @@ import type {
   ProjectOpenItemsView,
 } from '@orbit/shared';
 import { CardActionButton, CardActions } from './CardAction';
+import { ReviewCard } from './ReviewCard';
 import { api } from '../api';
 import { projectOpenItemsQuery } from '../lib/queries';
 import { ago } from '../lib/watches';
@@ -133,6 +134,7 @@ export function CoordinatorQuestionCard({
   now: number;
 }): JSX.Element | null {
   const qc = useQueryClient();
+  const [reviewOpen, setReviewOpen] = useState(false);
   const question = row.question;
   const [chosen, setChosen] = useState<Choice>(question?.recommendedOption ?? null);
   const [text, setText] = useState('');
@@ -188,7 +190,10 @@ export function CoordinatorQuestionCard({
   };
 
   return (
-    <div className="approval-card coordinator-question" id={`question-${row.itemId}`}>
+    <ReviewCard title={COORDINATOR_QUESTION_HEADING} summary={question.question}
+      meta={`${question.options.length} options · asked ${ago(row.waitingSince, now)}`}
+      id={`question-${row.itemId}`} open={reviewOpen} onOpenChange={setReviewOpen}>
+    <div className="approval-card coordinator-question">
       <div className="approval-head coordinator-question-head">
         <span className="coordinator-question-heading">{COORDINATOR_QUESTION_HEADING}</span>
         <span className="criteria-provenance prov-brand" title={FROM_COORDINATOR_TITLE}>
@@ -272,6 +277,7 @@ export function CoordinatorQuestionCard({
         <span className="coordinator-question-asked">{`asked ${ago(row.waitingSince, now)}`}</span>
       </CardActions>
     </div>
+    </ReviewCard>
   );
 }
 

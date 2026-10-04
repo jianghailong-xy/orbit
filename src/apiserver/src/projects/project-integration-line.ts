@@ -11,6 +11,7 @@ import {
 
 import type { PrismaService } from '../prisma/prisma.service';
 import { branchName } from './project-criterion-landing';
+import { readProjectLandTaskViews } from './project-task-integration';
 
 /**
  * A code project's integration line: the branch the platform lands its finished tasks on
@@ -275,11 +276,12 @@ export async function readProjectIntegrationView(
   // sorts by time.
   const [oldest] = await prisma.$queryRaw<Array<{
     state: string; kind: IntegrationJobKind; phase: IntegrationJobPhase | null;
-    taskTitle: string | null; startedAt: Date;
+    taskTitle: string | null; startedAt: Date; heartbeatAt: Date | null;
   }>>(Prisma.sql`
     SELECT j."state", j."kind", j."phase",
            t."title" AS "taskTitle",
-           COALESCE(j."claimed_at", j."created_at") AS "startedAt"
+           COALESCE(j."claimed_at", j."created_at") AS "startedAt",
+           j."heartbeat_at" AS "heartbeatAt"
       FROM "project_integration_job" j
       LEFT JOIN "task" t ON t."id" = j."task_id"
      WHERE j."project_id" = ${projectId}::uuid
@@ -287,6 +289,9 @@ export async function readProjectIntegrationView(
      ORDER BY (j."state" = 'RUNNING') DESC,
               COALESCE(j."claimed_at", j."created_at") ASC, j."id" ASC
      LIMIT 1`);
+  // Each current LAND_TASK through the task read model, so this page and the task's own describe
+  // one landing in the same words (§2.7a).
+  const landTasks = await readProjectLandTaskViews(prisma, projectId);
 
   const ahead = newest?.aheadOfUpstream ?? null;
   return {
@@ -298,6 +303,7 @@ export async function readProjectIntegrationView(
     integratingCount: counts?.integrating ?? 0,
     queuedCount: counts?.queued ?? 0,
     mergeCheckOnTip: lastLandingCheck(newest?.checks),
+    landTasks,
     inFlight: oldest
       ? {
         taskTitle: oldest.taskTitle,
@@ -305,6 +311,7 @@ export async function readProjectIntegrationView(
         phase: oldest.phase,
         state: oldest.state === 'RUNNING' ? 'RUNNING' : 'QUEUED',
         startedAt: oldest.startedAt,
+        heartbeatAt: oldest.heartbeatAt,
       }
       : null,
   };
