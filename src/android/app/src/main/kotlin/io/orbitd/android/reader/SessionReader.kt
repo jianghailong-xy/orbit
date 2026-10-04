@@ -38,6 +38,9 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         app.realtime, route.id!!, app.processScope, route.recordId, recordOpened) }
     DisposableEffect(model) { onDispose { model.close() } }
     val state by model.state.collectAsState()
+    val composer = remember(app, handle, route.id) { app.composer(handle, route.id!!) }
+    val composerState by composer.state.collectAsState()
+    var composeFocus by remember(handle, route.id) { mutableIntStateOf(0) }
     LaunchedEffect(state.window.seeded, state.loading, state.targetSeq) {
         if (route.recordId != null && state.window.seeded && !state.loading && state.targetSeq != null) recordOpened = true
     }
@@ -166,7 +169,12 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                         }
                     }
                     item(key = "newer") { if (displayedWindow.newerAfter != null) TextButton(enabled = !displayedLoading, onClick = model::newer) { Text("Load newer messages") } }
-                    item(key = "interaction-cards") { SessionCards(openLink) }
+                    item(key = "interaction-cards") { SessionCards(openLink, discuss = if (!composerState.loaded) null else { context ->
+                        val prior = composer.state.value.draft.text
+                        val text = prior + (if (prior.isBlank()) "" else "\n\n") + context
+                        composer.edit(text, text.length, text.length)
+                        composeFocus++
+                    }) }
                     item(key = "tail") { Spacer(Modifier.height(1.dp).testTag("transcript-tail")) }
                 }
                 if (!follow || state.window.newerAfter != null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -177,7 +185,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     TextButton(onClick = { follow = true; model.latest() }) { Text("Jump to latest") }
                 }
                 }
-                Box(Modifier.heightIn(max = composerHeight)) { SessionComposer(app, handle, route.id!!, state.session) }
+                Box(Modifier.heightIn(max = composerHeight)) { SessionComposer(app, handle, route.id!!, state.session, focusRequest = composeFocus) }
             }
         }
         }

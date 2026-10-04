@@ -128,6 +128,27 @@ class ComposerDeviceTest {
         capture("permission-withdrawn")
     }
 
+    @Test fun cardDiscussionPreservesDraftAndFocusesWithoutSending() = journey("card-discussion") {
+        login()
+        compose.onNodeWithTag("composer-input").performTextReplacement("已有草稿")
+        shellBytes("input keyevent KEYCODE_BACK")
+        control("""{"discussion":true}""")
+        compose.runOnIdle { app.realtime.refreshSession() }
+        compose.waitUntil(10000) { app.realtime.state.value.session?.snapshot?.standing?.get("acceptanceConfirmation") is JsonObject }
+        compose.onNodeWithTag("transcript-list").performScrollToNode(hasText("Chat about this"))
+        compose.onNodeWithText("Chat about this").performScrollTo().performClick()
+        compose.onNodeWithTag("composer-input").assertIsFocused()
+        compose.waitUntil(5000) { model.state.value.draft.text.contains("fixture-criteria-seal") }
+        val text = model.state.value.draft.text
+        assertTrue(text.startsWith("已有草稿\n\nAbout the acceptance criteria"))
+        assertTrue(text.contains("Keep the discussion draft"))
+        assertEquals(0, stats()["uniqueTurns"]!!.jsonPrimitive.int)
+        assertTrue(stats()["calls"]!!.jsonArray.isEmpty())
+        capture("discussion-focused")
+        compose.activityRule.scenario.recreate()
+        compose.onNodeWithTag("composer-input").assertTextContains(text)
+    }
+
     @Test fun attachmentFailureRetryPreviewCopyAndSystemShare() = journey("attachments") {
         login()
         val bytes="中文附件与真实URI权限\n".repeat(100).toByteArray()
@@ -155,7 +176,10 @@ class ComposerDeviceTest {
             compose.waitUntil(10000) { !model.state.value.busy && model.state.value.draft.pending==null && model.state.value.draft.attachments.isEmpty() }
             // The outbox's private copy is now removed: every action below must fetch the
             // transcript attachment through authenticated GET, not reuse the staged bytes.
-            awaitText(staged.name);compose.onNodeWithText(staged.name).performClick()
+            awaitText(staged.name)
+            compose.onAllNodesWithText("\"attachments\":", substring=true).assertCountEquals(0)
+            capture("attachment-only-sent")
+            compose.onNodeWithText(staged.name).performClick()
             val oldClip = app.getSystemService(ClipboardManager::class.java).primaryClip?.getItemAt(0)?.uri
             compose.onNodeWithText("Copy",useUnmergedTree=true).performClick()
             compose.waitUntil(5000) { app.getSystemService(ClipboardManager::class.java).primaryClip?.getItemAt(0)?.uri?.let { it != oldClip } == true }

@@ -11,6 +11,7 @@ SESSION='01a0cca7-8609-70ed-a0e2-d4b55b832b60'
 CREATED='01a0cca7-8609-70ed-a0e2-d4b55b832b70'
 WORKSPACE='01a0cca7-8609-70ed-a0e2-d4b55b832b61'
 RUNNER='01a0cca7-8609-70ed-a0e2-d4b55b832b68'
+PROJECT='01a0cca7-8609-70ed-a0e2-d4b55b832b69'
 def encoded(x): return json.dumps(x,ensure_ascii=False,separators=(',',':')).encode()
 class State:
     lock=threading.RLock()
@@ -18,11 +19,12 @@ class State:
     def reset(self):
         self.rows=[]; self.turns={}; self.attachments={}; self.calls=[]; self.attempts={}; self.controls=[]
         self.losses=0; self.uploadFailures=0; self.uploadDelay=0; self.denial=0; self.config={}; self.expired=False; self.rotation=0
-        self.status='AWAITING_INPUT'; self.revision=0; self.creations=[]; self.downloads=[]
+        self.status='AWAITING_INPUT'; self.revision=0; self.creations=[]; self.downloads=[]; self.discussion=False
     def detail(self):
         return {'id':SESSION,'title':'Composer conversation','workspaceId':WORKSPACE,'assignedRunnerId':RUNNER,
             'status':self.status,'runState':self.status,'lifecycleState':'OPEN','provider':'codex','model':'fixture-model',
-            'permissionMode':'default','effort':'high','capabilities':{'canSend':self.status!='FAILED','canResume':self.status=='FAILED','canComplete':True},**self.config}
+            'permissionMode':'default','effort':'high','capabilities':{'canSend':self.status!='FAILED','canResume':self.status=='FAILED','canComplete':True},
+            **({'projectId':PROJECT} if self.discussion else {}),**self.config}
     def stats(self):
         return {'scope':'controlled HTTP fixture; not deployed backend','uniqueTurns':len(self.turns),'attempts':self.attempts,
             'turns':self.turns,'attachments':{k:{a:b for a,b in v.items() if a!='bytes'} for k,v in self.attachments.items()},
@@ -54,7 +56,7 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/__control':
             with state.lock:
                 if body.get('reset'): state.reset()
-                for k in ['losses','uploadFailures','uploadDelay','denial','status','expired']:
+                for k in ['losses','uploadFailures','uploadDelay','denial','status','expired','discussion']:
                     if k in body: setattr(state,k,body[k])
             return self.reply({'ok':True})
         if path in ['/api/auth/login','/api/auth/refresh']:
@@ -142,6 +144,8 @@ class Handler(BaseHTTPRequestHandler):
             'modelCatalog':{'codex':[{'value':'fixture-model','label':'Fixture One','reasoningLevels':['low','high'],'serviceTiers':['priority'],'permissionModes':['default','plan']},{'value':'fixture-model-2','label':'Fixture Two'}]},
             'engines':[{'engine':'codex','installed':True,'auth':'yes','accounts':[{'id':'default','name':'Default','auth':'yes'},{'id':'second','name':'Second account','auth':'yes'},{'id':'expired','name':'Expired account','auth':'no'}]}]}])
         if path=='/api/providers': return self.reply([{'slug':'custom-codex','label':'Custom account','runtime':'codex','models':[{'value':'custom-model','label':'Custom model'}]}])
+        if path==f'/api/projects/{PROJECT}': return self.reply({'id':PROJECT,'title':'Composer discussion','acceptanceCriteriaItems':[{'ordinal':0,'text':'Keep the discussion draft'}]})
+        if path==f'/api/projects/{PROJECT}/acceptance/confirmation': return self.reply({'state':'UNCONFIRMED','currentVersion':{'digest':'fixture-criteria-seal'}})
         if path.endswith('/confirmation-under-review'): return self.reply(None)
         return self.reply([])
 if __name__=='__main__':

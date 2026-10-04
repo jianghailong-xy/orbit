@@ -11,8 +11,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
@@ -26,12 +29,17 @@ import io.orbitd.android.core.realtime.SessionState
 import kotlinx.serialization.json.*
 
 @Composable
-fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: String, session: SessionState?, target: DraftTarget? = null) {
+fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: String, session: SessionState?, target: DraftTarget? = null, focusRequest: Int = 0) {
     val model = remember(app, handle, sessionId) { app.composer(handle, sessionId, target) }
     val state by model.state.collectAsState()
     val context = LocalContext.current
     val draft = state.draft
     var field by remember(model) { mutableStateOf(TextFieldValue()) }
+    val focus = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(focusRequest) {
+        if (focusRequest > 0) { focus.requestFocus(); keyboard?.show() }
+    }
     // Keep TextFieldValue's composing range during IME updates. Disk stores committed text/cursor,
     // never an IME's stale composing range after a new input connection or process.
     LaunchedEffect(draft.text, draft.selectionStart, draft.selectionEnd) {
@@ -90,7 +98,7 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
                 }
                 ComposerUsage(model, state, effective, session)
             OutlinedTextField(field, onValueChange = { field = it; model.edit(it.text, it.selection.start, it.selection.end) },
-                modifier = Modifier.fillMaxWidth().testTag("composer-input").onPreviewKeyEvent {
+                modifier = Modifier.fillMaxWidth().focusRequester(focus).testTag("composer-input").onPreviewKeyEvent {
                     if (it.type == KeyEventType.KeyDown && it.key == Key.Enter && (it.isCtrlPressed || it.isMetaPressed) && field.composition == null && usable) {
                         model.send(); true
                     } else false

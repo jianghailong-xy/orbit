@@ -4,6 +4,8 @@ Development input: A04 project line, A05 `3c286987d`, A03 `8647533`, A06
 `d6a61511d6830237271f3216e0668702d0e64462`, and its reviewed partial-steer repair
 `5df1d1d57111bd607b36c8089ef855e4b2f4dc43`. Both A06 commits were absorbed by ordinary
 merge, preserving ancestry. A07 does not modify TranscriptRows or A08's cards/TranscriptRowView.
+A08's fixed discussion contract `08b204c6274b6a3201169f31e7c82315ac379523` and attachment-only
+rendering fix `4fd1b3b0549943ea38e3c40deb28f4396c9acbc8` are ordinary-merge integration inputs.
 
 ## Wire and storage
 
@@ -49,8 +51,9 @@ runner's agent/runtime-scoped catalog; local /status consumes no turn. No settin
 screen or new server protocol is added. Context uses reported transcript tokens/window and the
 selected model's reported contextWindow; unknown windows show a count. Usage reads the billed
 provider/account's snapshot, preserving fetched/reset timestamps and never substituting another
-login's quota. A08 owns question/approval/evidence reply targets. The A01 matrix's # reference
-picker was not found in the fixed Swift input; reference text is sent unchanged, with that
+login's quota. A08 owns question/approval/evidence reply targets. Its ordinary card discussion
+callback appends context to the existing durable draft and focuses the input without sending.
+The A01 matrix's # reference picker was not found in the fixed Swift input; reference text is sent unchanged, with that
 matrix discrepancy returned to A01 rather than inventing an endpoint.
 
 ## Entry-specific attachment contract
