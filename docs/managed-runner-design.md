@@ -1,0 +1,617 @@
+# Managed runner deployment and data contract
+
+This is the first implementation contract for an optional default runner on Kubernetes, with one
+Ceph RBD filesystem PVC per user and one active runner instance per PVC. It is for the server,
+runner, client, and storage implementers. Managed runners are **disabled by default**. This project
+delivers code, separate optional templates, and isolated tests; it authorizes no production
+deployment, infrastructure installation, or change to the existing deployment topology.
+
+Status: design, 2026-10-04. Code observations below refer to repository commit
+`72246fe2aec1d852cad06d568c3ec9ea844042c7`. New tables, interfaces, configuration, and template paths
+in this record are proposed contracts for subsequent implementation, not features already present.
+Actual cluster versions, credentials, hardware, quotas, and tenant population have not been supplied.
+Their absence blocks infrastructure execution, not this design review.
+
+## Scope and existing implementation
+
+The existing apiserver remains the control plane. A small managed runner manager records desired
+state in PostgreSQL and reconciles user Pods and PVCs in one explicitly configured test environment.
+The existing session queue, heartbeats, runtime selection, and session leases continue to execute
+work. No general cloud scheduler, new model platform, billing system, or dynamic flag service is added.
+Self-managed runners remain supported alongside the optional managed runner.
+
+| Repository evidence | Existing behavior and implementation consequence |
+| --- | --- |
+| [Prisma schema](../src/apiserver/prisma/schema.prisma) | `Runner` is owner-bound; its status is `ONLINE`, `OFFLINE`, or `DRAINING`. `Workspace.runner` has `onDelete: Cascade`. Compute removal must preserve the runner row. Managed provisioning needs its own durable unique mapping. |
+| [Auth service](../src/apiserver/src/auth/auth.service.ts) | Login and bootstrap currently issue tokens; refresh also calls `tokenFor`. Add provisioning intent after successful login/bootstrap, not inside token issuance or token refresh. |
+| [Workspaces service](../src/apiserver/src/workspaces/workspaces.service.ts) | Binding verifies runner ownership; deletion is soft deletion and protects project coordinators. Reuse those checks and preserve workspace IDs and ordering. |
+| [Queue service](../src/apiserver/src/queue/queue.service.ts) | Claims use a transaction advisory lock, owner predicates, provider capabilities, and active-turn caps. These are session execution limits, not infrastructure admission or storage fencing. |
+| [Reaper service](../src/apiserver/src/realtime/reaper.service.ts) | Sweeps every 30 seconds; runner silence exceeds its offline threshold at 90 seconds. Active turns can be finalized after losing a runner; idle `AWAITING_INPUT` sessions can survive. Silence does not prove a node stopped writing. |
+| [Runner config](../src/runner-go/config.go) | `config.json` persists runner ID and credential under `ORBIT_HOME`; private directory/file modes are 0700/0600. `runs` and `codex-state` also live there. |
+| [Run loop](../src/runner-go/runloop.go) and [session shutdown](../src/runner-go/session.go) | Heartbeats run every 30 seconds and continue during drain. The current supervisor shutdown envelope is 170 seconds, including the 100-second turn drain and release/flush backstops. Kubernetes termination must leave time beyond that envelope. |
+| [Worktrees](../src/runner-go/worktree.go) | Per-session checkouts and upload scratch live under `ORBIT_HOME`; Git metadata contains absolute paths. Preserve both the primary checkout and worktree root. Existing GC is distinct from PVC lifecycle. |
+| [Codex state](../src/runner-go/codex_state.go) | Shared partitions are keyed by the cleaned absolute `CODEX_HOME`; persisted layout/home/partition markers govern resume. Legacy and credential-isolated state can live under session scratch. Preserve all layouts. |
+| [Runner API](../src/apiserver/src/runner-api/runner-api.controller.ts) | Enrollment derives owner from an enrollment token and reuses a name match; deregistration hard-deletes the runner. Neither is a safe managed provisioning identity or managed delete path. |
+| [Workspace provider seed](../src/apiserver/src/workspaces/workspace-provider.ts) | A workspace stores no provider; a new workspace currently defaults to Claude before it has history. Managed first-session selection must positively select a supplied, ready runtime instead of inheriting an unavailable engine. |
+
+## Default disabled gate
+
+Use the server environment variable **`ORBIT_MANAGED_RUNNERS_ENABLED`**. Read it once through a small
+server configuration provider after the existing global Nest `ConfigModule` has loaded configuration.
+Follow the repository's `ORBIT_*` environment configuration and guarded route conventions, including
+the invalid-value handling of [wiki rollout](../src/apiserver/src/wiki/wiki-rollout.ts), with this
+feature's stricter default:
+
+| Input after trimming and lowercasing | Effective value |
+| --- | --- |
+| Absent, empty, or `false` | Disabled |
+| `true` | Enabled |
+| Any other string, including `1`, `yes`, and `on` | Disabled; log one configuration warning |
+
+Changes take effect on server restart. There is one shared effective value for controllers,
+authentication hooks, API guards, background services, and the capability response. No browser build
+variable or runner label can enable the feature. All API replicas must use the same value; mixed
+configuration is an invalid test setup. A disabled worker must not consume existing managed intents.
+
+| Boundary | Required disabled behavior | Required enabled behavior |
+| --- | --- | --- |
+| Dependency construction and module initialization | Construct only the inert configuration/status facade. Do not construct a Kubernetes client, read kubeconfig, try in-cluster discovery, validate Ceph secrets, register watches, or start a reconcile timer. | Validate the explicitly selected environment, RBAC, storage profile, image, admission protection, resource budget, and model supply before reconciliation starts. Missing prerequisites make the managed service unavailable while ordinary login remains usable. |
+| Successful login and first-user bootstrap | No managed intent, runner, workspace, credential, or PVC write. | Idempotently record owner-scoped provisioning intent after authentication; login does not wait for Pod readiness or contact Kubernetes. Provisioning failure must not invalidate the issued login session. |
+| Refresh, logout, password change, and capability reads | Preserve existing authentication behavior; reads have no provisioning side effects. | Still no implicit allocation. Login/bootstrap and explicit ensure are the allocation entry points. |
+| Ensure, retry, wake, sleep, or delete APIs | Authenticate first, then return `404 MANAGED_RUNNER_DISABLED` before any managed DB write or infrastructure call. | Record a valid desired-state transition; the manager performs resource operations. Retry never creates a second mapping or bypasses fencing. |
+| Messages, executable tasks, scheduled work, watch wakes, and auto retry | Continue existing self-managed queue behavior. No managed allocation, wake, sleep, or cleanup hook runs. | Only demand addressed to this owner's managed mapping requests wake; hooks run before an offline runner gate can prevent demand from being recorded. |
+| Three client applications | Missing capability or `enabled: false` preserves existing onboarding, navigation, workspace selection, and self-managed runner controls. Hide managed provisioning and retry flows. | Render the common server state contract; clients do not infer enabled status from runner names or offline heartbeats. |
+| Turning the flag off with existing resources | Freeze management. Do not stop Pods, revoke credentials, delete intents/PVCs, remove finalizers, or perform automatic orphan cleanup. Existing execution/heartbeat protocols can continue for an already running managed instance. | Re-enabling resumes reconciliation from stored identities after checking observed resources; it is not a fresh enrollment. |
+
+The default server must start using its ordinary database/auth/provider requirements with **no
+Kubernetes or Ceph credentials**. A disabled managed facade returns before any cluster credential
+validation. If drain is wanted before disabling, an operator must explicitly drain while enabled;
+setting the flag to false is not a shutdown or data-deletion command.
+
+Keep `.env.example`, root Compose, `/upgrade`, release workflows, installation scripts, and normal
+`dev`/`start` entry points disabled. A later configuration reference may document a commented
+`ORBIT_MANAGED_RUNNERS_ENABLED=false`; no default entry point forwards an inherited session variable
+as an opt-in or installs Kubernetes, Rook, Ceph, CSI, or managed workloads.
+
+## Identity and durable mapping
+
+For an enrolled user, the mapping is:
+
+```text
+User.ownerId
+  -> ManagedRunner.ownerId UNIQUE
+       -> Runner.id UNIQUE and stable
+       -> Workspace.id UNIQUE and stable for the default workspace
+       -> (clusterKey, namespace, pvcName, pvcUID) for one independent data PVC
+            -> PV UID and CSI volumeHandle -> one Ceph pool and RBD image
+       -> zero or one authorized Pod UID for the current instance generation
+```
+
+The mapping is keyed by the authenticated owner UUID, never email, hostname, display name, or
+user-controlled labels. All owner IDs in runner/workspace/session associations must agree, enforced
+by database ownership constraints and owner-scoped services. Existing users can retain any number of
+self-managed runners/workspaces; only the default **managed** mapping is unique per user.
+
+Proposed `managed_runner` fields are `ownerId`, `runnerId`, `defaultWorkspaceId`, `desiredState`,
+`managementState`, `generation`, `revision`, `clusterKey`, `namespace`, `pvcName`, `pvcUid`, `pvUid`,
+`volumeHandle`, `podName`, `podUid`, `nodeName`, `nodeUid`, `reservation`, `demandRevision`,
+`lastDemandAt`, `initialProvider`, `resourceProfileId`, `resourceOperationId`, `resourceOperationState`,
+`attempt`, `nextAttemptAt`, `lastError`, `fencingReceipt`, and `deletedAt`.
+Record creation/update times as usual. Use the schema's camelCase fields and snake_case database
+mapping. Unique constraints cover `ownerId`, `runnerId`, `defaultWorkspaceId`, and the cluster/PVC
+location; recorded PVC UID/volume handle cannot be adopted by another mapping. References that would
+discard the storage/fencing record on account or runner deletion must restrict deletion, not cascade.
+
+The instance generation is a monotonically increasing execution incarnation. It differs from the
+mapping revision used for compare-and-set updates. `podUid` identifies the actual Kubernetes object;
+a reused Pod name does not mean the old process stopped. Persist predecessor identities until stop
+or fencing is proven. An expired manager lease permits another reconciler, not another data writer.
+
+Use deterministic names derived from the internal runner UUID: `mr-<runner-uuid>` for the Pod and
+`mr-data-<runner-uuid>` for the PVC, in the configured managed namespace. API IDs keep the existing
+public ID codec; Kubernetes names use canonical UUIDs. PVCs have no owner reference to a Pod, Job,
+or other disposable compute resource. A PVC name found with a different UID, owner, storage profile,
+or volume handle is a conflict requiring review; never silently replace it with an empty disk.
+
+Create the mapping, runner row, and default workspace together in a retriable database transaction.
+Keep network/resource operations outside that transaction. A concurrent request that loses the
+owner unique constraint reads and returns the winner. Kubernetes creates use deterministic names;
+an ambiguous timeout is followed by a read and identity comparison before retrying. Existing desired
+state is the durable work queue for reconciliation, so process restarts cannot lose provisioning.
+
+Managed bootstrap is a trusted manager path binding the already created runner ID to its owner.
+Do not repeatedly call ordinary `orbit register`, match by machine name, or mint a public enrollment
+token. Store raw bootstrap/runner credentials only in an owner-specific Kubernetes Secret and the
+private runner config; store only their hash in the control plane. Issue a new credential for a
+replacement generation after the predecessor has stopped or been fenced. The init step checks the
+expected ID, generation, and PVC before updating config. Same-Pod process restarts reuse its identity.
+Managed runner authentication must bind every heartbeat, poll, event, and session lease operation to
+the authorized Pod UID/generation, with a positive protocol capability; reject predecessor writes.
+Self-managed authentication retains its current protocol.
+
+## Management and execution states
+
+Store desired state separately as `RUNNING`, `SLEEPING`, or `DELETED`. Absence of a mapping is the
+read state `NOT_PROVISIONED`. The manager alone advances observed management state:
+
+| Management state | Meaning and next transition |
+| --- | --- |
+| `REQUESTED` | Intent recorded. Evaluate storage and compute admission. |
+| `WAITING_CAPACITY` | An identified compute, storage, quota, or model requirement is unavailable. Keep demand and retry after capacity changes; no duplicate resources. |
+| `PROVISIONING` | Adopt/create the recorded PVC and bootstrap Secret. Await bound storage; partial success is reusable. |
+| `STARTING` | Exactly one authorized Pod is attaching/initializing; await a matching heartbeat, healthy mount, and usable runtime. |
+| `READY` | Authorized instance is running, heartbeat is fresh, and required runtime is available. New session turns may be claimed. |
+| `DRAINING` | Stop claims, wait for active and background work to finish/release, then stop compute. Demand arriving during drain is preserved. |
+| `SLEEPING` | Compute is stopped and detached; stable IDs, workspace, PVC, and data remain. Demand requests admission and `STARTING` again. |
+| `FENCING` | Predecessor cessation cannot yet be proved. Block replacement, keep the disk, and require a specific stop/fencing receipt. |
+| `FAILED` | Bounded attempts exhausted or a configuration/storage conflict requires action. Preserve data and structured cause; safe cases permit explicit retry. |
+| `DELETING` | Explicit deletion intent accepted; drain/fence first, retain an audit record until the storage disposition is settled. |
+| `DELETED` | Terminal tombstone. Login does not recreate data; ordinary retry cannot undo explicit deletion. |
+
+`Runner.status` remains the existing heartbeat observation. `READY + OFFLINE/stale` means unavailable
+and eligible for investigation, not proven dead; `SLEEPING + OFFLINE` is expected. The manager cannot
+manufacture `ONLINE` to pass a dispatch gate. Pod `Running` alone does not make the environment ready.
+Expose both states and `lastHeartbeatAt`, with an explicit server-derived `usable` boolean.
+
+## Persistent filesystem layout
+
+Mount the entire per-user PVC at **`/var/lib/orbit`** as an ext4 filesystem. The managed image uses
+the following fixed absolute locations on every node and image rebuild:
+
+| Location or environment | Data to retain |
+| --- | --- |
+| `HOME=/var/lib/orbit/home` | User-owned runtime configuration, engine histories, and non-rebuildable state under the home directory. |
+| `ORBIT_HOME=/var/lib/orbit/home/.orbit` | The complete machine directory, including private `config.json`, credential/account slots, run metadata, and local recovery markers. |
+| `$ORBIT_HOME/runs/<canonical-session-id>` | Session metadata, supervisor/event state, legacy Codex state, and isolated engine homes. |
+| `$ORBIT_HOME/worktrees/<canonical-session-id>` | Session Git checkouts and worktree metadata. Retain alongside the original repository's `.git` directory. |
+| `$ORBIT_HOME/uploads/<canonical-session-id>` | Downloaded/uploaded attachment scratch until normal session-aware GC; restart must not wipe it. |
+| `$ORBIT_HOME/codex-state/<partition>` | Runner-wide Codex SQLite database partitions, together with WAL and SHM files. |
+| `CODEX_HOME=/var/lib/orbit/home/.codex` | Default Codex configuration, authentication when used, history, and engine sessions. Additional account homes keep their persisted paths. |
+| `CLAUDE_CONFIG_DIR=/var/lib/orbit/home/.claude` | Claude state when this supplied runtime is enabled. Other supported runtimes keep state below the same persistent home. |
+| `/var/lib/orbit/home/orbit-repos` | Checkout root reported by existing `reposRoot()`; default workspace `workDir` is `/var/lib/orbit/home/orbit-repos/default`. |
+
+Persist the whole home/machine directories, not just the named examples. The image and executable
+tools are reproducible, `/tmp` and container runtime sockets are ephemeral, and the authoritative
+user/workspace/session queue and transcript stay in PostgreSQL. Container paths, UID/GID, and relevant
+engine versions must remain compatible across rebuilds. Image startup initializes missing directories
+only and validates volume identity; it must not overwrite a populated checkout or re-enroll a runner.
+Set `ORBIT_NO_SELFUPDATE=1` and disable automatic engine installation in the managed image; update
+pinned image/runtime digests through the drain/replacement workflow rather than mutating an image.
+
+Keep the existing private config modes. Git worktree absolute paths and Codex partition hashes make
+moving `HOME`/`ORBIT_HOME`/`CODEX_HOME` a data migration, not an incidental template edit. Managed
+workspace work directories and runtime-home overrides must remain within the user's PVC; reject
+host paths and another user's paths. This restriction is specific to managed environments.
+
+Several sessions can execute inside **one runner Pod**, with distinct worktrees and multiple local
+processes coordinating SQLite through the local filesystem. This is not multiple Kubernetes Pods
+or different nodes concurrently mounting and writing the same ext4 volume. SQLite WAL requires
+same-host shared-memory coordination; the proposed RBD block mapping presents ext4 on one node.
+CephFS/RWX is outside this first version and is not a substitute for this SQLite arrangement.
+[SQLite WAL documentation](https://www.sqlite.org/wal.html) supplies the filesystem constraint;
+crash/recovery correctness of the selected stack still requires the tests below.
+
+## Provisioning retry wake and sleep
+
+1. Successful login/bootstrap, while enabled, records `RUNNING` intent for the unique mapping.
+   Create the default workspace only once, bound by both physical `runnerId` and routing
+   `targetRunnerId`; its default directory is the fixed path above. Set `autoInitGit: true` and
+   `enableWorktree: true` for this managed workspace so the existing runner can initialize its
+   checkout and isolate concurrent sessions. Keep task/delegation permissions at their existing
+   disabled defaults until explicitly granted. Existing workspace selections,
+   manually removed defaults, project bindings, and deep links are not overwritten by login.
+2. Admit durable storage and initial compute before resource creation. If unavailable, return the
+   durable waiting state. Reconcile the PVC/Secret/Pod independently and preserve successful stages.
+   Classify quota denial, image-pull, scheduling, attach, missing model, and ownership conflicts.
+3. Readiness requires the expected Pod/generation, a mounted original PVC, a fresh owner-bound
+   heartbeat, directory probes, and at least one supplied runtime with usable credentials/model.
+   Persist the managed `initialProvider` selection, derived from that supply. For a workspace with
+   no history, the server/client first-session path uses it explicitly; never globally replace the
+   self-managed Claude seed or fall back to an uninstalled/unauthenticated engine.
+4. Transient errors use persisted backoff with jitter, a maximum attempt count and startup deadline.
+   The optional test profile must state concrete values before enabling; they are not infrastructure
+   facts available here. Startup budgets must accommodate the existing Codex shared-state startup
+   allowance. Permanent conflicts pause immediately. An explicit safe retry resets the attempt
+   budget for the same mapping and preserves the PVC; it does not discard partially created state.
+5. A new message/queued executable turn, a runnable task, or due scheduled/background work records
+   demand and requests `RUNNING`, even when the managed runner is asleep. Use existing dispatch
+   permission, dependency, cancellation, and provider checks before declaring a task runnable.
+   Hooks must precede online-only dispatch/resume gates; notify plus a database demand sweep repairs
+   missed notifications. Reuse existing turn/idempotency keys rather than add a second session queue.
+6. Specifically integrate [scheduled wake delivery](../src/apiserver/src/runner-api/scheduled-wakeup.worker.ts),
+   watch delivery, project/task dispatch, `SessionsService.createTurn`/resume, and
+   [auto retry](../src/apiserver/src/sessions/auto-retry.service.ts). The latter currently waits on
+   `RUNNER_OFFLINE` and can disarm after 30 minutes. Managed sleep/capacity wait must request wake
+   and surface a durable waiting reason without spending a provider retry attempt or reaching that
+   ordinary offline give-up path. True execution loss still follows the existing reaper/lease rules.
+7. Idle means no active turn, leased/queued executable inbox item, runnable task demand, live
+   background job/child operation, merge/cleanup/install/login/reset operation, or unflushed events.
+   An `AWAITING_INPUT` history can sleep only after its supervisor is detached and no job requires it.
+   A future wakeup can remain on the server; an already due wakeup prevents sleep. Missing or stale
+   idle telemetry prohibits automatic sleep. The test profile defines the idle interval.
+8. Under the mapping mutex, record the observed demand revision and request drain. Managed claims
+   must refuse `DRAINING` as well as unauthorized generations. Keep heartbeats running during drain.
+   Before stopping, compare demand revision again: abort sleep for new demand, or finish stop then
+   wake once with the saved demand. Require supervisor/lease/job/event acknowledgements and a
+   termination grace period greater than the current 170-second envelope plus preStop/unmount budget.
+   Do not assume the default Kubernetes grace period is sufficient. Stop/detach must be proven before
+   marking `SLEEPING` or releasing compute reservation; PVC storage reservation remains.
+
+## Single Pod and single writer protection
+
+The first version selects **RWO, Filesystem, ext4, and the kernel RBD mounter** on a verified stack.
+Kubernetes RWO permits multiple Pods on the same node. Kubernetes RWOP is stable from v1.29, but the
+Ceph-CSI v3.18.0 matrix still marks both RBD RWOP modes Alpha and advises against Alpha production
+use. RBD `exclusive-lock` can transfer cooperatively between clients and does not make two mounted
+ext4 filesystems safe. These are separate storage and application constraints.
+[Kubernetes access modes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes),
+[Ceph-CSI matrix](https://github.com/ceph/ceph-csi/blob/v3.18.0/README.md#support-matrix), and
+[Ceph exclusive locks](https://docs.ceph.com/en/latest/rbd/rbd-exclusive-locks/) establish those limits.
+
+Use a **manager-created bare Pod with a fixed name** and `restartPolicy: Never` for the first version.
+This avoids a Deployment rolling update, ReplicaSet, StatefulSet repair, Job retry, or autoscaler
+creating a successor independently of the manager's fencing decision. Container/init processes
+belong to that one Pod. A controller restart adopts its recorded Pod UID; it does not start another.
+Pod recreation is the only compute restart and follows the predecessor cessation gate.
+
+The optional environment must install a validating admission guard with `failurePolicy: Fail`
+before any managed PVC is usable. The guard checks **every Pod referring to a managed PVC**, including
+unlabelled Pods, read-only mounts, Jobs, init/sidecar containers, and updates/ephemeral-container
+subresources. It resolves PVC ownership, not caller-provided labels. It permits only the manager
+service account, the fixed Pod name, current reserved generation, approved image/security template,
+and that owner's PVC. Disallow extra applications/debug/backup Pods using the original volume.
+Tenants have no Kubernetes API credential, no Pod/PVC/Secret create rights, no host mount or raw
+device access, and no ability to create another PV/PVC alias to the same RBD image.
+
+The admission reservation is persisted atomically under the mapping row mutex, not implemented as
+“list Pods, then allow if none”. Only one generation/name can be reserved. The fixed Kubernetes
+namespace/name provides atomic object uniqueness for competing creates of that generation; the
+manager also retains a single in-flight resource operation and rereads after an ambiguous response.
+Different names or generations are refused even on the same node. A stuck reservation is reconciled
+against the Pod UID and resource-operation result, never freed simply because its lease expired.
+Without the database or admission service, creation fails closed. Cluster administrators are trusted
+infrastructure operators; bypass by those operators is outside the tenant security boundary and
+must be a recorded maintenance operation.
+
+After a create timeout, a single `GET` returning 404 does not prove the pending create cannot still
+commit. Retain that operation's reservation and generation; retries use the same fixed name and
+generation. Do not advance generation, finish sleep, or release compute until the operation is
+settled and any resulting writer has stopped. If that cannot be established, leave the mapping
+unavailable for operator reconciliation rather than authorize a competing incarnation.
+
+Normal replacement requires drain, all container processes stopped, successful CSI unpublish/unstage
+and detach, no old mount/client remaining, and preserved volume identity. Only then retire the Pod
+UID, advance generation, issue its credential, and create the replacement on another eligible node.
+Deletion of a Kubernetes API object, disappearance of a `VolumeAttachment`, or a manager lock alone
+is insufficient evidence that a partitioned machine stopped using the disk.
+
+For an unreachable node, persist `FENCING` and block replacement. The first supported fault path is
+operator-confirmed fencing in the authorized test environment:
+
+1. Identify the predecessor by Pod UID, node UID, generation, PVC UID, volume handle, and RBD image.
+   Stop new claims and reject the predecessor's managed API generation. Preserve the mapping and
+   pending demand. No timeout or user retry may authorize disk access by a successor.
+2. A privileged infrastructure operator powers off the old node through its hypervisor/BMC and
+   verifies that state, then quarantines it from scheduling/restart until stale Pods/mounts are
+   removed. Record the control action and independent observed power/cessation result. No such
+   operator access is assumed to exist here.
+3. Storage/network fencing is an alternative only after a separate tested procedure proves all
+   old client connections are denied by the OSDs and the old node cannot reconnect under the shared
+   CSI key. Record blocklisted client addresses/nonces, OSD map epoch/propagation, expiry/renewal,
+   isolation persistence, and rejoin policy. One lock break, token rotation, temporary blocklist,
+   or cordon is not sufficient. A storage partition alone cannot prove fencing.
+4. After confirmed power-off or validated equivalent, operators can apply the documented
+   `node.kubernetes.io/out-of-service` procedure to permit Kubernetes detach, and remove residual
+   attachment state using the storage operator's runbook. The manager consumes a receipt bound to
+   this predecessor and volume before authorizing a new generation. If proof is missing, remain
+   `FENCING`; failover availability is deliberately limited by the available fencing mechanism.
+5. Mount the original volume on node B, allow ext4/SQLite crash recovery, verify data and session
+   resume, and keep the old node quarantined. Rejoin only after stale execution/mappings are gone;
+   a late predecessor cannot authenticate or regain storage access.
+
+Kubernetes warns that forced detach while a workload still runs can corrupt data, and that the
+out-of-service taint requires prior verification of shutdown. The optional cluster profile must
+record controller-manager forced-detach behavior; timeout-driven detach never supplies Orbit's
+fencing receipt. If that behavior defeats the tested protection, enabling is blocked until the
+test cluster operator supplies a safe configuration.
+[Kubernetes node shutdown documentation](https://kubernetes.io/docs/concepts/cluster-administration/node-shutdown/)
+supports this operational prerequisite; this project does not change production controller settings.
+
+The required proof has two parts: no second Pod is admitted against the original PVC, and no
+predecessor can successfully write after takeover. Database locks, heartbeat leases, RWO, and
+exclusive-lock each cover only part of that proof. The concrete multi-node test plan below must
+establish both before claiming storage acceptance.
+
+## Ceph integration and compatibility
+
+The preferred optional test topology is an **external Ceph test backend supplied by its storage
+owner**, consumed by an isolated Kubernetes test cluster using its supported Ceph-CSI installation.
+Use a dedicated test pool/identity and approved namespaces; do not reuse a production data pool or
+install a second CSI driver over an existing one. Actual provider location and authorization remain
+pending. Rook external mode can import provider configuration without managing the provider's OSDs.
+[Rook external cluster documentation](https://rook.io/docs/rook/latest/CRDs/Cluster/external-cluster/external-cluster/)
+describes that separation.
+
+An in-cluster Rook-managed **test** Ceph backend is a separate optional variant, requiring explicit
+authorization for its operators/CRDs/privileged CSI plugins and enumerated disposable disks. It is
+not an automatic fallback when external credentials are missing. No `useAllDevices`, disk discovery
+that consumes host data, or single-node demo storage is a production design. Existing production
+external/Rook topology is an input to a future enablement review and is unchanged by this project.
+
+Official documentation checked on 2026-10-04 gives the following reference ranges. Feature minima,
+release maintenance, distro support, and tested combinations are different questions:
+
+| Component | Verified reference | First-version disposition and missing evidence |
+| --- | --- | --- |
+| Kubernetes | Current release page lists maintained branches 1.35–1.37; 1.34 has an EOL date of 2026-10-27. | Actual API server, kubelet, container runtime, controller flags, and distribution support are pending. Match the CSI tested window; no automatic upgrade. [Release policy](https://kubernetes.io/releases/). |
+| Ceph-CSI v3.18.0 | Tested Kubernetes versions are 1.34, 1.35, 1.36. RBD filesystem RWO is GA; RWOP is Alpha. Its RBD feature minimum of Pacific 16.2.0 is not a currently supported Ceph recommendation. | RWO is the selected baseline. Pin driver/operator/sidecar image digests and current support window. No RWOP production claim; no ARM64 assumption, since this matrix labels it experimental. [Versioned matrix](https://github.com/ceph/ceph-csi/blob/v3.18.0/README.md). |
+| Ceph release | Active releases are Tentacle 20.2.4 and Squid 19.2.6; estimated EOL dates are 2027-06-01 and 2026-10-31 respectively. Older Pacific/Quincy/Reef releases are archived. | Actual cluster version and maintenance provider are pending. A new candidate must have a maintenance horizon suitable for the intended rollout. [Ceph release index](https://docs.ceph.com/en/latest/releases/). |
+| CephX key format and kernel | The August 2026 Ceph security release introduces `aes256k`; upstream kernel support starts at 7.0, with named distro backports. | Record real kernel build, vendor backport, client libraries, and key type on every runner node. A version string such as 5.4+ alone cannot establish compatibility with these keys. No silent credential downgrade. [Ceph release and key guidance](https://ceph.io/en/news/blog/2026/v20-2-4-v19-2-6-combo-released/). |
+| Rook when used | Rook 1.19 supports Kubernetes 1.30–1.35; 1.20 supports 1.31–1.37. Both list Squid 19.2.0+ and Tentacle 20.2.1+. Only the most recent two minor series are maintained. | Pin the selected patch, its supported CSI integration, and security fixes. These ranges do not waive Ceph EOL/key requirements. [Rook support table](https://rook.io/docs/rook/latest-release/Getting-Started/maintenance-and-support/). |
+| Kernel mounter | Rook requires an RBD-enabled Linux kernel; its baseline image feature is `layering`. Additional listed features require compatible kernels. | Use maintained amd64 Linux and kernel RBD with explicit feature selection. Record `uname -r`, module/distro evidence, ext4 and Ceph auth compatibility, actual map/mount behavior, and reboot recovery on every eligible node. [Rook node prerequisites](https://rook.io/docs/rook/v1.19/Getting-Started/Prerequisites/prerequisites/). |
+| `rbd-nbd` mounter | The separately published mounter document recommends kernel 5.4+ and still labels this path Alpha. | Excluded from the baseline; do not silently fall back to it when kernel RBD fails. Its release-specific support would need a separate review. [Mounter document](https://github.com/ceph/ceph-csi/blob/devel/docs/design/proposals/rbd-nbd.md). |
+| CSI deployment mechanism | v3.18 release notes recommend Ceph-CSI Operator; Helm deployment tests are deprecated. | Reuse the test environment's supported installation. New optional direct CSI installation follows its pinned Operator instructions; do not assume an old Helm recipe is validated. [Release notes](https://github.com/ceph/ceph-csi/releases/tag/v3.18.0). |
+
+A candidate to assess, not an assertion about installed infrastructure, is Kubernetes 1.35/1.36,
+Ceph-CSI 3.18.0, maintained Tentacle with the required security/key fixes, and kernel RBD on a vendor
+supported node image. Rook 1.19 intersects that CSI range at Kubernetes 1.35; Rook 1.20 also intersects
+at 1.36. Select exact patches/digests only after the test owner provides the environment and confirms
+the full intersection, node authentication, and CSI sidecars. Recheck support dates before any later
+production enablement. Do not substitute the broad feature minimum for production support.
+
+The storage owner supplies an RBD-initialized replicated test pool with explicit replica count,
+`min_size`, CRUSH failure domain/device class, usable capacity and headroom, PG policy, and health
+requirements. Those numbers follow the supplied storage failure domains/disks and workload budget,
+not the number of Kubernetes compute nodes. Do not set `size: 1` or `min_size: 1` to make a failing
+test pass. Erasure-coded data pools and special image features are outside the initial profile.
+
+| Storage profile field | Required contract |
+| --- | --- |
+| CSI `clusterID` | An immutable configured identifier, conventionally the Ceph FSID, matching the CSI configuration's MON endpoints. Record the actual CSI driver name; Rook can use a namespace-prefixed driver. |
+| `pool` and StorageClass name | Explicit approved test values; never rely on the cluster's default class or alter a production class. |
+| Volume and filesystem | PVC `volumeMode: Filesystem`, `accessModes: [ReadWriteOnce]`, `csi.storage.k8s.io/fstype: ext4`. |
+| Mounter and features | Kernel RBD; start with validated `layering`. `tryOtherMounters: false`. Extra features, including exclusive-lock, need node support and do not relax single Pod rules. |
+| Binding and sizing | `volumeBindingMode: Immediate` for the baseline with all approved nodes able to reach this pool. Explicit per-user storage request; avoid unvalidated topology-aware features. |
+| Retention and growth | `reclaimPolicy: Retain`; PVC is independent of compute. Expansion stays disabled until quota/accounting and the selected driver growth path are verified. |
+| Secret references | Explicit provisioner, controller publish/expand as applicable, node-stage, and optional snapshot Secret names/namespaces as required by the pinned driver profile. Credentials live in protected infrastructure Secrets. |
+
+[Ceph-CSI storage configuration](https://ceph.github.io/ceph-csi/rbd/deploy/) provides parameter semantics;
+the table above is Orbit's narrower proposed profile, not a copied default template. A StatefulSet
+variant, if introduced later, must retain PVCs both on deletion and scale-down and preserve the same
+fencing gate. [StatefulSet retention](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#persistentvolumeclaim-retention)
+does not replace PV reclaim policy or proof of predecessor termination.
+
+For the documented baseline RBD operations, the pool-scoped CSI CephX identity needs:
+
+```text
+mon: profile rbd
+osd: profile rbd pool=<approved-test-pool>
+mgr: profile rbd pool=<approved-test-pool>
+```
+
+These are the documented RBD caps for provisioner/controller expand/node-stage operations, not
+`client.admin` or unrestricted `allow *`. Use a distinct test CSI client and rotate through the
+storage owner's Secret process. Further namespace scoping or separation of node/provisioner
+identities must be checked against the pinned CSI profile rather than inventing narrower caps that
+break attach or fencing. A dedicated pool isolates this CSI principal's storage authority; it is not
+per-user cryptographic isolation. Snapshot/backup/fencing administration has separate privileges.
+[Versioned Ceph-CSI capabilities](https://github.com/ceph/ceph-csi/blob/v3.18.0/docs/capabilities.md) supplies
+the minimum documented profile. Neither the apiserver manager nor user runner process receives
+CephX keys; CSI components hold them. Runner Pods receive only their own Orbit/runtime credentials.
+
+Kubernetes nodes and CSI components must reach the Ceph **public/client** network's MONs and every
+OSD address advertised to clients, not just one bootstrap MON or the apiserver. Document actual
+addresses, DNS, routes/NAT, MTU, throughput, latency, TLS/msgr settings, and firewall owners. Typical
+Ceph ports are MON TCP 3300/6789 and daemon TCP 6800–7568, subject to the actual cluster configuration.
+OSDs also need replication/heartbeat/recovery connectivity on the configured cluster network, if
+separate; user Pods do not need that network or Ceph access. Client traffic and recovery contention
+must fit the approved network budget. No firewall or production route is changed here.
+[Ceph network reference](https://docs.ceph.com/en/tentacle/rados/configuration/network-config-ref/) explains
+client-to-OSD connectivity and the two network roles.
+
+## Resource admission model supply and isolation
+
+Maintain a fixed resource profile for this first version, with values supplied by the test owner.
+Admission reserves CPU requests, memory requests, ephemeral storage, Pod/attach slots, per-user
+durable bytes, pool capacity headroom, and maximum concurrently active managed users. Reservations
+are updated atomically in PostgreSQL and backed by Kubernetes requests/limits, ResourceQuota, and
+LimitRange. Pending admitted Pods count against compute capacity; sleeping users continue to count
+against retained storage. Release compute only after stop/fencing proof. Do not sum observed usage
+or `maxConcurrent` and call it free infrastructure capacity.
+
+Use Ceph safe usable capacity, accounting for replication, near-full thresholds, retained images,
+snapshots and backup headroom, rather than advertised raw disk bytes or thin-provisioning optimism.
+Capacity wait does not delete disks, evict unrelated users, change infrastructure scale, or buy
+resources. Notify/rescan waiting intents when reservations or capacity change; show a reason and
+retry time. Define fair admission and startup limits within this fixed environment, not a generic
+placement platform. Runtime session concurrency is a separate per-runner `maxConcurrent` limit.
+
+Before enabling, supply at least one installed runtime, usable model/account/API credentials,
+approved network endpoint, and quota. Use Orbit's existing provider/credential mechanisms, including
+credential-isolated runtime state where selected. A mounted volume without model supply is not
+`READY`; report `MODEL_UNAVAILABLE` and let the user/operator resolve it. Never print provider keys,
+copy the server's master key into Pods, or assume a preinstalled CLI is signed in.
+
+The initial container profile supports **approved invited testers only**, subject to a recorded
+isolation decision. Use dedicated approved worker nodes, non-root fixed UID/GID, restricted Pod
+security, seccomp, no privilege escalation or host PID/network/path/device access, and no service
+account token automount. NetworkPolicy denies tenant-to-tenant and cluster-management traffic and
+allows only the required Orbit, DNS, repository, and provider endpoints. Admission enforces the
+volume/owner binding; a user's shell cannot mount another user's PVC or reach infrastructure Secrets.
+CSI/OSD privileges belong to trusted infrastructure components, not tenant Pods.
+
+Separate PVCs, namespaces/RBAC, and container controls reduce accidental and credential-based
+cross-tenant access; a shared host kernel is not a hardened boundary for hostile public arbitrary
+code. Public untrusted tenancy is blocked until the owner specifies and tests a stronger supported
+sandbox/VM runtime and its Ceph attach path. Confirm whether separate tenant namespaces, encryption
+at rest, egress mediation, and backup key isolation are required; do not claim the invited-test
+profile satisfies unspecified public isolation requirements.
+
+## Retention explicit deletion and backup
+
+Sleeping, stopping, moving nodes, replacing images, login retry, disabling the feature, and deleting
+a session/workspace do not delete the PVC, PV, RBD image, or stable runner identity. Retain data
+indefinitely in this first version until explicit deletion; retained storage still consumes quota.
+No age-based managed disk garbage collection is introduced. Existing session trash retention and
+runner-local worktree/upload GC remain their own policies and must not be reinterpreted as whole
+environment deletion. Their normal limits still apply to the corresponding session scratch.
+
+An authenticated owner requests explicit managed environment deletion through a dedicated API with
+the current mapping revision and an explicit data-disposition confirmation. Return a durable
+`DELETING` operation and stop new demand. The manager drains/fences and stops compute before removing
+bootstrap Secrets. Default runner unregister/remove routes must refuse hard deletion of a managed
+runner even when the feature is disabled, and direct the caller to this workflow; otherwise the
+schema cascade can destroy workspace relationships. Preserve runner/workspace/session history and
+the storage tombstone. Account removal
+must settle storage deletion or a recorded retention/export decision before losing owner metadata.
+
+`Retain` means deleting a PVC leaves a released PV and backing image; it is not proof of erased data.
+The first version separates compute deletion from privileged storage purge. Only an explicitly
+authorized storage operator purges the recorded RBD image, its snapshots/clones, released PV/PVC,
+and affected backup copies under the agreed retention policy, with identity checks and an audit
+receipt. Retained backups/exports must be named in the response; do not claim permanent erasure
+while they remain. Ambiguous purge results stay `DELETING` for reconciliation, never provision an
+empty replacement on retry. A completed deletion tombstone prevents automatic login recreation.
+
+Ceph replication protects against supported storage component failures. A snapshot in the same
+cluster shares that cluster's failure domain. Neither is an independent backup. Define an encrypted,
+access-controlled backup outside that Ceph failure domain plus the existing PostgreSQL backup;
+destination, frequency, retention, RPO, RTO, credentials and restore authority are pending.
+The first-version baseline backup drains/stops the writer, snapshots/exports consistently, and
+records file checksums, complete SQLite database/WAL sets, engine/runtime version, and the logical
+mapping manifest. A backup Pod must not mount the original PVC alongside the runner.
+
+Restore to a **new** isolated PVC from the independent backup, preserve the absolute filesystem
+layout, inspect SQLite `PRAGMA integrity_check`, and validate Git/attachments/engine session resume.
+The restored runtime stays unable to execute as the live runner until the original is stopped/fenced
+and the manager explicitly switches the mapping to the verified new PVC UID/volume handle.
+Do not duplicate live runner credentials to run a restore test beside the original. Record the
+mapping change and observed recovery point/time; these are measurements, not promised values here.
+
+## Server and three client interfaces
+
+Proposed authenticated capability route: `GET /api/auth/capabilities` returns
+`{ "managedRunners": { "enabled": false, "contractVersion": 1 } }` when off. It requires no cluster
+read. When on, it reports `enabled: true`; operational availability comes from the owner's status
+response. Absence of this member, a pre-feature endpoint 404, or an unsupported contract version
+means no managed UI. A transient fetch failure is an ordinary recoverable error, not an infinite
+onboarding wait or permission to provision.
+
+`GET /api/managed-runner` reads the authenticated owner's stored/derived status without allocating.
+`POST /api/managed-runner/ensure`, `/retry`, `/wake`, `/sleep`, and `/delete` request the transitions
+defined above. Require an idempotency key on writes and the current mapping revision for destructive
+or conflicting transitions. Requests never accept another owner's runner/PVC/node identifiers.
+Return `202` plus the same status/operation identity for asynchronous work; retries reuse it. Use
+`409` for deletion/state conflicts, `404` for unknown/foreign mappings, and safe structured reasons
+for configuration, quota, ownership, storage and fencing errors. Capacity waiting is an accepted
+state, not an authentication failure. A retry during `FENCING` cannot bypass stop proof.
+
+Shared status fields, defined in `@orbit/shared` and mirrored in OrbitKit, are:
+
+```text
+contractVersion, revision, managementState, desiredState,
+runnerId?, workspaceId?, heartbeatStatus?, lastHeartbeatAt?, usable,
+reason? { code, message, retryable }, retryAfter?, initialProvider?,
+actions { canEnsure, canWake, canSleep, canRetry, canDelete }
+```
+
+IDs use the existing wire codec; timestamps are ISO 8601. Nullable IDs describe stages before the
+mapping exists. Do not expose Ceph endpoints/keys, kubeconfig, node control credentials, Secret
+contents, or raw infrastructure errors to clients. Add a server-derived managed marker/state to
+runner/workspace list DTOs without changing the meaning of their existing heartbeat fields.
+Owner-scoped realtime notifications announce revision changes; reconnect refetches status. Bounded
+polling is a fallback, and starting/failed states always have a reason/deadline, not endless loading.
+
+| Client display | Server condition | Interaction |
+| --- | --- | --- |
+| Preparing | `REQUESTED`, `PROVISIONING`, `STARTING` | Explain the current wait; keep login/navigation usable. |
+| Waiting | `WAITING_CAPACITY` or `FENCING` | Show capacity wait or operator action; do not offer unsafe retry. |
+| Available | `READY` and `usable` | Open the stable default workspace and allow session submission. |
+| Sleeping | `SLEEPING` | New message requests wake, keeps its existing turn ID, and shows preparation. |
+| Stopping | `DRAINING` | Keep demand/navigation; session submission records demand for the next safe start. |
+| Failed | `FAILED` or unavailable configuration/model supply | Show server reason and only allowed retry/settings action. |
+| Removing or removed | `DELETING`, `DELETED` | Show data disposition; no implicit recreation. |
+
+Web integrates through [App default landing](../src/web/src/App.tsx) and
+[WorkspaceConsole](../src/web/src/components/WorkspaceConsole.tsx). macOS integrates through
+[AppModel](../src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift); iOS uses the common
+[OrbitKit models](../src/macos/OrbitKit/Sources/OrbitKit/Models/Runners.swift) and API client.
+All three preserve explicit deep links, last workspace selection, existing project/session routes,
+and self-managed runner registration. Only a bare/default landing with no chosen usable workspace
+enters managed preparation when capability is enabled. An existing sleeping managed workspace can
+be selected and queue work; it must not be mistaken for a deleted workspace or a new registration.
+Older clients keep additive DTO compatibility; access gates remain enforced on the server.
+
+## Optional test deployment boundary
+
+Subsequent implementation places optional templates under `deploy/managed-runner/` and test
+operations under a separate managed-runner test entry point. These paths are proposed, not installed
+by this design. They must not be imported by root Compose, `/upgrade`, default start/release scripts,
+or normal installation. Application templates refer to an already approved StorageClass/CSI and
+never install a backend as a side effect. Infrastructure variants have separate entry points.
+
+Before any mutating test command, the operator supplies an authorized environment manifest naming
+the exact kubeconfig context/API server identity, namespace allowlist, node allowlist, test Ceph
+FSID/pool, credential references, resource profile and permitted destructive tests. Require an
+explicit context/namespace on every command; never fall back to the current context, default
+namespace, in-cluster production credentials, or a production provider endpoint. Kubernetes
+cluster-scoped StorageClass/webhook/CSI/Rook setup requires its own enumerated permissions.
+
+Use a separate test apiserver/database/auth/provider environment and runner server URL; test login
+must not enqueue production sessions. Fencing trials involve only enumerated disposable worker
+nodes and test images/disks. Namespace separation alone is insufficient for kernel/CSI/node power
+tests. A missing authorized environment stops cluster work; local fakes and documentation review can
+continue. Production pools, disks, network routes, clients, containers and secrets are unchanged.
+
+## Prerequisites still to be supplied
+
+All entries are **pending** unless their owner supplies an evidence record. This list is the enabling
+gate for follow-on infrastructure tasks, not a request to buy or install resources now.
+
+| Required input | Who must supply or confirm it | Decision or evidence required |
+| --- | --- | --- |
+| Test and production topology/location | Deployment owner | Exact test cluster/context/API identity and geographic/network location; current production external Ceph/Rook relationship recorded read-only; isolation boundary. |
+| Access and operational authority | Kubernetes and storage operators | Namespace/resource allowlists, least-privilege manager RBAC, operator scope for CSI/SC/admission, Ceph Secret provisioning, and authorization for node fencing. Manager has no node-power, cluster-install, or Ceph-admin authority. |
+| Version tuple | Cluster/storage operators | API/kubelet/runtime, CSI/operator/sidecars, Ceph/Rook patches and digests, OS/kernel/mounter/ext4, image features and CephX key compatibility; maintained vendor/community support. |
+| Failure domains and storage media | Storage owner | MON quorum placement; OSD disk inventory, media/DB/WAL layout, CRUSH domains/replica/min_size, capacity/headroom/health limits, and power/network failure assumptions. Compute node count is not this inventory. |
+| Network | Network/storage operators | MON and all OSD client endpoints, routes/ports/MTU and measured latency/bandwidth, separate replication paths if used, provider/Orbit egress, and CSI host-network policy implications. |
+| Per-user resources and concurrency | Deployment owner | CPU/memory/ephemeral disk requests and limits, PVC size, retained-user/active-user/attach caps, quotas, expected session concurrency and scheduler headroom. No speculative hardware numbers. |
+| Lifecycle budgets | Deployment owner with runtime implementer | Idle interval, startup/retry budgets, drain/preStop/unmount limits, and the behavior when budgets expire while an old writer remains uncertain. |
+| Model supply | Model/runtime owner | Installed runtime and image digest, at least one accessible model and valid test credential/account, quota, explicit first-session selection, provider network access. |
+| Tenant boundary | Product/security owner | Invited vs public population, acceptable kernel sharing, namespace/sandbox requirements, egress and secret/data isolation; public hostile-code isolation remains blocked. |
+| Fencing and node rejoin | Infrastructure/storage operators | Working BMC/hypervisor access or tested persistent storage/network fencing, forced-detach configuration, receipt format, failure handling and quarantined rejoin procedure. |
+| Data protection and deletion | Data/storage owner | Independent backup destination/keys, frequency, RPO/RTO/retention, user/account deletion policy, purge authority and audit of snapshots/clones/backup copies. |
+
+## Verification and implementation handoff
+
+This design review establishes an implementation contract. It does **not** establish that a real
+cluster mounted data, denied a second Pod, fenced a node, or executed a model session. Those are
+follow-on evidence requirements. Local unit/integration tests use injected configuration, fake
+Kubernetes/storage clients and temporary databases/directories; they never discover live credentials.
+New runner tests explicitly clear session/service-token environment and use isolated scratch homes
+and provider tripwires per the repository test conventions when testing provider behavior.
+
+| Test group | Cases and required evidence |
+| --- | --- |
+| Default disabled | Run separately with the variable absent and explicitly `false`, no kubeconfig/Ceph credentials. Bootstrap/login/refresh, ensure/retry/wake/sleep/delete, queued messages/tasks/scheduled/watch work, controller restart and old stored intents must cause zero managed writes/resource operations. Instrument the client constructor and all resource methods to fail if reached; assert no watches/timers and normal server/login/self-managed behavior. Also test invalid values and capability absence on three clients. |
+| Disable existing state | Seed mapping/Pod/PVC references, start the server disabled, run normal workers and restart. Assert no stop/delete/cleanup/revocation; a read of capabilities does not allocate. An existing runner's heartbeat/execution compatibility remains intact. |
+| Enabled with isolated fakes | Explicit `true`; fake environment and budget. Cover concurrent login/ensure, timeout after each successful creation, partial failures, restart/adoption, retry exhaustion, owner mismatch, UID conflicts, two-manager admission races, and preservation of the same mapping/PVC. Missing enabled prerequisites cannot break ordinary login or accidentally select live infrastructure. |
+| Admission and storage on authorized nodes A and B | Record the actual stack/profile. While the original Pod writes files and SQLite WAL, attempt differently named, unlabelled and concurrently created Pods using the same PVC on A and B. Record admission refusals and prove rejected Pods never mounted or wrote. Exercise guard/database outage and stale generation requests. A native RWO scheduling rejection alone is not sufficient. |
+| Normal migration | Drain/stop/unpublish/unmap on A, then authorize B against the same PVC UID/PV/volume handle/RBD image. Compare deterministic file checksums, SQLite integrity and committed rows, runner/workspace ID, Git primary/worktree state, attachments, and a real engine session continuation. Record non-overlap of writers. |
+| Fault and fencing | Partition only A's control-plane path while leaving Ceph reachable: no replacement is authorized. Then perform the approved power/validated storage fence, capture its receipt and attach on B. Attempt late old-generation API use and old-node writes/reconnect; both must be denied. Capture termination/fence/detach/attach times, client/mount state, OSD epoch and data integrity. |
+| Wake and sleep | Independently test messages, executable tasks, scheduled/background/watch work and auto retry on a sleeping mapping; capacity wait, model absence and startup retry; active/job/flush work forbids sleep; demand racing drain survives; wake uses the original disk and identity. No provider retry attempt is spent merely waiting for managed capacity. |
+| Data lifecycle and independent restore | Rebuild image, sleep, login/retry, workspace/session deletion and disable retain the volume. Test confirmed deletion/purge against disposable data only. Restore independent backup to a new PVC without simultaneously activating copied runner credentials; verify SQLite/Git/attachments/engine state and measure recovery point/time. |
+| Clients and compatibility | Use the same state fixtures for Web/macOS/iOS: preparing, waiting, ready, sleeping, failed/retry and removed. Verify endpoint/capability absence and false, old clients/runners, selected workspace, deep links and self-managed registration. No indefinite loading or registration prompt for a sleeping managed workspace. |
+| Deployment boundary | Check root Compose/start/install/release/upgrade remain disabled and do not install infrastructure. Optional test commands refuse omitted/wrong context or namespace and do not target production DB/server/provider/FSID/pool. |
+
+Real storage evidence includes sanitized Pod/PVC/PV/VolumeAttachment UIDs, node UID/kernel, mounter,
+StorageClass parameters, CSI images/sidecars, Ceph version/pool/image/client/health, admission results,
+fencing receipts, filesystem mounts, checksums, SQLite results, and measured transition times. Record
+credentials by reference only. Ceph pool health and a green compile do not prove single writer safety.
+
+The project implementation order remains: storage integration and recovery evidence; managed image
+and fixed paths; manager/gate/unique mapping; login/default workspace; resource admission and wake/sleep;
+shared client status; two-user end-to-end, independent backup restore and operator runbook. Implementers
+must update this record with actual versions, authorized test scope and observed differences. Final
+acceptance and integration follow the project's independent evidence review and project branch;
+production enablement is a separately authorized undertaking.
