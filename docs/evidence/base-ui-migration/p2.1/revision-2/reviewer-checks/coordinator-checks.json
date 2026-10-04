@@ -1,0 +1,56 @@
+[
+  {
+    "check": "overlays-browser",
+    "exitCode": 0,
+    "seconds": 221.2,
+    "command": [
+      "npm",
+      "run",
+      "test:ui-overlays",
+      "-w",
+      "@orbit/web"
+    ],
+    "log": "/tmp/orbit-p21-coordinator-review-ls6bdiyx/overlays-browser.log"
+  },
+  {
+    "check": "overlays-typecheck",
+    "exitCode": 0,
+    "seconds": 0.27,
+    "command": [
+      "node",
+      "node_modules/typescript/bin/tsc",
+      "-p",
+      "src/web/ui-migration/overlays.tsconfig.json",
+      "--noEmit"
+    ],
+    "log": "/tmp/orbit-p21-coordinator-review-ls6bdiyx/overlays-typecheck.log"
+  },
+  {
+    "check": "public-boundary",
+    "exitCode": 0,
+    "seconds": 1.06,
+    "command": [
+      "npm",
+      "test",
+      "-w",
+      "@orbit/web",
+      "--",
+      "src/lib/theme.test.tsx",
+      "src/components/ui/boundary.test.ts"
+    ],
+    "log": "/tmp/orbit-p21-coordinator-review-ls6bdiyx/public-boundary.log"
+  },
+  {
+    "check": "web-build",
+    "exitCode": 0,
+    "seconds": 2.08,
+    "command": [
+      "npm",
+      "run",
+      "build",
+      "-w",
+      "@orbit/web"
+    ],
+    "log": "/tmp/orbit-p21-coordinator-review-ls6bdiyx/web-build.log"
+  }
+]
