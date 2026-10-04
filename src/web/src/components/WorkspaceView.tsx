@@ -280,6 +280,8 @@ import {
   SessionDecisionStrip,
   decisionRowKey,
   revealCriteriaCard,
+  revealCard,
+  REVIEW_CARD_REVEALED,
   revealSettlementCard,
   type PendingDecisionRow,
 } from './DecisionRail';
@@ -2146,6 +2148,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // Smart auto-scroll: only keep pinned to the bottom when the user is already there, so
   // reading history (or jumping to the sticky prompt) isn't yanked back by streaming updates.
   const atBottomRef = useRef(true);
+  // A bar-opened review stays at its preview until the reader navigates or sends again.
+  const reviewPositionHeldRef = useRef(false);
   // Render mirror of atBottomRef: drives the floating "jump to bottom" button, which shows
   // while the user has scrolled up off the live tail (and while `stranded`). (The ref alone
   // can't re-render.)
@@ -2300,7 +2304,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     // Pin to the bottom while at (or near) it; un-pin only when the READER scrolls up. Both the
     // reasoning behind that and the clients' copy of the rule live in tailPinning.ts.
     const sample = sampleTail(el);
-    atBottomRef.current = pinnedToTail(
+    atBottomRef.current = !reviewPositionHeldRef.current && pinnedToTail(
       atBottomRef.current,
       lastSampleRef.current,
       sample,
@@ -2375,6 +2379,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // is traded for the tail (backToLatestRef), and the record leaves the URL — a reload now opens at the
   // latest message, which is where the reader went.
   const backToLatest = useCallback(() => {
+    reviewPositionHeldRef.current = false;
     atBottomRef.current = true;
     setAtBottom(true);
     backToLatestRef.current?.();
@@ -2389,6 +2394,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   }, [setSearchParams]);
   // Snap back to the live tail; the scroll events it fires re-pin atBottomRef via measure().
   const scrollToBottom = useCallback(() => {
+    reviewPositionHeldRef.current = false;
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, []);
   // Called on send: re-pin to the live tail so a message fired while scrolled up snaps back to the
@@ -3677,6 +3683,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       return {};
     });
     atBottomRef.current = true; // a freshly opened/switched session starts pinned to the latest
+    reviewPositionHeldRef.current = false;
     lastSampleRef.current = TAIL_SAMPLE_ZERO;
     setAtBottom(true); // hide the jump-to-bottom button until the new session reports otherwise
     window.clearTimeout(strandTimerRef.current); // nor is it stranded off a tail not yet drawn
@@ -4495,8 +4502,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     // one that falls because they dragged up, and the transcript stops following the live reply
     // (tailPinning.ts). `pointerdown` is what catches a scrollbar drag, which fires none of the rest.
     const onReaderInput = (): void => {
+      reviewPositionHeldRef.current = false;
       readerInputAtRef.current = performance.now();
     };
+    const onReviewRevealed = (): void => {
+      reviewPositionHeldRef.current = true;
+      atBottomRef.current = false;
+      setAtBottom(false);
+    };
+    el.addEventListener(REVIEW_CARD_REVEALED, onReviewRevealed);
     const readerEvents = ['wheel', 'touchmove', 'pointerdown', 'keydown'] as const;
     for (const type of readerEvents) el.addEventListener(type, onReaderInput, { passive: true });
     // The events-driven pin above only re-scrolls when the transcript's *content* changes, so
@@ -4533,6 +4547,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     el.addEventListener('load', onLoad, { capture: true });
     return () => {
       el.removeEventListener('scroll', onScroll);
+      el.removeEventListener(REVIEW_CARD_REVEALED, onReviewRevealed);
       for (const type of readerEvents) el.removeEventListener(type, onReaderInput);
       el.removeEventListener('load', onLoad, { capture: true });
       ro.disconnect();
@@ -9037,11 +9052,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             onClick={() => {
               const seq = stuck?.seq;
               if (!seq) return;
-              scrollRef.current
-                ?.querySelector<HTMLElement>(
-                  `.chat-user[data-seq="${seq}"], [data-sticky-label][data-seq="${seq}"]`,
-                )
-                ?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+              const card = scrollRef.current?.querySelector<HTMLElement>(
+                `.chat-user[data-seq="${seq}"], [data-sticky-label][data-seq="${seq}"]`,
+              );
+              revealCard(card, 'start', false);
             }}
           >
             {/* The arrow points up at the turn the bar names, whoever's turn it was. */}
