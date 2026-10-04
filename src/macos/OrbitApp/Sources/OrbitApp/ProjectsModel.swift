@@ -99,6 +99,8 @@ final class ProjectDetailModel {
     /// instead of a spinner that never ends.
     private(set) var integrationUnread = false
     private(set) var openItems: ProjectOpenItemsView?
+    /// A failed first read must not leave the Open items panel spinning or claim there are none.
+    private(set) var openItemsUnread = false
     private(set) var coordinator: ProjectCoordinatorStatus?
     private(set) var graph: ProjectDependencyGraph?
     private(set) var readyQueue: ProjectReadyToRun?
@@ -167,7 +169,12 @@ final class ProjectDetailModel {
         } else {
             integrationUnread = integration == nil
         }
-        openItems = (try? await openItemsRead) ?? openItems
+        if let items = try? await openItemsRead {
+            openItems = items
+            openItemsUnread = false
+        } else {
+            openItemsUnread = openItems == nil
+        }
         coordinator = (try? await coordinatorRead) ?? coordinator
         graph = (try? await graphRead) ?? graph
         readyQueue = (try? await queueRead) ?? readyQueue

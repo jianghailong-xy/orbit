@@ -1,7 +1,7 @@
 import Foundation
 
 /// What one project's page says, card by card — ported from the web's project page so both clients
-/// draw the same project the same way: `ProjectPanoramaHeader.tsx` (Work overview),
+/// describe the same project facts: `ProjectPanoramaHeader.tsx` (Work overview),
 /// `ProjectAcceptanceCard.tsx` (criteria), `ProjectCoordinatorCard.tsx` (the coordinator's pill),
 /// `ProjectProgressStatus.tsx` (Open items), `ProjectIntegrationLine.tsx` (the line row) and
 /// `ProjectsPage.tsx`'s task bands and tags.
@@ -373,9 +373,32 @@ public enum ProjectPage {
     public static let needsYouGroup = "Needs you"
     public static let withCoordinatorGroup = "With the coordinator"
 
-    /// "1 need you · 2 with the coordinator · oldest first".
-    public static func openItemsHint(needsYou: Int, withCoordinator: Int) -> String {
-        "\(needsYou) need you · \(withCoordinator) with the coordinator · oldest first"
+    /// The toolbar counts every open item; only the owner's share raises a reminder on the page.
+    public struct OpenItemsSummary: Equatable, Sendable {
+        public let needsYou: Int
+        public let withCoordinator: Int
+        public var count: Int { needsYou + withCoordinator }
+
+        public var attention: String? {
+            guard needsYou > 0 else { return nil }
+            return needsYou == 1 ? "1 item needs you" : "\(needsYou) items need you"
+        }
+
+        public var subtitle: String {
+            if count == 0 { return "No open items" }
+            let owner = attention ?? "No action needed from you"
+            return withCoordinator > 0 ? "\(owner) · \(withCoordinator) with the coordinator" : owner
+        }
+    }
+
+    /// A missing read is not an empty inbox. A start request counts only while the page can answer
+    /// it; the owner's own Start… is an action, not something anybody is waiting on.
+    public static func openItemsSummary(status: ProjectStatus, started: Bool?,
+                                        items: ProjectOpenItemsView?) -> OpenItemsSummary? {
+        guard let items else { return nil }
+        let start = StartProject.pageRow(status: status, started: started, openItems: items)
+        return OpenItemsSummary(needsYou: items.needsYou.count + (start?.request == nil ? 0 : 1),
+                                withCoordinator: items.withCoordinator.count)
     }
 
     /// "You" / "Coordinator".

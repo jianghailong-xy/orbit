@@ -135,10 +135,6 @@ final class ProjectPageCopyParityTests: XCTestCase {
                               (.openCoordinator, "OPEN_COORDINATOR"), (.openTaskSession, "OPEN_TASK_SESSION")] {
             assertSays(web, "\(key): '\(ProjectPage.actionLabel(action)!)'", in: Self.progress)
         }
-        let hint = ProjectPage.openItemsHint(needsYou: 23, withCoordinator: 29)
-            .replacingOccurrences(of: "23", with: "${needsYou.length}")
-            .replacingOccurrences(of: "29", with: "${withCoordinator.length}")
-        assertSays(web, "`\(hint)`", in: Self.progress)
         // The coordinator's request to start leads Needs you, and is counted there; the owner's own
         // Start… is counted in nothing.
         assertSays(web, "...(startRequest ? [startRequest] : []),", in: Self.progress)

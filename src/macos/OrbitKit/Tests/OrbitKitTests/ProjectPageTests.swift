@@ -147,6 +147,41 @@ final class ProjectPageTests: XCTestCase {
                            sessionId: sessionId, fuseEpisodeId: fuse, actions: actions)
     }
 
+    func testOpenItemsSummaryKeepsCoordinatorItemsQuietUntilTheServerReassignsThem() throws {
+        let coordinator = item(.integrationCheckFailed, assignee: .coordinator, waited: 3_600,
+                               escalateIn: -60)
+        let quiet = try XCTUnwrap(ProjectPage.openItemsSummary(
+            status: .open, started: true, items: .init(withCoordinator: [coordinator])))
+        XCTAssertEqual(quiet.count, 1)
+        XCTAssertEqual(quiet.needsYou, 0)
+        XCTAssertNil(quiet.attention, "a local countdown reaching zero does not reassign an item")
+        XCTAssertEqual(quiet.subtitle, "No action needed from you · 1 with the coordinator")
+
+        let owner = item(.integrationCheckFailed, assignee: .owner, waited: 3_600)
+        let escalated = try XCTUnwrap(ProjectPage.openItemsSummary(
+            status: .open, started: true, items: .init(needsYou: [owner])))
+        XCTAssertEqual(escalated.count, 1)
+        XCTAssertEqual(escalated.attention, "1 item needs you")
+        XCTAssertEqual(escalated.subtitle, "1 item needs you")
+
+        let pause = item(.fusePaused, assignee: .owner, waited: 60, actions: [.resume], fuse: "f1")
+        let mixed = try XCTUnwrap(ProjectPage.openItemsSummary(
+            status: .open, started: true,
+            items: .init(needsYou: [owner, pause], withCoordinator: [coordinator])))
+        XCTAssertEqual(mixed.count, 3)
+        XCTAssertEqual(mixed.attention, "2 items need you", "the existing Resume action remains discoverable")
+        XCTAssertEqual(mixed.subtitle, "2 items need you · 1 with the coordinator")
+    }
+
+    func testOpenItemsSummaryDoesNotTurnAnUnreadInboxIntoAnEmptyOne() throws {
+        XCTAssertNil(ProjectPage.openItemsSummary(status: .open, started: true, items: nil))
+        let empty = try XCTUnwrap(ProjectPage.openItemsSummary(
+            status: .open, started: true, items: .init()))
+        XCTAssertEqual(empty.count, 0)
+        XCTAssertNil(empty.attention)
+        XCTAssertEqual(empty.subtitle, "No open items")
+    }
+
     func testWaitingLabelCountsDownToTheOwner() {
         XCTAssertEqual(ProjectPage.waitingLabel(item(.integrationConflict, assignee: .coordinator,
                                                      waited: 18 * 60, escalateIn: 102 * 60), now: Self.now),

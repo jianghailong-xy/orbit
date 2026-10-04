@@ -198,16 +198,31 @@ final class ProjectsWiringTests: XCTestCase {
                       "the origin rides the frame the drawer's row puts up")
     }
 
-    func testTheProjectPageDrawsTheWebsSectionsInTheWebsOrder() throws {
+    func testTheProjectPageLeadsWithProgressAndOpensItemsFromTheToolbar() throws {
         let view = code(try appSource("Views/ProjectsView.swift"))
         let page = try slice(view, from: "private func page(", to: ".projectPageListStyle()")
-        let order = ["openItemsSection(", "overviewSection(", "coordinatorSection(", "runSettingsSection(",
+        let order = ["openItemsAttention(", "overviewSection(", "coordinatorSection(", "runSettingsSection(",
                      "goalSection(", "graphSection(", "blockersSection(", "runQueueSection(", "criteriaSection(",
                      "instructionsSection(", "tasksSection("]
         let positions = order.map { page.range(of: $0)?.lowerBound }
         XCTAssertFalse(positions.contains(nil), "the page lost one of \(order)")
         XCTAssertEqual(positions.compactMap { $0 }, positions.compactMap { $0 }.sorted(),
-                       "the sections read in the web's order (ProjectPageSectionsCopyParityTests holds the web's)")
+                       "the owner's reminder precedes progress; the remaining sections keep their order")
+        XCTAssertFalse(page.contains("openItemsSection("), "the full inbox no longer occupies the project page")
+        let content = try slice(view, from: "private func content(", to: "private func page(")
+        XCTAssertTrue(content.contains("ToolbarItem(placement: .primaryAction) { openItemsEntry(store, document) }"))
+        let entry = try slice(view, from: "private func openItemsEntry(", to: "private func openItemsAttention(")
+        XCTAssertTrue(entry.contains("pageSheet = .openItems"))
+        XCTAssertTrue(entry.contains("summary.count > 0"), "an empty inbox has no badge")
+        let attention = try slice(view, from: "private func openItemsAttention(", to: "private func openItemsSheet(")
+        XCTAssertTrue(attention.contains("if let attention = summary?.attention"))
+        XCTAssertTrue(attention.contains("pageSheet = .openItems"))
+        XCTAssertTrue(attention.contains("start.request == nil"), "the owner's own Start… stays on the page")
+        let sheet = try slice(view, from: "private func openItemsSheet(", to: "private func openItemsSection(")
+        XCTAssertTrue(sheet.contains("openItemsSection(store, document, now: context.date)"))
+        XCTAssertTrue(sheet.contains("TimelineView(.periodic(from: .now, by: 30))"), "the sheet's countdown keeps updating")
+        XCTAssertTrue(sheet.contains(".presentationDetents([.medium, .large])"))
+        XCTAssertTrue(sheet.contains("store.openItemsUnread"), "a failed first read offers Retry instead of an empty inbox")
         let overview = try slice(view, from: "private func overviewSection(", to: "private func overviewCell(")
         XCTAssertTrue(overview.contains("model.selectedSection = .runners"),
                       "the stalled banner's press goes where an engine signs in")
@@ -225,8 +240,6 @@ final class ProjectsWiringTests: XCTestCase {
         let items = try slice(view, from: "private func openItemsSection(", to: "private func startItem(")
         XCTAssertTrue(items.contains("StartProject.pageRow(status: document.status, started: document.started,"))
         XCTAssertTrue(items.contains("if let start { startItem(start, store: store, now: now) }"))
-        XCTAssertTrue(items.contains("ProjectPage.openItemsHint(needsYou: needsYou.count + asking,"),
-                      "the request needs you and is counted; the owner's own Start… is not")
 
         let row = try slice(view, from: "private func startItem(", to: "private func reviewStart(")
         XCTAssertTrue(row.contains("case .asked(let row):"))
@@ -242,6 +255,10 @@ final class ProjectsWiringTests: XCTestCase {
         XCTAssertTrue(review.contains("openCoordinator(store, focus: nil, startCard: true)"))
         let open = try slice(view, from: "private func openCoordinator(", to: "private func replaceCoordinator(")
         XCTAssertTrue(open.contains("focus: item, focusStartCard: startCard)"))
+        XCTAssertTrue(open.contains("pageSheet = nil"), "the item panel must not cover the conversation it opens")
+        let perform = try slice(view, from: "private func perform(_ action: ProjectOpenItemAction",
+                                to: "private func openCoordinator(")
+        XCTAssertTrue(perform.contains("pageSheet = nil"), "task/session navigation and Resume also leave the panel")
         let app = code(try appSource("AppModel.swift"))
         let door = try slice(app, from: "func openProjectCoordinator(", to: "\n    }\n")
         XCTAssertTrue(door.contains(

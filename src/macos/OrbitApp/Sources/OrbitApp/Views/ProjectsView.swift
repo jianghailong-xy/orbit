@@ -354,9 +354,8 @@ struct ProjectDetailPane: View {
     }
 }
 
-/// One project's page, card for card the page the web draws on a phone, in the web's order: what is
-/// waiting on the reader, where the work stands, who is coordinating it, the goal, the plan as a
-/// graph, what is standing in its way, what can start, the criteria, the instructions and the tasks.
+/// One project's progress and plan. Open items live behind the toolbar, with a reminder on the
+/// page only when something needs the reader.
 struct ProjectDetailView: View {
     @Environment(AppModel.self) private var model
     #if os(iOS)
@@ -385,8 +384,7 @@ struct ProjectDetailView: View {
     /// says under itself. Read when the page opens; the panel hands back every change made in it.
     @State private var sharing = false
     @State private var shareRead: ShareLinkRead?
-    /// The sheet the page has put up over itself: the owner's own start card, or the merge check's
-    /// editor.
+    /// The page's open items, the owner's own start card, or the merge check's editor.
     @State private var pageSheet: ProjectPageSheet?
 
     /// A phone's width: two columns of lanes, four criteria before "View all" — the web's narrow page.
@@ -442,6 +440,7 @@ struct ProjectDetailView: View {
             }
             #endif
             if let document = store.document {
+                ToolbarItem(placement: .primaryAction) { openItemsEntry(store, document) }
                 ToolbarItem(placement: .primaryAction) { menu(store, document) }
             }
         }
@@ -496,7 +495,7 @@ struct ProjectDetailView: View {
                         .onDisappear { headerOnScreen = false }
                 }
                 .listRowBackground(Color.clear)
-                openItemsSection(store, document, now: now)
+                openItemsAttention(store, document, now: now)
                 overviewSection(store, document)
                 coordinatorSection(store, document, now: now)
                 runSettingsSection(store, document, now: now)
@@ -511,6 +510,8 @@ struct ProjectDetailView: View {
             .projectPageListStyle()
             .sheet(item: $pageSheet) { sheet in
                 switch sheet {
+                case .openItems:
+                    openItemsSheet(store)
                 case .start:
                     // The card's "View tasks ›": the page's own task list, under the card.
                     OwnerStartProjectSheet(store: store) {
@@ -614,32 +615,140 @@ struct ProjectDetailView: View {
 
     // MARK: open items
 
+    private func openItemsEntry(_ store: ProjectDetailModel, _ document: ProjectDocument) -> some View {
+        let summary = ProjectPage.openItemsSummary(status: document.status, started: document.started,
+                                                  items: store.openItems)
+        return Button { pageSheet = .openItems } label: {
+            HStack(spacing: 6) {
+                Text(ProjectPage.openItemsHeading)
+                if let summary, summary.count > 0 {
+                    Text(summary.count.formatted())
+                        .font(.orbitMeta.weight(.semibold))
+                        .monospacedDigit()
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .foregroundStyle(summary.needsYou > 0 ? Color.white : Color.secondary)
+                        .background(summary.needsYou > 0 ? Color.orange : Color.secondary.opacity(0.15),
+                                    in: Capsule())
+                }
+            }
+            .font(.orbitLabel.weight(.semibold))
+        }
+        .tint(Color.primary)
+        .accessibilityLabel(ProjectPage.openItemsHeading)
+        .accessibilityValue(summary?.subtitle ?? (store.openItemsUnread ? "Couldn't load open items" : "Loading"))
+    }
+
+    @ViewBuilder
+    private func openItemsAttention(_ store: ProjectDetailModel, _ document: ProjectDocument,
+                                    now: Date) -> some View {
+        let summary = ProjectPage.openItemsSummary(status: document.status, started: document.started,
+                                                  items: store.openItems)
+        if let attention = summary?.attention {
+            Section {
+                Button { pageSheet = .openItems } label: {
+                    HStack(spacing: 8) {
+                        Label(attention, systemImage: "exclamationmark.circle")
+                        Spacer(minLength: 8)
+                        Image(systemName: "chevron.forward").font(.orbitMeta.weight(.semibold))
+                    }
+                    .font(.orbitLabel.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+                    .padding(.vertical, 4)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            .listRowBackground(Color.orange.opacity(0.1))
+        } else if let start = StartProject.pageRow(status: document.status, started: document.started,
+                                                   openItems: store.openItems), start.request == nil {
+            // Starting an unstarted project remains discoverable even with no pending request.
+            Section { startItem(start, store: store, now: now) }
+        }
+    }
+
+    private func openItemsSheet(_ store: ProjectDetailModel) -> some View {
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    Text(ProjectPage.openItemsHeading).font(.title2.weight(.bold))
+                    Spacer()
+                    Button { pageSheet = nil } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Close open items")
+                    .keyboardShortcut(.cancelAction)
+                }
+                .padding([.horizontal, .top], 20)
+                if let document = store.document,
+                   let summary = ProjectPage.openItemsSummary(status: document.status, started: document.started,
+                                                              items: store.openItems) {
+                    Text(summary.subtitle)
+                        .font(.orbitLabel)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 8)
+                    List {
+                        openItemsSection(store, document, now: context.date)
+                        if summary.count == 0,
+                           StartProject.pageRow(status: document.status, started: document.started,
+                                                openItems: store.openItems) == nil {
+                            Text("Nothing is waiting on you or the coordinator.")
+                                .font(.orbitSubtext)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    #if os(iOS)
+                    .listStyle(.insetGrouped)
+                    #else
+                    .listStyle(.inset)
+                    #endif
+                    .refreshable { await store.load(refreshGraph: false) }
+                } else if store.openItemsUnread {
+                    ContentUnavailableView {
+                        Label("Open items couldn't be loaded", systemImage: "exclamationmark.triangle")
+                    } actions: {
+                        Button("Retry") { Task { await store.load(refreshGraph: false) } }
+                    }
+                } else {
+                    ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+        }
+        #if os(iOS)
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        #else
+        .frame(minWidth: 420, idealWidth: 520, minHeight: 420, idealHeight: 560)
+        #endif
+    }
+
     @ViewBuilder
     private func openItemsSection(_ store: ProjectDetailModel, _ document: ProjectDocument,
                                   now: Date) -> some View {
-        // A project nobody has started leads its Needs you with the start (mock board3 ②): the
-        // coordinator's request — served beside the items rather than among them — or, while nobody
-        // has asked, the owner's own Start…, which is counted in nothing: nobody is waiting on it.
         let start = StartProject.pageRow(status: document.status, started: document.started,
                                          openItems: store.openItems)
         let needsYou = store.openItems?.needsYou ?? []
         let withCoordinator = store.openItems?.withCoordinator ?? []
-        let asking = start?.request == nil ? 0 : 1
-        if !(needsYou.isEmpty && withCoordinator.isEmpty && start == nil) {
+        if !needsYou.isEmpty || start != nil {
             Section {
-                if !needsYou.isEmpty || start != nil {
-                    groupLabel(ProjectPage.needsYouGroup)
-                    if let start { startItem(start, store: store, now: now) }
-                    ForEach(needsYou) { row in openItem(row, store: store, now: now) }
-                }
-                if !withCoordinator.isEmpty {
-                    groupLabel(ProjectPage.withCoordinatorGroup)
-                    ForEach(withCoordinator) { row in openItem(row, store: store, now: now) }
-                }
+                if let start { startItem(start, store: store, now: now) }
+                ForEach(needsYou) { row in openItem(row, store: store, now: now) }
             } header: {
-                sectionHeader(ProjectPage.openItemsHeading,
-                              detail: ProjectPage.openItemsHint(needsYou: needsYou.count + asking,
-                                                                withCoordinator: withCoordinator.count))
+                groupLabel(ProjectPage.needsYouGroup)
+            }
+        }
+        if !withCoordinator.isEmpty {
+            Section {
+                ForEach(withCoordinator) { row in openItem(row, store: store, now: now) }
+            } header: {
+                groupLabel(ProjectPage.withCoordinatorGroup)
             }
         }
     }
@@ -653,23 +762,28 @@ struct ProjectDetailView: View {
                            now: Date) -> some View {
         switch start {
         case .asked(let row):
-            HStack(alignment: .center, spacing: 10) {
-                Circle().fill(Color.orange).frame(width: 8, height: 8)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(StartProject.title).font(.orbitSubtext.weight(.semibold)).lineLimit(3)
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 8) {
+                    Circle().fill(Color.orange).frame(width: 8, height: 8)
+                    Text(StartProject.title).font(.orbitSubtext.weight(.semibold))
+                }
+                VStack(alignment: .leading, spacing: 4) {
                     Text(row.startRequest.map { StartProject.requestSummary($0.settings) } ?? row.detailLine)
-                        .font(.orbitLabel).foregroundStyle(.secondary).lineLimit(3)
+                        .font(.orbitLabel).foregroundStyle(.secondary)
                     Text("\(ProjectPage.who(row)) · \(ProjectPage.waitingLabel(row, now: now))")
                         .font(.orbitMeta)
                         .foregroundStyle(.secondary)
                 }
-                Spacer(minLength: 6)
-                Button(ProjectPage.actionLabel(.review) ?? "") { reviewStart(store) }
-                    .font(.orbitLabel.weight(.semibold))
-                    .buttonStyle(.borderedProminent)
-                    .tint(Color.accentColor)
-                    .buttonBorderShape(.capsule)
-                    .disabled(store.busy)
+                .fixedSize(horizontal: false, vertical: true)
+                Button { reviewStart(store) } label: {
+                    Text(ProjectPage.actionLabel(.review) ?? "").frame(maxWidth: .infinity)
+                }
+                .font(.orbitLabel.weight(.semibold))
+                .buttonStyle(.borderedProminent)
+                .tint(Color.accentColor)
+                .buttonBorderShape(.capsule)
+                .controlSize(.large)
+                .disabled(store.busy)
             }
             .padding(.vertical, 2)
             .contentShape(Rectangle())
@@ -711,25 +825,32 @@ struct ProjectDetailView: View {
 
     private func openItem(_ row: ProjectOpenItemRow, store: ProjectDetailModel, now: Date) -> some View {
         let owner = row.assignee != .coordinator
-        return HStack(alignment: .center, spacing: 10) {
-            Circle().fill(owner ? Color.orange : Color.accentColor).frame(width: 8, height: 8)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(row.title).font(.orbitSubtext.weight(.semibold)).lineLimit(3)
-                if !row.detailLine.isEmpty {
-                    Text(row.detailLine).font(.orbitLabel).foregroundStyle(.secondary).lineLimit(3)
-                }
-                Text("\(ProjectPage.who(row)) · \(ProjectPage.waitingLabel(row, now: now))")
-                    .font(.orbitMeta)
-                    .foregroundStyle(.secondary)
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Circle().fill(owner ? Color.orange : Color.accentColor).frame(width: 8, height: 8)
+                Text(ProjectPage.who(row)).font(.orbitMeta).foregroundStyle(.secondary)
             }
-            Spacer(minLength: 6)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(row.title).font(.orbitSubtext.weight(.semibold))
+                if !row.detailLine.isEmpty {
+                    Text(row.detailLine).font(.orbitLabel).foregroundStyle(.secondary)
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            Text(ProjectPage.waitingLabel(row, now: now))
+                .font(.orbitMeta)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             if let action = ProjectPage.primaryAction(row), let label = ProjectPage.actionLabel(action) {
-                Button(label) { perform(action, on: row, store: store) }
-                    .font(.orbitLabel.weight(.semibold))
-                    .buttonStyle(.borderedProminent)
-                    .tint(owner ? Color.accentColor : Color.secondary)
-                    .buttonBorderShape(.capsule)
-                    .disabled(store.busy)
+                Button { perform(action, on: row, store: store) } label: {
+                    Text(label).frame(maxWidth: .infinity)
+                }
+                .font(.orbitLabel.weight(.semibold))
+                .buttonStyle(.borderedProminent)
+                .tint(Color.accentColor)
+                .buttonBorderShape(.capsule)
+                .controlSize(.large)
+                .disabled(store.busy)
             }
         }
         .padding(.vertical, 2)
@@ -740,6 +861,7 @@ struct ProjectDetailView: View {
 
     private func perform(_ action: ProjectOpenItemAction, on row: ProjectOpenItemRow,
                          store: ProjectDetailModel) {
+        pageSheet = nil
         switch action {
         case .resume:
             guard let episode = row.fuseEpisodeId else { return }
@@ -769,6 +891,7 @@ struct ProjectDetailView: View {
     /// needs-you banner makes.
     private func openCoordinator(_ store: ProjectDetailModel, focus row: ProjectOpenItemRow?,
                                  startCard: Bool = false) {
+        pageSheet = nil
         let item = row.map {
             SessionOwnerItem(itemId: $0.itemId, kind: ProjectPage.ownerItemKind($0), title: $0.title,
                              since: $0.waitingSince)
@@ -1827,8 +1950,9 @@ private func projectStatusLabel(_ document: ProjectDocument) -> String {
     return document.status == .done ? "Completed" : document.status.label
 }
 
-/// The two sheets the project page puts up over itself.
+/// The sheets the project page puts up over itself.
 private enum ProjectPageSheet: String, Identifiable {
+    case openItems
     /// The owner's own "Start…".
     case start
     /// How it runs' merge check, where a command has room.
