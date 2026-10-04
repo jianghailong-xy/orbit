@@ -13,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -29,7 +30,8 @@ import io.orbitd.android.core.realtime.SessionState
 import kotlinx.serialization.json.*
 
 @Composable
-fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: String, session: SessionState?, target: DraftTarget? = null, focusRequest: Int = 0) {
+fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: String, session: SessionState?, target: DraftTarget? = null, focusRequest: Int = 0,
+    inputFocusChanged: (Boolean) -> Unit = {}) {
     val model = remember(app, handle, sessionId) { app.composer(handle, sessionId, target) }
     val state by model.state.collectAsState()
     val context = LocalContext.current
@@ -102,7 +104,7 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
                 }
                 ComposerUsage(model, state, effective, session)
             OutlinedTextField(field, onValueChange = { field = it; model.edit(it.text, it.selection.start, it.selection.end) },
-                modifier = Modifier.fillMaxWidth().focusRequester(focus).testTag("composer-input").onPreviewKeyEvent {
+                modifier = Modifier.fillMaxWidth().focusRequester(focus).onFocusChanged { inputFocusChanged(it.isFocused) }.testTag("composer-input").onPreviewKeyEvent {
                     if (it.type == KeyEventType.KeyDown && it.key == Key.Enter && (it.isCtrlPressed || it.isMetaPressed) && field.composition == null && usable) {
                         model.send(); true
                     } else false

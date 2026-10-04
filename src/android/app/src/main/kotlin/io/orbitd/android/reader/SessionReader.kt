@@ -10,10 +10,12 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.*
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -41,6 +43,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val composer = remember(app, handle, route.id) { app.composer(handle, route.id!!) }
     val composerState by composer.state.collectAsState()
     var composeFocus by remember(handle, route.id) { mutableIntStateOf(0) }
+    var composerFocused by remember(handle, route.id) { mutableStateOf(false) }
     LaunchedEffect(state.window.seeded, state.loading, state.targetSeq) {
         if (route.recordId != null && state.window.seeded && !state.loading && state.targetSeq != null) recordOpened = true
     }
@@ -112,7 +115,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     }
     CompositionLocalProvider(LocalReaderResources provides resources) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
-        val composerHeight = if (maxHeight < 320.dp) maxHeight else maxHeight * 0.65f
+        val otherInputHasKeyboard = WindowInsets.ime.getBottom(LocalDensity.current) > 0 && !composerFocused
+        val composerHeight = if (otherInputHasKeyboard) 0.dp else if (maxHeight < 320.dp) maxHeight else maxHeight * 0.65f
         Column(Modifier.fillMaxSize()) {
             val session = state.session
             val detail = session?.snapshot?.detail
@@ -173,6 +177,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                         val prior = composer.state.value.draft.text
                         val text = prior + (if (prior.isBlank()) "" else "\n\n") + context
                         composer.edit(text, text.length, text.length)
+                        composerFocused = true
                         composeFocus++
                     }) }
                     item(key = "tail") { Spacer(Modifier.height(1.dp).testTag("transcript-tail")) }
@@ -185,7 +190,9 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     TextButton(onClick = { follow = true; model.latest() }) { Text("Jump to latest") }
                 }
                 }
-                Box(Modifier.heightIn(max = composerHeight)) { SessionComposer(app, handle, route.id!!, state.session, focusRequest = composeFocus) }
+                // Keep the composer and its activity-result launchers alive while card forms use the IME.
+                Box(Modifier.heightIn(max = composerHeight).clipToBounds()) { SessionComposer(app, handle, route.id!!, state.session,
+                    focusRequest = composeFocus, inputFocusChanged = { composerFocused = it }) }
             }
         }
         }
