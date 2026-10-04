@@ -2326,6 +2326,11 @@ final class AppModel {
         baseURL?.appendingPathComponent("tasks").appendingPathComponent(PublicID.toPublic(taskID))
     }
 
+    /// The session's signed-in address, separate from its public sharing link.
+    func sessionWebURL(_ sessionID: String) -> URL? {
+        baseURL?.appendingPathComponent("sessions").appendingPathComponent(PublicID.toPublic(sessionID))
+    }
+
     /// Put `node` on screen in the Agents section — the one transition every Agents entry point
     /// lands on, which is why each of them is now a single line naming the page it opens.
     ///
