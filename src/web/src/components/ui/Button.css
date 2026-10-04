@@ -1,0 +1,66 @@
+.orbit-button {
+  box-sizing: border-box;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--orbit-control-gap);
+  height: var(--orbit-control-height);
+  padding: 0 var(--orbit-control-padding-inline);
+  border: 1px solid var(--border);
+  border-radius: var(--orbit-radius);
+  color: var(--text-1);
+  background: var(--bg-raised);
+  font-family: var(--orbit-font-family);
+  font-size: var(--orbit-font-size);
+  font-weight: 400;
+  line-height: var(--orbit-line-height);
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+  outline: none;
+  transition: color .2s, background-color .2s, border-color .2s, opacity .2s;
+}
+.orbit-button-small { height: var(--orbit-control-height-sm); padding-inline: var(--orbit-control-padding-inline-sm); border-radius: var(--orbit-radius-sm); }
+.orbit-button-large { height: var(--orbit-control-height-lg); border-radius: var(--orbit-radius-popup); font-size: 16px; line-height: 1.5714285714; }
+.orbit-button-icon-only { width: var(--orbit-control-height); padding-inline: 0; }
+.orbit-button-icon-only.orbit-button-small { width: var(--orbit-control-height-sm); }
+.orbit-button-icon-only.orbit-button-large { width: var(--orbit-control-height-lg); }
+.orbit-button-icon { display: inline-flex; align-items: center; }
+.orbit-button-icon > .anticon { vertical-align: middle; }
+.orbit-button-icon > .anticon::before { content: '\00a0'; display: inline-block; width: 0; }
+.orbit-button:hover:where(:not(:disabled)) { color: var(--orbit-control-primary-hover); border-color: var(--orbit-control-primary-hover); }
+.orbit-button:active:where(:not(:disabled)) { color: var(--orbit-control-primary-active); border-color: var(--orbit-control-primary-active); }
+.orbit-button-primary { color: var(--orbit-control-on-primary); background: var(--orbit-control-primary); border-color: transparent; }
+.orbit-button-primary:hover:where(:not(:disabled)) { color: var(--orbit-control-on-primary); background: var(--orbit-control-primary-hover); border-color: transparent; }
+.orbit-button-primary:active:where(:not(:disabled)) { color: var(--orbit-control-on-primary); background: var(--orbit-control-primary-active); border-color: transparent; }
+.orbit-button-text, .orbit-button-link { background: transparent; border-color: transparent; }
+.orbit-button-text:hover:where(:not(:disabled)) { color: var(--text-1); background: var(--orbit-control-hover-bg); border-color: transparent; }
+.orbit-button-text:active:where(:not(:disabled)) { color: var(--text-1); background: var(--orbit-control-active-bg); border-color: transparent; }
+.orbit-button-link { color: var(--orbit-control-primary); }
+.orbit-button-link:hover:where(:not(:disabled)) { color: var(--orbit-control-link-hover); border-color: transparent; }
+.orbit-button-link:active:where(:not(:disabled)) { color: var(--orbit-control-primary-active); border-color: transparent; }
+.orbit-button-danger { color: var(--orbit-control-error); border-color: var(--orbit-control-error); }
+.orbit-button-danger.orbit-button-default { box-shadow: 0 2px 0 var(--orbit-control-error-outline); }
+.orbit-button-danger:hover:where(:not(:disabled)) { color: var(--orbit-control-error-hover); border-color: var(--orbit-control-error-hover); }
+.orbit-button-danger:active:where(:not(:disabled)) { color: var(--orbit-control-error-active); border-color: var(--orbit-control-error-active); }
+.orbit-button-danger.orbit-button-primary { color: var(--orbit-control-on-primary); background: var(--orbit-control-error); border-color: transparent; box-shadow: 0 2px 0 var(--orbit-control-error-outline); }
+.orbit-button-danger.orbit-button-primary:hover:where(:not(:disabled)) { background: var(--orbit-control-error-hover); }
+.orbit-button-danger.orbit-button-primary:active:where(:not(:disabled)) { background: var(--orbit-control-error-active); }
+.orbit-button-danger.orbit-button-text, .orbit-button-danger.orbit-button-link { border-color: transparent; }
+.orbit-button-danger.orbit-button-text:hover:where(:not(:disabled)) { background: var(--orbit-control-error-bg); }
+.orbit-button-danger.orbit-button-text:active:where(:not(:disabled)) { background: var(--orbit-control-error-bg-active); }
+.orbit-button:focus-visible { outline: var(--orbit-focus-width) solid var(--orbit-focus-color); outline-offset: var(--orbit-focus-offset); }
+.orbit-button[data-loading] { opacity: .65; cursor: default; }
+.orbit-button:disabled {
+  color: var(--orbit-control-disabled-text);
+  background: var(--orbit-control-disabled-bg);
+  border-color: var(--orbit-control-disabled-border);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+.orbit-button-text:disabled, .orbit-button-link:disabled { background: transparent; border-color: transparent; }
+@media (prefers-reduced-motion: reduce) { .orbit-button { transition: none; } }

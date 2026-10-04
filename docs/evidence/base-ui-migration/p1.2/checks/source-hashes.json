@@ -1,0 +1,102 @@
+[
+  {
+    "path": "src/web/package.json",
+    "sha256": "9c07d86e52439c8c734463b0fa376a6e0d19b0bfd8e6509b261fa087fed3f2ef"
+  },
+  {
+    "path": "src/web/src/components/ui/Badge.css",
+    "sha256": "ac1c8186475f80e4f2bdd6be142a43a4d4e90bf0910d9f28286d56bf096cce72"
+  },
+  {
+    "path": "src/web/src/components/ui/Badge.tsx",
+    "sha256": "380c7b8cf0c7b9a749c74435a0a4d65b5b6329aa6d8ae1295919586ce54842fc"
+  },
+  {
+    "path": "src/web/src/components/ui/Button.css",
+    "sha256": "47b3e24a986d258501f4f344ae757920088a8c095c2a26a2fe08232f7c34748c"
+  },
+  {
+    "path": "src/web/src/components/ui/Button.tsx",
+    "sha256": "c78b54cd6492c703f31f38e1d51b7dc5a72612dc11323f814fa4be12d5c283d2"
+  },
+  {
+    "path": "src/web/src/components/ui/Checkbox.tsx",
+    "sha256": "01a156a324518c0484e967c23972edacd55d63688f792bc84366cd11e6a345dc"
+  },
+  {
+    "path": "src/web/src/components/ui/ChoiceControls.css",
+    "sha256": "3d395e98ab2980ca6597072876125d5bd5c39f5646fba2def5980facfba61424"
+  },
+  {
+    "path": "src/web/src/components/ui/Input.tsx",
+    "sha256": "7e622dac9dfae87e0075abb867c5a3c5700af18057afe5ee582122510fbbdd3b"
+  },
+  {
+    "path": "src/web/src/components/ui/README.md",
+    "sha256": "d81765cd9aef5706d6413a8c5cd400c7369744528fd31e6c5a23977887273bb7"
+  },
+  {
+    "path": "src/web/src/components/ui/Radio.tsx",
+    "sha256": "c8719906b049a12be4176885cebbcd621eaf90172f2e588ac1f2659b9c5c5756"
+  },
+  {
+    "path": "src/web/src/components/ui/Spinner.css",
+    "sha256": "8988d64655aaf4a0cbb8f0a35bbfcb98e79e5425a53a95884b0602688ba51655"
+  },
+  {
+    "path": "src/web/src/components/ui/Spinner.tsx",
+    "sha256": "86e5e7e919406968e33da6699c79d05aceb38a425db8ae1d1a10c20ba076d30d"
+  },
+  {
+    "path": "src/web/src/components/ui/Switch.tsx",
+    "sha256": "ccb92ab7e3c52b7e7bce41b2de80aaccbd8ce369394d7f3ff55f805bfcc7c457"
+  },
+  {
+    "path": "src/web/src/components/ui/TextControls.css",
+    "sha256": "7d78290692b5e480e675ba007865b26eb8a853795d15f291da383caf5f5c5468"
+  },
+  {
+    "path": "src/web/src/components/ui/Textarea.tsx",
+    "sha256": "f77d1d8dfe26b06c3308265ab0aadc15c83c2c8ff4f111dc365d1d681268fd04"
+  },
+  {
+    "path": "src/web/src/components/ui/__fixtures__/ControlsFixture.css",
+    "sha256": "32baa06af535a0ec9bb48740c168a6fa20bf04a802e90938435992c02dc9ad2d"
+  },
+  {
+    "path": "src/web/src/components/ui/__fixtures__/ControlsFixture.tsx",
+    "sha256": "b745b48a466da716fbe2d23aace88a07326f43a5c89a0eee3b98607b999f22f8"
+  },
+  {
+    "path": "src/web/src/components/ui/boundary.test.ts",
+    "sha256": "ba8813bb8ab3ce77dce2c213c2ddb3ab91cd8243fc9ec7cc0b162107667d6d78"
+  },
+  {
+    "path": "src/web/src/components/ui/foundation.css",
+    "sha256": "ca096f46afb58e8dbe9cb58c34b23aae8d89d6bf82d7ef033386a46f6ab13420"
+  },
+  {
+    "path": "src/web/ui-migration/controls.browser.mjs",
+    "sha256": "14a2cbedd2f625f35cb6f7c8797ab9a5b0c9944a6fc93a39d6814c3aeb48024f"
+  },
+  {
+    "path": "src/web/ui-migration/controls.config.mjs",
+    "sha256": "8cf3a743f52d810b66cbe3f5d122766da374af55f1fd773cc9ac756110498e09"
+  },
+  {
+    "path": "src/web/ui-migration/controls.html",
+    "sha256": "25d869d6ad69252b1f6a6247011cf02bbc4b0363b4e57995daea678cac31b55c"
+  },
+  {
+    "path": "src/web/ui-migration/controls.tsconfig.json",
+    "sha256": "38445bae45f6884f516c74f4e98a26a17677f920048b0b1307c5a0018f79d181"
+  },
+  {
+    "path": "src/web/ui-migration/controls.tsx",
+    "sha256": "ee379fb6a30fe010fe6c08a6b6bcae71246ffc62a4a729b4dd05549a6e54e7f8"
+  },
+  {
+    "path": "src/web/ui-migration/playwright.config.mjs",
+    "sha256": "6e1be99a18e06c8209d9b49260a39aaeb1056d6069d3e100e55212f1f953df4a"
+  }
+]
