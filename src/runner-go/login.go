@@ -429,7 +429,7 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 			return
 		}
 		var err error
-		cmd, cleanup, err = antigravityGoogleCommand(ctx, binPath, env)
+		cmd, cleanup, err = antigravityGoogleCommand(ctx, binPath, env, false)
 		if err != nil {
 			r.mu.Unlock()
 			cancel()

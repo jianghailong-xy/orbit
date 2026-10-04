@@ -1417,13 +1417,24 @@ struct ProjectDetailView: View {
             Button {
                 Task { notice = await store.run(item.taskId) }
             } label: {
-                Label(store.starting.contains(item.taskId) ? ProjectPage.runPressStarting : ProjectPage.runPress,
-                      systemImage: "play.circle")
+                HStack(spacing: 6) {
+                    Image(systemName: "play.fill")
+                        .font(.orbitMeta.weight(.semibold))
+                    Text(store.starting.contains(item.taskId) ? ProjectPage.runPressStarting : ProjectPage.runPress)
+                }
+                .font(.orbitLabel.weight(.semibold))
+                .foregroundStyle(Color.accentColor)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .frame(minWidth: 72, minHeight: 34)
+                .background(Color.accentColor.opacity(0.08),
+                            in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .fixedSize()
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
             }
-            .font(.orbitLabel.weight(.semibold))
-            .buttonStyle(.borderedProminent)
-            .buttonBorderShape(.capsule)
-            .controlSize(.small)
+            .buttonStyle(.plain)
+            .opacity(store.busy ? 0.5 : 1)
             .disabled(store.busy)
             .accessibilityLabel("Run \(item.title)")
         case .paused where item.pausedList != nil:

@@ -855,6 +855,9 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// job the image before handed on as it re-executed is still this process's child, and until the
 	// pool holds it again the sweep takes its checkout for one nobody is using.
 	pool.adoptRecordedJobs()
+	// A copy of the Google sign-in lives in a session's directory only while an agy runs on it; the
+	// copies a crash or a kill left behind go before any session starts again.
+	pruneAntigravityTokenCopies()
 
 	// This machine's free-space floor (Runner.minFreeDiskMb), kept in sync the same way and for
 	// the same reason as max-concurrent above: the worktree sweep reclaims checkouts against it,
@@ -1110,6 +1113,16 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		default:
 		}
 	}
+	// A session that finds its engine signed out as it starts it says so (noteEngineSignedOut): the
+	// probe confirms it and the next beat carries it at once. Coalesced, since every session started on
+	// the same refused sign-in says the same thing.
+	reprobeAfterSignOut := coalescingRefresh(func() {
+		engineHealth.refresh()
+		beatNow()
+	})
+	engineSignedOut := func() { go reprobeAfterSignOut() }
+	engineSignedOutSeen.Store(&engineSignedOut)
+	defer engineSignedOutSeen.Store(nil)
 	// Heartbeat-delivered work may spawn git subprocesses that outlive the heartbeat
 	// goroutine itself. Stop dispatching it as soon as drain begins and join anything
 	// already running before a self-update replaces this process image.

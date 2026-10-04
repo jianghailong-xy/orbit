@@ -51,7 +51,7 @@ export const ACCOUNT_ID_PATTERN = /^(?:default|[0-9a-f]{8})$/;
 
 /** Which CLI to sign in. Absent from an older client, which only ever signed in claude. */
 export class StartLoginDto {
-  @IsOptional() @IsIn(['claude', 'codex', 'kimi']) engine?: LoginEngine;
+  @IsOptional() @IsIn(['claude', 'codex', 'kimi', 'antigravity']) engine?: LoginEngine;
   /** Sign in this account the runner already has, of an engine that keeps accounts. Absent: the
    *  runner's own login. */
   @IsOptional() @IsString() @Matches(ACCOUNT_ID_PATTERN) account?: string;

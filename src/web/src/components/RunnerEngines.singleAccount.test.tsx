@@ -15,16 +15,15 @@ import type { Runner } from './TasksSidePanel';
  * The group head and the account rows under it are for two accounts or more. One account is what
  * every machine had before accounts, so none of that may show for it: the card keeps one row per
  * engine, and the Codex row keeps its name, sub-line, status tag, quota and button. What it adds is
- * `+ Account`, ahead of that button — without it a machine with Default alone could never get to
+ * `Add account`, ahead of that button — without it a machine with Default alone could never get to
  * two. A runner too old to report accounts has one account, not none, and reads the same.
  *
- * Every ROW value is that engine row for the same fixture, held less `+ Account`, which has a test
+ * Every ROW value is that engine row for the same fixture, held less `Add account`, which has a test
  * of its own. It was first the page before accounts existed (RunnerEngines.tsx at 864cad31c); since
  * 2026-10-02 every engine's row says whether its login can take a session ("Available", where it said
  * "Signed in"), lists each quota window with its reset, gives its version as a number, and offers
- * Re-sign in as a mark. RunnerEngines.test.tsx keeps its own assertions, and this guard sits beside
- * them. Red here means one account draws differently from any engine's row — fix the page, not these
- * values.
+ * account maintenance in More. RunnerEngines.test.tsx keeps its own assertions, and this guard sits
+ * beside them so single-account rows keep the same information as other engine rows.
  */
 
 vi.mock('../api', () => ({ api: vi.fn() }));
@@ -105,7 +104,7 @@ const ROW: {
       text: ['Codex', '0.156.0', 'Available', '5h limit', '62%'],
       tag: 'green',
       bar: '62%',
-      buttons: ['Re-sign in · text'],
+      buttons: ['More actions · text'],
     },
     count: '1 runner · 3 signed in',
     folded: 'All signed in',
@@ -142,7 +141,7 @@ const ROW: {
       text: ['Codex', '0.156.0', 'Available', '5h limit', '62%'],
       tag: 'green',
       bar: '62%',
-      buttons: ['Re-sign in · text · disabled'],
+      buttons: ['More actions · text'],
     },
     count: '1 runner · 3 signed in',
     folded: 'All signed in',
@@ -218,7 +217,7 @@ const described = (button: HTMLButtonElement) =>
     .join(' · ');
 
 const addAccount = (row: Element) =>
-  [...row.querySelectorAll('button')].find((button) => button.textContent?.trim() === '+ Account');
+  [...row.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Add account');
 
 function codexRowOf(page: HTMLElement): HTMLElement {
   const row = [...page.querySelectorAll<HTMLElement>('.re-row')].find(
@@ -228,7 +227,7 @@ function codexRowOf(page: HTMLElement): HTMLElement {
   return row;
 }
 
-/** The Codex row as it reads less `+ Account`: one button taken out of a copy, and only that one. */
+/** The Codex row as it reads less `Add account`: one button taken out of a copy, and only that one. */
 function codexRow(page: HTMLElement): CodexRow {
   const row = codexRowOf(page).cloneNode(true) as HTMLElement;
   addAccount(row)?.remove();
@@ -258,11 +257,8 @@ describe.each(ONE_ACCOUNT)('one Codex account — %s', (_, accountsOf) => {
         're-row',
         're-row',
       ]);
-      // A reported signed-in slot also supports a server-side pause, even offline.
-      const pausable = auth === 'yes' && !!accountsOf(auth).accounts?.length;
-      expect(codexRow(page)).toEqual(pausable ? {
-        ...codex, text: [...codex.text, 'Pause…'], buttons: ['Pause… · default', ...codex.buttons],
-      } : codex);
+      // Pause is available inside More and adds no visible button or text to this row.
+      expect(codexRow(page)).toEqual(codex);
       // One account counts once, as the engine always did: on the section, and on a folded card.
       expect(page.querySelector('.re-sec-count')?.textContent).toBe(count);
       expect(summaryOf(box)).toBe(folded);
@@ -270,7 +266,7 @@ describe.each(ONE_ACCOUNT)('one Codex account — %s', (_, accountsOf) => {
   );
 
   it.each(ROW)(
-    '$state: + Account leads the Codex row, and opens the name for a second account',
+    '$state: Add account leads the Codex row, and opens the name for a second account',
     async ({ auth, over, codex }) => {
       const page = mount([runner({ auth, ...accountsOf(auth) }, over)]);
       const row = codexRowOf(page);
@@ -279,8 +275,7 @@ describe.each(ONE_ACCOUNT)('one Codex account — %s', (_, accountsOf) => {
       // The group head's button, ahead of the row's own — and, like that one, not pressable while
       // the machine is offline.
       expect([...row.querySelectorAll<HTMLButtonElement>('.re-act button')].map(described)).toEqual([
-        offline ? '+ Account · default · disabled' : '+ Account · default',
-        ...(auth === 'yes' && accountsOf(auth).accounts?.length ? ['Pause… · default'] : []),
+        offline ? 'Add account · default · disabled' : 'Add account · default',
         ...codex.buttons,
       ]);
       if (offline) return;

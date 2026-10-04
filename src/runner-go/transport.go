@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,7 +22,10 @@ import (
 )
 
 const (
-	runnerCapabilitiesHeader         = "X-Orbit-Runner-Capabilities"
+	runnerCapabilitiesHeader = "X-Orbit-Runner-Capabilities"
+	// The operating system this binary was built for (runtime.GOOS). The control plane offers a
+	// sign-in only where it works — Antigravity's Google login is Linux-only for now.
+	runnerOSHeader                   = "X-Orbit-Runner-Os"
 	sessionOrchestrationCredentialV1 = "session-orchestration-credential-v1"
 	sessionTerminalHandoffV1         = "session-terminal-handoff-v1"
 	sessionWorktreeOpsV1             = "session-worktree-ops-v1"
@@ -270,6 +274,7 @@ func (t *Transport) doVia(ctx context.Context, client *http.Client, method, path
 	}
 	req.Header.Set("content-type", "application/json")
 	req.Header.Set(runnerCapabilitiesHeader, runnerCapabilitiesV1)
+	req.Header.Set(runnerOSHeader, runtime.GOOS)
 	req.Header.Set("X-Orbit-Supported-Providers", runnerSupportedProviders)
 	req.Header.Set(runnerWriteCapabilityRevisionHeader, strconv.Itoa(runnerWriteCapabilityRevision))
 	req.Header.Set(runnerWriteSchemaRevisionHeader, strconv.Itoa(runnerWriteSchemaRevision))

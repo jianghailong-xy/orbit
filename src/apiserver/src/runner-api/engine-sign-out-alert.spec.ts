@@ -17,15 +17,19 @@ const RUNNER_ID = '11111111-1111-4111-8111-111111111111';
  * not fire on the two states that merely look like a sign-out.
  */
 
-function harness(priorEngines: unknown) {
+function harness(priorEngines: unknown, row: Record<string, unknown> = {}) {
   const notified: { runnerId: string; engine: string }[] = [];
-  let current: Record<string, unknown> = { maxConcurrent: 4, engines: priorEngines };
+  let current: Record<string, unknown> = { maxConcurrent: 4, engines: priorEngines, ...row };
   const prisma = {
     runner: {
       findUnique: async () => current,
       update: async ({ data }: { data: Record<string, unknown> }) => {
         current = { ...current, ...data };
         return current;
+      },
+      updateMany: async ({ data }: { data: Record<string, unknown> }) => {
+        current = { ...current, ...data };
+        return { count: 1 };
       },
     },
     session: { findMany: async () => [], updateMany: async () => ({ count: 0 }) },
@@ -120,4 +124,44 @@ test('each engine on the machine is judged on its own', async () => {
   ]);
 
   assert.deepEqual(h.notified, [{ runnerId: RUNNER_ID, engine: 'codex' }]);
+});
+
+test('an Antigravity Google sign-in that stops answering alerts its owner like any other engine', async () => {
+  const h = harness([{ engine: 'antigravity', installed: true, auth: 'yes', authSource: 'google' }]);
+
+  await beat(h.controller, [{ engine: 'antigravity', installed: true, auth: 'no', authSource: 'google' }]);
+
+  assert.deepEqual(h.notified, [{ runnerId: RUNNER_ID, engine: 'antigravity' }]);
+});
+
+test('Antigravity read as signed out while it is being signed in again is not news', async () => {
+  // Signing in another Google account sets the old one aside until that attempt ends, so the probe
+  // reads `no` in the middle of a sign-in the user is looking at.
+  for (const loginStatus of ['pending', 'awaiting_code', 'cancelling']) {
+    const h = harness(
+      [{ engine: 'antigravity', installed: true, auth: 'yes', authSource: 'google' }],
+      { loginEngine: 'antigravity', loginStatus, loginAt: new Date() },
+    );
+    await beat(h.controller, [{ engine: 'antigravity', installed: true, auth: 'no' }]);
+    assert.deepEqual(h.notified, [], loginStatus);
+  }
+  // Another engine's sign-in says nothing about Antigravity's, and the other way round.
+  const h = harness(
+    [
+      { engine: 'claude', installed: true, auth: 'yes' },
+      { engine: 'antigravity', installed: true, auth: 'yes', authSource: 'env_key' },
+    ],
+    { loginEngine: 'claude', loginStatus: 'awaiting_code', loginAt: new Date() },
+  );
+  await beat(h.controller, [
+    { engine: 'claude', installed: true, auth: 'yes' },
+    { engine: 'antigravity', installed: true, auth: 'no' },
+  ]);
+  assert.deepEqual(h.notified, [{ runnerId: RUNNER_ID, engine: 'antigravity' }]);
+  const g = harness(
+    [{ engine: 'claude', installed: true, auth: 'yes' }],
+    { loginEngine: 'antigravity', loginStatus: 'awaiting_code', loginAt: new Date() },
+  );
+  await beat(g.controller, [{ engine: 'claude', installed: true, auth: 'no' }]);
+  assert.deepEqual(g.notified, [{ runnerId: RUNNER_ID, engine: 'claude' }]);
 });

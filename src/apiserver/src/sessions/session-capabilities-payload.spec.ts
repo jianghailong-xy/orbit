@@ -154,7 +154,9 @@ test('session detail resolves the embedded workspace key against its actual runn
   const service = new SessionsService({ session: { findFirst: async () => ({ ...row, assignedRunner: runner, workspace }) } } as never, {} as never, {} as never);
   let detail = await service.get('owner-1', row.id);
   assert.deepEqual(detail.workspace?.antigravityKeyAvailableByRunner, { [runner.id]: false });
-  assert.deepEqual(detail.assignedRunner?.antigravity, { supported: true, installed: true, version: '1.2.3', envKeyAvailable: false });
+  assert.deepEqual(detail.assignedRunner?.antigravity, {
+    supported: true, installed: true, version: '1.2.3', envKeyAvailable: false, authSource: null, googleLogin: 'needs_update',
+  });
   workspace.env.GEMINI_API_KEY = 'test-workspace-key';
   detail = await service.get('owner-1', row.id);
   assert.deepEqual(detail.workspace?.antigravityKeyAvailableByRunner, { [runner.id]: true });
@@ -162,4 +164,21 @@ test('session detail resolves the embedded workspace key against its actual runn
   runner.engines[0].auth = 'yes';
   detail = await service.get('owner-1', row.id);
   assert.deepEqual(detail.workspace?.antigravityKeyAvailableByRunner, { [runner.id]: true });
+});
+
+test('session detail says which credential the runner runs built-in Antigravity on', async () => {
+  const row = sessionRow();
+  const runner = {
+    ...row.assignedRunner, displayName: 'HPC', version: '0.1.211',
+    capabilities: ['provider:antigravity', 'antigravity-google-login/v1'],
+    engines: [{ engine: 'antigravity', installed: true, version: '1.2.16', auth: 'yes', authSource: 'google' }],
+  };
+  const workspace = { id: 'workspace-1', runnerId: runner.id, env: null };
+  const service = new SessionsService({ session: { findFirst: async () => ({ ...row, assignedRunner: runner, workspace }) } } as never, {} as never, {} as never);
+  const detail = await service.get('owner-1', row.id);
+  // Signed in with Google and no key anywhere: the engine is offered, labelled by its source.
+  assert.deepEqual(detail.workspace?.antigravityKeyAvailableByRunner, { [runner.id]: true });
+  assert.deepEqual(detail.assignedRunner?.antigravity, {
+    supported: true, installed: true, version: '1.2.16', envKeyAvailable: true, authSource: 'google', googleLogin: 'available',
+  });
 });
