@@ -27,6 +27,7 @@ import { resolveLegacyArtifactPath } from './legacy-artifact-path';
 import { isOrbitAuthoredTurn } from './orbit-authored-turn';
 import { readSessionMessageCard } from './session-message';
 import {
+  closeRequestsTheRetryWillNotResend,
   isSessionReplyTurn,
   queuedRepliesContent,
   readOpenRequestPeers,
@@ -203,6 +204,7 @@ import {
   type TranscriptRecordKind,
 } from './transcript-around';
 import { EngineSignedOutConflict, signedOutEngineRefusal } from './engine-signin-preflight';
+import { antigravityState, hasGeminiEnvKey } from '../common/antigravity-readiness';
 import { ACCOUNT_ID_PATTERN } from '../runners/dto';
 import {
   accountLabel,
@@ -3161,7 +3163,7 @@ export class SessionsService {
       include: {
         workspace: true,
         assignedRunner: {
-          select: { id: true, name: true, status: true, lastHeartbeatAt: true, capabilities: true },
+          select: { id: true, name: true, displayName: true, version: true, engines: true, status: true, lastHeartbeatAt: true, capabilities: true },
         },
         tagLinks: {
           include: {
@@ -3255,6 +3257,16 @@ export class SessionsService {
       : null;
     return withSessionCapabilities({
       ...rest,
+      workspace: session.workspace ? {
+        ...session.workspace,
+        antigravityKeyAvailableByRunner: session.assignedRunner ? {
+          [session.assignedRunner.id]: hasGeminiEnvKey(session.workspace.env) || antigravityState(session.assignedRunner).envKeyAvailable,
+        } : {},
+      } : null,
+      assignedRunner: session.assignedRunner ? {
+        ...session.assignedRunner,
+        antigravity: antigravityState(session.assignedRunner),
+      } : null,
       route,
       mergeRepairSession: children[0] ? withSessionState(children[0]) : null,
       mergeRecoverySupported: session.assignedRunner?.capabilities.includes(SESSION_MERGE_RECOVERY_V1) ?? false,
@@ -7350,6 +7362,13 @@ export class SessionsService {
       });
       await this.linkAttachments(turn.id, attachmentIds, tx);
       await opts?.onTurnWritten?.(tx, turn);
+      // This turn takes the place of the retry the failed run was waiting on, which the write below
+      // disarms: what it kept for its re-send will not get one (§8 criterion 26, session-request.ts).
+      // The sweep's own re-send, and the failure card's Retry, took their request onto this turn just
+      // above, and leave nothing for it.
+      if (current.retryAt != null || current.retryClaimedAt != null) {
+        await closeRequestsTheRetryWillNotResend(tx, id);
+      }
       // A revive may also move the session to another provider on the same runtime. Unlike a live
       // switch there is no process to reload: the row goes PENDING and the claim below resolves
       // the environment from it, which is also why a model the new provider doesn't serve is

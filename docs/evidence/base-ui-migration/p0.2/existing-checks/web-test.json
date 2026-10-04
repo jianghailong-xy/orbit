@@ -1,0 +1,9 @@
+{
+  "command": "NO_COLOR=1 npm run test -w @orbit/web",
+  "startedAt": "2026-10-03T19:21:49.705965+00:00",
+  "finishedAt": "2026-10-03T19:24:44.479430+00:00",
+  "durationSeconds": 174.773,
+  "exitCode": 0,
+  "log": "web-test.log",
+  "testConfiguration": "Existing package script includes --maxWorkers=2; no timeout or assertion changes."
+}

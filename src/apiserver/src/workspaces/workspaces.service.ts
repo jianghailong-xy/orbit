@@ -11,6 +11,7 @@ import type { WorkspacePermissionRuleInfo } from '@orbit/shared';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { lastProviderByWorkspace, withProviderSeed } from './workspace-provider';
+import { antigravityState, hasGeminiEnvKey } from '../common/antigravity-readiness';
 import {
   isBlockingRepoState,
   readRunnerRepoHealth,
@@ -30,6 +31,21 @@ export class WorkspacesService {
   private readonly logger = new Logger(WorkspacesService.name);
 
   constructor(private readonly prisma: PrismaService) {}
+
+  /** Resolve each machine on the server so changing the chosen runner never guesses at credentials. */
+  private async withAntigravityKeys<T extends { env?: unknown }>(ownerId: string, workspaces: T[]) {
+    const runners = await this.prisma.runner.findMany({
+      where: { ownerId },
+      select: { id: true, engines: true },
+    });
+    const runnerKeys = runners.map((runner) => [runner.id, antigravityState(runner).envKeyAvailable] as const);
+    return workspaces.map((workspace) => ({
+      ...workspace,
+      antigravityKeyAvailableByRunner: Object.fromEntries(
+        runnerKeys.map(([id, available]) => [id, hasGeminiEnvKey(workspace.env) || available]),
+      ),
+    }));
+  }
 
   /**
    * A workspace may only be pinned to a runner the same owner controls. Without
@@ -85,7 +101,7 @@ export class WorkspacesService {
       },
     });
     // Brand-new: no sessions yet, so the seed is the floor. Shaped like every other read.
-    return withProviderSeed([workspace], new Map())[0];
+    return (await this.withAntigravityKeys(ownerId, withProviderSeed([workspace], new Map())))[0];
   }
 
   /** What the read paths include about a workspace's machine: identity for grouping/routing, plus
@@ -150,7 +166,7 @@ export class WorkspacesService {
     });
     // One indexed query for the whole list — the provider each project last ran on.
     const seeded = withProviderSeed(workspaces, await lastProviderByWorkspace(this.prisma, workspaces.map((a) => a.id)));
-    return seeded.map((workspace) => this.withRepoHealth(workspace));
+    return this.withAntigravityKeys(ownerId, seeded.map((workspace) => this.withRepoHealth(workspace)));
   }
 
   /**
@@ -211,7 +227,7 @@ export class WorkspacesService {
     });
     if (!workspace) throw new NotFoundException('workspace not found');
     const seeded = withProviderSeed([workspace], await lastProviderByWorkspace(this.prisma, [workspace.id]))[0];
-    return this.withRepoHealth(seeded);
+    return (await this.withAntigravityKeys(ownerId, [this.withRepoHealth(seeded)]))[0];
   }
 
   /**
@@ -292,7 +308,7 @@ export class WorkspacesService {
       data.runner = dto.runnerId ? { connect: { id: dto.runnerId } } : { disconnect: true };
     }
     const workspace = await this.prisma.workspace.update({ where: { id }, data });
-    return withProviderSeed([workspace], await lastProviderByWorkspace(this.prisma, [id]))[0];
+    return (await this.withAntigravityKeys(ownerId, withProviderSeed([workspace], await lastProviderByWorkspace(this.prisma, [id]))))[0];
   }
 
   /**

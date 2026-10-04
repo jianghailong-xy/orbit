@@ -278,6 +278,162 @@ func TestWikiMaintenanceSessionMountsOnlyTheOrbitServerWithItsTools(t *testing.T
 	}
 }
 
+// wikiRunCommands are the commands the server's tasks tell a maintenance session to run, as they write them
+// (wiki-maintenance-run.ts maintenanceTaskPrompt, wiki-plan-job.ts planJobPrompt and buildJobPrompt, which the
+// pg specs pin): a maintenance run's, a plan job's draft and revision, and a build's. Every one of them is a
+// maintenance session, claimed with the same run and started clean the same way.
+var wikiRunCommands = []struct{ job, title, command string }{
+	{"maintenance run", "Wiki maintenance: Orbit", "orbit wiki maintain --space " + maintenanceSpaceID},
+	{"plan draft", "Wiki plan draft: Orbit", "orbit wiki plan draft --space " + maintenanceSpaceID},
+	{"plan revision", "Wiki plan redraft: Orbit", "orbit wiki plan revise --space " + maintenanceSpaceID},
+	{"documents build", "Wiki documents: Orbit", "orbit wiki docs build --space " + maintenanceSpaceID},
+}
+
+// byPath is a bare `orbit …` command written by the CLI's path instead, quoted or not.
+func byPath(exe, command string, quoted bool) string {
+	if quoted {
+		exe = shellQuote(exe)
+	}
+	return exe + strings.TrimPrefix(command, "orbit")
+}
+
+// claudeBashAllows is how Claude Code reads the Bash rules of --allowedTools, as far as a clean start's rules
+// go — and as TestWikiMaintenanceSessionRunsItsCommandBareInTheRealClaudeCode sees the real CLI read them:
+// `Bash(P *)` allows P alone or with arguments after a space, `Bash(P)` P exactly, and a command that chains,
+// pipes, substitutes or redirects is never one these rules allow.
+func claudeBashAllows(rules []string, command string) bool {
+	if strings.ContainsAny(command, ";&|<>$`\n") {
+		return false
+	}
+	for _, rule := range rules {
+		inner, ok := strings.CutPrefix(rule, "Bash(")
+		if !ok || !strings.HasSuffix(inner, ")") {
+			continue
+		}
+		inner = strings.TrimSuffix(inner, ")")
+		if prefix, wild := strings.CutSuffix(inner, " *"); wild && (command == prefix || strings.HasPrefix(command, prefix+" ")) {
+			return true
+		}
+		if command == inner {
+			return true
+		}
+	}
+	return false
+}
+
+// linkThisBinaryAsOrbit puts a link named orbit to this test binary — orbitCLIExecutable() under `go test` —
+// first on the PATH, so that `orbit` on it is the runner's own CLI, as /usr/local/bin/orbit is on a runner.
+func linkThisBinaryAsOrbit(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.Symlink(orbitCLIExecutable(), filepath.Join(dir, "orbit")); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return dir
+}
+
+// Every maintenance session — a maintenance run, a plan job's draft or revision, a build — is started with
+// its task's command pre-approved bare, as the task writes it, and by the CLI's path, quoted or not, as the
+// system prompt gives it; and with nothing else: no other command of the CLI, no other program, nothing
+// chained on, and no bare `orbit` pointed at another PATH.
+func TestWikiMaintenanceSessionPreApprovesItsCommandBareAndByPath(t *testing.T) {
+	exe := orbitCLIExecutable()
+	for _, run := range wikiRunCommands {
+		t.Run(run.job, func(t *testing.T) {
+			linkThisBinaryAsOrbit(t)
+			job := maintenanceJob(t)
+			job.Title, job.Prompt = run.title, "Run this once, with the Bash tool:\n\n    "+run.command
+			args, env, _ := startMaintenance(t, job, true)
+			allowed, _ := argAfter(args, "--allowedTools")
+			rules := strings.Split(allowed, ",")
+			for _, command := range []string{run.command, byPath(exe, run.command, true), byPath(exe, run.command, false)} {
+				if !claudeBashAllows(rules, command) {
+					t.Errorf("%q is not pre-approved: --allowedTools %q", command, allowed)
+				}
+			}
+			task := publicID(job.TaskID)
+			for _, command := range []string{
+				"ls /",
+				"orbit task update " + task + " --status DONE",
+				byPath(exe, "orbit task update "+task+" --status DONE", false),
+				"orbit notify --title done",
+				"orbit wikimaintain --space " + maintenanceSpaceID,
+				run.command + " && ls /",
+				"PATH=/tmp " + run.command,
+			} {
+				if claudeBashAllows(rules, command) {
+					t.Errorf("%q is pre-approved: --allowedTools %q", command, allowed)
+				}
+			}
+			// The engine runs them on the PATH `orbit` was looked up on.
+			if env["PATH"] != os.Getenv("PATH") {
+				t.Errorf("PATH=%q, want the runner's own %q, on which `orbit` is already the runner's CLI", env["PATH"], os.Getenv("PATH"))
+			}
+		})
+	}
+}
+
+// The bare form runs whatever `orbit` the PATH finds, so it is pre-approved only where that is the runner's own
+// CLI: the CLI's directory is added to the PATH when that is all it takes, and a PATH on which another `orbit`
+// comes first — or an empty or relative directory, where a checkout's own `orbit` would be found — is left as
+// it is and gets no bare rule. The rules by the CLI's path stay either way.
+func TestWikiMaintenanceSessionPreApprovesBareOrbitOnlyWhereItIsTheRunnersOwn(t *testing.T) {
+	program := func(dir string, mode os.FileMode) string {
+		path := filepath.Join(dir, "orbit")
+		if err := os.WriteFile(path, []byte("#!/bin/sh\n"), mode); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	join := func(dirs ...string) string { return strings.Join(dirs, string(os.PathListSeparator)) }
+	bin, linked, other, unrunnable, empty := t.TempDir(), t.TempDir(), t.TempDir(), t.TempDir(), t.TempDir()
+	exe := program(bin, 0o755)
+	if err := os.Symlink(exe, filepath.Join(linked, "orbit")); err != nil {
+		t.Fatal(err)
+	}
+	program(other, 0o755)
+	program(unrunnable, 0o644)
+	for _, tc := range []struct {
+		name, path, exe, want string
+		bare                  bool
+	}{
+		{"on the PATH", join(empty, bin), exe, join(empty, bin), true},
+		{"linked on the PATH", join(linked, empty), exe, join(linked, empty), true},
+		{"after an orbit that cannot run", join(unrunnable, bin), exe, join(unrunnable, bin), true},
+		{"not on the PATH", empty, exe, join(empty, bin), true},
+		{"no PATH", "", exe, bin, true},
+		{"another orbit first", join(other, bin), exe, join(other, bin), false},
+		{"another orbit, and not on the PATH", other, exe, other, false},
+		{"an empty directory first", join("", bin), exe, join("", bin), false},
+		{"a relative directory first", join("bin", bin), exe, join("bin", bin), false},
+		{"no path the rules can name", bin, "", bin, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if path, bare := wikiMaintenancePath(tc.path, tc.exe); path != tc.want || bare != tc.bare {
+				t.Errorf("wikiMaintenancePath(%q) = %q, %v; want %q, %v", tc.path, path, bare, tc.want, tc.bare)
+			}
+		})
+	}
+
+	// In the clean start: another `orbit` first on the runner's PATH, and the rules name the CLI by its path alone.
+	t.Setenv("PATH", join(other, os.Getenv("PATH")))
+	job := maintenanceJob(t)
+	args, env, _ := startMaintenance(t, job, true)
+	allowed, _ := argAfter(args, "--allowedTools")
+	rules := strings.Split(allowed, ",")
+	command := "orbit wiki maintain --space " + maintenanceSpaceID
+	if claudeBashAllows(rules, command) || strings.Contains(allowed, "Bash(orbit ") {
+		t.Errorf("the bare `orbit wiki` is pre-approved where `orbit` is another program: --allowedTools %q", allowed)
+	}
+	if !claudeBashAllows(rules, byPath(orbitCLIExecutable(), command, true)) || !claudeBashAllows(rules, byPath(orbitCLIExecutable(), command, false)) {
+		t.Errorf("the rules by the CLI's path went with the bare ones: --allowedTools %q", allowed)
+	}
+	if env["PATH"] != os.Getenv("PATH") {
+		t.Errorf("PATH=%q, want the runner's own %q as it was", env["PATH"], os.Getenv("PATH"))
+	}
+}
+
 // Sub-agents and the web are named in --disallowedTools as well as left out of --tools, and they come from
 // the run itself: an agent config that forgot them does not bring them back.
 func TestWikiMaintenanceSessionDisallowsSubagentsAndTheWeb(t *testing.T) {
@@ -558,9 +714,36 @@ func TestWikiMaintenanceSessionIsTheContracts(t *testing.T) {
 		}
 		return out
 	}(), " ")
-	for _, want := range []string{"--bare", "--setting-sources ''", "--tools " + wikiMaintenanceBuiltinTools, "--strict-mcp-config", "--max-turns 120"} {
+	for _, want := range []string{"--bare", "--setting-sources ''", "--tools " + wikiMaintenanceBuiltinTools, "--strict-mcp-config", "--max-turns 120",
+		"--allowedTools <the orbit MCP tools below and the orbit wiki commands, by the CLI's path and bare (orbitCommand)>"} {
 		if !strings.Contains(flags, want) {
 			t.Errorf("the contract's flags %q do not say %q", flags, want)
+		}
+	}
+	// The orbit wiki commands by the CLI's path, and bare where `orbit` on the engine's PATH is the runner's
+	// own (wikiMaintenanceAllowedTools, wikiMaintenancePath) — the very commands the tasks write.
+	orbitCommand, _ := clean["orbitCommand"].(string)
+	for _, want := range []string{
+		"and no other command of the CLI, are pre-approved by the CLI's absolute path",
+		"also as the bare `orbit wiki <command>` the task prompts write",
+		"when `orbit` on the PATH the engine is handed is the runner's own executable",
+		"with no empty or relative directory before it",
+		"with the executable's directory added at its end",
+		"the bare form is not pre-approved",
+	} {
+		if !strings.Contains(orbitCommand, want) {
+			t.Errorf("the contract's orbitCommand %q does not say %q", orbitCommand, want)
+		}
+	}
+	tasks := wikiMaintenanceContract(t)["job"].(map[string]interface{})["task"].(map[string]interface{})["description"].(string) + " " +
+		wikiContract(t)["plan"].(map[string]interface{})["jobs"].(map[string]interface{})["task"].(map[string]interface{})["description"].(string)
+	for _, written := range wikiRunCommands {
+		command := "`" + strings.Replace(written.command, maintenanceSpaceID, "<id>", 1) + "`"
+		if written.job == "plan revision" {
+			command = "`orbit wiki plan draft --space <id>` (or `revise`)"
+		}
+		if !strings.Contains(tasks, command) {
+			t.Errorf("the contract's task descriptions do not write %s, a command a clean start pre-approves bare", command)
 		}
 	}
 }
@@ -580,8 +763,9 @@ type maintenanceEndpointRequest struct {
 }
 
 // newMaintenanceEndpoint is the model endpoint of a run that never ends on its own: every answer is a
-// shell command, as a model that loops would give, so only --max-turns ends the turn.
-func newMaintenanceEndpoint(t *testing.T) (string, func() []maintenanceEndpointRequest) {
+// shell command, as a model that loops would give, so only --max-turns ends the turn. Given commands, it
+// asks for those instead, one an answer and in order, and then ends the turn.
+func newMaintenanceEndpoint(t *testing.T, commands ...string) (string, func() []maintenanceEndpointRequest) {
 	t.Helper()
 	var mu sync.Mutex
 	var seen []maintenanceEndpointRequest
@@ -627,10 +811,27 @@ func newMaintenanceEndpoint(t *testing.T) (string, func() []maintenanceEndpointR
 			"id": "msg_" + strings.Repeat("x", n), "type": "message", "role": "assistant", "model": model, "content": []interface{}{},
 			"stop_reason": nil, "stop_sequence": nil, "usage": map[string]interface{}{"input_tokens": 10, "output_tokens": 1},
 		}})
+		command := "ls /"
+		if len(commands) > 0 {
+			if n > len(commands) {
+				event("content_block_start", map[string]interface{}{"type": "content_block_start", "index": 0, "content_block": map[string]interface{}{
+					"type": "text", "text": "",
+				}})
+				event("content_block_delta", map[string]interface{}{"type": "content_block_delta", "index": 0, "delta": map[string]interface{}{
+					"type": "text_delta", "text": "Done.",
+				}})
+				event("content_block_stop", map[string]interface{}{"type": "content_block_stop", "index": 0})
+				event("message_delta", map[string]interface{}{"type": "message_delta", "delta": map[string]interface{}{"stop_reason": "end_turn", "stop_sequence": nil},
+					"usage": map[string]interface{}{"output_tokens": 2}})
+				event("message_stop", map[string]interface{}{"type": "message_stop"})
+				return
+			}
+			command = commands[n-1]
+		}
 		event("content_block_start", map[string]interface{}{"type": "content_block_start", "index": 0, "content_block": map[string]interface{}{
 			"type": "tool_use", "id": "toolu_" + strings.Repeat("y", n), "name": "Bash", "input": map[string]interface{}{},
 		}})
-		input, _ := json.Marshal(map[string]interface{}{"command": "ls /", "description": "list the root"})
+		input, _ := json.Marshal(map[string]interface{}{"command": command, "description": "run the command"})
 		event("content_block_delta", map[string]interface{}{"type": "content_block_delta", "index": 0, "delta": map[string]interface{}{
 			"type": "input_json_delta", "partial_json": string(input),
 		}})
@@ -757,6 +958,182 @@ func TestWikiMaintenanceSessionDrivesTheRealClaudeCodeCleanly(t *testing.T) {
 	for _, tool := range offered.Tools {
 		if timeout := tool.InputSchema.Properties["timeout"].Description; tool.Name == "Bash" && !strings.Contains(timeout, budget) {
 			t.Errorf("the Bash tool offers its timeout as %q: the engine did not take the %s ms of the environment", timeout, budget)
+		}
+	}
+}
+
+// maintenanceToolResult is one tool result a request to the model carried back.
+type maintenanceToolResult struct {
+	IsError bool
+	Text    string
+}
+
+// toolResultsOf are the tool results a request to the model carries, in the order the tools were asked for.
+func toolResultsOf(t *testing.T, body string) []maintenanceToolResult {
+	t.Helper()
+	var request struct {
+		Messages []struct {
+			Role    string          `json:"role"`
+			Content json.RawMessage `json:"content"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal([]byte(body), &request); err != nil {
+		t.Fatal(err)
+	}
+	results := []maintenanceToolResult{}
+	for _, message := range request.Messages {
+		var blocks []struct {
+			Type    string          `json:"type"`
+			IsError bool            `json:"is_error"`
+			Content json.RawMessage `json:"content"`
+		}
+		if message.Role != "user" || json.Unmarshal(message.Content, &blocks) != nil {
+			continue
+		}
+		for _, block := range blocks {
+			if block.Type == "tool_result" {
+				results = append(results, maintenanceToolResult{IsError: block.IsError, Text: string(block.Content)})
+			}
+		}
+	}
+	return results
+}
+
+// The real CLI, started clean as every maintenance session is, runs each task's command bare — `orbit` on
+// its PATH being this runner's own — and by the CLI's path, quoted or not: each one is this runner's CLI,
+// reaching the Orbit server as the session. And it still refuses, without asking anybody, any other
+// program, a command of the CLI's other families, and a bare `orbit` pointed at another PATH.
+func TestWikiMaintenanceSessionRunsItsCommandBareInTheRealClaudeCode(t *testing.T) {
+	requireRealClaude(t)
+	exe := orbitCLIExecutable()
+	linkThisBinaryAsOrbit(t)
+	job := maintenanceJob(t)
+
+	// What reached the Orbit server, as which session and from which build: every command names a space of its
+	// own, and this test binary says it is version "dev" where an installed `orbit` says its release.
+	var mu sync.Mutex
+	reached := map[string]string{}
+	others := []string{}
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if rest, ok := strings.CutPrefix(r.URL.Path, "/api/runner/wiki/spaces/"); ok {
+			space, _, _ := strings.Cut(rest, "/")
+			mu.Lock()
+			reached[space] = r.Header.Get("X-Orbit-Session-Id") + " " + r.Header.Get(runnerCLIVersionHeader)
+			mu.Unlock()
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"code":"STUB_CONTROL_PLANE","message":"the stub control plane refuses every run"}`))
+			return
+		}
+		mu.Lock()
+		others = append(others, r.Method+" "+r.URL.Path)
+		mu.Unlock()
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	t.Cleanup(api.Close)
+	// The CLI reads the runner's configuration only from a private directory, as a runner's is.
+	if err := os.Chmod(os.Getenv("ORBIT_HOME"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	config, _ := json.Marshal(map[string]string{"serverUrl": api.URL, "runnerToken": "runner-token"})
+	if err := os.WriteFile(filepath.Join(os.Getenv("ORBIT_HOME"), "config.json"), config, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	space := func(i int) string { return "5pAceRealRun" + strconv.Itoa(100+i) }
+	commands, spaces := []string{}, []string{}
+	for _, run := range wikiRunCommands {
+		for _, form := range []func(string) string{
+			func(command string) string { return command },
+			func(command string) string { return byPath(exe, command, true) },
+			func(command string) string { return byPath(exe, command, false) },
+		} {
+			spaces = append(spaces, space(len(commands)))
+			commands = append(commands, form(strings.Replace(run.command, maintenanceSpaceID, space(len(commands)), 1)))
+		}
+	}
+	ran := len(commands)
+	// Another `orbit`, which a bare one must never reach, whatever PATH the command names.
+	elsewhere := t.TempDir()
+	mark := filepath.Join(elsewhere, "ran")
+	if err := os.WriteFile(filepath.Join(elsewhere, "orbit"), []byte("#!/bin/sh\ntouch '"+mark+"'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	commands = append(commands,
+		"ls /",
+		"orbit task update "+publicID(job.TaskID)+" --status DONE",
+		"PATH="+elsewhere+" orbit wiki maintain --space "+space(ran),
+	)
+	endpoint, requests := newMaintenanceEndpoint(t, commands...)
+	job.Agent.Env["ANTHROPIC_BASE_URL"] = endpoint
+	job.WikiMaintenance.MaxTurns = len(commands) + 5
+
+	scratch := t.TempDir()
+	if err := prepareWikiMaintenanceStart(job, scratch); err != nil {
+		t.Fatal(err)
+	}
+	args := claudeCommandArgs(job, scratch, true)
+	// Under `go test` the orbit server is this test binary; TestMain serves it as `orbit mcp` when told to.
+	mcpPath, _ := argAfter(args, "--mcp-config")
+	raw, _ := os.ReadFile(mcpPath)
+	var mcp map[string]map[string]map[string]interface{}
+	if err := json.Unmarshal(raw, &mcp); err != nil {
+		t.Fatal(err)
+	}
+	mcp["mcpServers"]["orbit"]["env"].(map[string]interface{})[testOrbitMCPEnv] = "1"
+	raw, _ = json.Marshal(mcp)
+	if err := os.WriteFile(mcpPath, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	proc, err := spawnClaude(ctx, job, t.TempDir(), args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { proc.stdin.Close(); proc.cmd.Wait() })
+	var stderr strings.Builder
+	go func() { _, _ = io.Copy(&stderr, proc.stderr) }()
+	frames := readFrames(t, proc.stdout)
+	if _, err := io.WriteString(proc.stdin, userFrame(job.SessionUUID, []map[string]interface{}{
+		{"type": "text", "text": "Run the command your task names."},
+	})); err != nil {
+		t.Fatal(err)
+	}
+	result := waitFrameTypeWithin(t, frames, "result", 3*realClaudeContractTimeout)
+	if result["subtype"] != "success" {
+		t.Fatalf("the turn ended %v: %v\n%s", result["subtype"], result, stderr.String())
+	}
+
+	seen := requests()
+	results := toolResultsOf(t, seen[len(seen)-1].Body)
+	if len(results) != len(commands) {
+		t.Fatalf("the model got %d tool results back for the %d commands it ran", len(results), len(commands))
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	for i, command := range commands[:ran] {
+		if who, ok := reached[spaces[i]]; !ok || who != publicID(job.SessionID)+" "+version {
+			t.Errorf("%q did not reach the Orbit server as the session, from this build (reached: %v, as %q): %s", command, ok, who, results[i].Text)
+		}
+		if !strings.Contains(results[i].Text, "the stub control plane refuses every run") {
+			t.Errorf("%q came back with %s, not what the CLI printed of the server's answer", command, results[i].Text)
+		}
+	}
+	for i, command := range commands[ran:] {
+		if !results[ran+i].IsError || strings.Contains(results[ran+i].Text, "stub control plane") {
+			t.Errorf("%q was not refused: %s", command, results[ran+i].Text)
+		}
+	}
+	if _, ok := reached[space(ran)]; ok {
+		t.Errorf("the bare orbit wiki maintain on another PATH reached the server")
+	}
+	if _, err := os.Stat(mark); err == nil {
+		t.Errorf("a bare orbit ran the other `orbit`, on the PATH its command named")
+	}
+	for _, call := range others {
+		if strings.Contains(call, "/tasks/") {
+			t.Errorf("a command of another family reached the server: %s", call)
 		}
 	}
 }

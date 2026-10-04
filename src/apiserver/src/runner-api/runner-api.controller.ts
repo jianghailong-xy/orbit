@@ -306,7 +306,7 @@ import {
   NON_REPLAYABLE_EVENT_TYPES,
   replayableEventSql,
 } from '../common/system-noise';
-import { isLoginEngine, sanitizeRunnerEngines } from '../common/runner-engines';
+import { isInstallEngine, isLoginEngine, sanitizeRunnerEngines } from '../common/runner-engines';
 import { readRunnerRepoHealth, sanitizeRunnerRepoHealth } from '../common/runner-repo-health';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { ALWAYS_ALLOWED_TOOLS, resolvePermissionMode } from '../common/permission-mode';
@@ -327,6 +327,7 @@ import {
   SOURCE_PROTOCOL_UNSUPPORTED_ERROR,
   advertisedRunnerProviders,
   runnerAdvertisesProvider,
+  withProviderDeclarations,
 } from './runner-provider-support';
 import { START_CARD_REVIEWS_MESSAGE, startCardReviewsCreate } from './unstarted-project-create';
 import {
@@ -905,6 +906,7 @@ export class RunnerApiController {
     @CurrentRunner() runner: { id: string; version: string | null },
     @Body() dto: RunnerHeartbeatRequest,
     @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
+    @Headers(RUNNER_PROVIDERS_HEADER) providerHeader?: string,
   ): Promise<RunnerHeartbeatResponse> {
     const heartbeatLeaseOwner = parseLeaseGeneration(dto?.leaseOwner);
     const reportedCapabilities = parseRunnerCapabilities(capabilities);
@@ -952,7 +954,7 @@ export class RunnerApiController {
         // Omission is an old/downgraded process and clears the prior process's declaration; keeping
         // the stale snapshot could admit CURRENT_WORK that the poller now owning the lease cannot
         // acknowledge. Inbox dequeue rechecks the request header as the second fence.
-        capabilities: reportedCapabilities ?? [],
+        capabilities: withProviderDeclarations(reportedCapabilities ?? [], providerHeader),
         capabilitiesReportedAt: new Date(),
         // What Codex rate-limit reset admission reads about the process sending this heartbeat
         // (docs/codex-rate-limit-reset-contract.md §4). Overwritten every beat, so a runner too old
@@ -1633,7 +1635,7 @@ export class RunnerApiController {
     if (r.installStatus !== 'pending') return undefined;
     // An update names no engine — it does every CLI already on the machine, like the engine-update loop.
     if (update) return { attempt: r.installAt?.toISOString() ?? '', mode: 'update' };
-    if (!isLoginEngine(r.installEngine)) return undefined;
+    if (!isInstallEngine(r.installEngine)) return undefined;
     return { engine: r.installEngine, attempt: r.installAt?.toISOString() ?? '', mode: 'install' };
   }
 

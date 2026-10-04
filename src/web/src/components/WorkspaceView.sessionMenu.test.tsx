@@ -187,7 +187,6 @@ describe('the session row More actions menu', () => {
     const labels = [...menu()!.querySelectorAll('.ant-dropdown-menu-item')].map((el) => {
       const copy = el.cloneNode(true) as HTMLElement;
       copy.querySelector('kbd')?.remove();
-      copy.querySelector('.session-menu-description')?.remove();
       return copy.textContent!.trim();
     });
     expect(labels).toEqual(expected);

@@ -342,6 +342,9 @@ function makeService(
         id: opts.seedTurnId,
         content: 'opening prompt',
       } : null),
+      // The latest message a runner took (`retryRecords`'s lost delivery): these fixtures model the
+      // runner's records alone, and no turn the runner went away with.
+      findFirst: async () => null,
     },
     attachment: {
       // The turn scope is the whole question — "which images went with THIS message" — so the

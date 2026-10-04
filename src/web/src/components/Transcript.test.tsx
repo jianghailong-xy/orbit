@@ -1863,12 +1863,12 @@ describe('runtime authentication help', () => {
     expect(html).not.toContain('opencode auth login');
   });
 
-  it('names the Gemini key Antigravity runs on, with nothing to sign into', () => {
+  it('takes Antigravity to the encrypted Gemini key in Providers', () => {
     const html = card('antigravity');
 
-    expect(html).toContain('Gemini API key rejected');
-    expect(html).toContain('GEMINI_API_KEY');
-    // agy has no sign-in for the relay to drive, and no configured row in Providers to fix.
+    expect(html).toContain('Antigravity needs a Gemini API key');
+    expect(html).toContain('Orbit stores the key encrypted');
+    expect(html).not.toContain('GEMINI_API_KEY');
     expect(html).not.toContain('rsi-');
     expect(html).not.toContain('Update the API key');
     expect(html).not.toContain('opencode auth login');

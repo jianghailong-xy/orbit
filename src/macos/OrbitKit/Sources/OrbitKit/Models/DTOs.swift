@@ -79,6 +79,8 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public let targetLabels: [String]?
     public let runnerId: String?
     public let env: [String: String]?
+    /// Server-resolved key availability on each runner. No Gemini key value is carried here.
+    public var antigravityKeyAvailableByRunner: [String: Bool]? = nil
     public let enabled: Bool?
     public let autoInitGit: Bool?
     /// Which of its runner's Codex accounts a session here runs on: a slot id or `default`. Nil is
@@ -105,6 +107,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         case id, name, lastProvider, provider, model, permissionMode, effort, workDir
         case description, appendSystemPrompt, systemPrompt, allowedTools, disallowedTools
         case maxTurns, maxBudgetUsd, targetRunnerId, targetLabels, runnerId, env, enabled
+        case antigravityKeyAvailableByRunner
         case autoInitGit, codexAccount, claudeAccount, enableWorktree, modelRouting, workDirExists, workDirIsGit
         case workDirFreeBytes, workDirTotalBytes, repoHealth, repoCleanup
     }
@@ -130,6 +133,8 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         targetLabels = try c.decodeIfPresent([String].self, forKey: .targetLabels)
         runnerId = try c.decodeIfPresent(String.self, forKey: .runnerId)
         env = try c.decodeIfPresent([String: String].self, forKey: .env)
+        antigravityKeyAvailableByRunner = try c.decodeIfPresent([String: Bool].self,
+                                                              forKey: .antigravityKeyAvailableByRunner)
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled)
         autoInitGit = try c.decodeIfPresent(Bool.self, forKey: .autoInitGit)
         codexAccount = try c.decodeIfPresent(String.self, forKey: .codexAccount)
@@ -189,6 +194,8 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     /// Each engine CLI's install/sign-in state as of that heartbeat's probe (`orbit doctor`).
     /// Absent from an older server, and from a runner that hasn't reported one.
     public let engines: [RunnerEngineHealth]?
+    /// Antigravity support and CLI readiness resolved by the server from the runner's report.
+    public var antigravity: RunnerAntigravityState? = nil
     /// Whether this runner's process is root, which costs the machine one permission mode: claude
     /// refuses Bypass under root and exits before its first message. Nil from an older server or a
     /// runner too old to report it, which stays unrestricted — an unknown must not withdraw a mode
@@ -644,6 +651,7 @@ public struct SessionAgentRef: Codable, Equatable, Sendable, Identifiable {
     /// Its environment, which can decide the account too — a config directory or a key of its own
     /// (`CodexAccounts.automaticOffered`). Carried by the detail payload's workspace row.
     public var env: [String: String]? = nil
+    public var antigravityKeyAvailableByRunner: [String: Bool]? = nil
 }
 
 /// A personal colored label (Files.app-style tag) the owner applies to their sessions. The library

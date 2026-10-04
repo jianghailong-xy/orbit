@@ -1,0 +1,15 @@
+{
+  "probe": "real-one-turn",
+  "agy_version": "1.2.16",
+  "method": "official /logout via private PTY",
+  "dbus": "nonexistent isolated socket",
+  "steps": [
+    "trusted only the empty temporary directory",
+    "typed /logout + Enter"
+  ],
+  "token_exists_after": false,
+  "exit_code": 0,
+  "forced_process_stop": true,
+  "duration_seconds": 11.16,
+  "output": "Accessing workspace:\n\n<TMP>/runs/real-one-turn/cwd\n\nDo you trust the contents of this project?\n\nAntigravity CLI requires permission to read, edit, and execute files here.\n\n> Yes, I trust this folder\n  No, exit\n\n  ↑/↓ Navigate · enter ConfirmGemini 3.8 Flash · high\n\n▄▀▀▄        Antigravity CLI 1.2.16\n▀▀▀▀▀▀       <EMAIL_REDACTED> (Google AI Pro)\n▀▀▀▀▀▀▀▀      Gemini 3.8 Flash (High)\n   ▄▀▀    ▀▀▄     <TMP>/runs/real-one-turn/cwd\n  ▄▀▀      ▀▀▄\n\n──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n>\n──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n? for shortcutsGemini 3.8 Flash · high/log\n\n> /logout     Log out\n  /changelog  Show release notes and changes\n\n  ↑/↓ Navigate · enter Select · tab Complete\n Gemini 3.8 Flash · high▄▀▀▄\n▀▀▀▀▀▀\n▀▀▀▀▀▀▀▀\n  ▄▀▀    ▀▀▄\n ▄▀▀      ▀▀▄\n\n Welcome to the Antigravity CLI. You are currently not signed in.\n\n Select login method:\n > 1. Google OAuth\n2. Use a Google Cloud project\n\n↑/↓ Navigate · enter Select"
+}

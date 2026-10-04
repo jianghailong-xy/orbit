@@ -5,6 +5,7 @@ import { Button, Popconfirm, Tag } from 'antd';
 import { DeleteOutlined, EditOutlined, LoginOutlined } from '@ant-design/icons';
 import {
   accountToStartOn,
+  type InstallEngine,
   type LoginEngine,
   type PlanUsageSnapshot,
   type RunnerAccountRemoveState,
@@ -37,7 +38,8 @@ import { ENGINE_NAME, RunnerSignIn } from './RunnerSignIn';
 import type { Runner } from './TasksSidePanel';
 
 // Every engine a runner can sign into, in display order. Derived from ENGINE_NAME — a
-// `Record<LoginEngine, …>` — so adding a fourth engine can't silently skip this page.
+// `Record<LoginEngine, …>` — so adding another login can't silently skip this page. Antigravity
+// has an installation row of its own and never contributes to the signed-in summaries.
 const ENGINES = Object.keys(ENGINE_NAME) as LoginEngine[];
 
 // Which runner cards the user opened. Cards start folded — three engines per machine adds up
@@ -68,7 +70,7 @@ type RowKind =
 export function rowKindOf(
   health: RunnerEngineHealth | undefined,
   install: RunnerInstallState | null | undefined,
-  engine: LoginEngine,
+  engine: InstallEngine,
 ): RowKind {
   if (install?.engine === engine) {
     if (install.status === 'pending' || install.status === 'installing') return 'installing';
@@ -908,7 +910,7 @@ function AddEngineAccount({
 
 /** What a collapsed card says in one line, so folding a runner away never hides a problem. */
 export function summaryOf(runner: Runner): string {
-  const relay = runner.install;
+  const relay = runner.install?.engine === 'antigravity' ? null : runner.install;
   const updating = relay?.mode === 'update';
   if (relay?.status === 'failed') return updating ? 'Update failed' : 'Install failed';
   if (relay?.status === 'pending' || relay?.status === 'installing') {
@@ -929,6 +931,90 @@ export function summaryOf(runner: Runner): string {
   return ready === ENGINES.length ? 'All signed in' : `${ready} of ${ENGINES.length} signed in`;
 }
 
+/** Gemini uses a key, so this CLI reports installation readiness rather than sign-in or quota. */
+function AntigravityRow({ runner, focused }: { runner: Runner; focused?: boolean }) {
+  const qc = useQueryClient();
+  const message = useToast();
+  const row = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (focused) row.current?.scrollIntoView({ block: 'center' });
+  }, [focused]);
+  const state = runner.antigravity;
+  const health = runner.engines?.find((engine) => engine.engine === 'antigravity');
+  const installed = state ? state.installed : health?.installed;
+  const unsupported = state?.supported === false;
+  const kind = rowKindOf(
+    installed == null ? undefined : { engine: 'antigravity', installed, auth: 'yes' },
+    runner.install,
+    'antigravity',
+  );
+  const tag = unsupported
+    ? { color: 'orange', label: 'Update runner' }
+    : kind === 'in'
+      ? { color: 'green', label: 'Ready' }
+      : installed == null && kind === 'missing'
+        ? { color: 'default', label: 'Unknown' }
+        : STATUS_TAG[kind];
+  const meta = unsupported
+    ? 'Needs Orbit runner 0.1.209+ — updates itself when idle'
+    : kind === 'in'
+      ? engineVersionNumber(state?.version ?? health?.version ?? '') || 'Installed'
+      : kind === 'installed'
+        ? 'Waiting for this runner to check in'
+        : installed == null && kind === 'missing'
+          ? 'This runner hasn’t reported Antigravity CLI yet'
+          : 'Not installed — Orbit can install it here';
+  const install = useMutation({
+    mutationFn: () => api(`/runners/${runner.id}/install`, { method: 'POST', body: { engine: 'antigravity' } }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
+    onError: (e: Error) => message.error("Couldn't start the install", e.message),
+  });
+  const dismiss = useMutation({
+    mutationFn: () => api(`/runners/${runner.id}/install`, { method: 'DELETE' }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
+  });
+  return (
+    <div className={`re-row${focused ? ' focused' : ''}`} ref={row} data-engine="antigravity">
+      <div className="re-id">
+        <ProviderTile slug="antigravity" label="Antigravity CLI" size={28} />
+        <div style={{ minWidth: 0 }}>
+          <div className="re-name">Antigravity CLI</div>
+          <div className="re-meta" style={{ whiteSpace: 'normal' }}>{meta}</div>
+        </div>
+      </div>
+      <Tag color={tag.color}>{tag.label}</Tag>
+      <div className="re-quota" style={{ color: 'var(--text-3)', fontSize: 11 }}>
+        No sign-in · runs on your Gemini key
+      </div>
+      <div className="re-act">
+        {!unsupported && installed != null && kind === 'missing' && (
+          <Button size="small" type="primary" disabled={!runner.online} loading={install.isPending} onClick={() => install.mutate()}>Install</Button>
+        )}
+        {!unsupported && kind === 'installing' && (
+          <Button size="small" type="text" onClick={() => dismiss.mutate()}>Cancel</Button>
+        )}
+        {!unsupported && kind === 'install-failed' && (
+          <Button size="small" disabled={!runner.online} loading={install.isPending} onClick={() => install.mutate()}>Retry</Button>
+        )}
+      </div>
+      {!unsupported && kind === 'installing' && (
+        <div className="re-panel">
+          <div className="re-panel-row">Installing Antigravity CLI on {runner.displayName || runner.name}…</div>
+          {runner.install?.command && <code className="re-cmd">{runner.install.command}</code>}
+          <div className="re-panel-hint">You can leave this page — it keeps running on that machine.</div>
+        </div>
+      )}
+      {!unsupported && kind === 'install-failed' && (
+        <div className="re-panel bad">
+          <div className="re-panel-row">{runner.install?.message || 'The installer failed.'}</div>
+          {runner.install?.command && <code className="re-cmd">{runner.install.command}</code>}
+          <button className="re-link" type="button" onClick={() => dismiss.mutate()}>Dismiss</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RunnerEngineCard({
   runner,
   collapsed,
@@ -939,7 +1025,7 @@ function RunnerEngineCard({
   collapsed: boolean;
   onToggle: () => void;
   /** The engine a deep link named for this runner, if this is the runner it named. */
-  focusEngine?: LoginEngine | null;
+  focusEngine?: InstallEngine | null;
 }) {
   const [signIn, setSignIn] = useState<string | null>(null);
   const engines = runner.engines ?? null;
@@ -1024,6 +1110,7 @@ function RunnerEngineCard({
           older runner can&apos;t be signed in or installed from here.
         </div>
       )}
+      {!collapsed && <AntigravityRow runner={runner} focused={focusEngine === 'antigravity'} />}
     </div>
   );
 }
@@ -1055,7 +1142,7 @@ export function RunnerEngines() {
   const [params] = useSearchParams();
   const focusRunner = routeId(params.get('runner'));
   const engineParam = params.get('engine');
-  const focusEngine = ENGINES.find((e) => e === engineParam) ?? null;
+  const focusEngine: InstallEngine | null = engineParam === 'antigravity' ? 'antigravity' : ENGINES.find((e) => e === engineParam) ?? null;
   useEffect(() => {
     if (!focusRunner) return;
     setExpanded((prev) => (prev.includes(focusRunner) ? prev : write([...prev, focusRunner])));

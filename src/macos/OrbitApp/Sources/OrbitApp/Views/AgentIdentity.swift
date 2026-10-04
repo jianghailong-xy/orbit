@@ -116,7 +116,7 @@ struct ProviderSwitchSheet: View {
     var onSelectAccount: ((String, String?) -> Void)?
     /// Where to send a row this machine can't run: the runner whose Engines section holds its
     /// install / Sign in. Nil leaves such a row inert, which is all an unknown runner allows.
-    var onFixRunner: (() -> Void)?
+    var onFixRunner: ((String) -> Void)?
     @Environment(\.dismiss) private var dismiss
     /// Open from the start when the pick already is one of the folded accounts, so its tick is in
     /// view (web parity).
@@ -126,7 +126,7 @@ struct ProviderSwitchSheet: View {
          currentAccount: String? = nil, automatic: [String: Bool] = [:],
          onSelect: @escaping (String) -> Void,
          onSelectAccount: ((String, String?) -> Void)? = nil,
-         onFixRunner: (() -> Void)? = nil) {
+         onFixRunner: ((String) -> Void)? = nil) {
         self.choices = choices
         self.currentSlug = currentSlug
         self.agentName = agentName
@@ -223,8 +223,8 @@ struct ProviderSwitchSheet: View {
             dismiss()
             // A row this machine can't run isn't a pick — it's a request for the sign-in
             // (or install) that would make it one, so go where that lives instead.
-            if choice.unavailable != nil, choice.slug != currentSlug {
-                if !greyed { onFixRunner?() }
+            if choice.unavailable != nil {
+                if !greyed { onFixRunner?(choice.fixEngine ?? choice.slug) }
             } else if choice.slug != currentSlug {
                 onSelect(choice.slug)
             }
@@ -235,6 +235,9 @@ struct ProviderSwitchSheet: View {
                                  label: choice.label, poolSize: choice.poolSize,
                                  poolUnit: choice.poolUnit)
                     Text(choice.label).foregroundStyle(.primary).lineLimit(1)
+                    if let detail = choice.labelDetail {
+                        Text(detail).font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
+                    }
                 }
                 .opacity(greyed ? 0.5 : 1)
                 Spacer(minLength: 8)
@@ -293,7 +296,7 @@ struct ProviderSwitchSheet: View {
         return Button {
             dismiss()
             if account.unavailable != nil {
-                onFixRunner?()
+                onFixRunner?(choice.fixEngine ?? choice.slug)
             } else if !picked {
                 onSelectAccount?(choice.slug, account.id)
             }
@@ -324,7 +327,7 @@ struct ProviderSwitchSheet: View {
 
     private func trailing(_ choice: ProviderChoice, greyed: Bool) -> String {
         guard let reason = choice.unavailable else { return choice.note ?? choice.modelLabel }
-        return greyed ? reason : "\(reason), sign in →"
+        return greyed ? reason : choice.fixEngine == "antigravity" ? "\(reason) →" : "\(reason), sign in →"
     }
 
     /// The row the pools' own accounts fold under: a chevron in the marks' column that turns when
