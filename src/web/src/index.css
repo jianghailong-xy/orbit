@@ -4865,9 +4865,6 @@ html[data-theme='dark'] .session-tag-chip {
   font-size: 12.5px;
   color: var(--text-4);
 }
-.session-project-row .session-title {
-  font-weight: 600;
-}
 .session-project-icon {
   position: relative;
   color: var(--brand);

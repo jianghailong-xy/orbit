@@ -1200,14 +1200,17 @@ export function SessionProjectListRow({
       <div className={`session-swipe${swipe?.dragging ? ' dragging' : ''}`}
         style={swipe?.offset ? { transform: `translateX(${swipe.offset}px)` } : undefined}>
         <span className="session-icon session-project-icon">
-          <SidebarNavIcon name="projects" />
-          {project.indicator && (
-            <span
-              className={`session-project-status ${project.indicator}`}
-              data-state={project.indicator}
-              aria-label={project.indicator === 'needs-you' ? 'Waiting for you'
-                : project.indicator === 'running' ? 'Running' : 'Background jobs'}
-            />
+          {project.indicator === 'running' ? <RunningStatusIcon /> : (
+            <>
+              <SidebarNavIcon name="projects" />
+              {project.indicator && (
+                <span
+                  className={`session-project-status ${project.indicator}`}
+                  data-state={project.indicator}
+                  aria-label={project.indicator === 'needs-you' ? 'Waiting for you' : 'Background jobs'}
+                />
+              )}
+            </>
           )}
         </span>
         <div className="session-main">
@@ -1378,6 +1381,14 @@ export function statusGlyphMotion(session: any, watching?: string | null): 'spin
 export const sessionNeedsYou = (session: any): boolean =>
   (session.pendingApprovals ?? 0) > 0 && session.waitingKind !== 'START_REQUEST';
 
+function RunningStatusIcon() {
+  return (
+    <Tooltip title="Running">
+      <LoadingOutlined spin style={{ color: 'var(--brand)', fontSize: 16 }} />
+    </Tooltip>
+  );
+}
+
 // One glyph per session state. Colour carries the meaning: blue = working,
 // amber = needs a human decision, green = the run reported success, red = real failure,
 // grey = neutral terminal (ended / interrupted / disconnected). A runner that
@@ -1421,11 +1432,7 @@ export function StatusIcon({ session, watching }: { session: any; watching?: str
       </Tooltip>
     );
   if (isGenerating(session, state)) {
-    return (
-      <Tooltip title="Running">
-        <LoadingOutlined spin style={{ color: 'var(--brand)', fontSize }} />
-      </Tooltip>
-    );
+    return <RunningStatusIcon />;
   }
   if (state === 'AWAITING_INPUT') {
     const work = parkedWorkLabel(session);
