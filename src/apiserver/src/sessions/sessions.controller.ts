@@ -359,12 +359,14 @@ export class SessionsController {
     view?: 'open' | 'completed' | 'trash' | 'active' | 'archived' | 'deleted' | 'system',
     // Page size. Omitted (every native client) means the whole list, as before.
     @Query('limit') limit?: string,
+    @Query('projectId', PublicIdPipe) projectId?: string,
   ) {
     const parsed = Number(limit);
     return this.sessions.list(user.userId, {
       runnerId,
       workspaceId: workspaceId ?? agentId,
       tagId,
+      projectId,
       view,
       limit: Number.isFinite(parsed) && parsed > 0 ? parsed : undefined,
     });
