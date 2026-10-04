@@ -20,7 +20,7 @@ class State:
         self.rows=[]; self.turns={}; self.attachments={}; self.calls=[]; self.attempts={}; self.controls=[]
         self.losses=0; self.uploadFailures=0; self.uploadDelay=0; self.denial=0; self.config={}; self.expired=False; self.rotation=0
         self.status='AWAITING_INPUT'; self.revision=0; self.creations=[]; self.downloads=[]; self.discussion=False
-        self.rejectTurnOnce=False
+        self.rejectTurnOnce=False; self.rejectTurnStatus=409
     def detail(self):
         return {'id':SESSION,'title':'Composer conversation','workspaceId':WORKSPACE,'assignedRunnerId':RUNNER,
             'status':self.status,'runState':self.status,'lifecycleState':'OPEN','provider':'codex','model':'fixture-model',
@@ -57,7 +57,7 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/__control':
             with state.lock:
                 if body.get('reset'): state.reset()
-                for k in ['losses','uploadFailures','uploadDelay','denial','status','expired','discussion','rejectTurnOnce']:
+                for k in ['losses','uploadFailures','uploadDelay','denial','status','expired','discussion','rejectTurnOnce','rejectTurnStatus']:
                     if k in body: setattr(state,k,body[k])
             return self.reply({'ok':True})
         if path in ['/api/auth/login','/api/auth/refresh']:
@@ -90,8 +90,9 @@ class Handler(BaseHTTPRequestHandler):
                 state.attempts[key]=state.attempts.get(key,0)+1
                 if key in state.turns and state.turns[key]['request']!=body: return self.reply({'message':'same key changed body'},409)
                 if key not in state.turns and path.endswith('/turns') and state.rejectTurnOnce:
-                    state.rejectTurnOnce=False; state.status='FAILED'
-                    return self.reply({'message':'the session has ended'},409)
+                    state.rejectTurnOnce=False
+                    if state.rejectTurnStatus==409: state.status='FAILED'
+                    return self.reply({'message':'the session has ended' if state.rejectTurnStatus==409 else 'request entity too large'},state.rejectTurnStatus)
                 if key not in state.turns:
                     turn=str(uuid.uuid4()); state.turns[key]={'turnId':turn,'request':body,'endpoint':path,'kind':'steer' if state.status=='RUNNING' else 'message'}
                     atts=[]

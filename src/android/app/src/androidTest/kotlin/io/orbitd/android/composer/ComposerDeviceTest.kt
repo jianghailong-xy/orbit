@@ -392,6 +392,33 @@ class ComposerDeviceTest {
         capture("resume-accepted")
     }
 
+    @Test fun explicit413RestoresEditableMessageAndAttachment() = journey("oversize-rejection") {
+        login()
+        compose.runOnIdle { model.importAttachment(StagedAttachment("oversize-file","retained.txt","text/plain"),
+            { StagedAttachment("oversize-file","retained.txt","text/plain",4) to "keep".toByteArray() }, {}) }
+        compose.waitUntil(10000) { model.state.value.draft.attachments.singleOrNull()?.remoteId != null }
+        val attachment = model.state.value.draft.attachments.single()
+        // HTTP response injection exercises the UI. The unit regression uses the actual 10 MiB + 1 text.
+        compose.onNodeWithTag("composer-input").performTextInput("正文过大，拒绝后可以缩短")
+        control("""{"rejectTurnOnce":true,"rejectTurnStatus":413}"""); clickSendWhenEnabled()
+        compose.waitUntil(10000) { !model.state.value.busy && model.state.value.error != null }
+        assertNull(model.state.value.draft.pending)
+        compose.onNodeWithTag("composer-input").assertTextContains("正文过大，拒绝后可以缩短")
+        assertEquals(attachment,model.state.value.draft.attachments.single())
+        assertEquals(0,stats()["uniqueTurns"]!!.jsonPrimitive.int)
+        capture("413-restored")
+        compose.onNodeWithTag("composer-input").performTextReplacement("缩短正文")
+        ready(); clickSendWhenEnabled()
+        compose.waitUntil(10000) { !model.state.value.busy && model.state.value.draft.pending == null && model.state.value.draft.text.isEmpty() }
+        val result = stats()
+        val sent = result["turns"]!!.jsonObject.values.single().jsonObject
+        assertTrue(sent["endpoint"]!!.jsonPrimitive.content.endsWith("/turns"))
+        assertEquals("缩短正文",sent["request"]!!.jsonObject["content"]!!.jsonPrimitive.content)
+        assertEquals(attachment.remoteId,sent["request"]!!.jsonObject["attachmentIds"]!!.jsonArray.single().jsonPrimitive.content)
+        assertEquals(2,result["calls"]!!.jsonArray.count { it.jsonObject["path"]!!.jsonPrimitive.content.endsWith("/turns") })
+        capture("413-corrected-accepted")
+    }
+
     @Test fun draftAccountUsageAndProviderSwitchMatchAutomaticCreate() = journey("draft-account") {
         login(); compose.onNodeWithContentDescription("Back").performClick()
         awaitText("New session"); compose.onAllNodesWithText("New session")[0].performClick()

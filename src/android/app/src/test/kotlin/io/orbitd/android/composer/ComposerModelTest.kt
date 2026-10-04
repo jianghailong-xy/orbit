@@ -28,6 +28,7 @@ class ComposerModelTest {
         var deny = false
         var createLost = false
         var rejectTurn = false
+        var rejectionStatus = 409
         var failCreateAckSave = false
         fun auth() = AuthSession(HttpTransport { request ->
             val call = request.api; calls += call
@@ -48,7 +49,7 @@ class ComposerModelTest {
                     """{"id":"remote-${calls.count { it.path.first() == "attachments" }}"}"""
                 }
                 call.path.last() in setOf("turns", "resume") && call.method == HttpMethod.POST -> {
-                    if (rejectTurn) return@HttpTransport ApiResponse(409, "{\"message\":\"the session has ended\"}".toByteArray())
+                    if (rejectTurn) return@HttpTransport ApiResponse(rejectionStatus, "{\"message\":\"the session has ended\"}".toByteArray())
                     val raw = call.body!!.decodeToString(); val payload = Wire.json.parseToJsonElement(raw).jsonObject
                     val id = payload.text("clientTurnId")!!
                     // No packet may leave until a recoverable, identical outbox entry exists.
@@ -340,5 +341,52 @@ class ComposerModelTest {
         assertEquals("created-session", restored.state.value.draft.createdSessionId)
         restored.retrySend(); restored.send(); runCurrent()
         assertEquals(1, rig.calls.count { it.path == listOf("sessions") && it.method == HttpMethod.POST })
+    }
+    @Test fun reviewAllWhitelistedFirstAndLaterRejections() = runTest {
+        for (status in listOf(400, 403, 404, 409, 422)) {
+            val rig=Rig(this); val m=rig.start(); rig.rejectTurn=true; rig.rejectionStatus=status
+            m.edit("rejected $status",0,0); m.send();runCurrent()
+            assertNull("first $status",m.state.value.draft.pending)
+            assertEquals("rejected $status",m.state.value.draft.text)
+            rig.rejectTurn=false;rig.failPosts=1;m.send();runCurrent()
+            val prior=m.state.value.draft.pending!!
+            rig.rejectTurn=true;m.retrySend();runCurrent()
+            assertEquals("late $status",prior,m.state.value.draft.pending)
+            m.close();val cold=rig.cold();assertEquals(prior,cold.state.value.draft.pending)
+        }
+    }
+    @Test fun review413RestoresOversizeDraftForCorrection() = runTest {
+        val rig=Rig(this);val m=rig.start();rig.rejectTurn=true;rig.rejectionStatus=413
+        m.importAttachment(StagedAttachment("a", "retained.txt", "text/plain"),
+            { StagedAttachment("a", "retained.txt", "text/plain", 4) to "keep".toByteArray() }, {})
+        m.state.first { it.uploads.isEmpty() }
+        val staged=m.state.value.draft.attachments
+        val content="x".repeat(10*1024*1024+1)
+        m.edit(content,0,0);m.send();runCurrent()
+        println("413 observed: draft length=${m.state.value.draft.text.length}, pending=${m.state.value.draft.pending?.endpoint}")
+        assertTrue("First 413 rejects before handling; oversized text must be editable",m.state.value.draft.pending==null)
+        assertEquals(content,m.state.value.draft.text)
+        assertEquals(staged,m.state.value.draft.attachments)
+        m.close();val cold=rig.cold()
+        assertEquals(content,cold.state.value.draft.text)
+        assertEquals(staged,cold.state.value.draft.attachments)
+        assertTrue(rig.sends.isEmpty())
+        rig.rejectTurn=false;cold.edit("shortened",0,0);cold.send();runCurrent()
+        assertNull(cold.state.value.draft.pending)
+        assertEquals(1,rig.sends.size)
+        val accepted=Wire.json.parseToJsonElement(rig.sends.values.single()).jsonObject
+        assertEquals("shortened",accepted.text("content"))
+        assertEquals(1,accepted["attachmentIds"]!!.jsonArray.size)
+    }
+
+    @Test fun reviewUnknownThen413RetainsExactIdentity() = runTest {
+        val rig=Rig(this);val m=rig.start();m.edit("accepted response lost",0,0)
+        rig.failPosts=1;m.send();runCurrent();val prior=m.state.value.draft.pending!!
+        rig.rejectTurn=true;rig.rejectionStatus=413;m.retrySend();runCurrent()
+        assertEquals(prior,m.state.value.draft.pending)
+        val requests=rig.calls.filter { it.path.last()=="turns" && it.method==HttpMethod.POST }
+        assertArrayEquals(requests[0].body,requests[1].body)
+        m.close();val cold=rig.cold();assertEquals(prior,cold.state.value.draft.pending)
+        println("unknown then 413: original endpoint/body/clientTurnId retained across retry and cold restoration")
     }
 }

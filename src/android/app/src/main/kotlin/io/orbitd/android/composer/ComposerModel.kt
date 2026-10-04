@@ -192,7 +192,7 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
         val accepted = try { api.mutation(pending.endpoint, pending.body) } catch (e: ApiError) {
             // A refusal of the first POST proves this operation was not accepted. A later refusal
             // (e.g. access revoked after a lost ACK) cannot disprove an earlier accepted request.
-            if (firstAttempt && e.status in setOf(400, 403, 404, 409, 422)) {
+            if (firstAttempt && e.status in setOf(400, 403, 404, 409, 413, 422)) {
                 restoreUnsent(pending)
                 persist()
             }

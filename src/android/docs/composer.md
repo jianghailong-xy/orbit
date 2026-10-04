@@ -44,7 +44,7 @@ it cannot be blindly replayed. Definite validation/permission rejection restores
 This API limitation is separate from same-clientTurnId retry for existing sessions.
 
 A failed pre-POST draft write restores editable text and attachments. A definite first-POST
-400/403/404/409/422 rejection does the same, so the next send re-reads capabilities and can resume.
+400/403/404/409/413/422 rejection does the same, so the next send re-reads capabilities and can resume.
 An uncertain delivery keeps its immutable outbox even if a later retry is refused. A successful
 create response keeps its known session id when local acknowledgement storage fails; the UI
 retries that write without another POST and navigates only after it succeeds. If the process is
