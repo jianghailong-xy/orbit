@@ -844,6 +844,25 @@ final class ConsoleModel {
         wireWorktree()
     }
 
+    /// Seed the live composer's first frame before the draft opens it. The create response owns
+    /// the config; the draft's catalogue names it without another asynchronous runner read.
+    func adoptCreatedSession(_ session: Session, from draft: ConsoleModel) {
+        provider = session.provider ?? draft.provider
+        modelCatalog = draft.modelCatalog
+        configuredProviders = draft.configuredProviders
+        configuredProvidersLoaded = draft.configuredProvidersLoaded
+        providerPools = draft.providerPools
+        sharedPools = draft.sharedPools
+        modelID = session.model ?? AgentDefaults.defaultModel(
+            for: provider, catalog: modelCatalog, configured: configuredProviders)
+        permissionMode = PermissionMode(rawValue: session.permissionMode ?? "") ?? draft.permissionMode
+        effort = Effort(rawValue: session.effort ?? draft.effort.rawValue) ?? draft.effort
+        fastMode = session.fastMode ?? draft.fastMode
+        if ComposerLogic.isLive(status: session.effectiveRunStatus), session.model != nil {
+            syncedConfig = (modelID, permissionMode.rawValue, effort.rawValue, fastMode)
+        }
+    }
+
     /// Hand the worktree sub-model the host context it needs: the live status (its poll cadence), the
     /// console status line (its action failures) and the toast host (its confirmations). Weak — it
     /// must not retain the console it's owned by.
