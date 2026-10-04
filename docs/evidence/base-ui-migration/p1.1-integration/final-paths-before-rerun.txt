@@ -1,0 +1,74 @@
+{
+  "root": "/tmp/orbit-p11-final-aa737ee0",
+  "commit": "c7f61251769331f0f2909d4e4d7ee245a01241d7",
+  "modules": {
+    "web:@base-ui/react/button": "/tmp/orbit-p11-final-aa737ee0/node_modules/@base-ui/react/button/index.js",
+    "web:@base-ui/react/dialog": "/tmp/orbit-p11-final-aa737ee0/node_modules/@base-ui/react/dialog/index.js",
+    "web:@orbit/shared": "/tmp/orbit-p11-final-aa737ee0/src/shared/dist/index.js",
+    "apiserver:@prisma/client": "/tmp/orbit-p11-final-aa737ee0/src/apiserver/node_modules/@prisma/client/default.js",
+    "apiserver:.prisma/client/default": "/tmp/orbit-p11-final-aa737ee0/src/apiserver/node_modules/.prisma/client/default.js",
+    "apiserver:@orbit/shared": "/tmp/orbit-p11-final-aa737ee0/src/shared/dist/index.js"
+  },
+  "paths": {
+    "node_modules": {
+      "exists": true,
+      "realpath": "/tmp/orbit-p11-final-aa737ee0/node_modules",
+      "symlink": false
+    },
+    "node_modules/.bin": {
+      "exists": true,
+      "realpath": "/tmp/orbit-p11-final-aa737ee0/node_modules/.bin",
+      "symlink": false
+    },
+    "node_modules/@base-ui/react": {
+      "exists": true,
+      "realpath": "/tmp/orbit-p11-final-aa737ee0/node_modules/@base-ui/react",
+      "symlink": false
+    },
+    "src/apiserver/node_modules/@prisma/client": {
+      "exists": true,
+      "realpath": "/tmp/orbit-p11-final-aa737ee0/src/apiserver/node_modules/@prisma/client",
+      "symlink": false
+    },
+    "src/apiserver/node_modules/.prisma": {
+      "exists": true,
+      "realpath": "/tmp/orbit-p11-final-aa737ee0/src/apiserver/node_modules/.prisma",
+      "symlink": false
+    },
+    "src/shared/dist": {
+      "exists": true,
+      "realpath": "/tmp/orbit-p11-final-aa737ee0/src/shared/dist",
+      "symlink": false
+    },
+    "src/web/node_modules": {
+      "exists": true,
+      "realpath": "/tmp/orbit-p11-final-aa737ee0/src/web/node_modules",
+      "symlink": false
+    },
+    "src/web/node_modules/.vite": {
+      "exists": false,
+      "note": "cache not yet created"
+    },
+    "src/web/node_modules/.vite-temp": {
+      "exists": true,
+      "realpath": "/tmp/orbit-p11-final-aa737ee0/src/web/node_modules/.vite-temp",
+      "symlink": false
+    },
+    "node_modules/@base-ui/react/package.json": {
+      "ino": 26008061,
+      "size": 35937,
+      "mtimeMs": 1791075554794.093
+    },
+    "node_modules/.package-lock.json": {
+      "ino": 26016824,
+      "size": 390225,
+      "mtimeMs": 1791075555690.0967
+    },
+    "src/apiserver/node_modules/.prisma/client/index.d.ts": {
+      "ino": 26108380,
+      "size": 14860698,
+      "mtimeMs": 1791075557630.1047
+    }
+  },
+  "trackedStatus": ""
+}

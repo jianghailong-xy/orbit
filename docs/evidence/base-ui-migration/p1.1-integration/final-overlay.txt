@@ -1,0 +1,15 @@
+worktree-overlay: incompatible dependencies in /root/orbit: node_modules/@playwright/test is not installed
+==> installing this worktree's lockfile in isolated node_modules
+npm warn deprecated whatwg-encoding@3.1.1: Use @exodus/bytes instead for a more spec-conformant and faster implementation
+
+added 780 packages in 4s
+==> tsc /tmp/orbit-p11-final-aa737ee0/node_modules/.bin/tsc (Version 7.0.2)
+==> copying @prisma/client out of /tmp/orbit-p11-final-aa737ee0/node_modules/@prisma/client (this worktree needs its own)
+==> generating this branch's Prisma client
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma/schema.prisma.
+==> building @orbit/shared
+==> require.resolve('@orbit/shared') from src/apiserver = /tmp/orbit-p11-final-aa737ee0/src/shared/dist/index.js
+==> require.resolve('@orbit/shared') from src/web = /tmp/orbit-p11-final-aa737ee0/src/shared/dist/index.js
+==> OK: /tmp/orbit-p11-final-aa737ee0 is ready to build and test

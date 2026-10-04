@@ -1,0 +1,12 @@
+{
+  "name": "after-preflight",
+  "cwd": "/tmp/orbit-p11-after-aa737ee0",
+  "command": "test ! -e node_modules && test ! -L node_modules && test ! -e src/web/node_modules && git show -s --format=fuller HEAD && node -e 'for (const mod of [\"@base-ui/react/button\", \"@base-ui/react/dialog\"]) { try { console.log(require.resolve(mod, {paths: [process.cwd()+\"/src/web\"]})); process.exitCode=1; } catch(e) { if(e.code!==\"MODULE_NOT_FOUND\") throw e; console.log(mod, e.code); } }'",
+  "start": "2026-10-04T00:55:48.472350+00:00",
+  "commit": "f26c5ebb4c06d593c5af4db27cd93836448de2f9",
+  "tree": "9f554a41f0f673a4ff47752f9ed33091c8737cdf",
+  "trackedBefore": "",
+  "exitCode": 0,
+  "end": "2026-10-04T00:55:48.687264+00:00",
+  "trackedAfter": ""
+}
