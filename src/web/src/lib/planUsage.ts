@@ -15,6 +15,7 @@ export interface PlanUsageDisplayRow {
   window: PlanUsageWindow;
   percent: number;
   nearLimit: boolean;
+  remaining?: boolean;
 }
 
 export interface PlanUsageSectionInfo {
@@ -206,6 +207,18 @@ function codexRows(usage: PlanUsageSnapshot): PlanUsageDisplayRow[] {
 }
 
 export function planUsageRows(usage: PlanUsageSnapshot): PlanUsageDisplayRow[] {
+  if (usage.provider === 'antigravity') return (usage.buckets ?? []).map((bucket) => {
+    const used = (1 - bucket.remainingFraction) * 100;
+    return {
+      key: bucket.id,
+      label: bucket.window === 'weekly' ? 'Weekly' : bucket.window === '5h' ? '5-hour' : bucket.window,
+      groupLabel: bucket.id,
+      window: { utilization: used, resetsAt: bucket.resetTime },
+      percent: clampPercent(bucket.remainingFraction * 100),
+      nearLimit: used >= 90,
+      remaining: true,
+    };
+  });
   const codex = usage.provider === 'codex' || !!usage.primary || !!usage.secondary || !!usage.rateLimits?.length;
   if (codex) return codexRows(usage);
   return CLAUDE_ROWS.flatMap(({ key, label }) => {
@@ -233,6 +246,7 @@ export function planUsageRows(usage: PlanUsageSnapshot): PlanUsageDisplayRow[] {
  */
 export function currentPlanUsageRows(usage: PlanUsageSnapshot, now: number = Date.now()): PlanUsageDisplayRow[] {
   return planUsageRows(usage).map((row) => {
+    if (row.remaining) return row;
     const { resetsAt, ...window } = row.window;
     const at = Date.parse(resetsAt ?? '');
     if (Number.isNaN(at) || at > now) return row;

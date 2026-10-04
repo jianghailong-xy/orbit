@@ -7453,6 +7453,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       runnerName: runner.displayName || runner.name,
       runnerId: runner.id,
       runnerVersion: runner.version,
+      googleLogin: runner.antigravity?.googleLogin,
       runtime: runtimeForProvider(shownProvider, configuredProviders),
       onConnectGemini: () => navigate(geminiProvider ? `/providers/${encodeId(geminiProvider.id)}` : '/providers/new/gemini'),
       onSwitchToGemini: geminiChoice && !geminiChoice.unavailable && !selectedTrashed && !selectedMissing

@@ -283,7 +283,7 @@ final class RunnersPageWiringTests: XCTestCase {
 
         let row = code(try slice(try appSource("Views/RunnerPageParts.swift"),
                                  from: "struct RunnerEngineRow: View {", to: "struct RunnerWorkspaceRow: View {"))
-        for piece in ["ProviderMark(provider: health.engine, size: 28", "RunnerPageFormat.engineStatus(health)",
+        for piece in ["ProviderMark(provider: health.engine, size: 28", "RunnerPageFormat.engineStatus(health, runner: runner)",
                       "RunnerPageFormat.updateFailedLine(health, now: now)", "RunnerPageFormat.needsSignIn(health)",
                       "RunnerPageFormat.engineWindows(runner, engine: health.engine)",
                       "RunnerWindowRow(row: row, resets: RunnerPageFormat.resetsLine(row, now: now))"] {
