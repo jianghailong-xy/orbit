@@ -81,7 +81,7 @@ NO_COLOR=1 node node_modules/@playwright/test/cli.js test --config /tmp/p23-new-
 
 本轮最初手工准备的 `/tmp/orbit-p23-reference` 仍保留。可重跑准备脚本已在新目录实跑，并逐文件核对原始源码；其首次遗漏tsconfig.base.json的准备失败及修正日志也保留。首次参考Vite启动少了根package.json，补齐原文件后才有效运行；初始隔离依赖准备遇到Prisma只读缓存，用 `/tmp/orbit-p23-cache` 副本完成。沙箱本地监听被拒后以授权的本地浏览器执行恢复；默认4177端口占用后固定使用14377，未复用未知服务器。
 
-`checks/`保存argv、时间、起点、退出码和完整日志；[tool-call-refs.json](checks/tool-call-refs.json)引用本任务运行中已有的调用行。`diagnostics/before-fix`是产品缺口复现；`diagnostics/first-integration`保存挂载初版的继承/宽度差异；`diagnostics/viewport-and-retained`保留后续诊断。其余检查日志保留了无效的宽度/overflow尝试，未降低相等断言。最后的keepMounted测试首次复用被固定Date去重的同一句错误，改用不同的警告事件验证重新打开，保留了既有去重规则；不是修改实现来让重复通知出现。
+`checks/`保存argv、时间、起点、退出码和完整日志；[tool-call-refs.json](checks/tool-call-refs.json)引用本任务运行中已有的 CommandExecution 行（exec-编号）。首次提交误用本地调度器的call-编号，服务端以 EVIDENCE_NO_RESOLVABLE_CITATION 拒收且没有写入；本次更正为实际命令行编号，未改变实现、测试或原始证据。`diagnostics/before-fix`是产品缺口复现；`diagnostics/first-integration`保存挂载初版的继承/宽度差异；`diagnostics/viewport-and-retained`保留后续诊断。其余检查日志保留了无效的宽度/overflow尝试，未降低相等断言。最后的keepMounted测试首次复用被固定Date去重的同一句错误，改用不同的警告事件验证重新打开，保留了既有去重规则；不是修改实现来让重复通知出现。
 
 ## 边界与回退
 
