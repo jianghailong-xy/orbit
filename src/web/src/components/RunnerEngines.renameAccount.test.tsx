@@ -7,6 +7,7 @@ import { App as AntApp } from 'antd';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
 import { RunnerEngines } from './RunnerEngines';
+import { clickRunnerMenuItem, runnerMenuItem } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
 /**
@@ -165,19 +166,17 @@ async function press(input: HTMLInputElement, key: string) {
   });
 }
 async function startRename(row: HTMLElement): Promise<HTMLInputElement> {
-  await act(async () => {
-    button(row, 'Rename').click();
-  });
+  await clickRunnerMenuItem(row, 'Rename');
   const input = editorOf(row);
   expect(input, 'the name turns into its editor').toBeTruthy();
   return input!;
 }
 
 describe('renaming an account on a runner', () => {
-  it('offers Rename on every account row, Default included', () => {
+  it('offers Rename in every account menu, Default included', async () => {
     const page = mount([runner([DEFAULT, RD, ORBIT])]);
 
-    for (const row of accountsOf(page)) expect(button(row, 'Rename')).toBeTruthy();
+    for (const row of accountsOf(page)) expect(await runnerMenuItem(row, 'Rename')).toBeTruthy();
   });
 
   it('renames Default: the new name goes to the control plane, and the row carries it with its DEFAULT mark', async () => {
@@ -276,8 +275,8 @@ describe('renaming an account on a runner', () => {
     const page = mount([runner([DEFAULT, RD, ORBIT], { online: false })]);
     const [, rdRow, orbitRow] = accountsOf(page);
 
-    expect(button(rdRow, 'Remove').disabled).toBe(true);
-    expect(button(orbitRow, 'Rename').disabled).toBe(false);
+    expect((await runnerMenuItem(rdRow, 'Remove account')).getAttribute('aria-disabled')).toBe('true');
+    expect((await runnerMenuItem(orbitRow, 'Rename')).getAttribute('aria-disabled')).not.toBe('true');
     const input = await startRename(orbitRow);
     await type(input, 'Orbit');
     await press(input, 'Enter');
@@ -291,9 +290,7 @@ describe('renaming an account on a runner', () => {
     const page = mount([runner([{ ...DEFAULT, name: 'jianghailong.main' }, RD, ORBIT])]);
     const [, rdRow] = accountsOf(page);
 
-    await act(async () => {
-      button(rdRow, 'Remove').click();
-    });
+    await clickRunnerMenuItem(rdRow, 'Remove account');
     await act(async () => {
       await vi.waitFor(
         () =>
@@ -306,7 +303,7 @@ describe('renaming an account on a runner', () => {
   });
 });
 
-describe('naming an account while + Account adds it', () => {
+describe('naming an account while Add account adds it', () => {
   // The slot the runner makes for the new account: an id of its own, under the name it was added with.
   const ADDED: RunnerEngineAccount = {
     id: '7c41d2aa',
@@ -320,7 +317,7 @@ describe('naming an account while + Account adds it', () => {
     apiMock.mock.calls
       .filter(([path, options]) => path === `/runners/${RUNNER_ID}/login` && options?.method === 'POST')
       .map(([, options]) => (options as { body?: unknown }).body);
-  /** The + Account panel, while it is open. */
+  /** The Add account panel, while it is open. */
   const panelOf = (page: ParentNode) => page.querySelector('.re-add');
   /** The runner's list has reached the page once the new account has a row of its own. */
   const shown = (page: ParentNode) =>
@@ -328,10 +325,10 @@ describe('naming an account while + Account adds it', () => {
   /** Let what that set off land — the effects of the render, a request's outcome — before asking
    *  whether the panel is still open: a list read or a failure reaches the component a tick later. */
   const settle = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
-  /** Press + Account on the Claude row, and put the caret in the name it opens with. */
+  /** Press Add account on the Claude row, and put the caret in the name it opens with. */
   async function add(page: HTMLElement): Promise<HTMLInputElement> {
     await act(async () => {
-      button(claudeRow(page), '+ Account').click();
+      button(claudeRow(page), 'Add account').click();
     });
     const input = page.querySelector<HTMLInputElement>('.re-add input')!;
     await act(async () => input.focus());
