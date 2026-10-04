@@ -6,6 +6,8 @@ import { getToken } from '../api';
 // single snapshot refetch — mirrors the iOS/macOS 200ms window, a touch longer here since the web
 // list payload is larger, so batching a few more events per refetch is worth the small latency.
 const REFRESH_DEBOUNCE_MS = 500;
+// Project progress is read separately from the member sessions, and can settle after their update.
+const PROJECTS_REFRESH_DEBOUNCE_MS = 2_000;
 // `['task-lists']` gets a slower floor of its own. The debounce above is a *trailing* window, so a
 // steady stream of task events never lets it close: a run writing tasks in bulk (a DAG being laid
 // down, a sweep dispatching a large list) holds it open and pins every query in the group at 2 Hz.
@@ -52,6 +54,8 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     let refreshTimer: ReturnType<typeof setTimeout> | undefined;
     let listsTimer: ReturnType<typeof setTimeout> | undefined;
     let watchesTimer: ReturnType<typeof setTimeout> | undefined;
+    let projectsTimer: ReturnType<typeof setTimeout> | undefined;
+    const projectSessionTimers = new Map<string, ReturnType<typeof setTimeout>>();
     let listsRefetchedAt = 0;
     let stopped = false;
     let dropped = false;
@@ -107,6 +111,24 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     // moves one list row and arrives as `session.updated` instead.
     const refetchFolders = (): void => {
       void qc.invalidateQueries({ queryKey: ['session-folders'] });
+    };
+    const refetchProjects = (): void => {
+      void qc.invalidateQueries({ queryKey: ['projects', 'sidebar'] });
+    };
+    const scheduleProjectRefresh = (): void => {
+      if (projectsTimer) clearTimeout(projectsTimer);
+      projectsTimer = setTimeout(() => {
+        projectsTimer = undefined;
+        refetchProjects();
+      }, PROJECTS_REFRESH_DEBOUNCE_MS);
+    };
+    const scheduleProjectSessions = (projectId: string): void => {
+      const previous = projectSessionTimers.get(projectId);
+      if (previous) clearTimeout(previous);
+      projectSessionTimers.set(projectId, setTimeout(() => {
+        projectSessionTimers.delete(projectId);
+        void qc.invalidateQueries({ queryKey: ['project-sessions', projectId] });
+      }, REFRESH_DEBOUNCE_MS));
     };
     // The two reads a decision card is drawn from, which none of the list refetches above reach.
     // Evidence being submitted or decided arrives as `task.changed`, and its read is keyed by the
@@ -167,6 +189,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       workspaces: refetchWorkspaces,
       tags: refetchTags,
       folders: refetchFolders,
+      projects: refetchProjects,
       providers: refetchProviders,
       decisions: refetchPendingDecisions,
       watches: refetchWatches,
@@ -185,6 +208,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       // A deleted folder's sessions are back in their workspace's list, so the rows move too.
       if (type.startsWith('folder.')) return ['folders', 'sessions'];
       if (type.startsWith('provider.')) return ['providers'];
+      if (type === 'project.changed') return ['projects', 'sessions'];
       // The server naming a watch itself: it was made, edited, paused, resumed or stopped; it
       // matched, expired or ended unmatched; or one of its deliveries delivered or dead-lettered
       // (docs/watch-contract.md §8.1). These are the changes NO other event accompanies — a
@@ -248,6 +272,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         // could have swallowed exactly the revive this tab needs to stop drawing a session as
         // ended (see refetchSessionDetail). Prefix key, so a session id isn't needed here.
         for (const refetch of Object.values(REFETCH)) refetch();
+        void qc.invalidateQueries({ queryKey: ['project-sessions'] });
         void qc.invalidateQueries({ queryKey: ['session'] });
         // Keyed under ['project'], so the prefix above misses it: a proposal filed or decided
         // during the gap would otherwise wait out its poll.
@@ -255,7 +280,11 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       };
       es.onmessage = (e) => {
         lastMsgAt = Date.now();
-        let ev: { type?: string; sessionId?: string; data?: { id?: unknown } | null };
+        let ev: {
+          type?: string;
+          sessionId?: string;
+          data?: { id?: unknown; projectMembership?: { projectId?: unknown } | null } | null;
+        };
         try {
           ev = JSON.parse(e.data);
         } catch {
@@ -265,7 +294,36 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         // along as an optional extra rather than a requirement, because the user-scoped library
         // events (tag/provider/task-list) legitimately carry none.
         if (!ev?.type || ev.type === 'ping') return;
+        const projectId = ev.data?.projectMembership?.projectId;
         const id = ev.data?.id;
+        if (ev.type === 'session.updated' || ev.type === 'session.created' || ev.type === 'session.ended') {
+          if (typeof projectId === 'string' && projectId) {
+            if (ev.type === 'session.updated') scheduleProjectRefresh();
+            scheduleProjectSessions(projectId);
+          }
+          // A membership can be cleared (or changed), and older peers can omit it. Refresh a
+          // loaded project's former member too, without touching any unrelated project.
+          const sessionId = ev.sessionId || (typeof id === 'string' ? id : '');
+          if (sessionId) {
+            for (const [key, rows] of qc.getQueriesData<readonly { id: string }[]>({ queryKey: ['project-sessions'] })) {
+              if (typeof key[1] === 'string' && rows?.some((row) => row.id === sessionId)) {
+                scheduleProjectSessions(key[1]);
+              }
+            }
+            // Lifecycle-ended frames carry no membership. A member entering Completed may
+            // only be known in an earlier workspace Open list or its own session detail.
+            if (ev.type === 'session.ended') {
+              const known = qc.getQueriesData<readonly { id: string; projectMembership?: { projectId?: string } | null }[]>(
+                { queryKey: ['sessions'] },
+              ).flatMap(([, rows]) => rows?.filter((row) => row.id === sessionId) ?? []);
+              const detail = qc.getQueryData<{ projectMembership?: { projectId?: string } | null }>(['session', sessionId]);
+              for (const row of [...known, detail]) {
+                if (row?.projectMembership?.projectId) scheduleProjectSessions(row.projectMembership.projectId);
+              }
+            }
+          }
+        }
+        if (ev.type === 'project.changed' && typeof id === 'string' && id) scheduleProjectSessions(id);
         scheduleRefresh(ev.type, ev.sessionId, typeof id === 'string' ? id : undefined);
       };
       es.onerror = () => drop();
@@ -281,6 +339,8 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       if (refreshTimer) clearTimeout(refreshTimer);
       if (listsTimer) clearTimeout(listsTimer);
       if (watchesTimer) clearTimeout(watchesTimer);
+      if (projectsTimer) clearTimeout(projectsTimer);
+      for (const timer of projectSessionTimers.values()) clearTimeout(timer);
       es?.close();
     };
   }, [qc]);

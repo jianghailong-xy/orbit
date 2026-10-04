@@ -844,6 +844,14 @@ export interface ProjectListCoordinatorActivity<Instant = string> {
   lastTurnAt: Instant | null;
 }
 
+/** Stored task statuses from `project_task_status_count`, as `GET /projects/sidebar` serves them. */
+export interface ProjectSidebarTaskCounts {
+  done: number;
+  failed: number;
+  /** Every task except CANCELLED, including DONE and FAILED. */
+  total: number;
+}
+
 /**
  * What `GET /projects` says about who must act on a project, and how long they have had to — the
  * blockers the list has always aggregated plus the items behind them (§7.1 V1).

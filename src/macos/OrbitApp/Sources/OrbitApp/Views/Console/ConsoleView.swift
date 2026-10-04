@@ -123,7 +123,8 @@ struct ConsoleView: View {
         Group {
             if let console = registry.peek(sessionID) {
                 VStack(spacing: 0) {
-                    TranscriptView(console: console, hidesStickyQuestion: foldsChrome(console))
+                    TranscriptView(console: console, hidesStickyQuestion: foldsChrome(console),
+                                   reviewingCard: approvalReview != nil || promotionReview != nil)
                     // Pending approvals (incl. the AskUserQuestion form) render inline at the tail of
                     // the transcript now — as the agent's latest turn, web-style — not in a fixed panel
                     // here. See TranscriptView.
@@ -546,10 +547,15 @@ private struct ConsoleNavTitle: View {
 
 struct TranscriptView: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.openApprovalReview) private var openApprovalReview
+    @Environment(\.openPromotionReview) private var openPromotionReview
     let console: ConsoleModel
     /// The sticky "↑ Your question" header folds away while a phone's composer holds the keyboard,
     /// with the rest of the console's chrome (`ConsoleView.foldsChrome`).
     var hidesStickyQuestion = false
+    /// Keep the preview's place while its sheet refreshes or the conversation keeps streaming.
+    var reviewingCard = false
+    @State private var reviewSessionID: String?
     private let bottomID = TranscriptRow.bottom.id
     // Mirrors web's `atBottom` (AgentView.tsx): flips false once the user scrolls up off the live
     // tail. Drives the floating jump-to-latest button AND gates the auto-follow below, so reading
@@ -700,7 +706,7 @@ struct TranscriptView: View {
                 let prependAnchor = console.takePrependAnchor()
                 // A window opened at a record ends at a gap, so its bottom is never the live tail to
                 // follow — pinning there would only walk the window down page by page.
-                if atBottom && !console.detached {
+                if atBottom && !console.detached && !reviewingCard {
                     proxy.scrollTo(bottomID, anchor: .bottom)
                 } else if let prependAnchor {
                     proxy.scrollTo(ruler.topAnchorID ?? prependAnchor, anchor: .top)
@@ -717,6 +723,15 @@ struct TranscriptView: View {
             // without waiting for a scroll that may never come.
             .onChange(of: atBottom, initial: true) { _, pinned in
                 console.setReadingHistory(!pinned)
+            }
+            .onChange(of: reviewingCard, initial: true) {
+                if reviewingCard {
+                    reviewSessionID = console.sessionID
+                    atBottom = false
+                } else {
+                    if reviewSessionID == console.sessionID { atBottom = false }
+                    reviewSessionID = nil
+                }
             }
             .onChange(of: console.sessionID) {
                 atBottom = true; stranded = false; ruler.reset(); stuckID = nil
@@ -747,16 +762,15 @@ struct TranscriptView: View {
             // from.
             .onChange(of: console.scrollRequest) { _, request in
                 guard let request else { return }
+                atBottom = false
                 #if os(iOS)
                 // Same coast fix as the jump-to-latest disc: cancel the momentum first, or the
                 // deceleration swallows the scroll.
                 transcriptScroll.halt()
-                DispatchQueue.main.async { holdScroll(to: request.rowID, anchor: .center) }
-                #else
-                withAnimation(.easeOut(duration: 0.2)) {
-                    proxy.scrollTo(request.rowID, anchor: .center)
-                }
                 #endif
+                DispatchQueue.main.async {
+                    holdScroll(to: request.rowID, anchor: .center, opensReview: true)
+                }
             }
             // A link to one record (`SessionRecordLink`): scroll to its row. The reader is taken off
             // the live tail first, said outright as the sticky header's jump says it — a programmatic
@@ -775,9 +789,17 @@ struct TranscriptView: View {
             // The scrolls `heldScroll` carried here, made inside this update — after the List has taken
             // its rows, so the index path SwiftUI picks for the row is one UIKit has.
             .onChange(of: heldScroll) { _, held in
-                guard let held else { return }
-                withAnimation(.easeOut(duration: 0.2)) {
+                guard let held, held.sessionID == console.sessionID else { return }
+                if held.opensReview {
+                    guard let row = rows.first(where: { $0.id == held.rowID }) else { return }
+                    // Settle the preview's position before presenting; an animation could be
+                    // interrupted by the sheet and leave its row off-screen on return.
                     proxy.scrollTo(held.rowID, anchor: held.anchor)
+                    openReview(for: row)
+                } else {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        proxy.scrollTo(held.rowID, anchor: held.anchor)
+                    }
                 }
             }
             .onAppear { proxy.scrollTo(bottomID, anchor: .bottom); recomputeStuck() }
@@ -1014,8 +1036,23 @@ struct TranscriptView: View {
 
     /// Carry a scroll into the next update rather than making it from here (see `heldScroll`). A new
     /// tick each time, so asking twice for the same row scrolls twice.
-    private func holdScroll(to rowID: String, anchor: UnitPoint) {
-        heldScroll = HeldScroll(rowID: rowID, anchor: anchor, tick: (heldScroll?.tick ?? 0) &+ 1)
+    private func holdScroll(to rowID: String, anchor: UnitPoint, opensReview: Bool = false) {
+        heldScroll = HeldScroll(rowID: rowID, anchor: anchor, tick: (heldScroll?.tick ?? 0) &+ 1,
+                                sessionID: console.sessionID, opensReview: opensReview)
+    }
+
+    /// The bar opens the same review as tapping a preview. Inline cards remain scroll-only.
+    private func openReview(for row: TranscriptRow) {
+        guard case .decisionCard(let card) = row else { return }
+        switch card.kind {
+        case .promotionApproval(let promotionID):
+            openPromotionReview(promotionID)
+        case .criteriaDecision, .acceptanceConfirmation, .startProject, .criteriaChange,
+             .ownerConfirmation, .coordinatorQuestion:
+            openApprovalReview(.delivered(card))
+        default:
+            break
+        }
     }
 
     // Sticky header that names the turn above the fold and scrolls back to it — web's
@@ -1264,6 +1301,8 @@ private struct HeldScroll: Equatable {
     let rowID: String
     let anchor: UnitPoint
     let tick: Int
+    let sessionID: String
+    let opensReview: Bool
 }
 
 #if os(iOS)

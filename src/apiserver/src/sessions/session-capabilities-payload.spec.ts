@@ -132,6 +132,7 @@ test('merge recovery is offered only by a capable assigned runner', async () => 
     const row = sessionRow();
     row.assignedRunner.capabilities = capabilities;
     const service = new SessionsService({
+      $queryRaw: async () => [{ projectMembership: null }],
       session: { findFirst: async () => row },
     } as never, {} as never, {} as never);
     const detail = await service.get('owner-1', row.id);
@@ -139,6 +140,7 @@ test('merge recovery is offered only by a capable assigned runner', async () => 
   }
   const row = sessionRow();
   const service = new SessionsService({
+    $queryRaw: async () => [{ projectMembership: null }],
     session: { findFirst: async () => ({ ...row, assignedRunner: null }) },
   } as never, {} as never, {} as never);
   assert.equal((await service.get('owner-1', row.id)).mergeRecoverySupported, false);
@@ -151,7 +153,10 @@ test('session detail resolves the embedded workspace key against its actual runn
     engines: [{ engine: 'antigravity', installed: true, version: '1.2.3', auth: 'no' }],
   };
   const workspace = { id: 'workspace-1', runnerId: 'a-different-runner', env: { GEMINI_API_KEY: '' } };
-  const service = new SessionsService({ session: { findFirst: async () => ({ ...row, assignedRunner: runner, workspace }) } } as never, {} as never, {} as never);
+  const service = new SessionsService({
+    $queryRaw: async () => [{ projectMembership: null }],
+    session: { findFirst: async () => ({ ...row, assignedRunner: runner, workspace }) },
+  } as never, {} as never, {} as never);
   let detail = await service.get('owner-1', row.id);
   assert.deepEqual(detail.workspace?.antigravityKeyAvailableByRunner, { [runner.id]: false });
   assert.deepEqual(detail.assignedRunner?.antigravity, {
@@ -174,7 +179,10 @@ test('session detail says which credential the runner runs built-in Antigravity 
     engines: [{ engine: 'antigravity', installed: true, version: '1.2.16', auth: 'yes', authSource: 'google' }],
   };
   const workspace = { id: 'workspace-1', runnerId: runner.id, env: null };
-  const service = new SessionsService({ session: { findFirst: async () => ({ ...row, assignedRunner: runner, workspace }) } } as never, {} as never, {} as never);
+  const service = new SessionsService({
+    $queryRaw: async () => [{ projectMembership: null }],
+    session: { findFirst: async () => ({ ...row, assignedRunner: runner, workspace }) },
+  } as never, {} as never, {} as never);
   const detail = await service.get('owner-1', row.id);
   // Signed in with Google and no key anywhere: the engine is offered, labelled by its source.
   assert.deepEqual(detail.workspace?.antigravityKeyAvailableByRunner, { [runner.id]: true });
