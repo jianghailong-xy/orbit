@@ -191,6 +191,19 @@ class ComposerDeviceTest {
             compose.waitUntil(5000) { compose.onNodeWithText("Share",useUnmergedTree=true).fetchSemanticsNode().config.getOrNull(SemanticsProperties.Disabled)==null }
             systemClick("Share")
             capture("system-share")
+            systemFind { it.viewIdResourceName?.endsWith(":id/chooser_header")==true }?.let { header ->
+                val bounds=android.graphics.Rect();header.getBoundsInScreen(bounds)
+                if (!bounds.isEmpty && bounds.top>100) {
+                    val time=SystemClock.uptimeMillis()
+                    for (step in 0..16) {
+                        val action=when(step) { 0->MotionEvent.ACTION_DOWN;16->MotionEvent.ACTION_UP;else->MotionEvent.ACTION_MOVE }
+                        val pointer=MotionEvent.PointerProperties().apply { id=0;toolType=MotionEvent.TOOL_TYPE_FINGER }
+                        val position=MotionEvent.PointerCoords().apply { x=bounds.exactCenterX();y=bounds.exactCenterY()+(80f-bounds.exactCenterY())*step/16;pressure=1f;size=1f }
+                        val event=MotionEvent.obtain(time,SystemClock.uptimeMillis(),action,1,arrayOf(pointer),arrayOf(position),0,0,1f,1f,0,0,InputDevice.SOURCE_TOUCHSCREEN,0)
+                        assertTrue(instrument.uiAutomation.injectInputEvent(event,true));event.recycle();SystemClock.sleep(20)
+                    }
+                }
+            }
             systemClick("A07 receiver")
             systemClick("Received file")
             assertEquals(sha(bytes),systemNode("Received file")!!.contentDescription.toString())
@@ -356,7 +369,14 @@ class ComposerDeviceTest {
         compose.waitUntil(10000) { found=systemNode(text); found!=null }
         found!!.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SHOW_ON_SCREEN.id)
         SystemClock.sleep(300)
-        found = systemNode(text) ?: found
+        compose.waitUntil(10000) {
+            found=systemFind { node ->
+                val bounds=android.graphics.Rect();node.getBoundsInScreen(bounds)
+                node.isVisibleToUser && !bounds.isEmpty &&
+                    (node.text?.toString()?.equals(text,ignoreCase=true)==true || node.contentDescription?.toString()==text)
+            }
+            found!=null
+        }
         clickNode(found!!)
     }
     private fun clickNode(node:AccessibilityNodeInfo) {
