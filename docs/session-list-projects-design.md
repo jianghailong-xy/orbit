@@ -16,6 +16,7 @@
 | role | 怎么认 |
 |---|---|
 | `COORDINATOR` | `project.coordinator_session_id = s.id` |
+| `LANDING`（平台驱动的落地会话） | `s.kind = 'LANDING'` 且 `project_landing.session_id = s.id`；项目归属由落地主体对应的任务或晋升确定（集成线契约 §2.9） |
 | `TASK` | `s.task_id → task.project_id` |
 | `CONTEXT`（@ 任务发起的对话） | `s.context_task_id → task.project_id` |
 | `JUDGMENT`（coordinator 的一次性判断会话） | `project_coordinator_wake.session_id`，`status = 'SESSION_OPENED'` |
@@ -23,30 +24,33 @@
 
 - 一个会话同时命中多条时按表格顺序取第一条（正常不会发生：coordinator 不执行任务，`task_id` 和 `context_task_id` 有 CHECK 互斥）。
 - 被 `/coordinator/replace` 换掉的旧 coordinator 认不回来（项目不再指向它），它留在 Completed 里平铺。本期不处理。
+- `LANDING` 的 `AWAITING_INPUT` 只表示容器未结案，不表示等用户回复；实时状态读 `landing` 视图。项目分组上线前不进任何列表，只能通过链接打开；上线后收进项目条目，项目会话页以 Landings 组列出未结的和有待办的，已结的折叠。
 
 ## 3. 服务端
 
 ### 3.1 `projectMembership`
 
-会话列表（`GET /sessions`）、会话详情（`GET /sessions/:id`）和 `session.updated` 推送的会话摘要（`buildSessionSummary`）都加：
+会话列表（`GET /sessions`）、会话详情（`GET /sessions/:id`）和 `session.updated` 推送的会话摘要（`buildSessionSummary`）都加；落地会话使用 `landing.updated`（§3.4）：
 
 ```jsonc
 "projectMembership": {              // 不属于任何项目时为 null
   "projectId": "…",
   "projectTitle": "后台作业生命周期",
   "projectStatus": "OPEN",          // OPEN | DONE | CANCELLED
-  "role": "COORDINATOR"             // COORDINATOR | TASK | CONTEXT | JUDGMENT | CHILD
+  "role": "COORDINATOR"             // COORDINATOR | LANDING | TASK | CONTEXT | JUDGMENT | CHILD
 }
 ```
 
 - **不改现有 `projectId` / `projectTitle`。** 它们的含义是“这个会话协调哪个项目”，只给 coordinator；Coordinator 标、会话里的卡片、iOS 的 `coordinatorPulses`、Back to project 都在读。
 - 嵌套的 `projectId` 已在 `PUBLIC_ID_FIELDS` 里（`src/shared/src/codec.ts`），拦截器按字段名改写、不看层级，所以 codec 不用改。
-- 成员关系写成**一段 SQL**，三处共用，免得列表、详情、推送算出来不一样。列表查询已经 `LEFT JOIN task t`、`LEFT JOIN project cp`（`sessions.service.ts` 的 `listRows`），在此基础上补 `context_task_id` 的任务、判断会话的 wake 和根会话。
-- 本期不加列、不做迁移。
+- 成员关系写成**一段 SQL**，列表、详情、推送共用，免得算出来不一样。列表查询已经 `LEFT JOIN task t`、`LEFT JOIN project cp`（`sessions.service.ts` 的 `listRows`），在此基础上补 `context_task_id` 的任务、判断会话的 wake、根会话及落地主体。
+- **集成线契约修订 9（§2.9、附录 B）取代本条原来的「本期不加列、不做迁移」（修订前第 45 行）。** 落地会话增加 `session.kind` 判别列及落地主体、作业记录的存储；选型和迁移约束以该契约为准。
 
 ### 3.2 按项目列会话
 
 `GET /sessions?projectId=<id>&view=<open|completed>`：这个项目在**所有 Workspace** 里属于调用者的成员会话（含 coordinator），行的形状和排序与列表相同。别人的项目返回空列表。项目会话页用它。
+
+`GET /sessions` 和 agent 工具 `session_list` 默认排除 `kind=LANDING`。项目分组上线前不开放列表包含落地会话的选项；`includeLanding` 随项目分组一起上线，届时显式请求（HTTP 为 `includeLanding=1`）才把落地会话作为 `LANDING` 成员返回，项目会话页采用该选项。直接链接的 `GET /sessions/:id`、`session_get` 不受列表排除规则影响。
 
 ### 3.3 `/projects/sidebar` 补进度数字
 
@@ -54,8 +58,9 @@
 
 ### 3.4 实时
 
-不加新事件。客户端：
-- 成员会话的 `session.updated` 本来就实时，条目上的状态点、第 2 行的话跟着它变。
+**集成线契约修订 9 取代本节原来的「不加新事件」。** 落地会话新增 `landing.updated`，与 `includeLanding` 随项目分组一起上线；在那之前按集成线契约 §2.7a 的节奏轮询。旧客户端忽略未知的 `landing.updated`，不会因此收到落地会话行或普通会话失败通知。客户端：
+
+- 普通成员会话的 `session.updated` 本来就实时，条目上的状态点、第 2 行的话跟着它变；落地会话的条目状态跟着 `landing.updated` 变。
 - 进度数字（`taskCounts`、`buckets.running`）和 coordinator 处理中的例外来自 `/projects/sidebar`：照旧 15 秒轮询，另外收到成员会话的 `session.updated` 时去抖（约 2 秒）顺手刷新一次。
 - 把两端都没处理的 `project.changed` 接上：Web 的 `groupsFor` 现在只刷会话，Swift 的 `ControlEventType` 把它解成 `.unknown`；收到时刷新项目摘要。
 
