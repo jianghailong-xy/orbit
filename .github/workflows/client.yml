@@ -105,7 +105,7 @@ jobs:
   ios:
     name: iOS (generate + build)
     # macOS runners bill at 10× — only on PRs or an explicit dispatch, not every branch push.
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
