@@ -38,7 +38,7 @@ class RealtimeStoreTest {
         var project = false
         var heldDirectory: CompletableDeferred<Unit>? = null
         fun response(json: String) = ApiResponse(200, json.encodeToByteArray())
-        fun client() = AuthSession(HttpTransport { request ->
+        fun client(dispatcher: CoroutineDispatcher = StandardTestDispatcher(scope.testScheduler)) = AuthSession(HttpTransport { request ->
             reads += request
             val path = request.api.path
             when {
@@ -62,7 +62,7 @@ class RealtimeStoreTest {
                     response(if (pending) """[{"id":"pending-card-marker","status":"PENDING"}]""" else "[]")
                 else -> response(if (pending) """{"pending":[{"id":"standing-card-marker"}]}""" else "null")
             }
-        }, credentials, instances, data, "test", dispatcher = StandardTestDispatcher(scope.testScheduler), eventTransport = streams)
+        }, credentials, instances, data, "test", dispatcher = dispatcher, eventTransport = streams)
 
         suspend fun start(): Pair<AuthSession, RealtimeStore> {
             credentials.value = StoredSession(serverA.value, tokens())
@@ -262,6 +262,48 @@ class RealtimeStoreTest {
             assertNotNull(auth.readData(next, DataKind.CACHE, "realtime-v1"))
             store.close(); auth.logout(); runCurrent()
         }
+    }
+
+    @Test fun conflatedAccountSwitchDoesNotCarryThePreviousSelectionIntoNewCache() = runTest {
+        for (server in listOf(serverA, serverB)) {
+            val rig = Rig(this)
+            rig.credentials.value = StoredSession(serverA.value, tokens())
+            rig.instances.value = serverA.value
+            val auth = rig.client(UnconfinedTestDispatcher(testScheduler))
+            auth.restore()
+            val old = auth.state.value as AuthState.SignedIn
+            val store = RealtimeStore(auth, backgroundScope)
+            store.selectSession("s1"); runCurrent()
+            assertEquals("s1", store.state.value.session!!.id)
+            val next = auth.login(server, "bob@example.test", "fixture-password")
+            // No collector turn occurred between the old and new SignedIn values.
+            assertSame(old.handle, store.state.value.handle)
+            runCurrent(); advanceTimeBy(201); runCurrent()
+            assertSame(next, store.state.value.handle)
+            assertNull(RealtimeCache.read(auth, next).lastSessionId)
+            assertNull(store.state.value.session)
+            assertTrue(RealtimeCache.read(auth, next).sessions.isEmpty())
+            store.close(); auth.logout(); runCurrent()
+        }
+    }
+
+    @Test fun pendingLoginDeepLinkAndExplicitNewHandleSelectionWinOverRestore() = runTest {
+        val rig = Rig(this)
+        val auth = rig.client(UnconfinedTestDispatcher(testScheduler))
+        auth.restore()
+        val store = RealtimeStore(auth, backgroundScope)
+        // An explicit deep link can arrive before the store observes SignedOut.
+        store.selectSession("s1"); runCurrent()
+        val first = auth.login(serverA, "bob@example.test", "fixture-password")
+        runCurrent()
+        assertSame(first, store.state.value.handle)
+        assertEquals("s1", store.state.value.session?.id)
+        val next = auth.login(serverB, "bob@example.test", "fixture-password")
+        store.selectSession("s2") // New handle is already current, collector has not caught up.
+        runCurrent(); advanceTimeBy(201); runCurrent()
+        assertSame(next, store.state.value.handle)
+        assertEquals("s2", store.state.value.session?.id)
+        assertEquals("s2", RealtimeCache.read(auth, next).lastSessionId)
     }
 
     @Test fun corruptOrVersionedCacheRestoresAsColdOpen() = runTest {
