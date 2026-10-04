@@ -1,0 +1,40 @@
+{
+  "provenance": "Synthetic wire cases, extending OrbitKit TranscriptReducerTests.recordedSession and SSEFrameParserTests. No captured account data.",
+  "cases": [
+    {
+      "name": "final text replaces animation and replay duplicates",
+      "events": [
+        {"seq": 1, "type": "user", "payload": {"text": "List the files", "clientTurnId": "c1"}},
+        {"seq": 0, "type": "text_delta", "payload": {"delta": "I'll "}},
+        {"seq": 0, "type": "text_delta", "payload": {"text": "list them."}},
+        {"seq": 2, "type": "assistant", "payload": {"text": "I'll list them."}},
+        {"seq": 3, "type": "tool_use", "payload": {"toolUseId": "t1", "name": "Bash", "input": {"command": "ls"}}},
+        {"seq": 4, "type": "tool_result", "payload": {"toolUseId": "t1", "content": "a.txt\nb.txt"}},
+        {"seq": 2, "type": "assistant", "payload": {"text": "I'll list them."}},
+        {"seq": 5, "type": "turn_end", "payload": {"status": "AWAITING_INPUT"}}
+      ],
+      "expected": {"maxSeq": 5, "messages": ["user:List the files", "assistant:I'll list them."], "tools": ["t1:a.txt\nb.txt"], "draft": ""}
+    },
+    {
+      "name": "whole tool snapshots reject reordering and lose to final result",
+      "events": [
+        {"seq": 4, "type": "tool_use", "payload": {"toolUseId": "shell", "name": "Bash", "input": {"command": "test"}}},
+        {"seq": 900, "type": "tool_output", "payload": {"toolUseId": "shell", "content": "newest", "snapshotSeq": 12}},
+        {"seq": 901, "type": "tool_output", "payload": {"toolUseId": "shell", "content": "old", "snapshotSeq": 11}},
+        {"seq": 5, "type": "tool_result", "payload": {"toolUseId": "shell", "content": "final"}},
+        {"seq": 902, "type": "tool_output", "payload": {"toolUseId": "shell", "content": "late", "snapshotSeq": 13}},
+        {"seq": 9007199254740991, "type": "status", "payload": {"status": "SUCCEEDED"}}
+      ],
+      "expected": {"maxSeq": 5, "messages": [], "tools": ["shell:final"], "draft": ""}
+    },
+    {
+      "name": "entry during a turn receives a live prefix without moving cursor",
+      "events": [
+        {"seq": 10, "type": "user", "payload": {"text": "你好"}},
+        {"seq": 0, "type": "text_delta", "payload": {"text": "已经输出的前缀"}},
+        {"seq": 0, "type": "text_delta", "payload": {"text": "，继续"}}
+      ],
+      "expected": {"maxSeq": 10, "messages": ["user:你好"], "tools": [], "draft": "已经输出的前缀，继续"}
+    }
+  ]
+}

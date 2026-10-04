@@ -29,6 +29,8 @@ import {
  * — here carrying a reply to the proposing session — is what the press contributes.
  */
 
+// These cases check the card's data/decision contract; ReviewCard.test covers the real dialog.
+vi.mock('./ReviewCard', () => import('../test/inlineReviewCard'));
 vi.mock('../api', () => ({ api: vi.fn() }));
 
 const PROJECT = '34ODoUKJGEsfbgcJDGS4q';

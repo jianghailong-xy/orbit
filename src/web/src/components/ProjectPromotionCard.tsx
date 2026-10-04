@@ -1,4 +1,4 @@
-import { useRef, type JSX, type ReactNode } from 'react';
+import { useRef, useState, type JSX, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert } from 'antd';
@@ -8,6 +8,7 @@ import type {
   ProjectPromotionView,
 } from '@orbit/shared';
 import { CardActionButton, CardActions } from './CardAction';
+import { ReviewCard } from './ReviewCard';
 import { SHORTCUT_HINT, useApproveHotkey, useCardKeyClaim } from './CardHotkey';
 import { blockerHeadline, type ProjectBlocker } from './ProjectBlockers';
 import { FROM_ORBIT, FROM_ORBIT_TITLE } from './ProjectProgressStatus';
@@ -523,6 +524,7 @@ export function ProjectPromotionCard({
   now: number;
 }): JSX.Element | null {
   const qc = useQueryClient();
+  const [reviewOpen, setReviewOpen] = useState(false);
   const decide = useMutation({
     mutationFn: (door: 'confirm' | 'decline' | 'cancel') =>
       decidePromotion(projectId, promotion.promotionId, door, {
@@ -542,8 +544,8 @@ export function ProjectPromotionCard({
   // ⌘/Ctrl + Enter is `Merge to main` while this card is asking and is the highest card asking
   // (`CardHotkey.ts`) — the chord rather than the bare key, because this press changes main.
   const anchor = useRef<HTMLDivElement>(null);
-  const keys = useCardKeyClaim(promotion.state === 'READY' && !decide.isPending, anchor);
-  useApproveHotkey(keys, () => decide.mutate('confirm'));
+  const keys = useCardKeyClaim(reviewOpen && promotion.state === 'READY' && !decide.isPending, anchor);
+  useApproveHotkey(keys, () => decide.mutate('confirm'), { anchor });
 
   if (!DRAWN_STATES.includes(promotion.state as (typeof DRAWN_STATES)[number])) return null;
 
@@ -555,10 +557,13 @@ export function ProjectPromotionCard({
   const resolving = resolvingPress(item, now);
 
   return (
+    <ReviewCard enabled={!merged} title={promotionHeading(promotion)}
+      summary={shortRef(promotion.sourceRef)} meta={promotion.state === 'READY' ? 'Ready to merge · review checks and included work' : promotion.state.toLowerCase()}
+      id={`promotion-${promotion.promotionId}`} open={reviewOpen} onOpenChange={setReviewOpen}>
     <div
       ref={anchor}
       className={`approval-card criteria-decision project-promotion is-${promotion.state.toLowerCase()}`}
-      id={`promotion-${promotion.promotionId}`}
+      id={merged ? `promotion-${promotion.promotionId}` : undefined}
       data-state={promotion.state}
     >
       <div className="approval-head project-promotion-head">
@@ -645,6 +650,7 @@ export function ProjectPromotionCard({
         </CardActions>
       )}
     </div>
+    </ReviewCard>
   );
 }
 

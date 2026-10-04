@@ -1369,6 +1369,8 @@ export interface ArtifactCommand {
   requestId: string;
   sessionId: string;
   path: string;
+  /** A changed file relative to this session's worktree; absent for legacy absolute paths. */
+  source?: 'worktree';
 }
 
 // ─────────────────────────── Interactive sessions (Route B) ───────────────────────────
@@ -2104,6 +2106,7 @@ export interface ArtifactResultRequest {
   status: 'uploaded' | 'missing' | 'error';
   attachmentId?: string;
   message?: string;
+  errorCode?: 'too_large';
 }
 
 /**

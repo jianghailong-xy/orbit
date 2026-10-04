@@ -1,0 +1,112 @@
+[WebServer] (node:1619104) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 2 tests using 1 worker
+
+(node:1619208) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 [chromium-light-phone] › src/web/ui-migration/overlays.browser.mjs:57:1 › dialog and drawers match current surfaces, geometry, typography and actions (7.1s)
+(node:1619945) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  2 [webkit-dark-desktop] › src/web/ui-migration/overlays.browser.mjs:57:1 › dialog and drawers match current surfaces, geometry, typography and actions (6.2s)
+
+
+  1) [chromium-light-phone] › src/web/ui-migration/overlays.browser.mjs:57:1 › dialog and drawers match current surfaces, geometry, typography and actions 
+
+    Error: right drawer
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 2
+    + Received  + 2
+
+    @@ -54,16 +54,16 @@
+        "height": 844,
+        "lineHeight": "16.1px",
+        "padding": "0px",
+        "separators": Object {
+          "footer": Object {
+    -       "color": "rgba(17, 42, 80, 0.08)",
+    +       "color": "rgb(236, 238, 241)",
+            "style": "solid",
+            "width": "1px",
+          },
+          "header": Object {
+    -       "color": "rgba(17, 42, 80, 0.08)",
+    +       "color": "rgb(236, 238, 241)",
+            "style": "solid",
+            "width": "1px",
+          },
+        },
+        "width": 378,
+
+      114 |   }
+      115 |   await attach(info, 'appearance', measurements);
+    > 116 |   for (const [kind, { ant, orbit }] of Object.entries(measurements)) expect(orbit, kind).toEqual(ant);
+          |                                                                                          ^
+      117 | });
+      118 |
+      119 | test('dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus', async ({ page }, info) => {
+        at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:116:90
+
+    Error Context: src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-chromium-light-phone/error-context.md
+
+    attachment #11: trace (application/zip) ────────────────────────────────────────────────────────
+    src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-chromium-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-chromium-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [webkit-dark-desktop] › src/web/ui-migration/overlays.browser.mjs:57:1 › dialog and drawers match current surfaces, geometry, typography and actions 
+
+    Error: right drawer
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 2
+    + Received  + 2
+
+    @@ -54,16 +54,16 @@
+        "height": 900,
+        "lineHeight": "16.1px",
+        "padding": "0px",
+        "separators": Object {
+          "footer": Object {
+    -       "color": "rgba(223, 223, 226, 0.05)",
+    +       "color": "rgb(52, 52, 55)",
+            "style": "solid",
+            "width": "1px",
+          },
+          "header": Object {
+    -       "color": "rgba(223, 223, 226, 0.05)",
+    +       "color": "rgb(52, 52, 55)",
+            "style": "solid",
+            "width": "1px",
+          },
+        },
+        "width": 378,
+
+      114 |   }
+      115 |   await attach(info, 'appearance', measurements);
+    > 116 |   for (const [kind, { ant, orbit }] of Object.entries(measurements)) expect(orbit, kind).toEqual(ant);
+          |                                                                                          ^
+      117 | });
+      118 |
+      119 | test('dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus', async ({ page }, info) => {
+        at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:116:90
+
+    Error Context: src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-webkit-dark-desktop/error-context.md
+
+    attachment #11: trace (application/zip) ────────────────────────────────────────────────────────
+    src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2 failed
+    [chromium-light-phone] › src/web/ui-migration/overlays.browser.mjs:57:1 › dialog and drawers match current surfaces, geometry, typography and actions 
+    [webkit-dark-desktop] › src/web/ui-migration/overlays.browser.mjs:57:1 › dialog and drawers match current surfaces, geometry, typography and actions 

@@ -276,11 +276,12 @@ export async function readProjectIntegrationView(
   // sorts by time.
   const [oldest] = await prisma.$queryRaw<Array<{
     state: string; kind: IntegrationJobKind; phase: IntegrationJobPhase | null;
-    taskTitle: string | null; startedAt: Date;
+    taskTitle: string | null; startedAt: Date; heartbeatAt: Date | null;
   }>>(Prisma.sql`
     SELECT j."state", j."kind", j."phase",
            t."title" AS "taskTitle",
-           COALESCE(j."claimed_at", j."created_at") AS "startedAt"
+           COALESCE(j."claimed_at", j."created_at") AS "startedAt",
+           j."heartbeat_at" AS "heartbeatAt"
       FROM "project_integration_job" j
       LEFT JOIN "task" t ON t."id" = j."task_id"
      WHERE j."project_id" = ${projectId}::uuid
@@ -310,6 +311,7 @@ export async function readProjectIntegrationView(
         phase: oldest.phase,
         state: oldest.state === 'RUNNING' ? 'RUNNING' : 'QUEUED',
         startedAt: oldest.startedAt,
+        heartbeatAt: oldest.heartbeatAt,
       }
       : null,
   };

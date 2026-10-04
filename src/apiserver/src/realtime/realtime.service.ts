@@ -29,6 +29,7 @@ import { Observable, Subject, filter, map, mergeMap } from 'rxjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { deriveSessionCapabilities } from '../sessions/session-state';
+import { readWorktreeArtifactRequest } from '../sessions/worktree-artifact';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { isSessionGenerating } from '../common/session-generating';
 import { countLiveApprovals } from '../sessions/abandoned-approvals';
@@ -1272,6 +1273,13 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     });
     return turns
       .filter((t) => t.content)
-      .map((t) => ({ requestId: t.id, sessionId: t.sessionId, path: t.content! }));
+      .map((t) => {
+        const request = readWorktreeArtifactRequest(t.content);
+        return {
+          requestId: t.id, sessionId: t.sessionId,
+          path: request?.path ?? t.content!,
+          ...(request ? { source: 'worktree' as const } : {}),
+        };
+      });
   }
 }

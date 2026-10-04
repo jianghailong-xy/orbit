@@ -1,0 +1,76 @@
+[WebServer] (node:1613798) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 2 tests using 1 worker
+
+(node:1613888) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 [chromium-light-phone] › src/web/ui-migration/overlays.browser.mjs:57:1 › dialog and drawers match current surfaces, geometry, typography and actions (4.1s)
+(node:1614175) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  2 [webkit-dark-desktop] › src/web/ui-migration/overlays.browser.mjs:57:1 › dialog and drawers match current surfaces, geometry, typography and actions (4.1s)
+
+
+  1) [chromium-light-phone] › src/web/ui-migration/overlays.browser.mjs:57:1 › dialog and drawers match current surfaces, geometry, typography and actions 
+
+    Error: locator.focus: Error: strict mode violation: locator('.reference-drawer-root:visible') resolved to 2 elements:
+        1) <div tabindex="-1" class="ant-drawer ant-drawer-right reference-drawer-root css-dev-only-do-not-override-oc1rc0 css-var-_r_0_">…</div> aka locator('.ant-drawer').first()
+        2) <div tabindex="-1" class="ant-drawer ant-drawer-bottom reference-drawer-root css-dev-only-do-not-override-oc1rc0 css-var-_r_0_ ant-drawer-open">…</div> aka locator('.ant-drawer.ant-drawer-bottom')
+
+    Call log:
+      - waiting for locator('.reference-drawer-root:visible')
+
+
+      65 |     await page.mouse.move(0, 0);
+      66 |     const focusRoot = system === 'AntD' && kind.includes('drawer') ? page.locator('.reference-drawer-root:visible') : overlay;
+    > 67 |     await focusRoot.focus();
+         |                     ^
+      68 |     await expect(focusRoot).toBeFocused();
+      69 |     await overlay.evaluate(async (el) => {
+      70 |       await Promise.all(el.getAnimations({ subtree: true })
+        at measure (/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:67:21)
+        at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:111:17
+
+    Error Context: src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-chromium-light-phone/error-context.md
+
+    attachment #6: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-chromium-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-chromium-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [webkit-dark-desktop] › src/web/ui-migration/overlays.browser.mjs:57:1 › dialog and drawers match current surfaces, geometry, typography and actions 
+
+    Error: locator.focus: Error: strict mode violation: locator('.reference-drawer-root:visible') resolved to 2 elements:
+        1) <div tabindex="-1" class="ant-drawer ant-drawer-right reference-drawer-root css-dev-only-do-not-override-oc1rc0 css-var-_r_0_">…</div> aka locator('.ant-drawer').first()
+        2) <div tabindex="-1" class="ant-drawer ant-drawer-bottom reference-drawer-root css-dev-only-do-not-override-oc1rc0 css-var-_r_0_ ant-drawer-open">…</div> aka locator('.ant-drawer.ant-drawer-bottom')
+
+    Call log:
+      - waiting for locator('.reference-drawer-root:visible')
+
+
+      65 |     await page.mouse.move(0, 0);
+      66 |     const focusRoot = system === 'AntD' && kind.includes('drawer') ? page.locator('.reference-drawer-root:visible') : overlay;
+    > 67 |     await focusRoot.focus();
+         |                     ^
+      68 |     await expect(focusRoot).toBeFocused();
+      69 |     await overlay.evaluate(async (el) => {
+      70 |       await Promise.all(el.getAnimations({ subtree: true })
+        at measure (/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:67:21)
+        at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:111:17
+
+    Error Context: src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-webkit-dark-desktop/error-context.md
+
+    attachment #6: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2 failed
+    [chromium-light-phone] › src/web/ui-migration/overlays.browser.mjs:57:1 › dialog and drawers match current surfaces, geometry, typography and actions 
+    [webkit-dark-desktop] › src/web/ui-migration/overlays.browser.mjs:57:1 › dialog and drawers match current surfaces, geometry, typography and actions 
