@@ -38,6 +38,7 @@ class RealtimeStoreTest {
         var detailError: Int? = null
         var project = false
         var heldDirectory: CompletableDeferred<Unit>? = null
+        var heldDetail: CompletableDeferred<Unit>? = null
         fun response(json: String) = ApiResponse(200, json.encodeToByteArray())
         fun client(dispatcher: CoroutineDispatcher = StandardTestDispatcher(scope.testScheduler)) = AuthSession(HttpTransport { request ->
             reads += request
@@ -58,7 +59,9 @@ class RealtimeStoreTest {
                     response("""{"events":[${selected.joinToString()}],"hasMore":false,"after":null}""")
                 }
                 path == listOf("sessions", "s1") || path == listOf("sessions", "s2") -> {
-                    detailError?.let { return@HttpTransport ApiResponse(it, "{}".encodeToByteArray()) }
+                    val captured = detailError
+                    heldDetail?.let { withContext(NonCancellable) { it.await() } }
+                    captured?.let { return@HttpTransport ApiResponse(it, "{}".encodeToByteArray()) }
                     response("""{"id":"${path.last()}","status":"RUNNING"${if (project) ",\"taskId\":\"t1\",\"projectId\":\"p1\"" else ""}}""")
                 }
                 path.last() in setOf("approvals", "turns", "background") ->
@@ -113,7 +116,7 @@ class RealtimeStoreTest {
     @Test fun forbiddenAndMissingSessionWithdrawTranscriptAndCacheUntilAuthorityRecovers() = runTest {
         for (status in listOf(403, 404)) {
             val rig = Rig(this)
-            val (_, store) = rig.start()
+            val (auth, store) = rig.start()
             rig.detailError = status
             store.refreshSession(); runCurrent(); advanceTimeBy(101); runCurrent()
             assertTrue(store.state.value.session!!.accessDenied)
@@ -122,7 +125,7 @@ class RealtimeStoreTest {
             rig.streams.session().emit("""{"seq":2,"type":"assistant","payload":{"text":"must stay hidden"}}""")
             runCurrent()
             assertTrue(store.state.value.session!!.transcript.events.isEmpty())
-            val cache = Wire.decode(rig.data.values.values.single(), RealtimeCache.serializer())
+            val cache = RealtimeCache.read(auth, (auth.state.value as AuthState.SignedIn).handle)
             assertFalse(cache.sessions.containsKey("s1"))
             rig.detailError = null
             advanceTimeBy(1_001); runCurrent()
@@ -131,6 +134,62 @@ class RealtimeStoreTest {
             assertEquals("initial", store.state.value.session!!.transcript.events.single().fields.text("text"))
             store.close(); runCurrent()
         }
+    }
+
+    @Test fun readDenialWithoutAReaderSurvivesColdAuthAndStoreRestoration() = runTest {
+        val rig = Rig(this)
+        val (auth, store) = rig.start()
+        val handle = (auth.state.value as AuthState.SignedIn).handle
+        store.selectSession(null); runCurrent()
+        store.reportReadDenial(handle, "s1", ApiError.parse(403, "{}".toByteArray()))
+        store.close(); runCurrent()
+        val restoredAuth = rig.client()
+        restoredAuth.restore()
+        val restored = RealtimeStore(restoredAuth, backgroundScope)
+        restored.selectSession("s1"); runCurrent()
+        assertTrue(restored.state.value.session!!.accessDenied)
+        assertTrue(restored.state.value.session!!.transcript.events.isEmpty())
+        restored.setForeground(true); restored.setNetwork(true); runCurrent()
+        assertFalse(restored.state.value.session!!.accessDenied)
+        assertTrue(restored.state.value.session!!.fresh)
+        assertEquals("initial", restored.state.value.session!!.transcript.events.single().fields.text("text"))
+    }
+
+    @Test fun readingCacheRevocationRejectsLateWritesButLeavesOtherScopesIntact() = runTest {
+        val rig = Rig(this)
+        val (auth, _) = rig.start()
+        val handle = (auth.state.value as AuthState.SignedIn).handle
+        val cache = ReadingCache(auth, handle, "s1")
+        val other = ReadingCache(auth, handle, "s2")
+        cache.write("reader-s1", 0, "default".toByteArray())
+        cache.write("reader-s1-record", 0, "record".toByteArray())
+        other.write("reader-s2", 0, "other".toByteArray())
+        val denied = cache.revoke()
+        assertNull(cache.read("reader-s1").second)
+        assertNull(cache.read("reader-s1-record").second)
+        cache.write("reader-s1", 0, "late write".toByteArray())
+        assertEquals("other", other.read("reader-s2").second!!.decodeToString())
+        cache.authorize(denied.revision)
+        assertFalse(cache.valid(0))
+        cache.write("reader-s1", 0, "late after recovery".toByteArray())
+        assertEquals("default", cache.read("reader-s1").second!!.decodeToString())
+        cache.write("reader-s1", denied.revision, "fresh".toByteArray())
+        assertEquals("fresh", cache.read("reader-s1").second!!.decodeToString())
+    }
+
+    @Test fun authorityResponseStartedBeforeReadDenialCannotReleaseIt() = runTest {
+        val rig = Rig(this)
+        val (auth, store) = rig.start()
+        rig.heldDetail = CompletableDeferred()
+        store.refreshSession(); runCurrent()
+        rig.detailError = 503
+        store.reportReadDenial((auth.state.value as AuthState.SignedIn).handle, "s1", ApiError.parse(404, "{}".toByteArray()))
+        val oldRequest = rig.heldDetail!!
+        rig.heldDetail = null; oldRequest.complete(Unit); runCurrent()
+        assertTrue(store.state.value.session!!.accessDenied)
+        assertFalse(store.state.value.session!!.fresh)
+        assertNull(store.state.value.session!!.snapshot)
+        assertTrue(store.state.value.session!!.transcript.events.isEmpty())
     }
 
     @Test fun temporarySessionErrorRetainsOnlyStaleReadContent() = runTest {

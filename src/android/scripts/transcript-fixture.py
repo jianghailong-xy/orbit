@@ -33,6 +33,16 @@ RICH = ('# Reading fixture\n\nSelect these words and copy a portion of this para
         '[Earlier record](orbit-session:' + SESSION + '?at=' + RECORD + ')\n\nEnd of rich message.')
 
 def event(seq, mode='DS3', full=False):
+    if mode == 'REVIEW':
+        kind, payload = 'assistant', {'text': f'Protected record {seq}'}
+        if seq == 414: kind, payload = 'turn_end', {'subtype': 'completed'}
+        if seq == 415: kind, payload = 'user', {'text': 'Question without a reply'}
+        if seq == 416: kind, payload = 'turn_end', {'subtype': 'error_during_execution'}
+        if seq == 417: payload['text'] = f'[![Task preview](orbit-attachment:{ATTACHMENT})](orbit-task:{TASK})'
+        if seq == 418: payload['text'] = f'[![Web preview](orbit-attachment:{ATTACHMENT})](https://example.test/related)'
+        if seq == 419: payload['text'] = 'Protected full message' + ('\ncomplete text' * 300 if full else ' preview')
+        if seq == 420: payload['text'] = 'Protected latest 420'
+        return {'seq': seq, 'type': kind, 'payload': payload, 'truncated': seq == 419 and not full, 'ts': '2026-10-04T00:00:00.000Z'}
     slot = (seq - 1) % 20
     cycle = (seq - 1) // 20
     if slot == 0:
@@ -69,6 +79,9 @@ class State:
     lock = threading.RLock()
     mode = 'DS3'
     denial = 0
+    page_denial = 0
+    record_denial = 0
+    snapshot_status = 0
     stream = False
     stream_started = 0.
     delta_count = 0
@@ -76,7 +89,7 @@ class State:
     requests = []
     extra = []
     @property
-    def count(self): return (10000 if self.mode == 'DS3' else 100000) + len(self.extra)
+    def count(self): return (420 if self.mode == 'REVIEW' else 10000 if self.mode == 'DS3' else 100000) + len(self.extra)
 state = State()
 
 class Handler(BaseHTTPRequestHandler):
@@ -94,7 +107,10 @@ class Handler(BaseHTTPRequestHandler):
             with state.lock:
                 if body.get('reset'):
                     state.mode = body.get('mode', 'DS3'); state.extra = []; state.denial = 0; state.stream = False; state.delta_count = 0; state.epoch += 1
+                    state.page_denial = 0; state.record_denial = 0; state.snapshot_status = 0
                 if 'denial' in body: state.denial = body['denial']
+                for key in ('page_denial', 'record_denial', 'snapshot_status'):
+                    if key in body: setattr(state, key, body[key])
                 if 'stream' in body: state.stream = body['stream']; state.stream_started = time.monotonic()
                 if body.get('disconnect'): state.epoch += 1
                 if body.get('append'):
@@ -112,6 +128,9 @@ class Handler(BaseHTTPRequestHandler):
         with state.lock:
             state.requests.append({'at':time.monotonic(), 'path':self.path})
         if state.denial and path.startswith('/api/sessions/' + SESSION): return self.reply({}, state.denial)
+        if state.snapshot_status and path == '/api/sessions/' + SESSION: return self.reply({}, state.snapshot_status)
+        if state.page_denial and path.endswith('/events/page') and 'before' in query: return self.reply({}, state.page_denial)
+        if state.record_denial and (path.endswith('/full') or path.endswith('/events/page') and 'around' in query): return self.reply({}, state.record_denial)
         if path == '/api/users/me': return self.reply({'id':'a06-user','email':'a06@example.test','name':'A06'})
         session = {'id':SESSION,'title':'Long conversation','workspaceId':WORKSPACE,'status':'RUNNING','runState':'RUNNING','lifecycleState':'OPEN',
                    'branch':'orbit/a06-reading','baseSha':'a'*40,'isolationStatus':'isolated','worktreeDirty':True,
@@ -130,12 +149,13 @@ class Handler(BaseHTTPRequestHandler):
             total = state.count
             if 'around' in query:
                 anchor = ANCHORS.get(query['around'][0])
+                if state.mode == 'REVIEW' and query['around'][0] == RECORD: anchor = 110
                 if anchor is None: return self.reply({}, 404)
                 start = max(1,anchor-90); end = start+199
             elif 'before' in query: end = int(query['before'][0])-1; start=max(1,end-199)
             elif 'after' in query: start=int(query['after'][0])+1; end=min(total,start+199)
             else: end=total; start=max(1,end-int(query.get('tail',['200'])[0])+1)
-            base = 10000 if state.mode == 'DS3' else 100000
+            base = 420 if state.mode == 'REVIEW' else 10000 if state.mode == 'DS3' else 100000
             rows = [event(i,state.mode) if i<=base else state.extra[i-base-1] for i in range(start,end+1)]
             value = {'events':rows,'hasMore':start>1,'before':start if start>1 else None,'after':end if end<total else None}
             if 'around' in query: value['anchor']={'kind':'event','id':query['around'][0],'seq':anchor}
@@ -180,7 +200,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def manifest(output):
     output.mkdir(parents=True,exist_ok=True)
-    for mode,count in [('DS3',10000),('DS4',100000)]:
+    for mode,count in [('DS3',10000),('DS4',100000),('REVIEW',420)]:
         digest=hashlib.sha256(); size=0; types={}; maximum=0
         for i in range(1,count+1):
             row=event(i,mode,True); data=encoded(row)+b'\n'; size+=len(data); maximum=max(maximum,len(data)); digest.update(data); types[row['type']]=types.get(row['type'],0)+1

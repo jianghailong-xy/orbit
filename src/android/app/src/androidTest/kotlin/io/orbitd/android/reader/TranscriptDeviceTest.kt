@@ -36,6 +36,131 @@ class TranscriptDeviceTest {
     private val workspace = "01a0cca7-8609-70ed-a0e2-d4b55b832b61"
     private val record = "01a0cca7-8609-70ed-a0e2-d4b55b832b63"
 
+    @Test fun reviewOrdinaryDenialWithdrawsAndStaysWithdrawnOffline() = journey("review-page-denial") {
+        reviewSession()
+        scrollHistory()
+        compose.onNodeWithTag("transcript-list").performScrollToNode(hasText("Load earlier messages"))
+        control("{\"page_denial\":404,\"snapshot_status\":503}")
+        compose.onNodeWithText("Load earlier messages").performClick()
+        assertUnavailable()
+        capture("review-page-withdrawn")
+        compose.runOnIdle { app.realtime.setNetwork(false) }
+        compose.onNodeWithContentDescription("Back").performClick()
+        awaitText("Long conversation")
+        compose.onNodeWithText("Long conversation").performClick()
+        assertUnavailable()
+        compose.activityRule.scenario.recreate()
+        assertUnavailable()
+        capture("review-page-offline-restored")
+        recoverReviewSession()
+    }
+
+    @Test fun reviewRecordRevocationInvalidatesDefaultRouteBookmark() = journey("review-route-revocation") {
+        reviewSession()
+        scrollHistory()
+        compose.onNodeWithTag("transcript-list").performScrollToNode(hasTestTag("event:350"))
+        SystemClock.sleep(600)
+        openRecord()
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag("event:110").fetchSemanticsNodes().isNotEmpty() }
+        control("{\"snapshot_status\":403}")
+        compose.runOnIdle { app.realtime.refreshSession() }
+        assertUnavailable()
+        compose.runOnIdle { app.realtime.setNetwork(false) }
+        control("{\"snapshot_status\":503}")
+        instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+        assertUnavailable()
+        compose.onNodeWithContentDescription("Back").performClick()
+        awaitText("Long conversation")
+        compose.onNodeWithText("Long conversation").performClick()
+        assertUnavailable()
+        compose.activityRule.scenario.recreate()
+        assertUnavailable()
+        capture("review-bookmarks-revoked")
+        recoverReviewSession()
+    }
+
+    @Test fun reviewFullAndAroundDistinguishMissingRecordFromDeniedSession() = journey("review-record-denial") {
+        reviewSession()
+        control("{\"record_denial\":404}")
+        openRecord()
+        awaitText("That message is not in this session")
+        compose.onNodeWithText("Session unavailable").assertDoesNotExist()
+        capture("review-missing-record")
+        instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+        awaitText("Protected latest 420")
+        scrollHistory()
+        compose.onNodeWithTag("transcript-list").performScrollToNode(hasTestTag("event:419"))
+        compose.onNode(hasText("Read full message") and hasAnyAncestor(hasTestTag("event:419"))).performClick()
+        awaitText("Couldn't load full message · Retry")
+        compose.onNodeWithText("Session unavailable").assertDoesNotExist()
+        control("{\"record_denial\":403,\"snapshot_status\":503}")
+        compose.onNodeWithText("Couldn't load full message · Retry").performClick()
+        assertUnavailable()
+        capture("review-full-forbidden")
+        recoverReviewSession()
+        control("{\"record_denial\":404,\"snapshot_status\":404}")
+        openRecord()
+        assertUnavailable()
+        capture("review-around-session-missing")
+    }
+
+    @Test fun reviewFailedTurnAndLinkedImagesUseProductDestinations() = journey("review-rendering") {
+        reviewSession()
+        scrollHistory()
+        val list = compose.onNodeWithTag("transcript-list")
+        val notice = "This turn ended without a reply — send the message again to retry."
+        list.performScrollToNode(hasText(notice))
+        compose.onNodeWithText(notice).assertIsDisplayed()
+        compose.onNode(hasText("Copy message") and hasAnyAncestor(hasTestTag("event:416"))).performClick()
+        compose.waitUntil(5_000) { (app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).primaryClip?.getItemAt(0)?.text?.toString() == notice }
+        capture("review-failed-turn")
+        list.performScrollToNode(hasContentDescription("Task preview"))
+        compose.onNodeWithContentDescription("Task preview").performClick()
+        compose.onNodeWithText("Close image").assertIsDisplayed()
+        capture("review-linked-image-zoom")
+        compose.onNodeWithText("Close image").performClick()
+        list.performScrollToNode(hasText("Open link") and hasAnyAncestor(hasTestTag("event:417")))
+        compose.onNode(hasText("Open link") and hasAnyAncestor(hasTestTag("event:417"))).performClick()
+        awaitText("Related reading task")
+        capture("review-image-task-destination")
+        instrument.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+        awaitText("Session options")
+        val opened = java.util.concurrent.atomic.AtomicReference<String?>()
+        val monitor = object : android.app.Instrumentation.ActivityMonitor() {
+            override fun onStartActivity(intent: Intent): android.app.Instrumentation.ActivityResult? {
+                if (intent.action != Intent.ACTION_VIEW) return null
+                opened.set(intent.dataString)
+                return android.app.Instrumentation.ActivityResult(android.app.Activity.RESULT_CANCELED, null)
+            }
+        }
+        instrument.addMonitor(monitor)
+        try {
+            list.performScrollToNode(hasText("Open link") and hasAnyAncestor(hasTestTag("event:418")))
+            compose.onNode(hasText("Open link") and hasAnyAncestor(hasTestTag("event:418"))).performClick()
+            compose.waitUntil(5_000) { opened.get() != null }
+            assertEquals("https://example.test/related", opened.get())
+            File(evidence, "review-link-targets.txt").writeText("orbit=Related reading task\nhttps=${opened.get()}\nexternalIntentIntercepted=true\n")
+            capture("review-image-web-destination")
+        } finally { instrument.removeMonitor(monitor) }
+    }
+
+    private fun reviewSession() {
+        login(); control("{\"reset\":true,\"mode\":\"REVIEW\"}")
+        openSession(); awaitText("Protected latest 420")
+    }
+    private fun assertUnavailable() {
+        awaitText("Session unavailable")
+        compose.onNodeWithTag("transcript-list").assertDoesNotExist()
+        compose.onAllNodesWithText("Copy message").assertCountEquals(0)
+    }
+    private fun recoverReviewSession() {
+        control("{\"page_denial\":0,\"record_denial\":0,\"snapshot_status\":0}")
+        compose.runOnIdle { app.realtime.setNetwork(true) }
+        compose.onNodeWithText("Retry").performClick()
+        awaitText("Protected latest 420")
+        compose.onNodeWithText("Session unavailable").assertDoesNotExist()
+    }
+
     @Test fun readingPagingSelectionLinksAndRestoration() = journey("reading") {
         login()
         compose.onNodeWithTag("workspace:$workspace").performClick()

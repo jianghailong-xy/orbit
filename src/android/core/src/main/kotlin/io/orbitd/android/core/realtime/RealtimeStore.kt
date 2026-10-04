@@ -10,6 +10,7 @@ import io.orbitd.android.core.protocol.Wire
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
@@ -28,6 +29,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** One per application. Auth owns credentials and disk namespaces; this store owns foreground
  * connections, bounded transcript/cache state, and authority refreshes. UI must match state.handle
@@ -71,6 +73,20 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
     }
     fun refreshDirectory() { directoryRevision.update { it + 1 } }
     fun refreshSession() { sessionRevision.update { it + 1 } }
+    /** A reader's REST denial is authority too; invalidate pending snapshots and live content. */
+    suspend fun reportReadDenial(handle: SessionHandle, id: String, error: ApiError) {
+        require(error.status == 403 || error.status == 404)
+        if (!current(handle)) return
+        val focus = selection.value
+        if (focus.handle === handle && focus.id == id) {
+            updateSession(handle, focus) { it.copy(accessDenied = true, fresh = false, snapshot = null,
+                transcript = Transcript(), error = RealtimeError.from(error)) }
+            refreshSession()
+        }
+        // A route can disappear before its UI collector runs. The store persists this decision
+        // independently, and a new process/route must read it before restoring any transcript.
+        withContext(NonCancellable) { ReadingCache(auth, handle, id).revoke() }
+    }
     override fun close() { owner.cancel() }
 
     private fun current(handle: SessionHandle) = (auth.state.value as? AuthState.SignedIn)?.handle === handle
@@ -104,6 +120,11 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
             }
         }
         launch {
+            state.map { it.session?.takeIf { s -> s.accessDenied }?.id }.distinctUntilChanged().collect { id ->
+                if (id != null) { cache.update { it.copy(sessions = it.sessions - id) }; writes.trySend(Unit) }
+            }
+        }
+        launch {
             combine(foreground, network) { visible, path -> visible to path }.collectLatest { (visible, path) ->
                 if (visible && path.available) control(handle, path, cache, writes)
                 else publish(handle) { it.copy(controlConnection = ConnectionState.STOPPED,
@@ -114,8 +135,9 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
             if (focus.handle !== handle) return@collectLatest
             cache.update { it.copy(lastSessionId = focus.id) }
             writes.trySend(Unit)
+            val denied = focus.id?.let { ReadingCache(auth, handle, it).permission().denied } == true
             publish(handle) { it.copy(session = focus.id?.let { id ->
-                SessionState(id, cache.value.sessions[id]?.withoutLive() ?: Transcript())
+                SessionState(id, if (denied) Transcript() else cache.value.sessions[id]?.withoutLive() ?: Transcript(), accessDenied = denied)
             }) }
             if (focus.id == null) return@collectLatest
             combine(foreground, network) { visible, path -> visible to path }.collectLatest { (visible, path) ->
@@ -234,7 +256,10 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
                         accessDenied = it.accessDenied || denied,
                         snapshot = if (denied) null else it.snapshot,
                         transcript = if (denied) Transcript() else it.transcript) }
-                    if (denied) { cache.update { it.copy(sessions = it.sessions - id) }; writes.trySend(Unit) }
+                    if (denied) {
+                        withContext(NonCancellable) { ReadingCache(auth, handle, id).revoke() }
+                        cache.update { it.copy(sessions = it.sessions - id) }; writes.trySend(Unit)
+                    }
                     delay(policy.delayMs(true))
                     refresh.trySend(Unit)
                 }
@@ -254,7 +279,7 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
                 if (reseed || state.value.session?.transcript?.seeded != true) {
                     val tail = rest.page(handle, id)
                     check()
-                    updateSession(handle, focus) { it.copy(transcript = it.transcript.tail(tail)) }
+                    updateSession(handle, focus) { if (it.accessDenied) it else it.copy(transcript = it.transcript.tail(tail)) }
                     save()
                     reseed = false
                 }
@@ -271,7 +296,7 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
                         val page = rest.page(handle, id, after)
                         check()
                         if (++pages > 2) throw Resync()
-                        updateSession(handle, focus) { it.copy(transcript = it.transcript.page(page)) }
+                        updateSession(handle, focus) { if (it.accessDenied) it else it.copy(transcript = it.transcript.page(page)) }
                         save()
                         val next = page.after ?: break
                         if (next <= after) throw Resync()
@@ -296,6 +321,7 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
                 save()
             } catch (error: Exception) {
                 failed = true
+                if (error is ApiError && error.status in setOf(403, 404)) reportReadDenial(handle, id, error)
                 updateSession(handle, focus) { it.copy(error = RealtimeError.from(error), fresh = false) }
             }
             updateSession(handle, focus) { it.copy(connection = ConnectionState.BACKOFF, fresh = false,

@@ -36,6 +36,23 @@ internal data class TranscriptRow(val event: RunEvent, val result: RunEvent? = n
 
 /** Project only durable changes. Live text and tool snapshots are passed to their own row. */
 internal fun transcriptRows(events: List<RunEvent>): List<TranscriptRow> {
+    // Project an unexplained end as a readable error with the original anchor. A bounded page
+    // starting mid-turn cannot prove there was no earlier reply, so wait for a user or boundary.
+    var knownTurn = false
+    var accountedFor = false
+    val unexplained = mutableSetOf<Long>()
+    events.forEach { event ->
+        when (event.type) {
+            "user" -> knownTurn = true
+            "assistant", "error", "auth_error", "auto_retry", "interrupt" -> accountedFor = true
+            "turn_end" -> {
+                val subtype = event.fields.string("subtype").orEmpty()
+                val authoritativeStatus = event.fields.string("status") in setOf("PENDING", "RUNNING", "SUCCEEDED", "FAILED", "CANCELLED", "AWAITING_INPUT", "INTERRUPTED")
+                if (knownTurn && !accountedFor && !authoritativeStatus && subtype.isNotEmpty() && subtype !in setOf("success", "completed")) unexplained += event.seq
+                accountedFor = false; knownTurn = true
+            }
+        }
+    }
     val knownTools = events.filter { it.type == "tool_use" }.mapNotNull { it.toolId() }.toSet()
     fun parent(event: RunEvent) = event.parent()?.takeIf(knownTools::contains)
     val results = events.filter { it.type == "tool_result" && it.toolId() != null }
@@ -44,6 +61,9 @@ internal fun transcriptRows(events: List<RunEvent>): List<TranscriptRow> {
     val grouped = events.groupBy(::parent)
     fun rows(parent: String?, visited: Set<String>): List<TranscriptRow> {
         return grouped[parent].orEmpty().mapNotNull { e ->
+            if (e.seq in unexplained) return@mapNotNull TranscriptRow(e.copy(type = "error", payload = buildJsonObject {
+                put("text", "This turn ended without a reply — send the message again to retry.")
+            }))
             if (e.type in setOf("turn_end", "status", "user_delivery", "init", "system", "result")) return@mapNotNull null
             if (e.type == "tool_result" && e.seq in usedResults) return@mapNotNull null
             val result = if (e.type == "tool_use") results[parent to e.toolId()] else null

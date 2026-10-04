@@ -2,6 +2,7 @@ package io.orbitd.android.reader
 
 import io.orbitd.android.core.auth.*
 import io.orbitd.android.core.net.ApiError
+import io.orbitd.android.core.net.ApiRequest
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.*
 import io.orbitd.android.directory.directoryError
@@ -13,7 +14,7 @@ import kotlinx.serialization.encodeToString
 
 @Serializable
 internal data class ReadingBookmark(val seq: Long = 0, val offset: Int = 0, val following: Boolean = true,
-    val window: ReadingWindow = ReadingWindow())
+    val window: ReadingWindow = ReadingWindow(), val accessRevision: Long = 0)
 internal data class ReadingState(val window: ReadingWindow = ReadingWindow(), val session: SessionState? = null,
     val ready: Boolean = false, val loading: Boolean = false, val error: String? = null,
     val targetSeq: Long? = null, val targetOffset: Int = 0, val targetTick: Long = 0,
@@ -34,31 +35,41 @@ internal class SessionReaderModel(private val auth: AuthSession, private val han
     private var pageJob: Job? = null
     private var saveJob: Job? = null
     private var generation = 0L
-    private val cacheKey = "reader-${ObjectId.canonical(id) ?: id}" + (record?.let { "-${ObjectId.canonical(it) ?: it}" } ?: "")
+    private val canonicalId = ObjectId.canonical(id) ?: id
+    private val cacheKey = "reader-$canonicalId" + (record?.let { "-${ObjectId.canonical(it) ?: it}" } ?: "")
+    private val cache = ReadingCache(auth, handle, canonicalId)
+    private var access = ReadingAccess()
 
     init {
         owner.launch {
-            val saved = try { auth.readData(handle, DataKind.CACHE, cacheKey)?.takeIf { it.size <= CACHE_LIMIT }
+            val saved = try { val (permission, bytes) = cache.read(cacheKey); access = permission
+                bytes?.takeIf { it.size <= CACHE_LIMIT }
                 ?.let { Wire.decode(it, ReadingBookmark.serializer()) } } catch (cancel: CancellationException) { throw cancel }
                 catch (_: Exception) { null }
-            val restoreSaved = (record == null || restoreSavedRecord) && saved != null && saved.window.events.size <= ReadingWindow.LIMIT
-            if (restoreSaved && saved != null) {
+            val restoreSaved = (record == null || restoreSavedRecord) && saved != null &&
+                !access.denied && saved.accessRevision == access.revision && saved.window.events.size <= ReadingWindow.LIMIT
+            if (restoreSaved) {
                 bookmark = saved; following = saved.following
                 mutable.value = ReadingState(window = saved.window, ready = true,
                     targetSeq = saved.seq.takeIf { !saved.following }, targetOffset = saved.offset, targetTick = 1)
                 if (!saved.following && !saved.window.seeded) restore(saved.seq, saved.offset)
-            } else mutable.value = ReadingState(ready = true)
-            if (record != null && !restoreSaved) openRecord(record)
+            } else mutable.value = ReadingState(ready = true, denied = access.denied)
+            if (record != null && !restoreSaved && !access.denied) openRecord(record)
             var previousEvents: List<RunEvent>? = null
             store.state.collect { live ->
                 val s = live.session?.takeIf { live.handle === handle && it.id == id } ?: return@collect
                 val denied = s.accessDenied
                 if (denied) {
-                    generation++; pageJob?.cancel(); saveJob?.cancel()
-                    mutable.value = ReadingState(session = s, ready = true, denied = true)
-                    bookmark = ReadingBookmark()
-                    auth.writeData(handle, DataKind.CACHE, cacheKey, ByteArray(0))
+                    withdraw(s)
                     previousEvents = null
+                } else if (access.denied) {
+                    // Only a fresh authority response may release the session-wide marker.
+                    if (!s.fresh || s.snapshot == null) return@collect
+                    access = cache.authorize(access.revision)
+                    if (access.denied) return@collect
+                    mutable.value = ReadingState(session = s, ready = true)
+                    previousEvents = null
+                    if (record != null) openRecord(record) else latest()
                 } else {
                     val old = mutable.value
                     val restoring = !old.window.seeded && old.targetSeq != null
@@ -84,7 +95,7 @@ internal class SessionReaderModel(private val auth: AuthSession, private val han
         fun slice(): ReadingBookmark {
             val from = if (bookmark.following) (window.events.size - count).coerceAtLeast(0) else (index - count / 3).coerceAtLeast(0)
             val events = window.events.drop(from).take(count)
-            return bookmark.copy(window = window.copy(events = events, hasOlder = window.hasOlder || from > 0,
+            return bookmark.copy(accessRevision = access.revision, window = window.copy(events = events, hasOlder = window.hasOlder || from > 0,
                 newerAfter = if (from + events.size < window.events.size) events.lastOrNull()?.seq else window.newerAfter))
         }
         var saved = slice()
@@ -97,7 +108,7 @@ internal class SessionReaderModel(private val auth: AuthSession, private val han
             saved = saved.copy(window = ReadingWindow())
             bytes = Wire.json.encodeToString(saved).encodeToByteArray()
         }
-        try { auth.writeData(handle, DataKind.CACHE, cacheKey, bytes) }
+        try { cache.write(cacheKey, saved.accessRevision, bytes) }
         catch (cancel: CancellationException) { throw cancel }
         catch (_: Exception) { mutable.update { it.copy(error = "Couldn't save reading position. Keep this session open and retry.") } }
     }
@@ -106,7 +117,7 @@ internal class SessionReaderModel(private val auth: AuthSession, private val han
         if (!window.hasOlder) return
         val before = window.events.firstOrNull()?.seq ?: return
         page { old ->
-            val loaded = api.page("before" to "$before")
+            val loaded = read { api.page("before" to "$before") }
             old.copy(window = old.window.older(loaded), targetSeq = bookmark.seq.takeIf { it > 0 },
                 targetOffset = bookmark.offset, targetTick = old.targetTick + 1)
         }
@@ -114,18 +125,23 @@ internal class SessionReaderModel(private val auth: AuthSession, private val han
     fun newer() {
         val after = mutable.value.window.newerAfter ?: return
         page { old ->
-            val loaded = api.page("after" to "$after")
+            val loaded = read { api.page("after" to "$after") }
             old.copy(window = old.window.newer(loaded), targetSeq = bookmark.seq.takeIf { it > 0 },
                 targetOffset = bookmark.offset, targetTick = old.targetTick + 1)
         }
     }
     fun show(seq: Long) { following = false; mutable.update { it.copy(targetSeq = seq, targetOffset = 0, targetTick = it.targetTick + 1) } }
-    suspend fun full(seq: Long) = api.full(seq)
+    suspend fun full(seq: Long): RunEvent {
+        val version = generation
+        val event = read(recordScoped = true) { api.full(seq) }
+        if (version != generation || mutable.value.denied || !cache.valid(access.revision)) throw CancellationException("Reading access changed")
+        return event
+    }
     fun openRecord(record: String) {
         following = false
         page(replace = true) { old ->
             try {
-                val page = api.page("around" to record)
+                val page = read(recordScoped = true) { api.page("around" to record) }
                 val anchor = page.anchor ?: error("Missing anchor")
                 old.copy(window = ReadingWindow().seed(page), targetSeq = anchor.seq, targetOffset = 0, targetTick = old.targetTick + 1)
             } catch (error: ApiError) {
@@ -135,12 +151,12 @@ internal class SessionReaderModel(private val auth: AuthSession, private val han
     }
     fun latest() {
         following = true
-        page(replace = true) { old -> old.copy(window = ReadingWindow().seed(api.page("tail" to "200")),
+        page(replace = true) { old -> old.copy(window = ReadingWindow().seed(read { api.page("tail" to "200") }),
             targetSeq = null, targetTick = old.targetTick + 1) }
     }
     private fun restore(seq: Long, offset: Int) {
         page(replace = true) { old ->
-            val loaded = api.page("before" to "${seq + 1}")
+            val loaded = read { api.page("before" to "${seq + 1}") }
             old.copy(window = ReadingWindow().seed(loaded).copy(newerAfter = loaded.events.lastOrNull()?.seq),
                 targetSeq = seq, targetOffset = offset, targetTick = old.targetTick + 1)
         }
@@ -169,10 +185,32 @@ internal class SessionReaderModel(private val auth: AuthSession, private val han
             } catch (cancel: CancellationException) { throw cancel }
             catch (error: Exception) {
                 if (version == generation) mutable.update { it.copy(loading = false, error = directoryError(error)) }
-                if (error is ApiError && error.status == 403) store.refreshSession()
             }
         }
     }
-    override fun close() { owner.cancel(); scope.launch { save() } }
+    private suspend fun withdraw(session: SessionState?) {
+        generation++; pageJob?.cancel(); saveJob?.cancel()
+        mutable.value = ReadingState(session = session, ready = true, denied = true)
+        bookmark = ReadingBookmark()
+        // Finishing a denial must survive removal of the row/route that initiated the request.
+        withContext(NonCancellable) { access = cache.revoke() }
+    }
+    private suspend fun <T> read(recordScoped: Boolean = false, load: suspend () -> T): T {
+        try { return load() }
+        catch (error: ApiError) {
+            var denial: ApiError? = error.takeIf { it.status == 403 || it.status == 404 && !recordScoped }
+            if (recordScoped && error.status == 404) {
+                // around/full can fail for one missing record in an otherwise accessible session.
+                try { auth.request(handle, ApiRequest(listOf("sessions", id))) }
+                catch (check: ApiError) { if (check.status in setOf(403, 404)) denial = check else throw check }
+            }
+            denial?.let {
+                store.reportReadDenial(handle, id, it)
+                withdraw(store.state.value.session?.takeIf { s -> s.id == id && s.accessDenied })
+            }
+            throw error
+        }
+    }
+    override fun close() { generation++; owner.cancel(); scope.launch { save() } }
     companion object { private const val CACHE_LIMIT = 1024 * 1024 }
 }

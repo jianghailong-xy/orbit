@@ -26,10 +26,20 @@ the durable event list's identity; row projection runs only when durable content
 Rows have stable sequence keys, fold results into their calls, and retain orphaned results and
 subagent messages when the launching call lies outside the current page.
 
-Authoritative 403/404 removes the transcript, details, links and cached reading content. SSE
+Authoritative session 403/404 removes the transcript, details, links and cached reading content. SSE
 cannot repopulate denied state; successful authority recovery loads a fresh tail. Network/5xx
 failures keep explicitly stale reading content. Session mutations still require both fresh
 session and directory state and the captured auth handle. No auth rotation logic was changed.
+Ordinary tail/before/after 404 is session-scoped. An around/full 404 can instead mean one missing
+record: a session detail read distinguishes that case before revoking the session. An unavailable
+authority check keeps stale content and reports its failure; it does not invent a denial.
+
+`ReadingCache` persists a session-wide access revision in A03's account namespace. Rejection
+invalidates every default/record bookmark, including late saves and cold process restoration.
+Old bookmark bytes cannot restore under the new revision. The store also persists rejection when
+no reader is mounted; a fresh authoritative snapshot is required to release it. In-flight page,
+full-content and authority responses cannot revive content after rejection. These are additive
+reading/cache APIs; auth, wire DTOs, the unified destination and A07/A08 interfaces are unchanged.
 
 ## Reading and content
 
@@ -49,10 +59,12 @@ session and directory state and the captured auth handle. No auth rotation logic
 - Saved reading windows use account-scoped storage, at most 200 events and 1 MiB. Large windows
   shrink around the anchor. If even one event exceeds that limit, only position metadata is
   stored and restoration pages to its sequence; offline failure offers Retry rather than
-  substituting the latest messages. Cached content can be read offline without fresh authority.
+  substituting the latest messages. Cached content can be read offline unless access was revoked.
 - CommonMark/GFM uses the pinned `commonmark-java` 0.25.1 parser and tables, strikethrough,
   task-list and autolink extensions. Native Compose text supports selection, headings, lists,
   quotes, inline emphasis/code and links. HTML is literal text. Tables scroll horizontally.
+  A linked image retains its outer destination via Open link, alongside image viewing/Open image;
+  both destinations use the existing safe link handler.
 - Code/diff/output previews collapse after 24 lines or 4,000 characters. Full output uses lazy
   32-line chunks, horizontal scrolling and Copy all. Tool payloads marked truncated are fetched
   from the existing full-event endpoint when expanded. Text/thinking drafts stay separate from
@@ -65,12 +77,19 @@ session and directory state and the captured auth handle. No auth rotation logic
   readable. Background REST fields are `toolUseId`, `shellId` and `latestOutput`, with live whole
   snapshots overlaid. Session details include branch/base/worktree state, changed files, diff,
   and related task/project/session routes. Interactive cards remain their feature tasks' work.
+- An unexplained failed `turn_end` has a readable, copyable notice at its original sequence.
+  Success/completed, absent subtype, authoritative status and already explained outcomes do not
+  add that notice. A page starting mid-turn does not infer that an off-page reply was missing.
 - Authenticated attachment and same-session legacy artifact images use the existing API. Other
   HTTPS images use a separate client with no auth or redirects. Images are sampled to at most
   1440×2560 within a fixed preview area to avoid late layout shifts; a dialog allows zoom/pan.
   File links use Android's document destination chooser. Images/downloads are bounded to the
   server's 25 MiB upload limit; opt-in full-event responses are bounded to 40 MiB. These bounds
   do not alter default REST/auth requests.
+
+Compatibility observation for A01: web also accepts old `payload.images`; the referenced iOS
+reducer uses `attachments` and does not establish that legacy format as a confirmed iOS requirement.
+This repair does not expand that format's support or change the S1 deployment baseline.
 
 `text/MarkdownText.kt` and `text/ReaderLinks.kt` are the deliberately small reuse surface for
 Wiki and detail pages. They share native text, code, images and link routing, without a general
@@ -131,5 +150,24 @@ physical Android phones, approved deployed instance/isolated role accounts, and 
 traversal/spoken feedback. Synthetic emulator checks do not close those gaps or lower S1/D09.
 Use the final task evidence envelope for candidate-specific results, hashes and remaining gaps;
 exploratory failures stay in their original artifact directories.
+
+## Revision 1 repair checks
+
+The independent SEND_BACK review of `b0c142296b3dbb328beea043877796afb451ec5c` identified four
+reading defects. `*Review*Test` first ran with the unchanged b0 product: 12 checks, seven expected
+failures across all four findings. The exact three test files then passed unchanged after repair.
+Additional cases cover late page/full/authority responses, cold auth/store restoration, cache
+revision writes, unrelated namespaces and partial-turn boundaries. The old evidence archive and
+its 600-second stream diagnostic remain intact; this increment does not rerun that sampling.
+
+The fixture's separate `REVIEW` dataset has 420 records; DS3/DS4 are unchanged. It independently
+controls ordinary page denial, around/full denial and session detail status. Four instrumentation
+methods named `review…` exercise actual login/directory/reader routes, copying the failure notice,
+linked-image zoom/task navigation and the exact HTTPS ACTION_VIEW URI (intercepted before launch).
+They also check removal of all Copy message controls, offline route reentry/recreation, missing
+records and fresh authority recovery. Select these with comma-separated `A06_TEST` method names.
+Candidate hashes, raw red/green results and affected device checks live in the incremental repair
+package and task comment. This code repair does not resubmit a completion envelope with unchanged
+external gaps, pass A05 as a whole, or authorize A07/A08 to start.
 
 Parser reference: [commonmark-java 0.25.1](https://github.com/commonmark/commonmark-java/tree/commonmark-parent-0.25.1).

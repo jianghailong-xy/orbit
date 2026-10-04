@@ -93,7 +93,12 @@ private fun MarkdownNode(node: Node, open: (String) -> Unit) {
             val chunks = remember(node) { inlineChunks(node) }
             chunks.forEach { chunk ->
                 val image = chunk.singleOrNull() as? Image
+                val link = (chunk.singleOrNull() as? Link)?.takeIf { it.children().any { child -> child is Image } }
                 if (image != null) TranscriptImage(image.destination, plain(image), open)
+                else if (link != null) {
+                    MarkdownNode(link, open)
+                    TextButton(onClick = { open(link.destination) }) { Text("Open link") }
+                }
                 else Text(inlineNodes(chunk, open), style = MaterialTheme.typography.bodyLarge)
             }
         }
@@ -107,7 +112,7 @@ internal fun inlineChunks(node: Node): List<List<Node>> {
     fun flush() { if (run.isNotEmpty()) result.add(run); run = mutableListOf() }
     node.children().forEach { child ->
         if (child is Image) { flush(); result += listOf(child) }
-        else if (child is Link && child.children().any { it is Image }) { flush(); result.addAll(child.children().map { listOf(it) }) }
+        else if (child is Link && child.children().any { it is Image }) { flush(); result += listOf(child) }
         else run += child
     }
     flush()
