@@ -146,9 +146,9 @@ fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: Str
     }
     preview?.let { att ->
         val images = draft.attachments.filter { it.mime.startsWith("image/") }; val index = images.indexOfFirst { it.id == att.id }
-        key(att.id) { AttachmentActions(att.name, att.mime, { model.attachmentBytes(att.id) },
+        AttachmentActions(att.name, att.mime, { model.attachmentBytes(att.id) }, contentKey = att.id,
             previous = if (index > 0) ({ preview = images[index - 1] }) else null,
-            next = if (index >= 0 && index < images.lastIndex) ({ preview = images[index + 1] }) else null) { preview = null } }
+            next = if (index >= 0 && index < images.lastIndex) ({ preview = images[index + 1] }) else null) { preview = null }
     }
     slashScope?.let { kind ->
         AlertDialog(onDismissRequest = { slashScope = null }, title = { Text(if (kind == "command") "Command" else "Skill") }, text = {

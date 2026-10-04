@@ -316,11 +316,13 @@ class ComposerDeviceTest {
             compose.waitUntil(10000) { model.state.value.draft.attachments.size==2 && model.state.value.draft.attachments.all { it.remoteId!=null } }
             assertTrue(model.state.value.draft.attachments.any { it.source=="paste" })
             appClick("${photo.name} · ${photo.size/1024} KB")
-            appClick("Next image")
-            compose.waitUntil(5000) { compose.onAllNodesWithContentDescription("pasted.png").fetchSemanticsNodes().isNotEmpty() }
-            capture("gallery-next")
-            appClick("Previous image")
-            compose.waitUntil(5000) { compose.onAllNodesWithContentDescription("photo.png").fetchSemanticsNodes().isNotEmpty() }
+            repeat(6) { round ->
+                appClick("Next image")
+                compose.waitUntil(5000) { compose.onAllNodesWithContentDescription("pasted.png").fetchSemanticsNodes().isNotEmpty() }
+                if (round==0) capture("gallery-next")
+                appClick("Previous image")
+                compose.waitUntil(5000) { compose.onAllNodesWithContentDescription("photo.png").fetchSemanticsNodes().isNotEmpty() }
+            }
             appClick("Close attachment")
             ready();clickSendWhenEnabled()
             compose.waitUntil(10000) { !model.state.value.busy && model.state.value.draft.pending==null && model.state.value.draft.attachments.isEmpty() }

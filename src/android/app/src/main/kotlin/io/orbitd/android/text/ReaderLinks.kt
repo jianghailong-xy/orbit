@@ -83,7 +83,7 @@ fun rememberReaderLinkHandler(resources: ReaderResources, open: (OrbitRoute) -> 
         val info = resources.metadata(source)
         val name = info?.first ?: source.substringAfterLast('/').substringAfter(':').ifBlank { "orbit-file" }
         val mime = info?.second ?: android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(name.substringAfterLast('.', "")) ?: "application/octet-stream"
-        AttachmentActions(name, mime, { resources.bytes(source) }) { file = null }
+        AttachmentActions(name, mime, { resources.bytes(source) }, contentKey = source) { file = null }
     }
     message?.let { AlertDialog(onDismissRequest = { message = null }, text = { Text(it) }, confirmButton = {
         TextButton(onClick = { message = null }) { Text("OK") }
@@ -140,9 +140,9 @@ fun TranscriptImage(source: String, alt: String, open: (String) -> Unit) {
     if (zoom && bitmap != null && resources?.available() == true) {
         val info = resources.metadata(selected)
         val gallery = resources.images(); val index = gallery.indexOf(selected)
-        key(selected) { AttachmentActions(info?.first ?: alt.ifBlank { "image.png" }, info?.second ?: "image/*",
-            { resources.bytes(selected) }, closeLabel = "Close image",
+        AttachmentActions(info?.first ?: alt.ifBlank { "image.png" }, info?.second ?: "image/*",
+            { resources.bytes(selected) }, closeLabel = "Close image", contentKey = selected,
             previous = if (index > 0) ({ selected = gallery[index - 1] }) else null,
-            next = if (index >= 0 && index < gallery.lastIndex) ({ selected = gallery[index + 1] }) else null) { zoom = false } }
+            next = if (index >= 0 && index < gallery.lastIndex) ({ selected = gallery[index + 1] }) else null) { zoom = false }
     }
 }

@@ -45,7 +45,16 @@ fun clearAttachmentHandoffs(context: Context) {
 
 @Composable
 fun AttachmentActions(name: String, mime: String, bytes: suspend () -> ByteArray, closeLabel: String = "Close attachment",
-    previous: (() -> Unit)? = null, next: (() -> Unit)? = null, close: () -> Unit) {
+    previous: (() -> Unit)? = null, next: (() -> Unit)? = null, contentKey: String = name, close: () -> Unit) {
+    // Keep the Android window while changing images; reset only the file's content and jobs.
+    Dialog(close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        key(contentKey) { AttachmentContent(name, mime, bytes, closeLabel, previous, next, close) }
+    }
+}
+
+@Composable
+private fun AttachmentContent(name: String, mime: String, bytes: suspend () -> ByteArray, closeLabel: String,
+    previous: (() -> Unit)?, next: (() -> Unit)?, close: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var error by remember { mutableStateOf<String?>(null) }
@@ -123,31 +132,29 @@ fun AttachmentActions(name: String, mime: String, bytes: suspend () -> ByteArray
             resolver.update(uri, ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) }, null, null)
         } catch (failure: Exception) { resolver.delete(uri, null, null); throw failure }
     }
-    Dialog(close, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(Modifier.fillMaxSize().safeDrawingPadding()) { Column(Modifier.padding(12.dp)) {
-            TextButton(onClick = close) { Text(closeLabel) }
-            Text(name, style = MaterialTheme.typography.titleMedium)
-            notice?.let { Text(it) }
-            error?.let { Text(it, color = MaterialTheme.colorScheme.error); TextButton(onClick = { error = null; retry++ }) { Text("Retry") } }
-            if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-                if (mime.startsWith("image/")) TextButton(enabled = !busy, onClick = { run("Saved to Pictures/Orbit") { saveImage(it) } }) { Text("Save image") }
-                TextButton(enabled = !busy, onClick = { save.launch(name) }) { Text("Download") }
-                TextButton(enabled = !busy, onClick = { run { handoff(it, Intent.ACTION_VIEW) } }) { Text("Open") }
-                TextButton(enabled = !busy, onClick = { run { handoff(it, Intent.ACTION_SEND) } }) { Text("Share") }
-                TextButton(enabled = !busy, onClick = { run("Copied file") { handoff(it, "copy") } }) { Text("Copy") }
-            }
-            if (previous != null || next != null) Row {
-                TextButton(enabled = previous != null, onClick = { previous?.invoke() }) { Text("Previous image") }
-                TextButton(enabled = next != null, onClick = { next?.invoke() }) { Text("Next image") }
-            }
-            image?.let { bitmap ->
-                var scale by remember { mutableFloatStateOf(1f) }
-                var x by remember { mutableFloatStateOf(0f) }; var y by remember { mutableFloatStateOf(0f) }
-                Image(bitmap.asImageBitmap(), name, Modifier.weight(1f).fillMaxWidth().pointerInput(Unit) {
-                    detectTransformGestures { _, pan, zoom, _ -> scale = (scale * zoom).coerceIn(1f, 5f); x += pan.x; y += pan.y }
-                }.graphicsLayer { scaleX = scale; scaleY = scale; translationX = x; translationY = y }, contentScale = ContentScale.Fit)
-            }
-        } }
-    }
+    Surface(Modifier.fillMaxSize().safeDrawingPadding()) { Column(Modifier.padding(12.dp)) {
+        TextButton(onClick = close) { Text(closeLabel) }
+        Text(name, style = MaterialTheme.typography.titleMedium)
+        notice?.let { Text(it) }
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error); TextButton(onClick = { error = null; retry++ }) { Text("Retry") } }
+        if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+            if (mime.startsWith("image/")) TextButton(enabled = !busy, onClick = { run("Saved to Pictures/Orbit") { saveImage(it) } }) { Text("Save image") }
+            TextButton(enabled = !busy, onClick = { save.launch(name) }) { Text("Download") }
+            TextButton(enabled = !busy, onClick = { run { handoff(it, Intent.ACTION_VIEW) } }) { Text("Open") }
+            TextButton(enabled = !busy, onClick = { run { handoff(it, Intent.ACTION_SEND) } }) { Text("Share") }
+            TextButton(enabled = !busy, onClick = { run("Copied file") { handoff(it, "copy") } }) { Text("Copy") }
+        }
+        if (previous != null || next != null) Row {
+            TextButton(enabled = previous != null, onClick = { previous?.invoke() }) { Text("Previous image") }
+            TextButton(enabled = next != null, onClick = { next?.invoke() }) { Text("Next image") }
+        }
+        image?.let { bitmap ->
+            var scale by remember { mutableFloatStateOf(1f) }
+            var x by remember { mutableFloatStateOf(0f) }; var y by remember { mutableFloatStateOf(0f) }
+            Image(bitmap.asImageBitmap(), name, Modifier.weight(1f).fillMaxWidth().pointerInput(Unit) {
+                detectTransformGestures { _, pan, zoom, _ -> scale = (scale * zoom).coerceIn(1f, 5f); x += pan.x; y += pan.y }
+            }.graphicsLayer { scaleX = scale; scaleY = scale; translationX = x; translationY = y }, contentScale = ContentScale.Fit)
+        }
+    } }
 }
