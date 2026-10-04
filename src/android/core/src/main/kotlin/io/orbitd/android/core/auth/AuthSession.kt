@@ -1,6 +1,7 @@
 package io.orbitd.android.core.auth
 
 import io.orbitd.android.core.net.ApiRequest
+import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.net.ApiResponse
 import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.net.HttpRequest
@@ -12,6 +13,9 @@ import io.orbitd.android.core.protocol.ProtocolException
 import io.orbitd.android.core.protocol.RefreshRequest
 import io.orbitd.android.core.protocol.User
 import io.orbitd.android.core.protocol.Wire
+import io.orbitd.android.core.realtime.EventTransport
+import io.orbitd.android.core.realtime.OkHttpEventTransport
+import io.orbitd.android.core.realtime.SseFrame
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -56,6 +60,7 @@ class AuthSession(
     private val clientVersion: String,
     private val allowLoopbackHttp: Boolean = false,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val eventTransport: EventTransport = OkHttpEventTransport(),
 ) : OrbitApi {
     private class Epoch(val server: ServerAddress, dispatcher: CoroutineDispatcher) {
         val job = SupervisorJob()
@@ -189,6 +194,45 @@ class AuthSession(
     suspend fun writeData(handle: SessionHandle, kind: DataKind, key: String, bytes: ByteArray) = lock.withLock {
         current(handle)
         data.write(handle.account, kind, key, bytes)
+    }
+
+    /** Streams share the REST epoch and refresh flight; credentials never leave this boundary. */
+    suspend fun stream(handle: SessionHandle, request: ApiRequest,
+        onOpen: suspend () -> Unit, onFrame: suspend (SseFrame) -> Unit) {
+        val current = lock.withLock { current(handle) }
+        owned(current) {
+            var opened = false
+            suspend fun consume(token: String) = eventTransport.stream(
+                HttpRequest(current.server, request, clientVersion, token),
+                { lock.withLock { requireCurrent(current) }; opened = true; onOpen() },
+                { frame -> lock.withLock { requireCurrent(current) }; onFrame(frame) },
+            )
+            val (first, version) = lock.withLock {
+                requireCurrent(current)
+                current.tokens!! to current.version
+            }
+            try { consume(first.accessToken) } catch (error: ApiError) {
+                if (opened || error.status != 401) throw error
+                refresh(current, version)
+                val (fresh, retryVersion) = lock.withLock {
+                    requireCurrent(current)
+                    current.tokens!! to current.version
+                }
+                try { consume(fresh.accessToken) } catch (retry: ApiError) {
+                    withContext(NonCancellable) {
+                        lock.withLock {
+                            requireCurrent(current)
+                            if (!opened && retry.status == 401 && current.version == retryVersion) {
+                                retireLocked(current.server, SignOutReason.EXPIRED)
+                                throw SessionChanged()
+                            }
+                        }
+                    }
+                    throw retry
+                }
+            }
+            lock.withLock { requireCurrent(current) }
+        }
     }
 
     private suspend fun refresh(current: Epoch, rejectedVersion: Long): LoginResponse {
