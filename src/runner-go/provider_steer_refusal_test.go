@@ -97,6 +97,7 @@ func TestEverySessionLoopThatCannotSteerRefusesOne(t *testing.T) {
 		// provider → the source files its inbox dispatch lives in.
 		providerCodex:       {"codex_appserver.go"},
 		providerKimi:        {"kimi_acp.go"},
+		providerDsh:         {"dsh_acp.go"},
 		providerOpenCode:    {"opencode.go"},
 		providerAntigravity: {"antigravity.go"},
 	}
