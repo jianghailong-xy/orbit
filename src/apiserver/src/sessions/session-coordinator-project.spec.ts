@@ -14,7 +14,12 @@ import { SessionsService } from './sessions.service';
 const NOW = new Date();
 const PROJECT_ID = '018f3f3e-1a2b-7c3d-8e4f-5a6b7c8d9e0f';
 
-function sessionRow(coordinatorForProject: { id: string; title: string } | null) {
+/** The include's own shape: the coordinator's project, and its primary codebase — the read the
+ *  detail derives the project's integration line from. `codebases` is always an array from a real
+ *  query (a to-many relation under `select`), which is why the stub carries one too. */
+function sessionRow(
+  coordinatorForProject: { id: string; title: string; codebases: { integrationRef: string | null }[] } | null,
+) {
   return {
     id: '11111111-1111-4111-8111-111111111111',
     status: RunStatus.AWAITING_INPUT,
@@ -69,13 +74,19 @@ function serviceFor(row: ReturnType<typeof sessionRow>) {
 
 test('the detail names the project a coordinator session coordinates', async () => {
   const { service, calls } = serviceFor(
-    sessionRow({ id: PROJECT_ID, title: '实施 Project 公平调度域改造' }),
+    sessionRow({
+      id: PROJECT_ID,
+      title: '实施 Project 公平调度域改造',
+      codebases: [{ integrationRef: `refs/heads/project/${PROJECT_ID}` }],
+    }),
   );
 
   const detail: any = await service.get('owner-1', '11111111-1111-4111-8111-111111111111');
 
   assert.equal(detail.projectId, PROJECT_ID);
   assert.equal(detail.projectTitle, '实施 Project 公平调度域改造');
+  // The coordinator's own project line, read out of the same include and spelled as a branch.
+  assert.equal(detail.projectIntegrationRef, `project/${PROJECT_ID}`);
   assert.deepEqual(detail.projectMembership, {
     projectId: PROJECT_ID,
     projectTitle: '实施 Project 公平调度域改造',
@@ -83,7 +94,13 @@ test('the detail names the project a coordinator session coordinates', async () 
     role: 'COORDINATOR',
   });
   // Reached through the unique index behind Project.coordinatorSessionId, in the same read.
-  assert.deepEqual(calls[0].include.coordinatorForProject, { select: { id: true, title: true } });
+  assert.deepEqual(calls[0].include.coordinatorForProject, {
+    select: {
+      id: true,
+      title: true,
+      codebases: { where: { slot: 'primary' }, select: { integrationRef: true }, take: 1 },
+    },
+  });
   // The join itself is not part of the payload — only the two flattened fields are.
   assert.equal('coordinatorForProject' in detail, false);
 });
@@ -95,5 +112,6 @@ test('an ordinary session says so with nulls rather than by omission', async () 
 
   assert.equal(detail.projectId, null);
   assert.equal(detail.projectTitle, null);
+  assert.equal(detail.projectIntegrationRef, null);
   assert.equal(detail.projectMembership, null);
 });
