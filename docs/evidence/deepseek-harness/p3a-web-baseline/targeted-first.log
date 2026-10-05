@@ -1,0 +1,16 @@
+
+> @orbit/web@0.1.0 test
+> vitest run --maxWorkers=2 src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx src/components/WorkspaceView.criteriaDecisionCard.test.tsx src/components/WorkspaceView.promotionPlacement.test.tsx src/components/WorkspaceView.settlementPointer.test.tsx
+
+
+ RUN  v5.0.2 /root/.orbit/worktrees/2dca8f50-ea79-57ab-94e4-b997289bec5c/src/web
+
+
+ Test Files  4 passed (4)
+      Tests  43 passed (43)
+   Start at  18:13:25
+   Duration  5.86s (tests 56%, import 24%, transform 11%, environment 9%)
+
+    Isolate  4 workers spawned · ~298ms startup each (spawn + environment, per file)
+             at least ~298ms faster with isolate: false — reuses workers across files instead of one per file
+

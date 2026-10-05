@@ -14,7 +14,7 @@ export function sanitizeRuntimeDefaultModels(value: unknown): RuntimeDefaultMode
     const model = source[runtime];
     if (typeof model !== 'string') continue;
     const trimmed = model.trim();
-    if (trimmed) result[runtime] = trimmed;
+    if (trimmed) result[runtime] = runtime === AgentProvider.DSH ? model : trimmed;
   }
   return result;
 }
@@ -30,7 +30,9 @@ export function firstRuntimeCatalogModel(value: unknown, runtime: AgentProvider)
   const rows = (value as RunnerModelCatalog)[runtime];
   if (!Array.isArray(rows)) return undefined;
   for (const row of rows) {
-    if (row && typeof row.value === 'string' && row.value.trim()) return row.value.trim();
+    if (row && typeof row.value === 'string' && row.value.trim()) {
+      return runtime === AgentProvider.DSH ? row.value : row.value.trim();
+    }
   }
   return undefined;
 }
@@ -46,7 +48,7 @@ export function runtimeCatalogModels(
   if (!Array.isArray(rows)) return undefined;
   return rows
     .filter((row) => !!row && typeof row.value === 'string' && !!row.value.trim())
-    .map((row) => ({ value: row.value.trim() }));
+    .map((row) => ({ value: runtime === AgentProvider.DSH ? row.value : row.value.trim() }));
 }
 
 /** The reasoning levels/variants a runner reports for one runtime model, or undefined when the

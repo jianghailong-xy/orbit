@@ -61,7 +61,8 @@ export function subscriptionUsageRefusal(row: UsageProbeRow, apiKey: string): Su
   if (
     row.runtime === AgentProvider.CODEX ||
     row.runtime === AgentProvider.KIMI ||
-    row.runtime === AgentProvider.ANTIGRAVITY
+    row.runtime === AgentProvider.ANTIGRAVITY ||
+    row.runtime === AgentProvider.DSH
   ) {
     return 'NOT_CLAUDE_RUNTIME';
   }

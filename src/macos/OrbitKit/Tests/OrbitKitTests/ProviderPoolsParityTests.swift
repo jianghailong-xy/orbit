@@ -257,37 +257,38 @@ final class ProviderPoolsParityTests: XCTestCase {
 
     // MARK: - the words
 
-    /// The status bar's account names whose it is in the web's own sentences (WorkspaceView's tooltip).
-    /// Rendered with sentinel names, then the sentinels swapped for the web's interpolations, so the
-    /// whole sentence has to match rather than the words either side of a name.
+    /// The status bar's account names whose it is in the web's own sentences (`poolAccountHelp` in
+    /// lib/providerPools.ts, which the WorkspaceView tooltip says). Rendered with sentinel names,
+    /// then the sentinels swapped for the web's interpolations, so the whole sentence has to match
+    /// rather than the words either side of a name.
     ///
     /// The web's sentence for the member the next session starts on ends by saying how it was chosen,
     /// which differs for a shared pool's key; an account pool's words are the branch this client says.
     func testTheAccountSaysWhoseItIsInTheWebsSentences() throws {
-        let web = try source("src/web/src/components/WorkspaceView.tsx")
+        let web = try source("src/web/src/lib/providerPools.ts")
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
         let pool = ProviderPool(id: "p", slug: "s", label: "POOLNAME")
         let member = PoolMember(id: "m", slug: "k", label: "MEMBERNAME", state: .available)
         func theirs(_ current: Bool) -> String {
             ProviderPools.accountHelp(pool: pool, account: PoolAccount(member: member, current: current))
-                .replacingOccurrences(of: "POOLNAME", with: "${shownPool.label}")
-                .replacingOccurrences(of: "MEMBERNAME", with: "${shownPoolAccount.member.label}")
+                .replacingOccurrences(of: "POOLNAME", with: "${pool.label}")
+                .replacingOccurrences(of: "MEMBERNAME", with: "${account.member.label}")
         }
-        XCTAssertTrue(web.contains("`\(theirs(true))`"), "WorkspaceView.tsx has no `\(theirs(true))`")
+        XCTAssertTrue(web.contains("`\(theirs(true))`"), "providerPools.ts has no `\(theirs(true))`")
         let next = theirs(false)
         let chosen = " — the account whose quota resets soonest"
         XCTAssertTrue(next.hasSuffix(chosen))
         let opening = next.dropLast(chosen.count)
-        XCTAssertTrue(web.contains("`\(opening) — ${ shownPool.shared ? 'the key it picks for you right now' : 'the account whose quota resets soonest' }`"),
-                      "WorkspaceView.tsx no longer says `\(next)` for an account pool")
+        XCTAssertTrue(web.contains("`\(opening) — ${ pool.shared ? 'the key it picks for you right now' : 'the account whose quota resets soonest' }`"),
+                      "providerPools.ts no longer says `\(next)` for an account pool")
         // A shared pool's key says the same sentence with the web's other branch, which the ternary
         // above already carries — so it has to be the same opening and the one word changed.
         let shared = ProviderPool(id: "p", slug: "s", label: "POOLNAME", members: [member],
                                   shared: SharedPool(id: "p", slug: "s", label: "POOLNAME"))
         let asKey = ProviderPools
             .accountHelp(pool: shared, account: PoolAccount(member: member, current: false))
-            .replacingOccurrences(of: "POOLNAME", with: "${shownPool.label}")
-            .replacingOccurrences(of: "MEMBERNAME", with: "${shownPoolAccount.member.label}")
+            .replacingOccurrences(of: "POOLNAME", with: "${pool.label}")
+            .replacingOccurrences(of: "MEMBERNAME", with: "${account.member.label}")
         XCTAssertTrue(asKey.hasSuffix(" — the key it picks for you right now"), asKey)
         XCTAssertEqual(asKey.replacingOccurrences(of: "the key it picks for you right now",
                                                   with: "the account whose quota resets soonest"),
@@ -295,8 +296,8 @@ final class ProviderPoolsParityTests: XCTestCase {
         // Running — as opposed to starting — names the key the same way either kind does.
         XCTAssertEqual(ProviderPools
             .accountHelp(pool: shared, account: PoolAccount(member: member, current: true))
-            .replacingOccurrences(of: "POOLNAME", with: "${shownPool.label}")
-            .replacingOccurrences(of: "MEMBERNAME", with: "${shownPoolAccount.member.label}"),
+            .replacingOccurrences(of: "POOLNAME", with: "${pool.label}")
+            .replacingOccurrences(of: "MEMBERNAME", with: "${account.member.label}"),
                        theirs(true))
     }
 

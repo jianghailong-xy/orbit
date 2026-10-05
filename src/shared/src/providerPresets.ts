@@ -54,15 +54,17 @@ export interface ProviderPreset {
    * dialect since it dropped Chat Completions in February 2026 — `kimi` for Moonshot's own API,
    * which the Kimi CLI speaks natively, so a Kimi key runs on Kimi, and `antigravity` for Google's
    * Gemini API, which the Antigravity CLI (agy) speaks natively, so a Gemini key runs on agy.
+   * `dsh` explicitly selects DeepSeek Harness; the existing `deepseek` preset still borrows Claude.
    */
-  runtime?: 'claude' | 'codex' | 'kimi' | 'antigravity';
+  runtime?: 'claude' | 'codex' | 'kimi' | 'antigravity' | 'dsh';
   /**
    * True when this vendor's endpoint IS the runtime CLI's own — Anthropic for `claude`, OpenAI
    * for `codex`, Gemini for `antigravity`. The runner probes those CLIs for their live model list
    * (see the runner's claude_models.go / codex_models.go / antigravity_models.go), so the picker
    * follows the installed CLI and nobody has to maintain a list that goes stale the day a model
    * ships. `models` below stays as the fallback for a runner whose probe hasn't landed yet, but it
-   * is not editable in the UI.
+   * is not editable in the UI. DeepSeek Harness has no static fallback: its opaque ACP values
+   * and unknown context windows must come from the runtime.
    *
    * A third-party Anthropic-compatible endpoint (DeepSeek, Moonshot, GLM…) is NOT this: the
    * runner's probe reports what its own CLI offers, which says nothing about what that vendor
@@ -160,6 +162,18 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     ],
     defaultModel: 'deepseek-v4-pro',
     catalog: { source: 'deepseek', match: /^deepseek-/ },
+    brand: { mono: 'D', from: '#5b7cff', to: '#3a57e8' },
+    keyUrl: 'https://platform.deepseek.com',
+  },
+  {
+    slug: 'deepseek-harness',
+    label: 'DeepSeek Harness',
+    runtime: 'dsh',
+    // The official API Key adapter speaks Messages, not Chat Completions (P0 contract §2).
+    baseUrl: 'https://api.deepseek.com/anthropic',
+    models: [],
+    defaultModel: '',
+    modelsFromRuntime: true,
     brand: { mono: 'D', from: '#5b7cff', to: '#3a57e8' },
     keyUrl: 'https://platform.deepseek.com',
   },

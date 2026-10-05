@@ -140,6 +140,7 @@ export class UsersController {
       merged.notifySessionFinished = dto.notifySessionFinished;
     if (dto.notifyAgentMessage !== undefined) merged.notifyAgentMessage = dto.notifyAgentMessage;
     if (dto.enableOrchestration !== undefined) merged.enableOrchestration = dto.enableOrchestration;
+    if (dto.modelRouting !== undefined) merged.modelRouting = dto.modelRouting;
     return asMe(await this.prisma.user.update({
       where: { id: user.userId },
       data: { preferences: merged as Prisma.InputJsonValue },

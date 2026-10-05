@@ -32,15 +32,13 @@ test('custom-provider', async (t) => {
     assert.equal(isBuiltinProvider('deepseek'), false);
   });
 
-  await t.test('a stale old-replica kimi identity is fenced to the historical Claude fallback', () => {
-    const exec = resolveProviderExec({
+  await t.test('a stale old-replica kimi identity cannot dispatch on the runner Claude login', () => {
+    assert.throws(() => resolveProviderExec({
       declaredProvider: AgentProvider.KIMI,
       declaredProviderBuiltin: false,
       customRow: null,
       sessionModel: 'kimi-k2.7-code',
-    });
-    assert.equal(exec.provider, AgentProvider.CLAUDE);
-    assert.equal(exec.model, 'claude-opus-5');
+    }), /provider not available/);
   });
 
   await t.test('built-in claude: model kept, workspace env passed through, no injection', () => {
@@ -683,8 +681,8 @@ test('custom-provider', async (t) => {
     assert.deepEqual(Object.keys(exec.env ?? {}).sort(), ['OPENAI_API_KEY', 'OPENAI_BASE_URL']);
   });
 
-  await t.test('a disabled custom row preserves its legacy Workspace pin during rolling deploy', () => {
-    const exec = resolveProviderExec({
+  await t.test('a disabled custom row cannot dispatch on the runner Claude login during rolling deploy', () => {
+    assert.throws(() => resolveProviderExec({
       declaredProvider: 'deepseek',
       customRow: row({ enabled: false }),
       sessionModel: null,
@@ -692,10 +690,7 @@ test('custom-provider', async (t) => {
       usesRuntimeDefaultModel: false,
       runtimeDefaultModels: { claude: 'claude-sonnet-5' },
       workspaceEnv: { A: '1' },
-    });
-    assert.equal(exec.provider, 'claude');
-    assert.equal(exec.model, 'claude-opus-4-8');
-    assert.deepEqual(exec.env, { A: '1' });
+    }), /provider is disabled/);
   });
 
   await t.test('new model-less sessions ignore legacy Workspace pins and use Runtime defaults', () => {

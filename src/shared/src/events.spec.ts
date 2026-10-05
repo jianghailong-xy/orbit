@@ -7,6 +7,8 @@ import {
   isRateLimitApiErrorText,
   isRetryableApiErrorText,
   isUsageLimitErrorText,
+  RATE_LIMIT_ENGINE_ERROR_PREFIX,
+  RETRYABLE_ENGINE_ERROR_PREFIXES,
   toolResultText,
   workflowLaunchReceipt,
 } from './events';
@@ -199,6 +201,12 @@ describe('isRetryableApiErrorText', () => {
     expect(isRateLimitApiErrorText('API Error: 529 overloaded_error')).toBe(false);
     expect(isRateLimitApiErrorText('exceeded retry limit')).toBe(false);
     expect(isRateLimitApiErrorText(null)).toBe(false);
+    // The prefix is spelled twice on purpose: the list holds the literal so that macos/OrbitKit's
+    // EngineErrorsParityTests, which parses that list's own source text, can see it — an entry that is a
+    // reference, or one that arrives through a spread, is invisible to it. This is what keeps the two
+    // spellings equal; without it, editing one and not the other is a silent drift between what Orbit
+    // retries on and what it treats as a rate limit.
+    expect(RETRYABLE_ENGINE_ERROR_PREFIXES).toContain(RATE_LIMIT_ENGINE_ERROR_PREFIX);
   });
 
   it('does not retry what it cannot place', () => {

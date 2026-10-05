@@ -110,8 +110,12 @@ async function fixture(
   const runnerId = randomUUID();
   const agentId = randomUUID();
   const projectId = randomUUID();
+  // The account has smart model selection on: these cases are about routing with it on.
   await db.user.create({
-    data: { id: ownerId, email: `${label}-${RUN}-${ownerId}@routing.invalid`, name: label, passwordHash: 'x' },
+    data: {
+      id: ownerId, email: `${label}-${RUN}-${ownerId}@routing.invalid`, name: label, passwordHash: 'x',
+      preferences: { modelRouting: true },
+    },
   });
   await db.runner.create({
     data: {

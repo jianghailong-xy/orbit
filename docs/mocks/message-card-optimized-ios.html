@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>消息卡片优化设计稿</title>
+<style>
+  :root {
+    --ink:#17181b; --muted:#777a83; --faint:#a7aab2; --line:#e2e3e7;
+    --blue:#3975ee; --blue-dark:#245bd0; --blue-wash:#eef3ff; --blue-line:#d5e2ff;
+    --orange:#f08a2c; --orange-wash:#fff3e7; --green:#2f9b5a;
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; min-height:100%; }
+  body { background:#ececef; color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Noto Sans CJK SC","PingFang SC","Helvetica Neue",sans-serif; -webkit-font-smoothing:antialiased; }
+  .board { width:393px; margin:0 auto; }
+  .phone { width:393px; height:852px; position:relative; overflow:hidden; background:#fff; }
+  .status { height:54px; padding:18px 21px 0 42px; display:flex; justify-content:space-between; align-items:flex-start; font-size:17px; font-weight:700; letter-spacing:-.2px; }
+  .status-right { display:flex; align-items:center; gap:8px; }
+  .bars { display:flex; gap:3px; align-items:flex-end; height:17px; }
+  .bars i { display:block; width:4px; border-radius:2px; background:#141519; }
+  .bars i:nth-child(1){height:7px}.bars i:nth-child(2){height:10px}.bars i:nth-child(3){height:14px}.bars i:nth-child(4){height:17px}
+  .wifi { width:21px; height:14px; border:3px solid #141519; border-top-color:#141519; border-left-color:transparent; border-right-color:transparent; border-bottom-color:transparent; border-radius:50%; transform:rotate(180deg); position:relative; margin-top:1px; }
+  .wifi:after { content:""; position:absolute; left:6px; top:5px; width:5px; height:5px; border-radius:50%; background:#141519; }
+  .battery { min-width:39px; height:24px; padding:3px 5px; border-radius:8px; background:#31c364; color:#fff; font-size:15px; line-height:18px; text-align:center; }
+  .nav { height:59px; position:relative; display:flex; align-items:flex-start; justify-content:center; }
+  .nav-button { position:absolute; top:0; width:46px; height:46px; border:1px solid #e4e4e7; border-radius:50%; background:#fff; box-shadow:0 2px 9px rgba(0,0,0,.05); display:grid; place-items:center; color:#111; }
+  .nav-button.back { left:15px; font-size:34px; line-height:1; font-weight:300; padding-bottom:5px; }
+  .nav-button.more { right:15px; font-size:26px; line-height:1; letter-spacing:3px; padding-left:3px; padding-bottom:9px; }
+  .nav-title { text-align:center; padding:2px 72px 0; max-width:100%; }
+  .nav-title strong { display:block; font-size:17px; line-height:23px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .nav-title span { display:block; margin-top:1px; color:#8b8d94; font-size:12px; line-height:17px; }
+  .escalated { height:38px; padding:0 17px; background:#fff0e4; border-top:1px solid #f6e1d2; border-bottom:1px solid #eedfd2; display:flex; align-items:center; gap:10px; font-size:15px; }
+  .escalated .dot { width:9px; height:9px; flex:none; border-radius:50%; background:var(--orange); }
+  .escalated .copy { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .escalated .arrow { margin-left:auto; color:#c7a88d; font-size:24px; line-height:1; }
+  .question { height:39px; padding:0 17px; display:flex; align-items:center; gap:9px; border-bottom:1px solid var(--line); font-size:16px; }
+  .question .label { color:#8b8d94; }
+  .question .label::before { content:"↑"; margin-right:6px; color:#9a9ca3; }
+  .question .text { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .conversation { position:absolute; top:190px; bottom:232px; left:0; right:0; overflow:hidden; padding:0 16px 18px; }
+  .reply { margin:17px 0 13px; font-size:18px; line-height:26px; }
+  .reply .accent { color:#24262c; }
+  .message-card { margin-left:60px; border:1px solid var(--blue-line); background:var(--blue-wash); border-radius:18px; overflow:hidden; box-shadow:0 2px 4px rgba(42,86,180,.05); }
+  .card-header { min-height:50px; padding:12px 14px 11px; display:flex; align-items:center; gap:9px; border-bottom:1px solid var(--blue-line); }
+  .orbit-mark { width:24px; height:24px; border-radius:8px; display:grid; place-items:center; flex:none; color:#fff; background:var(--blue); font-size:15px; font-weight:700; }
+  .header-copy { min-width:0; }
+  .header-copy strong { display:block; font-size:14px; line-height:18px; font-weight:650; }
+  .header-copy span { display:block; margin-top:1px; color:#7c8497; font-size:11px; line-height:15px; }
+  .linked { margin-left:auto; align-self:flex-start; padding:4px 7px; border-radius:7px; background:#fff; color:#5574b6; font-size:10px; line-height:13px; white-space:nowrap; }
+  .card-body { padding:13px 14px 14px; }
+  .card-title { font-size:17px; line-height:23px; font-weight:650; letter-spacing:-.15px; }
+  .state-row { display:flex; align-items:center; gap:7px; margin-top:8px; color:#68728a; font-size:12px; }
+  .state { display:inline-flex; align-items:center; gap:5px; color:#9b5f1d; font-weight:600; }
+  .state i { width:7px; height:7px; border-radius:50%; background:var(--orange); }
+  .separator { width:1px; height:12px; background:#cfd7e9; }
+  .summary { margin-top:13px; padding:10px 11px; border-radius:11px; background:#fff; color:#454b5a; font-size:13px; line-height:19px; }
+  .summary strong { color:#222a3b; font-weight:650; }
+  .detail-row { margin-top:12px; padding-top:11px; border-top:1px solid var(--blue-line); display:flex; align-items:center; gap:8px; color:#596b93; font-size:12px; }
+  .detail-row .mini { width:17px; height:17px; border:1.5px solid #7891c5; border-radius:5px; display:grid; place-items:center; font-size:10px; }
+  .detail-row .chevron { margin-left:auto; font-size:18px; color:#7990bf; line-height:1; }
+  .actions { display:flex; gap:8px; margin-top:13px; }
+  .action { height:35px; flex:1; border-radius:10px; display:grid; place-items:center; font-size:13px; font-weight:600; }
+  .action.primary { color:#fff; background:var(--blue); box-shadow:0 2px 4px rgba(57,117,238,.22); }
+  .action.secondary { color:#4a659d; background:#fff; border:1px solid #c9d7f5; }
+  .metadata { margin-top:11px; color:#8c95a9; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10px; line-height:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .down { position:absolute; right:21px; bottom:33px; width:40px; height:40px; border-radius:20px; background:#fff; box-shadow:0 2px 10px rgba(0,0,0,.17); display:grid; place-items:center; color:#1d2026; font-size:21px; z-index:4; }
+  .bottom { position:absolute; left:0; right:0; bottom:0; height:232px; background:#fff; border-top:1px solid #e6e6e9; }
+  .strip { position:absolute; left:16px; right:16px; height:40px; border:1px solid #dbdce1; border-radius:14px; display:flex; align-items:center; padding:0 11px; gap:9px; }
+  .strip.process { top:19px; }
+  .strip.tasks { top:68px; }
+  .strip .glyph { width:22px; text-align:center; color:#6e737d; font-size:17px; }
+  .strip strong { font-size:15px; line-height:20px; }
+  .strip span { color:#8b8d94; font-size:12px; }
+  .strip .chev { margin-left:auto; color:#8b8d94; font-size:22px; }
+  .composer { position:absolute; left:16px; right:16px; top:117px; height:88px; border:1px solid #dedfe3; border-radius:25px; box-shadow:0 1px 2px rgba(0,0,0,.04); padding:12px 15px; }
+  .placeholder { color:#b5b6bb; font-size:17px; }
+  .composer-bottom { position:absolute; left:15px; right:10px; bottom:10px; display:flex; align-items:center; gap:14px; }
+  .plus { font-size:27px; color:#7f8187; font-weight:300; line-height:1; }
+  .auto { font-size:16px; color:#71747b; }
+  .model { margin-left:auto; font-size:15px; font-weight:650; color:#1b1c20; }
+  .model span { color:#8b8d94; font-weight:400; }
+  .send { width:32px; height:32px; border-radius:16px; background:#3476ee; display:grid; place-items:center; color:#fff; font-size:17px; }
+  .board-caption { width:393px; padding:18px 20px 22px; background:#ececef; color:#52555d; font-size:12px; line-height:18px; }
+  .board-caption strong { color:#1b1c20; font-size:13px; }
+  @media (min-width:700px) {
+    body { padding:44px 0; }
+    .board { box-shadow:0 18px 55px rgba(0,0,0,.16); border-radius:46px; overflow:hidden; }
+  }
+</style>
+<div class="board">
+  <main class="phone" aria-label="消息卡片优化设计稿">
+    <header class="status">
+      <span>11:35</span>
+      <div class="status-right"><span class="bars"><i></i><i></i><i></i><i></i></span><span class="wifi"></span><span class="battery">98</span></div>
+    </header>
+    <nav class="nav">
+      <div class="nav-button back">‹</div>
+      <div class="nav-title"><strong>OpenAI 接口 429 报错质疑</strong><span>Running · Open · just now</span></div>
+      <div class="nav-button more">•••</div>
+    </nav>
+    <div class="escalated"><span class="dot"></span><span class="copy">已升级给你 · DeepSeek Harness…</span><span class="arrow">›</span></div>
+    <div class="question"><span class="label">你的问题</span><span class="text">orbit 支持取消吗</span></div>
+    <section class="conversation">
+      <div class="reply"><span class="accent">宕跑一结束，我接着报。</span></div>
+      <article class="message-card">
+        <div class="card-header">
+          <span class="orbit-mark">⌁</span>
+          <div class="header-copy"><strong>Orbit 任务通知</strong><span>已关联到当前会话</span></div>
+          <span class="linked">上下文已整理</span>
+        </div>
+        <div class="card-body">
+          <div class="card-title">登录池会话显示当前 ChatGPT 账号与额度</div>
+          <div class="state-row"><span class="state"><i></i>等待你处理</span><span class="separator"></span><span>刚刚更新</span><span class="separator"></span><span>今天 12:03 截止</span></div>
+          <div class="summary"><strong>这轮运行已结束，证据已提交。</strong> 你可以打开任务查看结果，或稍后再处理。</div>
+          <div class="detail-row"><span class="mini">↗</span><span>查看任务详情与完整上下文</span><span class="chevron">›</span></div>
+          <div class="actions"><div class="action primary">查看任务</div><div class="action secondary">稍后处理</div></div>
+          <div class="metadata">任务 34aN4a4w… · rev 1 · run 3g9ke9aw…</div>
+        </div>
+      </article>
+      <div class="down">↓</div>
+    </section>
+    <section class="bottom">
+      <div class="strip process"><span class="glyph">▣</span><strong>后台进程</strong><span>1 个运行中 · 共 13 个</span><span class="chev">›</span></div>
+      <div class="strip tasks"><span class="glyph">☑</span><strong>此处创建的任务</strong><span>0/2 完成</span><span class="chev">›</span></div>
+      <div class="composer"><div class="placeholder">消息…</div><div class="composer-bottom"><span class="plus">＋</span><span class="auto">自动</span><span class="model">deepseek-flash <span>Ultra</span></span><span class="send">■</span></div></div>
+    </section>
+  </main>
+  <div class="board-caption"><strong>消息卡片 · 优化方向</strong><br>把原始 XML 和长段落收进详情；首屏只保留任务名称、状态、时间、结果摘要与两个操作。完整任务 ID 保留在底部，便于追溯但不抢阅读焦点。</div>
+</div>
+</html>

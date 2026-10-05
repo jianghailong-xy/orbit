@@ -181,6 +181,9 @@ export interface UserPreferences {
    *  workspace, enforced by the server on each claim, spawn and call. Absent means on; only
    *  opting out is ever written. */
   enableOrchestration?: boolean;
+  /** Smart model selection for the whole account — the Suggested tiers and the Agent switch that
+   *  routes task runs onto them. Absent means OFF; only turning it on has to be written. */
+  modelRouting?: boolean;
 }
 
 export interface Me {

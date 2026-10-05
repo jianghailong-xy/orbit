@@ -57,20 +57,28 @@ test("Don't Ask means deny everywhere a runtime can withhold, and is unenforced 
   assert.ok(codex.note?.includes('not enforced on Codex'), `codex note = ${codex.note}`);
 });
 
-test('the deliberately-permissive modes are honored everywhere, including Codex', () => {
+test('Auto and Bypass are honored by supported runtimes and rejected on DeepSeek Harness', () => {
+  const expected: Record<AgentProvider, { u: 'allow' | 'deny'; h: boolean }> = {
+    [AgentProvider.CLAUDE]: { u: 'allow', h: true },
+    [AgentProvider.CODEX]: { u: 'allow', h: true },
+    [AgentProvider.KIMI]: { u: 'allow', h: true },
+    [AgentProvider.OPENCODE]: { u: 'allow', h: true },
+    [AgentProvider.ANTIGRAVITY]: { u: 'allow', h: true },
+    [AgentProvider.DSH]: { u: 'deny', h: false },
+  };
   for (const mode of [PermissionMode.AUTO, PermissionMode.BYPASS]) {
     for (const provider of Object.values(AgentProvider)) {
       const semantics = derivePermissionSemantics(provider, mode);
       assert.deepEqual(
         { u: semantics.unapproved, h: semantics.honored },
-        { u: 'allow', h: true },
+        expected[provider],
         `${provider}/${mode}`,
       );
     }
   }
 });
 
-test('Auto exists on every runtime; only Claude gates it per model', () => {
+test('Auto is unavailable on DeepSeek Harness and only Claude gates it per model', () => {
   // Codex has it as `on-request` ("the model decides when to ask"), Kimi and OpenCode
   // runtime-wide. It used to be refused on Codex, which is why a Codex session was told to
   // switch to a newer Claude model to get a mode its own CLI has had all along.
@@ -83,6 +91,34 @@ test('Auto exists on every runtime; only Claude gates it per model', () => {
   assert.equal(autoAvailable(AgentProvider.CLAUDE, 'claude-haiku-4-5'), false);
   // A configured provider's model space is vendor-defined; the CLI decides for itself.
   assert.equal(autoAvailable(AgentProvider.CLAUDE, 'deepseek-v4', true), true);
+  assert.equal(autoAvailable(AgentProvider.DSH, 'deepseek-v4-pro'), false);
+});
+
+test('DeepSeek Harness rejects every permission mode with partial approval and explanatory notes', () => {
+  const catalog = {
+    [AgentProvider.DSH]: [{
+      value: 'opaque-model', label: 'Model', permissionModes: [PermissionMode.AUTO],
+    }],
+  };
+  for (const mode of [undefined, null, ...Object.values(PermissionMode), 'unknown-mode']) {
+    for (const runsAsRoot of [undefined, false, true]) {
+      const semantics = derivePermissionSemantics(
+        AgentProvider.DSH, mode, 'opaque-model', runsAsRoot, catalog,
+      );
+      assert.equal(semantics.mode, mode ?? PermissionMode.DONT_ASK);
+      assert.equal(semantics.unapproved, 'deny', `${mode}/${runsAsRoot}`);
+      assert.equal(semantics.honored, false, `${mode}/${runsAsRoot}`);
+      assert.equal(semantics.approvalSupport, 'partial');
+      assert.match(semantics.note ?? '', /does not support these permission modes/);
+      assert.match(semantics.note ?? '', /Session configuration is rejected/);
+      assert.match(semantics.shortNote ?? '', /unsupported on DeepSeek Harness/);
+      assert.match(semantics.shortNote ?? '', /session configuration is rejected/);
+      assert.doesNotMatch(semantics.note ?? '', /runs as Default|runs as Don't Ask/);
+    }
+  }
+  for (const customProvider of [false, true]) {
+    assert.equal(autoAvailable(AgentProvider.DSH, 'opaque-model', customProvider, catalog), false);
+  }
 });
 
 test('Auto on a Claude model without it is disclosed, not hidden', () => {
@@ -125,6 +161,8 @@ test('approval support is reported per runtime', () => {
   assert.equal(runtimeApprovalSupport(AgentProvider.ANTIGRAVITY), 'full');
   // Codex gates its dangerous primitives (commands, patches) but not every tool.
   assert.equal(runtimeApprovalSupport(AgentProvider.CODEX), 'partial');
+  // Harness can ask about file sandbox expansion, but its Orbit mode mappings remain unverified.
+  assert.equal(runtimeApprovalSupport(AgentProvider.DSH), 'partial');
 });
 
 const ROW = {

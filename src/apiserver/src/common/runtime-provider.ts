@@ -6,6 +6,7 @@ import {
   permissionModeAvailableOnRunner,
 } from '@orbit/shared';
 import type { RunnerModelCatalog } from '@orbit/shared';
+import { BadRequestException } from '@nestjs/common';
 import { runtimeCatalogReasoningLevels } from './runtime-model';
 
 // Closed CLI enums. An account default last picked in an OpenCode session (whose variants are
@@ -53,6 +54,7 @@ export function normalizeRuntimeProvider(
   // provider or pool that held the slug aside before the keyword became a runtime.
   if (value === AgentProvider.ANTIGRAVITY) return AgentProvider.ANTIGRAVITY;
   if (value === AgentProvider.KIMI && providerBuiltin) return AgentProvider.KIMI;
+  if (value === AgentProvider.DSH && providerBuiltin) return AgentProvider.DSH;
   return AgentProvider.CLAUDE;
 }
 
@@ -62,6 +64,7 @@ export function initializesRuntimeDynamically(provider?: string | null): boolean
   return (
     provider === AgentProvider.CODEX ||
     provider === AgentProvider.KIMI ||
+    provider === AgentProvider.DSH ||
     provider === AgentProvider.OPENCODE ||
     provider === AgentProvider.ANTIGRAVITY
   );
@@ -97,6 +100,11 @@ export function normalizeBuiltinPermissionMode(
   runsAsRoot?: boolean | null,
   modelCatalog?: unknown,
 ): PermissionMode {
+  // P0 does not establish any of Orbit's existing global tool policies for ACP dsh.
+  // P4 must prove an enforced file policy before these modes can be admitted.
+  if (provider === AgentProvider.DSH) {
+    throw new BadRequestException('DeepSeek Harness permission modes require an enforced file policy');
+  }
   if (!permissionModeAvailableOnRunner(permissionMode, runsAsRoot)) {
     return ROOT_FALLBACK_PERMISSION_MODE;
   }
@@ -120,7 +128,8 @@ export function normalizeEffortForProvider(
   effort?: string | null,
 ): string | undefined {
   if (effort == null) return undefined;
-  if (provider === AgentProvider.OPENCODE) return effort;
+  // ACP configuration values are opaque; the live catalog below validates dsh's selection.
+  if (provider === AgentProvider.OPENCODE || provider === AgentProvider.DSH) return effort;
   if (provider === AgentProvider.KIMI) {
     if (effort === 'minimal') return 'low';
     if (effort === 'medium') return 'high';
@@ -147,6 +156,7 @@ const MODEL_DEFINED_EFFORT_RUNTIMES: AgentProvider[] = [
   AgentProvider.OPENCODE,
   AgentProvider.KIMI,
   AgentProvider.ANTIGRAVITY,
+  AgentProvider.DSH,
 ];
 
 /** Claude Code's effort levels, lowest first: the scale a declared list is read against, and the

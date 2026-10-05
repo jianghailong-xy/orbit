@@ -30,6 +30,7 @@ import {
 import { countLiveApprovals } from '../sessions/abandoned-approvals';
 import { isSessionGenerating } from '../common/session-generating';
 import { SingleFlight } from '../common/single-flight';
+import { modelRoutingEnabled } from '../common/model-routing-switch';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { MergeReceiptRow, mergeReceiptRow } from '../sessions/merge-receipt';
@@ -2237,6 +2238,11 @@ export class ProjectsService {
         project.title,
         project.id,
         project.coordinatorEnabled,
+        // Read on its own rather than with the project, whose payload is returned as it is.
+        modelRoutingEnabled(await this.prisma.user.findUnique({
+          where: { id: ownerId },
+          select: { preferences: true },
+        })),
       ),
       // Keep the transition first in the serialized tool result. Project payloads can contain long
       // acceptance definitions, and the role change is what the currently-running turn must see.
@@ -4018,8 +4024,10 @@ export class ProjectsService {
       select: {
         id: true,
         title: true,
-        // Which of the two instruction texts the opening says (`coordinator-opening.ts`).
+        // Which of the two instruction texts the opening says (`coordinator-opening.ts`), and
+        // whether it asks for a tier: the owner's smart model selection, the switch delivery reads.
         coordinatorEnabled: true,
+        owner: { select: { preferences: true } },
         coordinatorSessionId: true,
         coordinatorWorkspaceId: true,
         // Both halves of the fold `deriveSessionLifecycleState` takes, rather than a second reading
@@ -4093,7 +4101,12 @@ export class ProjectsService {
         {
           workspaceId: runIn,
           title: coordinatorSessionTitle(project.title),
-          prompt: buildCoordinatorOpening(project.title, project.id, project.coordinatorEnabled),
+          prompt: buildCoordinatorOpening(
+            project.title,
+            project.id,
+            project.coordinatorEnabled,
+            modelRoutingEnabled(project.owner),
+          ),
         },
         { source: 'user', titleManagedByProject: true },
       );

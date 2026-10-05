@@ -1,0 +1,18 @@
+{
+  "extends": "../../../../src/web/tsconfig.json",
+  "include": [
+    "../../../../src/web/src/components/CriteriaDecisionCard.receipt.test.tsx",
+    "../../../../src/web/src/components/CriteriaDecisionCard.sessionSwitch.test.tsx",
+    "../../../../src/web/src/components/WorkspaceView.acceptanceConfirmationCard.test.tsx",
+    "../../../../src/web/src/components/WorkspaceView.criteriaDecisionCard.test.tsx",
+    "../../../../src/web/src/components/WorkspaceView.promotionPlacement.test.tsx",
+    "../../../../src/web/src/components/WorkspaceView.settlementPointer.test.tsx"
+  ],
+  "exclude": [],
+  "compilerOptions": {
+    "types": [
+      "vite/client",
+      "node"
+    ]
+  }
+}

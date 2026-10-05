@@ -734,8 +734,10 @@ suite('(q) the core tables keep every trigger that predates this project', async
   // which keeps an older control plane from claiming an Antigravity session as Claude and writes
   // nothing at all; 15 since 0370 added `task_owner_confirmation_review_reviewer_ended`, which
   // records on the confirmation reviews still waiting on a session that their reviewer ended, and
-  // writes only `task_owner_confirmation_review`.
-  assert.deepEqual(counts, { run_event: 1, session: 15, task: 30 });
+  // writes only `task_owner_confirmation_review`; 16 since 0377 added
+  // `session_dsh_runner_acquisition_guard`, which reads the provider and locks the runner
+  // FOR SHARE NOWAIT to enforce DeepSeek Harness admission without writing another relation.
+  assert.deepEqual(counts, { run_event: 1, session: 16, task: 30 });
 
   // And every one that went is named, so a reader can tell a removal from an accident.
   for (const trigger of [

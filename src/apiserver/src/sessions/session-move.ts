@@ -26,6 +26,7 @@ const RUNTIME_LABEL: Record<AgentProvider, string> = {
   [AgentProvider.KIMI]: 'Kimi',
   [AgentProvider.OPENCODE]: 'OpenCode',
   [AgentProvider.ANTIGRAVITY]: 'Antigravity',
+  [AgentProvider.DSH]: 'DeepSeek Harness',
 };
 
 /** Why a session cannot move at all (§5.2, "会话自身"). */
@@ -95,7 +96,8 @@ export function sessionMoveVerdict(s: SessionMoveFacts): SessionMoveVerdict {
   if (
     s.runtime === AgentProvider.KIMI ||
     s.runtime === AgentProvider.OPENCODE ||
-    s.runtime === AgentProvider.ANTIGRAVITY
+    s.runtime === AgentProvider.ANTIGRAVITY ||
+    s.runtime === AgentProvider.DSH
   ) {
     return refuse(`Moving ${RUNTIME_LABEL[s.runtime]} sessions isn't supported yet.`);
   }

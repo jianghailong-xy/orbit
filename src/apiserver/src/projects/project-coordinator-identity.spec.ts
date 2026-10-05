@@ -62,6 +62,9 @@ function makeService(fx: Fixture = {}) {
   let coordinator = fx.coordinator === undefined ? null : fx.coordinator;
 
   const prisma: any = {
+    // The owner's smart model selection, which the promotion's instructions are rendered under:
+    // an account that never turned it on.
+    user: { findUnique: async () => ({ preferences: {} }) },
     project: {
       findFirst: async () =>
         fx.project === null

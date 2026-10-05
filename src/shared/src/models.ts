@@ -16,6 +16,9 @@ export const DEFAULT_MODEL_BY_PROVIDER: Record<AgentProvider, string> = {
   // models ship with the CLI and come and go with its releases (`agy models`), so naming one here
   // could only ever go stale; the runner's catalogue supplies the concrete ids.
   [AgentProvider.ANTIGRAVITY]: '',
+  // ACP supplies opaque model tokens via configOptions. No static model or window fallback:
+  // a blank selection leaves the Harness's current/default choice intact (P0 contract §4).
+  [AgentProvider.DSH]: '',
 };
 
 /**
@@ -142,6 +145,9 @@ export function modelForProvider(provider: AgentProvider, override?: string | nu
   // `||` (not `??`) so a blank override ('' from a degenerate row) also falls back to the default
   // rather than reaching the runner as `-m ''`.
   const model = override || fallback;
+  // Harness configOptions values are opaque tokens, not ids that can be rebuilt or validated
+  // using another runtime's prefixes. Admission checks them against that runtime's live list.
+  if (provider === AgentProvider.DSH) return model;
   // OpenCode's selector is always `provider/model`. A provider-only API patch from an older
   // client can leave the prior runtime's model on the agent; omit that invalid bare id instead
   // of passing it to the CLI. A namespaced id is opaque here — it may legitimately name any
