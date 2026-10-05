@@ -22,6 +22,8 @@ const OVERLOADED =
 const QUOTA = "You've hit your session limit · resets 6:20pm (Europe/Berlin)";
 const RATE_LIMITED =
   "API Error: Request rejected (429) · This request would exceed your account's rate limit. Please try again later.";
+const CODEX_RATE_LIMITED =
+  'exceeded retry limit, last status: 429 Too Many Requests, request id: 95e00d6c-68cc-4d64-b4da-01a6252260c2';
 
 type RetryPlan = { retryAt?: Date | null; retryAttempts?: number };
 
@@ -135,8 +137,25 @@ test('arms the API key rate limit even though its status is mid-sentence', async
   );
 });
 
+test('arms Codex after its 429 retries are exhausted', async () => {
+  const before = Date.now();
+  const plan = await planFor({ provider: 'codex', retryAttempts: 0 }, CODEX_RATE_LIMITED);
+  const delay = plan.retryAt!.getTime() - before;
+
+  assert.ok(
+    delay >= API_ERROR_RETRY_BACKOFF_MS[0] && delay <= API_ERROR_RETRY_BACKOFF_MS[0] * 1.3,
+    `expected the first step (+jitter), got ${delay}ms`,
+  );
+});
+
 test('hands back once the steps are spent instead of retrying forever', async () => {
   const plan = await planFor({ retryAttempts: MAX_API_ERROR_RETRIES }, OVERLOADED);
+
+  assert.equal(plan.retryAt, null);
+});
+
+test('hands back Codex 429 once the bounded retry budget is spent', async () => {
+  const plan = await planFor({ provider: 'codex', retryAttempts: MAX_API_ERROR_RETRIES }, CODEX_RATE_LIMITED);
 
   assert.equal(plan.retryAt, null);
 });
@@ -233,7 +252,7 @@ test('an account pool no member reports on is armed as any unreported quota: for
 // not the person's message failing: that message was answered before the turn began, and the retry
 // re-sends it. Production, 2026-09-25: four re-sends of an answered question after one 429.
 test('a failure in a turn nobody delivered arms nothing and leaves an earlier arm standing', async () => {
-  for (const text of [OVERLOADED, RATE_LIMITED, QUOTA]) {
+  for (const text of [OVERLOADED, RATE_LIMITED, CODEX_RATE_LIMITED, QUOTA]) {
     assert.deepEqual(await planFor({ retryAttempts: 1 }, text, {} as never, false), {}, text);
   }
 });

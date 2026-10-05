@@ -173,6 +173,19 @@ describe('isRetryableApiErrorText', () => {
     ).toBe(false);
   });
 
+  it('flags Codex exhausting its request retries on a 429', () => {
+    const error = 'exceeded retry limit, last status: 429 Too Many Requests';
+    expect(
+      isRetryableApiErrorText(`${error}, request id: 95e00d6c-68cc-4d64-b4da-01a6252260c2`),
+    ).toBe(true);
+    expect(isRetryableApiErrorText(error)).toBe(true);
+    expect(isRetryableApiErrorText(`  ${error}`)).toBe(true);
+    expect(isRetryableApiErrorText(`The run failed with "${error}".`)).toBe(false);
+    expect(isRetryableApiErrorText('exceeded retry limit')).toBe(false);
+    expect(isRetryableApiErrorText('exceeded retry limit, last status: 400 Bad Request')).toBe(false);
+    expect(isRetryableApiErrorText('exceeded retry limit, last status: 401 Unauthorized')).toBe(false);
+  });
+
   it('does not retry what it cannot place', () => {
     expect(isRetryableApiErrorText('API Error: something new nobody has seen')).toBe(false);
     expect(isRetryableApiErrorText('all good')).toBe(false);

@@ -5446,7 +5446,7 @@ export class RunnerApiController {
           return !acc || e.seq > acc.seq ? { seq: e.seq, text, turnId: e.turnId ?? null } : acc;
         }, null);
       // The same provider outage when a runtime reports it as the turn's error instead of as a reply
-      // — Codex's "Selected model is at capacity". Only an error the retry would re-send past counts:
+      // — Codex's model-at-capacity or exhausted-429 message. Only an error the retry would re-send past counts:
       // every other error line is the runtime narrating its own reconnects or a failure a re-send
       // reproduces, and neither is an answer, which is what a reply here would clear the streak for.
       const lastRetryableError = durable
