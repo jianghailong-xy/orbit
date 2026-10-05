@@ -1,0 +1,1 @@
+switch: 40 label="Smart model selection, Coordinators suggest a tier for each task, and Agents you turn this on for run their tasks on that tier's model and effort. Off: tasks run exactly as before." value="1" frame=(16.0, 459.3333333333333, 370.0, 150.33333333333331) hittable=true

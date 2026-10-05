@@ -1,0 +1,300 @@
+    t =    73.96s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    73.96s     Wait for io.orbitd.routeprobe to idle
+    t =    73.96s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    74.00s     Check for interrupting elements affecting Window
+    t =    74.14s     Synthesize event
+    t =    74.16s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    74.26s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    74.32s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    74.40s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    74.50s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    76.04s     Wait for io.orbitd.routeprobe to idle
+    t =    77.08s Checking existence of `"orbit, 1d ago, Ended · Opus 5.5 · max, ✦ Smart selection would have picked Sonnet 5.5 · medium (M)" Button`
+    t =    77.44s Find the "orbit, 1d ago, Ended · Opus 5.5 · max, ✦ Smart selection would have picked Sonnet 5.5 · medium (M)" Button
+    t =    77.80s Find the "orbit, 1d ago, Ended · Opus 5.5 · max, ✦ Smart selection would have picked Sonnet 5.5 · medium (M)" Button
+    t =    78.17s Checking existence of `"orbit, 1d ago, Ended · Opus 5.5 · max, ✦ Smart selection would have picked Sonnet 5.5 · medium (M)" Button`
+    t =    78.44s Find the "orbit, 1d ago, Ended · Opus 5.5 · max, ✦ Smart selection would have picked Sonnet 5.5 · medium (M)" Button
+    t =    78.74s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.62] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.62] -> (0.0, -140.0) with velocity of 250.00 pixels per second, and then hold for 0.6 seconds 
+    t =    78.74s     Wait for io.orbitd.routeprobe to idle
+    t =    78.75s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    78.78s     Check for interrupting elements affecting Window
+    t =    78.90s     Synthesize event
+    t =    78.93s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    78.96s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    79.00s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    79.02s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    79.06s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    80.55s     Wait for io.orbitd.routeprobe to idle
+    t =    81.58s Checking existence of `"orbit, 1d ago, Ended · Opus 5.5 · max, ✦ Smart selection would have picked Sonnet 5.5 · medium (M)" Button`
+    t =    82.10s Find the "orbit, 1d ago, Ended · Opus 5.5 · max, ✦ Smart selection would have picked Sonnet 5.5 · medium (M)" Button
+    t =    82.58s Find the "orbit, 1d ago, Ended · Opus 5.5 · max, ✦ Smart selection would have picked Sonnet 5.5 · medium (M)" Button
+    t =    82.98s Find the "orbit, 1d ago, Ended · Opus 5.5 · max, ✦ Smart selection would have picked Sonnet 5.5 · medium (M)" Button
+    t =    84.82s Added attachment named '4b-task-on-runs'
+    t =    84.83s Requesting snapshot of accessibility hierarchy for app with pid 25432
+    t =    85.47s Requesting snapshot of accessibility hierarchy for app with pid 25432
+    t =    85.62s Get number of matches for: Elements matching predicate 'label CONTAINS "✦ L ↑"'
+    t =    85.79s Checking existence of `Any (First Match)`
+    t =    86.34s Find the Any (First Match)
+    t =    87.26s Find the "orbit, 18m, Running · Opus 5.5 · high, ✦ L ↑" Button
+    t =    88.13s Find the "orbit, 18m, Running · Opus 5.5 · high, ✦ L ↑" Button
+    t =    88.97s Find the "orbit, 18m, Running · Opus 5.5 · high, ✦ L ↑" Button
+    t =    89.73s Find the "orbit, 18m, Running · Opus 5.5 · high, ✦ L ↑" Button
+    t =    90.73s Get number of matches for: Elements matching predicate 'label CONTAINS "✦ M"'
+    t =    90.86s Checking existence of `Any (First Match)`
+    t =    91.87s Find the Any (First Match)
+    t =    92.79s Find the "orbit, 55m ago, Failed · Sonnet 5.5 · medium, ✦ M" Button
+    t =    93.80s Find the "orbit, 55m ago, Failed · Sonnet 5.5 · medium, ✦ M" Button
+    t =    95.29s Find the "orbit, 55m ago, Failed · Sonnet 5.5 · medium, ✦ M" Button
+    t =    96.17s Find the "orbit, 55m ago, Failed · Sonnet 5.5 · medium, ✦ M" Button
+    t =    96.97s Get number of matches for: Elements matching predicate 'label CONTAINS "would have picked"'
+    t =    97.15s Checking existence of `Any (First Match)`
+    t =    98.03s Find the Any (First Match)
+    t =    98.85s Find the "orbit, 1d ago, Ended · Opus 5.5 · max, ✦ Smart selection would have picked Sonnet 5.5 · medium (M)" Button
+    t =    99.77s Find the "orbit, 1d ago, Ended · Opus 5.5 · max, ✦ Smart selection would have picked Sonnet 5.5 · medium (M)" Button
+    t =   100.53s Find the "orbit, 1d ago, Ended · Opus 5.5 · max, ✦ Smart selection would have picked Sonnet 5.5 · medium (M)" Button
+    t =   101.37s Find the "orbit, 1d ago, Ended · Opus 5.5 · max, ✦ Smart selection would have picked Sonnet 5.5 · medium (M)" Button
+    t =   102.26s Get number of matches for: Elements matching predicate 'label CONTAINS "Why "'
+    t =   102.35s Checking existence of `Any (First Match)`
+    t =   102.72s Find the Any (First Match)
+    t =   103.17s Find the "info.circle" Button
+    t =   103.61s Find the "info.circle" Button
+    t =   104.12s Find the "info.circle" Button
+    t =   104.50s Find the "info.circle" Button
+    t =   104.99s Get number of matches for: Elements matching predicate 'label CONTAINS "would have picked"'
+    t =   105.09s Get number of matches for: Elements matching predicate 'label BEGINSWITH "Why "'
+    t =   105.20s Terminate io.orbitd.routeprobe:25432
+    t =   106.26s Tear Down
+Test Case '-[RouteProbeUITests.SwitchShotTests test4TaskOn]' passed (106.963 seconds).
+Test Case '-[RouteProbeUITests.SwitchShotTests test5AgentOff]' started.
+    t =     0.00s Start Test at 2026-10-05 05:42:13.808
+    t =     0.17s Set Up
+    t =     0.22s Open io.orbitd.routeprobe
+    t =     0.22s     Launch io.orbitd.routeprobe
+2026-10-05 05:42:14.510 xcodebuild[4641:20380] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-05 05:42:14.511 xcodebuild[4641:20380] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     2.58s         Setting up automation session
+    t =     6.00s         Wait for io.orbitd.routeprobe to idle
+    t =     8.52s Waiting 60.0s for Any (First Match) to exist
+    t =     9.58s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =     9.59s         Checking existence of `Any (First Match)`
+    t =    13.36s Added attachment named '5-agent-off-top'
+    t =    13.36s Press Window (First Match)[0.03, 0.75] for 0.1 seconds, then drag to Window (First Match)[0.03, 0.75] -> (0.0, -400.0) with velocity of 750.00 pixels per second, and then hold for 0.4 seconds 
+    t =    13.36s     Wait for io.orbitd.routeprobe to idle
+    t =    13.37s     Find the Window (First Match)
+    t =    13.41s     Check for interrupting elements affecting Window
+    t =    13.72s     Synthesize event
+    t =    13.73s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    13.79s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    13.83s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    13.90s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    13.98s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    15.28s     Wait for io.orbitd.routeprobe to idle
+    t =    17.44s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.75] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.75] -> (0.0, -400.0) with velocity of 750.00 pixels per second, and then hold for 0.4 seconds 
+    t =    17.44s     Wait for io.orbitd.routeprobe to idle
+    t =    17.46s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    17.48s     Check for interrupting elements affecting Window
+    t =    17.63s     Synthesize event
+    t =    17.63s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    17.66s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    17.72s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    17.76s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    17.82s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    19.08s     Wait for io.orbitd.routeprobe to idle
+    t =    21.11s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.75] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.75] -> (0.0, -400.0) with velocity of 750.00 pixels per second, and then hold for 0.4 seconds 
+    t =    21.11s     Wait for io.orbitd.routeprobe to idle
+    t =    21.12s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    21.14s     Check for interrupting elements affecting Window
+    t =    21.26s     Synthesize event
+    t =    21.26s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    21.29s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    21.31s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    21.34s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    21.38s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    22.64s     Wait for io.orbitd.routeprobe to idle
+    t =    24.68s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.75] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.75] -> (0.0, -400.0) with velocity of 750.00 pixels per second, and then hold for 0.4 seconds 
+    t =    24.68s     Wait for io.orbitd.routeprobe to idle
+    t =    24.69s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    24.72s     Check for interrupting elements affecting Window
+    t =    24.89s     Synthesize event
+    t =    24.89s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    24.92s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    24.97s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    25.00s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    25.05s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    26.38s     Wait for io.orbitd.routeprobe to idle
+    t =    29.60s Added attachment named '5b-agent-off-end'
+    t =    29.61s Requesting snapshot of accessibility hierarchy for app with pid 29482
+    t =    30.45s Requesting snapshot of accessibility hierarchy for app with pid 29482
+    t =    30.66s Get number of matches for: Elements matching predicate 'label CONTAINS "Task runs"'
+    t =    30.78s Checking existence of `Any (First Match)`
+    t =    31.03s Get number of matches for: Elements matching predicate 'label CONTAINS "Smart model selection"'
+    t =    31.16s Checking existence of `Any (First Match)`
+    t =    31.53s Get number of matches for: Elements matching predicate 'label CONTAINS "Working directory"'
+    t =    31.64s Checking existence of `Any (First Match)`
+    t =    31.99s Find the Any (First Match)
+    t =    32.32s Find the "Working directory" StaticText
+    t =    32.73s Find the "Working directory" StaticText
+    t =    33.14s Find the "Working directory" StaticText
+    t =    33.71s Find the "Working directory" StaticText
+    t =    34.02s Get number of matches for: Elements matching predicate 'label CONTAINS "Smart model selection for tasks"'
+    t =    34.20s Terminate io.orbitd.routeprobe:29482
+    t =    35.24s Tear Down
+Test Case '-[RouteProbeUITests.SwitchShotTests test5AgentOff]' passed (35.654 seconds).
+Test Case '-[RouteProbeUITests.SwitchShotTests test6AgentOn]' started.
+    t =     0.00s Start Test at 2026-10-05 05:42:49.462
+    t =     0.05s Set Up
+    t =     0.10s Open io.orbitd.routeprobe
+    t =     0.10s     Launch io.orbitd.routeprobe
+2026-10-05 05:42:49.573 xcodebuild[4641:20380] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-05 05:42:49.573 xcodebuild[4641:20380] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.01s         Setting up automation session
+    t =     3.73s         Wait for io.orbitd.routeprobe to idle
+    t =     5.79s Waiting 60.0s for Any (First Match) to exist
+    t =     6.83s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =     6.83s         Checking existence of `Any (First Match)`
+    t =    10.21s Added attachment named '6-agent-on-top'
+    t =    10.22s Press Window (First Match)[0.03, 0.75] for 0.1 seconds, then drag to Window (First Match)[0.03, 0.75] -> (0.0, -400.0) with velocity of 750.00 pixels per second, and then hold for 0.4 seconds 
+    t =    10.22s     Wait for io.orbitd.routeprobe to idle
+    t =    10.22s     Find the Window (First Match)
+    t =    10.25s     Check for interrupting elements affecting Window
+    t =    10.44s     Synthesize event
+    t =    10.44s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    10.50s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    10.52s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    10.57s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    10.67s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    11.95s     Wait for io.orbitd.routeprobe to idle
+    t =    13.85s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.75] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.75] -> (0.0, -400.0) with velocity of 750.00 pixels per second, and then hold for 0.4 seconds 
+    t =    13.85s     Wait for io.orbitd.routeprobe to idle
+    t =    13.85s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    13.87s     Check for interrupting elements affecting Window
+    t =    14.01s     Synthesize event
+    t =    14.01s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    14.04s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    14.06s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    14.10s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    14.13s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    15.40s     Wait for io.orbitd.routeprobe to idle
+    t =    16.71s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.75] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.75] -> (0.0, -400.0) with velocity of 750.00 pixels per second, and then hold for 0.4 seconds 
+    t =    16.71s     Wait for io.orbitd.routeprobe to idle
+    t =    16.71s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    16.74s     Check for interrupting elements affecting Window
+    t =    16.89s     Synthesize event
+    t =    16.89s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    16.92s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    16.94s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    16.97s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    16.99s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    18.25s     Wait for io.orbitd.routeprobe to idle
+    t =    19.56s Press Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.75] for 0.1 seconds, then drag to Window at {{0.0, 0.0}, {402.0, 874.0}}[0.03, 0.75] -> (0.0, -400.0) with velocity of 750.00 pixels per second, and then hold for 0.4 seconds 
+    t =    19.56s     Wait for io.orbitd.routeprobe to idle
+    t =    19.56s     Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    19.59s     Check for interrupting elements affecting Window
+    t =    19.75s     Synthesize event
+    t =    19.75s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    19.79s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    19.83s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    19.86s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    19.92s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    21.20s     Wait for io.orbitd.routeprobe to idle
+    t =    23.70s Added attachment named '6b-agent-on-end'
+    t =    23.70s Requesting snapshot of accessibility hierarchy for app with pid 30469
+    t =    24.38s Requesting snapshot of accessibility hierarchy for app with pid 30469
+    t =    24.57s Get number of matches for: Elements matching predicate 'label CONTAINS "Task runs"'
+    t =    24.72s Checking existence of `Any (First Match)`
+    t =    25.49s Find the Any (First Match)
+    t =    26.69s Find the "Task runs" StaticText
+    t =    27.58s Find the "Task runs" StaticText
+    t =    28.43s Find the "Task runs" StaticText
+    t =    29.30s Find the "Task runs" StaticText
+    t =    30.12s Get number of matches for: Elements matching predicate 'label CONTAINS "Smart model selection"'
+    t =    30.26s Checking existence of `Any (First Match)`
+    t =    31.08s Find the Any (First Match)
+    t =    31.85s Find the "Smart model selection for tasks, Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected." Switch
+    t =    32.77s Find the "Smart model selection for tasks, Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected." Switch
+    t =    33.70s Find the "Smart model selection for tasks, Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected." Switch
+    t =    34.57s Find the "Smart model selection for tasks, Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected." Switch
+    t =    35.43s Get number of matches for: Elements matching predicate 'label CONTAINS "Working directory"'
+    t =    35.56s Checking existence of `Any (First Match)`
+    t =    36.12s Find the Any (First Match)
+    t =    36.82s Find the "Working directory" StaticText
+    t =    37.37s Find the "Working directory" StaticText
+    t =    37.87s Find the "Working directory" StaticText
+    t =    38.26s Find the "Working directory" StaticText
+    t =    38.77s Get number of matches for: Elements matching predicate 'label CONTAINS "Smart model selection for tasks"'
+    t =    38.88s Terminate io.orbitd.routeprobe:30469
+    t =    39.97s Tear Down
+Test Case '-[RouteProbeUITests.SwitchShotTests test6AgentOn]' passed (40.294 seconds).
+Test Case '-[RouteProbeUITests.SwitchShotTests test7ComposerOff]' started.
+    t =     0.00s Start Test at 2026-10-05 05:43:29.757
+    t =     0.06s Set Up
+    t =     0.10s Open io.orbitd.routeprobe
+    t =     0.10s     Launch io.orbitd.routeprobe
+2026-10-05 05:43:29.891 xcodebuild[4641:20380] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-05 05:43:29.894 xcodebuild[4641:20380] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.80s         Setting up automation session
+    t =     4.27s         Wait for io.orbitd.routeprobe to idle
+    t =     6.32s Waiting 60.0s for Any (First Match) to exist
+    t =     7.38s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =     7.39s         Checking existence of `Any (First Match)`
+    t =    13.45s Find the Window (First Match)
+    t =    13.52s Get all elements bound by index for: Elements matching predicate 'label BEGINSWITH "Model "'
+    t =    13.78s Checking existence of `Button (Element at index 0)`
+    t =    13.90s Find the Button (Element at index 0)
+    t =    13.98s Checking existence of `"Model Opus 5.5, effort High" Button`
+    t =    14.06s Find the "Model Opus 5.5, effort High" Button
+    t =    14.15s Find the "Model Opus 5.5, effort High" Button
+    t =    14.25s Find the "Model Opus 5.5, effort High" Button
+    t =    14.34s Find the "Model Opus 5.5, effort High" Button
+    t =    14.46s Find the "Model Opus 5.5, effort High" Button
+    t =    14.82s Added attachment named '7-composer-off'
+    t =    14.82s Get number of matches for: Elements matching predicate 'label CONTAINS "picked by smart selection"'
+    t =    14.97s Tap "Model Opus 5.5, effort High" Button
+    t =    14.97s     Wait for io.orbitd.routeprobe to idle
+    t =    14.98s     Find the "Model Opus 5.5, effort High" Button
+    t =    15.08s     Check for interrupting elements affecting "Model Opus 5.5, effort High" Button
+    t =    15.17s     Synthesize event
+    t =    15.49s     Wait for io.orbitd.routeprobe to idle
+    t =    18.17s Added attachment named '7b-composer-off-menu'
+    t =    18.18s Requesting snapshot of accessibility hierarchy for app with pid 32446
+    t =    18.79s Requesting snapshot of accessibility hierarchy for app with pid 32446
+    t =    18.96s Get number of matches for: Elements matching predicate 'label CONTAINS "Picked by smart selection"'
+    t =    19.17s Terminate io.orbitd.routeprobe:32446
+    t =    20.19s Tear Down
+Test Case '-[RouteProbeUITests.SwitchShotTests test7ComposerOff]' passed (20.213 seconds).
+Test Case '-[RouteProbeUITests.SwitchShotTests test8ComposerOn]' started.
+    t =     0.00s Start Test at 2026-10-05 05:43:49.971
+    t =     0.06s Set Up
+    t =     0.10s Open io.orbitd.routeprobe
+    t =     0.10s     Launch io.orbitd.routeprobe
+2026-10-05 05:43:50.124 xcodebuild[4641:20380] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-05 05:43:50.124 xcodebuild[4641:20380] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     1.36s         Setting up automation session
+    t =     5.19s         Wait for io.orbitd.routeprobe to idle
+    t =     7.67s Waiting 60.0s for Any (First Match) to exist
+    t =     8.69s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =     8.70s         Checking existence of `Any (First Match)`
+    t =    10.03s         Capturing element debug description
+    t =    10.76s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    10.76s         Checking existence of `Any (First Match)`
+    t =    16.76s Added attachment named '8-composer-on'
+    t =    16.76s Get number of matches for: Elements matching predicate 'label CONTAINS "picked by smart selection"'
+    t =    17.09s Terminate io.orbitd.routeprobe:33241
+    t =    18.11s Tear Down
+Test Case '-[RouteProbeUITests.SwitchShotTests test8ComposerOn]' passed (18.198 seconds).
+Test Suite 'SwitchShotTests' passed at 2026-10-05 05:44:08.169.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 392.515 (392.527) seconds
+Test Suite 'RouteProbeUITests.xctest' passed at 2026-10-05 05:44:08.170.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 392.515 (392.528) seconds
+Test Suite 'Selected tests' passed at 2026-10-05 05:44:08.170.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 392.515 (392.529) seconds
+2026-10-05 05:45:03.422 xcodebuild[4641:20380] [MT] IDETestOperationsObserverDebug: 500.617 elapsed -- Testing started completed.
+2026-10-05 05:45:03.426 xcodebuild[4641:20380] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-05 05:45:03.426 xcodebuild[4641:20380] [MT] IDETestOperationsObserverDebug: 500.618 sec, +500.618 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.route-probe/ios/results/iphone.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

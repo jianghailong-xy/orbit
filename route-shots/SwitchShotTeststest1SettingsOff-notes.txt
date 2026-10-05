@@ -1,0 +1,6 @@
+switch: 40 label="Smart model selection, Coordinators suggest a tier for each task, and Agents you turn this on for run their tasks on that tier's model and effort. Off: tasks run exactly as before." value="0" frame=(16.0, 459.3333333333333, 370.0, 150.33333333333331) hittable=true
+after tap 1: 40 label="Smart model selection, Coordinators suggest a tier for each task, and Agents you turn this on for run their tasks on that tier's model and effort. Off: tasks run exactly as before." value="1" frame=(16.0, 459.3333333333333, 370.0, 150.33333333333331) hittable=true
+switch after the tap: 40 label="Smart model selection, Coordinators suggest a tier for each task, and Agents you turn this on for run their tasks on that tier's model and effort. Off: tasks run exactly as before." value="1" frame=(16.0, 459.3333333333333, 370.0, 150.33333333333331) hittable=true
+PATCH lines in requests.log:
+    PATCH /api/users/me/preferences body: {"modelRouting":true}
+05:38:22 "PATCH /api/users/me/preferences HTTP/1.1" 200 -

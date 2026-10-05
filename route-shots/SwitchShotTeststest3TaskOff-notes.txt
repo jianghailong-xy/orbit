@@ -1,0 +1,11 @@
+task-off: in view after 1 drag(s) at (32.0, 247.3333282470703, 338.0, 34.33332824707031)
+3-task-off-details 'Suggested': 0 element(s) — (missing)
+3-task-off-details 'Smart selection': 0 element(s) — (missing)
+3-task-off-details 'Coordinator:': 0 element(s) — (missing)
+3-task-off-details 'Provider default': 2 element(s) — 9 label="Model, Provider default" value="" frame=(32.0, 351.3333435058594, 338.0, 34.333343505859375) hittable=true
+task-off-runs: in view after 11 drag(s) at (16.0, 626.0000000000002, 370.0, 74.00000000000011)
+3b-task-off-runs '✦': 0 element(s) — (missing)
+3b-task-off-runs 'would have picked': 0 element(s) — (missing)
+3b-task-off-runs 'Why ': 0 element(s) — (missing)
+3b-task-off-runs 'Opus 5.5 · high': 2 element(s) — 9 label="orbit, 18m, Running · Opus 5.5 · high" value="1" frame=(16.0, 478.0, 370.0, 74.0) hittable=true
+3b-task-off-runs 'Opus 5.5 · max': 2 element(s) — 9 label="orbit, 1d ago, Ended · Opus 5.5 · max" value="" frame=(16.0, 626.0000000000002, 370.0, 74.00000000000011) hittable=true

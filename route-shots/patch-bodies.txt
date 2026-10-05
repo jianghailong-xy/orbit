@@ -1,0 +1,2 @@
+    PATCH /api/users/me/preferences body: {"modelRouting":true}
+05:38:22 "PATCH /api/users/me/preferences HTTP/1.1" 200 -

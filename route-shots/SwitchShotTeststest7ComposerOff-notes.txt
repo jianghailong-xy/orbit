@@ -1,0 +1,1 @@
+chip: 9 label="Model Opus 5.5, effort High" value="" frame=(212.66666666666666, 797.0, 101.33333333333334, 18.0) hittable=true

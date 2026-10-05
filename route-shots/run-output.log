@@ -1,0 +1,332 @@
+==> fixture API on 127.0.0.1:8765
+curl: (7) Failed to connect to 127.0.0.1 port 8765 after 0 ms: Couldn't connect to server
+[{"id": "a1", "name": "orbit", "provider": "claude", "lastProvider": "claude", "runnerId": "r1", "enabled": true, "modelRouting": true, "enableWorktree": true, "effort": "", "workDir": "/srv/orbit", "appendSystemPrompt": "", "workDirExists": true, "workDirIsGit": true}]
+==> runtimes available:
+iOS 26.2 (26.2 - 23C54) - com.apple.CoreSimulator.SimRuntime.iOS-26-2
+iOS 26.4 (26.4.1 - 23E254a) - com.apple.CoreSimulator.SimRuntime.iOS-26-4
+iOS 26.5 (26.5 - 23F77) - com.apple.CoreSimulator.SimRuntime.iOS-26-5
+==> iPhone: iPhone 17 Pro  runtime: com.apple.CoreSimulator.SimRuntime.iOS-26-5
+==> iphone
+Test Case '-[RouteProbeUITests.SwitchShotTests test1SettingsOff]' started.
+Test Case '-[RouteProbeUITests.SwitchShotTests test1SettingsOff]' passed (60.966 seconds).
+Test Case '-[RouteProbeUITests.SwitchShotTests test2SettingsOn]' started.
+Test Case '-[RouteProbeUITests.SwitchShotTests test2SettingsOn]' passed (22.798 seconds).
+Test Case '-[RouteProbeUITests.SwitchShotTests test3TaskOff]' started.
+Test Case '-[RouteProbeUITests.SwitchShotTests test3TaskOff]' passed (87.431 seconds).
+Test Case '-[RouteProbeUITests.SwitchShotTests test4TaskOn]' started.
+Test Case '-[RouteProbeUITests.SwitchShotTests test4TaskOn]' passed (106.963 seconds).
+Test Case '-[RouteProbeUITests.SwitchShotTests test5AgentOff]' started.
+Test Case '-[RouteProbeUITests.SwitchShotTests test5AgentOff]' passed (35.654 seconds).
+Test Case '-[RouteProbeUITests.SwitchShotTests test6AgentOn]' started.
+    t =    31.85s Find the "Smart model selection for tasks, Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected." Switch
+    t =    32.77s Find the "Smart model selection for tasks, Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected." Switch
+    t =    33.70s Find the "Smart model selection for tasks, Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected." Switch
+    t =    34.57s Find the "Smart model selection for tasks, Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected." Switch
+Test Case '-[RouteProbeUITests.SwitchShotTests test6AgentOn]' passed (40.294 seconds).
+Test Case '-[RouteProbeUITests.SwitchShotTests test7ComposerOff]' started.
+Test Case '-[RouteProbeUITests.SwitchShotTests test7ComposerOff]' passed (20.213 seconds).
+Test Case '-[RouteProbeUITests.SwitchShotTests test8ComposerOn]' started.
+Test Case '-[RouteProbeUITests.SwitchShotTests test8ComposerOn]' passed (18.198 seconds).
+Test Suite 'SwitchShotTests' passed at 2026-10-05 05:44:08.169.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 392.515 (392.527) seconds
+Test Suite 'RouteProbeUITests.xctest' passed at 2026-10-05 05:44:08.170.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 392.515 (392.528) seconds
+Test Suite 'Selected tests' passed at 2026-10-05 05:44:08.170.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 392.515 (392.529) seconds
+==> requests the app made:
+05:26:03 "GET /api/agents HTTP/1.1" 200 -
+    POST /__reset body: 
+05:37:37 "POST /__reset?modelRouting=false HTTP/1.1" 200 -
+05:38:05 "GET /api/users/me HTTP/1.1" 200 -
+05:38:06 "GET /api/agents HTTP/1.1" 200 -
+05:38:06 "GET /api/runners HTTP/1.1" 200 -
+05:38:06 "GET /api/providers HTTP/1.1" 200 -
+05:38:06 "GET /api/providers/pools HTTP/1.1" 200 -
+05:38:06 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+05:38:07 "GET /api/session-tags HTTP/1.1" 200 -
+05:38:07 "GET /api/sessions?view=open HTTP/1.1" 200 -
+05:38:08 "GET /api/share-links HTTP/1.1" 200 -
+05:38:08 "GET /api/runners HTTP/1.1" 200 -
+05:38:11 "GET /api/session-folders HTTP/1.1" 200 -
+05:38:11 "GET /api/projects HTTP/1.1" 404 -
+05:38:11 "GET /api/projects/sidebar HTTP/1.1" 404 -
+05:38:11 "GET /api/agents HTTP/1.1" 200 -
+    PATCH /api/users/me/preferences body: {"modelRouting":true}
+05:38:22 "PATCH /api/users/me/preferences HTTP/1.1" 200 -
+    POST /__reset body: 
+05:38:36 "POST /__reset?modelRouting=true HTTP/1.1" 200 -
+05:38:42 "GET /api/users/me HTTP/1.1" 200 -
+05:38:43 "GET /api/agents HTTP/1.1" 200 -
+05:38:43 "GET /api/runners HTTP/1.1" 200 -
+05:38:43 "GET /api/providers HTTP/1.1" 200 -
+05:38:43 "GET /api/providers/pools HTTP/1.1" 200 -
+05:38:43 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+05:38:44 "GET /api/sessions?view=open HTTP/1.1" 200 -
+05:38:44 "GET /api/session-tags HTTP/1.1" 200 -
+05:38:44 "GET /api/runners HTTP/1.1" 200 -
+05:38:44 "GET /api/share-links HTTP/1.1" 200 -
+05:38:47 "GET /api/projects/sidebar HTTP/1.1" 404 -
+05:38:47 "GET /api/projects HTTP/1.1" 404 -
+05:38:47 "GET /api/session-folders HTTP/1.1" 200 -
+05:38:47 "GET /api/agents HTTP/1.1" 200 -
+    POST /__reset body: 
+05:38:59 "POST /__reset?modelRouting=false HTTP/1.1" 200 -
+05:39:08 "GET /api/users/me HTTP/1.1" 200 -
+05:39:08 "GET /api/agents HTTP/1.1" 200 -
+05:39:08 "GET /api/runners HTTP/1.1" 200 -
+05:39:08 "GET /api/providers HTTP/1.1" 200 -
+05:39:09 "GET /api/providers/pools HTTP/1.1" 200 -
+05:39:09 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+05:39:09 "GET /api/task-lists HTTP/1.1" 200 -
+05:39:09 "GET /api/sessions?view=open HTTP/1.1" 200 -
+05:39:09 "GET /api/session-tags HTTP/1.1" 200 -
+05:39:09 "GET /api/tasks/T1/share HTTP/1.1" 200 -
+05:39:09 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+05:39:09 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:39:10 "GET /api/tasks/T1/row HTTP/1.1" 200 -
+05:39:10 "GET /api/projects/sidebar HTTP/1.1" 404 -
+05:39:10 "GET /api/projects HTTP/1.1" 404 -
+05:39:10 "GET /api/session-folders HTTP/1.1" 200 -
+05:39:10 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+05:39:10 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+05:39:13 "GET /api/tasks/T1/attribution HTTP/1.1" 200 -
+05:39:13 "GET /api/tasks/T1/dependency-graph?direction=both&maxNodes=500&pairUnary=true HTTP/1.1" 404 -
+05:39:13 "GET /api/task-lists HTTP/1.1" 200 -
+05:39:13 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+05:39:13 "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+05:39:13 "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+05:39:13 "GET /api/watches HTTP/1.1" 200 -
+05:39:13 "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+05:39:16 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:39:21 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:39:25 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:39:30 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:39:34 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:39:38 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:39:42 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:39:46 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:39:50 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:39:54 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:39:58 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:40:03 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:40:07 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:40:11 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:40:16 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:40:20 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:40:24 "GET /api/tasks/T1 HTTP/1.1" 200 -
+    POST /__reset body: 
+05:40:26 "POST /__reset?modelRouting=true HTTP/1.1" 200 -
+05:40:32 "GET /api/users/me HTTP/1.1" 200 -
+05:40:33 "GET /api/agents HTTP/1.1" 200 -
+05:40:33 "GET /api/runners HTTP/1.1" 200 -
+05:40:33 "GET /api/providers HTTP/1.1" 200 -
+05:40:33 "GET /api/providers/pools HTTP/1.1" 200 -
+05:40:33 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+05:40:34 "GET /api/sessions?view=open HTTP/1.1" 200 -
+05:40:34 "GET /api/session-tags HTTP/1.1" 200 -
+05:40:34 "GET /api/task-lists HTTP/1.1" 200 -
+05:40:34 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:40:34 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+05:40:34 "GET /api/tasks/T1/share HTTP/1.1" 200 -
+05:40:34 "GET /api/tasks/T1/row HTTP/1.1" 200 -
+05:40:34 "GET /api/projects/sidebar HTTP/1.1" 404 -
+05:40:34 "GET /api/session-folders HTTP/1.1" 200 -
+05:40:34 "GET /api/projects HTTP/1.1" 404 -
+05:40:34 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+05:40:34 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+05:40:36 "GET /api/tasks/T1/attribution HTTP/1.1" 200 -
+05:40:36 "GET /api/tasks/T1/dependency-graph?direction=both&maxNodes=500&pairUnary=true HTTP/1.1" 404 -
+05:40:36 "GET /api/task-lists HTTP/1.1" 200 -
+05:40:36 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+05:40:37 "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+05:40:37 "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+05:40:37 "GET /api/watches HTTP/1.1" 200 -
+05:40:37 "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+05:40:40 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:40:44 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:40:49 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:40:53 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:40:57 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:41:01 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:41:06 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:41:10 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:41:14 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:41:18 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:41:22 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:41:27 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:41:31 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:41:35 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:41:40 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:41:44 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:41:48 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:41:53 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:41:57 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:42:02 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:42:06 "GET /api/tasks/T1 HTTP/1.1" 200 -
+05:42:10 "GET /api/tasks/T1 HTTP/1.1" 200 -
+    POST /__reset body: 
+05:42:14 "POST /__reset?modelRouting=false HTTP/1.1" 200 -
+05:42:20 "GET /api/users/me HTTP/1.1" 200 -
+05:42:21 "GET /api/agents HTTP/1.1" 200 -
+05:42:21 "GET /api/runners HTTP/1.1" 200 -
+05:42:21 "GET /api/providers HTTP/1.1" 200 -
+05:42:21 "GET /api/providers/pools HTTP/1.1" 200 -
+05:42:21 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+05:42:21 "GET /api/sessions?view=open HTTP/1.1" 200 -
+05:42:21 "GET /api/session-tags HTTP/1.1" 200 -
+05:42:23 "GET /api/projects/sidebar HTTP/1.1" 404 -
+05:42:23 "GET /api/projects HTTP/1.1" 404 -
+05:42:23 "GET /api/session-folders HTTP/1.1" 200 -
+    POST /__reset body: 
+05:42:49 "POST /__reset?modelRouting=true HTTP/1.1" 200 -
+05:42:53 "GET /api/users/me HTTP/1.1" 200 -
+05:42:54 "GET /api/agents HTTP/1.1" 200 -
+05:42:54 "GET /api/runners HTTP/1.1" 200 -
+05:42:54 "GET /api/providers HTTP/1.1" 200 -
+05:42:54 "GET /api/providers/pools HTTP/1.1" 200 -
+05:42:54 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+05:42:54 "GET /api/sessions?view=open HTTP/1.1" 200 -
+05:42:54 "GET /api/session-tags HTTP/1.1" 200 -
+05:42:55 "GET /api/projects/sidebar HTTP/1.1" 404 -
+05:42:55 "GET /api/projects HTTP/1.1" 404 -
+05:42:56 "GET /api/session-folders HTTP/1.1" 200 -
+    POST /__reset body: 
+05:43:29 "POST /__reset?modelRouting=false HTTP/1.1" 200 -
+05:43:34 "GET /api/users/me HTTP/1.1" 200 -
+05:43:35 "GET /api/agents HTTP/1.1" 200 -
+05:43:35 "GET /api/runners HTTP/1.1" 200 -
+05:43:35 "GET /api/providers HTTP/1.1" 200 -
+05:43:35 "GET /api/providers/pools HTTP/1.1" 200 -
+05:43:35 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+05:43:35 "GET /api/session-tags HTTP/1.1" 200 -
+05:43:35 "GET /api/sessions?view=open HTTP/1.1" 200 -
+05:43:37 "GET /api/sessions/S2 HTTP/1.1" 200 -
+05:43:37 "GET /api/sessions/S2/events/page?tail=200&maxPayload=2048 HTTP/1.1" 200 -
+05:43:37 "GET /api/sessions/S2 HTTP/1.1" 200 -
+05:43:37 "GET /api/sessions/S2/created-tasks HTTP/1.1" 404 -
+05:43:37 "GET /api/session-folders HTTP/1.1" 200 -
+05:43:37 "GET /api/projects HTTP/1.1" 404 -
+05:43:37 "GET /api/sessions/S2 HTTP/1.1" 200 -
+05:43:37 "GET /api/sessions/S2/turns HTTP/1.1" 200 -
+05:43:37 "GET /api/sessions/S2/approvals?status=PENDING HTTP/1.1" 404 -
+05:43:37 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S2 HTTP/1.1" 404 -
+05:43:38 "GET /api/sessions/S2/background HTTP/1.1" 404 -
+05:43:38 "GET /api/sessions/S2/events?sinceSeq=2&maxPayload=2048 HTTP/1.1" 404 -
+05:43:38 "GET /api/runners HTTP/1.1" 200 -
+05:43:38 "GET /api/projects/sidebar HTTP/1.1" 404 -
+05:43:38 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+05:43:38 "GET /api/providers/pools HTTP/1.1" 200 -
+05:43:38 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S2 HTTP/1.1" 404 -
+05:43:38 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+05:43:38 "GET /api/providers HTTP/1.1" 200 -
+05:43:39 "GET /api/sessions/S2/events?sinceSeq=2&maxPayload=2048 HTTP/1.1" 404 -
+05:43:39 "GET /api/sessions/S2/turns HTTP/1.1" 200 -
+05:43:39 "GET /api/sessions/S2/background HTTP/1.1" 404 -
+05:43:39 "GET /api/sessions/S2/approvals?status=PENDING HTTP/1.1" 404 -
+05:43:39 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S2 HTTP/1.1" 404 -
+05:43:39 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+05:43:41 "GET /api/sessions/S2/events?sinceSeq=2&maxPayload=2048 HTTP/1.1" 404 -
+05:43:41 "GET /api/sessions/S2/approvals?status=PENDING HTTP/1.1" 404 -
+05:43:41 "GET /api/sessions/S2/background HTTP/1.1" 404 -
+05:43:41 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S2 HTTP/1.1" 404 -
+05:43:42 "GET /api/sessions/S2/turns HTTP/1.1" 200 -
+05:43:42 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+05:43:46 "GET /api/sessions/S2/approvals?status=PENDING HTTP/1.1" 404 -
+05:43:46 "GET /api/sessions/S2/turns HTTP/1.1" 200 -
+05:43:46 "GET /api/sessions/S2/background HTTP/1.1" 404 -
+05:43:46 "GET /api/sessions/S2/events?sinceSeq=2&maxPayload=2048 HTTP/1.1" 404 -
+05:43:46 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S2 HTTP/1.1" 404 -
+05:43:47 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+    POST /__reset body: 
+05:43:50 "POST /__reset?modelRouting=true HTTP/1.1" 200 -
+05:43:55 "GET /api/users/me HTTP/1.1" 200 -
+05:43:56 "GET /api/agents HTTP/1.1" 200 -
+05:43:56 "GET /api/runners HTTP/1.1" 200 -
+05:43:56 "GET /api/providers HTTP/1.1" 200 -
+05:43:56 "GET /api/providers/pools HTTP/1.1" 200 -
+05:43:57 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+05:43:57 "GET /api/sessions?view=open HTTP/1.1" 200 -
+05:43:57 "GET /api/session-tags HTTP/1.1" 200 -
+05:43:58 "GET /api/sessions/S2 HTTP/1.1" 200 -
+05:43:58 "GET /api/sessions/S2 HTTP/1.1" 200 -
+05:43:58 "GET /api/sessions/S2/created-tasks HTTP/1.1" 404 -
+05:43:58 "GET /api/sessions/S2/events/page?tail=200&maxPayload=2048 HTTP/1.1" 200 -
+05:43:58 "GET /api/projects/sidebar HTTP/1.1" 404 -
+05:43:59 "GET /api/projects HTTP/1.1" 404 -
+05:43:59 "GET /api/session-folders HTTP/1.1" 200 -
+05:43:59 "GET /api/sessions/S2/turns HTTP/1.1" 200 -
+05:43:59 "GET /api/sessions/S2 HTTP/1.1" 200 -
+05:43:59 "GET /api/sessions/S2/approvals?status=PENDING HTTP/1.1" 404 -
+05:43:59 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S2 HTTP/1.1" 404 -
+05:44:00 "GET /api/runners HTTP/1.1" 200 -
+05:44:00 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S2 HTTP/1.1" 404 -
+05:44:00 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+05:44:00 "GET /api/sessions/S2/events?sinceSeq=2&maxPayload=2048 HTTP/1.1" 404 -
+05:44:00 "GET /api/sessions/S2/background HTTP/1.1" 404 -
+05:44:00 "GET /api/providers/pools HTTP/1.1" 200 -
+05:44:00 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+05:44:00 "GET /api/providers HTTP/1.1" 200 -
+05:44:01 "GET /api/sessions/S2/approvals?status=PENDING HTTP/1.1" 404 -
+05:44:01 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S2 HTTP/1.1" 404 -
+05:44:01 "GET /api/sessions/S2/turns HTTP/1.1" 200 -
+05:44:01 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+05:44:01 "GET /api/sessions/S2/background HTTP/1.1" 404 -
+05:44:01 "GET /api/sessions/S2/events?sinceSeq=2&maxPayload=2048 HTTP/1.1" 404 -
+05:44:03 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S2 HTTP/1.1" 404 -
+05:44:03 "GET /api/sessions/S2/approvals?status=PENDING HTTP/1.1" 404 -
+05:44:03 "GET /api/sessions/S2/background HTTP/1.1" 404 -
+05:44:03 "GET /api/tasks/T1/owner-confirmation HTTP/1.1" 200 -
+05:44:03 "GET /api/sessions/S2/events?sinceSeq=2&maxPayload=2048 HTTP/1.1" 404 -
+05:44:03 "GET /api/sessions/S2/turns HTTP/1.1" 200 -
+==> what was written (PATCH bodies):
+    PATCH /api/users/me/preferences body: {"modelRouting":true}
+05:38:22 "PATCH /api/users/me/preferences HTTP/1.1" 200 -
+==> what 404ed:
+   9 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S2 HTTP/1.1" 404 -
+   8 "GET /api/projects/sidebar HTTP/1.1" 404 -
+   8 "GET /api/projects HTTP/1.1" 404 -
+   7 "GET /api/sessions/S2/events?sinceSeq=2&maxPayload=2048 HTTP/1.1" 404 -
+   7 "GET /api/sessions/S2/background HTTP/1.1" 404 -
+   7 "GET /api/sessions/S2/approvals?status=PENDING HTTP/1.1" 404 -
+   2 "GET /api/tasks/T1/dependency-graph?direction=both&maxNodes=500&pairUnary=true HTTP/1.1" 404 -
+   2 "GET /api/sessions/S2/created-tasks HTTP/1.1" 404 -
+==> shots:
+total 9640
+drwxr-xr-x  38 runner  staff    1216 Oct  5 05:45 .
+drwxr-xr-x  13 runner  staff     416 Oct  5 05:29 ..
+-rw-r--r--   1 runner  staff  211969 Oct  5 05:38 1-settings-off.png
+-rw-r--r--   1 runner  staff  213205 Oct  5 05:38 1b-settings-flipped-on.png
+-rw-r--r--   1 runner  staff  213205 Oct  5 05:38 2-settings-on.png
+-rw-r--r--   1 runner  staff  454853 Oct  5 05:39 3-task-off-details.png
+-rw-r--r--   1 runner  staff  404502 Oct  5 05:40 3b-task-off-runs.png
+-rw-r--r--   1 runner  staff  458910 Oct  5 05:40 4-task-on-details.png
+-rw-r--r--   1 runner  staff  397966 Oct  5 05:41 4b-task-on-runs.png
+-rw-r--r--   1 runner  staff  164825 Oct  5 05:42 5-agent-off-top.png
+-rw-r--r--   1 runner  staff  164825 Oct  5 05:42 5b-agent-off-end.png
+-rw-r--r--   1 runner  staff  209307 Oct  5 05:42 6-agent-on-top.png
+-rw-r--r--   1 runner  staff  286067 Oct  5 05:43 6b-agent-on-end.png
+-rw-r--r--   1 runner  staff  252697 Oct  5 05:43 7-composer-off.png
+-rw-r--r--   1 runner  staff  296924 Oct  5 05:43 7b-composer-off-menu.png
+-rw-r--r--   1 runner  staff  255733 Oct  5 05:44 8-composer-on.png
+-rw-r--r--   1 runner  staff     529 Oct  5 05:45 not-served.txt
+-rw-r--r--   1 runner  staff     122 Oct  5 05:45 patch-bodies.txt
+-rw-r--r--   1 runner  staff   12914 Oct  5 05:44 requests.log
+-rw-r--r--   1 runner  staff       0 Oct  5 05:25 stub.out
+-rw-r--r--@  1 runner  staff    1018 Oct  5 05:38 SwitchShotTeststest1SettingsOff-notes.txt
+-rw-r--r--@  1 runner  staff     282 Oct  5 05:38 SwitchShotTeststest2SettingsOn-notes.txt
+-rw-r--r--@  1 runner  staff    1054 Oct  5 05:40 SwitchShotTeststest3TaskOff-notes.txt
+-rw-r--r--@  1 runner  staff    1574 Oct  5 05:42 SwitchShotTeststest4TaskOn-notes.txt
+-rw-r--r--@  1 runner  staff     278 Oct  5 05:42 SwitchShotTeststest5AgentOff-notes.txt
+-rw-r--r--@  1 runner  staff     719 Oct  5 05:43 SwitchShotTeststest6AgentOn-notes.txt
+-rw-r--r--@  1 runner  staff     126 Oct  5 05:43 SwitchShotTeststest7ComposerOff-notes.txt
+-rw-r--r--@  1 runner  staff       0 Oct  5 05:44 SwitchShotTeststest8ComposerOn-notes.txt
+-rw-r--r--@  1 runner  staff   17413 Oct  5 05:38 tree-1-settings-off.txt
+-rw-r--r--@  1 runner  staff   17413 Oct  5 05:38 tree-2-settings-on.txt
+-rw-r--r--@  1 runner  staff   16248 Oct  5 05:39 tree-3-task-off-details.txt
+-rw-r--r--@  1 runner  staff   15228 Oct  5 05:40 tree-3b-task-off-runs.txt
+-rw-r--r--@  1 runner  staff   16911 Oct  5 05:40 tree-4-task-on-details.txt
+-rw-r--r--@  1 runner  staff   15332 Oct  5 05:41 tree-4b-task-on-runs.txt
+-rw-r--r--@  1 runner  staff   14413 Oct  5 05:42 tree-5b-agent-off-end.txt
+-rw-r--r--@  1 runner  staff   16667 Oct  5 05:43 tree-6b-agent-on-end.txt
+-rw-r--r--@  1 runner  staff   11722 Oct  5 05:43 tree-7b-composer-off-menu.txt
+-rw-r--r--   1 runner  staff  696653 Oct  5 05:45 xcodebuild-iphone.log

@@ -1,0 +1,20 @@
+Test Case '-[RouteProbeUITests.SwitchShotTests test1SettingsOff]' started.
+Test Case '-[RouteProbeUITests.SwitchShotTests test1SettingsOff]' passed (60.966 seconds).
+Test Case '-[RouteProbeUITests.SwitchShotTests test2SettingsOn]' started.
+Test Case '-[RouteProbeUITests.SwitchShotTests test2SettingsOn]' passed (22.798 seconds).
+Test Case '-[RouteProbeUITests.SwitchShotTests test3TaskOff]' started.
+Test Case '-[RouteProbeUITests.SwitchShotTests test3TaskOff]' passed (87.431 seconds).
+Test Case '-[RouteProbeUITests.SwitchShotTests test4TaskOn]' started.
+Test Case '-[RouteProbeUITests.SwitchShotTests test4TaskOn]' passed (106.963 seconds).
+Test Case '-[RouteProbeUITests.SwitchShotTests test5AgentOff]' started.
+Test Case '-[RouteProbeUITests.SwitchShotTests test5AgentOff]' passed (35.654 seconds).
+Test Case '-[RouteProbeUITests.SwitchShotTests test6AgentOn]' started.
+Test Case '-[RouteProbeUITests.SwitchShotTests test6AgentOn]' passed (40.294 seconds).
+Test Case '-[RouteProbeUITests.SwitchShotTests test7ComposerOff]' started.
+Test Case '-[RouteProbeUITests.SwitchShotTests test7ComposerOff]' passed (20.213 seconds).
+Test Case '-[RouteProbeUITests.SwitchShotTests test8ComposerOn]' started.
+Test Case '-[RouteProbeUITests.SwitchShotTests test8ComposerOn]' passed (18.198 seconds).
+	 Executed 8 tests, with 0 failures (0 unexpected) in 392.515 (392.527) seconds
+	 Executed 8 tests, with 0 failures (0 unexpected) in 392.515 (392.528) seconds
+	 Executed 8 tests, with 0 failures (0 unexpected) in 392.515 (392.529) seconds
+** TEST SUCCEEDED **

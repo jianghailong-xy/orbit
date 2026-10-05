@@ -1,0 +1,3 @@
+6b-agent-on-end 'Task runs': 3 element(s) — 48 label="Task runs" value="" frame=(16.0, 515.6666666666667, 370.0, 40.33333333333337) hittable=true
+6b-agent-on-end 'Smart model selection': 2 element(s) — 40 label="Smart model selection for tasks, Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected." value="1" frame=(16.0, 556.0, 370.0, 177.0) hittable=true
+6b-agent-on-end 'Working directory': 1 element(s) — 48 label="Working directory" value="" frame=(16.0, 405.6666666666667, 370.0, 40.333333333333314) hittable=true

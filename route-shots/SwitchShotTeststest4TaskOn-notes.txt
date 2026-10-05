@@ -1,0 +1,9 @@
+task-on: in view after 1 drag(s) at (32.0, 247.3333282470703, 338.0, 34.33332824707031)
+4-task-on-details 'Suggested': 2 element(s) — 48 label="Suggested" value="" frame=(32.0, 305.8333333333333, 82.33333333333333, 20.33333333333337) hittable=false
+4-task-on-details 'Smart selection': 2 element(s) — 9 label="Model, ✦ Smart selection" value="" frame=(32.0, 403.3333435058594, 338.0, 34.333343505859375) hittable=true
+4-task-on-details 'Coordinator:': 1 element(s) — 48 label="Coordinator: one service plus its spec; an acceptance command decides it" value="" frame=(32.0, 558.3333333333334, 328.3333333333333, 31.66666666666663) hittable=true
+task-on-runs: in view after 12 drag(s) at (32.0, 553.3333333333335, 280.3333333333333, 80.33333333333337)
+4b-task-on-runs '✦ L ↑': 2 element(s) — 9 label="orbit, 18m, Running · Opus 5.5 · high, ✦ L ↑" value="1" frame=(32.0, 407.33333333333326, 280.3333333333333, 40.333333333333314) hittable=true
+4b-task-on-runs '✦ M': 2 element(s) — 9 label="orbit, 55m ago, Failed · Sonnet 5.5 · medium, ✦ M" value="" frame=(32.0, 481.33333333333303, 280.3333333333333, 40.33333333333337) hittable=true
+4b-task-on-runs 'would have picked': 2 element(s) — 9 label="orbit, 1d ago, Ended · Opus 5.5 · max, ✦ Smart selection would have picked Sonnet 5.5 · medium (M)" value="" frame=(32.0, 553.3333333333335, 280.3333333333333, 80.33333333333337) hittable=true
+4b-task-on-runs 'Why ': 3 element(s) — 9 label="Why Opus 5.5 · high" value="" frame=(320.3333333333333, 405.33333333333326, 32.0, 44.0) hittable=true

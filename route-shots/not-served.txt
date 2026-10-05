@@ -1,0 +1,8 @@
+   9 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S2 HTTP/1.1" 404 -
+   8 "GET /api/projects/sidebar HTTP/1.1" 404 -
+   8 "GET /api/projects HTTP/1.1" 404 -
+   7 "GET /api/sessions/S2/events?sinceSeq=2&maxPayload=2048 HTTP/1.1" 404 -
+   7 "GET /api/sessions/S2/background HTTP/1.1" 404 -
+   7 "GET /api/sessions/S2/approvals?status=PENDING HTTP/1.1" 404 -
+   2 "GET /api/tasks/T1/dependency-graph?direction=both&maxNodes=500&pairUnary=true HTTP/1.1" 404 -
+   2 "GET /api/sessions/S2/created-tasks HTTP/1.1" 404 -
