@@ -275,3 +275,36 @@ describe('a removal the machine would not do', () => {
     expect(workRow.querySelector('.re-panel.bad')).toBeNull();
   });
 });
+
+describe('an account on its way out', () => {
+  // Between the press and the beat that drops the row — the machine may already have said done —
+  // the row says Removing… instead of its sign-in, and the group's head stops counting it.
+  it.each(['pending', 'done'] as const)('reads Removing… and leaves the head’s count while %s', async (status) => {
+    const page = mount([
+      runner([DEFAULT, WORK, PERSONAL], {
+        accountRemove: { engine: 'codex', account: PERSONAL.id, status, message: null },
+      }),
+    ]);
+    const [, workRow, personalRow] = accountsOf(page);
+
+    expect(personalRow.classList.contains('account-removing')).toBe(true);
+    expect(personalRow.querySelector('.re-status')?.textContent).toBe('Removing…');
+    expect((await runnerMenuItem(personalRow, 'Remove account')).getAttribute('aria-disabled')).toBe('true');
+    expect(workRow.classList.contains('account-removing')).toBe(false);
+    expect(workRow.querySelector('.re-status')?.textContent).not.toContain('Removing');
+    expect(page.querySelector('[data-engine="codex"] .re-meta')?.textContent).toContain('of 2 accounts available');
+  });
+
+  it('is back to itself when the machine refused', () => {
+    const page = mount([
+      runner([DEFAULT, WORK], {
+        accountRemove: { engine: 'codex', account: WORK.id, status: 'failed', message: 'a session is running on it' },
+      }),
+    ]);
+    const [, workRow] = accountsOf(page);
+
+    expect(workRow.classList.contains('account-removing')).toBe(false);
+    expect(workRow.querySelector('.re-status')?.textContent).not.toContain('Removing');
+    expect(page.querySelector('[data-engine="codex"] .re-meta')?.textContent).toContain('of 2 accounts available');
+  });
+});

@@ -97,3 +97,41 @@ public enum StickySummary {
         return (yourQuestion, text)
     }
 }
+
+/// Which turn the sticky bar names for each place the reader can be, read off the items once.
+///
+/// The bar names the last question above the item under the viewport top (`recomputeStuck`), and
+/// that item changes on every scroll — which walked the transcript from its head and read every
+/// user turn's text (`isAnchor`, `WatchWakeText.parse`) again each time. Which turns are questions
+/// changes only when the items do, so it is answered here once per published state and a scroll
+/// is a lookup.
+public struct StickyQuestions {
+    /// Each item's position, by id — the first one, as the walk stopped at the first.
+    private let position: [String: Int]
+    /// `above[i]`: the last question before item `i`; `above[items.count]`, the last of them all.
+    private let above: [String?]
+
+    /// `isQuestion` is the console's own test of one user turn (`namesAQuestion`).
+    public init(_ items: [TranscriptItem], isQuestion: (UserBubble) -> Bool) {
+        var position: [String: Int] = [:]
+        var above: [String?] = []
+        above.reserveCapacity(items.count + 1)
+        var last: String?
+        for (index, item) in items.enumerated() {
+            if position[item.id] == nil { position[item.id] = index }
+            above.append(last)
+            if case .user(let b) = item, isQuestion(b) { last = b.id }
+        }
+        above.append(last)
+        self.position = position
+        self.above = above
+    }
+
+    /// The last question above the item `anchor` names — every question, when no item has that id.
+    public func above(_ anchor: String) -> String? {
+        above[position[anchor] ?? above.count - 1]
+    }
+
+    /// The last question in the transcript.
+    public var last: String? { above[above.count - 1] }
+}

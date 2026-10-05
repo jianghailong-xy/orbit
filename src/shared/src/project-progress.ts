@@ -509,6 +509,10 @@ export interface ProjectOpenItemRow<Instant = string> {
   fuseEpisodeId: string | null;
   delivery: { state: OpenItemDeliveryState; sessionId: string | null; at: Instant | null };
   actions: OpenItemAction[];
+  /** The server's one-sentence answer to "what must happen next". Optional for rolling deploys. */
+  requiredAction?: string;
+  /** The first executable door for the item, when the server can name one. */
+  primaryAction?: OpenItemAction;
   /** Present for a `COORDINATOR_QUESTION` and null for every other kind. */
   question: CoordinatorQuestion | null;
   /** The request a `START_REQUEST` carries — what the "Start this project?" card is drawn from —
@@ -609,6 +613,10 @@ export interface OpenItemDeliveryCard {
   } | null;
   /** The doors that exist for this item today, as the server decides them (§4.8). */
   actions: OpenItemAction[];
+  /** The same server-derived next-step sentence served on the project row. */
+  requiredAction?: string;
+  /** The first executable door for the item, when one is available. */
+  primaryAction?: OpenItemAction;
   /**
    * What the platform knew about the landing when it handed the item over, or null when it is not
    * answerable — an item about no task at all, which is what a promotion's is.
@@ -875,12 +883,15 @@ export interface ProjectListCoordinatorItems<Instant = string> {
  * Absent when nobody has decided a line and nothing has integrated yet: a project with no line has
  * no line to draw, and printing the default rule's guess there would state a decision nobody made.
  */
-export interface ProjectListIntegration {
+export interface ProjectListIntegration<Instant = string> {
   line: IntegrationLine;
   /** The branch's name, spelled as a merge receipt spells it (no `refs/heads/`). */
   ref: string;
   /** QUEUED or RUNNING jobs, including project merges and checks. Exceptions are not activity. */
   activeJobCount?: number;
+  /** The job the project page's landing line would describe, chosen by the same rule; absent when
+   *  nothing is in flight and on older servers. The session list's project row states it. */
+  inFlight?: ProjectIntegrationInFlight<Instant>;
 }
 
 /**
@@ -958,6 +969,8 @@ export interface SessionOwnerItem<Instant = string> {
   title: string;
   /** Since when it has been waiting on the owner. The banner shows the oldest. */
   since: Instant;
+  /** The short reason for an escalated item, derived from its raw kind. */
+  need?: string;
 }
 
 /**

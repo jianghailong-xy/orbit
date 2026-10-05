@@ -29,7 +29,8 @@ struct ToastRequest: Equatable {
 final class AppModel {
     // auth / instance
     var signedIn = false
-    var instanceField = "orbitd.io"
+    static let defaultInstance = "orbitd.io"
+    var instanceField = AppModel.defaultInstance
     var email = ""
     var password = ""
     var errorText: String?
@@ -392,8 +393,21 @@ final class AppModel {
     private var libraryRefreshQueue = CoalescedRefreshQueue<LibraryTarget, String>()
     private var libraryRefreshTask: Task<Void, Never>?
     private var libraryRefreshGeneration = 0
+    /// `loadSessions`'s single flight: the fetch on the wire, whether a call is waiting for one more,
+    /// and how the last one went. The generation retires a flight across an instance switch.
+    private var sessionsLoadTask: Task<Void, Never>?
+    private var sessionsLoadPending = false
+    private var sessionsLoadSucceeded = false
+    private var sessionsLoadGeneration = 0
+    /// How a poll reads the Open list: the delta against the last list fetched where the server has
+    /// it, else the tagged full read that comes back as an empty 304 when nothing changed. Told
+    /// whenever `sessions` is written any other way (an event folded in), so an "unchanged" answer
+    /// only ever vouches for the list it describes. One per instance and sign-in.
+    private var openListReader: OpenListReader?
 
     private static let instanceKey = "orbit.instance"
+    /// The email of the last successful sign-in, prefilled on the login page.
+    private static let emailKey = "orbit.email"
     /// Remembers the last agent you selected so a cold launch lands there instead of always the
     /// first agent in the list. Read in `loadAgentsThenLand`, written by `selectedAgentID`'s didSet.
     private static let lastAgentKey = "orbit.lastAgent"
@@ -405,6 +419,7 @@ final class AppModel {
         tokenStore = InMemoryTokenStore()
         #endif
 
+        email = UserDefaults.standard.string(forKey: Self.emailKey) ?? ""
         // Restore the last instance; if its token is still in the Keychain, skip the login screen —
         // and draw the first frame from what the last run left rather than from nothing.
         if let saved = UserDefaults.standard.string(forKey: Self.instanceKey),
@@ -455,11 +470,16 @@ final class AppModel {
         libraryRefreshTask?.cancel()
         libraryRefreshTask = nil
         libraryRefreshQueue = CoalescedRefreshQueue()
+        sessionsLoadGeneration &+= 1
+        sessionsLoadTask?.cancel()
+        sessionsLoadTask = nil
+        sessionsLoadPending = false
         apiGeneration &+= 1
         sessionDetails.removeAll()
         baseURL = url
         let client = APIClient(baseURL: url, tokenStore: tokenStore)
         api = client
+        openListReader = OpenListReader(api: client)
         // One link-preview store for the app, with an age on its answers: a screen that stays open
         // asks for its cards again as it redraws, and only what has gone stale costs a request.
         linkCards = OrbitLinkCards(baseURL: url,
@@ -473,7 +493,12 @@ final class AppModel {
         tasksModel.setSectionActive(selectedSection == .tasks)
         tasksModel.setSelectedDetailID(selectedTaskID)
         tasks = tasksModel
-        agents = AgentsModel(baseURL: url, tokenStore: tokenStore)
+        let agentsModel = AgentsModel(baseURL: url, tokenStore: tokenStore)
+        agentsModel.refreshOpen = { [weak self] in
+            guard let self, await self.loadSessions() else { return nil }
+            return self.sessions
+        }
+        agents = agentsModel
         runners = RunnersModel(baseURL: url, tokenStore: tokenStore)
         admin = AdminModel(baseURL: url, tokenStore: tokenStore)
         sharedLinks = SharedLinksModel(baseURL: url, tokenStore: tokenStore)
@@ -681,12 +706,14 @@ final class AppModel {
             return
         }
         configure(url)
-        UserDefaults.standard.set(instanceField, forKey: Self.instanceKey)
 
         busy = true
         defer { busy = false }
         do {
             _ = try await api!.login(email: email, password: password)
+            // Remember only what signed in, so a mistyped server or email never sticks.
+            UserDefaults.standard.set(instanceField, forKey: Self.instanceKey)
+            UserDefaults.standard.set(email, forKey: Self.emailKey)
             user = try? await api!.me()
             password = ""
             signedIn = true
@@ -716,6 +743,11 @@ final class AppModel {
         libraryRefreshTask?.cancel()
         libraryRefreshTask = nil
         libraryRefreshQueue = CoalescedRefreshQueue()
+        sessionsLoadGeneration &+= 1
+        sessionsLoadTask?.cancel()
+        sessionsLoadTask = nil
+        sessionsLoadPending = false
+        openListReader = api.map { OpenListReader(api: $0) }
         controlPlaneLive = false
         consoleRegistry?.reset()   // persist open transcripts, drop the warm cache
         // The account's lists leave with it: the next launch here may be someone else's.
@@ -1336,17 +1368,48 @@ final class AppModel {
         notifications.focusedSessionID = id
     }
 
-    func loadSessions() async {
-        guard let api else { return }
+    /// Refresh the Open list, one fetch at a time. A call while one is on the wire doesn't start a
+    /// second beside it — the Open list is the app's largest response, and launch alone asks for it
+    /// from the poll, the stream connecting and the list appearing. It asks for one more fetch after
+    /// that one instead, since the one in flight may have left before whatever the caller refreshes
+    /// for (the stream connecting, an event), and every call meanwhile shares it. Each call returns
+    /// once a fetch that started after it has finished: true when that fetch adopted a list.
+    @discardableResult
+    func loadSessions() async -> Bool {
+        sessionsLoadPending = true
+        if sessionsLoadTask == nil {
+            let generation = sessionsLoadGeneration
+            sessionsLoadTask = Task { @MainActor [weak self] in
+                while let self, self.sessionsLoadGeneration == generation, self.sessionsLoadPending {
+                    self.sessionsLoadPending = false
+                    self.sessionsLoadSucceeded = await self.fetchOpenSessions()
+                }
+                if let self, self.sessionsLoadGeneration == generation { self.sessionsLoadTask = nil }
+            }
+        }
+        await sessionsLoadTask?.value
+        return sessionsLoadSucceeded
+    }
+
+    private func fetchOpenSessions() async -> Bool {
+        guard let reader = openListReader else { return false }
         do {
-            let list = try await api.listSessions(view: .open)
+            guard case .list(let list) = try await reader.read() else {
+                // Unchanged: `sessions` is still the list the server has, so there is nothing to
+                // adopt or announce. The review-due timer re-arms against it, as an adopted snapshot does.
+                scheduleReviewDueRefresh(sessions)
+                return true
+            }
             openListFromLaunchSnapshot = false
             applySessionSnapshot(list)
+            reader.adopted()
+            return true
         } catch APIError.unauthorized {
             logout()
         } catch {
             // Transient — keep the last good list.
         }
+        return false
     }
 
     /// Adopt a new Open snapshot: the ONE place the list and everything derived from it are written,
@@ -1357,6 +1420,7 @@ final class AppModel {
     /// `notify: false` is for a snapshot whose transitions the caller already accounted for (a local
     /// purge), where the diff would otherwise post a bogus "finished" alert.
     private func applySessionSnapshot(_ list: [Session], notify: Bool = true) {
+        openListReader?.invalidate()   // see `openListReader`; a fetch marks it adopted once this is done
         // Notify on snapshot-to-snapshot transitions (skip the first load, which only primes). Skip
         // the session whose console is on screen — its own stream already shows the change.
         if notify, let prev = lastSnapshot {
@@ -1571,18 +1635,6 @@ final class AppModel {
         }
     }
 
-    /// Open a **Recents** row from the drawer: jump into the session's owning agent and put its
-    /// console on screen. The Open list nests the agent, so there's no fetch (unlike a cold deep link
-    /// — see ``openSession``). A no-op agent switch leaves the page where it is; a real one replaces
-    /// it, which is also the whole of "clear the prior agent's session/compose state": both were
-    /// pages of this one stack, and a page cannot outlive the frame it was.
-    func openRecentSession(_ s: Session) {
-        // The frame records where it came from — a Recents drawer row — so the compact shell frees
-        // the left edge for the drawer-open swipe on that console (see `NavState.consoleFromRecents`).
-        // Nothing to set first, and no observer with an ordering convention to preserve it.
-        show(.console(sessionID: s.id, origin: .drawer), agent: s.agent?.id ?? s.agentId)
-    }
-
     /// The "needs you" banner's state for a screen showing `focused` (nil from a list, which shows no
     /// one session). Cheap enough to read per body pass — it filters the handful of blocked rows, not
     /// the Open list, which `applySessionSnapshot` already narrowed.
@@ -1637,16 +1689,14 @@ final class AppModel {
         return session(id: id)?.capabilities?.canComplete ?? true
     }
 
-    /// iOS compact: true when the console currently pushed on the Agents stack was opened from a
-    /// **Recents** drawer row (and is still the one showing). The compact shell uses this to free the
-    /// left screen edge for the drawer-open swipe on that page — you came from the drawer, so the edge
-    /// returns you there — while the nav-bar back button still pops to the agent's session list.
-    var consoleFromRecents: Bool { nav.consoleFromRecents }
+    /// The drawer row the screen belongs to (`NavState.drawerDestination`): the row drawn as
+    /// selected, and the one whose tap only closes the drawer.
+    var drawerDestination: DrawerDestination { nav.drawerDestination(agentID: selectedAgentID) }
 
-    /// iOS compact: the same for the project page on top of the Projects stack, when one of the
-    /// drawer's project rows opened it — the edge returns you to the drawer, the back button to the
-    /// Projects list.
-    var projectFromDrawer: Bool { nav.projectFromDrawer }
+    /// iOS compact: the page on top is its drawer destination's own — a section's list or a
+    /// project's sessions page — so the left screen edge opens the drawer; over any page pushed above
+    /// it the edge is the system back-swipe's.
+    var atDestinationRoot: Bool { nav.atDestinationRoot }
 
     /// True when the current section's navigation stack is at its root (nothing pushed) — the
     /// compact shell uses this to yield the left screen edge to its drawer-open gesture only where
@@ -2062,12 +2112,66 @@ final class AppModel {
     private(set) var projectSessions: [Session] = []
     private(set) var projectSessionsLoading = false
     private(set) var projectSessionsError: String?
+    /// The project's landing read, for the summary card's landing line (`ProjectPage.landingLine`).
+    private(set) var projectSessionsIntegration: ProjectIntegrationView?
+    private(set) var projectSessionsIntegrationReadAt: Date?
+    private(set) var projectSessionsIntegrationReadFailed = false
     private var projectSessionsAddress: SessionProjectAddress?
 
     var projectSessionsColumn: SessionProjectAddress? { nav.projectSessionsColumn }
 
     func openProjectSessions(_ address: SessionProjectAddress) {
         nav.enterProjectSessions(address)
+    }
+
+    /// Every drawer row's tap. The row of the destination already showing only closes the drawer;
+    /// any other lands on its destination's root. On a phone that is the destination's whole stack;
+    /// in the iPad's sidebar column only the list column changes, and the detail keeps its page.
+    func openDrawerDestination(_ destination: DrawerDestination, inColumn: Bool) {
+        guard destination != drawerDestination else { return }
+        switch destination {
+        case .section(let section):
+            selectedSection = section
+            guard !inColumn else { return }
+            nav.popToRoot()
+            if section == .tasks { tasks?.selectScope(.all) }
+            syncTaskDetailStore()
+        case .workspace(let agentID):
+            selectedSection = .agents
+            if selectedAgentID != agentID {
+                selectedAgentID = agentID
+                nav.popToRoot()
+            } else if inColumn {
+                nav.leaveProjectSessions()
+            } else {
+                nav.popToRoot()
+            }
+        case .project(let projectID):
+            openProjectSessions(projectID, inColumn: inColumn)
+        }
+    }
+
+    /// A project's sessions page over its coordinator's workspace (or the one already showing).
+    /// Without any workspace it opens the project's page.
+    private func openProjectSessions(_ projectID: String, inColumn: Bool) {
+        let key = PublicID.storageKey(projectID)
+        let coordinator = (sessions + (agents?.allSessions ?? [])).first {
+            $0.projectMembership?.role == .coordinator
+                && $0.projectMembership.map { PublicID.storageKey($0.projectId) } == key
+        }
+        guard let agentID = coordinator.flatMap({ $0.agent?.id ?? $0.agentId })
+                ?? selectedAgentID ?? orderedAgents.first?.id else { return openProject(projectID) }
+        selectedSection = .agents
+        if selectedAgentID != agentID {
+            selectedAgentID = agentID
+            nav.popToRoot()
+        }
+        let address = SessionProjectAddress(projectID: projectID, agentID: agentID, view: .open)
+        if inColumn {
+            nav.enterProjectSessions(address)
+        } else {
+            nav.path = [.sessionProject(address)]
+        }
     }
 
     func leaveProjectSessions(_ projectID: String? = nil) {
@@ -2081,9 +2185,14 @@ final class AppModel {
             projectSessionsAddress = address
             projectSessions = []
             projectSessionsError = nil
+            projectSessionsIntegration = nil
+            projectSessionsIntegrationReadAt = nil
+            projectSessionsIntegrationReadFailed = false
         }
         projectSessionsLoading = true
         defer { if projectSessionsAddress == address { projectSessionsLoading = false } }
+        let integrationRead = Task { try await api.projectIntegration(address.projectID) }
+        defer { integrationRead.cancel() }
         do {
             let openRead = Task { try await api.listSessions(view: .open, projectId: address.projectID) }
             let completedRead = Task { try await api.listSessions(view: .completed, projectId: address.projectID) }
@@ -2104,6 +2213,15 @@ final class AppModel {
         } catch {
             guard projectSessionsAddress == address, !Task.isCancelled else { return }
             projectSessionsError = APIClient.failureReason(error)
+        }
+        let integration = try? await integrationRead.value
+        guard projectSessionsAddress == address, !Task.isCancelled else { return }
+        if let integration {
+            projectSessionsIntegration = integration
+            projectSessionsIntegrationReadAt = Date()
+            projectSessionsIntegrationReadFailed = false
+        } else {
+            projectSessionsIntegrationReadFailed = true
         }
     }
 
@@ -2363,13 +2481,11 @@ final class AppModel {
         return try await api.taskPage(cursor: cursor, limit: 50, counts: .none, creatorSessionId: sessionID)
     }
 
-    /// Open one project's page from outside the Projects list — the drawer's project rows: the
-    /// section's list at the root and the project on top, whatever was showing there before. The
-    /// drawer's rows pass `.drawer`, so the compact shell frees the left edge for the drawer-open
-    /// swipe on that page (see `NavState.projectFromDrawer`).
-    func openProject(_ id: String, origin: NavOrigin = .list) {
+    /// Open one project's page from outside the Projects list: the section's list at the root and
+    /// the project on top, whatever was showing there before.
+    func openProject(_ id: String) {
         selectedSection = .projects
-        nav.path = [.projectDetail(projectID: id, origin: origin)]
+        nav.path = [.projectDetail(projectID: id)]
     }
 
     /// The project line on a task's page. Over that project's own page — one of its rows opened the
@@ -2381,9 +2497,9 @@ final class AppModel {
     }
 
     /// A project's page opened from inside a conversation — a coordinator conversation's title, a
-    /// project link in a transcript. On a phone (`overConsole`) it is pushed over the console, so the
-    /// back swipe returns to the conversation; on the wide shells it opens in the Projects section,
-    /// whose sidebar is the way back.
+    /// project link in a transcript — or from a project's sessions page. On a phone (`overConsole`)
+    /// it is pushed over that page, so the back swipe returns to it; on the wide shells it opens in
+    /// the Projects section, whose sidebar is the way back.
     func openProjectFromConversation(_ id: String, overConsole: Bool) {
         let id = PublicID.toPublic(id)
         guard overConsole else { return openProject(id) }

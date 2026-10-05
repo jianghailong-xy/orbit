@@ -123,7 +123,7 @@ struct SessionFolderPage: View {
     private var folder: SessionFolder? { app.sessionFolders.first { $0.id == address.folderID } }
     /// The folder's sessions, in the list's order — the page's own list, and what the Move panel
     /// counts its folders over.
-    private var sessions: [Session] {
+    private func sessions(_ projectListing: SessionProjectListing) -> [Session] {
         guard let agents = app.agents else { return [] }
         let ungrouped = SessionFolderGrouping.sessions(agents.agentSessions, inFolder: address.folderID,
                                                       view: address.view)
@@ -131,20 +131,24 @@ struct SessionFolderPage: View {
         return projectListing.entries.map(\.timeGroupingSession)
     }
     private var projectListing: SessionProjectListing {
-        SessionProjectGrouping.listing(app.agents?.agentSessions ?? [],
+        let coordinators = (app.agents?.allSessions ?? []) + app.sessions
+        // Only the sessions the grouping looks a watch up for — the folder's workspace list and the
+        // projects' coordinators — not every session of the account (see the workspace list's).
+        let watched = (app.agents?.agentSessions ?? []) + coordinators.filter { $0.projectMembership?.role == .coordinator }
+        return SessionProjectGrouping.listing(app.agents?.agentSessions ?? [],
                                       folders: app.sessionFolders.filter { $0.workspaceId == address.agentID },
                                       projects: app.projects?.sidebarProjects ?? [], view: address.view,
                                       byTag: false, searching: isSearching, folderID: address.folderID,
                                       runnerOffline: app.agents?.runnerIsOffline(agent?.runnerId) ?? false,
-                                      coordinators: (app.agents?.allSessions ?? []) + app.sessions,
+                                      coordinators: coordinators,
                                       contentSessions: address.view == .open ? app.sessions : app.agents?.allSessions,
-                                      watching: Dictionary((app.sessions + (app.agents?.allSessions ?? [])).compactMap { session in
+                                      watching: Dictionary(watched.compactMap { session in
                                           app.watches?.summary(for: session.id).map { (session.id, $0) }
                                       }, uniquingKeysWith: { _, latest in latest }),
                                       line: { SessionLine.make(for: $0, live: true,
                                                               watching: app.watches?.summary(for: $0.id)) })
     }
-    private var timeSections: [SessionTimeSection] {
+    private func timeSections(_ sessions: [Session]) -> [SessionTimeSection] {
         SessionTimeGrouping.sections(sessions, pinnedFirst: address.view == .open)
     }
     private var query: String {
@@ -222,6 +226,11 @@ struct SessionFolderPage: View {
     /// rows as every other list draws them (see `sessionRow`), and the same pull-to-refresh.
     private func list(agent: Agent) -> some View {
         @Bindable var app = app
+        // One grouping per pass, which the list's closures and its empty state share (see the
+        // workspace list's `body`).
+        let projectListing = self.projectListing
+        let sessions = self.sessions(projectListing)
+        let timeSections = self.timeSections(sessions)
         let projectRows = Dictionary(uniqueKeysWithValues: projectListing.projects.map { ($0.id, $0) })
         return List(selection: rowNavigation == .selection ? $app.selectedAgentSessionID : nil) {
             if isSearching {
@@ -350,7 +359,7 @@ struct SessionFolderPage: View {
             case .project: app.openProjectSessions(projectAddress)
             }
         }
-        return SessionProjectRowView(row: row, onOpen: onOpen, onSessions: { app.openProjectSessions(projectAddress) })
+        return SessionProjectRowView(row: row, onOpen: { app.openProjectSessions(projectAddress) })
         .sessionProjectRowActions(row, onOpen: onOpen, onSessions: { app.openProjectSessions(projectAddress) }, onProject: {
             app.openProject(row.projectId)
         }, onMove: { if let coordinator = row.coordinator { movingSession = coordinator } })

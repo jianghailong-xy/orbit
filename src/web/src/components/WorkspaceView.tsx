@@ -17,6 +17,7 @@ import {
   EditOutlined,
   EllipsisOutlined,
   EyeOutlined,
+  ExportOutlined,
   FolderOutlined,
   GlobalOutlined,
   InfoCircleOutlined,
@@ -196,6 +197,8 @@ import { SessionOutputs } from './SessionOutputs';
 import { NewSessionProviderHero } from './NewSessionProviderHero';
 import {
   currentProviderChoice,
+  engineChoiceFor,
+  engineChoices,
   providerChoices,
   sameRuntimeChoices,
 } from '../lib/sessionProviderChoices';
@@ -1163,12 +1166,12 @@ function SessionProjectProgressBar({ counts, runningCount }: { counts: ProjectSi
   );
 }
 
-/** A project occupies the coordinator's row, using the same two lines as a session. */
+/** A project occupies the coordinator's row, using the same two lines as a session. A click opens
+ *  the project's sessions page; the menu's Open Session reaches the grouping target. */
 export function SessionProjectListRow({
   project,
   active,
   onOpen,
-  onSessions,
   menu,
   menuOpen,
   onMenuOpenChange,
@@ -1177,7 +1180,6 @@ export function SessionProjectListRow({
   project: SessionProjectRow<any>;
   active: boolean;
   onOpen: () => void;
-  onSessions: () => void;
   menu: MenuProps;
   menuOpen: boolean;
   onMenuOpenChange: (open: boolean) => void;
@@ -1218,7 +1220,10 @@ export function SessionProjectListRow({
             style={{ width: Math.max(0, side === 'leading' ? swipe.offset : -swipe.offset) }}>
             <button type="button" className={`session-swipe-action ${action}`} aria-label={label} tabIndex={-1}
               onClick={(e) => { e.stopPropagation(); swipe.onAction(action); }}>
-              {action === 'move' ? <FolderOutlined /> : project.coordinator?.pinnedAt ? <PushpinFilled /> : <PushpinOutlined />}
+              <span className="session-swipe-glyph">
+                {action === 'move' ? <FolderOutlined /> : project.coordinator?.pinnedAt ? <PushpinFilled /> : <PushpinOutlined />}
+              </span>
+              <span className="session-swipe-title" aria-hidden="true">{label}</span>
             </button>
           </div>
         );
@@ -1245,12 +1250,9 @@ export function SessionProjectListRow({
             <span className="session-time">{fmtTime(project.lastTurnAt ?? project.createdAt ?? undefined)}</span>
           </div>
           <div className="session-sub">
-            <button
-              type="button"
+            <span
               className={`session-project-progress${project.status === 'DONE' ? ' done' : ''}`}
               title={SESSION_PROJECT_COPY.progressHint(project.sessionCount, project.runningCount)}
-              aria-label={`Sessions for ${project.title}`}
-              onClick={(e) => { e.stopPropagation(); onSessions(); }}
             >
               {counts ? (
                 <>
@@ -1258,7 +1260,7 @@ export function SessionProjectListRow({
                   {SESSION_PROJECT_COPY.progress(counts.done, counts.total)}
                 </>
               ) : project.status}
-            </button>
+            </span>
             <div
               className={`session-preview${project.line.tone === 'preview' ? '' : ` tone-${project.line.tone}`}`}
               title={project.line.text}
@@ -3299,7 +3301,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
 
   // Everything that could run a session on this machine: engines first — with the health this
   // runner reported, since the session runs there — then this account's providers. The New
-  // Session hero offers all of it; the composer's Provider pill offers the same-runtime slice.
+  // Session hero offers it by engine; the composer's Provider menu offers the same-runtime slice.
   const providerWorkspace = selected
     ? (workspacesQ.data ?? []).find((workspace) => workspace.id === selected.workspace?.id)
     : pickedWorkspace;
@@ -3348,6 +3350,20 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       runner.antigravity,
     ],
   );
+  // The New Session hero's engines, each landing on the draft's pick when it holds it, else on what
+  // this workspace last ran there. The current one is the engine of the pick itself — synthesized
+  // when no group holds it (`opencode`, a removed provider) or holds it but cannot run it.
+  const draftEngines = useMemo(
+    () =>
+      engineChoices(providerChoicesForRunner, configuredProviders, [
+        pickedProvider,
+        pickedWorkspace?.lastProvider ?? pickedWorkspace?.provider,
+      ]),
+    [providerChoicesForRunner, configuredProviders, pickedProvider, pickedWorkspace?.lastProvider, pickedWorkspace?.provider],
+  );
+  const currentDraftEngine =
+    draftEngines.find((engine) => engine.provider.slug === pickedProvider) ??
+    engineChoiceFor(currentProviderChoiceForDraft, configuredProviders);
   // What a switch just changed. Shown under the summary and cleared on a timer: the model move
   // is a silent side effect otherwise, and so is the write-back that remembers the pick.
   const [providerSwitchNote, setProviderSwitchNote] = useState<string | null>(null);
@@ -7277,15 +7293,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     : (shownProvider === 'codex' || shownProvider === 'claude') && shownAccount !== 'default'
       ? accountPlanUsage(runner.planUsage, shownProvider, shownAccount)
       : sessionPlanUsage(shownProvider, runner.planUsage, configuredProviders);
-  // Where this session could move without changing CLI. Offered on the two routes that actually
-  // carry a provider: a live session's config PATCH, and the resume that revives an ended one. A
-  // draft picks in the hero above instead (which offers every runtime, not one), and a terminal
-  // session that can't be resumed would start a NEW session on send, where the workspace decides. A
-  // single entry means there is nowhere to go, and the pill stays out of the composer entirely —
-  // the common case, one Claude sign-in and no configured providers.
+  // Where this session could move without changing CLI. Offered on the three routes that actually
+  // carry a provider: a live session's config PATCH, the resume that revives an ended one, and the
+  // draft's create — whose engine the hero above picks, so here too it is the same-runtime slice. A
+  // terminal session that can't be resumed would start a NEW session on send, where the workspace
+  // decides. A single entry means there is nowhere to go, and the pill stays out of the composer
+  // entirely — the common case, one Claude sign-in and no configured providers.
   const providerSwitchChoices = useMemo(
     () =>
-      live || resumable
+      live || resumable || !selected
         ? sameRuntimeChoices(
             shownProvider,
             providerChoicesForRunner,
@@ -7298,6 +7314,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     [
       live,
       resumable,
+      selected,
       shownProvider,
       providerChoicesForRunner,
       configuredProviders,
@@ -7342,7 +7359,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // as the words, or off the server's answer when the window held none.
   const retryFromSession = retryText ? retry.sessionMessage : serverRetry?.sessionMessage;
   const resendFromSession = useMutation({
-    mutationFn: (sessionId: string) => resendSessionRetryMessage(sessionId),
+    // With whatever the composer has picked — pressing Retry after choosing a provider means
+    // "re-send this there", and the server moves the session as it would on a send.
+    mutationFn: (sessionId: string) =>
+      resendSessionRetryMessage(sessionId, {
+        ...(pendingResumeProvider ? { provider: pendingResumeProvider } : {}),
+        ...(pendingResumeAccount ? { account: pendingResumeAccount } : {}),
+      }),
     onSuccess: (_answer, sessionId) => qc.invalidateQueries({ queryKey: ['session', sessionId] }),
     // Said, not returned: an error toast stays until it is dismissed, and React Query waits on what
     // `onError` hands back before the press stops being in flight. Returned, a press that failed — or
@@ -7836,7 +7859,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       navigate(`/providers?runner=${encodeId(runner.id)}&engine=${shownAccountEngine}`);
       return;
     }
-    if (!selected) return;
+    // A draft starts on it: nothing on the server yet, so the pick rides on the create.
+    if (!selected) {
+      pickDraftAccount(shownAccountEngine, account === AUTOMATIC_ACCOUNT ? null : account);
+      return;
+    }
     // An ended session whose switch onto this engine is still held: nothing on the server is on the
     // engine yet, so the account rides along with the switch, on the message that revives it.
     if (pendingResumeProvider && endedProviderPick) {
@@ -7856,7 +7883,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     }
     // A provider this runner can't run isn't a switch — it's a request for the sign-in (or
     // install) that would make it one. Go straight to that engine's row on the Providers page, as
-    // the New Session picker's row does — or, for a choice that names its own fix (an account
+    // the New Session hero's row does — or, for a choice that names its own fix (an account
     // pool), to that page. The chip keeps showing the provider still in use.
     const picked = providerSwitchChoices.find((c) => c.slug === v);
     if (picked?.unavailable) {
@@ -7864,6 +7891,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         picked.fixHref ??
           `/providers?runner=${encodeId(runner.id)}&engine=${picked.fixEngine ?? picked.slug}`,
       );
+      return;
+    }
+    // A draft holds the pick for its create. Model, mode and effort re-seed on their own: the
+    // provider is part of the draft's seed context (`modelContextKey`).
+    if (!selected) {
+      if (account === undefined) pickDraftProvider(v);
+      else pickDraftAccount(v, account === AUTOMATIC_ACCOUNT ? null : account);
       return;
     }
     // Each provider owns its model space, so carry the running model only when the new one offers
@@ -7920,6 +7954,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       runnerName: runner.displayName || runner.name,
       runnerId: runner.id,
       runnerVersion: runner.version,
+      googleLogin: runner.antigravity?.googleLogin,
       runtime: runtimeForProvider(shownProvider, configuredProviders),
       onConnectGemini: () => navigate(geminiProvider ? `/providers/${encodeId(geminiProvider.id)}` : '/providers/new/gemini'),
       onSwitchToGemini: geminiChoice && !geminiChoice.unavailable && !selectedTrashed && !selectedMissing
@@ -8065,10 +8100,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   );
   // The runner's accounts of the session's engine, listed under it in the Provider submenu for a
   // session on built-in Codex or Claude to move between — each with its own quota, as the New Session
-  // picker lists them. Only with two or more (one is nothing to choose), and only on a runner that
-  // carries a conversation from one account to another: an older one would resume it where it was.
+  // picker lists them. Only with two or more (one is nothing to choose), and for a session only on a
+  // runner that carries a conversation from one account to another: an older one would resume it
+  // where it was. A draft has no conversation to carry, so it starts on any of them.
   const accountRows =
-    shownAccountEngine && runner.capabilities?.includes(ACCOUNT_MOVE_CAPABILITY[shownAccountEngine])
+    shownAccountEngine && (!selected || runner.capabilities?.includes(ACCOUNT_MOVE_CAPABILITY[shownAccountEngine]))
       ? (providerSwitchChoices.find((choice) => choice.slug === shownAccountEngine)?.accounts ?? [])
       : [];
   const accountsOffered = accountRows.length > 1;
@@ -8079,13 +8115,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const automaticHere = !!shownAccountEngine && automaticOfferedOn(shownAccountEngine, shownWorkspaceRow);
   const sessionAutomatic =
     automaticHere &&
-    (pendingResumeProvider
+    (!selected
+      ? !(shownAccountEngine === 'claude' ? draftClaudeAccount : draftCodexAccount)
+      : pendingResumeProvider
       ? !pendingResumeAccount || pendingResumeAccount === AUTOMATIC_ACCOUNT
       : !(shownAccountEngine === 'claude' ? detailForSelected?.claudeAccountPinned : detailForSelected?.codexAccountPinned));
-  // Another built-in engine's accounts, listed under it as the New Session picker lists them: a switch
-  // onto that engine can land on any of them. On a runner that carries a conversation between them.
+  // Another built-in engine's accounts, listed under it as the engine's own are: a switch
+  // onto that engine can land on any of them. For a session, on a runner that carries a conversation
+  // between them.
   const accountRowsFor = (engine: AccountEngine) => {
-    const rows = runner.capabilities?.includes(ACCOUNT_MOVE_CAPABILITY[engine])
+    const rows = !selected || runner.capabilities?.includes(ACCOUNT_MOVE_CAPABILITY[engine])
       ? (providerSwitchChoices.find((choice) => choice.slug === engine)?.accounts ?? [])
       : [];
     return rows.length > 1 ? rows : [];
@@ -8094,8 +8133,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // a ✦ on a light blue ground, and its menu opens on why — the decision's own first sentence — and
   // on where to fix the model for every run. Only while the chip still shows the pick: a model
   // changed here is this run's own. A session opened by hand has no route, and a run on an Agent
-  // without smart selection has one that was not applied, so both look as they always have.
+  // without smart selection has one that was not applied, so both look as they always have — and
+  // with the account's switch off (the default), so does every run.
   const smartRoute = (() => {
+    if (me.data?.preferences?.modelRouting !== true) return null;
     const route = detailForSelected?.route;
     return selected?.taskId && route?.applied && route.level && route.model === shownModel ? route : null;
   })();
@@ -8140,10 +8181,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               // Carry the reason on the row itself, where it answers the question being asked
               // ("why can't I pick Claude?"). It stays pickable rather than greyed because picking
               // it does something useful — it goes where the fix is (see pickProvider), which is
-              // the New Session picker's behaviour for the same row. The running provider is
+              // the New Session hero's behaviour for the same row. The running provider is
               // exempt: it is the chip's own provider, and needs no parenthetical.
               const blocked = !!choice.unavailable && choice.slug !== shownProvider;
-              // Each built-in engine's accounts under it, as the New Session picker lists them: on the
+              // Each built-in engine's accounts under it: on the
               // engine the session is on, the ones it moves between (switchAccount); under another,
               // the ones a switch onto that engine lands on (pickProvider with the account).
               const here = choice.slug === shownAccountEngine;
@@ -8186,7 +8227,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                         label: (
                           <span className="scope-menu-row">
                             <span className="composer-account-row-name">Automatic</span>
-                            {menuValue('Resets soonest')}
+                            {menuValue('Switches to soonest reset')}
                             {checkSlot(here && sessionAutomatic)}
                           </span>
                         ),
@@ -8629,10 +8670,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                       project={s}
                       active={s.members.some((member) => member.id === selectedId) ||
                         selectedSession?.projectMembership?.projectId === s.projectId}
-                      onOpen={openTarget}
-                      onSessions={() => {
+                      onOpen={() => {
                         if (swipeClickGuard.current) { swipeClickGuard.current = false; return; }
                         if (swipeOpen) { setSwipeOpen(null); return; }
+                        setMenuOpenId(null);
                         enterProjectSessions(s.projectId);
                       }}
                       menuOpen={menuOpenId === s.id}
@@ -8690,10 +8731,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   pin: s.pinnedAt
                     ? { label: 'Unpin', icon: <PushpinFilled />, disabled: false }
                     : { label: 'Pin', icon: <PushpinOutlined />, disabled: false },
-                  share: { label: 'Share', icon: <GlobalOutlined />, disabled: false },
+                  share: { label: 'Share', icon: <ExportOutlined />, disabled: false },
                   move: { label: 'Move', icon: <FolderOutlined />, disabled: false },
                   delete: { label: 'Delete', icon: <DeleteOutlined />, disabled: false },
-                  purge: { label: 'Delete permanently', icon: <DeleteOutlined />, disabled: false },
+                  purge: { label: 'Delete Permanently', icon: <DeleteOutlined />, disabled: false },
                 };
                 const menuItem = (action: SwipeAction) => ({
                   key: action,
@@ -8768,7 +8809,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                                 runSwipeAction(action, s);
                               }}
                             >
-                              {swipeButtons[action].icon}
+                              <span className="session-swipe-glyph">{swipeButtons[action].icon}</span>
+                              <span className="session-swipe-title" aria-hidden="true">
+                                {swipeButtons[action].label}
+                              </span>
                             </button>
                           ))}
                         </div>
@@ -9749,15 +9793,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               ref={scrollRef}
             >
               <NewSessionProviderHero
-                current={currentProviderChoiceForDraft}
-                choices={providerChoicesForRunner}
+                current={currentDraftEngine}
+                engines={draftEngines}
                 onPick={pickDraftProvider}
-                currentAccount={pickedProvider === 'claude' ? shownClaudeAccount : shownCodexAccount}
-                automatic={{
-                  ...(codexAutoOffered ? { codex: !draftCodexAccount } : {}),
-                  ...(claudeAutoOffered ? { claude: !draftClaudeAccount } : {}),
-                }}
-                onPickAccount={pickDraftAccount}
                 runnerId={runner.id}
                 currentModelLabel={shownModelLabel}
                 // Nothing to choose until we know which workspace (and so which project) this runs in.

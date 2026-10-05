@@ -751,9 +751,10 @@ public enum TaskDetailLogic {
         UpdateTaskRequest(modelHint: level.map { .set($0) } ?? .clear, modelHintReason: .clear)
     }
 
-    /// The decision behind a run, when it named a tier. A route with no tier routed nothing.
-    public static func runRoute(_ session: SessionRef) -> TaskRunRoute? {
-        guard let route = session.route, let level = route.level, !level.isEmpty else { return nil }
+    /// The decision behind a run, when it named a tier. A route with no tier routed nothing, and
+    /// with the account's switch off (the default) there is none: runs read as before routing.
+    public static func runRoute(_ session: SessionRef, smartSelection: Bool) -> TaskRunRoute? {
+        guard smartSelection, let route = session.route, let level = route.level, !level.isEmpty else { return nil }
         return route
     }
 
@@ -781,8 +782,9 @@ public enum TaskDetailLogic {
 
     /// What the run ran on — `Sonnet 5.5 · medium` — from its own row, or from the pick for a run on
     /// it that has not been claimed yet; nil while neither says.
-    public static func runModelLine(_ session: SessionRef, modelLabel: (String) -> String) -> String? {
-        let applied = runRoute(session)?.applied == true
+    public static func runModelLine(_ session: SessionRef, smartSelection: Bool,
+                                    modelLabel: (String) -> String) -> String? {
+        let applied = runRoute(session, smartSelection: smartSelection)?.applied == true
         let ranOn = nonEmpty(session.model) ?? (applied ? nonEmpty(session.route?.model) : nil)
         guard let ranOn else { return nil }
         let ranAt = nonEmpty(session.effort) ?? (applied ? nonEmpty(session.route?.effort) : nil)

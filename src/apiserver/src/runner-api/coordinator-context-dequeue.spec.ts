@@ -167,7 +167,7 @@ for (const kind of ['message', 'steer'] as const) {
     assert.deepEqual(
       (sessionReads[0] as { select: { coordinatorForProject: unknown } }).select
         .coordinatorForProject,
-      { select: { id: true, coordinatorEnabled: true } },
+      { select: { id: true, coordinatorEnabled: true, owner: { select: { preferences: true } } } },
     );
     assert.equal(
       (sessionReads[0] as { select: { titleBeforeProjectManagement: unknown } }).select

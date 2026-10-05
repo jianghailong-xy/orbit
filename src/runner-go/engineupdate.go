@@ -344,6 +344,9 @@ func plural(n int, word string) string {
 // Best-effort by construction: an unreachable feed means we do not know, never that we are
 // current. The updater then runs exactly as it did before this existed.
 func latestEngineVersion(ctx context.Context, spec engineSpec) string {
+	if spec.bin == providerDsh {
+		return dshSupportedVersion // Fixed P0 admission; never query npm latest.
+	}
 	if spec.latestURL == "" {
 		return ""
 	}
@@ -470,6 +473,30 @@ func updateEngine(ctx context.Context, spec engineSpec, servicePath string, prox
 	// the version probes too, so `before` can't be measured against another updater's write.
 	engineInstall.mu.Lock()
 	defer engineInstall.mu.Unlock()
+	if spec.bin == providerDsh {
+		if _, err := os.Stat(dshVersionDir()); errors.Is(err, os.ErrNotExist) {
+			if !dshHasPublishedInstall() {
+				return EngineUpdateReport{}, "" // On-demand/browser install owns missing engines.
+			}
+			cmdCtx, cancel := context.WithTimeout(ctx, engineUpdateTimeout)
+			defer cancel()
+			if err := installDsh(cmdCtx, proxyVars); err != nil {
+				rec := recordEngineUpdate(spec.bin, updateFailed, err.Error(), engineUpdateFacts{latest: dshSupportedVersion})
+				return rec, spec.name + " — update failed: " + err.Error()
+			}
+			rec := recordEngineUpdate(spec.bin, updateUpdated, "Installed the supported version beside the retained previous versions.", engineUpdateFacts{installed: dshSupportedVersion, latest: dshSupportedVersion})
+			return rec, spec.name + " updated to fixed supported version " + dshSupportedVersion
+		}
+		_, err := dshExecutablePath()
+		if err != nil {
+			rec := recordEngineUpdate(spec.bin, updateFailed, err.Error(), engineUpdateFacts{latest: dshSupportedVersion})
+			return rec, spec.name + " — update failed: " + err.Error()
+		}
+		// Published directories are immutable, so even a damaged version is never
+		// repaired in place. Changing the supported version creates another directory.
+		rec := recordEngineUpdate(spec.bin, updateChecked, "Pinned to the P0 supported version; npm latest is not followed.", engineUpdateFacts{installed: dshSupportedVersion, latest: dshSupportedVersion})
+		return rec, spec.name + " — fixed supported version " + dshSupportedVersion
+	}
 	// Resolve the exact binary the runner would exec (service PATH order) and measure the
 	// version against THAT path before and after: an update that exits 0 without moving
 	// this binary's version wrote to a copy the runner never runs.
@@ -564,6 +591,19 @@ func updateEngine(ctx context.Context, spec engineSpec, servicePath string, prox
 			return EngineUpdateReport{}, ""
 		}
 		detail := updateErrDetail(err, out.bytes())
+		if !engineRunnableAt(binPath) {
+			// The updater did not merely fail: the engine it was asked to update is not runnable at
+			// all. `claude update` exits in a fraction of a second with nothing to say when the CLI
+			// it runs through is the damaged thing, and the bare `signal: killed` that produces
+			// reads as a network or permission problem — about a binary that is present, signed and
+			// unrunnable, which is a machine every session on it will fail on until somebody
+			// reinstalls it. Say which of the two this is, since that is the whole question
+			// whoever reads the row is trying to answer.
+			logln("engine-update:", spec.name, "is not runnable:", detail)
+			rec := recordEngineUpdate(spec.bin, updateFailed,
+				step+detail+" — the installed "+spec.name+" does not run at all (it is present and cannot be exec'd).", facts)
+			return rec, spec.name + " — installed but does not run: " + detail
+		}
 		logln("engine-update:", spec.name, "failed:", detail)
 		rec := recordEngineUpdate(spec.bin, updateFailed, step+detail, facts)
 		return rec, spec.name + " — update failed: " + detail
@@ -777,6 +817,9 @@ func recordEngineUpdate(bin, status, message string, facts engineUpdateFacts) En
 // with drift measured only when a command runs, a permanently busy machine can fall arbitrarily
 // far behind while its row says nothing at all.
 func noteEngineDrift(ctx context.Context, spec engineSpec, servicePath string) {
+	if spec.bin == providerDsh {
+		return // Busy dsh sessions stay pinned; no release feed or binary probe runs here.
+	}
 	binPath, ok := lookPathIn(spec.executable(), servicePath)
 	if !ok {
 		return

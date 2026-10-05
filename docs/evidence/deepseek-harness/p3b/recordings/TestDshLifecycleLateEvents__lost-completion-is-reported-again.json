@@ -1,0 +1,169 @@
+{
+  "controlPlaneTurns": [
+    {
+      "completions": [
+        {
+          "error": "",
+          "result": "reply to m1 after []",
+          "runtimeSessionId": "lc-engine-session-1",
+          "status": "SUCCEEDED",
+          "subtype": "completed"
+        }
+      ],
+      "deliveries": 2,
+      "kind": "message",
+      "status": "SUCCEEDED",
+      "turnId": "t1"
+    },
+    {
+      "completions": null,
+      "deliveries": 1,
+      "kind": "end",
+      "status": "DELIVERED",
+      "turnId": "end"
+    },
+    {
+      "completions": null,
+      "deliveries": 1,
+      "kind": "end",
+      "status": "DELIVERED",
+      "turnId": "end2"
+    }
+  ],
+  "engineRequests": [
+    {
+      "id": "orbit-dsh-1",
+      "method": "initialize",
+      "pid": 3440005
+    },
+    {
+      "id": "orbit-dsh-2",
+      "method": "session/new",
+      "pid": 3440005
+    },
+    {
+      "fields": {
+        "keySuffix": "0001",
+        "method": "session/new",
+        "permissionMode": "workspace-write",
+        "profileSealed": true
+      },
+      "note": "open",
+      "pid": 3440005
+    },
+    {
+      "id": "orbit-dsh-3",
+      "method": "session/prompt",
+      "pid": 3440005
+    },
+    {
+      "id": "orbit-dsh-4",
+      "method": "session/close",
+      "pid": 3440005
+    },
+    {
+      "id": "orbit-dsh-1",
+      "method": "initialize",
+      "pid": 3440012
+    },
+    {
+      "id": "orbit-dsh-2",
+      "method": "session/resume",
+      "pid": 3440012
+    },
+    {
+      "fields": {
+        "keySuffix": "0001",
+        "method": "session/resume",
+        "permissionMode": "workspace-write",
+        "profileSealed": true
+      },
+      "note": "open",
+      "pid": 3440012
+    },
+    {
+      "id": "orbit-dsh-3",
+      "method": "session/close",
+      "pid": 3440012
+    }
+  ],
+  "engineSessionLogs": {
+    "lc-engine-session-1": {
+      "cwd": "/tmp/orbit-dsh-p3b-kWhHCj/TestDshLifecycleLateEventslost-completion-is-reported-again3255167134/001/work",
+      "history": [
+        "m1 [effect]"
+      ]
+    }
+  },
+  "orbitTranscript": [
+    {
+      "subtype": "launch",
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "subtype": "init",
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "text": "m1 [effect]",
+      "turn": "t1",
+      "type": "user"
+    },
+    {
+      "status": "in_progress",
+      "toolCallId": "lc-tool-3440005-1",
+      "turn": "t1",
+      "type": "tool_use"
+    },
+    {
+      "isError": false,
+      "status": "completed",
+      "toolCallId": "lc-tool-3440005-1",
+      "turn": "t1",
+      "type": "tool_result"
+    },
+    {
+      "text": "reply to m1 after []",
+      "turn": "t1",
+      "type": "assistant"
+    },
+    {
+      "subtype": "context",
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "stopReason": "end_turn",
+      "subtype": "completed",
+      "turn": "t1",
+      "type": "turn_end"
+    },
+    {
+      "subtype": "launch",
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "subtype": "init",
+      "turn": "",
+      "type": "system"
+    }
+  ],
+  "runnerTurnLedger": {
+    "runtimeSessionId": "lc-engine-session-1",
+    "turns": {
+      "t1": {
+        "state": "settled",
+        "status": "SUCCEEDED",
+        "subtype": "completed",
+        "result": "reply to m1 after []"
+      }
+    }
+  },
+  "scenario": "TestDshLifecycleLateEvents/lost-completion-is-reported-again",
+  "sideEffects": [
+    "m1"
+  ]
+}

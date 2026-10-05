@@ -359,11 +359,11 @@ describe('project entries in the session list', { timeout: 60_000 }, () => {
     expect(projectRow().querySelector('.session-project-progress-bar')).toBeNull();
   });
 
-  it('opens the coordinator when the project entry is clicked', async () => {
+  it('opens the project sessions page when the project entry is clicked', async () => {
     await mount();
     await click(projectRow(), 'the project entry');
-    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}`));
-    expect(projectRow().classList.contains('active')).toBe(true);
+    await until(() => expect(mounted().querySelector('.session-project-page')).not.toBeNull());
+    expect(new URLSearchParams(location.split('?')[1]).get('project')).toBeTruthy();
   });
 
   it('files all project members under the coordinator folder, including members filed elsewhere', async () => {

@@ -61,7 +61,9 @@ private struct RunnerEngineContent: View {
         let offline = RunnerPageFormat.isOffline(runner, now: now)
         Form {
             head(health, now: now)
-            if let health, health.installed == true, let login = RunnerPageFormat.loginEngine(engine) {
+            if engine == "antigravity" {
+                antigravitySection(health, offline: offline, now: now)
+            } else if let health, health.installed == true, let login = RunnerPageFormat.loginEngine(engine) {
                 accountsSection(health, login: login, offline: offline, now: now)
             }
             updateSection(offline: offline)
@@ -99,6 +101,38 @@ private struct RunnerEngineContent: View {
     }
 
     // MARK: sections
+
+    @ViewBuilder private func antigravitySection(_ health: RunnerEngineHealth?, offline: Bool, now: Date) -> some View {
+        Section {
+            if health?.auth == "yes" {
+                Text(health?.authSource == "google" ? "Google account" : "env key · runs on your Gemini key")
+            }
+            if let status = health.flatMap({ RunnerPageFormat.engineStatus($0, runner: runner) }), health?.auth != "yes" {
+                Text(status.text).foregroundStyle(RunnerInk.status(status.tone))
+            }
+            ForEach(RunnerPageFormat.engineWindows(runner, engine: engine)) { row in
+                RunnerWindowRow(row: row, resets: RunnerPageFormat.resetsLine(row, now: now))
+            }
+            if let hint = EngineAuth.antigravityLoginHint(runner.antigravity?.googleLogin) {
+                Text(hint).font(.orbitLabel).foregroundStyle(Color.secondary)
+            } else if RunnerPageFormat.antigravityCanSignIn(runner) {
+                if signingIn != nil {
+                    RunnerSignInView(runnerID: runner.id, engine: .antigravity)
+                    Button("Close") { closeSignIn() }
+                } else {
+                    Button(health?.auth == "yes" && health?.authSource == "google" ? "Re-sign in · change Google account" : "Sign in with Google") {
+                        signingIn = CodexAccounts.defaultID
+                    }
+                    .disabled(offline)
+                    GoogleSignInTermsView()
+                }
+            }
+        } header: {
+            RunnerSectionHeader("Sign-In")
+        } footer: {
+            if offline { Text(RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER) }
+        }
+    }
 
     /// The engine, its version and whether it is kept current.
     @ViewBuilder private func head(_ health: RunnerEngineHealth?, now: Date) -> some View {

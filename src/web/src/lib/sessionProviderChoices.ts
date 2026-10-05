@@ -18,9 +18,9 @@ import {
  * summary under the card — an engine spends the subscription you signed into on that machine, a
  * configured provider spends the API key you pasted.
  *
- * Engines are the slugs a runner can sign into (LoginEngine in @orbit/shared), plus Antigravity,
- * which has no sign-in at all — agy runs on a Gemini API key from its environment — and is
- * offered only when the server confirms an environment key. `opencode` is an AgentProvider that is neither,
+ * Engines are the slugs a runner can sign into (LoginEngine in @orbit/shared). Antigravity is
+ * offered when the server confirms an environment key or a runner Google account.
+ * `opencode` is an AgentProvider that is neither,
  * so it never appears as a choice — it only shows up as the current pick when a workspace is
  * already set to it.
  */
@@ -209,9 +209,14 @@ function byokBlocker(health?: RunnerEngineHealth): string | undefined {
 }
 
 /** Antigravity admission uses the runner capability the server reads when dispatching. */
-function antigravityBlocker(state?: RunnerAntigravityState, health?: RunnerEngineHealth): string | undefined {
+function antigravityBlocker(state?: RunnerAntigravityState, health?: RunnerEngineHealth, login = false): string | undefined {
   if (state?.supported === false) return 'Update runner';
-  return state ? (state.installed === false ? 'Not installed' : undefined) : byokBlocker(health);
+  if (state?.installed === false) return 'Not installed';
+  if (login) {
+    if (health?.auth === 'no' || (state?.authSource === 'google' && !state.envKeyAvailable)) return 'Not signed in';
+    return engineBlocker(health);
+  }
+  return byokBlocker(health);
 }
 
 /**
@@ -246,11 +251,12 @@ export function providerChoices(
   antigravity?: RunnerAntigravityState,
   antigravityKeyAvailable: boolean = antigravity?.envKeyAvailable ?? false,
 ): ProviderChoice[] {
+  const usesGoogleAccount = antigravity?.authSource === 'google' && !(antigravityKeyAvailable && !antigravity.envKeyAvailable);
   const engines: ProviderChoice[] = ENGINE_SLUGS.filter(
-    (slug) => slug !== AgentProvider.ANTIGRAVITY || antigravityKeyAvailable,
+    (slug) => slug !== AgentProvider.ANTIGRAVITY || antigravityKeyAvailable || antigravity?.authSource === 'google',
   ).map((slug) => {
     const health = engineHealth?.find((e) => e.engine === slug);
-    const blocker = slug === AgentProvider.ANTIGRAVITY ? antigravityBlocker(antigravity, health) : engineBlocker(health);
+    const blocker = slug === AgentProvider.ANTIGRAVITY ? antigravityBlocker(antigravity, health, !antigravityKeyAvailable || usesGoogleAccount) : engineBlocker(health);
     const accounts =
       (slug === AgentProvider.CODEX || slug === AgentProvider.CLAUDE) && !blocker && (health?.accounts?.length ?? 0) >= 2
         ? health!.accounts!.map((account): AccountChoice => {
@@ -276,7 +282,7 @@ export function providerChoices(
       slug,
       label: ENGINE_LABELS[slug] ?? slug,
       kind: 'engine' as const,
-      ...(slug === AgentProvider.ANTIGRAVITY ? { labelDetail: 'env key' } : {}),
+      ...(slug === AgentProvider.ANTIGRAVITY ? { labelDetail: usesGoogleAccount ? 'Google account' : 'env key' } : {}),
       ...brandForProvider(slug, ENGINE_LABELS[slug] ?? slug),
       modelLabel: defaultModelLabel(slug, modelCatalog, configured, runtimeDefaultModels),
       ...(blocker ? { unavailable: blocker, fixEngine: slug } : {}),
@@ -403,14 +409,88 @@ export function currentProviderChoice(
   const found = choices.find((c) => c.slug === provider);
   if (found) return found;
   const label = ENGINE_LABELS[provider] ?? provider;
-  const blocker = provider === AgentProvider.ANTIGRAVITY ? antigravityBlocker(antigravity) : undefined;
+  const blocker = provider === AgentProvider.ANTIGRAVITY ? antigravityBlocker(antigravity, undefined, !antigravity?.envKeyAvailable) : undefined;
   return {
     slug: provider,
     label,
     kind: Object.values(AgentProvider).some((p) => p === provider) ? 'engine' : 'byok',
-    ...(provider === AgentProvider.ANTIGRAVITY ? { labelDetail: 'env key' } : {}),
+    ...(provider === AgentProvider.ANTIGRAVITY ? { labelDetail: antigravity?.authSource === 'google' ? 'Google account' : 'env key' } : {}),
     ...(blocker ? { unavailable: blocker, fixEngine: AgentProvider.ANTIGRAVITY } : {}),
     ...brandForProvider(provider, label),
     modelLabel: defaultModelLabel(provider, modelCatalog, configured, runtimeDefaultModels),
   };
 }
+
+/** An engine — the CLI a session runs on — as the New Session hero lists it. Which provider of that
+ *  engine the session spends (its own sign-in, an account pool, a key that borrows it) is the
+ *  composer's Provider menu's question, so a row here names the engine and the provider a pick of
+ *  it lands on. */
+export interface EngineChoice {
+  slug: AgentProvider;
+  label: string;
+  brand: ProviderBrand;
+  glyphKey?: string;
+  /** Where picking this engine lands: the preferred provider of it, else its own sign-in, else the
+   *  first of its providers that can run (`engineChoices`). */
+  provider: ProviderChoice;
+  /** Why none of this engine's providers can run here, and where that is fixed — the landing
+   *  provider's own reason, since there is no better one to pick. */
+  unavailable?: string;
+  fixEngine?: string;
+  fixHref?: string;
+}
+
+/** The engine row for `provider`, landing on it. Also how the hero names a pick that is in no group
+ *  (`opencode`, a removed provider): its runtime, on the synthesized current choice. */
+export function engineChoiceFor(provider: ProviderChoice, configured?: ConfiguredProvider[] | null): EngineChoice {
+  const slug = runtimeForProvider(provider.slug, configured);
+  const label = ENGINE_LABELS[slug] ?? slug;
+  return {
+    slug,
+    label,
+    ...brandForProvider(slug, label),
+    provider,
+    ...(provider.unavailable
+      ? {
+          unavailable: provider.unavailable,
+          ...(provider.fixEngine ? { fixEngine: provider.fixEngine } : {}),
+          ...(provider.fixHref ? { fixHref: provider.fixHref } : {}),
+        }
+      : {}),
+  };
+}
+
+/**
+ * `choices` grouped by the engine that runs them, in the order the engines first appear there. Each
+ * engine lands on the first of `preferred` it holds that can run (the draft's pick, then what the
+ * workspace last ran on), else its own sign-in, else the first of its providers that can run — one
+ * in a pool last, since the pool beside it is the usual answer. An engine none of whose providers can
+ * run lands on its own row (or its first) and carries that row's reason.
+ */
+export function engineChoices(
+  choices: ProviderChoice[],
+  configured: ConfiguredProvider[],
+  preferred: readonly (string | null | undefined)[] = [],
+): EngineChoice[] {
+  const groups = new Map<AgentProvider, ProviderChoice[]>();
+  for (const choice of choices) {
+    const runtime = runtimeForProvider(choice.slug, configured);
+    groups.set(runtime, [...(groups.get(runtime) ?? []), choice]);
+  }
+  return [...groups.entries()].map(([engine, group]) => {
+    const ready = group.filter((choice) => !choice.unavailable);
+    const landing =
+      preferred.map((slug) => ready.find((choice) => choice.slug === slug)).find(Boolean) ??
+      ready.find((choice) => choice.slug === engine) ??
+      ready.find((choice) => !choice.inPool) ??
+      ready[0] ??
+      group.find((choice) => choice.slug === engine) ??
+      group[0];
+    return engineChoiceFor(landing, configured);
+  });
+}
+
+/** How the hero says which provider its engine runs on: nothing extra for the engine's own sign-in
+ *  (bar how it signs in, for Antigravity), "via DeepSeek" for anything else. */
+export const engineProviderDetail = (engine: EngineChoice): string | undefined =>
+  engine.provider.slug === engine.slug ? engine.provider.labelDetail : `via ${engine.provider.label}`;

@@ -22,9 +22,6 @@ import Foundation
 public enum NavOrigin: Hashable, Sendable {
     /// A row in the section's own list.
     case list
-    /// A row in the compact shell's left drawer — a Recents row, or one of the open projects — the
-    /// page that yields the screen edge back to the drawer it came from.
-    case drawer
     /// A URL or a notification tap.
     case deepLink
     /// The needs-you banner.
@@ -70,8 +67,8 @@ public enum NavNode: Hashable, Sendable {
     case accountPool(poolID: String)
     case sharedPool(poolID: String)
     case userDetail(userID: String)
-    /// One project's page, pushed from the Projects list or from the drawer's project rows — which
-    /// the page's origin tells apart, as a console's does.
+    /// One project's page, pushed from the Projects list — or over a phone's conversation or a
+    /// project's sessions page, so the back swipe returns there.
     case projectDetail(projectID: String, origin: NavOrigin = .list)
     /// Every task one session's agent created: its console's `View all in Tasks ›` on a phone, pushed
     /// over that console — with the card's task and project pages — so the back swipe returns to the
@@ -177,17 +174,22 @@ public struct NavState: Equatable, Sendable {
     /// that drew as selected and could not be opened.
     public var highlightedSessionID: String? { consoleOnTop }
 
-    /// `AppModel.consoleFromRecents` — you came from the drawer, so the left edge returns you there.
-    /// No shadow variable and no assignment-ordering convention: the frame says where it came from.
-    public var consoleFromRecents: Bool {
-        if case .console(_, .drawer) = path.last { return true }
-        return false
+    /// The drawer row the screen belongs to — the one drawn as selected, and the one whose tap only
+    /// closes the drawer. A project's sessions page anywhere on the Agents stack makes it that
+    /// project's, with what was pushed over it; otherwise the Agents stack is the workspace's
+    /// (`agentID`, the agent its pane shows), and every other section's stack is the section's own.
+    public func drawerDestination(agentID: String?) -> DrawerDestination {
+        guard section == .agents else { return .section(section) }
+        if let project = projectSessionsColumn { return .project(projectID: project.projectID) }
+        return agentID.map { .workspace(agentID: $0) } ?? .section(.agents)
     }
 
-    /// `AppModel.projectFromDrawer` — the same for a project's page opened from the drawer's project
-    /// rows: the left edge returns you to the drawer, not to the Projects list under the page.
-    public var projectFromDrawer: Bool {
-        if case .projectDetail(_, .drawer) = path.last { return true }
+    /// The page on top is its drawer destination's own — a section's list, or a project's sessions
+    /// page — so a phone's left edge opens the drawer there. Over any page pushed above it, the edge
+    /// is the system back-swipe's.
+    public var atDestinationRoot: Bool {
+        guard let top = path.last else { return true }
+        if case .sessionProject = top { return true }
         return false
     }
 
@@ -531,6 +533,33 @@ public struct NavState: Equatable, Sendable {
         var p = path
         change(&p)
         stacks[section] = p.isEmpty ? nil : p
+    }
+}
+
+/// A row of the phone's drawer (the iPad's sidebar), as a place: a section, one workspace's session
+/// list, or one project's sessions page. `NavState.drawerDestination(agentID:)` says which one the
+/// screen belongs to, so a row's highlight and what its tap does are one read. Two spellings of a
+/// project's id are the same project.
+public enum DrawerDestination: Hashable, Sendable {
+    case section(AppSection)
+    case workspace(agentID: String)
+    case project(projectID: String)
+
+    public static func == (lhs: DrawerDestination, rhs: DrawerDestination) -> Bool {
+        switch (lhs, rhs) {
+        case (.section(let a), .section(let b)): return a == b
+        case (.workspace(let a), .workspace(let b)): return a == b
+        case (.project(let a), .project(let b)): return PublicID.storageKey(a) == PublicID.storageKey(b)
+        default: return false
+        }
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        switch self {
+        case .section(let section): hasher.combine(0); hasher.combine(section)
+        case .workspace(let agentID): hasher.combine(1); hasher.combine(agentID)
+        case .project(let projectID): hasher.combine(2); hasher.combine(PublicID.storageKey(projectID))
+        }
     }
 }
 
