@@ -2,7 +2,7 @@
 
 任务 `34Zogl1Sal7LyMPd2KcsT`（项目「Antigravity 支持 Google 账号登录」第 5 步），对应项目验收条目 3（`1c20Fd28SknYGalQD5smdG`）。验证在 HPC runner `workstation-gpu`（`34P34HcKKoFRn2j9KitgJ`）上完成，2026-10-05。
 
-**结论一句话**：Google 账号登录本身在真实机器上跑通了（登录、额度、两轮对话、`--conversation` 恢复、并发、每会话凭据副本、凭据移走/移回、泄露检查零命中全部成立），**但「用一个登录后才有的模型跑一轮」这一项到本文件第二版为止仍未通过**：控制面最初把 Google 模式特有的 Claude / GPT-OSS 模型静默换成默认的 `gemini-3.8-flash`（§6）；修复 `b5b99caa4` 之后不再替换了，但模型**根本送不到 runner**（agy argv 里没有 `--model`，详见 §10）。
+**结论一句话**：Google 账号登录本身在真实机器上跑通了（登录、额度、两轮对话、`--conversation` 恢复、并发、每会话凭据副本、凭据移走/移回、泄露检查零命中全部成立），**但「用一个登录后才有的模型跑一轮」这一项到本文件第二版为止仍未通过**：控制面最初把 Google 模式特有的 Claude / GPT-OSS 模型静默换成默认的 `gemini-3.8-flash`（§6）；修复 `b5b99caa4` 之后不再替换了，但模型**根本送不到 runner**（agy argv 里没有 `--model`，详见 §9）。
 
 脱敏规则：本文件、本次提交和所有截图里不出现 token、cookie、授权码或账号邮箱。下面每条命令的输出都先经过一个脱敏过滤器（邮箱、`4/0` / `ya29.` / `1//` 前缀的长串、JWT、长 blob 一律换成占位符，命中数只在计数里出现，行内容一律不打印）。凭据文件始终只做 stat（大小/权限/时间），从不读取内容。
 
@@ -193,7 +193,7 @@ UNION ALL SELECT '1//',   count(*) … AND payload::text LIKE '%1//%';
 
 **四个被检查的 E2E 会话（`01a10b45-39e3`、`01a10b45-3abe`、`01a10b45-62ce`、`01a10b46-3eee`）一个都没有出现在命中里**——它们的内容里三个前缀各 0 次。也就是说：宽查询的 15 次命中的是被检查文本自身（检查命令与讨论），不是任何 token 泄露。查询全程只返回计数与 session_id，没有读取或返回任何 payload 内容。
 
-## 10. 修复后重跑：结论「修复后仍不生效」
+## 9. 修复后重跑：结论「修复后仍不生效」
 
 协调会话确认模型修复已并入并通过（修复提交 `b5b99caa4`），要求基于修复后的控制面重跑「登录后才有的模型跑一轮」，并给出实际 init/runtime model **未被降级**的可验证记录。重跑结果：**控制面那一半生效了，模型仍然到不了 runner，这一轮没通过。**
 
@@ -217,7 +217,7 @@ UNION ALL SELECT '1//',   count(*) … AND payload::text LIKE '%1//%';
 
 **给下游的结论**：这条验收项需要的「agy 实际 `--model` = 请求的 Google 模式模型 + 正常回答」目前拿不到；修复 `b5b99caa4` 只修掉了「静默换成 gemini-3.8-flash」，没有让模型到达 runner。
 
-### 10.1 判别结果：目录里有 Google 行，问题在派发侧的匹配
+### 9.1 判别结果：目录里有 Google 行，问题在派发侧的匹配
 
 协调会话在生产 `orbit-postgres` 上跑了上面那条只读查询（`runner.model_catalog -> 'antigravity'`，`name='workstation-gpu'`）：
 
@@ -226,11 +226,29 @@ n = 7
 ids = claude-opus-5-5, claude-sonnet-5-5, gemini-3.1-pro, gemini-3.6-flash, gemini-3.7-flash, gemini-3.8-flash, gpt-oss-120b
 ```
 
-所以 §10 判据链第 3 步的两种可能里，**(a) 被排除**：控制面手上这份目录**确实有** `claude-sonnet-5-5`（以及 `claude-opus-5-5`、`gpt-oss-120b`）。剩下的就是 **(b)：修复后的派发侧判定对目录里已经存在的 Google id 仍然匹配不上，于是回退成「不传模型」**——症状因此从「静默换成 gemini-3.8-flash」变成「静默用 agy 默认模型」，用户可见的结果一样。修复任务已按这条实测 reopen/返工，定位方向是派发目录匹配与部署树。
+所以 §9 判据链第 3 步的两种可能里，**(a) 被排除**：控制面手上这份目录**确实有** `claude-sonnet-5-5`（以及 `claude-opus-5-5`、`gpt-oss-120b`）。剩下的就是 **(b)：修复后的派发侧判定对目录里已经存在的 Google id 仍然匹配不上，于是回退成「不传模型」**——症状因此从「静默换成 gemini-3.8-flash」变成「静默用 agy 默认模型」，用户可见的结果一样。修复任务已按这条实测 reopen/返工，定位方向是派发目录匹配与部署树。
 
 在修复落地前不再重复「签出/签入」触发（同一条手段已用过一次且无效），等待修复结果后重跑并提交下一版证据。
 
-## 9. 截图
+### 9.2 修复第 5 版之后重跑：Google 行仍然送不到 runner
+
+协调会话确认修复第 5 版（派发级）已通过并部署，我按它给的措辞立刻重跑。结果仍是**不通过**，而且这次拿到了一个三点判别：
+
+| 会话 | 请求模型 | 在控制面目录里？ | session 行 | runner 里 agy 的 argv |
+| --- | --- | --- | --- | --- |
+| [N](orbit-session:34aaApZg1dqufhNCg9HPu) | `gemini-3.1-pro` | ✅ 在 | `gemini-3.1-pro` | ✅ `--model gemini-3.1-pro --effort high` |
+| [R](orbit-session:34ab6sfjRARUWFjIpxnaR) | `gemini-9.9-ultra` | ❌ 不在 | 被换成 `gemini-3.8-flash` | ✅ `--model gemini-3.8-flash --effort high` |
+| [Q](orbit-session:34ab5o5LoCvOpDVxtx6fy) | `claude-sonnet-5-5` | ✅ 在（§9.1 的 n=7 里有） | ✅ 保留 `claude-sonnet-5-5` | ❌ **完全没有 `--model`**（agy 跑默认模型），回答本身正常 |
+
+也就是说，控制面现在三种情况里有两种是对的：**不在目录里的 id → 回退成默认模型并送到 runner**；**`gemini-` 目录行 → 原样送**；**目录里的 Google 行（非 `gemini-` 前缀）→ 只保住 session 行，送到 runner 的是空值**。用户可见的结果仍然是「选了 Claude Sonnet 5.5，实际跑 Gemini」。
+
+排除 runner 侧的再一次确认（这次连二进制都对上了）：运行中的 runner 是 `0.1.210`，其自报 `sourceSha = 3d418178f3ee25a5c36fee06b78356d0f98c4f52`；把那个 revision 的 `antigravity_models.go` 取出来与本仓逐字对比，`antigravityModelArgs` **完全一致**——它对目录里没有的模型是原样透传，任何非空 model 都不可能产生空 argv。所以空 argv 只能来自控制面：Q 的那次 claim 里 `agent.model` 是空的。
+
+剩下的定位只能在做控制面那一侧做：需要看部署树里这次 claim 实际构建出的 `agent.model`（例如 apiserver 日志里的 claim/assign 行，或对同一个 session 加一次带 payload 的日志），以及为什么「非 `gemini-` 前缀的目录行」会走到空值分支。本机看不到这一层。
+
+**给下游的结论（第三版）**：修复 `b5b99caa4` 与「第 5 版」都没有让 Google 模式模型到达 runner；三次 A/B/C 已经把范围压到控制面「目录行的模型解析」这一处。
+
+## 10. 截图
 
 
 **这一项没拿到**：本轮执行会话在本机上没有任何 owner 作用域的凭据（唯一的本地 token 是本会话的 runner-orchestration JWT，用户 API 一律 401），卡片和会话页面的截图只能由 owner 的浏览器出。owner 在凭据移走窗口开放的 20 分钟里没有回话，窗口到点关闭，因此：
