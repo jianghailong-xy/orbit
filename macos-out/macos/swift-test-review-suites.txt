@@ -1,0 +1,6 @@
+Test Suite 'AntigravityGoogleClientTests' started at 2026-10-05 06:51:27.344.
+Test Suite 'AntigravityGoogleClientTests' passed at 2026-10-05 06:51:27.353.
+Test Suite 'EngineAuthTests' started at 2026-10-05 06:51:28.333.
+Test Suite 'EngineAuthTests' passed at 2026-10-05 06:51:28.337.
+Test Suite 'SessionProviderChoicesTests' started at 2026-10-05 06:51:36.083.
+Test Suite 'SessionProviderChoicesTests' passed at 2026-10-05 06:51:36.100.
