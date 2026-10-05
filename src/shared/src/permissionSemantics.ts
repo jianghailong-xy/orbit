@@ -28,6 +28,9 @@ import type { ApprovalSupport, PermissionSemantics, RunnerModelCatalog } from '.
  *                       same card. Those cover command execution and patches — its dangerous
  *                       primitives — but not every tool, and Don't Ask is still not enforced
  *                       (see below).
+ *  - DSH      partial — ACP has single-request approval for file-sandbox expansion; MCP tools
+ *                       can act without asking. Orbit permission modes remain unsupported until
+ *                       the P4 policy guards have their own evidence (P0 contract §5).
  *
  * Shared rather than server-only so the composer can describe a session it has not created yet
  * with the same table the server will apply to it. Update it together with the runner; this is
@@ -40,6 +43,7 @@ export function runtimeApprovalSupport(provider: string): ApprovalSupport {
       return 'full';
     case AgentProvider.KIMI:
     case AgentProvider.CODEX:
+    case AgentProvider.DSH:
       return 'partial';
     default:
       return 'none';
@@ -80,9 +84,10 @@ export const AUTO_CAPABLE_CLAUDE_MODELS: ReadonlySet<string> = new Set([
 /**
  * Whether Auto — "let the model decide when to ask a human" — is a mode this runtime actually has.
  *
- * Every runtime but Claude has it runtime-wide, for any model: Codex spells it `on-request` ("the
- * model decides when to ask the user for approval"), Kimi and OpenCode expose it as a plain mode,
+ * Codex, Kimi, OpenCode and Antigravity have it runtime-wide, for any model: Codex spells it
+ * `on-request` ("the model decides when to ask the user for approval"), Kimi and OpenCode expose it as a plain mode,
  * and Antigravity runs it as `--dangerously-skip-permissions`, on any model it lists.
+ * DeepSeek Harness has no verified mapping of Orbit Auto to its file policy and withholds it.
  * Claude alone makes it model-specific, and the assigned runner's catalogue is where that answer
  * comes from — its row lists the modes the CLI that will run the model accepts. Only a model that
  * row does not cover falls back to the static list above. A configured (BYOK) provider's model
@@ -100,6 +105,7 @@ export function autoAvailable(
   customProvider = false,
   modelCatalog?: RunnerModelCatalog | null,
 ): boolean {
+  if (runtime === AgentProvider.DSH) return false;
   if (runtime !== AgentProvider.CLAUDE) return true;
   if (customProvider) return true;
   const reported = runnerCatalogRow(runtime, model, modelCatalog)?.permissionModes;
@@ -178,6 +184,21 @@ export function derivePermissionSemantics(
 ): PermissionSemantics {
   const mode = (permissionMode ?? PermissionMode.DONT_ASK) as string;
   const approvalSupport = runtimeApprovalSupport(provider);
+
+  // None of Orbit's existing modes is an enforced Harness file policy. API admission rejects
+  // them rather than substituting a default that might permit side effects (P0 contract §5).
+  if (provider === AgentProvider.DSH) {
+    return {
+      mode,
+      unapproved: 'deny',
+      approvalSupport,
+      honored: false,
+      note:
+        'DeepSeek Harness does not support these permission modes. Session configuration is ' +
+        'rejected until an enforced file policy is available.',
+      shortNote: 'unsupported on DeepSeek Harness; session configuration is rejected',
+    };
+  }
 
   // Bypass on a runner deployed as root. Unlike every other unhonored mode here this one is not a
   // difference of degree: the CLI refuses to start at all, so the session produces nothing. It runs

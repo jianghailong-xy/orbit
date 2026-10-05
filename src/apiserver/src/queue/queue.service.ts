@@ -14,7 +14,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { codexPoolUnavailableReason } from '../providers/codex-login';
 import { loginCanRun, loginPoolResumesAt, loginRunsAgainAt, type LoginAccount } from '../providers/pool-login-select';
 import { choosePoolCredential } from '../providers/pool-credential-select';
-import { isBuiltinProvider, resolveProviderExec, type ModelProviderRow } from '../providers/custom-provider';
+import { accountPoolRuntime, isBuiltinProvider, resolveProviderExec, type ModelProviderRow } from '../providers/custom-provider';
 import { ProviderPlanUsageService } from '../providers/plan-usage.service';
 import { isPoolCandidate, poolUnavailableReason } from '../providers/pool-admission';
 import { keyCanRun, keyRunsAgainAt, poolKeysResumeAt } from '../providers/pool-key-select';
@@ -48,7 +48,9 @@ import {
 } from '../common/session-tree-sql';
 import {
   ANTIGRAVITY_RUNNER_UPGRADE_ERROR,
+  DSH_RUNNER_UPGRADE_ERROR,
   OPENCODE_RUNNER_UPGRADE_ERROR,
+  PROVIDER_UNAVAILABLE_ERROR,
   SOURCE_PROTOCOL_UNSUPPORTED_ERROR,
 } from '../runner-api/runner-provider-support';
 import { ALWAYS_ALLOWED_TOOLS, resolvePermissionMode } from '../common/permission-mode';
@@ -161,6 +163,7 @@ export class QueueService {
       const runner = session.assignedRunner;
       let until = runner ? sessionAccountPausedUntil(session, session.workspace, runner, now) : null;
       const engine = session.provider;
+      let unavailable = false;
       if (until && runner && (engine === 'codex' || engine === 'claude')) {
         const canMove = runner.capabilities.includes(engine === 'codex' ? CODEX_ACCOUNT_MOVE_V1 : CLAUDE_ACCOUNT_MOVE_V1);
         const move = canMove && accountBeforeDispatch(engine, {
@@ -170,13 +173,20 @@ export class QueueService {
         if (move) until = null;
       }
       if (!isBuiltinProvider(engine, session.providerBuiltin) && engine) {
+        const provider = await this.prisma.modelProvider.findFirst({
+          where: { slug: engine, OR: [{ ownerId: null }, { ownerId: session.ownerId }] },
+          select: { enabled: true, runtime: true },
+        });
+        unavailable = provider
+          ? !provider.enabled || !['claude', 'codex', 'kimi', 'antigravity', 'dsh'].includes(provider.runtime)
+          : !await accountPoolRuntime(this.prisma, session.ownerId, engine);
         const key = `${session.ownerId}:${engine}`;
         if (!poolPauses.has(key)) poolPauses.set(key, await this.accountPoolPausedUntil(session.ownerId, engine, now));
         until = poolPauses.get(key) ?? null;
       }
-      if (!until) continue;
+      if (!until && !unavailable) continue;
       blocked.push(session.id);
-      const error = `Account paused until ${until.toISOString()}`;
+      const error = unavailable ? PROVIDER_UNAVAILABLE_ERROR : `Account paused until ${until!.toISOString()}`;
       if (session.error !== error) {
         const updated = await this.prisma.session.updateMany({
           where: { id: session.id, status: 'PENDING' }, data: { error },
@@ -196,6 +206,7 @@ export class QueueService {
   ): Promise<ClaimedSession | null> {
     const supportsOpenCode = runner.supportedProviders?.includes(AgentProvider.OPENCODE) ?? false;
     const supportsAntigravity = runner.supportedProviders?.includes(AgentProvider.ANTIGRAVITY) ?? false;
+    const supportsDsh = runner.supportedProviders?.includes(AgentProvider.DSH) ?? false;
     const paused = await this.pausedPendingSessions(runner.id);
     // Atomically claim one PENDING session assigned to this runner. The runner id
     // must be cast to ::uuid: Prisma binds template params as text, and Postgres
@@ -219,12 +230,12 @@ export class QueueService {
         // pg_advisory_xact_lock returns PostgreSQL void, which queryRaw cannot deserialize;
         // executeRaw deliberately discards that result (same pattern as pg_notify).
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(1330792788, 1)`;
-        // Migrations 0080 and 0367 install database triggers so an older apiserver replica cannot
-        // claim OpenCode or Antigravity as Claude during a rolling control-plane deploy (0372
+        // Migrations 0080, 0367 and 0377 install database triggers so an older apiserver replica cannot
+        // claim OpenCode, Antigravity or dsh as Claude during a rolling control-plane deploy (0372
         // widened the Antigravity one to the configured rows that borrow it). These
         // transaction-local capabilities are the positive signal that lets only the new, capable
-        // path pass. One statement for both: this runs inside the global claim lock above.
-        await tx.$executeRaw`SELECT set_config('orbit.runner_supports_opencode', ${supportsOpenCode ? '1' : '0'}, true), set_config('orbit.runner_supports_antigravity', ${supportsAntigravity ? '1' : '0'}, true)`;
+        // path pass. One statement sets all three inside the global claim lock above.
+        await tx.$executeRaw`SELECT set_config('orbit.runner_supports_opencode', ${supportsOpenCode ? '1' : '0'}, true), set_config('orbit.runner_supports_antigravity', ${supportsAntigravity ? '1' : '0'}, true), set_config('orbit.runner_supports_dsh', ${supportsDsh ? '1' : '0'}, true)`;
         // Asked again here, after the waits for a connection and for the lock above (up to 20s
         // under a busy pool): the runner may have hung up during them.
         if (hungUp?.aborted) return [];
@@ -243,6 +254,8 @@ export class QueueService {
             WHEN error IN (
               ${OPENCODE_RUNNER_UPGRADE_ERROR},
               ${ANTIGRAVITY_RUNNER_UPGRADE_ERROR},
+              ${DSH_RUNNER_UPGRADE_ERROR},
+              ${PROVIDER_UNAVAILABLE_ERROR},
               ${SOURCE_PROTOCOL_UNSUPPORTED_ERROR}
             ) OR error LIKE 'Account paused until %' THEN NULL
             ELSE error
@@ -271,6 +284,41 @@ export class QueueService {
             AND NOT (s.id = ANY(${paused}::uuid[]))
             AND s."cancel_requested_at" IS NULL
             AND s."assigned_runner_id" = ${runnerId}
+            -- An unresolved/disabled configured identity must never become a Claude job.
+            AND (
+              COALESCE(s.provider, 'claude') IN ('claude', 'codex', 'opencode', 'antigravity')
+              OR (s."provider_builtin" AND s.provider IN ('kimi', 'dsh'))
+              OR (NOT s."provider_builtin" AND (
+                EXISTS (
+                  SELECT 1 FROM "model_provider" mp
+                  WHERE mp.slug = s.provider AND mp.enabled
+                    AND mp.runtime IN ('claude', 'codex', 'kimi', 'antigravity', 'dsh')
+                    AND (mp.owner_id IS NULL OR mp.owner_id = s.owner_id)
+                ) OR EXISTS (
+                  SELECT 1 FROM "provider_pool" pp
+                  WHERE pp.slug = s.provider AND (
+                    (pp.owner_id = s.owner_id AND NOT pp.shared)
+                    OR (pp.engine = 'codex' AND EXISTS (
+                      SELECT 1 FROM "provider_pool_person" person
+                      WHERE person.pool_id = pp.id AND person.user_id = s.owner_id
+                    ))
+                  )
+                )
+              ))
+            )
+            -- Both the request and the heartbeat must declare Harness. The database trigger
+            -- repeats this so a legacy API transaction cannot bypass the capability gate.
+            AND (
+              NOT ((s.provider = 'dsh' AND s."provider_builtin") OR EXISTS (
+                SELECT 1 FROM "model_provider" mp
+                WHERE NOT s."provider_builtin" AND mp.slug = s.provider AND mp.runtime = 'dsh'
+                  AND (mp.owner_id IS NULL OR mp.owner_id = s.owner_id)
+              )) OR (${supportsDsh} AND EXISTS (
+                SELECT 1 FROM "runner" r WHERE r.id = ${runnerId}
+                  AND r."capabilities_reported_at" IS NOT NULL
+                  AND 'provider:dsh' = ANY(r.capabilities)
+              ))
+            )
             -- Legacy runners treat an unknown provider as Claude. Require a positive OpenCode
             -- capability advertisement so an upgraded server can never dispatch one of these
             -- rows to a pre-0.1.82 process during a rolling release.
@@ -294,6 +342,7 @@ export class QueueService {
                 SELECT 1 FROM "model_provider" mp
                 WHERE mp."slug" = s.provider
                   AND mp."runtime" = 'antigravity'
+                  AND NOT (s.provider = 'dsh' AND s."provider_builtin")
                   AND mp."enabled"
                   AND (mp."owner_id" IS NULL OR mp."owner_id" = s."owner_id")
               )
@@ -808,7 +857,9 @@ export class QueueService {
   async accountPoolPausedUntil(
     ownerId: string, slug: string, now: Date, db: Prisma.TransactionClient | PrismaService = this.prisma,
   ): Promise<Date | null> {
-    if (isBuiltinProvider(slug)) return null;
+    // This caller has only a slug. A pre-existing dsh pool keeps that identity; a native dsh
+    // selection simply finds no pool. Other built-ins remain unambiguous.
+    if (slug !== AgentProvider.DSH && isBuiltinProvider(slug)) return null;
     const own = await this.accountPool(ownerId, slug, db);
     if (own && own.engine !== AgentProvider.CODEX) {
       const paused = own.candidates.filter((candidate) => candidate.pausedUntil && candidate.pausedUntil > now);
@@ -831,11 +882,11 @@ export class QueueService {
   async pausedPoolMemberUntil(
     ownerId: string,
     slug: string,
-    session: { poolMemberProviderId: string | null; poolCodexAccountId: string | null; poolKeyId: string | null },
+    session: { providerBuiltin?: boolean; poolMemberProviderId: string | null; poolCodexAccountId: string | null; poolKeyId: string | null },
     now: Date,
     db: Prisma.TransactionClient | PrismaService = this.prisma,
   ): Promise<Date | null> {
-    if (isBuiltinProvider(slug)) return null;
+    if (isBuiltinProvider(slug, session.providerBuiltin ?? (slug !== AgentProvider.DSH))) return null;
     const pool = await db.providerPool.findFirst({
       where: { slug, OR: [{ ownerId, shared: false }, { engine: AgentProvider.CODEX, people: { some: { userId: ownerId } } }] },
       select: { id: true, engine: true },
@@ -884,7 +935,7 @@ export class QueueService {
    */
   async accountPoolResumesAt(ownerId: string, slug: string, now: Date): Promise<Date | null> {
     // A built-in engine is never a pool.
-    if (isBuiltinProvider(slug)) return null;
+    if (slug !== AgentProvider.DSH && isBuiltinProvider(slug)) return null;
     // With no quota cache there is nothing to judge an account pool by.
     const pool = this.planUsage ? await this.accountPool(ownerId, slug) : null;
     // A Codex pool of one's own is judged by its ChatGPT accounts (migration 0324) and its keys (0358), not by
@@ -929,13 +980,16 @@ export class QueueService {
     session: {
       ownerId: string;
       provider: string | null;
+      providerBuiltin?: boolean;
       poolKeyId: string | null;
       poolCodexAccountId: string | null;
     },
     now: Date,
     patienceMs = 0,
   ): Promise<Date | null> {
-    if (!session.provider || isBuiltinProvider(session.provider)) return null;
+    if (!session.provider || isBuiltinProvider(
+      session.provider, session.providerBuiltin ?? (session.provider !== AgentProvider.DSH),
+    )) return null;
     const pool = await this.sharedPoolOf(db, session.ownerId, session.provider);
     if (!pool) return null;
     const keys = await sharedPoolKeyCandidates(db, pool.id, now);
@@ -978,11 +1032,13 @@ export class QueueService {
    */
   async loginPoolRetryAt(
     db: Prisma.TransactionClient | PrismaService,
-    session: { ownerId: string; provider: string | null; poolCodexAccountId: string | null; poolKeyId?: string | null },
+    session: { ownerId: string; provider: string | null; providerBuiltin?: boolean; poolCodexAccountId: string | null; poolKeyId?: string | null },
     now: Date,
     patienceMs = 0,
   ): Promise<Date | null> {
-    if (!session.provider || isBuiltinProvider(session.provider)) return null;
+    if (!session.provider || isBuiltinProvider(
+      session.provider, session.providerBuiltin ?? (session.provider !== AgentProvider.DSH),
+    )) return null;
     const pool = await this.accountPool(session.ownerId, session.provider, db);
     if (pool?.engine !== AgentProvider.CODEX) return null;
     const keys = await sharedPoolKeyCandidates(db, pool.id, now);
