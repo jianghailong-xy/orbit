@@ -256,6 +256,17 @@ final class ConsoleModel {
     /// (auto-scroll, sticky-header recompute) observe this O(1) counter instead of an
     /// `onChange(of: state.items)` that Equatable-compares the whole item array every publish.
     private(set) var stateRevision = 0
+    /// The rows' clocks for the `state` published at `stateRevision` (`ReceiptAnchor.Clocks`). The
+    /// console's body places records on every update — `TranscriptRows.build` and the needs-you bar
+    /// both — and reading every row's clock again for each was the idle console's main cost; a
+    /// published state's clocks never change, so they are read once per publish.
+    @ObservationIgnored private var clocksCache: (revision: Int, clocks: ReceiptAnchor.Clocks)?
+    var receiptClocks: ReceiptAnchor.Clocks {
+        if let cached = clocksCache, cached.revision == stateRevision { return cached.clocks }
+        let clocks = ReceiptAnchor.Clocks(state.items)
+        clocksCache = (stateRevision, clocks)
+        return clocks
+    }
     /// Bumped whenever the LOCAL user sends a message from this console. The transcript observes it
     /// to force a scroll to the live tail on send — even when the user had scrolled up to read
     /// history (the `stateRevision` follow only re-pins while already at the bottom). Web parity:
@@ -3383,7 +3394,7 @@ final class ConsoleModel {
             else { return state.items.count }
             return at
         case .at(let moment):
-            let read = clocks ?? ReceiptAnchor.Clocks(state.items)
+            let read = clocks ?? receiptClocks
             clocks = read
             switch ReceiptAnchor.place(read, at: moment) {
             case .after(let id): return state.items.firstIndex { $0.id == id } ?? state.items.count
