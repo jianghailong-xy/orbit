@@ -108,9 +108,24 @@ try {
   const sha256 = createHash('sha256').update(readFileSync(binary)).digest('hex');
   const baseline = JSON.parse(readFileSync(path.join(root, 'docs/evidence/deepseek-harness/dsh-v0.2.0-rc.2/summary.json'), 'utf8'));
   assert.equal(sha256, baseline.cliSha256, 'CLI differs from the fixed P0 artifact');
-  assert.equal(createHash('sha256').update(readFileSync(path.join(install, 'package-lock.json'))).digest('hex'),
-    baseline.lockSha256, 'dependencies differ from the fixed P0 lock');
-  process.stdout.write(`Real official dsh ${version}; CLI sha256=${sha256}\n`);
+  // baseline.lockSha256 records the pre-override historical experiment; the canonical lock is the
+  // committed P0 package-lock.json carrying the fflate security override (docs/dependency-security.md).
+  const p0 = path.join(root, 'scripts/deepseek-harness-p0');
+  const lockSha256 = file => createHash('sha256').update(readFileSync(file)).digest('hex');
+  const canonicalLockSha256 = lockSha256(path.join(p0, 'package-lock.json'));
+  assert.equal(lockSha256(path.join(install, 'package-lock.json')), canonicalLockSha256,
+    'npm ci rewrote the canonical P0 lock');
+  const lock = JSON.parse(readFileSync(path.join(p0, 'package-lock.json'), 'utf8'));
+  const dshEntry = lock.packages['node_modules/@deepseek-ai/dsh'];
+  assert.equal(dshEntry?.version, '0.2.0-rc.2', 'P0 lock does not pin dsh 0.2.0-rc.2');
+  assert.equal(dshEntry.integrity, baseline.npmIntegrity, 'P0 lock dsh integrity differs from the recorded artifact');
+  assert.equal(JSON.parse(readFileSync(path.join(p0, 'package.json'), 'utf8'))
+    .overrides?.['@deepseek-ai/libreoffice-kit']?.fflate, '0.8.3', 'P0 fflate security override missing');
+  const fflateKey = 'node_modules/@deepseek-ai/libreoffice-kit/node_modules/fflate';
+  assert.equal(lock.packages[fflateKey]?.version, '0.8.3', 'P0 lock does not resolve the fflate override');
+  assert.equal(JSON.parse(readFileSync(path.join(install, fflateKey, 'package.json'), 'utf8')).version, '0.8.3',
+    'installed fflate is not the patched 0.8.3');
+  process.stdout.write(`Real official dsh ${version}; CLI sha256=${sha256}; P0 lock sha256=${canonicalLockSha256} (fflate 0.8.3 override)\n`);
   env.P3A_DSH_BIN = binary;
   env.P3A_NODE_BIN = process.execPath;
   const output = run('go', ['test', '-tags=dsh_integration', '-json', '-count=1', '-timeout=30m', '-run', `^(${suites.join('|')})$`, '.'],
