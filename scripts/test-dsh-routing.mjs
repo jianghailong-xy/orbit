@@ -18,9 +18,10 @@ const sharedNames = [
 export const permissionRegressionNames = [
   'an ask-me mode is honored only where the runtime can reach a human',
   "Don't Ask means deny everywhere a runtime can withhold, and is unenforced on Codex",
-  'Auto and Bypass are honored by supported runtimes and rejected on DeepSeek Harness',
-  'Auto is unavailable on DeepSeek Harness and only Claude gates it per model',
-  'DeepSeek Harness rejects every permission mode with partial approval and explanatory notes',
+  'Auto and Bypass are honored by supported runtimes; DeepSeek Harness honors Auto and rejects Bypass',
+  'Auto is available on DeepSeek Harness and only Claude gates it per model',
+  "DeepSeek Harness enforces Default, Auto and Don't Ask and rejects the rest with explanatory notes",
+  'P4 dsh: the server admits exactly the modes the picker describes as honored',
   'Auto on a Claude model without it is disclosed, not hidden',
   'a caveat is carried as data exactly when the mode is not honored',
   'approval support is reported per runtime',
@@ -28,6 +29,7 @@ export const permissionRegressionNames = [
   'a custom provider omits the field rather than guessing its borrowed runtime',
   'a row with no provider information still derives lifecycle capabilities',
   'an Antigravity session payload says what its mode means on agy, not on Claude',
+  'P4 dsh: a session payload says what its mode means on DeepSeek Harness',
 ];
 const apiCases = {
   'common/permission-semantics': permissionRegressionNames,
@@ -57,7 +59,7 @@ const apiCases = {
     'dsh compatibility: existing dsh provider and pool slugs stay configured on creation and switching',
     'dsh compatibility: Claude and Harness histories refuse cross-runtime resume and config switches',
     'dsh compatibility: a disabled existing dsh provider is unavailable instead of becoming the built-in engine',
-    'dsh admission: unverified permission policies reject explicit account and code defaults before creation',
+    'dsh admission: unverified permission policies reject explicit and account-default modes before creation',
     'dsh admission: terminal Harness resume refuses an unverified permission policy without rewriting its id',
     'dsh compatibility: other built-in engine creation and runtime routes remain unchanged',
     'dsh admission: Harness history cannot move to a different workspace',

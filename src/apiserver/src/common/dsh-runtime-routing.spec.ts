@@ -48,10 +48,14 @@ test('P1a dsh effort routing preserves opaque values and obeys the live model ca
 });
 
 test('P1a dsh rejects unverified permission modes including account defaults', () => {
-  for (const mode of [...Object.values(PermissionMode), 'unknown']) {
+  // P4 measured Default, Auto and Don't Ask; every other mode stays refused, never substituted.
+  for (const mode of [PermissionMode.PLAN, PermissionMode.ACCEPT_EDITS, PermissionMode.BYPASS, 'unknown']) {
     assert.throws(() => normalizeBuiltinPermissionMode(
       AgentProvider.DSH, MODEL, mode as PermissionMode, true, true,
-    ), /permission modes require an enforced file policy/);
+    ), /DeepSeek Harness cannot enforce permission mode/);
+  }
+  for (const mode of [PermissionMode.DEFAULT, PermissionMode.AUTO, PermissionMode.DONT_ASK]) {
+    assert.equal(normalizeBuiltinPermissionMode(AgentProvider.DSH, MODEL, mode, true, true), mode);
   }
   assert.equal(normalizeBuiltinPermissionMode(
     AgentProvider.CLAUDE, 'deepseek-v4-pro', PermissionMode.AUTO, true,

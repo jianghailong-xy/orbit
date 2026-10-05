@@ -24,11 +24,9 @@ var prepareDshSessionLaunch = func(ctx context.Context, job *ClaimedSession, exe
 	return PrepareDshSessionLaunch(ctx, job, execDir, dshFileModeForPermission(job.Agent.PermissionMode))
 }
 
-// dsh has two verified file policies. Plan mode never writes; every other Orbit mode gets the
-// workspace sandbox and never more, since writes outside it reach dsh's permission request.
+// dshFileModeForPermission is the file policy of a mode dsh can enforce (dshPermissionPolicyFor),
+// and "" for any other, which the preparer refuses as DSH_PERMISSION_UNSUPPORTED.
 func dshFileModeForPermission(mode string) string {
-	if mode == "plan" {
-		return "read-only"
-	}
-	return "workspace-write"
+	policy, _ := dshPermissionPolicyFor(mode)
+	return policy.FileMode
 }

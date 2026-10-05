@@ -55,9 +55,13 @@ type dshACPClient struct {
 	wg            sync.WaitGroup
 	configOptions []interface{} // configured only by the session loop
 	secrets       []string      // launch credentials, masked out of every diagnostic
+	// permissions answers session/request_permission; without it every request is cancelled.
+	permissions *dshPermissionBridge
 }
 
-func startDshACP(ctx context.Context, spec DshLaunchSpec, mapper *dshEventMapper, emit emitFn) (*dshACPClient, error) {
+// permissions may be nil; it is attached before the reader starts, so every approval request
+// this process sends reaches it.
+func startDshACP(ctx context.Context, spec DshLaunchSpec, mapper *dshEventMapper, permissions *dshPermissionBridge, emit emitFn) (*dshACPClient, error) {
 	if spec.Version != dshSupportedVersion {
 		return nil, fmt.Errorf("unsupported dsh CLI version %q; require %s", spec.Version, dshSupportedVersion)
 	}
@@ -95,6 +99,10 @@ func startDshACP(ctx context.Context, spec DshLaunchSpec, mapper *dshEventMapper
 	}
 	a := &dshACPClient{cmd: cmd, cancel: cancel, stdin: stdin, mapper: mapper, secrets: dshLaunchSecrets(spec.Env),
 		pending: map[string]chan dshRPCReply{}, writes: make(chan dshWrite, 16), done: make(chan struct{})}
+	if permissions != nil {
+		permissions.reply = a.respondPermission
+		a.permissions = permissions
+	}
 	emit(evSystem, map[string]interface{}{"subtype": "launch", "provider": providerDsh, "runtime": "acp",
 		"executable": spec.Executable, "argv": spec.Args, "cliVersion": spec.Version,
 		"dshHome": spec.DshHome, "configHash": spec.ConfigHash})
@@ -125,8 +133,10 @@ func (a *dshACPClient) readLoop(r io.Reader) {
 			return
 		}
 		if msg.Method != "" {
-			if msg.ID != nil {
-				// P4 wires the permission bridge. Until then reverse requests fail closed.
+			if msg.ID != nil && msg.Method == "session/request_permission" && a.permissions != nil {
+				a.permissions.request(msg.ID, rawObject(msg.Params))
+			} else if msg.ID != nil {
+				// No other reverse request is served, and without a bridge approvals fail closed.
 				response := map[string]interface{}{"jsonrpc": "2.0", "id": msg.ID,
 					"error": map[string]interface{}{"code": -32601, "message": "unsupported ACP request " + msg.Method}}
 				if msg.Method == "session/request_permission" {
@@ -174,6 +184,10 @@ func (a *dshACPClient) fail(err error) {
 		}
 		close(a.done)
 		a.mu.Unlock()
+		// A card left open on a lost transport can only be withdrawn: nothing could act on it.
+		if a.permissions != nil {
+			a.permissions.close()
+		}
 		_ = a.stdin.Close()
 		a.cancel()
 	})
@@ -275,8 +289,17 @@ func (a *dshACPClient) initialize(ctx context.Context) error {
 	return err
 }
 
-func (a *dshACPClient) open(ctx context.Context, cwd string) (string, error) {
-	result, err := a.call(ctx, "session/new", map[string]interface{}{"cwd": cwd, "mcpServers": []interface{}{}})
+// respondPermission answers one reverse request; dsh reads it by the server's RPC id.
+func (a *dshACPClient) respondPermission(id interface{}, outcome map[string]interface{}) error {
+	return a.write(context.Background(), map[string]interface{}{"jsonrpc": "2.0", "id": id,
+		"result": map[string]interface{}{"outcome": outcome}})
+}
+
+func (a *dshACPClient) open(ctx context.Context, cwd string, mcpServers []interface{}) (string, error) {
+	if mcpServers == nil {
+		mcpServers = []interface{}{}
+	}
+	result, err := a.call(ctx, "session/new", map[string]interface{}{"cwd": cwd, "mcpServers": mcpServers})
 	if err != nil {
 		return "", err
 	}
@@ -290,8 +313,12 @@ func (a *dshACPClient) open(ctx context.Context, cwd string) (string, error) {
 
 // resume reattaches the durable runtime id. A failure is reported, never replaced by new:
 // a fresh session would silently drop the conversation the user is continuing.
-func (a *dshACPClient) resume(ctx context.Context, sessionID, cwd string) error {
-	result, err := a.call(ctx, "session/resume", map[string]interface{}{"sessionId": sessionID, "cwd": cwd, "mcpServers": []interface{}{}})
+// MCP connections are not persisted, so every resume declares the servers again.
+func (a *dshACPClient) resume(ctx context.Context, sessionID, cwd string, mcpServers []interface{}) error {
+	if mcpServers == nil {
+		mcpServers = []interface{}{}
+	}
+	result, err := a.call(ctx, "session/resume", map[string]interface{}{"sessionId": sessionID, "cwd": cwd, "mcpServers": mcpServers})
 	if err != nil {
 		return err
 	}
@@ -367,6 +394,9 @@ func (a *dshACPClient) dispose() {
 	a.fail(fmt.Errorf("dsh ACP disposed"))
 	_ = waitSessionProcessTree(a.cmd)
 	a.wg.Wait()
+	if a.permissions != nil {
+		a.permissions.wait()
+	}
 }
 
 var dshSecretPattern = regexp.MustCompile(`sk-[A-Za-z0-9_-]{8,}`)
@@ -496,6 +526,18 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 		p.emit(evError, map[string]interface{}{"message": message})
 		return stFailed, true, false
 	}
+	// What dsh cannot enforce is refused before anything is prepared or started.
+	policy, err := dshPermissionPolicyFor(p.job.Agent.PermissionMode)
+	if err == nil {
+		err = dshToolPolicyError(p.job.Agent)
+	}
+	var mcpServers []interface{}
+	if err == nil {
+		mcpServers, err = dshMCPServers(p.job, policy)
+	}
+	if err != nil {
+		return fail(err.Error())
+	}
 	spec := p.dshLaunchSpec
 	prepared := spec == nil
 	if prepared {
@@ -542,7 +584,25 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 			logln("dsh turn ledger:", err)
 		}
 	}
-	app, err := startDshACP(p.ctx, *spec, mapper, p.emit)
+	permissions := newDshPermissionBridge(func() dshPermissionPolicy {
+		// Read per request: a reload between Default and Don't Ask keeps the process.
+		current, err := dshPermissionPolicyFor(p.job.Agent.PermissionMode)
+		if err != nil {
+			return dshPermissionPolicy{}
+		}
+		return current
+	}, mapper.toolCall, func(ctx context.Context, ask dshPermissionAsk) string {
+		return bridgeDshPermission(ctx, p.t, p.job.SessionID, ask)
+	}, func(turnID, kind string, payload map[string]interface{}) {
+		mapper.mu.Lock()
+		payload["runtimeSessionId"] = mapper.sessionID
+		mapper.mu.Unlock()
+		if turnID != "" {
+			payload["localTurnId"] = turnID
+		}
+		p.emitFor(turnID, kind, payload)
+	})
+	app, err := startDshACP(p.ctx, *spec, mapper, permissions, p.emit)
 	if err != nil {
 		return fail("failed to start DeepSeek Harness: " + err.Error())
 	}
@@ -560,10 +620,10 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 	}
 	sessionID := runtimeID
 	if sessionID == "" {
-		if sessionID, err = app.open(initCtx, spec.Cwd); err != nil {
+		if sessionID, err = app.open(initCtx, spec.Cwd, mcpServers); err != nil {
 			return fail(err.Error())
 		}
-	} else if err := app.resume(initCtx, sessionID, spec.Cwd); err != nil {
+	} else if err := app.resume(initCtx, sessionID, spec.Cwd, mcpServers); err != nil {
 		return fail("DeepSeek Harness could not resume session " + sessionID + ": " + err.Error())
 	}
 	if err := ledger.update(func() { ledger.RuntimeSessionID = sessionID }); err != nil {
@@ -637,6 +697,7 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 	// report=false settles only locally: after a lease loss the turn and its prompted record
 	// belong to the new owner, which settles it without replaying the prompt.
 	settle := func(done dshPromptResult, report bool) string {
+		permissions.close()
 		result, err := dshSettlementOutcome(stopped, done.result, done.err)
 		req, ok := mapper.settle(done.turnID, result, err)
 		if ok && report {
@@ -718,6 +779,7 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 			return true
 		}
 		turnID := activeID
+		permissions.begin()
 		// Recorded before the prompt is written: from here a crash leaves a turn that must not be replayed.
 		if err := ledger.update(func() { ledger.Turns[turnID] = &dshTurnRecord{State: dshTurnPrompted} }); err != nil {
 			settle(dshPromptResult{turnID: turnID, err: fmt.Errorf("cannot record the turn before prompting dsh: %v", err)}, true)
@@ -732,6 +794,7 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 		return true
 	}
 	closeSession := func() {
+		permissions.close()
 		closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := app.closeSession(closeCtx, sessionID); err != nil {
@@ -750,6 +813,7 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 		}
 		select {
 		case <-p.ctx.Done():
+			permissions.close()
 			if activeID != "" {
 				stopped = true
 				settle(<-promptDone, true)
@@ -765,6 +829,7 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 		case err := <-pollErrors:
 			// Another owner holds the lease: end the process tree first, so nothing more runs on
 			// this session's behalf, then settle locally and leave the turn to that owner.
+			permissions.close()
 			app.fail(err)
 			if activeID != "" {
 				stopped = true
@@ -804,6 +869,9 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 					continue
 				}
 				stopped = true
+				// Close the approval path first: an Allow decided after this point is never written,
+				// and one already written precedes the cancel on the wire.
+				permissions.close()
 				cancelCtx, cancel := context.WithTimeout(p.ctx, 2*time.Second)
 				err := app.write(cancelCtx, map[string]interface{}{"jsonrpc": "2.0", "method": "session/cancel",
 					"params": map[string]interface{}{"sessionId": sessionID}})
@@ -827,6 +895,7 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 					// process and Prepare again from the latest dispatch. Nothing is replayed.
 					if activeID != "" {
 						stopped = true
+						permissions.close()
 						app.fail(fmt.Errorf("dsh launch configuration changed"))
 						settle(<-promptDone, true)
 					}

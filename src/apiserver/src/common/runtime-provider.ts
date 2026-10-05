@@ -6,7 +6,7 @@ import {
   permissionModeAvailableOnRunner,
 } from '@orbit/shared';
 import type { RunnerModelCatalog } from '@orbit/shared';
-import { BadRequestException } from '@nestjs/common';
+import { assertDshPermissionMode } from './permission-semantics';
 import { runtimeCatalogReasoningLevels } from './runtime-model';
 
 // Closed CLI enums. An account default last picked in an OpenCode session (whose variants are
@@ -100,11 +100,8 @@ export function normalizeBuiltinPermissionMode(
   runsAsRoot?: boolean | null,
   modelCatalog?: unknown,
 ): PermissionMode {
-  // P0 does not establish any of Orbit's existing global tool policies for ACP dsh.
-  // P4 must prove an enforced file policy before these modes can be admitted.
-  if (provider === AgentProvider.DSH) {
-    throw new BadRequestException('DeepSeek Harness permission modes require an enforced file policy');
-  }
+  // dsh enforces its own file sandbox, measured per mode; root and per-model Auto are Claude's.
+  if (provider === AgentProvider.DSH) return assertDshPermissionMode(permissionMode);
   if (!permissionModeAvailableOnRunner(permissionMode, runsAsRoot)) {
     return ROOT_FALLBACK_PERMISSION_MODE;
   }

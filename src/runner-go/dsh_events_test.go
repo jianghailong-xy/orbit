@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -333,5 +334,70 @@ func TestDshACPEventAttribution(t *testing.T) {
 	last := events[len(events)-1]
 	if last.turnID != "second" || last.payload["contextTokens"] != 0 || last.payload["contextWindow"] != 321 {
 		t.Fatalf("explicit zero usage was lost: %+v", last)
+	}
+}
+
+// TestDshEventsToolCallJoin replays P0's recorded approval: dsh names the call by toolCallId only,
+// after its tool_call. The mapper keeps what that call asked for, the bridge shows it on the card
+// and answers with the exact wire shape the real CLI accepted; a settled call is no longer askable.
+func TestDshEventsToolCallJoin(t *testing.T) {
+	var rows []dshRecordedRow
+	for _, row := range dshReadRecording(t) {
+		if row.Scenario == "permission-allow-once" && row.Channel == "acp/out" {
+			rows = append(rows, row)
+		}
+	}
+	mapper := newDshEventMapper("<UUID_59>", func(string, string, map[string]interface{}) {})
+	if err := mapper.begin("local-turn"); err != nil {
+		t.Fatal(err)
+	}
+	policy, _ := dshPermissionPolicyFor("default")
+	var asked []dshPermissionAsk
+	var replies []map[string]interface{}
+	bridge := newDshPermissionBridge(func() dshPermissionPolicy { return policy }, mapper.toolCall,
+		func(_ context.Context, ask dshPermissionAsk) string { asked = append(asked, ask); return dshAllowOnce },
+		func(string, string, map[string]interface{}) {})
+	bridge.reply = func(id interface{}, outcome map[string]interface{}) error {
+		replies = append(replies, map[string]interface{}{"jsonrpc": "2.0", "id": id, "result": map[string]interface{}{"outcome": outcome}})
+		return nil
+	}
+	bridge.begin()
+	requests := 0
+	for _, row := range rows {
+		switch row.Value["method"] {
+		case "session/update":
+			if err := mapper.update(mapValue(row.Value["params"])); err != nil {
+				t.Fatalf("seq %d: %v", row.Seq, err)
+			}
+		case "session/request_permission":
+			requests++
+			params := mapValue(row.Value["params"])
+			if call := mapValue(params["toolCall"]); len(call) != 1 || call["toolCallId"] != "call_p0_26" {
+				t.Fatalf("recorded request = %+v", params)
+			}
+			bridge.request(row.Value["id"], params)
+			bridge.wait()
+		}
+	}
+	if requests != 1 || len(asked) != 1 || asked[0].Name != "write" || asked[0].ToolCallID != "call_p0_26" ||
+		!strings.Contains(firstString(mapValue(asked[0].Input), "file_path"), "permission-allow-once.txt") {
+		t.Fatalf("the card must carry the joined call: %+v", asked)
+	}
+	var recorded map[string]interface{}
+	for _, row := range dshReadRecording(t) {
+		if row.Scenario == "permission-allow-once" && row.Channel == "acp/in" && row.Value["result"] != nil && row.Value["id"] == float64(0) {
+			recorded = row.Value
+		}
+	}
+	got, _ := json.Marshal(replies[0])
+	want, _ := json.Marshal(recorded)
+	if len(replies) != 1 || string(got) != string(want) {
+		t.Fatalf("reply %s, the real CLI accepted %s", got, want)
+	}
+	if _, ok := mapper.toolCall("call_p0_26"); ok {
+		t.Fatal("a completed call can no longer be approved")
+	}
+	if _, ok := mapper.toolCall("call_p0_25"); ok {
+		t.Fatal("a failed call can no longer be approved")
 	}
 }
