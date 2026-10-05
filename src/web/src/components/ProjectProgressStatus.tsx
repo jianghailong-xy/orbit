@@ -461,20 +461,16 @@ export function FusePauseCard({
       id={`fuse-${row.itemId}`}
       onChat={onChat}
     >
-      <div className="project-open-item-actions">
-        <div className="project-open-item-door">
-          <Button
-            type="primary"
-            size="small"
-            loading={resume.isPending}
-            disabled={row.fuseEpisodeId == null}
-            onClick={() => resume.mutate()}
-          >
-            Resume
-          </Button>
-        </div>
-      </div>
-      <div className="project-open-item-consequences">
+      <div className="project-open-item-door">
+        <Button
+          type="primary"
+          size="small"
+          loading={resume.isPending}
+          disabled={row.fuseEpisodeId == null}
+          onClick={() => resume.mutate()}
+        >
+          Resume
+        </Button>
         <span className="project-open-item-consequence">{ACTION_CONSEQUENCES.RESUME}</span>
       </div>
       {resume.isError ? (
@@ -1410,37 +1406,18 @@ function CardActions({
           currentPromotionId={currentPromotionId}
         />
       )}
+      <span className="project-open-item-consequence">{actionConsequence(row, action)}</span>
     </div>
   );
-  const consequence = (action: OpenItemAction): JSX.Element => (
-    <span className="project-open-item-consequence" key={action}>
-      {actionConsequence(row, action)}
-    </span>
-  );
-  const allActions: Array<OpenItemAction | 'MARK_HANDLED'> = handClosable
-    ? [...ordered, 'MARK_HANDLED']
-    : ordered;
   return (
     <>
-      <div className="project-open-item-actions">
-        {ordered.map(door)}
-        {handClosable ? (
-          <div className="project-open-item-door" key="MARK_HANDLED">
-            <MarkHandledPress row={row} projectId={projectId} />
-          </div>
-        ) : null}
-      </div>
-      <div className="project-open-item-consequences">
-        {allActions.map((action) =>
-          action === 'MARK_HANDLED' ? (
-            <span className="project-open-item-consequence" key={action}>
-              {ACTION_CONSEQUENCES.MARK_HANDLED}
-            </span>
-          ) : (
-            consequence(action)
-          ),
-        )}
-      </div>
+      {ordered.map(door)}
+      {handClosable ? (
+        <div className="project-open-item-door" key="MARK_HANDLED">
+          <MarkHandledPress row={row} projectId={projectId} />
+          <span className="project-open-item-consequence">{ACTION_CONSEQUENCES.MARK_HANDLED}</span>
+        </div>
+      ) : null}
     </>
   );
 }
@@ -1605,7 +1582,7 @@ function ItemCard({
               ))}
             </p>
           ) : null}
-          {children}
+          {children ? <div className="project-open-item-actions">{children}</div> : null}
         </div>
         <ItemFactRows row={row} />
         <ItemHandlingRows row={row} now={now} />
