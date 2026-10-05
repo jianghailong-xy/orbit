@@ -381,6 +381,8 @@ struct AgentPanes: View {
     /// state: this pane is rebuilt per workspace (`.id(a.id)`), so @State would unfold it on every
     /// switch, and on every launch.
     @AppStorage("sessionList.pinnedCollapsed") private var pinnedCollapsed = false
+    /// The last grouping drawn and its inputs (see `body`).
+    @State private var listingMemo = SessionListingMemo<SessionListGrouping>()
     #endif
     // Set true when the composer hands ↑/↓ back on Escape, so the session list can be arrow-navigated
     // without a click; the binding also tracks click-to-focus.
@@ -395,12 +397,14 @@ struct AgentPanes: View {
         // this column. Compact's rows push their own pages onto the section's `NavigationStack`, so
         // there the List has nothing to select (and in a plain stack wouldn't respond to a tap).
         #if os(iOS)
-        // The grouping runs once a pass: the list's closures, which SwiftUI also runs on its own as
-        // rows scroll in, read these rather than regrouping the account's sessions each time.
-        let projectListing = self.projectListing
-        let folderListing = self.folderListing(projectListing)
-        let timeSections = self.timeSections(folderListing)
-        let projectRows = Dictionary(uniqueKeysWithValues: projectListing.projects.map { ($0.id, $0) })
+        // The grouping runs only when what it is computed from changed (`SessionListingMemo`): the
+        // body re-runs on a selection, a pop back to the list or a focus request, none of which
+        // moves a row. The list's closures, which SwiftUI also runs on its own as rows scroll in,
+        // read these rather than regrouping the account's sessions each time.
+        let grouping = listingMemo.value(for: listInputs, compute: Self.grouping)
+        let folderListing = grouping.folderListing
+        let timeSections = grouping.timeSections
+        let projectRows = grouping.projectRows
         #endif
         List(selection: listSelection) {
             #if os(iOS)
@@ -817,11 +821,31 @@ struct AgentPanes: View {
     }
 
     #if os(iOS)
+    /// What the list's grouping is computed from, read off the models each pass — which is also
+    /// what re-runs the body when one of them changes (see `SessionListingMemo`).
+    private var listInputs: SessionListInputs {
+        SessionListInputs(workspaceID: agent.id, sessions: agents.agentSessions, tagFilter: tagFilter,
+                          accountSessions: app.sessions, allSessions: agents.allSessions,
+                          folders: app.sessionFolders, projects: app.projects?.sidebarProjects ?? [],
+                          watches: app.watches?.summaries ?? [:], view: view, groupByTag: groupByTag,
+                          searching: isSearching, runnerOffline: agents.runnerIsOffline(agent.runnerId))
+    }
+
+    /// The whole grouping, from its inputs alone: static, so it cannot read a fact the memo's key
+    /// does not carry.
+    private static func grouping(_ inputs: SessionListInputs) -> SessionListGrouping {
+        let projectListing = Self.projectListing(inputs)
+        let folderListing = Self.folderListing(projectListing, inputs)
+        let projectRows = Dictionary(uniqueKeysWithValues: projectListing.projects.map { ($0.id, $0) })
+        return SessionListGrouping(projectListing: projectListing, folderListing: folderListing,
+                                   timeSections: Self.timeSections(folderListing, inputs), projectRows: projectRows)
+    }
+
     /// The recency sections the list draws, split out of the `ForEach` so the leading one can be
     /// rendered without its title (see the list body). Over what is left after the folders take
     /// theirs — a session inside a folder is drawn behind its row, not here (§3.3).
-    private func timeSections(_ folderListing: SessionFolderListing) -> [SessionTimeSection] {
-        SessionTimeGrouping.sections(folderListing.sessions, pinnedFirst: view == .open && tagFilter == nil)
+    private static func timeSections(_ folderListing: SessionFolderListing, _ inputs: SessionListInputs) -> [SessionTimeSection] {
+        SessionTimeGrouping.sections(folderListing.sessions, pinnedFirst: inputs.view == .open && inputs.tagFilter == nil)
     }
 
     /// This workspace's list, split by folder (§3.3): the folder rows the list draws at its top,
@@ -831,35 +855,36 @@ struct AgentPanes: View {
     /// row's spinner exactly as it silences the workspace's own. Trash, a tag filter and Group by
     /// Tag all leave the folder rows empty (§3.3): each is a grouping of its own, and a second one
     /// stacked on the list would leave a session with two places to be.
-    private func folderListing(_ projectListing: SessionProjectListing) -> SessionFolderListing {
-        guard SessionProjectGrouping.listShowsProjects(view: view, byTag: tagFilter != nil || groupByTag) else {
-            return SessionFolderGrouping.listing(shownSessions,
-                                      folders: app.sessionFolders.filter { $0.workspaceId == agent.id },
-                                      view: view,
-                                      byTag: tagFilter != nil || groupByTag,
-                                      runnerOffline: agents.runnerIsOffline(agent.runnerId))
+    private static func folderListing(_ projectListing: SessionProjectListing, _ inputs: SessionListInputs) -> SessionFolderListing {
+        guard SessionProjectGrouping.listShowsProjects(view: inputs.view, byTag: inputs.byTag) else {
+            return SessionFolderGrouping.listing(inputs.shownSessions,
+                                      folders: inputs.workspaceFolders,
+                                      view: inputs.view,
+                                      byTag: inputs.byTag,
+                                      runnerOffline: inputs.runnerOffline)
         }
         return SessionFolderListing(folders: projectListing.folders,
                                     sessions: projectListing.entries.map(\.timeGroupingSession))
     }
 
-    private var projectListing: SessionProjectListing {
-        let coordinators = agents.allSessions + app.sessions
+    private static func projectListing(_ inputs: SessionListInputs) -> SessionProjectListing {
+        let shownSessions = inputs.shownSessions
+        let coordinators = inputs.allSessions + inputs.accountSessions
         // Only the sessions the grouping looks a watch up for — this list's own and the projects'
         // coordinators — not every session of the account, each a `PublicID` key conversion.
         let watched = shownSessions + coordinators.filter { $0.projectMembership?.role == .coordinator }
         return SessionProjectGrouping.listing(shownSessions,
-                                      folders: app.sessionFolders.filter { $0.workspaceId == agent.id },
-                                      projects: app.projects?.sidebarProjects ?? [], view: view,
-                                      byTag: tagFilter != nil || groupByTag, searching: isSearching,
-                                      runnerOffline: agents.runnerIsOffline(agent.runnerId),
+                                      folders: inputs.workspaceFolders,
+                                      projects: inputs.projects, view: inputs.view,
+                                      byTag: inputs.byTag, searching: inputs.searching,
+                                      runnerOffline: inputs.runnerOffline,
                                       coordinators: coordinators,
-                                      contentSessions: view == .open ? app.sessions : agents.allSessions,
+                                      contentSessions: inputs.view == .open ? inputs.accountSessions : inputs.allSessions,
                                       watching: Dictionary(watched.compactMap { session in
-                                          app.watches?.summary(for: session.id).map { (session.id, $0) }
+                                          inputs.watch(for: session.id).map { (session.id, $0) }
                                       }, uniquingKeysWith: { _, latest in latest }),
                                       line: { SessionLine.make(for: $0, live: true,
-                                                              watching: app.watches?.summary(for: $0.id)) })
+                                                              watching: inputs.watch(for: $0.id)) })
     }
 
     private func projectRow(_ row: SessionProjectRow) -> some View {

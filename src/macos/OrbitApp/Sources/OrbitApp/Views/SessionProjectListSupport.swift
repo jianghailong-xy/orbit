@@ -15,4 +15,15 @@ extension SessionProjectEntry {
         }
     }
 }
+
+/// One pass's grouping of a session list — what the workspace list and a folder page draw, kept
+/// in a `SessionListingMemo` until its inputs change.
+struct SessionListGrouping {
+    let projectListing: SessionProjectListing
+    /// The folder rows on top and the sessions left for the time sections (a folder page has no
+    /// folder rows: its sessions are the folder's).
+    let folderListing: SessionFolderListing
+    let timeSections: [SessionTimeSection]
+    let projectRows: [String: SessionProjectRow]
+}
 #endif
