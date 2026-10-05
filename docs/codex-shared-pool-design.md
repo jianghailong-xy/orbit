@@ -96,7 +96,8 @@ codex (custom provider "orbit") ──▶  /gw/codex/responses  ──池内某�
   由**贡献者本人或管理员**用「Replace key」换上 key：同样校验格式、加密存库、只回打码指纹。
   判重管的是**加入**：换成池里另一把已有的 key 仍被拒；重填同一把 key 就是替换，收下并置回 `ACTIVE`，
   若上游仍拒，下一次 401 再置 `INVALID`。
-- 429 `rate_limit_exceeded` 不是失效：在同一把 key 上退避，见 §2.3。
+- 429 `rate_limit_exceeded` 不是失效：网关先在同一把 key 上退避；退避用尽仍是 429 时给该 key 记一个短期
+  throttle（0382），下一次 claim 可以换走，见 §2.3。
 
 ### 2.2 网关
 
@@ -192,7 +193,8 @@ codex (custom provider "orbit") ──▶  /gw/codex/responses  ──池内某�
   - 上游 `insufficient_quota`（或余额用尽）→ 网关立刻标记该 key 本窗口用完，带上恢复时间（上游给的话）；
     当前回合按现有的撞限流程结束，下一次 claim 换到别的 key；
   - 上游 401 → 该 key 置 `INVALID`，下一次 claim 换到别的 key，等贡献者本人或管理员替换；
-  - 上游 `rate_limit_exceeded`（429）→ **在同一把 key 上退避**，不跳 key；
+  - 上游 `rate_limit_exceeded`（429）→ 网关先在**同一把 key 上退避**，不跳 key；退避用尽仍是 429 时给该 key
+    记一个短期 throttle（迁移 0382），下一次 claim 可以换走；
   - 全部用完时，沿用现有的撞限等待。
 - 换 key 提示（D5）：
   - `Switched to orbit-org-2 — orbit-org-1 is out of budget`
@@ -215,8 +217,13 @@ codex (custom provider "orbit") ──▶  /gw/codex/responses  ──池内某�
   - 撞限后的回合：回合失败时若会话的 key 已不能再跑（按库里状态判，不看 codex 的措辞），
     turn-complete / finalize 按 `QueueService.sharedPoolKeyRetryAt` 武装自动重试（另一把 key 能跑＝现在，
     全部用完＝最早恢复时间）；`accountPoolResumesAt` 对共享池给出同一个时间，sweeper 和任务的额度闸都按它；
-  - `rate_limit_exceeded`：codex 0.158 自己不重试 429，网关在同一把 key 上按 retry-after / x-ratelimit-reset-* 退避重发
-    （最多 4 次，单次 ≤20s、合计 ≤40s），仍是 429 就原样转回；不标记 key，下一次 claim 仍粘在它上面。
+  - `rate_limit_exceeded`：codex 自己不重试 429（0.160 实测：只发一次请求就判失败，`request_max_retries` 也管不着），
+    网关在同一把凭据上按 retry-after / x-ratelimit-reset-* 退避重发（最多 4 次，单次 ≤20s、合计 ≤40s）。
+    仍是 429 时网关把 429 原样转回，并给该凭据记一个短期 `throttled_until`（迁移 0382，60s–15min，与订阅窗口的
+    `spent_until` 严格分开）：它落在 `loginCanRun` / `keyCanRun` 里，于是下一次 claim 能换到别的账号或 key，
+    换不了时会话留在原处、`loginPoolRetryAt` / `sharedPoolKeyRetryAt` 按这个时刻武装重试 —— 而不是走通用的
+    30s/2m/5m API 错误梯度（那条梯度只留给池回答不了的会话，例如 BYOK 自定义 provider）。
+    这会话层的一条由 `retryPlanFor` 里 `isRateLimitApiErrorText` 分流。
 - 方案 A 落地（2026-10-02，`providers/pool-credential-select.ts` 的 `choosePoolCredential`，账号之间的规则在 `pool-login-select.ts`）：
   构建引擎环境的每个入口（claim、runner 重启后的 reclaim、换 provider 的 reload）都在这里选一次，记在会话上（`pool_codex_account_id`
   或 `pool_key_id`，两者至多一个有值），网关只照着转发。
@@ -241,13 +248,15 @@ codex (custom provider "orbit") ──▶  /gw/codex/responses  ──池内某�
   - 换号提示沿用个人池的句式。账号用邮箱称呼，没有邮箱时用 `…` 加账号 id 末 4 位；key 用它的名字：
     - 账号 → 账号：`Switched to <Y> — the <5-hour|weekly> window on <X> is spent`；X 被 OpenAI 登出时 `Switched to <Y> — <X> was signed out by OpenAI`；
       只有 `spent_until`、说不出是哪个窗口时 `Switched to <Y> — the usage limit on <X> is reached`；
+      只是被限流（0382 的 `throttled_until`）时 `Switched to <Y> — <X> is rate limited right now`；
       X 已被移出池时 `Switched to <Y> — the previous account is no longer in this pool`。
       例：`Switched to hl.work@gmail.com — the weekly window on jianghailong.rd@gmail.com is spent`。
     - 账号 → key：原因同上，前面换成 key 的名字，如 `Switched to orbit-org-1 — the weekly window on jianghailong.rd@gmail.com is spent`。
     - key → 账号：池主的会话说 `Switched to <账号> — your ChatGPT accounts come first`；被加进来的人的会话说
       `Switched to <账号> — the pool's ChatGPT accounts come first`（key 本身没问题，只是会话先用账号；2026-10-03 起账号对
       池里每个人都是「先用账号」）。
-    - key → key：仍是 D5 的句式。会话第一次落到某个凭据上是起点，不算换号，不写提示。
+    - key → key：仍是 D5 的句式（被限流时 `Switched to <Y> — <X> is rate limited right now`）。
+      会话第一次落到某个凭据上是起点，不算换号，不写提示。
     - 网关在额度用完 / 被登出时留下的那句（`The <window> window on X is spent — this session waits for its reset at …` 等）
       只在没有别的账号或 key 能跑、会话留在原处时保留；claim 把会话换走时用「Switched to …」替掉它。
       投递照旧：claim 时给 warm 引擎排一个空 reload，reclaim / reload 由重启的引擎自己的 init / resumed 带走。

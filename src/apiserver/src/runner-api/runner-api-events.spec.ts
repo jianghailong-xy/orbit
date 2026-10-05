@@ -20,6 +20,15 @@ type RunEventRow = {
 const CODEX_RATE_LIMITED =
   'exceeded retry limit, last status: 429 Too Many Requests, request id: 95e00d6c-68cc-4d64-b4da-01a6252260c2';
 
+/**
+ * The claim service as a session on no pool sees it: the credential lookups a rate limit makes answer
+ * nothing, so the fixed backoff stands. These cases are about what ingestion writes, not about pools.
+ */
+const noPoolQueue = {
+  sharedPoolRetryAt: async () => null,
+  loginPoolRetryAt: async () => null,
+} as never;
+
 function makeController(
   status: RunStatus = RunStatus.AWAITING_INPUT,
   runtimeSessionId: string | null = 'runtime-1',
@@ -144,7 +153,7 @@ function makeController(
     calls,
     published: () => publishedEvents.length,
     publishedEvents: () => publishedEvents,
-    controller: new RunnerApiController(prisma as never, {} as never, realtime as never, {} as never, {} as never, {} as never, { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never),
+    controller: new RunnerApiController(prisma as never, noPoolQueue, realtime as never, {} as never, {} as never, {} as never, { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never),
   };
 }
 

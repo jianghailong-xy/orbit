@@ -441,6 +441,23 @@ export class CodexLoginService implements OnModuleDestroy {
     if (count > 0) await this.publishPool(poolId);
   }
 
+  /**
+   * The Codex backend rate-limited this account and the wait it named outlasted what the pool gateway may
+   * hold a request open for, so its 429 went back to codex — which does not retry one, and fails the turn
+   * with "exceeded retry limit, last status: 429" (migration 0382). Recorded as a SHORT window, and
+   * deliberately not `spentUntil`: a subscription's limit is a reset hours or days away, this is minutes.
+   * No claim chooses the account until it passes, so the failed turn's retry arms at that moment
+   * (QueueService.loginPoolRetryAt) instead of a fixed ladder, and a claim moves the session off it when
+   * another account can run. No session is moved here, exactly as markSpent leaves it.
+   */
+  async markThrottled(poolId: string, accountId: string, until: Date): Promise<void> {
+    const { count } = await this.prisma.poolCodexLogin.updateMany({
+      where: { poolId, accountId },
+      data: { throttledUntil: until },
+    });
+    if (count > 0) await this.publishPool(poolId);
+  }
+
   /** Each pool's accounts as a response reads them, by pool id, oldest first — the order a pool's `login`
    *  is the first of (ProvidersService). */
   async views(poolIds: string[]): Promise<Map<string, CodexLoginView[]>> {
