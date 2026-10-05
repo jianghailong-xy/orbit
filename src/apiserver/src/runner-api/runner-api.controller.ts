@@ -162,6 +162,7 @@ import {
   coordinatorOpeningIsCurrent,
   wrapCoordinatorDeliveryContext,
 } from '../projects/coordinator-opening';
+import { modelRoutingEnabled } from '../common/model-routing-switch';
 import { appendWikiContext } from '../wiki/wiki-push';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -3402,8 +3403,11 @@ export class RunnerApiController {
             coordinatorContextEpoch: true,
             coordinatorContextAckKey: true,
             // The switch picks which instruction text is delivered, and so is part of the context
-            // key — read here and in turnComplete alike, so both sides compute the same key.
-            coordinatorForProject: { select: { id: true, coordinatorEnabled: true } },
+            // key — read here and in turnComplete alike, so both sides compute the same key. So does
+            // the project owner's smart model selection (common/model-routing-switch.ts).
+            coordinatorForProject: {
+              select: { id: true, coordinatorEnabled: true, owner: { select: { preferences: true } } },
+            },
             // What the wiki context below is decided from: which space this session's workspace is
             // bound to, and the three things about a run that take it out of the push entirely —
             // a verifier, a foreman, or a judgment session (design §7.3). The fourth, coordinating
@@ -3552,14 +3556,17 @@ export class RunnerApiController {
               sessionContext.prompt,
               sessionContext.titleBeforeProjectManagement,
               sessionContext.coordinatorForProject,
+              modelRoutingEnabled(sessionContext.coordinatorForProject?.owner ?? null),
             );
           } else if (t.kind !== 'steer' && sessionContext.coordinatorForProject) {
-            const { id: projectId, coordinatorEnabled } = sessionContext.coordinatorForProject;
+            const { id: projectId, coordinatorEnabled, owner } = sessionContext.coordinatorForProject;
+            const modelRouting = modelRoutingEnabled(owner);
             const contextKey = buildCoordinatorDeliveryContextKey(
               projectId,
               leaseGeneration!,
               sessionContext.coordinatorContextEpoch,
               coordinatorEnabled,
+              modelRouting,
             );
             if (sessionContext.coordinatorContextAckKey !== contextKey) {
               // A dedicated project-page coordinator's initial turn already IS the canonical
@@ -3571,9 +3578,9 @@ export class RunnerApiController {
                 !runtimeStarted
                 && t.clientTurnId === `initial-${sessionId}`
                 && sessionContext.titleBeforeProjectManagement == null
-                && coordinatorOpeningIsCurrent(sessionContext.prompt, projectId, coordinatorEnabled);
+                && coordinatorOpeningIsCurrent(sessionContext.prompt, projectId, coordinatorEnabled, modelRouting);
               if (!openingAlreadyPresent) {
-                content = wrapCoordinatorDeliveryContext(content, projectId, coordinatorEnabled);
+                content = wrapCoordinatorDeliveryContext(content, projectId, coordinatorEnabled, modelRouting);
               }
               if (t.coordinatorContextKey !== contextKey) {
                 await tx.conversationTurn.updateMany({
@@ -4105,7 +4112,9 @@ export class RunnerApiController {
           assignedRunnerId: true,
           inboxLeaseGeneration: true,
           coordinatorContextEpoch: true,
-          coordinatorForProject: { select: { id: true, coordinatorEnabled: true } },
+          coordinatorForProject: {
+            select: { id: true, coordinatorEnabled: true, owner: { select: { preferences: true } } },
+          },
           mergeStatus: true,
           mergedSourceSha: true,
           // Armed by the event batch that carried this turn's error (the runner flushes events
@@ -4165,6 +4174,7 @@ export class RunnerApiController {
               current.inboxLeaseGeneration,
               current.coordinatorContextEpoch,
               current.coordinatorForProject.coordinatorEnabled,
+              modelRoutingEnabled(current.coordinatorForProject.owner),
             )
           : null;
       const acknowledgedCoordinatorContextKey =
