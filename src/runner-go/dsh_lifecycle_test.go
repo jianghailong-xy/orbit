@@ -1434,7 +1434,7 @@ func TestDshLifecycleCredentialReload(t *testing.T) {
 	next := h.start(job)
 	h.cp.add("t2", "message", "m2")
 	h.settledOnce("t2", stSucceeded, "reply to m2 after [m1]")
-	h.cp.addTurn(&lcTurn{ID: "r-mode", Kind: "reload", Content: `{"permissionMode":"plan"}`})
+	h.cp.addTurn(&lcTurn{ID: "r-mode", Kind: "reload", Content: `{"permissionMode":"default"}`})
 	next.wait(t)
 	if !next.reload {
 		t.Fatal("a file-policy change must relaunch the engine")
@@ -1505,8 +1505,9 @@ func TestDshLifecycleRedaction(t *testing.T) {
 
 func TestDshLifecycleWiring(t *testing.T) {
 	t.Run("file-policy", func(t *testing.T) {
-		for mode, want := range map[string]string{"plan": "read-only", "": "workspace-write", "default": "workspace-write",
-			"acceptEdits": "workspace-write", "bypassPermissions": "workspace-write", "dontAsk": "workspace-write"} {
+		// P4 policy: only modes dsh can enforce have a file policy; the rest are refused ("").
+		for mode, want := range map[string]string{"": "workspace-write", "auto": "workspace-write", "default": "read-only",
+			"dontAsk": "read-only", "plan": "", "acceptEdits": "", "bypassPermissions": ""} {
 			if got := dshFileModeForPermission(mode); got != want {
 				t.Fatalf("permission %q -> %q, want %q", mode, got, want)
 			}

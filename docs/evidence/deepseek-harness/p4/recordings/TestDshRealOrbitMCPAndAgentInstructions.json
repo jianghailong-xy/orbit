@@ -1,0 +1,370 @@
+{
+  "approvalCards": [
+    {
+      "ID": "approval-1",
+      "Body": {
+        "input": {
+          "acceptanceCriteria": "synthetic",
+          "assigneeId": "p4-agent",
+          "completionCriterion": "EVIDENCE_JUDGMENT",
+          "description": "synthetic",
+          "title": "P4 isolated task"
+        },
+        "toolName": "orbit_task_create"
+      },
+      "Status": "ALLOWED",
+      "Polls": 1,
+      "LatePoll": false
+    }
+  ],
+  "controlPlane": [
+    {
+      "agent": "",
+      "body": {
+        "input": {
+          "acceptanceCriteria": "synthetic",
+          "assigneeId": "p4-agent",
+          "completionCriterion": "EVIDENCE_JUDGMENT",
+          "description": "synthetic",
+          "title": "P4 isolated task"
+        },
+        "toolName": "orbit_task_create"
+      },
+      "method": "POST",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    },
+    {
+      "agent": "p4-agent",
+      "body": {
+        "acceptanceCriteria": "synthetic",
+        "assigneeId": "p4-agent",
+        "completionCriterion": "EVIDENCE_JUDGMENT",
+        "description": "synthetic",
+        "title": "P4 isolated task"
+      },
+      "method": "POST",
+      "path": "/api/runner/tasks",
+      "session": "p4-orbit-session"
+    },
+    {
+      "agent": "p4-agent",
+      "body": {
+        "body": "P4 synthetic comment"
+      },
+      "method": "POST",
+      "path": "/api/runner/tasks/p4-task/comments",
+      "session": ""
+    }
+  ],
+  "facts": {
+    "agentsAndSkillsInContext": true,
+    "commentsOnDouble": 1,
+    "literalAppend": "P4_ORBIT_APPEND {{p4_literal_braces}}",
+    "systemHasHarnessIdentity": true,
+    "tasksCreatedOnDouble": 1,
+    "tools": {
+      "bash": true,
+      "create_goal": true,
+      "edit": true,
+      "exit_plan_mode": true,
+      "get_goal": true,
+      "glob": true,
+      "grep": true,
+      "job_kill": true,
+      "job_list": true,
+      "job_output": true,
+      "list_mcp_resource_templates": true,
+      "list_mcp_resources": true,
+      "mcp__orbit__ask_owner": true,
+      "mcp__orbit__bg_kill": true,
+      "mcp__orbit__bg_list": true,
+      "mcp__orbit__bg_output": true,
+      "mcp__orbit__bg_run": true,
+      "mcp__orbit__integration_retry": true,
+      "mcp__orbit__merge_receipt": true,
+      "mcp__orbit__merge_receipts": true,
+      "mcp__orbit__notify": true,
+      "mcp__orbit__open_item_hand_over": true,
+      "mcp__orbit__open_item_resolve": true,
+      "mcp__orbit__project_blocker_resolve": true,
+      "mcp__orbit__project_create": true,
+      "mcp__orbit__project_crossings": true,
+      "mcp__orbit__project_delete": true,
+      "mcp__orbit__project_get": true,
+      "mcp__orbit__project_merge_evidence": true,
+      "mcp__orbit__project_request_done": true,
+      "mcp__orbit__project_request_start": true,
+      "mcp__orbit__project_update": true,
+      "mcp__orbit__provider_create": true,
+      "mcp__orbit__provider_delete": true,
+      "mcp__orbit__provider_list": true,
+      "mcp__orbit__provider_update": true,
+      "mcp__orbit__schedule_wakeup": true,
+      "mcp__orbit__task_attribution": true,
+      "mcp__orbit__task_await": true,
+      "mcp__orbit__task_batch_pin": true,
+      "mcp__orbit__task_comment": true,
+      "mcp__orbit__task_confirmation_return": true,
+      "mcp__orbit__task_confirmation_review": true,
+      "mcp__orbit__task_create": true,
+      "mcp__orbit__task_create_batch": true,
+      "mcp__orbit__task_delete": true,
+      "mcp__orbit__task_dependency_add": true,
+      "mcp__orbit__task_dependency_graph": true,
+      "mcp__orbit__task_dependency_remove": true,
+      "mcp__orbit__task_evidence_decide": true,
+      "mcp__orbit__task_evidence_list": true,
+      "mcp__orbit__task_evidence_submit": true,
+      "mcp__orbit__task_get": true,
+      "mcp__orbit__task_labels": true,
+      "mcp__orbit__task_list": true,
+      "mcp__orbit__task_progress_report": true,
+      "mcp__orbit__task_reopen": true,
+      "mcp__orbit__task_request_confirmation": true,
+      "mcp__orbit__task_start": true,
+      "mcp__orbit__task_update": true,
+      "mcp__orbit__tasklist_create": true,
+      "mcp__orbit__tasklist_delete": true,
+      "mcp__orbit__tasklist_get": true,
+      "mcp__orbit__tasklist_list": true,
+      "mcp__orbit__tasklist_propose_dag": true,
+      "mcp__orbit__tasklist_update": true,
+      "mcp__orbit__watch_cancel": true,
+      "mcp__orbit__watch_create": true,
+      "mcp__orbit__watch_get": true,
+      "mcp__orbit__watch_list": true,
+      "mcp__orbit__watch_update": true,
+      "mcp__orbit__wiki_get": true,
+      "mcp__orbit__wiki_propose": true,
+      "mcp__orbit__wiki_search": true,
+      "read": true,
+      "read_image": true,
+      "read_mcp_resource": true,
+      "skill": true,
+      "todo_write": true,
+      "update_goal": true,
+      "web_fetch": true,
+      "web_search": true,
+      "write": true
+    }
+  },
+  "modelRequests": 4,
+  "orbitEvents": [
+    {
+      "payload": {
+        "argv": [
+          "--profile",
+          "acp",
+          "--patch",
+          "/tmp/orbit-dsh-p4-77gLzH/TestDshRealOrbitMCPAndAgentInstructions1524909255/001/dsh-home/orbit.patch.json",
+          "--patch",
+          "/tmp/orbit-dsh-p4-77gLzH/TestDshRealOrbitMCPAndAgentInstructions1524909255/001/dsh-home/orbit-agent.patch.json"
+        ],
+        "cliVersion": "0.2.0-rc.2",
+        "configHash": "d4398074f22920c026998e73a07f9f48489a01ff90198bdca12c2c4fb3acf598",
+        "dshHome": "/tmp/orbit-dsh-p4-77gLzH/TestDshRealOrbitMCPAndAgentInstructions1524909255/001/dsh-home",
+        "executable": "/tmp/orbit-dsh-p4-77gLzH/install/node_modules/.bin/dsh",
+        "provider": "dsh",
+        "runtime": "acp",
+        "subtype": "launch"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "cliVersion": "0.2.0-rc.2",
+        "provider": "dsh",
+        "resumed": false,
+        "runtime": "acp",
+        "runtimeSessionId": "a2ebd5da-ea71-4701-b6ae-31ec0a13a629",
+        "sessionId": "a2ebd5da-ea71-4701-b6ae-31ec0a13a629",
+        "subtype": "init"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "localTurnId": "t1",
+        "runtimeSessionId": "a2ebd5da-ea71-4701-b6ae-31ec0a13a629",
+        "text": "Use Orbit MCP to file and comment."
+      },
+      "turn": "t1",
+      "type": "user"
+    },
+    {
+      "payload": {
+        "contextTokens": 46273,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "a2ebd5da-ea71-4701-b6ae-31ec0a13a629",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call_p4_1",
+        "input": {
+          "acceptanceCriteria": "synthetic",
+          "completionCriterion": "EVIDENCE_JUDGMENT",
+          "description": "synthetic",
+          "title": "P4 isolated task"
+        },
+        "kind": "other",
+        "localTurnId": "t1",
+        "mcpServer": "orbit",
+        "mcpTool": "task_create",
+        "name": "mcp__orbit__task_create",
+        "runtimeSessionId": "a2ebd5da-ea71-4701-b6ae-31ec0a13a629",
+        "status": "in_progress",
+        "toolCallId": "call_p4_1"
+      },
+      "turn": "t1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "{\n  \"id\": \"p4-double-task\",\n  \"title\": \"P4 isolated task\"\n}",
+        "isError": false,
+        "localTurnId": "t1",
+        "runtimeSessionId": "a2ebd5da-ea71-4701-b6ae-31ec0a13a629",
+        "status": "completed",
+        "toolCallId": "call_p4_1",
+        "toolUseId": "call_p4_1"
+      },
+      "turn": "t1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "contextTokens": 46318,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "a2ebd5da-ea71-4701-b6ae-31ec0a13a629",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call_p4_2",
+        "input": {
+          "body": "P4 synthetic comment"
+        },
+        "kind": "other",
+        "localTurnId": "t1",
+        "mcpServer": "orbit",
+        "mcpTool": "task_comment",
+        "name": "mcp__orbit__task_comment",
+        "runtimeSessionId": "a2ebd5da-ea71-4701-b6ae-31ec0a13a629",
+        "status": "in_progress",
+        "toolCallId": "call_p4_2"
+      },
+      "turn": "t1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "{\n  \"id\": \"p4-double-comment\"\n}",
+        "isError": false,
+        "localTurnId": "t1",
+        "runtimeSessionId": "a2ebd5da-ea71-4701-b6ae-31ec0a13a629",
+        "status": "completed",
+        "toolCallId": "call_p4_2",
+        "toolUseId": "call_p4_2"
+      },
+      "turn": "t1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "contextTokens": 46363,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "a2ebd5da-ea71-4701-b6ae-31ec0a13a629",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call_p4_3",
+        "input": {
+          "description": "delegate",
+          "prompt": "write a file",
+          "run_in_background": false
+        },
+        "kind": "other",
+        "localTurnId": "t1",
+        "name": "subagent",
+        "runtimeSessionId": "a2ebd5da-ea71-4701-b6ae-31ec0a13a629",
+        "status": "in_progress",
+        "toolCallId": "call_p4_3"
+      },
+      "turn": "t1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "Error: unknown tool \"subagent\"",
+        "isError": true,
+        "localTurnId": "t1",
+        "runtimeSessionId": "a2ebd5da-ea71-4701-b6ae-31ec0a13a629",
+        "status": "failed",
+        "toolCallId": "call_p4_3",
+        "toolUseId": "call_p4_3"
+      },
+      "turn": "t1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "localTurnId": "t1",
+        "messageId": "71db6999-428f-4e1d-8785-dc66c475e438",
+        "runtimeSessionId": "a2ebd5da-ea71-4701-b6ae-31ec0a13a629",
+        "text": "P4 Orbit MCP answer"
+      },
+      "turn": "t1",
+      "type": "assistant"
+    },
+    {
+      "payload": {
+        "contextTokens": 46392,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "a2ebd5da-ea71-4701-b6ae-31ec0a13a629",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "contextTokens": 46392,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "numTurns": 1,
+        "runtimeSessionId": "a2ebd5da-ea71-4701-b6ae-31ec0a13a629",
+        "stopReason": "end_turn",
+        "subtype": "completed"
+      },
+      "turn": "t1",
+      "type": "turn_end"
+    }
+  ],
+  "permissionMode": "default",
+  "scenario": "TestDshRealOrbitMCPAndAgentInstructions"
+}

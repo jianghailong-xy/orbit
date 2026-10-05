@@ -1,4 +1,4 @@
-import { AgentProvider, PermissionMode } from './enums';
+import { AgentProvider, DSH_PERMISSION_MODES, PermissionMode } from './enums';
 import { runnerCatalogRow } from './models';
 import type { ApprovalSupport, PermissionSemantics, RunnerModelCatalog } from './dto';
 
@@ -28,9 +28,11 @@ import type { ApprovalSupport, PermissionSemantics, RunnerModelCatalog } from '.
  *                       same card. Those cover command execution and patches — its dangerous
  *                       primitives — but not every tool, and Don't Ask is still not enforced
  *                       (see below).
- *  - DSH      partial — ACP has single-request approval for file-sandbox expansion; MCP tools
- *                       can act without asking. Orbit permission modes remain unsupported until
- *                       the P4 policy guards have their own evidence (P0 contract §5).
+ *  - DSH      partial — measured on 0.2.0-rc.2 (P4): only a file-sandbox escalation raises an
+ *                       ACP approval, which the runner bridges to the same card, once. Reads,
+ *                       sandboxed commands, web tools and MCP tools never ask; subagent tools are
+ *                       removed because their escalations never reach ACP. Default, Auto and
+ *                       Don't Ask are enforced (DSH_PERMISSION_MODES); the rest are refused.
  *
  * Shared rather than server-only so the composer can describe a session it has not created yet
  * with the same table the server will apply to it. Update it together with the runner; this is
@@ -87,7 +89,7 @@ export const AUTO_CAPABLE_CLAUDE_MODELS: ReadonlySet<string> = new Set([
  * Codex, Kimi, OpenCode and Antigravity have it runtime-wide, for any model: Codex spells it
  * `on-request` ("the model decides when to ask the user for approval"), Kimi and OpenCode expose it as a plain mode,
  * and Antigravity runs it as `--dangerously-skip-permissions`, on any model it lists.
- * DeepSeek Harness has no verified mapping of Orbit Auto to its file policy and withholds it.
+ * DeepSeek Harness runs it as its workspace-write sandbox, on any model.
  * Claude alone makes it model-specific, and the assigned runner's catalogue is where that answer
  * comes from — its row lists the modes the CLI that will run the model accepts. Only a model that
  * row does not cover falls back to the static list above. A configured (BYOK) provider's model
@@ -105,7 +107,6 @@ export function autoAvailable(
   customProvider = false,
   modelCatalog?: RunnerModelCatalog | null,
 ): boolean {
-  if (runtime === AgentProvider.DSH) return false;
   if (runtime !== AgentProvider.CLAUDE) return true;
   if (customProvider) return true;
   const reported = runnerCatalogRow(runtime, model, modelCatalog)?.permissionModes;
@@ -185,18 +186,52 @@ export function derivePermissionSemantics(
   const mode = (permissionMode ?? PermissionMode.DONT_ASK) as string;
   const approvalSupport = runtimeApprovalSupport(provider);
 
-  // None of Orbit's existing modes is an enforced Harness file policy. API admission rejects
-  // them rather than substituting a default that might permit side effects (P0 contract §5).
+  // DeepSeek Harness: each mode is what its file sandbox enforces, measured in P4. A mode with no
+  // enforceable equivalent is refused by API admission rather than run as something wider.
   if (provider === AgentProvider.DSH) {
+    if (!(DSH_PERMISSION_MODES as readonly string[]).includes(mode)) {
+      return {
+        mode,
+        unapproved: 'deny',
+        approvalSupport,
+        honored: false,
+        note:
+          'DeepSeek Harness does not support this permission mode. Session configuration is ' +
+          'rejected; use Default, Auto or Don’t Ask.',
+        shortNote: 'unsupported on DeepSeek Harness; session configuration is rejected',
+      };
+    }
+    const unasked =
+      'Reading files, read-only commands, web tools and MCP tools (Orbit’s included) run ' +
+      'without asking; subagents are not available.';
+    if (mode === PermissionMode.AUTO) {
+      return {
+        mode,
+        unapproved: 'allow',
+        approvalSupport,
+        honored: true,
+        note:
+          'Edits and commands inside the workspace and temporary directories run without asking; ' +
+          'a write anywhere else asks you once. ' + unasked,
+      };
+    }
+    if (mode === PermissionMode.DEFAULT) {
+      return {
+        mode,
+        unapproved: 'ask',
+        approvalSupport,
+        honored: true,
+        note:
+          'Files are read-only: each write, by a tool or a command, asks you once before it runs. ' +
+          unasked,
+      };
+    }
     return {
       mode,
       unapproved: 'deny',
       approvalSupport,
-      honored: false,
-      note:
-        'DeepSeek Harness does not support these permission modes. Session configuration is ' +
-        'rejected until an enforced file policy is available.',
-      shortNote: 'unsupported on DeepSeek Harness; session configuration is rejected',
+      honored: true,
+      note: 'Files are read-only and every write is refused without asking. ' + unasked,
     };
   }
 

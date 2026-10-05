@@ -267,6 +267,18 @@ export enum PermissionMode {
   BYPASS = 'bypassPermissions',
 }
 
+/**
+ * The permission modes DeepSeek Harness (`dsh`) can enforce, measured on 0.2.0-rc.2 (P4 evidence,
+ * docs/evidence/deepseek-harness/p4/): Default and Don't Ask run its read-only file sandbox and
+ * either ask through Orbit's approval card or reject each escalation; Auto runs its workspace-write
+ * sandbox. Plan, Accept Edits and Bypass have no enforceable equivalent and are refused.
+ */
+export const DSH_PERMISSION_MODES: readonly PermissionMode[] = [
+  PermissionMode.DEFAULT,
+  PermissionMode.AUTO,
+  PermissionMode.DONT_ASK,
+];
+
 /** Normalized run-event types streamed from runner → control plane → UI. */
 export enum RunEventType {
   SYSTEM = 'system',

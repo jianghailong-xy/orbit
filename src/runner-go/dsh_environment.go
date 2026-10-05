@@ -24,6 +24,15 @@ type DshLaunchInput struct {
 	FileMode       string
 }
 
+// DshAgentOverlay is the agent configuration a session adds to the Harness defaults. A session
+// launch always has one, a catalogue probe never: it is written beside the provider overlay and
+// passed as a second --patch.
+type DshAgentOverlay struct {
+	// AppendSystemPrompt becomes one literal section after Harness's own system prompt. It is
+	// never a template, a provider setting or a config key.
+	AppendSystemPrompt string
+}
+
 func (i DshLaunchInput) String() string {
 	return fmt.Sprintf("DeepSeek Harness input (session=%s, cwd=%s, policy=%s)", i.OrbitSessionID, i.ExecutionDir, i.FileMode)
 }
@@ -52,13 +61,17 @@ const dshMissingKeyMessage = "DSH_CREDENTIAL_MISSING: configure a DeepSeek Harne
 
 // PrepareDshSessionLaunch uses the same Agent.Env populated by encrypted provider dispatch.
 func PrepareDshSessionLaunch(ctx context.Context, job *ClaimedSession, executionDir, fileMode string) (DshLaunchSpec, error) {
-	return PrepareDshLaunch(ctx, DshLaunchInput{
+	return prepareDshLaunch(ctx, DshLaunchInput{
 		OrbitSessionID: job.SessionID, ExecutionDir: executionDir,
 		APIKey: job.Agent.Env["ORBIT_DSH_API_KEY"], BaseURL: job.Agent.Env["ORBIT_DSH_BASE_URL"], FileMode: fileMode,
-	})
+	}, dshSessionAgentOverlay(job))
 }
 
 func PrepareDshLaunch(ctx context.Context, input DshLaunchInput) (DshLaunchSpec, error) {
+	return prepareDshLaunch(ctx, input, nil)
+}
+
+func prepareDshLaunch(ctx context.Context, input DshLaunchInput, agent *DshAgentOverlay) (DshLaunchSpec, error) {
 	if strings.TrimSpace(input.APIKey) == "" {
 		return DshLaunchSpec{}, errors.New(dshMissingKeyMessage)
 	}
@@ -69,10 +82,14 @@ func PrepareDshLaunch(ctx context.Context, input DshLaunchInput) (DshLaunchSpec,
 	if err != nil {
 		return DshLaunchSpec{}, err
 	}
-	return prepareDshConfig(input, executable)
+	return prepareDshAgentConfig(input, agent, executable)
 }
 
 func prepareDshConfig(input DshLaunchInput, executable string) (DshLaunchSpec, error) {
+	return prepareDshAgentConfig(input, nil, executable)
+}
+
+func prepareDshAgentConfig(input DshLaunchInput, agent *DshAgentOverlay, executable string) (DshLaunchSpec, error) {
 	if !dshSessionIDPattern.MatchString(input.OrbitSessionID) {
 		return DshLaunchSpec{}, errors.New("DSH_CONFIG_CONFLICT: invalid Orbit session identity")
 	}
@@ -82,7 +99,7 @@ func prepareDshConfig(input DshLaunchInput, executable string) (DshLaunchSpec, e
 		return DshLaunchSpec{}, errors.New("DSH_CONFIG_CONFLICT: session state root cannot be a symlink")
 	}
 	home := filepath.Join(root, decodeSessionID(input.OrbitSessionID))
-	return prepareDshConfigAt(input, executable, home)
+	return prepareDshAgentConfigAt(input, agent, executable, home)
 }
 
 type dshConfigOwner struct {
@@ -98,6 +115,10 @@ type dshConfigOwner struct {
 // prepareDshConfigAt also serves credentialless catalogue probes in brand-new temporary homes.
 // Preparation only runs before spawn or after Dispose. Close/Dispose never delete this state.
 func prepareDshConfigAt(input DshLaunchInput, executable, home string) (DshLaunchSpec, error) {
+	return prepareDshAgentConfigAt(input, nil, executable, home)
+}
+
+func prepareDshAgentConfigAt(input DshLaunchInput, agent *DshAgentOverlay, executable, home string) (DshLaunchSpec, error) {
 	if input.FileMode != "read-only" && input.FileMode != "workspace-write" {
 		return DshLaunchSpec{}, errors.New("DSH_PERMISSION_UNSUPPORTED: explicitly choose a verified file policy")
 	}
@@ -139,7 +160,7 @@ func prepareDshConfigAt(input DshLaunchInput, executable, home string) (DshLaunc
 		if json.Unmarshal(data, &saved) != nil || saved.SessionID != owner.SessionID || saved.Cwd != cwd || saved.Version != dshSupportedVersion || saved.Schema != owner.Schema {
 			return DshLaunchSpec{}, errors.New("DSH_CONFIG_CONFLICT: saved session identity, workspace or runtime version differs; recovery data retained")
 		}
-		previousPatch, err := os.ReadFile(filepath.Join(home, "orbit.patch.json"))
+		previousPatch, err := dshOverlayBytes(home)
 		if err != nil || saved.ConfigHash != dshConfigurationHash(saved.FileMode, previousPatch) {
 			return DshLaunchSpec{}, errors.New("DSH_CONFIG_CONFLICT: saved overlay hash differs; recovery data retained")
 		}
@@ -175,16 +196,107 @@ func prepareDshConfigAt(input DshLaunchInput, executable, home string) (DshLaunc
 	if err := writeDshConfigFile(patchPath, patch); err != nil {
 		return DshLaunchSpec{}, errors.New("DSH_CONFIG_CONFLICT: cannot write private session overlay")
 	}
-	owner.ConfigHash = dshConfigurationHash(input.FileMode, patch)
+	args := []string{"--profile", "acp", "--patch", patchPath}
+	agentPath := filepath.Join(home, dshAgentPatchFile)
+	if agent != nil {
+		agentPatch, err := dshAgentOverlayPatch(home, *agent)
+		if err == nil {
+			err = writeDshConfigFile(agentPath, agentPatch)
+		}
+		if err != nil {
+			return DshLaunchSpec{}, errors.New("DSH_CONFIG_CONFLICT: cannot write private agent overlay")
+		}
+		args = append(args, "--patch", agentPath)
+	} else if err := os.Remove(agentPath); err != nil && !os.IsNotExist(err) {
+		return DshLaunchSpec{}, errors.New("DSH_CONFIG_CONFLICT: cannot remove a stale agent overlay")
+	}
+	overlay, err := dshOverlayBytes(home)
+	if err != nil {
+		return DshLaunchSpec{}, errors.New("DSH_CONFIG_CONFLICT: cannot read back the session overlay")
+	}
+	owner.ConfigHash = dshConfigurationHash(input.FileMode, overlay)
 	ownerData, _ := json.Marshal(owner)
 	if err := writeDshConfigFile(ownerPath, ownerData); err != nil {
 		return DshLaunchSpec{}, errors.New("DSH_CONFIG_CONFLICT: cannot persist session identity")
 	}
 	env := dshBaseEnv()
-	env = append(env, "DSH_HOME="+home, "DSH_PERMISSION_MODE="+input.FileMode,
+	// DSH_AGENTS_HOME keeps the runner user's ~/.agents skills out, as P2 keeps their profile out:
+	// a session discovers its workspace's AGENTS.md and project skills only.
+	env = append(env, "DSH_HOME="+home, "DSH_AGENTS_HOME="+filepath.Join(home, "agents"), "DSH_PERMISSION_MODE="+input.FileMode,
 		"DSH_TELEMETRY_DISABLED=1", "ORBIT_DSH_API_KEY="+input.APIKey)
-	return DshLaunchSpec{Executable: executable, Args: []string{"--profile", "acp", "--patch", patchPath},
+	return DshLaunchSpec{Executable: executable, Args: args,
 		Env: env, Cwd: cwd, DshHome: home, Version: dshSupportedVersion, ConfigHash: owner.ConfigHash}, nil
+}
+
+const dshAgentPatchFile = "orbit-agent.patch.json"
+
+// dshOverlayBytes is every Orbit overlay byte the hash covers, the agent overlay when present.
+func dshOverlayBytes(home string) ([]byte, error) {
+	patch, err := os.ReadFile(filepath.Join(home, "orbit.patch.json"))
+	if err != nil {
+		return nil, err
+	}
+	agent, err := os.ReadFile(filepath.Join(home, dshAgentPatchFile))
+	if os.IsNotExist(err) {
+		return patch, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return append(append(patch, '\n'), agent...), nil
+}
+
+// The additive system-prompt section, measured in P0 (literal-additive-system-prompt): it keeps
+// Harness's identity and tool guidance and never interpolates the text it is given.
+const dshAppendPromptPlugin = `// Orbit: one literal system-prompt section after DeepSeek Harness's own.
+export const name = 'orbit-append-system-prompt';
+export const inject = ['systemPrompt'];
+export function apply(ctx, config) {
+  ctx.systemPrompt.section({ name: 'orbit:append-system-prompt', order: 10201, text: config.text, interpolate: false });
+}
+`
+
+// Tools whose work runs in a child agent. A child's escalation never reaches ACP and its tool
+// calls are not projected (P4 evidence), so Orbit could neither ask about nor show them.
+var dshDisabledAgentTools = []string{"tool-subagent", "tool-subagent-fork", "tool-subagent-control",
+	"tool-subagent-list-agents", "tool-workflow"}
+
+// dshAgentOverlayPatch writes the prompt plugin with its versioned manifest (dsh refuses a named
+// package without a version) under a directory named for its code hash, and returns the patch.
+func dshAgentOverlayPatch(home string, agent DshAgentOverlay) ([]byte, error) {
+	rows := []interface{}{}
+	for _, id := range dshDisabledAgentTools {
+		rows = append(rows, map[string]interface{}{"id": id, "disabled": true})
+	}
+	if strings.TrimSpace(agent.AppendSystemPrompt) != "" {
+		digest := sha256.Sum256([]byte(dshAppendPromptPlugin))
+		dir := filepath.Join(home, "orbit-plugins", "append-system-prompt-"+hex.EncodeToString(digest[:6]))
+		for _, path := range []string{filepath.Dir(dir), dir} {
+			if err := privateDshDir(path); err != nil {
+				return nil, err
+			}
+		}
+		manifest, _ := json.Marshal(map[string]interface{}{"name": "orbit-dsh-append-system-prompt", "version": "1.0.0", "private": true, "type": "module"})
+		if err := writeDshConfigFile(filepath.Join(dir, "package.json"), manifest); err != nil {
+			return nil, err
+		}
+		entry := filepath.Join(dir, "index.mjs")
+		if err := writeDshConfigFile(entry, []byte(dshAppendPromptPlugin)); err != nil {
+			return nil, err
+		}
+		rows = append(rows, map[string]interface{}{"insert": []interface{}{map[string]interface{}{
+			"id": "orbit-append-system-prompt", "name": (&url.URL{Scheme: "file", Path: entry}).String(),
+			"config": map[string]interface{}{"text": agent.AppendSystemPrompt},
+		}}})
+	}
+	return json.Marshal(rows)
+}
+
+// dshSessionAgentOverlay is the session's instructions in the order every runtime uses: the
+// agent's own prompt, its appended prompt, then Orbit's CLI guidance.
+func dshSessionAgentOverlay(job *ClaimedSession) *DshAgentOverlay {
+	configured := strings.TrimSpace(strings.Join([]string{strings.TrimSpace(job.Agent.SystemPrompt), job.Agent.AppendSystemPrompt}, "\n\n"))
+	return &DshAgentOverlay{AppendSystemPrompt: withOrbitCLIInstructions(configured, orbitCLIExecutable(), job.insideRecordedWork(), job.watchesOn())}
 }
 
 func dshConfigurationHash(fileMode string, patch []byte) string {

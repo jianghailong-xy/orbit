@@ -23,7 +23,7 @@ type ProviderRow = ReturnType<typeof row>;
 
 function fixture(options: {
   provider?: string; providerBuiltin?: boolean; seed?: string; capabilities?: string[];
-  capabilitiesReportedAt?: Date | null; rows?: ProviderRow[]; status?: RunStatus;
+  capabilitiesReportedAt?: Date | null; rows?: ProviderRow[]; status?: RunStatus; permissionMode?: string;
 } = {}) {
   const creates: Array<Record<string, unknown>> = [];
   const updates: Array<Record<string, unknown>> = [];
@@ -34,7 +34,7 @@ function fixture(options: {
   };
   const session = {
     id, ownerId, provider: options.provider ?? 'dsh', providerBuiltin: options.providerBuiltin ?? true,
-    model: null, permissionMode: 'default', usesRuntimeDefaultModel: true,
+    model: null, permissionMode: options.permissionMode ?? 'default', usesRuntimeDefaultModel: true,
     runtimeSessionId: '55555555-5555-4555-8555-555555555555', numTurns: 3,
     startedAt: new Date(), status: options.status ?? RunStatus.FAILED,
     assignedRunnerId: runner.id, assignedRunner: runner, owner: { preferences: {} },
@@ -142,16 +142,17 @@ test('P1b dsh preflight: resume and config reject withdrawn direct and borrowed 
 
 test('P1b dsh preflight: capable runners still reject unverified Harness permissions', async () => {
   for (const operation of ['create', 'resume', 'config']) {
+    // Plan has no enforceable Harness equivalent (P4); Default, Auto and Don't Ask are admitted.
     const f = fixture({ capabilities: ['provider:dsh'], capabilitiesReportedAt: new Date(),
-      status: operation === 'config' ? RunStatus.AWAITING_INPUT : RunStatus.FAILED });
+      status: operation === 'config' ? RunStatus.AWAITING_INPUT : RunStatus.FAILED, permissionMode: PermissionMode.PLAN });
     await assert.rejects(() => operation === 'create'
-      ? f.service.create(ownerId, { ...opening, provider: 'dsh' })
+      ? f.service.create(ownerId, { ...opening, provider: 'dsh', permissionMode: PermissionMode.PLAN })
       : operation === 'resume'
         ? f.service.resume(ownerId, id, continuation)
         : f.service.updateConfig(ownerId, id, { effort: 'high' }),
     (error: unknown) => {
       assert.ok(error instanceof BadRequestException);
-      assert.match(error.message, /permission modes require an enforced file policy/);
+      assert.match(error.message, /DeepSeek Harness cannot enforce permission mode "plan"/);
       return true;
     });
     assert.deepEqual(f.creates, []);
