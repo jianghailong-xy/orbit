@@ -288,6 +288,27 @@ function antigravityOffers(model, offered) {
 
 （顺带一个不能用作依据的观察：`https://orbitd.io/assets/index-35EWT_ac.js` 的哈希在两次部署之间没变——但 web 并不引用 `modelForProvider`（`src/web` 里零命中），所以哈希不变**不能**说明构建树没变。）
 
+### 9.5 更正 rev4 的推论：对 antigravity，修复的 fallback **就是空字符串**
+
+rev4 里我写了「`origin/main` 的代码不可能产出空值」——**这条是错的**，写下它时我还没读 `DEFAULT_MODEL_BY_PROVIDER`。实际常量（`origin/main` 与修复前逐字一致）：
+
+```ts
+[AgentProvider.ANTIGRAVITY]: '',   // Empty omits `--model`, and agy runs its own default
+```
+
+所以 `modelForProvider` 的 antigravity 分支本来就是「保留模型，或**送空**」：
+
+```ts
+return antigravityOffers(model, offered) ? model : fallback;   // fallback === ''
+```
+
+也就是说「argv 里没有 `--model`」**完全可能正是 `origin/main` 的代码在跑**，而不是我上一节猜的「中间 revision」。更正后的结论：
+
+- `claude-sonnet-5-5` 明明在 DB 的 `runner.model_catalog -> antigravity` 里（n=7），却走到了 `offered` 判定失败那一支 ⇒ 要么**解析那一刻拿到的 `offered` 里没有这一行**（claim 里 `runtimeCatalogModels(args.modelCatalog, provider)` 读的是它自己 select 出来的 `assignedRunner.modelCatalog`，见 `queue.service.ts:559-562 / 694`，而 DB 里确实有），要么部署的仍是 offers() 按前缀判定 + 空 fallback 的那一版。这两种在 `claude-sonnet-5-5`（送空）与 `gemini-3.1-pro`（保留，即 N）上表现相同，从外部无法区分。
+- `gemini-9.9-ultra` 的对照（R/T）是另一条线：它被回退成 `gemini-3.8-flash` **并写回了 session 行**。如果解析时用的是「前缀型、空 fallback」的判定，`gemini-9.9-ultra` 会被原样保留（argv 里会出现 `--model gemini-9.9-ultra`）；它没有出现，说明**建会话那一步就已经把它换掉了**（那时 `offered` 是有的，因为 `claude-sonnet-5-5` 被保留了下来）。这与「建会话时有目录、解析时拿不到」的假设一致。
+
+**给修复团队的落点**因此从「查构建 revision」缩小为「**为什么 `offers()` 在 claim 解析那一刻拿不到那一行**」：在 claim 里把 `args.modelCatalog?.['antigravity']` 与算出来的 `offered` 打一行日志即可一眼看出。另外请顺便注意：`fallback` 用 `''` 会把「判定失败」变成**静默降级到 agy 默认模型**——它与本次缺陷的用户观感一模一样（选了 Claude Sonnet 5.5，实际跑 Gemini），所以这一支值得单独断言。
+
 ## 10. 截图
 
 
