@@ -171,6 +171,7 @@ struct WikiRunView: View {
 
     @State private var reverting = false
     @State private var notice: String?
+    @State private var noticeTitle = WikiCopy.runRevertFailed
 
     var body: some View {
         if let wiki = model.wiki {
@@ -182,6 +183,7 @@ struct WikiRunView: View {
                             Button(WikiModeCopy.revertRunConfirm, role: .destructive) {
                                 Task {
                                     if let answer = await wiki.revert(changeset) {
+                                        noticeTitle = WikiCopy.runRevertFailed
                                         notice = answer
                                     } else {
                                         model.showToast(WikiModeCopy.reverted)
@@ -201,7 +203,7 @@ struct WikiRunView: View {
                 }
             }
             .task(id: changesetID) { await wiki.loadRun(changesetID) }
-            .alert(WikiCopy.refused, isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
+            .alert(noticeTitle, isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
                 Button("OK", role: .cancel) { notice = nil }
             } message: {
                 Text(notice ?? "")
@@ -219,6 +221,7 @@ struct WikiRunView: View {
             reject: { id, reason in
                 Task {
                     if let answer = await wiki.reject(id, reason: reason) {
+                        noticeTitle = WikiCopy.entryRejectFailed
                         notice = answer
                     } else {
                         model.showToast(WikiModeCopy.rejected)

@@ -68,6 +68,9 @@ struct WorktreeBar: View {
     // MARK: - worktree pill
 
     private func pill(detail d: SessionDetail, branch: String, files: [SessionChangedFile]) -> some View {
+        let displayBranch = d.projectMembership?.role == .coordinator
+            ? (d.projectIntegrationRef ?? branch)
+            : branch
         let committed = !console.sessionStatus.isLive
         // Gate Commit/Merge on the session's AUTHORITATIVE control-plane status (what the composer's
         // Stop button reads via `showsInterrupt`), not the stream-derived `sessionStatus`: the latter
@@ -101,7 +104,7 @@ struct WorktreeBar: View {
                     // second dropdown, not "view diff"). Copy is the secondary action, so it moves to the
                     // long-press (right-click on macOS) context menu — a plain tap can no longer silently
                     // copy, and the Commit/Merge control stays its own target so a diff tap can't fire it.
-                    branchSummary(branch: branch, add: add, del: del, count: files.count,
+                    branchSummary(branch: displayBranch, add: add, del: del, count: files.count,
                                   committed: primary == .merge)
                     // The action button keeps its size (web `flex: none`); the branch/stat truncate first
                     // under narrow width.
@@ -278,8 +281,8 @@ private struct WorktreeMergeControl: View {
         let status = detail.mergeStatus
         let targets = detail.mergeTargets ?? []
         let busy = console.worktree.busy
-        let defaultTarget = WorktreeBarLogic.defaultTarget(targets: targets,
-                                                           agentDefaultTarget: detail.agent?.defaultMergeTarget)
+        let defaultTarget = detail.mergeTarget ?? WorktreeBarLogic.defaultTarget(
+            targets: targets, agentDefaultTarget: detail.agent?.defaultMergeTarget)
         // The user's caret pick re-points the primary button until they merge (falls back if the
         // picked branch is no longer an offered target).
         let picked = selectedTarget.flatMap { targets.contains($0) ? $0 : nil }
@@ -607,7 +610,10 @@ struct DiffSheet: View {
 
     var body: some View {
         let files = console.worktree.detail?.changedFiles ?? []
-        let branch = console.worktree.detail?.branch
+        let detail = console.worktree.detail
+        let branch = detail?.projectMembership?.role == .coordinator
+            ? (detail?.projectIntegrationRef ?? detail?.branch)
+            : detail?.branch
         NavigationStack {
             List(files) { file in
                 NavigationLink {
@@ -703,11 +709,18 @@ struct DiffFileView: View {
     private static let lineCap = 1200
 
     var body: some View {
+        if file.additions < 0 || file.deletions < 0 {
+            WorktreeFilePreview(worktree: console.worktree, file: file)
+                .id(file.path)
+        } else {
+            textDiff
+        }
+    }
+
+    @ViewBuilder private var textDiff: some View {
         let patch = console.worktree.diff.first { $0.path == file.path }
         ScrollView {
-            if file.additions < 0 || file.deletions < 0 {
-                placeholder("Binary file — no preview")
-            } else if let text = patch?.patch, !text.isEmpty {
+            if let text = patch?.patch, !text.isEmpty {
                 let (attr, trimmed) = Self.colorize(text)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(attr).font(.orbitDiffLine).textSelection(.enabled)

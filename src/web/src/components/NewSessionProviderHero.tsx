@@ -3,7 +3,6 @@ import { Popover } from 'antd';
 import { Link } from 'react-router-dom';
 import { encodeId } from '../lib/idCodec';
 import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
-import antigravityLogo from '../assets/antigravity-color.svg';
 import type { AccountChoice, ProviderChoice } from '../lib/sessionProviderChoices';
 
 /** The brand mark. Same artwork and tile as /providers, sized up:
@@ -28,7 +27,6 @@ function ProviderMark({ choice, size }: { choice: ProviderChoice; size: number }
 
 function BrandMark({ choice, size }: { choice: ProviderChoice; size: number }) {
   const glyph = choice.glyphKey ? PROVIDER_GLYPHS[choice.glyphKey] : undefined;
-  const fullColor = choice.glyphKey === 'antigravity';
   return (
     <span
       className="provider-tile np-mark"
@@ -36,14 +34,12 @@ function BrandMark({ choice, size }: { choice: ProviderChoice; size: number }) {
         width: size,
         height: size,
         borderRadius: Math.round(size * 0.26),
-        background: fullColor ? '#fff' : `linear-gradient(135deg, ${choice.brand.from}, ${choice.brand.to})`,
-        border: fullColor ? '1px solid #e5e7eb' : undefined,
+        background: `linear-gradient(135deg, ${choice.brand.from}, ${choice.brand.to})`,
+        border: choice.glyphKey === 'antigravity' ? '1px solid rgba(255,255,255,0.16)' : undefined,
         boxShadow: size >= 40 ? `0 8px 22px ${hexAlpha(choice.brand.to, 0.34)}` : undefined,
       }}
     >
-      {fullColor ? (
-        <img src={antigravityLogo} alt="" width={Math.round(size * 0.75)} height={Math.round(size * 0.75)} />
-      ) : glyph ? (
+      {glyph ? (
         <svg
           viewBox="0 0 24 24"
           width={Math.round(size * 0.56)}

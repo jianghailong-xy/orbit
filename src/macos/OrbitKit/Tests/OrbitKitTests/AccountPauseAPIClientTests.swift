@@ -80,16 +80,6 @@ final class AccountPauseAPIClientTests: XCTestCase {
             XCTAssertEqual(APIClient.failureReason(error), "Only the contributor or an admin can pause this account")
         }
     }
-
-    func testStubCapturesAStreamedRequestBody() throws {
-        let body = Data(#"{"durationMinutes":120}"#.utf8)
-        var request = URLRequest(url: URL(string: "https://orbit.test/api/pause")!)
-        request.httpBodyStream = InputStream(data: body)
-        XCTAssertNil(request.httpBody)
-        let seen = PauseSeenRequest()
-        seen.record(request)
-        XCTAssertEqual(try XCTUnwrap(seen.request?.httpBody), body)
-    }
 }
 
 /// The request the stub was handed, read back by the test once the call returned.
@@ -98,19 +88,19 @@ private final class PauseSeenRequest: @unchecked Sendable {
     private var seen: URLRequest?
 
     func record(_ request: URLRequest) {
-        // macOS URLSession moves the body to a stream before handing it to URLProtocol.
+        // On macOS URLProtocol receives the body as a stream, as in ProfileRecorder.
         var captured = request
         if captured.httpBody == nil, let stream = request.httpBodyStream {
             stream.open()
             defer { stream.close() }
-            var body = Data()
+            var data = Data()
             var buffer = [UInt8](repeating: 0, count: 4096)
             while stream.hasBytesAvailable {
                 let count = stream.read(&buffer, maxLength: buffer.count)
                 if count <= 0 { break }
-                body.append(contentsOf: buffer[0..<count])
+                data.append(contentsOf: buffer[0..<count])
             }
-            captured.httpBody = body
+            captured.httpBody = data
         }
         lock.lock()
         seen = captured

@@ -69,6 +69,20 @@ describe('runnerAttention.cases.json', () => {
   it('names every case once, so a failure at either end points at one case', () => {
     expect(new Set(CASES.map((c) => c.name)).size).toBe(CASES.length);
   });
+
+  // The login names cover Antigravity too, but which engines raise a sign-in or a quota is
+  // unchanged: a signed-out Antigravity beside a case's login engines changes nothing it raises.
+  it('raises the same items with a signed-out Antigravity beside the login engines', () => {
+    for (const c of CASES) {
+      const engines = c.input.runner.engines;
+      if (!engines) continue;
+      const withAntigravity: RunnerAttentionInput = {
+        ...c.input,
+        runner: { ...c.input.runner, engines: [...engines, { engine: 'antigravity', installed: true, auth: 'no' }] },
+      };
+      expect(runnerAttention(withAntigravity), c.name).toEqual(runnerAttention(c.input));
+    }
+  });
 });
 
 describe('the four runners of 2026-09-29, as the project states them', () => {

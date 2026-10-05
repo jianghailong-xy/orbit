@@ -1,0 +1,6 @@
+[
+  {"id":"s1","title":"Done","status":"SUCCEEDED","capabilities":{"canSend":false,"canResume":false,"resumeBlockedReason":"MISSING_CONTEXT","canComplete":true,"canRestore":false}},
+  {"id":"s2","title":null,"status":"RUNNING"},
+  {"id":"s3","status":"FUTURE_STATUS","runState":"FUTURE_RUN_STATE","lifecycleState":"FUTURE_LIFECYCLE","unknownField":{"x":1},"capabilities":{"canSend":false,"canResume":false,"resumeBlockedReason":"FUTURE_REASON","canArchive":true,"canRestore":false,"futureAction":true}},
+  {"id":"s4","status":"RUNNING","capabilities":{"canComplete":false,"canArchive":true}}
+]

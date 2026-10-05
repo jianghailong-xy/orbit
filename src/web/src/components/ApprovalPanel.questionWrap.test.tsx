@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { JSDOM } from 'jsdom';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ApprovalPanel } from './ApprovalPanel';
 import { Transcript, type RunEvent } from './Transcript';
 import type { ApprovalInfo } from '../api';
@@ -129,3 +129,6 @@ describe('the same question read back in the transcript', () => {
     expect(PRESERVES_BREAKS).toContain(shown.whiteSpace);
   });
 });
+
+// The card's content/decision contract is tested inline; real dialogs are covered in ReviewCard.test.tsx.
+vi.mock('./ReviewCard', () => import('../test/inlineReviewCard'));

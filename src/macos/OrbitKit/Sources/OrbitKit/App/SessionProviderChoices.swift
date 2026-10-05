@@ -128,7 +128,7 @@ public enum SessionProviderChoices {
     }
 
     /// Login engines, with Antigravity offered for Google sign-in or a workspace/runner key.
-    public static let engineSlugs = ["claude", "codex", "kimi", "antigravity"]
+    public static let engineSlugs = ["claude", "codex", "antigravity", "kimi"]
 
     /// A built-in engine has no configured row, so it has no preset to inherit a look from. Borrow
     /// the vendor preset carrying the same mark: the engine and the BYOK provider are the same
@@ -201,8 +201,10 @@ public enum SessionProviderChoices {
                                antigravityKeyAvailable: Bool? = nil) -> [ProviderChoice] {
         let health = { (engine: String) in engines?.first { $0.engine == engine } }
         let keyAvailable = antigravityKeyAvailable ?? antigravity?.envKeyAvailable ?? false
+        let googleAccount = antigravity?.authSource == "google"
+            && !(keyAvailable && antigravity?.envKeyAvailable == false)
         let engineChoices = engineSlugs.filter { $0 != "antigravity" || keyAvailable || antigravity?.authSource == "google" }.map { slug in
-            let blocker = slug == "antigravity" ? antigravityBlocker(antigravity, health: health(slug), login: !keyAvailable || antigravity?.authSource == "google") : engineBlocker(health(slug))
+            let blocker = slug == "antigravity" ? antigravityBlocker(antigravity, health: health(slug), login: !keyAvailable || googleAccount) : engineBlocker(health(slug))
             return ProviderChoice(
                 slug: slug,
                 label: AgentDefaults.providerName(slug, configured: configured),
@@ -214,7 +216,7 @@ public enum SessionProviderChoices {
                 accounts: (slug == "codex" || slug == "claude") && blocker == nil
                     ? accountChoices(health(slug)?.accounts, usage: planUsage?.snapshot(for: slug))
                     : nil,
-                labelDetail: slug == "antigravity" ? (antigravity?.authSource == "google" ? "Google account" : "env key") : nil)
+                labelDetail: slug == "antigravity" ? (googleAccount ? "Google account" : "env key") : nil)
         }
         // Like a configured provider, a pool needs the CLI it runs on and nothing signed in: each run
         // carries one of its members' credentials. A missing CLI outranks the members, because it is

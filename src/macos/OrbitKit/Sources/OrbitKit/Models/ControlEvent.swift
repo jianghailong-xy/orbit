@@ -22,6 +22,8 @@ public enum ControlEventType: String, Codable, Sendable {
     case agentChanged = "agent.changed"
     /// Owner-level libraries. These are USER-scoped: `sessionId` is empty (see ControlEvent).
     case taskListChanged = "task.list.changed"
+    /// A project changed: refresh the project's index and sidebar summaries.
+    case projectChanged = "project.changed"
     case tagChanged = "tag.changed"
     /// One of the owner's session folders was created, renamed or deleted: a nudge to re-read
     /// `GET /session-folders`. A session moved between folders is a `session.updated` instead,
@@ -106,6 +108,8 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
     /// explicit null means this Session stopped coordinating a Project (clear the badge/link).
     public let projectId: String??
     public let projectTitle: String??
+    /// Absent preserves membership from the list; explicit null removes it.
+    public let projectMembership: SessionProjectMembership??
     public let pendingApprovals: Int
     /// What `pendingApprovals` is counting, when one word says it better than "approval" — see
     /// `SessionWaitingKind`. The server overwrites it together with the count, so the row reads it
@@ -175,6 +179,9 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
             : nil
         projectTitle = values.contains(.projectTitle)
             ? .some(try values.decodeIfPresent(String.self, forKey: .projectTitle))
+            : nil
+        projectMembership = values.contains(.projectMembership)
+            ? .some(try values.decodeIfPresent(SessionProjectMembership.self, forKey: .projectMembership))
             : nil
         pendingApprovals = try values.decode(Int.self, forKey: .pendingApprovals)
         // Absent and null are the same fact here — no named kind — unlike `retryAt`, where the

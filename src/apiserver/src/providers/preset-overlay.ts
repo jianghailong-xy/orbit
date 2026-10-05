@@ -1,8 +1,9 @@
-import { providerPreset } from '@orbit/shared';
+import { AgentProvider, providerPreset } from '@orbit/shared';
 import { catalogDefaultModel, catalogModels } from './model-catalog';
 
 /** The fields of a ModelProvider row the preset governs (a subset of the Prisma row). */
 export interface PresetBackedRow {
+  runtime?: string;
   presetSlug?: string | null;
   /** False for a row that keeps its vendor identity but maintains its own model list. */
   followsPreset?: boolean;
@@ -25,6 +26,7 @@ function governing(row: PresetBackedRow) {
  * (followsPreset false) and keeps its own default from then on.
  */
 export function presetDefaultModel(row: PresetBackedRow): string | null {
+  if (row.runtime === AgentProvider.DSH) return null;
   const preset = governing(row);
   return preset ? catalogDefaultModel(preset) : row.defaultModel;
 }
@@ -40,6 +42,11 @@ export function presetDefaultModel(row: PresetBackedRow): string | null {
  * it's better than an empty picker.
  */
 export function withPreset<T extends PresetBackedRow>(row: T): T {
+  if (row.runtime === AgentProvider.DSH) {
+    // Harness config option values are opaque and session-scoped. Only its ACP catalogue owns
+    // these ids; a provider row or a models.dev list cannot supply a fallback selection.
+    return { ...row, models: [], defaultModel: null, modelsFromRuntime: true } as T;
+  }
   const preset = governing(row);
   if (!preset) return row;
   // `models` here is the fallback for a vendor whose CLI reports its own — see modelsFromRuntime
@@ -62,7 +69,7 @@ export function withPreset<T extends PresetBackedRow>(row: T): T {
  * Swift `WorkspaceDefaults.models(for:catalog:configured:)`); this is what lets dispatch agree.
  */
 export function followsRuntimeCatalog(row: PresetBackedRow): boolean {
-  return governing(row)?.modelsFromRuntime === true;
+  return row.runtime === AgentProvider.DSH || governing(row)?.modelsFromRuntime === true;
 }
 
 /**
@@ -77,7 +84,7 @@ export function followsRuntimeCatalog(row: PresetBackedRow): boolean {
 export function ownsModel(row: PresetBackedRow, model: string): boolean {
   if (!model) return false;
   const preset = governing(row);
-  if (preset?.modelsFromRuntime) return true;
+  if (followsRuntimeCatalog(row)) return true;
   const models = preset ? catalogModels(preset) : row.models;
   return (
     Array.isArray(models) &&

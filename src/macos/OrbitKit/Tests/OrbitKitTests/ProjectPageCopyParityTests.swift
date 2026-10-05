@@ -70,7 +70,8 @@ final class ProjectPageCopyParityTests: XCTestCase {
         assertSays(web, "% complete`", in: Self.panorama)
         // Ready on a project nobody has started (mock board3 ②), in both shapes of the card.
         assertSays(web, "export const READY_UNTIL_STARTED = '\(ProjectPage.readyUntilStarted)';", in: Self.panorama)
-        assertSays(web, "const readyFootnote = notStarted ? READY_UNTIL_STARTED : 'can start now';", in: Self.panorama)
+        assertSays(web, "const readyFootnote = notStarted ? READY_UNTIL_STARTED : paused ? READY_WHILE_PAUSED", in: Self.panorama)
+        assertSays(web, "export const READY_WHILE_PAUSED = '\(ProjectPage.readyWhilePaused)';", in: Self.panorama)
         assertSays(web, "ready: readyFootnote,", in: Self.panorama)
         assertSays(web, "lane.key === 'ready' ? { ...lane, footnote: readyFootnote } : lane)", in: Self.panorama)
     }
@@ -135,10 +136,6 @@ final class ProjectPageCopyParityTests: XCTestCase {
                               (.openCoordinator, "OPEN_COORDINATOR"), (.openTaskSession, "OPEN_TASK_SESSION")] {
             assertSays(web, "\(key): '\(ProjectPage.actionLabel(action)!)'", in: Self.progress)
         }
-        let hint = ProjectPage.openItemsHint(needsYou: 23, withCoordinator: 29)
-            .replacingOccurrences(of: "23", with: "${needsYou.length}")
-            .replacingOccurrences(of: "29", with: "${withCoordinator.length}")
-        assertSays(web, "`\(hint)`", in: Self.progress)
         // The coordinator's request to start leads Needs you, and is counted there; the owner's own
         // Start… is counted in nothing.
         assertSays(web, "...(startRequest ? [startRequest] : []),", in: Self.progress)

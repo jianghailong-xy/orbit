@@ -1,0 +1,54 @@
+{
+  "referenceCommit": "297d33e97729c66ebdc8f2b63b0e094db1d9e8df",
+  "allIdentical": true,
+  "screenshots": [
+    {
+      "path": "breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/breakpoint-961-session-actual.png",
+      "currentSha256": "f404a2cc9f4ac0c1462624e21dc8c8d28a707618e81e2b7e86d9193a3bf3b3ca",
+      "headSha256": "f404a2cc9f4ac0c1462624e21dc8c8d28a707618e81e2b7e86d9193a3bf3b3ca",
+      "identical": true
+    },
+    {
+      "path": "breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-desktop/breakpoint-961-session-actual.png",
+      "currentSha256": "e7811c7c8c45957d602bd982c4e2b16e6f7e5127bdafaf7833b83d232364cf07",
+      "headSha256": "e7811c7c8c45957d602bd982c4e2b16e6f7e5127bdafaf7833b83d232364cf07",
+      "identical": true
+    },
+    {
+      "path": "breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-desktop/breakpoint-961-session-actual.png",
+      "currentSha256": "9aeaca5657b43e3a6e998a665fd9f1c53f5ce903c40471bc029a66d30924662a",
+      "headSha256": "9aeaca5657b43e3a6e998a665fd9f1c53f5ce903c40471bc029a66d30924662a",
+      "identical": true
+    },
+    {
+      "path": "breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-light-desktop/breakpoint-961-session-actual.png",
+      "currentSha256": "cde12f4ede8a75066d26012c987f15e9621212bac6329e50916c26221fffbd60",
+      "headSha256": "cde12f4ede8a75066d26012c987f15e9621212bac6329e50916c26221fffbd60",
+      "identical": true
+    },
+    {
+      "path": "pages.browser.mjs-session-chromium-dark-desktop/session-idle-actual.png",
+      "currentSha256": "c9c52edb52ecb33d242fa70601244037a9b2a73f5d1a0bcd29dfedd92219e607",
+      "headSha256": "c9c52edb52ecb33d242fa70601244037a9b2a73f5d1a0bcd29dfedd92219e607",
+      "identical": true
+    },
+    {
+      "path": "pages.browser.mjs-session-chromium-light-desktop/session-idle-actual.png",
+      "currentSha256": "ab22c002b044c4b1cad4705aa653f3aadf55d8ef400e3767537518b5382a2cc1",
+      "headSha256": "ab22c002b044c4b1cad4705aa653f3aadf55d8ef400e3767537518b5382a2cc1",
+      "identical": true
+    },
+    {
+      "path": "pages.browser.mjs-session-webkit-dark-desktop/session-idle-actual.png",
+      "currentSha256": "2b1ec419fb04ed4fbe15e9dbfb98d76e859ba87767b8ff78bf593881e6be0dbe",
+      "headSha256": "2b1ec419fb04ed4fbe15e9dbfb98d76e859ba87767b8ff78bf593881e6be0dbe",
+      "identical": true
+    },
+    {
+      "path": "pages.browser.mjs-session-webkit-light-desktop/session-idle-actual.png",
+      "currentSha256": "38d530382ce01fdab851daac0b56fb3f4354afa89dc3868efa5fb37a4eacaf80",
+      "headSha256": "38d530382ce01fdab851daac0b56fb3f4354afa89dc3868efa5fb37a4eacaf80",
+      "identical": true
+    }
+  ]
+}

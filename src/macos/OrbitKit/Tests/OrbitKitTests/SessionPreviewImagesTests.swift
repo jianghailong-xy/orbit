@@ -67,6 +67,31 @@ final class SessionPreviewImagesTests: XCTestCase {
         XCTAssertEqual(SessionPreviewImages.collect(items), [])
     }
 
+    func testScreenshotFileLinksJoinTheSamePagerInTranscriptOrder() {
+        let items = [assistant("a1", """
+            ![first](orbit-attachment:first123)
+
+            [查看实际页面截图](orbit-attachment:shot123 "runner-mobile.png")
+
+            [Download](orbit-attachment:doc123 "report.pdf")
+
+            ![last](orbit-attachment:last123)
+            """)]
+
+        XCTAssertEqual(keys(SessionPreviewImages.collect(items)), [
+            "a1/markdown/orbit-attachment:first123",
+            "a1/markdown/orbit-attachment:shot123",
+            "a1/markdown/orbit-attachment:last123",
+        ])
+    }
+
+    func testUntypedAttachmentsJoinOnlyAfterDecodingAsImages() {
+        let items = [assistant("a1", "[截图](orbit-attachment:shot123) [文档](orbit-attachment:doc123)")]
+        XCTAssertEqual(SessionPreviewImages.collect(items), [])
+        XCTAssertEqual(keys(SessionPreviewImages.collect(items, isAttachmentImage: { $0 == "shot123" })),
+                       ["a1/markdown/orbit-attachment:shot123"])
+    }
+
     func testTheSameImageInTwoMessagesIsTwoPagesButRepeatedInOneIsOne() {
         let markdown = "![a](orbit-attachment:same)\n\n![a](orbit-attachment:same)"
 

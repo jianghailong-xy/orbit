@@ -5,6 +5,7 @@ import {
   Delete,
   ForbiddenException,
   Get,
+  Header,
   MessageEvent,
   Param,
   Patch,
@@ -32,6 +33,7 @@ import {
   MergeRepairDto,
   MergeToMainDto,
   MoveSessionDto,
+  RetryIdentityDto,
   SessionArmRetryDto,
   SessionConfigDto,
   SessionAccountDto,
@@ -358,12 +360,14 @@ export class SessionsController {
     view?: 'open' | 'completed' | 'trash' | 'active' | 'archived' | 'deleted' | 'system',
     // Page size. Omitted (every native client) means the whole list, as before.
     @Query('limit') limit?: string,
+    @Query('projectId', PublicIdPipe) projectId?: string,
   ) {
     const parsed = Number(limit);
     return this.sessions.list(user.userId, {
       runnerId,
       workspaceId: workspaceId ?? agentId,
       tagId,
+      projectId,
       view,
       limit: Number.isFinite(parsed) && parsed > 0 ? parsed : undefined,
     });
@@ -400,6 +404,17 @@ export class SessionsController {
     @Query('path') artifactPath?: string,
   ): Promise<StreamableFile> {
     const { data, mimeType, disposition } = await this.sessions.getLegacyArtifactForOwner(user.userId, id, artifactPath);
+    return new StreamableFile(data, { type: mimeType, disposition, length: data.length });
+  }
+
+  @Get(':id/worktree-file')
+  @Header('Cache-Control', 'no-store')
+  async worktreeFile(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Query('path') filePath?: string,
+  ): Promise<StreamableFile> {
+    const { data, mimeType, disposition } = await this.sessions.getWorktreeFileForOwner(user.userId, id, filePath);
     return new StreamableFile(data, { type: mimeType, disposition, length: data.length });
   }
 
@@ -599,8 +614,14 @@ export class SessionsController {
    *  carrying `clientTurnId` from a client that predates that is ignored, not refused — the key it
    *  chose is simply not the one the re-send goes out under. */
   @Post(':id/retry-message')
-  resendRetryMessage(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
-    return this.autoRetry.resendRetryMessage(user.userId, id);
+  resendRetryMessage(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    // The composer's pending pick, when the person pressed Retry after choosing one: the re-send is
+    // a resume, and what they chose has to travel with it. Absent, the retry runs where it did.
+    @Body() dto: RetryIdentityDto,
+  ) {
+    return this.autoRetry.resendRetryMessage(user.userId, id, dto);
   }
 
   /** Turn off the pending auto-retry on this session. Arming happens by itself when a quota or a

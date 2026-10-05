@@ -138,9 +138,9 @@ public final class APIClient: @unchecked Sendable {
     /// if the new one is rejected. Older servers silently treat unknown Completed/Trash values as
     /// Open, so a mismatched (or empty, for those two scopes) response also triggers the fallback.
     public func listSessions(view: SessionView = .open,
-                             runnerId: String? = nil) async throws -> [Session] {
+                             runnerId: String? = nil, projectId: String? = nil) async throws -> [Session] {
         do {
-            let sessions = try await listSessions(queryValue: view.queryValue, runnerId: runnerId)
+            let sessions = try await listSessions(queryValue: view.queryValue, runnerId: runnerId, projectId: projectId)
             if view == .open || (!sessions.isEmpty && sessions.allSatisfy({
                 $0.effectiveLifecycleState == view.lifecycleState
             })) {
@@ -149,12 +149,13 @@ public final class APIClient: @unchecked Sendable {
         } catch APIError.http(let status, _) where [400, 404, 422].contains(status) {
             // Fall through to the compatibility request.
         }
-        return try await listSessions(queryValue: view.legacyQueryValue, runnerId: runnerId)
+        return try await listSessions(queryValue: view.legacyQueryValue, runnerId: runnerId, projectId: projectId)
     }
 
-    private func listSessions(queryValue: String, runnerId: String?) async throws -> [Session] {
+    private func listSessions(queryValue: String, runnerId: String?, projectId: String?) async throws -> [Session] {
         var q = [URLQueryItem(name: "view", value: queryValue)]
         if let runnerId { q.append(URLQueryItem(name: "runnerId", value: runnerId)) }
+        if let projectId { q.append(URLQueryItem(name: "projectId", value: projectId)) }
         return try await get("sessions", query: q)
     }
 
@@ -335,8 +336,10 @@ public final class APIClient: @unchecked Sendable {
     /// in the owner's name (docs/session-request-reply-contract.md §2.1). No key is sent: the server
     /// derives one from the failed message, so a second press — a double tap, a response lost and sent
     /// again — is the turn already queued (criterion 19). Web parity: `resendSessionRetryMessage`.
-    public func resendRetryMessage(sessionID: String) async throws -> TurnAccepted {
-        try await post("sessions/\(sessionID)/retry-message", body: RetryResendRequest())
+    public func resendRetryMessage(sessionID: String, provider: String? = nil,
+                                   account: String? = nil) async throws -> TurnAccepted {
+        try await post("sessions/\(sessionID)/retry-message",
+                       body: RetryResendRequest(provider: provider, account: account))
     }
 
     /// Turn off / put back the retry a spent quota or a transient provider error armed on this
@@ -666,6 +669,11 @@ public final class APIClient: @unchecked Sendable {
     /// `GET /projects`: every project this account owns, newest first; `status` narrows the read.
     public func projects(status: ProjectStatus? = nil) async throws -> [ProjectSummary] {
         try await get("projects", query: status.map { [URLQueryItem(name: "status", value: $0.rawValue)] } ?? [])
+    }
+
+    /// `GET /projects/sidebar`: open projects with the session list's activity and task progress.
+    public func sidebarProjects() async throws -> [ProjectSummary] {
+        try await get("projects/sidebar")
     }
 
     /// `GET /projects/:id`: the project's own record — goal, criteria and what the read says about
@@ -1409,6 +1417,18 @@ public final class APIClient: @unchecked Sendable {
         let query = [URLQueryItem(name: "path", value: path)]
         return try await send(makeRequest("sessions/\(sessionID)/artifacts", method: "GET",
                                           query: query, body: Optional<Empty>.none))
+    }
+
+    /// Read the current worktree file, independently of transcript attachments or their caches.
+    /// The server confines the relative path to this session's worktree and bounds the runner read.
+    public func sessionWorktreeFile(sessionID: String, path: String) async throws -> Data {
+        var request = try makeRequest("sessions/\(sessionID)/worktree-file", method: "GET",
+                                      query: [URLQueryItem(name: "path", value: path)],
+                                      body: Optional<Empty>.none)
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+        request.timeoutInterval = 45
+        return try await send(request, cancellationAware: true)
     }
 
     // MARK: - request plumbing

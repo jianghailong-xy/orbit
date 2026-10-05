@@ -212,10 +212,14 @@ struct AgentContentColumn: View {
             // folder's page carrying the column's own back button, while the detail pane beside it
             // goes on following the selected session. A phone never reads this — its folder page is
             // a frame the compact stack pushes (`CompactSections`).
-            if let address = app.folderColumn {
-                SessionFolderPage(address: address, rowNavigation: rowNavigation, searchQuery: $searchQuery)
+            if let address = app.projectSessionsColumn, rowNavigation == .selection {
+                SessionProjectPage(address: address, rowNavigation: rowNavigation)
             } else {
-                workspaceList
+                if let address = app.folderColumn {
+                    SessionFolderPage(address: address, rowNavigation: rowNavigation, searchQuery: $searchQuery)
+                } else {
+                    workspaceList
+                }
             }
             #else
             workspaceList
@@ -267,7 +271,8 @@ struct AgentContentColumn: View {
         // text); the hits replace the list's sections until the field is cleared (see `AgentPanes`).
         .sessionListSearch(text: $searchQuery,
                            fromBottom: SessionListPresentation.resolve(
-                               isCompactWidth: horizontalSizeClass == .compact).searchesFromBottom)
+                               isCompactWidth: horizontalSizeClass == .compact).searchesFromBottom,
+                           isEnabled: app.projectSessionsColumn == nil || rowNavigation != .selection)
         // The query used to be `AgentPanes`' own state, so switching workspace (`.id(a.id)`) dropped
         // it. It outlives that rebuild now, so clear it here to land on the new workspace's sessions
         // rather than on the old workspace's search results.
@@ -389,6 +394,9 @@ struct AgentPanes: View {
         // The selection is for the three-column shape only: it is what fills the detail pane beside
         // this column. Compact's rows push their own pages onto the section's `NavigationStack`, so
         // there the List has nothing to select (and in a plain stack wouldn't respond to a tap).
+        #if os(iOS)
+        let projectRows = Dictionary(uniqueKeysWithValues: projectListing.projects.map { ($0.id, $0) })
+        #endif
         List(selection: listSelection) {
             #if os(iOS)
             // ChatGPT-style recency sections (Pinned / Today / Yesterday / 2–7 days ago / …) — a
@@ -443,9 +451,9 @@ struct AgentPanes: View {
                             // Only the list's own first row drops the hairline above it: with
                             // folder rows on top, the first "Today" row is not that row.
                             if session.id == section.sessions.first?.id, folderListing.folders.isEmpty {
-                                sessionRow(session).listRowSeparator(.hidden, edges: .top)
+                                listRow(session, projects: projectRows).listRowSeparator(.hidden, edges: .top)
                             } else {
-                                sessionRow(session)
+                                listRow(session, projects: projectRows)
                             }
                         }
                     } else if section.title == "Pinned" {
@@ -455,14 +463,14 @@ struct AgentPanes: View {
                         // the sidebar list style.
                         Section {
                             if !pinnedCollapsed {
-                                ForEach(section.sessions) { sessionRow($0) }
+                                ForEach(section.sessions) { listRow($0, projects: projectRows) }
                             }
                         } header: {
                             pinnedSectionHeader(section.title)
                         }
                     } else {
                         Section {
-                            ForEach(section.sessions) { sessionRow($0) }
+                            ForEach(section.sessions) { listRow($0, projects: projectRows) }
                         } header: {
                             Text(section.title).textCase(nil)
                         }
@@ -559,6 +567,9 @@ struct AgentPanes: View {
         // near-continuous stream of whole-list decodes and list diffs.
         .task(id: "\(agent.id)|\(view.rawValue)") {
             await agents.loadSessions(agentID: agent.id, view: view, reset: true)
+            #if os(iOS)
+            await app.projects?.load()
+            #endif
             guard view != .open else { return }
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 4_000_000_000)
@@ -661,7 +672,9 @@ struct AgentPanes: View {
         // The Move panel for the row whose Move was tapped: the folders of this workspace, counted
         // over the list the row is in (docs/session-folders-move-design.md §4).
         .sheet(item: $movingSession) { s in
-            SessionMoveSheet(session: s, workspace: agent, listed: agents.agentSessions).environment(app)
+            if let workspace = agents.agent(s.agent?.id ?? s.agentId ?? agent.id) {
+                SessionMoveSheet(session: s, workspace: workspace, listed: agents.allSessions).environment(app)
+            }
         }
         // Rename… / Delete Folder…, raised by a folder row's long-press menu — the same two asks, in
         // the same words, that a folder page's ⋯ raises (§3.4).
@@ -814,11 +827,48 @@ struct AgentPanes: View {
     /// Tag all leave the folder rows empty (§3.3): each is a grouping of its own, and a second one
     /// stacked on the list would leave a session with two places to be.
     private var folderListing: SessionFolderListing {
-        SessionFolderGrouping.listing(shownSessions,
+        let ungrouped = SessionFolderGrouping.listing(shownSessions,
                                       folders: app.sessionFolders.filter { $0.workspaceId == agent.id },
                                       view: view,
                                       byTag: tagFilter != nil || groupByTag,
                                       runnerOffline: agents.runnerIsOffline(agent.runnerId))
+        guard SessionProjectGrouping.listShowsProjects(view: view, byTag: tagFilter != nil || groupByTag) else {
+            return ungrouped
+        }
+        return SessionFolderListing(folders: projectListing.folders,
+                                    sessions: projectListing.entries.map(\.timeGroupingSession))
+    }
+
+    private var projectListing: SessionProjectListing {
+        SessionProjectGrouping.listing(shownSessions,
+                                      folders: app.sessionFolders.filter { $0.workspaceId == agent.id },
+                                      projects: app.projects?.sidebarProjects ?? [], view: view,
+                                      byTag: tagFilter != nil || groupByTag, searching: isSearching,
+                                      runnerOffline: agents.runnerIsOffline(agent.runnerId),
+                                      coordinators: agents.allSessions + app.sessions,
+                                      contentSessions: view == .open ? app.sessions : agents.allSessions,
+                                      watching: Dictionary((app.sessions + agents.allSessions).compactMap { session in
+                                          app.watches?.summary(for: session.id).map { (session.id, $0) }
+                                      }, uniquingKeysWith: { _, latest in latest }),
+                                      line: { SessionLine.make(for: $0, live: true,
+                                                              watching: app.watches?.summary(for: $0.id)) })
+    }
+
+    private func projectRow(_ row: SessionProjectRow) -> some View {
+        let address = SessionProjectAddress(projectID: row.projectId, agentID: agent.id, view: view)
+        let onOpen = {
+            switch row.target {
+            case .session(let id):
+                if let session = (app.sessions + agents.allSessions).first(where: { $0.id == id }) {
+                    app.openProjectMember(session, push: rowNavigation == .push)
+                }
+            case .project: app.openProjectSessions(address)
+            }
+        }
+        return SessionProjectRowView(row: row, onOpen: onOpen, onSessions: { app.openProjectSessions(address) })
+        .sessionProjectRowActions(row, onOpen: onOpen, onSessions: { app.openProjectSessions(address) }, onProject: {
+            app.openProject(row.projectId)
+        }, onMove: { if let coordinator = row.coordinator { movingSession = coordinator } })
     }
 
     /// One folder's row: the glyph, name, count and the state it reports, as the whole row (the
@@ -907,6 +957,14 @@ struct AgentPanes: View {
     /// destination value on the compact stack. There is no third state for "highlighted but not
     /// openable" to live in: the highlight IS the pushed console in both shapes, so a tap always
     /// either selects a row that isn't the page showing or pushes the one that is.
+    @ViewBuilder private func listRow(_ s: Session, projects: [String: SessionProjectRow]) -> some View {
+        if let project = projects[s.id] {
+            projectRow(project)
+        } else {
+            sessionRow(s)
+        }
+    }
+
     @ViewBuilder private func sessionRow(_ s: Session) -> some View {
         let row = AgentSessionRow(session: s, deleted: view == .trash, showsPin: view == .open)
         switch rowNavigation {
@@ -1726,6 +1784,7 @@ struct AgentFormContent: View {
     let agents: AgentsModel
     let agent: Agent
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppModel.self) private var app
 
     @State private var name = ""
     @State private var effort: Effort = .default
@@ -1786,15 +1845,19 @@ struct AgentFormContent: View {
             }
 
             // Off by default, and only the owner's to turn on: it decides what task runs cost, so the
-            // agent tools cannot set it (docs/model-routing-design.md §7.2).
-            Section("Task runs") {
-                Toggle(isOn: $modelRouting) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(TaskDetailCopy.smartSelectionSwitch)
-                        Text(TaskDetailCopy.smartSelectionSwitchDetail)
-                            .font(.orbitLabel)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
+            // agent tools cannot set it (docs/model-routing-design.md §7.2). With the account's switch
+            // off (the default) the Agent has no switch of its own; its stored value is left alone,
+            // since Done sends it only when it moved.
+            if app.user?.preferences?.smartModelSelection ?? false {
+                Section("Task runs") {
+                    Toggle(isOn: $modelRouting) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(TaskDetailCopy.smartSelectionSwitch)
+                            Text(TaskDetailCopy.smartSelectionSwitchDetail)
+                                .font(.orbitLabel)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                 }
             }

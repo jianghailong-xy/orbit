@@ -108,7 +108,7 @@ async function task(db: PrismaClient, f: Fixture, title: string): Promise<string
 async function job(
   db: PrismaClient,
   f: Fixture,
-  spec: { at: Date; claimedAt?: Date; finishedAt?: Date; state: string;
+  spec: { at: Date; claimedAt?: Date; finishedAt?: Date; heartbeatAt?: Date; state: string;
           taskId?: string | null; idempotency: string;
           kind?: IntegrationJobKind; phase?: IntegrationJobPhase | null;
           checks?: Prisma.InputJsonValue; aheadOfUpstream?: number },
@@ -135,6 +135,7 @@ async function job(
       state: spec.state,
       createdAt: spec.at,
       claimedAt: spec.claimedAt ?? null,
+      heartbeatAt: spec.heartbeatAt ?? null,
       finishedAt: spec.finishedAt ?? null,
       idempotencyKey: `ij:v1:test:${f.projectId}:${spec.idempotency}`,
     },
@@ -192,7 +193,7 @@ test('the landing line describes running work before the queue, on real PostgreS
         const taskId = await task(db, f, 'T1 wiki 契约');
         await job(db, f, { at: at(0), state: 'QUEUED', idempotency: 'older' });
         await job(db, f, { at: at(30), claimedAt: at(60), state: 'RUNNING', taskId,
-                          phase: 'CHECK', idempotency: 'newer' });
+                          phase: 'CHECK', heartbeatAt: at(65), idempotency: 'newer' });
 
         const view = await read(db, f);
 
@@ -202,6 +203,7 @@ test('the landing line describes running work before the queue, on real PostgreS
           phase: 'CHECK',
           state: 'RUNNING',
           startedAt: at(60),
+          heartbeatAt: at(65),
         });
         assert.equal(view.integratingCount, 1);
         assert.equal(view.queuedCount, 1);
@@ -227,6 +229,7 @@ test('the landing line describes running work before the queue, on real PostgreS
           phase: null,
           state: 'RUNNING',
           startedAt: at(10),
+          heartbeatAt: null,
         });
       });
 
@@ -241,7 +244,7 @@ test('the landing line describes running work before the queue, on real PostgreS
 
         assert.deepEqual(view.inFlight, {
           taskTitle: null, kind: 'LAND_PROMOTION', phase: null,
-          state: 'RUNNING', startedAt: at(10),
+          state: 'RUNNING', startedAt: at(10), heartbeatAt: null,
         });
       });
 
@@ -253,7 +256,7 @@ test('the landing line describes running work before the queue, on real PostgreS
 
         assert.deepEqual((await read(db, f)).inFlight, {
           taskTitle: 'Oldest queued task', kind: 'LAND_TASK', phase: null,
-          state: 'QUEUED', startedAt: at(0),
+          state: 'QUEUED', startedAt: at(0), heartbeatAt: null,
         });
       });
 
@@ -267,7 +270,7 @@ test('the landing line describes running work before the queue, on real PostgreS
           await db.projectIntegrationJob.update({ where: { id }, data: { phase } });
           assert.deepEqual((await read(db, f)).inFlight, {
             taskTitle: null, kind: 'CHECK_PROMOTION', phase,
-            state: 'RUNNING', startedAt: at(10),
+            state: 'RUNNING', startedAt: at(10), heartbeatAt: null,
           });
         }
       });

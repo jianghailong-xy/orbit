@@ -1,14 +1,19 @@
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
-import { writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { chromium } from 'playwright';
 import { installFixedDate, installFixtures } from '../../../src/web/ui-migration/fixtures.mjs';
 import { RUNNER, WORKSPACE } from '../../../src/web/ui-migration/session-fixtures.mjs';
 
 // Capture the real application. Only transport responses use synthetic display data.
 // Start the web Vite server, then run: node docs/mocks/antigravity-branding/capture.mjs
+// Set ORBIT_PREVIEW_OUTPUT_DIR to preserve an earlier set of screenshots.
 const origin = process.env.ORBIT_PREVIEW_ORIGIN ?? 'http://127.0.0.1:5177';
-const directory = fileURLToPath(new URL('./', import.meta.url));
+const directory = process.env.ORBIT_PREVIEW_OUTPUT_DIR
+  ? resolve(process.env.ORBIT_PREVIEW_OUTPUT_DIR)
+  : fileURLToPath(new URL('./', import.meta.url));
+await mkdir(directory, { recursive: true });
 const runner = {
   ...RUNNER, name: 'HPC', activeSessions: 0,
   engines: [

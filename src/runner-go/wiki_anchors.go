@@ -70,6 +70,8 @@ const (
 	// A fetch of origin's main may cross a slow network; one git command on the checkout may not.
 	wikiAnchorFetchTimeout = 5 * time.Minute
 	wikiAnchorGitTimeout   = 2 * time.Minute
+	// How long a git command's output may stay open after git exited, held by a process it started.
+	wikiAnchorGitWaitDelay = 2 * time.Second
 	// A report writes one transaction per entry, fifty of them at most.
 	wikiAnchorReportTimeout = 2 * time.Minute
 )
@@ -367,8 +369,12 @@ func wikiAnchorsCheckout(flagValue string, listed *wikiAnchorRepo) (string, erro
 
 // fetchWikiAnchorsRef fetches origin's main and answers the commit origin/main names after it: every
 // anchor of the run is checked on that one commit, and the report says which.
+//
+// --no-auto-maintenance: the run starts no maintenance in a checkout it only reads. Git's own after a
+// fetch is a detached process that holds the fetch's output for a moment after the fetch has exited —
+// a moment as long as a loaded machine makes it (wikiAnchorGit).
 func fetchWikiAnchorsRef(repo string) (string, error) {
-	if _, code, stderr, err := wikiAnchorGit(repo, wikiAnchorFetchTimeout, "fetch", "--quiet", "--no-tags", "origin", wikiAnchorsVerifyRefspec); err != nil || code != 0 {
+	if _, code, stderr, err := wikiAnchorGit(repo, wikiAnchorFetchTimeout, "fetch", "--quiet", "--no-tags", "--no-auto-maintenance", "origin", wikiAnchorsVerifyRefspec); err != nil || code != 0 {
 		return "", fmt.Errorf("orbit wiki anchors verify: git fetch origin main failed in %s, so nothing was checked and "+
 			"nothing reported — a check against an origin/main that was not just fetched says nothing about main: %s",
 			repo, firstNonEmpty(strings.TrimSpace(stderr), errString(err)))
@@ -553,6 +559,12 @@ func wikiGitSaysAbsent(code int, stderr string) bool {
 // wikiAnchorGit runs `git -C repo <args>` and answers its stdout as it was written (a blob is hashed
 // byte for byte), its exit code and its stderr. err is only git not running or running out of time:
 // a non-zero exit is an answer the caller reads. No prompt can hold it, and no optional lock is taken.
+//
+// Nor can a process git started and left running. Wait reads git's stdout and stderr to their end, and
+// a child that outlives git — a hook, a configured upload-pack, git's own detached maintenance for the
+// moment before it lets go — holds them open: on 10-04 a merge check spent its last minute in this Wait
+// on a fetch that had already exited, past any timeout, because the context kills only git. WaitDelay
+// bounds that read. What git wrote before it exited is its answer, and is what is returned.
 func wikiAnchorGit(repo string, timeout time.Duration, args ...string) ([]byte, int, string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -561,6 +573,7 @@ func wikiAnchorGit(repo string, timeout time.Duration, args ...string) ([]byte, 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
+	cmd.WaitDelay = wikiAnchorGitWaitDelay
 	err := cmd.Run()
 	if ctx.Err() != nil {
 		return nil, -1, stderr.String(), fmt.Errorf("git %s did not finish within %s", args[0], timeout)
@@ -569,7 +582,8 @@ func wikiAnchorGit(repo string, timeout time.Duration, args ...string) ([]byte, 
 	if errors.As(err, &exit) {
 		return stdout.Bytes(), exit.ExitCode(), stderr.String(), nil
 	}
-	if err != nil {
+	// ErrWaitDelay is git exiting 0 with its output still held open by a child when WaitDelay ran out.
+	if err != nil && !errors.Is(err, exec.ErrWaitDelay) {
 		return nil, -1, stderr.String(), fmt.Errorf("git %s: %w", args[0], err)
 	}
 	return stdout.Bytes(), 0, stderr.String(), nil

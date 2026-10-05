@@ -7,7 +7,7 @@ import { accountPauseUntil } from '../common/account-pause';
 import { PublicIdPipe } from '../common/public-id';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
-import { codexLoginView, codexPoolUnavailableReason, maskedAccount } from './codex-login';
+import { codexLoginView, codexPoolUnavailableReason, maskedAccount, POOL_LOGIN_SELECT } from './codex-login';
 import { CreateModelProviderDto, CreateProviderPoolDto, UpdateModelProviderDto } from './dto';
 import { decryptSecret, encryptSecret } from './provider-crypto';
 import { catalogDefaultModel, catalogModels, presetCatalog } from './model-catalog';
@@ -102,6 +102,12 @@ function assertReasoningLevels(runtime: string, models: unknown): void {
   }
 }
 
+function assertDshRuntimeCatalog(runtime: string, models: unknown, defaultModel?: string): void {
+  if (runtime === AgentProvider.DSH && ((Array.isArray(models) && models.length > 0) || defaultModel?.trim())) {
+    throw new BadRequestException('DeepSeek Harness models and default come from the runtime ACP catalogue');
+  }
+}
+
 /** A provider row as refusing an edit to a pool member reads it, before and after the edit. */
 type PoolEditRow = PoolAdmissionRow & { id: string; label: string };
 
@@ -111,23 +117,6 @@ type PoolEditRow = PoolAdmissionRow & { id: string; label: string };
  *  the encrypted pair is never selected on any path that builds a response. */
 /** A pool's ChatGPT logins, read beside the pool itself: a login belongs to a person of the pool
  *  (migration 0371), so it is no relation of the pool row. Each by its email and `…AB12`, oldest first. */
-const POOL_LOGIN_SELECT = {
-  poolId: true,
-  accountId: true,
-  // Who signed it in — the person whose sign-in again brings it back, and who may take it out with the
-  // pool's admins.
-  userId: true,
-  email: true,
-  plan: true,
-  state: true,
-  lastError: true,
-  expiresAt: true,
-  createdAt: true,
-  // What the pool gateway last read off the backend's answers, and the reset it named (migration 0324).
-  usage: true,
-  spentUntil: true,
-  pausedUntil: true,
-} satisfies Prisma.PoolCodexLoginSelect;
 
 type PoolLoginRow = Prisma.PoolCodexLoginGetPayload<{ select: typeof POOL_LOGIN_SELECT }>;
 
@@ -301,7 +290,7 @@ export class ProvidersService {
         // The built-in entries below already name `opencode` and `antigravity`; the compatibility
         // guard rows that hold those slugs are not second providers to choose between.
         slug: { notIn: COMPATIBILITY_GUARD_SLUGS },
-        enabled: true,
+        AND: [{ OR: [{ enabled: true }, { slug: AgentProvider.DSH }] }],
         OR: [{ ownerId: null }, { ownerId }],
       },
       orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
@@ -313,6 +302,7 @@ export class ProvidersService {
         defaultModel: true,
         presetSlug: true,
         followsPreset: true,
+        enabled: true,
       },
     });
     const pools = await this.prisma.providerPool.findMany({
@@ -324,12 +314,14 @@ export class ProvidersService {
     });
     return [
       // A built-in engine carries no label: the slug is the engine's name, and it runs on itself.
-      ...Object.values(AgentProvider).map((slug) => ({ slug, runtime: slug, builtin: true })),
+      ...Object.values(AgentProvider)
+        .filter((slug) => slug !== AgentProvider.DSH || ![...rows, ...pools].some((row) => row.slug === slug))
+        .map((slug) => ({ slug, runtime: slug, builtin: true })),
       // Same preset resolution the pickers get, so the models named here are the ones the
       // provider currently offers rather than the copy stored when it was connected. Which
       // preset backs the row is the picker's business, not the caller's: dropped here.
-      ...rows.map((row) => {
-        const { presetSlug, followsPreset, ...view } = withPreset(row);
+      ...rows.filter((row) => row.enabled !== false).map((row) => {
+        const { presetSlug, followsPreset, enabled, ...view } = withPreset(row);
         return { ...view, builtin: false };
       }),
       // A pool runs on its members' Claude subscriptions, whose models are the Claude CLI's own —
@@ -393,11 +385,13 @@ export class ProvidersService {
   /** Create a provider. ownerId null = shared (admin area); set = the caller's personal one. */
   async create(ownerId: string | null, dto: CreateModelProviderDto) {
     const preset = this.assertPreset(dto.presetSlug);
+    const runtime = dto.runtime ?? preset?.runtime ?? AgentProvider.CLAUDE;
+    assertDshRuntimeCatalog(runtime, dto.models, dto.defaultModel);
     // Following means the catalogue supplies the models — a list sent alongside it would only be a
     // stale copy of the same thing. What's stored is then a snapshot: reads serve the preset, so it
     // only ever surfaces if we stop shipping that preset.
     const follows = !!preset && dto.followsPreset !== false;
-    const models = follows
+    const models = runtime === AgentProvider.DSH ? [] : follows
       ? catalogModels(preset!).map((m) => ({
           value: m.value,
           label: m.label,
@@ -407,11 +401,11 @@ export class ProvidersService {
     const base = slugBase(dto.slug ?? preset?.slug ?? dto.label);
     const data = {
       label: dto.label,
-      runtime: dto.runtime ?? preset?.runtime ?? 'claude',
+      runtime,
       baseUrl: dto.baseUrl,
       apiKeyEnc: encryptSecret(dto.apiKey),
       models: models as Prisma.InputJsonValue,
-      defaultModel: (follows ? catalogDefaultModel(preset!) : dto.defaultModel) ?? dto.models?.[0]?.value ?? null,
+      defaultModel: runtime === AgentProvider.DSH ? null : (follows ? catalogDefaultModel(preset!) : dto.defaultModel) ?? dto.models?.[0]?.value ?? null,
       // Identity outlives ownership: a row that maintains its own list is still an Anthropic one.
       presetSlug: preset?.slug ?? null,
       followsPreset: follows,
@@ -462,7 +456,17 @@ export class ProvidersService {
    *  users pass their id (their personal rows). Cross-scope ids read as not-found. */
   async update(ownerId: string | null, id: string, dto: UpdateModelProviderDto) {
     const current = await this.getScoped(ownerId, id);
-    assertReasoningLevels(dto.runtime ?? current.runtime, dto.models ?? current.models);
+    const runtime = dto.runtime ?? current.runtime;
+    assertDshRuntimeCatalog(runtime, dto.models, dto.defaultModel);
+    if (
+      dto.runtime && dto.runtime !== current.runtime &&
+      (dto.runtime === AgentProvider.DSH || current.runtime === AgentProvider.DSH)
+    ) {
+      // A history read can race a session created on the previous runtime. Keep the identity
+      // stable and require a separate provider instead of moving its future resume ids.
+      throw new BadRequestException('provider runtime cannot change into or out of dsh; create a separate provider');
+    }
+    if (runtime !== AgentProvider.DSH) assertReasoningLevels(runtime, dto.models ?? current.models);
     const data: Prisma.ModelProviderUpdateInput = {
       label: dto.label,
       runtime: dto.runtime,
@@ -501,7 +505,10 @@ export class ProvidersService {
   }
 
   async remove(ownerId: string | null, id: string) {
-    await this.getScoped(ownerId, id);
+    const current = await this.getScoped(ownerId, id);
+    if ((current.runtime === AgentProvider.DSH || current.slug === AgentProvider.DSH) && await this.hasProviderHistory(current)) {
+      throw new BadRequestException('DeepSeek Harness provider has session or task history and cannot be removed');
+    }
     await this.prisma.modelProvider.delete({ where: { id } });
     this.publishChanged(ownerId, id);
     return { ok: true };
@@ -676,6 +683,9 @@ export class ProvidersService {
     model?: string;
     runtime?: string;
   }): Promise<{ ok: boolean; status?: number; message: string }> {
+    if (dto.runtime === AgentProvider.DSH) {
+      throw new BadRequestException('DeepSeek Harness requires runtime prompt validation');
+    }
     const base = this.assertTestableUrl(dto.baseUrl).replace(/\/+$/, '');
     const model = (dto.model ?? '').trim();
     if (!model) throw new BadRequestException('add a model before testing');
@@ -763,6 +773,15 @@ export class ProvidersService {
     });
     if (!row) throw new NotFoundException('provider not found');
     return row;
+  }
+
+  private async hasProviderHistory(row: { slug: string; ownerId: string | null }): Promise<boolean> {
+    const where = { provider: row.slug, ...(row.ownerId === null ? {} : { ownerId: row.ownerId }) };
+    const [session, task] = await Promise.all([
+      this.prisma.session.findFirst({ where: { ...where, providerBuiltin: false }, select: { id: true } }),
+      this.prisma.task.findFirst({ where, select: { id: true } }),
+    ]);
+    return !!session || !!task;
   }
 
   private async getScopedPool(ownerId: string, id: string) {

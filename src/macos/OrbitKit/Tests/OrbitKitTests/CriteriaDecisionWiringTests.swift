@@ -215,10 +215,15 @@ final class CriteriaDecisionWiringTests: XCTestCase {
     func testBothCardsAreDimmedWholeByTheirOpenRuleAndOnlyByTheChrome() throws {
         let weakening = try weakeningCard()
         let confirmation = try confirmationCard()
-        XCTAssertTrue(weakening.contains(".approvalChrome(.orange, dimmed: CriteriaDecisions.isDimmed(standing))"),
+        XCTAssertTrue(weakening.contains("ApprovalReviewLayout(title: CriteriaDecisions.title"))
+        XCTAssertTrue(weakening.contains("dimmed: CriteriaDecisions.isDimmed(standing)"),
                       "a stale weakening card is dimmed by the derived standing it is drawn from")
-        XCTAssertTrue(confirmation.contains(".approvalChrome(.blue, dimmed: AcceptanceConfirmations.isDimmed(standing))"),
+        XCTAssertTrue(confirmation.contains("ApprovalReviewLayout(title: AcceptanceConfirmations.title"))
+        XCTAssertTrue(confirmation.contains("dimmed: AcceptanceConfirmations.isDimmed(standing)"),
                       "and so is a confirmation already given at another end")
+        let review = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/ApprovalReview.swift")
+        XCTAssertTrue(review.contains(".approvalChrome(tone, dimmed: dimmed)"),
+                      "the shared preview passes the card's standing to the same chrome")
         XCTAssertFalse((weakening + confirmation).contains("0.72"),
                        "the chrome applies the opacity; a second one inside a card would multiply")
         XCTAssertTrue(try source(Self.cardPath).contains(".opacity(dimmed ? 0.72 : 1)"),

@@ -95,6 +95,7 @@ export const COORDINATOR_ACTIONS = [
   'CONCLUDE_VERDICT_PASS',
   'SETTLE_PROJECT_DONE',
   'RESOLVE_PROJECT_BLOCKER',
+  'DECIDE_TASK_LANDING',
 ] as const;
 export type CoordinatorAction = (typeof COORDINATOR_ACTIONS)[number];
 
@@ -152,6 +153,10 @@ export const COORDINATOR_AUTHORITY: Readonly<Record<CoordinatorAction, Authority
   // name the write it would authorize. Calling this HUMAN_ONLY would claim exactly the property
   // that review found the approval row does not have.
   RESOLVE_PROJECT_BLOCKER: 'COORDINATOR_BOUNDED',
+  // A coordinator may choose what happens to a delivery whose landing needs a judgment: accept
+  // its scope, send it back, replace it, or request one explicit retry. This never edits the
+  // acceptance ruler; those questions remain HUMAN_ONLY above.
+  DECIDE_TASK_LANDING: 'COORDINATOR_BOUNDED',
 };
 
 /**

@@ -650,6 +650,7 @@ export async function applyIntegrationJobResult(
         claimLeaseOwner: true, claimGeneration: true, runnerId: true, claimedAt: true,
         generation: true, retryOfJobId: true, retryFailureClass: true, retryReason: true,
         retryRequestedBySessionId: true,
+        retryRequestedByUserId: true,
         session: { select: { baseSha: true } },
         task: { select: { title: true, assigneeId: true, creatorType: true, creatorId: true } },
       },
@@ -986,6 +987,7 @@ export async function applyIntegrationJobResult(
                 failureClass: job.retryFailureClass,
                 reason: job.retryReason,
                 requestedBySessionId: job.retryRequestedBySessionId,
+                requestedByUserId: job.retryRequestedByUserId,
               }
             : null,
         }),
@@ -1108,6 +1110,7 @@ function nothingToLandComment(input: {
       failureClass: string | null;
       reason: string | null;
       requestedBySessionId: string | null;
+      requestedByUserId: string | null;
     } | null;
   },
 ): Record<string, unknown> {

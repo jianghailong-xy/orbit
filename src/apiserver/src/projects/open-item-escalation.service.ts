@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { LANDED_RESULTS } from './project-criterion-landing';
 import { INTEGRATION_ITEM_KINDS, openItemOwed } from './project-open-item';
+import { PROJECT_LIVE_SESSION_STATUS_SQL } from './live-session-status';
 
 /**
  * How often the clock looks. Not how long anything waits: each item carries its own
@@ -37,64 +38,103 @@ export interface ReconciledOpenItem {
  * The moment an item the coordinator holds becomes the owner's, as SQL over the `project_open_item`
  * row aliased `alias` — the one definition the clock acts on and every reader of the item shows.
  *
- * The clock counts the coordinator's silence, not the item's age. An item is opened with
- * `escalate_at` = the moment it started waiting + its project's window (§4.1, frozen by X-E2), and
- * that is when it goes to the owner if nothing is carrying it. It is carried while the conversation
- * the project is coordinated from — live, and holding a delivery of the item that was not taken back
- * — has moved since the item was put on it: been handed a turn, or finished one. The item then stays
- * the coordinator's until a full window (its own, `escalate_at - waiting_since`) has passed since
- * that conversation last moved. So a conversation that is busy, or working through a queue, keeps
- * what it was given; one that is wedged, has gone quiet or has ended hands it over one window after
- * it stopped; and an item that never reached anybody goes when its window runs out, as it always did.
+ * The clock follows concrete progress on this item. An item is opened with `escalate_at` equal to
+ * `waiting_since + the project's frozen window` (§4.1, X-E2). The latest progress fact (the answered
+ * delivery turn, a task linked as a fix, the linked task's work session, or an integration handling
+ * job) moves that deadline by one window. A generic conversation turn is not progress on this item.
+ * While a linked task is `IN_PROGRESS`, its task-work session is live, or a coordinator handling job
+ * is queued/running, the item has no deadline (`NULL`): H4's in-flight handling is still progress and
+ * cannot be handed to the owner mid-operation. Once that work ends, the latest recorded instant is
+ * used and the item can escalate after one quiet window.
  *
- * Moving is read from committed turn facts: `delivered_at`, written when `dequeueTurn` hands a turn
- * to an engine, and `answered_at`, when that turn completes. Only a turn an engine was actually
- * handed counts — ending or interrupting a conversation retires its queued turns in place as
- * ANSWERED, and a turn nobody ran is not the conversation moving — and only a `message` turn, since
- * a control turn (an interrupt, an end, a reload) is acked on delivery and is somebody else acting on
- * the conversation. Both columns are `timestamp`, written in UTC.
+ * Progress is read from committed facts: delivery answers, task/session timestamps, and handling
+ * job state. No turn, session, wake row, or delivery is written by the clock.
  */
 export function escalatesAt(alias: string): Prisma.Sql {
   const item = Prisma.raw(`"${alias}"`);
-  return Prisma.sql`GREATEST(${item}."escalate_at", (
-    SELECT max(COALESCE(turn."answered_at", turn."delivered_at") AT TIME ZONE 'UTC')
-           + (${item}."escalate_at" - ${item}."waiting_since")
-      FROM "project" proj
-      JOIN "session" coordinator ON coordinator."id" = proj."coordinator_session_id"
-      JOIN "project_open_item_delivery" delivery
-        ON delivery."session_id" = coordinator."id"
-       AND delivery."item_id" = ${item}."id"
-       AND delivery."purpose" = 'ITEM'
-       AND delivery."returned_at" IS NULL
-      JOIN "conversation_turn" turn
-        ON turn."session_id" = coordinator."id"
-       AND turn."kind" = 'message'
-       AND turn."delivered_at" IS NOT NULL
-       AND COALESCE(turn."answered_at", turn."delivered_at") AT TIME ZONE 'UTC' >= delivery."created_at"
-     WHERE proj."id" = ${item}."project_id"
-       AND proj."coordinator_enabled"
-       AND ${item}."assignee" = 'COORDINATOR'
-       -- The conversation can still take a turn: it has not ended (sessionHasEnded, in SQL), and
-       -- nobody has asked it to (the inbox hands no message to a conversation whose end is asked).
-       AND coordinator."deleted_at" IS NULL
-       AND coordinator."completed_at" IS NULL
-       AND coordinator."archived_at" IS NULL
-       AND coordinator."cancel_requested_at" IS NULL
-       AND (coordinator."status" IN ('PENDING', 'RUNNING', 'AWAITING_INPUT')
-            OR (coordinator."status" = 'INTERRUPTED' AND COALESCE(coordinator."end_reason", '') = ''))))`;
+  return Prisma.sql`CASE
+    -- A live concrete fix owns the clock. The item remains OPEN, but it is not handed to the owner
+    -- while the task/session or the coordinator's integration retry is still in flight.
+    WHEN EXISTS (
+      SELECT 1
+        FROM "task" fix
+       WHERE fix."fixes_open_item_id" = ${item}."id"
+         AND fix."status" = 'IN_PROGRESS'
+    )
+      OR EXISTS (
+        SELECT 1
+          FROM "task" fix
+          JOIN "session" work ON work."task_id" = fix."id"
+                             AND work."starts_task_work" = true
+         WHERE fix."fixes_open_item_id" = ${item}."id"
+           AND work."deleted_at" IS NULL
+           AND work."completed_at" IS NULL
+           AND work."archived_at" IS NULL
+           AND work."cancel_requested_at" IS NULL
+           AND work."status" IN (${Prisma.raw(PROJECT_LIVE_SESSION_STATUS_SQL)})
+           AND (work."status" <> 'INTERRUPTED' OR work."end_reason" IS NULL)
+      )
+      OR EXISTS (
+        SELECT 1
+          FROM "project_integration_job" handling
+         WHERE handling."id" = ${item}."handling_job_id"
+           AND handling."state" IN ('QUEUED', 'RUNNING')
+      )
+    THEN NULL
+    ELSE GREATEST(
+      ${item}."escalate_at",
+      COALESCE((
+        SELECT max(progress."at") + (${item}."escalate_at" - ${item}."waiting_since")
+          FROM (
+            -- Only the turn this item was delivered on counts. Generic chat turns are intentionally
+            -- absent: they are conversation activity, not progress on this exception.
+            SELECT turn."answered_at" AS "at"
+              FROM "project_open_item_delivery" delivery
+              JOIN "conversation_turn" turn
+                ON turn."session_id" = delivery."session_id"
+               AND turn."client_turn_id" = delivery."client_turn_id"
+             WHERE delivery."item_id" = ${item}."id"
+               AND delivery."purpose" = 'ITEM'
+               AND turn."kind" = 'message'
+               AND turn."answered_at" IS NOT NULL
+            UNION ALL
+            -- updated_at is the durable write instant for both filing a new fix and attaching an
+            -- existing task through task_update.
+            SELECT fix."updated_at" AS "at"
+              FROM "task" fix
+             WHERE fix."fixes_open_item_id" = ${item}."id"
+            UNION ALL
+            SELECT GREATEST(
+                     COALESCE(work."last_turn_at", work."created_at"),
+                     COALESCE(work."finished_at", work."completed_at", work."archived_at", work."deleted_at")
+                   ) AS "at"
+              FROM "task" fix
+              JOIN "session" work
+                ON work."task_id" = fix."id"
+               AND work."starts_task_work" = true
+             WHERE fix."fixes_open_item_id" = ${item}."id"
+            UNION ALL
+            SELECT ${item}."handling_started_at" AS "at"
+             WHERE ${item}."handling_started_at" IS NOT NULL
+            UNION ALL
+            SELECT handling."finished_at" AS "at"
+              FROM "project_integration_job" handling
+             WHERE handling."id" = ${item}."handling_job_id"
+               AND handling."finished_at" IS NOT NULL
+          ) progress
+      ), ${item}."escalate_at")
+    )
+  END`;
 }
 
 /**
  * The one clock this platform adds (`docs/project-integration-line-contract.md` §4.6 X-E1).
  *
  * WHAT IT IS FOR. An exception item has an assignee, and the project's coordinator conversation can
- * be one of them. A conversation that is not reading — because it is wedged, because nobody restarts
- * it, because the item never reached it — leaves the item waiting with no end, and the whole point of
- * the item was that somebody is expected to act on it. So an item nobody has carried for longer than
- * its project's window stops being the coordinator's and becomes the account owner's. Carried is
- * read off the conversation, not the item (`escalatesAt`): a coordinator that has the item and is
- * still taking turns is acting on it however long ago it was opened, and handing its work to the owner
- * at the two-hour mark only locked the conversation out of what it was doing (§4.7).
+   * be one of them. A concrete fix or handling job is evidence that somebody is acting on the item, so
+   * an in-flight operation keeps it with that actor. Once the operation ends, the item moves to the
+   * owner only after a full frozen window with no item-specific progress. Generic chat is intentionally
+   * not a clock reset (§4.7 H4).
  *
  * WHY A CLOCK IS ALLOWED HERE AND NOWHERE ELSE. Every other input in this system is routed on a
  * COMMITTED FACT — evidence revised, a receipt written, a turn ended — and elapsed time is not one:

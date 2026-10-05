@@ -1,63 +1,88 @@
 # Antigravity Google 登录：web 与 macOS/iOS 客户端证据
 
 任务 `34ZogkzPnQ44ODj72jrYb`，对应项目验收条目 2（`4q7GDYg6GzChkJE0bfhFGV`）。
-分支：`orbit/web-macos-ios-antigravity-google-683266`。
-控制面契约来自第 3 步提交 `7cd0d809be5052ef1eadd2738a2217403767eeb9`，已以 `8725dd57d` 落在项目线上。
+当前分支：`orbit/web-macos-ios-antigravity-google-db95c8`。
+控制面契约来自第 3 步提交 `7cd0d809be5052ef1eadd2738a2217403767eeb9`，已以 `8725dd57d` 落地。
 
-## 2026-10-04 集成冲突后的复验
+## 当前基线同步（generation 10 MAIN_SYNC，2026-10-05）
 
-上一轮分支 `orbit/web-macos-ios-antigravity-google-b47365` 在集成时被退回。本轮从项目当前 HEAD `b0eb14060` 建立新分支，只重放三个客户端提交（原 `bf28fc0d9`、`e212ac862`、`af6b0f652`，现 `5141039a9`、`597b5c1cf`、`91da7f22b`）。Git 自动合并无遗留冲突；项目控制面、Google 会话与网络探测修复全部保留在祖先历史中，两个曾冲突文件保留已验收的客户端实现。没有重新 rebase 包含上游提交的旧分支。
+按协调会话 05:36 的评论，本轮只做基线同步，不重做客户端功能：把项目分支 tip 与当前 upstream main tip 一起吸进本任务源分支。源不再是启动时的项目 tip，而是上一已验证源 `666e679646d632f1fec7f49c295820a562e5f5a6`（它已含项目 tip，并带着四个冲突文件的解法与 main 到 `a0a76a760` 的全部改动）。
 
-| 当前基线检查 | 本任务本轮 Orbit 后台工具行 | 结果 |
+- 上一已验证源：`666e679646d632f1fec7f49c295820a562e5f5a6`
+- 项目 ref `refs/heads/project/34ZoXvNg4WmQIi0AiwWmu` tip：`80e7ad8fd8ee581f5c2f66490f1966f487ad3fb6`
+- upstream `refs/heads/main` tip：`aaf077310ad296c0dfeb8cfdb6b76aa367cb2f08`
+- 本轮真实合并提交：`2daa7c065a663b429e20972b09e664f6faf8a5f8`，父为 `666e679646` 与 `aaf077310`；项目 tip 与 main tip 都是它的祖先。合并干净，只应用了 main 的 `OrbitLinkCardView.swift` 增量。
+
+冲突文件由上一源解好，本轮的合并只带来 main 的增量，因此没有新的文本冲突。冲突解法的取舍沿用上一源：`AccountPauseAPIClientTests.swift`、`CodexSignInCopyParityTests.swift` 与 `origin/main` 逐字一致（保留 main 的测试修复）；`RunnerEngines.tsx` 删掉 main 入口重做里的 `AntigravityRow` 与三处特判（不显示认证状态、忽略 `auth=no`、固定 API key 文案），改用统一引擎行 + Google 登录；`SessionProviderChoices.swift` 在 main 的 `claude / codex / antigravity / kimi` 顺序上加 Google 账号选择与失效登录判断。
+
+本轮新基线实际跑了：web 全量 `npm test -w @orbit/web`、apiserver 全量 `npm test -w @orbit/apiserver`（先 `npm run prisma:generate -w @orbit/apiserver`，4383 用例 0 失败，含 `a runner signed in with Google offers built-in Antigravity to every workspace without a key`）、OrbitKit 全量 `swift test`（含 `AntigravityGoogleClientTests` / `SessionProviderChoicesTests` / `EngineAuthTests` 共 125 条 0 失败）、`npm run build -w @orbit/web`、1280px / 443px 真实生产路由截图。上面这些工具行、HEAD 与 Orbit 附件回执以本任务会话提交的新证据信封为准。下方旧工具行及 main 既有失败对照仅保留作历史记录，不代替本次验证。
+
+### client CI（macOS + iOS）已在精确 HEAD 上真跑并全绿
+
+`client.yml` 由协调会话在 wikova 上对分支 `orbit/web-macos-ios-antigravity-google-db95c8` 的 HEAD `a3bde09398758f5257134b385c5c3abfd7106be2` 以 `workflow_dispatch` 触发：
+
+- run：<https://github.com/jianghailong-xy/orbit/actions/runs/37271149367>（run 2351，event `workflow_dispatch`，head_sha `a3bde0939`，conclusion **success**）
+- macOS (build + test)：**success** —— step `Test OrbitKit (macOS)` success、step `Build OrbitApp` success（都是 completed，不是 skipped）
+- iOS (generate + build)：**success** —— step `Build for iOS Simulator` success
+- Font tokens / Navigation：success
+
+**为什么本会话自己不能触发**：本 HPC 没有 `gh`，也没有任何 GitHub token / 凭据（已确认 `~/.config/gh`、`~/.netrc`、`~/.git-credentials`、环境变量都没有）。`client.yml` 的 `macos` 与 `ios` 两个 job 都带 `if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'`（`src/macos/**` 的普通 push 只会跑两个 Linux 审计、跳过两个 Xcode job），所以本机既不能 `workflow_dispatch`，也不能靠 push 触发这两个编译门。读结果同样没有 token，本会话是直接查 GitHub 的公开 API 拿到上面这份 job/step 回执的（证据工具行 `bgj_82b5016fcd5a`）。
+
+### 本轮工作树依赖修复（不是产品缺陷）
+
+第一次 `npm test -w @orbit/web` 报 121 个文件、28 条失败。原因是本 worktree 的 `node_modules/@base-ui` 与 `node_modules/@floating-ui` 是指向 `/tmp/orbit-p11-final-aa737ee0/node_modules/...` 的符号链接（另一个 checkout 的安装），Node 按 realpath 解析后 `@base-ui` 会加载 `/tmp` 里那份 `react`，与本 worktree 的 `react` 不是同一个实例，触发 `Cannot read properties of null (reading 'useRef')` 等运行环境错误。把这两个包换成 worktree 内的真实拷贝、并从同一安装补上 `reselect` 等缺失依赖后重跑，失败降到 1 条（即下方 main 既有红），与干净 main 逐条一致。这是取证环境问题，已在提交说明里注明。
+
+## 历史 main 上的冲突处理
+
+只重放客户端实现及取证文件，保留最新 main 的控制面和 runner 改动。
+
+- `SessionProviderChoices.swift` 保留 main 的 `claude / codex / antigravity / kimi` 顺序，加入 Google 账号选择、失效登录判断和 workspace Gemini key 回退。
+- `RunnerEngines.tsx` 保留 main 的账号菜单和布局；Antigravity 使用同一引擎行、额度组件和菜单，已登录后的换号入口位于 `More actions → Re-sign in`，交互测试实际提交粘贴的授权码。
+- `AccountPauseAPIClientTests.swift`、`CodexSignInCopyParityTests.swift` 及 `SharedPoolCopyParityTests.swift` 保留 main 的修复，与基线逐字一致。
+
+未登录的 Linux runner 提供 Google 登录及条款提示；已登录时显示 Google 账号、每周 / 5 小时剩余额度与重置时间。macOS 和旧 runner 显示限制，env key 路径保留。选择器、未登录错误卡和共享原生源码同步这些状态；未知认证不显示成已登录，缺 CLI 优先显示未安装。
+
+## 历史测试（分支 `orbit/web-macos-ios-antigravity-google-284433`）
+
+| 检查 | 本任务会话的 Orbit 后台工具行 | 结果 |
 | --- | --- | --- |
-| `npm test -w @orbit/web` | `bgj_9de97c4efb8e` | 退出码 0；294 文件、3615 用例通过；没有需要豁免的 web 失败 |
-| `npm run build -w @orbit/web` | `bgj_c29a11fe628a` | 退出码 0；TypeScript 与生产构建通过 |
-| Swift 6.1 Docker 中 OrbitKit `swift test --jobs 2` | `bgj_a20f7e913859` | 退出码 0；2780 用例、5 跳过、0 失败；6 个 Antigravity 用例实际执行并通过 |
-| 当前生产构建的 Chromium 截图 | `bgj_6a8e8e74e1aa` | 退出码 0；1280px / 443px 共 16 张；无浏览器异常或页面横向溢出 |
-| 原始截图总览 | `bgj_c2c2641db991` | 退出码 0；桌面与手机各一张，展示对应 8 个状态 |
+| Google 登录及 runner 账号菜单、选择器、错误卡回归 | `bgj_e9464c9b9eeb` | 退出码 0；13 文件、225 用例通过 |
+| `npm test -w @orbit/web` | `bgj_5802cb7b0efe` | 退出码 1；3646 通过、30 失败，296 文件 |
+| 干净 `bd688174c` 的 web 全量对照 | `bgj_8b4d04dacc81` | 退出码 1；3631 通过、同样 30 失败，295 文件 |
+| `npm run build -w @orbit/web` | `bgj_2e8b71a666e0` | 退出码 0；TypeScript 与生产构建通过 |
+| Swift 6.1 Docker 的 OrbitKit `swift test --jobs 2` | `bgj_9243e4215fcb` | 退出码 0；2823 用例、5 个默认跳过的性能基线、0 失败 |
+| 生产构建的 Chromium 截图及原图总览 | `bgj_26c36e0b5189` | 退出码 0；1280px / 443px 共 16 张原图和 2 张总览，无浏览器异常或页面横向溢出 |
+| 原图及总览的 Orbit 附件上传 | `bgj_c5073ed1f127` | 退出码 0；18 个附件均返回保存回执 |
 
-本轮对上述新分支重新 dispatch `client.yml`，须确认 macOS 的 `Test OrbitKit (macOS)`、`Build OrbitApp` 和 iOS 的 `Build for iOS Simulator` 真正运行并通过；新 HEAD 与 CI 链接由本轮证据信封记录。下方旧 CI 与工具行仅保留为上一轮历史。
+### main 既有的 web 失败（generation 10 基线）
 
-本次实现复用粘贴授权码中继，为支持的 Linux runner 提供 Google 登录/重新登录、条款链接、Google 账号标记、各额度桶的剩余百分比和重置时间。macOS runner 与旧 runner 显示对应限制；保留 env key 和配置 Gemini key 的路径。新建会话选择器与未登录错误卡使用同一状态；`auth=unknown` 不宣称已登录，`auth=no` 会阻止 Google 账号选择。
+本分支（`2daa7c065`，308 文件 / 3883 用例 / 1 失败）与干净 `origin/main` （`aaf077310`，307 文件 / 3868 用例 / 1 失败）用同一份依赖与同一 vitest 版本各跑一遍全量，唯一的失败是同一个用例，逐字一致；本分支没有新增失败，且多出 15 条通过用例。[web-main-comparison.json](web-main-comparison.json) 记录两次运行的工具行、用例数与失败断言。
 
-## 上一轮已记录的检查
+| 失败文件（`src/web/src/components/`） | 用例 | 在干净 main 上同样红 |
+| --- | ---: | --- |
+| `SessionReplyCard.test.tsx` | 1 | 是（`aaf077310` 上复现同一条断言 `chat-injected-action`） |
 
-| 检查 | Orbit 后台工具行 | 结果 |
-| --- | --- | --- |
-| `npm test -w @orbit/web` | `bgj_75709d9759c6` | 退出码 0；294 文件、3615 用例通过 |
-| `npm run build -w @orbit/web` | `bgj_b9b147a609a5` | 退出码 0；TypeScript 与生产构建通过 |
-| Swift 6.1 Docker 中 OrbitKit `swift test --jobs 2` | `bgj_ef99ff4e52d5` | 退出码 0；2779 用例、5 跳过、0 失败 |
-| Google 登录及受影响的 OrbitKit 测试组 | `bgj_f0e40ed45d6d` | 退出码 0；143 用例通过 |
-| 三个改动的 SwiftUI 文件 `swift -frontend -parse` | `bgj_62fbb3f12912` | 退出码 0；只证明语法，类型与平台编译须由 client CI 证明 |
-| 浏览器取证 `node docs/evidence/antigravity-google-login/clients/capture.mjs` | `bgj_a0e5a6a68d27` | 退出码 0；16 张截图，检查了浏览器异常与横向溢出 |
-| 原始截图总览 `node docs/evidence/antigravity-google-login/clients/contact-sheets.mjs` | `bgj_54121c744d84` | 退出码 0；两张总览 |
-| `AccountPauseAPIClientTests`（包含 body stream 回归） | `bgj_947cd2fb277e` | 退出码 0；4 用例、0 失败 |
+### OrbitKit 过时断言的复验
 
-上一轮客户端 CI：[37176765769](https://github.com/jianghailong-xy/orbit/actions/runs/37176765769)，HEAD `af6b0f65208ce35f6b012e9c4ac0c864e9c73ca2` 的 macOS OrbitKit 测试、OrbitApp 编译与 iOS Simulator 编译全部实际运行并通过。该结果不代替本轮新基线 CI。
+干净 main 上 `bgj_fa7d1b3bcc6f` 实际执行 1 个测试并复现 `OrbitLinkCopyParityTests.testTheStalledLineIsTheProjectsOwnSentence` 的唯一失败：项目页已经由 main 改为手动就绪提示，旧测试仍要求它携带 link card 的 stalled 文案。
+本分支仅将该测试改为检查 web / Swift link card 实际共用的文案，保留四个有效断言，未改项目页行为。最终 OrbitKit 全量无失败。
 
-首次 [client CI](https://github.com/jianghailong-xy/orbit/actions/runs/37176072114) 在 `e212ac8625e1efca08a4dc99eab020ccd084dc60` 上：iOS Simulator 真编译通过；macOS OrbitKit 编译通过，但既有 `AccountPauseAPIClientTests.testPausesTheNamedRunnerSlot` 直接解包 nil `httpBody` 崩溃，OrbitApp 编译被跳过。main 上该测试相同：macOS URLSession 将请求体移到 `httpBodyStream`，测试没有读取流。本分支让测试 stub 在收到请求时读取流、保留请求体，再断言 duration 和显式 null；增加流式请求回归测试。这只修复测试取证，不改客户端网络行为。需对修复后的 SHA 重跑 client CI。
+## macOS/iOS 同源数据证明与编译
 
-## 原生同源数据证明
+`AntigravityGoogleClientTests.swift` 的 9 个测试使用此目录 `fixtures.json`，与 web 测试和截图共用脱敏控制面数据。覆盖 Google 身份、weekly / 5h 剩余量（72% / 18%）及重置时间、零额度、未知 / 失效认证、Linux / macOS / 旧 runner 登录入口、选择器、两种 API key 路径、`awaiting_code` DTO、条款和共享 SwiftUI 接线。
+9 个测试在本轮最终全量中全部实际执行并通过，作为任务允许的 macOS/iOS 截图替代证据。本轮在合并 HEAD `2daa7c065` 上于 Swift 6.1 容器跑全量 `swift test`：2912 用例、5 个默认跳过的性能基线、0 失败；`--filter 'AntigravityGoogleClientTests|SessionProviderChoicesTests|EngineAuthTests'` 聚焦跑 125 条、0 失败。
 
-`AntigravityGoogleClientTests.swift` 的 6 个测试读取此目录 `fixtures.json`，与 web 测试、截图共用脱敏控制面数据。覆盖 Google 身份、weekly/5h 剩余量（72%/18%）与重置时间、零额度、未知/失效认证、Linux/macOS/旧 runner 登录入口、选择器、两种 API key 路径、`awaiting_code` DTO 和 SwiftUI 接线。macOS 与 iOS 共享这些 OrbitKit / OrbitApp 源码。该测试在最终全量中实际执行并通过；不以语法检查代替 SwiftUI 编译。
-
-## 既有失败的复验与同步
-
-干净 `origin/main`（`6e5ba7544bd3bcf64ae544f606ebef7a929370de`）上，后台工具行 `bgj_a5e75edc5d17` 复现两个测试的三处失败断言：
-
-- `CodexSignInCopyParityTests.testTheAccountsRowSaysWhatTheWebRowSays`：旧 NEXT 标记断言漏掉 main 已有的暂停账号过滤。
-- `SharedPoolCopyParityTests.testThePickerAndTheComposerDrawASharedPoolAsTheWebDoes`：旧 `next: login.next` / `next: key.next` 断言漏掉 main 已有的暂停过滤。
-
-为让本分支完整 `swift test` 和 client CI 通过，仅同步上述三处文案/接线断言，不改账号池产品行为。最终全量已无失败。web 全量没有需要豁免的失败。
+HPC 没有 `gh`，也没有 token。协调会话已在分支 `orbit/web-macos-ios-antigravity-google-db95c8` 的 HEAD `a3bde0939` 上以 `workflow_dispatch` 触发 `client.yml`：[run 37271149367](https://github.com/jianghailong-xy/orbit/actions/runs/37271149367)，conclusion **success**，macOS `Test OrbitKit (macOS)`、`Build OrbitApp` 与 iOS `Build for iOS Simulator` 三个 step 都实际执行成功（非 skipped）。job / step 回执见上一节与本次证据信封；历史分支的 CI 不作为本轮编译证据。
 
 ## 浏览器截图
 
-截图在真实生产路由 `/providers`、`/workspaces/:id/new`、`/sessions/:id` 上通过 Chromium 取证，viewport 分别为 1280px 与 443px，device scale 为 1。仅 REST/SSE 输入为合成脱敏 fixture；不是实际 Google 账号认证证据。每种宽度包括：未登录及条款、已登录及额度/重置、macOS 暂不支持、需要升级、env key、未知认证、展开的选择器、未登录错误卡。`capture-results.json` 保存每张截图的 viewport 和可见文本。
+真实生产路由 `/providers`、`/workspaces/:id/new`、`/sessions/:id` 通过 Chromium 取证，viewport 分别为 1280px 和 443px，device scale 为 1。仅 REST/SSE 输入为合成脱敏 fixture。每种宽度包含：未登录及条款、Google 账号及额度 / 重置、macOS 暂不支持、需要升级、env key、未知认证、展开的选择器、未登录错误卡。
+`capture-results.json` 保存每张原图的 viewport 和可见文本；取证脚本同时核对登录按钮、条款链接、两条重置时间、Google 账号选择器与不支持平台的无登录入口。
 
 ![1280px 桌面总览](screenshots/1280-overview.png)
 
 ![443px 手机总览](screenshots/443-overview.png)
 
-总览按原尺寸排列 16 张原始截图，原图全部保留在 `screenshots/`。重跑取证需要已安装 Playwright/Chromium、共享包已构建，以及 `npm run dev -w @orbit/web -- --host 127.0.0.1 --port 4178 --strictPort`。
+总览按原尺寸排列原图，全部原图保留在 `screenshots/` 并已上传 Orbit。复跑需安装 Playwright / Chromium，先构建 shared 和 web，再启动 `npm run preview -w @orbit/web -- --host 127.0.0.1 --port 4184 --strictPort`，运行 `ORBIT_EVIDENCE_WEB_URL=http://127.0.0.1:4184 node docs/evidence/antigravity-google-login/clients/capture.mjs` 和 `contact-sheets.mjs`。
 
-真实 Google 账号授权、实时额度和推送通知的端到端验证属于项目第 5 步，本证据没有宣称它们已经执行。
+真实 Google 账号授权、实时额度和推送通知的端到端验证由项目第 5 步持有；本客户端证据没有宣称这些实验已经执行。
