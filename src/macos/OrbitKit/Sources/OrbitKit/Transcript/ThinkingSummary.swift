@@ -15,17 +15,13 @@ import Foundation
 /// pure function of the stream and a reload of a persisted transcript reports the same number.
 public enum ThinkingSummary {
     /// The runner stamps `2026-09-15T17:51:52.123Z`; a formatter without `.withFractionalSeconds`
-    /// returns nil for exactly that shape, so both are tried.
-    private static let isoFractional: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f
-    }()
-    private static let isoWhole = ISO8601DateFormatter()
-
+    /// returns nil for exactly that shape, so both are tried — which is what `RelativeTime.parse`
+    /// does, with the same two option sets (`.withInternetDateTime` is `ISO8601DateFormatter`'s
+    /// default). It is asked rather than repeated because it keeps what it parsed: the transcript
+    /// reads the same rows' clocks on every update (`ReceiptAnchor.Clocks`), an ICU parse each.
     public static func date(_ stamp: String?) -> Date? {
         guard let stamp else { return nil }
-        return isoFractional.date(from: stamp) ?? isoWhole.date(from: stamp)
+        return RelativeTime.parse(stamp)
     }
 
     /// Seconds between two stamps. Nil when either is missing or unparseable, or when they do not

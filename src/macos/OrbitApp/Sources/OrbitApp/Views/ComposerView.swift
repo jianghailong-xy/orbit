@@ -612,8 +612,8 @@ struct ComposerView: View {
                         // "Orbit lost my provider". The running one is exempt — it is the row's
                         // own caption, and a parenthetical there would sit under every turn.
                         let blocked = choice.unavailable != nil && choice.slug != console.provider
-                        // Each built-in engine's accounts under it, as the new-session picker lists
-                        // them (web parity): on the engine the session is on, the ones it moves
+                        // Each built-in engine's accounts under it (web parity): on the engine the
+                        // session (or draft) is on, the ones it moves
                         // between; under another, the ones a switch onto that engine lands on.
                         let here = choice.slug == console.accountEngine
                         let elsewhere = here || blocked ? [] : console.accountChoices(for: choice.slug)

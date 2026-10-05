@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunnerStatus } from '@orbit/shared';
 import { RunnersService } from '../runners/runners.service';
+import { CLAUDE_ACCOUNT_REMOVE_V1 } from '../runner-api/runner-api.controller';
 import { RealtimeService } from './realtime.service';
 
 /**
@@ -83,4 +84,27 @@ test('starting a sign-in, pasting its code and stopping an Antigravity one each 
   // Cancelling a Claude sign-in hands the runner nothing, so there is nothing to wake it for.
   await runners.cancelLogin('owner-1', RUNNER);
   assert.deepEqual(woken, [RUNNER, RUNNER]);
+});
+
+test('asking to remove an account wakes the runner, so the account goes now rather than at the next tick', async () => {
+  let row: Record<string, unknown> = {
+    id: RUNNER,
+    ownerId: 'owner-1',
+    status: RunnerStatus.ONLINE,
+    capabilities: [CLAUDE_ACCOUNT_REMOVE_V1],
+    capabilitiesReportedAt: new Date(),
+  };
+  const prisma = {
+    runner: {
+      findFirst: async () => row,
+      update: async ({ data }: { data: Record<string, unknown> }) => (row = { ...row, ...data }),
+    },
+  };
+  const woken: string[] = [];
+  const realtime = { notifyRunnerWake: (id: string) => woken.push(id) };
+  const runners = new RunnersService(prisma as never, realtime as never);
+
+  const state = await runners.removeAccount('owner-1', RUNNER, 'claude', 'a1b2c3d4');
+  assert.equal(state.status, 'pending');
+  assert.deepEqual(woken, [RUNNER]);
 });

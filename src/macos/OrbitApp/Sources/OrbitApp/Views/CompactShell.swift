@@ -507,7 +507,6 @@ private struct NavBarLeadingMargin: UIViewRepresentable {
     }
 
     func updateUIView(_ view: UIView, context: Context) {
-        Self.restore(from: view)
         context.coordinator.track()
     }
 
@@ -524,10 +523,18 @@ private struct NavBarLeadingMargin: UIViewRepresentable {
         private var link: CADisplayLink?
         private var observer: CFRunLoopObserver?
         private var deadline = Date.distantPast
+        /// The bars the last walk of the window found, held weakly. Walking the whole window — the
+        /// session list's hundreds of rows included — on every tick of the slide cost ~220ms of main
+        /// thread per open/close, so it is walked once per `track()` and again only when a cached bar
+        /// has left the window (or gone); `nil` means not looked up yet.
+        private var bars: [Weak]?
+
+        struct Weak { weak var bar: UINavigationBar? }
 
         func track() {
             deadline = Date().addingTimeInterval(NavBarLeadingMargin.trackingWindow)
-            NavBarLeadingMargin.restore(from: view)
+            bars = nil
+            restore()
             guard link == nil else { return }
             let link = CADisplayLink(target: self, selector: #selector(tick))
             link.add(to: .main, forMode: .common)
@@ -550,13 +557,20 @@ private struct NavBarLeadingMargin: UIViewRepresentable {
                 }
                 return
             }
-            if let view { NavBarLeadingMargin.restore(from: view) }
+            restore()
+        }
+
+        private func restore() {
+            guard let window = view?.window else { return }
+            if bars == nil || bars!.contains(where: { $0.bar?.window !== window }) {
+                bars = window.orbitNavigationBars.map(Weak.init)
+            }
+            NavBarLeadingMargin.restore(bars!.compactMap(\.bar), in: window)
         }
     }
 
-    private static func restore(from view: UIView?) {
-        guard let window = view?.window else { return }
-        for bar in window.orbitNavigationBars {
+    private static func restore(_ bars: [UINavigationBar], in window: UIWindow) {
+        for bar in bars {
             let offLeadingEdge = bar.convert(bar.bounds, to: window).minX != 0
             guard offLeadingEdge, bar.directionalLayoutMargins.leading == 0 else { continue }
             bar.directionalLayoutMargins.leading = leading

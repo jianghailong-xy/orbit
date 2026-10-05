@@ -538,8 +538,8 @@ export class RunnersService {
 
   /**
    * Ask this runner to remove one account slot of `engine`: the slot's own directory with everything
-   * the CLI keeps in it — a CODEX_HOME, a CLAUDE_CONFIG_DIR — and the record beside it. The next
-   * heartbeat picks it up and the runner reports what happened.
+   * the CLI keeps in it — a CODEX_HOME, a CLAUDE_CONFIG_DIR — and the record beside it. The runner
+   * is woken to heartbeat at once, picks it up there and reports what happened.
    *
    * `default` is refused here rather than on the runner: it is the directory the machine's own
    * environment selects, and the one the CLI typed in a terminal shares, so there is nothing to
@@ -587,6 +587,8 @@ export class RunnersService {
         codexAccountRemoveAt: new Date(),
       },
     });
+    // Delivered on the runner's next heartbeat; have that be now, as for a sign-in.
+    this.realtime?.notifyRunnerWake(id);
     return accountRemoveStateOf(r);
   }
 

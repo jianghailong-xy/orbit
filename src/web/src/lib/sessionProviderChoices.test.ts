@@ -3,6 +3,8 @@ import {
   brandForProvider,
   currentProviderChoice,
   defaultModelLabel,
+  engineChoices,
+  engineProviderDetail,
   providerChoices,
   runtimeSummary,
   sameRuntimeChoices,
@@ -735,5 +737,43 @@ describe('runtimeSummary', () => {
     expect(runtimeSummary('kimi')).toBe('Runs on the Kimi CLI');
     expect(runtimeSummary('codex')).toBe('OpenAI-compatible');
     expect(runtimeSummary('claude')).toBe('Anthropic-compatible');
+  });
+});
+
+describe('engineChoices', () => {
+  const configured = [deepseek, moonshot, gemini];
+  const all = providerChoices(configured, catalog, undefined, undefined, [], undefined, undefined, true);
+
+  it('lists each engine once, its keys folded into the engine that runs them', () => {
+    expect(engineChoices(all, configured).map((engine) => engine.slug)).toEqual(['claude', 'codex', 'antigravity', 'kimi']);
+  });
+
+  it("lands on the engine's own sign-in, unless a preferred provider of it can run", () => {
+    const landing = (preferred: string[]) =>
+      engineChoices(all, configured, preferred).map((engine) => engine.provider.slug);
+    expect(landing([])).toEqual(['claude', 'codex', 'antigravity', 'kimi']);
+    // The draft's pick first, then what the workspace last ran: each only where it runs.
+    expect(landing(['deepseek', 'moonshot'])).toEqual(['deepseek', 'codex', 'antigravity', 'moonshot']);
+  });
+
+  it('skips a preferred provider that cannot run, and a signed-out engine, for one that can', () => {
+    const choices = providerChoices(configured, catalog, undefined, [{ engine: 'claude', installed: true, auth: 'no' }]);
+    const claude = engineChoices(choices, configured, [])[0];
+    expect(claude.provider.slug).toBe('deepseek');
+    expect(claude.unavailable).toBeUndefined();
+  });
+
+  it('carries the reason when no provider of the engine can run', () => {
+    const choices = providerChoices(configured, catalog, undefined, [{ engine: 'kimi', installed: false, auth: 'unknown' }]);
+    const kimi = engineChoices(choices, configured, ['moonshot']).find((engine) => engine.slug === 'kimi')!;
+    expect(kimi.provider.slug).toBe('kimi');
+    expect(kimi.unavailable).toBe('Not installed');
+    expect(kimi.provider.fixEngine).toBe('kimi');
+  });
+
+  it('says "via" the provider only when it is not the engine itself', () => {
+    const [claude] = engineChoices(all, configured, ['deepseek']);
+    expect(engineProviderDetail(claude)).toBe('via DeepSeek');
+    expect(engineProviderDetail(engineChoices(all, configured)[0])).toBeUndefined();
   });
 });

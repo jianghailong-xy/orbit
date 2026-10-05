@@ -2,7 +2,7 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode 
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Dropdown, Popconfirm, Tag, type MenuProps } from 'antd';
-import { DeleteOutlined, DownloadOutlined, EditOutlined, EllipsisOutlined, LoginOutlined, PauseOutlined, PlayCircleOutlined, PlusOutlined, WarningOutlined } from '@ant-design/icons';
+import { DeleteOutlined, DownloadOutlined, EditOutlined, EllipsisOutlined, LoadingOutlined, LoginOutlined, PauseOutlined, PlayCircleOutlined, PlusOutlined, WarningOutlined } from '@ant-design/icons';
 import {
   accountToStartOn,
   type InstallEngine,
@@ -170,6 +170,14 @@ function duplicateAccounts(
  */
 export function tildePath(path: string): string {
   return path.replace(/^(?:\/root|\/home\/[^/]+|\/Users\/[^/]+)(?=\/|$)/, '~');
+}
+
+/** Whether this account is on its way out: asked to be removed, and still listed until the re-probe
+ *  that follows the machine's "done" drops it, a beat later. */
+function beingRemoved(runner: Runner, engine: LoginEngine, account: string): boolean {
+  const removal = runner.accountRemove;
+  return removal?.engine === engine && removal.account === account &&
+    (removal.status === 'pending' || removal.status === 'done');
 }
 
 /** The accounts a Codex row lists under itself: every one, once there is more than one — and only
@@ -364,8 +372,10 @@ function EngineRow({
   // More than one Codex account: this row heads their group, and each account is a row of its own
   // below it (AccountRow), with its own state.
   const grouped = accounts.length > 0;
-  // What the head says for its group: how many of its accounts could take a session now.
-  const ready = accounts.filter((account) => {
+  // What the head says for its group: how many of its accounts could take a session now, out of
+  // those staying — one being removed is counted as gone already.
+  const kept = accounts.filter((account) => !beingRemoved(runner, engine, account.id));
+  const ready = kept.filter((account) => {
     const own = accountKindOf(account);
     return !accountIsPaused(account.pausedUntil, now) && available(own, quotaOf(own, accountPlanUsage(runner.planUsage, engine, account.id), !!runner.online, now));
   }).length;
@@ -440,7 +450,7 @@ function EngineRow({
               <>
                 {versionOf(engine, health)} ·{' '}
                 <b>
-                  {ready} of {accounts.length} accounts available
+                  {ready} of {kept.length} accounts available
                 </b>
               </>
             ) : (
@@ -724,7 +734,7 @@ function AccountRow({
   // button says it is under way, and a machine that refused says why.
   const removal = runner.accountRemove;
   const mine = removal?.engine === engine && removal.account === account.id ? removal : null;
-  const removing = mine?.status === 'pending';
+  const removing = beingRemoved(runner, engine, account.id);
   const refused = mine?.status === 'failed' ? mine.message : null;
   const remove = useMutation({
     mutationFn: () =>
@@ -780,7 +790,7 @@ function AccountRow({
   );
 
   return (
-    <div className={`re-row re-acct${lastOfGroup ? ' re-acct-end' : ''}${accountIsPaused(account.pausedUntil, now) ? ' account-paused' : ''}`}>
+    <div className={`re-row re-acct${lastOfGroup ? ' re-acct-end' : ''}${accountIsPaused(account.pausedUntil, now) ? ' account-paused' : ''}${removing ? ' account-removing' : ''}`}>
       <div className="re-id">
         <span className="re-rail" aria-hidden="true" />
         <div className="re-id-main" style={{ minWidth: 0 }}>
@@ -793,11 +803,17 @@ function AccountRow({
           </div>
         </div>
       </div>
-      <AccountPauseStatus until={account.pausedUntil} now={now} detail={kind === 'in' ? 'Signed in' : undefined} status={statusOf(kind, quota, now)} />
+      {removing ? (
+        <div className="re-status">
+          <Tag color="processing" icon={<LoadingOutlined />}>Removing…</Tag>
+        </div>
+      ) : (
+        <AccountPauseStatus until={account.pausedUntil} now={now} detail={kind === 'in' ? 'Signed in' : undefined} status={statusOf(kind, quota, now)} />
+      )}
       <QuotaCell kind={kind} quota={quota} />
       <div className="re-act">
         {kind !== 'in' && (
-          <Button size="small" className="re-action" type={runner.online ? 'primary' : 'default'} disabled={!runner.online} onClick={toggle}>
+          <Button size="small" className="re-action" type={runner.online ? 'primary' : 'default'} disabled={!runner.online || removing} onClick={toggle}>
             Sign in
           </Button>
         )}
@@ -1144,7 +1160,12 @@ export function RunnerEngines() {
           // Same for an account removal: the machine answers on its next check-in, and the page
           // has to be there to take the answer — a refusal is news the person who pressed it has
           // to see, and the row it is about leaves once the probe catches up.
-          r.accountRemove?.status === 'pending',
+          r.accountRemove?.status === 'pending' ||
+          // ...and a removal the machine reported done before the beat carrying its re-probe: the
+          // row stays until the runner stops reporting the account.
+          (r.accountRemove?.status === 'done' && !!r.online &&
+            !!r.engines?.some((e) => e.engine === r.accountRemove?.engine &&
+              e.accounts?.some((a) => a.id === r.accountRemove?.account))),
       )
         ? 4000
         : false,

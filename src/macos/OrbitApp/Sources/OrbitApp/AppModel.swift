@@ -29,7 +29,8 @@ struct ToastRequest: Equatable {
 final class AppModel {
     // auth / instance
     var signedIn = false
-    var instanceField = "orbitd.io"
+    static let defaultInstance = "orbitd.io"
+    var instanceField = AppModel.defaultInstance
     var email = ""
     var password = ""
     var errorText: String?
@@ -392,8 +393,21 @@ final class AppModel {
     private var libraryRefreshQueue = CoalescedRefreshQueue<LibraryTarget, String>()
     private var libraryRefreshTask: Task<Void, Never>?
     private var libraryRefreshGeneration = 0
+    /// `loadSessions`'s single flight: the fetch on the wire, whether a call is waiting for one more,
+    /// and how the last one went. The generation retires a flight across an instance switch.
+    private var sessionsLoadTask: Task<Void, Never>?
+    private var sessionsLoadPending = false
+    private var sessionsLoadSucceeded = false
+    private var sessionsLoadGeneration = 0
+    /// How a poll reads the Open list: the delta against the last list fetched where the server has
+    /// it, else the tagged full read that comes back as an empty 304 when nothing changed. Told
+    /// whenever `sessions` is written any other way (an event folded in), so an "unchanged" answer
+    /// only ever vouches for the list it describes. One per instance and sign-in.
+    private var openListReader: OpenListReader?
 
     private static let instanceKey = "orbit.instance"
+    /// The email of the last successful sign-in, prefilled on the login page.
+    private static let emailKey = "orbit.email"
     /// Remembers the last agent you selected so a cold launch lands there instead of always the
     /// first agent in the list. Read in `loadAgentsThenLand`, written by `selectedAgentID`'s didSet.
     private static let lastAgentKey = "orbit.lastAgent"
@@ -405,6 +419,7 @@ final class AppModel {
         tokenStore = InMemoryTokenStore()
         #endif
 
+        email = UserDefaults.standard.string(forKey: Self.emailKey) ?? ""
         // Restore the last instance; if its token is still in the Keychain, skip the login screen —
         // and draw the first frame from what the last run left rather than from nothing.
         if let saved = UserDefaults.standard.string(forKey: Self.instanceKey),
@@ -455,11 +470,16 @@ final class AppModel {
         libraryRefreshTask?.cancel()
         libraryRefreshTask = nil
         libraryRefreshQueue = CoalescedRefreshQueue()
+        sessionsLoadGeneration &+= 1
+        sessionsLoadTask?.cancel()
+        sessionsLoadTask = nil
+        sessionsLoadPending = false
         apiGeneration &+= 1
         sessionDetails.removeAll()
         baseURL = url
         let client = APIClient(baseURL: url, tokenStore: tokenStore)
         api = client
+        openListReader = OpenListReader(api: client)
         // One link-preview store for the app, with an age on its answers: a screen that stays open
         // asks for its cards again as it redraws, and only what has gone stale costs a request.
         linkCards = OrbitLinkCards(baseURL: url,
@@ -473,7 +493,12 @@ final class AppModel {
         tasksModel.setSectionActive(selectedSection == .tasks)
         tasksModel.setSelectedDetailID(selectedTaskID)
         tasks = tasksModel
-        agents = AgentsModel(baseURL: url, tokenStore: tokenStore)
+        let agentsModel = AgentsModel(baseURL: url, tokenStore: tokenStore)
+        agentsModel.refreshOpen = { [weak self] in
+            guard let self, await self.loadSessions() else { return nil }
+            return self.sessions
+        }
+        agents = agentsModel
         runners = RunnersModel(baseURL: url, tokenStore: tokenStore)
         admin = AdminModel(baseURL: url, tokenStore: tokenStore)
         sharedLinks = SharedLinksModel(baseURL: url, tokenStore: tokenStore)
@@ -681,12 +706,14 @@ final class AppModel {
             return
         }
         configure(url)
-        UserDefaults.standard.set(instanceField, forKey: Self.instanceKey)
 
         busy = true
         defer { busy = false }
         do {
             _ = try await api!.login(email: email, password: password)
+            // Remember only what signed in, so a mistyped server or email never sticks.
+            UserDefaults.standard.set(instanceField, forKey: Self.instanceKey)
+            UserDefaults.standard.set(email, forKey: Self.emailKey)
             user = try? await api!.me()
             password = ""
             signedIn = true
@@ -716,6 +743,11 @@ final class AppModel {
         libraryRefreshTask?.cancel()
         libraryRefreshTask = nil
         libraryRefreshQueue = CoalescedRefreshQueue()
+        sessionsLoadGeneration &+= 1
+        sessionsLoadTask?.cancel()
+        sessionsLoadTask = nil
+        sessionsLoadPending = false
+        openListReader = api.map { OpenListReader(api: $0) }
         controlPlaneLive = false
         consoleRegistry?.reset()   // persist open transcripts, drop the warm cache
         // The account's lists leave with it: the next launch here may be someone else's.
@@ -1336,17 +1368,48 @@ final class AppModel {
         notifications.focusedSessionID = id
     }
 
-    func loadSessions() async {
-        guard let api else { return }
+    /// Refresh the Open list, one fetch at a time. A call while one is on the wire doesn't start a
+    /// second beside it — the Open list is the app's largest response, and launch alone asks for it
+    /// from the poll, the stream connecting and the list appearing. It asks for one more fetch after
+    /// that one instead, since the one in flight may have left before whatever the caller refreshes
+    /// for (the stream connecting, an event), and every call meanwhile shares it. Each call returns
+    /// once a fetch that started after it has finished: true when that fetch adopted a list.
+    @discardableResult
+    func loadSessions() async -> Bool {
+        sessionsLoadPending = true
+        if sessionsLoadTask == nil {
+            let generation = sessionsLoadGeneration
+            sessionsLoadTask = Task { @MainActor [weak self] in
+                while let self, self.sessionsLoadGeneration == generation, self.sessionsLoadPending {
+                    self.sessionsLoadPending = false
+                    self.sessionsLoadSucceeded = await self.fetchOpenSessions()
+                }
+                if let self, self.sessionsLoadGeneration == generation { self.sessionsLoadTask = nil }
+            }
+        }
+        await sessionsLoadTask?.value
+        return sessionsLoadSucceeded
+    }
+
+    private func fetchOpenSessions() async -> Bool {
+        guard let reader = openListReader else { return false }
         do {
-            let list = try await api.listSessions(view: .open)
+            guard case .list(let list) = try await reader.read() else {
+                // Unchanged: `sessions` is still the list the server has, so there is nothing to
+                // adopt or announce. The review-due timer re-arms against it, as an adopted snapshot does.
+                scheduleReviewDueRefresh(sessions)
+                return true
+            }
             openListFromLaunchSnapshot = false
             applySessionSnapshot(list)
+            reader.adopted()
+            return true
         } catch APIError.unauthorized {
             logout()
         } catch {
             // Transient — keep the last good list.
         }
+        return false
     }
 
     /// Adopt a new Open snapshot: the ONE place the list and everything derived from it are written,
@@ -1357,6 +1420,7 @@ final class AppModel {
     /// `notify: false` is for a snapshot whose transitions the caller already accounted for (a local
     /// purge), where the diff would otherwise post a bogus "finished" alert.
     private func applySessionSnapshot(_ list: [Session], notify: Bool = true) {
+        openListReader?.invalidate()   // see `openListReader`; a fetch marks it adopted once this is done
         // Notify on snapshot-to-snapshot transitions (skip the first load, which only primes). Skip
         // the session whose console is on screen — its own stream already shows the change.
         if notify, let prev = lastSnapshot {

@@ -16260,63 +16260,6 @@ button.chat-jump-start:hover {
   color: var(--text-3);
   font-size: 12px;
 }
-/* An account pool: its vendor's mark, with how many accounts it holds in the corner. */
-.np-mark-wrap {
-  position: relative;
-  flex: none;
-  display: inline-flex;
-}
-.np-pool-badge {
-  position: absolute;
-  top: -4px;
-  right: -5px;
-  min-width: 1.6em;
-  padding: 0 0.35em;
-  border-radius: 999px;
-  border: 1.5px solid var(--bg-raised);
-  background: var(--text-1);
-  color: var(--bg-raised);
-  font-weight: 700;
-  line-height: 1.45;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-/* "Pin a specific account": the accounts a pool runs on, one click further away than the pool. */
-.np-pin-toggle {
-  color: var(--text-3);
-}
-.np-pin-chev {
-  display: inline-block;
-  width: 20px;
-  text-align: center;
-  font-size: 10px;
-  transition: transform 0.15s;
-}
-.np-pin-chev.open {
-  transform: rotate(90deg);
-}
-.np-pinned {
-  padding-left: 14px;
-}
-/* An engine's own accounts on this runner, under its row: which one this session spends. The tick
-   takes the mark's column, so the account names line up with the engine's. */
-.np-account-tick {
-  flex: none;
-  width: 20px;
-  text-align: center;
-  font-size: 11px;
-  color: var(--brand);
-}
-.np-account.picked {
-  color: var(--text-1);
-}
-.np-account .np-row-model.near-limit {
-  color: var(--warning);
-}
-/* Account names are often emails, so the list makes room for one beside its quota. */
-.np-list.with-accounts {
-  width: 280px;
-}
 .np-list.with-details {
   width: 360px;
   max-width: calc(100vw - 32px);
@@ -20782,6 +20725,53 @@ button.project-open-item-action:disabled {
   .wk-layout .wk-cols { grid-template-columns: minmax(0, 1fr); }
 }
 
+/* ── the desktop Wiki fills the main region (mock 29) ──────────────────────────────────────────
+   Every Wiki page drops the 1040px cap: the head, the search and the status row run the whole width,
+   and the directory sticks beside the page and scrolls on its own, so its length no longer sets the
+   page's height. A reading page (a document, an article, Browse, the A–Z index, the plan) keeps a
+   reading width and stands centred in the room right of the directory; Review keeps its own 1040px,
+   centred. The home is a dashboard, not an article, and takes the whole width. Its cards re-flow by the main column's own width: once it
+   has room, the two columns open into one grid — Review and Plan side by side on top, Principles,
+   Recent decisions and Recently changed across under them, Agents used the wiki as the right rail
+   from top to bottom; wider still, the decisions and the changes sit side by side. The DOM keeps its
+   two columns (the phone's order and iOS's are read from it): `display: contents` lets the grid
+   place their cards. */
+@media (min-width: 961px) {
+  .wk-page { max-width: none; }
+  .wk-page--reading > .wk-layout > .wk-main > * { max-width: 880px; margin-inline: auto; }
+  .wk-layout > .wk-dir-col { position: sticky; top: 0; max-height: calc(var(--app-vh, 100vh) - 48px); overflow-y: auto;
+                             overscroll-behavior: contain; margin-left: -8px; scrollbar-width: thin; }
+  .wk-layout > .wk-dir-col > .wk-toc { margin-left: 0; }
+  .wk-layout.home > .wk-main { container: wk-home / inline-size; }
+  @container wk-home (min-width: 760px) {
+    .wk-layout .wk-cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) clamp(290px, 26%, 380px);
+                          grid-template-rows: auto auto auto auto 1fr; gap: 16px; }
+    .wk-cols > .wk-col { display: contents; }
+    .wk-cols .wk-card { grid-column: 1 / span 2; }
+    .wk-cols .wk-review-card { grid-column: 1; grid-row: 1; align-self: stretch; border-color: var(--warning-border);
+                               background: color-mix(in srgb, var(--warning-bg) 45%, var(--bg-raised)); }
+    .wk-cols .wk-plan-card { grid-column: 2; grid-row: 1; align-self: stretch; }
+    .wk-cols:not(:has(.wk-plan-card)) .wk-review-card { grid-column: 1 / span 2; }
+    /* Agents used the wiki: the right column's last card. */
+    .wk-cols > .wk-col:last-child > .wk-card:last-child { grid-column: 3; grid-row: 1 / -1; }
+    /* Recently changed: a run per line — who, what it applied, its links, when. */
+    .wk-cols .wk-tl li.wk-tl-run { padding: 9px 0; border-top: 1px solid var(--border-subtle); }
+    .wk-cols .wk-tl li.wk-tl-run:first-child { border-top: 0; }
+    .wk-cols .wk-tl li.wk-tl-run::before { display: none; }
+    .wk-tl-run > div { display: grid; grid-template-columns: max-content minmax(0, 1fr) auto auto; align-items: baseline; column-gap: 16px; }
+    .wk-tl-run .wk-tl-h { display: contents; }
+    .wk-tl-run .wk-tl-h b { grid-column: 1; grid-row: 1; }
+    .wk-tl-run .wk-tl-h .when { grid-column: 4; grid-row: 1; margin: 0; }
+    .wk-tl-run .wk-tl-t, .wk-tl-run .wk-tl-n { grid-column: 2; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .wk-tl-run .wk-tl-t { grid-row: 1; }
+    .wk-tl-run .wk-tl-acts { grid-column: 3; grid-row: 1; margin: 0; white-space: nowrap; }
+  }
+  @container wk-home (min-width: 1400px) {
+    /* Recent decisions (the main column's second card) beside Recently changed (the right column's last but one). */
+    .wk-cols > .wk-col:first-child > .wk-card:nth-child(2), .wk-cols > .wk-col:last-child > .wk-card:nth-last-child(2) { grid-column: auto; grid-row: 3; }
+  }
+}
+
 /* ── narrower than the app's desktop layout (960px, `MOBILE_QUERY`): the phone mocks 12, 14, 16 ────
    One column in the phone's order: the head, the status line, the search, then the Review bar,
    Principles, Recent decisions, Recently changed and Agents used the wiki — the right rail's Review
@@ -21420,6 +21410,11 @@ button.agent-progress-agent:hover {
 /* Timed pauses keep identity and quota visible while showing when the account returns. */
 .re-row.account-paused {
   background: color-mix(in srgb, var(--warning, #d89614) 7%, transparent);
+}
+/* An account on its way out: the row stays readable but steps back until the runner drops it. */
+.re-row.account-removing .re-id,
+.re-row.account-removing .re-quota {
+  opacity: 0.45;
 }
 .account-pause-remaining {
   margin-top: 4px;

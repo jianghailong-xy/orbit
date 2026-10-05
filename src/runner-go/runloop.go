@@ -1550,9 +1550,12 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					if err := removeAccount(kind, claudeUsage, codexUsage, rr.Account, kind.liveDirs(pool.sessionIDs())); err != nil {
 						res.Status, res.Message = "failed", firstLine(err.Error())
 					} else {
-						// Re-probe the engines as well, so the account leaves the page's list on the
-						// next beat rather than in five minutes.
-						go engineHealth.refresh()
+						// Re-probe this engine and beat at once, so the account leaves the page's list
+						// now rather than a heartbeat — or five minutes — later.
+						go func() {
+							engineHealth.refreshEngine(kind.engine)
+							beatNow()
+						}()
 					}
 					if err := t.accountRemoveResult(res); err != nil {
 						logln("account-remove-result POST failed:", err)
@@ -1563,7 +1566,10 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				if err := removeAccount(codexAccountKind, claudeUsage, codexUsage, rr.Account, codexSessionAccountHomes(pool.sessionIDs())); err != nil {
 					res.Status, res.Message = "failed", firstLine(err.Error())
 				} else {
-					go engineHealth.refresh()
+					go func() {
+						engineHealth.refreshEngine(providerCodex)
+						beatNow()
+					}()
 				}
 				if err := t.codexAccountRemoveResult(res); err != nil {
 					logln("codex-account-remove-result POST failed:", err)

@@ -230,6 +230,8 @@ import {
 } from './current-work-delivery';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { returnQueuedTurns } from '../projects/project-open-item';
+import { OpenListDeltaStore } from './open-list-delta';
+import { readOpenListVersion } from './open-list-version';
 import {
   SESSION_RUNNER_OFFLINE_AFTER_MS,
   deriveSessionCapabilities,
@@ -666,6 +668,8 @@ interface AccountSwitchWrite {
 @Injectable()
 export class SessionsService {
   private readonly logger = new Logger(SessionsService.name);
+  /** The snapshots `listOpenSince` answers a cursor against — see open-list-delta.ts. */
+  private readonly openListDelta = new OpenListDeltaStore();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -2720,6 +2724,11 @@ export class SessionsService {
     return [...counts.values()];
   }
 
+  /** The Open list's data version; see open-list-version.ts. */
+  openListVersion(ownerId: string): Promise<string> {
+    return readOpenListVersion(this.prisma, ownerId);
+  }
+
   async list(
     ownerId: string,
     filters: {
@@ -2802,6 +2811,40 @@ export class SessionsService {
   }
 
   /**
+   * The Open list as a delta against the list the caller was last sent under `since` (see
+   * open-list-delta.ts): only the rows that changed, the ids that left Open — finished, trashed or
+   * deleted alike, since all the delta sees is that the row is no longer in the list — and the
+   * order when it moved. A cursor this process does not hold is answered `full: true` with the
+   * whole list. Every answer carries the cursor for the next read.
+   */
+  async listOpenSince(
+    ownerId: string,
+    filters: { runnerId?: string; workspaceId?: string; tagId?: string; projectId?: string },
+    since: string | undefined,
+  ) {
+    const rows = await this.list(ownerId, { ...filters, view: 'open' });
+    const scope = JSON.stringify([
+      filters.runnerId ?? null, filters.workspaceId ?? null, filters.tagId ?? null, filters.projectId ?? null,
+    ]);
+    // A runner's heartbeat restamps every row it hosts every 30 seconds; with a few runners that
+    // alone would resend most of the list on most polls. The clients that read this delta draw
+    // nothing from the raw timestamp — what it decides (the queue gate, capabilities) are fields of
+    // their own and still count — so it is left out of what counts as a change, and a row sent
+    // here may carry an older heartbeat than the plain list would.
+    const delta = this.openListDelta.answer(ownerId, scope, rows, since, (row) =>
+      row.assignedRunner ? { ...row, assignedRunner: { ...row.assignedRunner, lastHeartbeatAt: null } } : row,
+    );
+    if (delta.full) return delta;
+    // Rows have their `id` rewritten to the public spelling on the way out; bare id lists are not
+    // walked by that pass, so they are spelled here to match.
+    return {
+      ...delta,
+      removedIds: delta.removedIds.map(uuidToBase62),
+      ...(delta.order ? { order: delta.order.map(uuidToBase62) } : {}),
+    };
+  }
+
+  /**
    * These sessions' list rows, for a reader that names sessions instead of browsing a view of them
    * (the link cards, `link-previews/`). The same query and the same mapping as `list`, so a row read
    * here cannot say something different from the row the list draws for the same session.
@@ -2819,7 +2862,13 @@ export class SessionsService {
     });
   }
 
-  /** The row query and its mapping, shared by `list` and `listRowsByIds`. */
+  /**
+   * The row query and its mapping, shared by `list` and `listRowsByIds`.
+   *
+   * Every table read here, or by a reader called from here, must also be a source of
+   * `readOpenListVersion` (open-list-version.ts): the Open list answers 304 from that version
+   * without building this, so a source it misses is a change the clients never see.
+   */
   private async listRows(
     ownerId: string,
     { scope, visibility, orderBy, pageLimit }: {

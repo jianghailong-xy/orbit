@@ -467,3 +467,86 @@ export function currentProviderChoice(
     modelLabel: defaultModelLabel(provider, modelCatalog, configured, runtimeDefaultModels),
   };
 }
+
+/** An engine — the CLI a session runs on — as the New Session hero lists it. Which provider of that
+ *  engine the session spends (its own sign-in, an account pool, a key that borrows it) is the
+ *  composer's Provider menu's question, so a row here names the engine and the provider a pick of
+ *  it lands on. */
+export interface EngineChoice {
+  slug: AgentProvider;
+  label: string;
+  brand: ProviderBrand;
+  glyphKey?: string;
+  /** Where picking this engine lands: the preferred provider of it, else its own sign-in, else the
+   *  first of its providers that can run (`engineChoices`). */
+  provider: ProviderChoice;
+  /** Why none of this engine's providers can run here, and where that is fixed — the landing
+   *  provider's own reason, since there is no better one to pick. */
+  unavailable?: string;
+  fixEngine?: string;
+  fixHref?: string;
+}
+
+/** The engine row for `provider`, landing on it. Also how the hero names a pick that is in no group
+ *  (`opencode`, a removed provider): its runtime, on the synthesized current choice. */
+/** The engine a choice belongs to. The connect-a-key row names no provider yet; it is Harness's. */
+const choiceRuntime = (choice: ProviderChoice, configured?: ConfiguredProvider[] | null): AgentProvider =>
+  choice.setup ? AgentProvider.DSH : runtimeForProvider(choice.slug, configured);
+
+export function engineChoiceFor(provider: ProviderChoice, configured?: ConfiguredProvider[] | null): EngineChoice {
+  const slug = choiceRuntime(provider, configured);
+  const label = ENGINE_LABELS[slug] ?? slug;
+  return {
+    slug,
+    label,
+    ...brandForProvider(slug, label),
+    provider,
+    ...(provider.unavailable
+      ? {
+          unavailable: provider.unavailable,
+          ...(provider.fixEngine ? { fixEngine: provider.fixEngine } : {}),
+          ...(provider.fixHref ? { fixHref: provider.fixHref } : {}),
+        }
+      : {}),
+  };
+}
+
+/**
+ * `choices` grouped by the engine that runs them, in the order the engines first appear there. Each
+ * engine lands on the first of `preferred` it holds that can run (the draft's pick, then what the
+ * workspace last ran on), else its own sign-in, else the first of its providers that can run — one
+ * in a pool last, since the pool beside it is the usual answer. An engine none of whose providers can
+ * run lands on its own row (or its first) and carries that row's reason.
+ */
+export function engineChoices(
+  choices: ProviderChoice[],
+  configured: ConfiguredProvider[],
+  preferred: readonly (string | null | undefined)[] = [],
+): EngineChoice[] {
+  const groups = new Map<AgentProvider, ProviderChoice[]>();
+  for (const choice of choices) {
+    const runtime = choiceRuntime(choice, configured);
+    groups.set(runtime, [...(groups.get(runtime) ?? []), choice]);
+  }
+  return [...groups.entries()].map(([engine, group]) => {
+    const ready = group.filter((choice) => !choice.unavailable);
+    const landing =
+      preferred.map((slug) => ready.find((choice) => choice.slug === slug)).find(Boolean) ??
+      ready.find((choice) => choice.slug === engine) ??
+      ready.find((choice) => !choice.inPool) ??
+      ready[0] ??
+      group.find((choice) => choice.slug === engine) ??
+      group[0];
+    return engineChoiceFor(landing, configured);
+  });
+}
+
+/** How the hero says which provider its engine runs on: nothing extra for the engine's own sign-in
+ *  (bar how it signs in, for Antigravity), "via DeepSeek" for anything else. */
+export const engineProviderDetail = (engine: EngineChoice): string | undefined =>
+  engine.provider.slug === engine.slug
+    ? engine.provider.labelDetail
+    : // A key named for its engine (DeepSeek Harness) would only repeat it.
+      engine.provider.label === engine.label || engine.provider.setup
+      ? undefined
+      : `via ${engine.provider.label}`;

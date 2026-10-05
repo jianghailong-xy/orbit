@@ -258,6 +258,9 @@ public enum ReceiptAnchor {
     /// nineteen records over a full window (1,000 rows) were 19,000 parses on each update of the
     /// console — 2.8 s a render with that session's own tail replayed on Linux — and the account
     /// owner's iOS console froze on open (2026-09-23). Read once, it is one parse a row.
+    ///
+    /// A console keeps one per published state (`ConsoleModel.receiptClocks`) and hands it to
+    /// `TranscriptRows.build`, so the rows are read once per update rather than once per body.
     public struct Clocks {
         fileprivate let rows: [(id: String, at: Date)]
 
@@ -284,7 +287,13 @@ public enum ReceiptAnchor {
     /// The moment one record carries, for ordering the ones that are all above the window: the head
     /// of the transcript reads top-down oldest-first, like the conversation it is the head of.
     public static func ascending(_ a: String, _ b: String) -> Bool {
-        guard let x = ThinkingSummary.date(a), let y = ThinkingSummary.date(b) else { return false }
+        ascending(ThinkingSummary.date(a), ThinkingSummary.date(b))
+    }
+
+    /// The same order over moments already read, for a sort that reads each one once rather than
+    /// twice per comparison. A moment that cannot be read is ordered before nothing.
+    public static func ascending(_ x: Date?, _ y: Date?) -> Bool {
+        guard let x, let y else { return false }
         return x < y
     }
 }
@@ -442,7 +451,8 @@ public enum TranscriptRows {
                              statusCards: [LocalStatusCard],
                              canPageOlder: Bool,
                              showWorkingIndicator: Bool,
-                             decisionCards: [DeliveredDecisionCard] = []) -> [TranscriptRow] {
+                             decisionCards: [DeliveredDecisionCard] = [],
+                             clocks known: ReceiptAnchor.Clocks? = nil) -> [TranscriptRow] {
         var rows: [TranscriptRow] = []
         // A command run before the first transcript event belongs above events that arrive later;
         // the rest are placed after the item that was last at invocation time.
@@ -459,8 +469,8 @@ public enum TranscriptRows {
         var trailingDecisions: [DeliveredDecisionCard] = []
         var headRecords: [DeliveredDecisionCard] = []
         // Every record is placed against the same rows, so their clocks are read once — and only
-        // when there is a record to place (`ReceiptAnchor.Clocks`).
-        var clocks: ReceiptAnchor.Clocks?
+        // when there is a record to place (`ReceiptAnchor.Clocks`) and the caller has not read them.
+        var clocks: ReceiptAnchor.Clocks? = known
         for card in decisionCards {
             switch card.placement {
             case .onArrival(nil):
@@ -481,11 +491,14 @@ public enum TranscriptRows {
         // these are its oldest rows. Nothing here is frozen — a page of history reaching back past
         // one of these moments puts that record back where it HAPPENED, because the placement is
         // re-derived against the rows that then exist.
-        headRecords.sort { a, b in
-            guard case .at(let x) = a.placement, case .at(let y) = b.placement else { return false }
-            return ReceiptAnchor.ascending(x, y)
+        // Each moment is read once, before the sort, not twice per comparison inside it.
+        let headMoments: [(card: DeliveredDecisionCard, at: Date?)] = headRecords.map { card in
+            guard case .at(let moment) = card.placement else { return (card, nil) }
+            return (card, ThinkingSummary.date(moment))
         }
-        rows.append(contentsOf: headRecords.map(TranscriptRow.decisionCard))
+        rows.append(contentsOf: headMoments
+            .sorted { ReceiptAnchor.ascending($0.at, $1.at) }
+            .map { TranscriptRow.decisionCard($0.card) })
         // …and the load-earlier row goes UNDER them: it is the way up to the rows these records are
         // older than, so a record's moment being above the window must not hide the control that
         // pages the window back to it.

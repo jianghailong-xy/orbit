@@ -62,6 +62,9 @@ final class AgentsModel {
     /// agent's Open list is that snapshot narrowed to the agent, so a first load of one can start
     /// from its rows instead of a blank "Loading…".
     private var openSnapshot: [Session]?
+    /// The app's Open-list refresh (`AppModel.loadSessions`), answering the list it adopted — nil
+    /// when that fetch failed. An Open list loads through it, so the app fetches that list once.
+    @ObservationIgnored var refreshOpen: (@MainActor () async -> [Session]?)?
 
     private let api: APIClient
 
@@ -327,6 +330,13 @@ final class AgentsModel {
             }
         }
         defer { sessionsLoading = false }
+        // The app already keeps the Open list: refresh it through the app's one fetch rather than
+        // a second of the same list beside it. A failed one falls through to this list's own, which
+        // says what went wrong.
+        if view == .open, let refreshOpen, let all = await refreshOpen() {
+            adoptOpen(all, agentID: agentID)
+            return
+        }
         do {
             let all = try await api.listSessions(view: view)
             #if os(iOS)
@@ -358,10 +368,17 @@ final class AgentsModel {
     func applyOpenSnapshot(_ all: [Session]) {
         openSnapshot = all
         guard let q = lastSessionQuery, q.view == .open else { return }
+        adoptOpen(all, agentID: q.agentID)
+    }
+
+    /// Write the Open list only where it changed: Observation invalidates on assignment, equal or
+    /// not, and the list redraws for each — a change in another workspace leaves this one's rows.
+    private func adoptOpen(_ all: [Session], agentID: String) {
         #if os(iOS)
-        allSessions = all
+        if allSessions != all { allSessions = all }
         #endif
-        agentSessions = SessionFilter.forAgent(all, agentID: q.agentID, view: q.view)
+        let mine = SessionFilter.forAgent(all, agentID: agentID, view: .open)
+        if agentSessions != mine { agentSessions = mine }
     }
 
     private func friendly(_ error: Error) -> String {

@@ -86,6 +86,86 @@ func TestEnsureEngineReportsAnInstallerThatLies(t *testing.T) {
 	}
 }
 
+// The shape that took every session on a Mac mini down for three hours on 2026-10-05: the engine
+// is present, executable and on the service PATH, and cannot be run at all (macOS killed its
+// native install at exec, exit 137, no output). Both checks Orbit had answered "fine" — the binary
+// is there — so the machine kept being handed sessions that could only fail, and neither the
+// Install button nor the update loop would run an installer for an engine it could find.
+func TestEnsureEngineRepairsAnEngineThatDoesNotRun(t *testing.T) {
+	dir := t.TempDir()
+	dead := filepath.Join(dir, "orbit-fake-engine")
+	if err := os.WriteFile(dead, []byte("#!/bin/sh\nkill -9 $$\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runs := filepath.Join(dir, "runs")
+	bin := withFakeEngine(t, dir,
+		"printf '#!/bin/sh\\nexit 0\\n' > "+dead+" && chmod +x "+dead+" && echo ran >> "+runs)
+	configureEngineInstall(true, nil)
+	t.Cleanup(func() { configureEngineInstall(false, nil) })
+
+	var notes []string
+	if msg := ensureEngine(context.Background(), bin, func(n string) { notes = append(notes, n) }); msg != "" {
+		t.Fatalf("the install should have left a runnable engine, got %q", msg)
+	}
+	if len(notes) == 0 || !strings.Contains(notes[0], "Reinstalling Fake Engine") {
+		t.Fatalf("the session must be told the engine is being repaired, not installed: %v", notes)
+	}
+	if b, _ := os.ReadFile(runs); strings.Count(string(b), "ran") != 1 {
+		t.Fatalf("the installer should have run exactly once, ran %d times", strings.Count(string(b), "ran"))
+	}
+}
+
+// Without install consent the session cannot be repaired, and what it is told has to be the truth
+// somebody can act on: the binary is right there and does not run — the one thing "not found"
+// would send them looking for.
+func TestEnsureEngineNamesAnEngineThatDoesNotRunWithoutConsent(t *testing.T) {
+	dir := t.TempDir()
+	dead := filepath.Join(dir, "orbit-fake-engine")
+	if err := os.WriteFile(dead, []byte("#!/bin/sh\nkill -9 $$\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runs := filepath.Join(dir, "runs")
+	bin := withFakeEngine(t, dir, "echo ran >> "+runs)
+	configureEngineInstall(false, nil)
+	t.Cleanup(func() { configureEngineInstall(false, nil) })
+
+	msg := ensureEngine(context.Background(), bin, func(string) {})
+	if !strings.Contains(msg, "does not run") || !strings.Contains(msg, dead) {
+		t.Fatalf("want a message naming the binary that does not run, got %q", msg)
+	}
+	if strings.Contains(msg, "not found") {
+		t.Fatalf("an engine that is installed must not be reported as missing: %q", msg)
+	}
+	if _, err := os.Stat(runs); err == nil {
+		t.Fatal("a runner without consent must not run an installer")
+	}
+}
+
+// The button a human presses to fix a machine, which used to answer "done" for exactly the
+// machines that needed it.
+func TestInstallEngineNowRepairsAnEngineThatDoesNotRun(t *testing.T) {
+	dir := t.TempDir()
+	dead := filepath.Join(dir, "orbit-fake-engine")
+	if err := os.WriteFile(dead, []byte("#!/bin/sh\nkill -9 $$\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runs := filepath.Join(dir, "runs")
+	bin := withFakeEngine(t, dir,
+		"printf '#!/bin/sh\\nexit 0\\n' > "+dead+" && chmod +x "+dead+" && echo ran >> "+runs)
+	spec, ok := specFor(bin)
+	if !ok {
+		t.Fatal("fixture lost its engine spec")
+	}
+
+	res := installEngineNow(spec)
+	if res.Status != installDone {
+		t.Fatalf("repair result = %+v, want done once the engine runs again", res)
+	}
+	if b, _ := os.ReadFile(runs); strings.Count(string(b), "ran") != 1 {
+		t.Fatal("the Install button answered done without running the installer for a binary that does not run")
+	}
+}
+
 // The web transcript only offers its sign-in card for text that reads as an auth failure
 // (isAuthErrorText in @orbit/shared keys on this exact prefix), and that card is the whole
 // remedy for an engine installed on a machine nobody has a terminal on.

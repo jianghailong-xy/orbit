@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { derivePermissionSemantics, DSH_PERMISSION_MODES, type RunnerEngineHealth } from '@orbit/shared';
 import { DSH_CONNECT_HREF, dshRepair, dshRunnerState } from './dshRuntime';
-import { providerChoices, runtimeSummary, sameRuntimeChoices } from './sessionProviderChoices';
+import { engineChoices, engineProviderDetail, providerChoices, runtimeSummary, sameRuntimeChoices } from './sessionProviderChoices';
 import { supportsRunnerSlashAssets, slashAssetMatchesProvider } from './slashCommands';
 import {
   clampPermissionModeForModel,
@@ -206,5 +206,24 @@ describe('providerChoices for DeepSeek Harness', () => {
       'deepseek-harness',
       'deepseek-harness-2',
     ]);
+  });
+
+  it('groups Harness keys and the connect row under one DeepSeek Harness engine in the hero', () => {
+    const ready = choicesOn(capable([health()]));
+    const engines = engineChoices(ready, [harness, deepseek]);
+    const dsh = engines.find((e) => e.slug === 'dsh')!;
+    expect(dsh).toMatchObject({ label: 'DeepSeek Harness', glyphKey: 'deepseek-harness' });
+    expect(dsh.provider.slug).toBe('deepseek-harness');
+    expect(engineProviderDetail(dsh)).toBeUndefined();
+    // The Claude-borrowing DeepSeek key stays under Claude, named as such.
+    const claude = engines.find((e) => e.slug === 'claude')!;
+    expect(engineChoices(ready, [harness, deepseek], ['deepseek']).find((e) => e.slug === 'claude')!.provider.slug).toBe('deepseek');
+    expect(claude.slug).toBe('claude');
+
+    const none = engineChoices(choicesOn(capable([health()]), [deepseek]), [deepseek]);
+    const connect = none.find((e) => e.slug === 'dsh')!;
+    expect(connect).toMatchObject({ label: 'DeepSeek Harness', unavailable: 'Add API key', fixHref: DSH_CONNECT_HREF });
+    expect(engineProviderDetail(connect)).toBeUndefined();
+    expect(none.find((e) => e.slug === 'claude')!.provider.setup).toBeUndefined();
   });
 });

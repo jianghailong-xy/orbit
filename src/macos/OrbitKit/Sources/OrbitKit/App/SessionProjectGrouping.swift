@@ -114,6 +114,12 @@ public enum SessionProjectGrouping {
                                          projects: [], sessions: loose,
                                          entries: loose.map(SessionProjectEntry.session))
         }
+        // Each project's share of the content list, split once rather than filtered out of the
+        // whole list per project.
+        let contentByProject = contentSessions.map { content in
+            Dictionary(grouping: content.filter { $0.projectMembership != nil },
+                       by: { $0.projectMembership!.projectId })
+        }
         var rows: [SessionProjectRow] = []
         for projectID in projectIDs {
             let members = groups[projectID]!
@@ -123,12 +129,14 @@ public enum SessionProjectGrouping {
             let summary = projects.first { $0.id == projectID }
             let membership = members[0].projectMembership!
             var content = members
-            if let contentSessions {
+            if let contentByProject {
                 content = []
-                for session in contentSessions.filter({ $0.projectMembership?.projectId == projectID }) + members {
-                    if let index = content.firstIndex(where: { $0.id == session.id }) {
+                var indexByID: [String: Int] = [:]
+                for session in (contentByProject[projectID] ?? []) + members {
+                    if let index = indexByID[session.id] {
                         content[index] = session
                     } else {
+                        indexByID[session.id] = content.count
                         content.append(session)
                     }
                 }
@@ -199,10 +207,14 @@ public enum SessionProjectGrouping {
                 line: selectedLine, target: target, taskCounts: summary?.taskCounts,
                 runningCount: summary?.buckets.running ?? runningCount))
         }
-        let entries = (loose.map(SessionProjectEntry.session) + rows.map(SessionProjectEntry.project)).sorted { a, b in
-            if view == .open, (a.pinnedAt != nil) != (b.pinnedAt != nil) { return a.pinnedAt != nil }
-            return instant(a.lastTurnAt ?? a.createdAt) > instant(b.lastTurnAt ?? b.createdAt)
-        }
+        // Each entry's time is parsed once, not twice per comparison.
+        let entries = (loose.map(SessionProjectEntry.session) + rows.map(SessionProjectEntry.project))
+            .map { ($0, instant($0.lastTurnAt ?? $0.createdAt)) }
+            .sorted { a, b in
+                if view == .open, (a.0.pinnedAt != nil) != (b.0.pinnedAt != nil) { return a.0.pinnedAt != nil }
+                return a.1 > b.1
+            }
+            .map(\.0)
         return SessionProjectListing(folders: folderID == nil ? folderListing.folders : [],
                                      projects: rows, sessions: loose, entries: entries)
     }

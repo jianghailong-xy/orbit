@@ -591,6 +591,19 @@ func updateEngine(ctx context.Context, spec engineSpec, servicePath string, prox
 			return EngineUpdateReport{}, ""
 		}
 		detail := updateErrDetail(err, out.bytes())
+		if !engineRunnableAt(binPath) {
+			// The updater did not merely fail: the engine it was asked to update is not runnable at
+			// all. `claude update` exits in a fraction of a second with nothing to say when the CLI
+			// it runs through is the damaged thing, and the bare `signal: killed` that produces
+			// reads as a network or permission problem — about a binary that is present, signed and
+			// unrunnable, which is a machine every session on it will fail on until somebody
+			// reinstalls it. Say which of the two this is, since that is the whole question
+			// whoever reads the row is trying to answer.
+			logln("engine-update:", spec.name, "is not runnable:", detail)
+			rec := recordEngineUpdate(spec.bin, updateFailed,
+				step+detail+" — the installed "+spec.name+" does not run at all (it is present and cannot be exec'd).", facts)
+			return rec, spec.name + " — installed but does not run: " + detail
+		}
 		logln("engine-update:", spec.name, "failed:", detail)
 		rec := recordEngineUpdate(spec.bin, updateFailed, step+detail, facts)
 		return rec, spec.name + " — update failed: " + detail
