@@ -361,7 +361,18 @@ export class SessionsController {
     // Page size. Omitted (every native client) means the whole list, as before.
     @Query('limit') limit?: string,
     @Query('projectId', PublicIdPipe) projectId?: string,
+    // The Open list as a delta against the cursor of the copy already held (see
+    // SessionsService.listOpenSince). Present at all — even empty — asks for the delta shape, which
+    // is how a client gets its first cursor; absent keeps the plain array every older client reads.
+    @Query('since') since?: string,
   ) {
+    if (since !== undefined && (view === undefined || view === 'open' || view === 'active')) {
+      return this.sessions.listOpenSince(
+        user.userId,
+        { runnerId, workspaceId: workspaceId ?? agentId, tagId, projectId },
+        since,
+      );
+    }
     const parsed = Number(limit);
     return this.sessions.list(user.userId, {
       runnerId,

@@ -177,6 +177,23 @@ public final class APIClient: @unchecked Sendable {
         }
     }
 
+    /// The Open list as a delta against `cursor` — what changed since the list the server sent
+    /// under it (`OpenListRead`). An empty cursor asks for the whole list and a first cursor. While
+    /// anything runs the list changes between almost every two polls, so the 304 above rarely
+    /// helps; this sends the rows that moved instead of all of them. nil when the server turns the
+    /// query down, which the caller answers with the conditional full read.
+    public func listOpenSessions(since cursor: String) async throws -> OpenListRead? {
+        let req = try makeRequest("sessions", method: "GET",
+                                  query: [URLQueryItem(name: "view", value: SessionView.open.queryValue),
+                                          URLQueryItem(name: "since", value: cursor)],
+                                  body: Optional<Empty>.none)
+        do {
+            return try OpenListRead.decode(try await send(req), with: decoder)
+        } catch APIError.http(let status, _) where [400, 404, 422].contains(status) {
+            return nil
+        }
+    }
+
     public func session(_ id: String) async throws -> Session { try await get("sessions/\(id)") }
 
     /// One session request as it stands now — the state a request card shows (`SessionRequestView`).

@@ -399,10 +399,11 @@ final class AppModel {
     private var sessionsLoadPending = false
     private var sessionsLoadSucceeded = false
     private var sessionsLoadGeneration = 0
-    /// The server's tag for the Open list `sessions` was last fetched as — what lets a poll that
-    /// finds it unchanged come back as an empty 304. Cleared whenever `sessions` is written any
-    /// other way (an event folded in), so a 304 only ever vouches for the list it describes.
-    private var openListETag: String?
+    /// How a poll reads the Open list: the delta against the last list fetched where the server has
+    /// it, else the tagged full read that comes back as an empty 304 when nothing changed. Told
+    /// whenever `sessions` is written any other way (an event folded in), so an "unchanged" answer
+    /// only ever vouches for the list it describes. One per instance and sign-in.
+    private var openListReader: OpenListReader?
 
     private static let instanceKey = "orbit.instance"
     /// The email of the last successful sign-in, prefilled on the login page.
@@ -473,12 +474,12 @@ final class AppModel {
         sessionsLoadTask?.cancel()
         sessionsLoadTask = nil
         sessionsLoadPending = false
-        openListETag = nil
         apiGeneration &+= 1
         sessionDetails.removeAll()
         baseURL = url
         let client = APIClient(baseURL: url, tokenStore: tokenStore)
         api = client
+        openListReader = OpenListReader(api: client)
         // One link-preview store for the app, with an age on its answers: a screen that stays open
         // asks for its cards again as it redraws, and only what has gone stale costs a request.
         linkCards = OrbitLinkCards(baseURL: url,
@@ -746,7 +747,7 @@ final class AppModel {
         sessionsLoadTask?.cancel()
         sessionsLoadTask = nil
         sessionsLoadPending = false
-        openListETag = nil
+        openListReader = api.map { OpenListReader(api: $0) }
         controlPlaneLive = false
         consoleRegistry?.reset()   // persist open transcripts, drop the warm cache
         // The account's lists leave with it: the next launch here may be someone else's.
@@ -1391,17 +1392,17 @@ final class AppModel {
     }
 
     private func fetchOpenSessions() async -> Bool {
-        guard let api else { return false }
+        guard let reader = openListReader else { return false }
         do {
-            guard let fresh = try await api.listOpenSessions(ifNoneMatch: openListETag) else {
-                // 304: `sessions` is still the list that tag names, so there is nothing to adopt or
-                // announce. The review-due timer re-arms against it, as an adopted snapshot does.
+            guard case .list(let list) = try await reader.read() else {
+                // Unchanged: `sessions` is still the list the server has, so there is nothing to
+                // adopt or announce. The review-due timer re-arms against it, as an adopted snapshot does.
                 scheduleReviewDueRefresh(sessions)
                 return true
             }
             openListFromLaunchSnapshot = false
-            applySessionSnapshot(fresh.sessions)
-            openListETag = fresh.etag
+            applySessionSnapshot(list)
+            reader.adopted()
             return true
         } catch APIError.unauthorized {
             logout()
@@ -1419,7 +1420,7 @@ final class AppModel {
     /// `notify: false` is for a snapshot whose transitions the caller already accounted for (a local
     /// purge), where the diff would otherwise post a bogus "finished" alert.
     private func applySessionSnapshot(_ list: [Session], notify: Bool = true) {
-        openListETag = nil   // see `openListETag`; a fetch sets it again once this is done
+        openListReader?.invalidate()   // see `openListReader`; a fetch marks it adopted once this is done
         // Notify on snapshot-to-snapshot transitions (skip the first load, which only primes). Skip
         // the session whose console is on screen — its own stream already shows the change.
         if notify, let prev = lastSnapshot {
