@@ -184,7 +184,8 @@ import {
 } from '../lib/slashCommands';
 import { sessionPlanUsage } from '../lib/planUsage';
 import { accountNameOf, accountPlanUsage } from '../lib/engineAccounts';
-import { poolsAsProviders, providerPoolsQuery, sessionPoolAccount } from '../lib/providerPools';
+import { poolAccountHelp, poolsAsProviders, providerPoolsQuery, sessionPoolAccount } from '../lib/providerPools';
+import { isLoginPool, poolSessionLoginMember } from '../lib/codexLogin';
 import { sharedPoolAsProviderPool, sharedPoolsQuery } from '../lib/sharedPools';
 import {
   decideContextSeed,
@@ -7193,9 +7194,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const shownPoolMemberId = shownPool?.shared
     ? detailForSelected?.poolKeyId
     : detailForSelected?.poolMemberProviderId;
+  // A login pool's session records the ChatGPT account it runs on (`poolCodexLogin`), and names that —
+  // not the pool's `next` member, which is the answer for a session starting now: with the pool's
+  // oldest account spent there is no next, while the session runs on that very account.
   const shownPoolAccount =
     shownPool && (!selectedId || detailForSelected)
-      ? sessionPoolAccount(shownPool, selectedId ? shownPoolMemberId : null)
+      ? isLoginPool(shownPool) && selectedId && detailForSelected?.poolCodexLogin
+        ? poolSessionLoginMember(shownPool, detailForSelected.poolCodexLogin)
+        : sessionPoolAccount(shownPool, selectedId ? shownPoolMemberId : null)
       : null;
   // Which of the runner's accounts a built-in Codex or Claude session spends — the draft's pick, or the
   // one picked for the session, else its workspace's — and Default for an id this runner does not
@@ -10473,15 +10479,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               </Dropdown>
             </span>
             {shownPool && shownPoolAccount && (
-              <Tooltip
-                title={
-                  shownPoolAccount.current
-                    ? `${shownPool.label} is running this session on ${shownPoolAccount.member.label}`
-                    : `A session on ${shownPool.label} starts on ${shownPoolAccount.member.label} — ${
-                        shownPool.shared ? 'the key it picks for you right now' : 'the account whose quota resets soonest'
-                      }`
-                }
-              >
+              <Tooltip title={poolAccountHelp(shownPool, shownPoolAccount)}>
                 <span className="composer-pill composer-account" data-pool-account={shownPoolAccount.member.id}>
                   <span className="composer-account-name">{shownPoolAccount.member.label}</span>
                 </span>

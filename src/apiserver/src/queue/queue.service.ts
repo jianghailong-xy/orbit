@@ -12,12 +12,12 @@ import {
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { codexPoolUnavailableReason } from '../providers/codex-login';
-import { loginCanRun, loginPoolResumesAt, type LoginAccount } from '../providers/pool-login-select';
+import { loginCanRun, loginPoolResumesAt, loginRunsAgainAt, type LoginAccount } from '../providers/pool-login-select';
 import { choosePoolCredential } from '../providers/pool-credential-select';
 import { isBuiltinProvider, resolveProviderExec, type ModelProviderRow } from '../providers/custom-provider';
 import { ProviderPlanUsageService } from '../providers/plan-usage.service';
 import { isPoolCandidate, poolUnavailableReason } from '../providers/pool-admission';
-import { keyCanRun, poolKeysResumeAt } from '../providers/pool-key-select';
+import { keyCanRun, keyRunsAgainAt, poolKeysResumeAt } from '../providers/pool-key-select';
 import {
   mintPoolGatewayToken,
   mintPoolLoginToken,
@@ -918,6 +918,11 @@ export class QueueService {
    * credential (migration 0382, providers/pool-gateway.service.ts), so the credential cannot run, and this
    * answers for it exactly as it does for a spent one. Decided from the accounts and the keys as the
    * database holds them, not from the words the engine ended with.
+   *
+   * `patienceMs` is the one thing the caller decides rather than the pool: when the credential the session
+   * is already on comes back inside it, that moment is answered instead of the pool's — see
+   * `worthWaitingFor` and `POOL_RATE_LIMIT_WAIT_MS`. Zero, the default, is the pool's own answer, which is
+   * what every caller but the rate-limited retry wants.
    */
   async sharedPoolRetryAt(
     db: Prisma.TransactionClient | PrismaService,
@@ -928,6 +933,7 @@ export class QueueService {
       poolCodexAccountId: string | null;
     },
     now: Date,
+    patienceMs = 0,
   ): Promise<Date | null> {
     if (!session.provider || isBuiltinProvider(session.provider)) return null;
     const pool = await this.sharedPoolOf(db, session.ownerId, session.provider);
@@ -938,9 +944,13 @@ export class QueueService {
     const account = pool.logins.find((login) => login.accountId === session.poolCodexAccountId);
     if (account) {
       if (loginCanRun(account, now)) return null;
+      const own = loginRunsAgainAt(account, now);
+      if (worthWaitingFor(own, now, patienceMs)) return own;
     } else {
       const current = keys.find((key) => key.id === session.poolKeyId);
       if (current && keyCanRun(current, session.ownerId, now)) return null;
+      const own = current ? keyRunsAgainAt(current, session.ownerId, now) : null;
+      if (worthWaitingFor(own, now, patienceMs)) return own;
     }
     return earliest(loginPoolResumesAt(pool.logins, now), poolKeysResumeAt(keys, session.ownerId, now));
   }
@@ -962,11 +972,15 @@ export class QueueService {
    * The pool's API keys (migration 0358) count beside its accounts: the owner's session runs on a key when
    * no account can (resolveLoginPool), so one on a key that can still run is null as one on an account is,
    * and another key that can run — or an account come back — is `now`.
+   *
+   * `patienceMs` is `sharedPoolRetryAt`'s: the moment the credential the session is already on comes back,
+   * when that is near enough to be worth more than the move.
    */
   async loginPoolRetryAt(
     db: Prisma.TransactionClient | PrismaService,
     session: { ownerId: string; provider: string | null; poolCodexAccountId: string | null; poolKeyId?: string | null },
     now: Date,
+    patienceMs = 0,
   ): Promise<Date | null> {
     if (!session.provider || isBuiltinProvider(session.provider)) return null;
     const pool = await this.accountPool(session.ownerId, session.provider, db);
@@ -975,9 +989,13 @@ export class QueueService {
     if (session.poolCodexAccountId) {
       const current = pool.logins.find((login) => login.accountId === session.poolCodexAccountId);
       if (current && loginCanRun(current, now)) return null;
+      const own = current ? loginRunsAgainAt(current, now) : null;
+      if (worthWaitingFor(own, now, patienceMs)) return own;
     } else {
       const current = keys.find((key) => key.id === (session.poolKeyId ?? null));
       if (current && keyCanRun(current, session.ownerId, now)) return null;
+      const own = current ? keyRunsAgainAt(current, session.ownerId, now) : null;
+      if (worthWaitingFor(own, now, patienceMs)) return own;
     }
     return earliest(loginPoolResumesAt(pool.logins, now), poolKeysResumeAt(keys, session.ownerId, now));
   }
@@ -1424,4 +1442,17 @@ async function poolLogins(
 /** The earlier of two times, either of which may be none: when the first of two things comes back. */
 function earliest(a: Date | null, b: Date | null): Date | null {
   return a && b ? (a.getTime() <= b.getTime() ? a : b) : (a ?? b);
+}
+
+/**
+ * Whether a session is better off waiting on the credential it is already on than taking the pool's
+ * answer — the bit of the retry that is the caller's to ask for, not the pool's.
+ *
+ * `at` is when that credential can run again, and `patienceMs` 0 says no wait is worth anything: the callers
+ * that arm a session off a credential that cannot run at all (spent, signed out, refused) want the pool's
+ * answer, which is a move when another credential can take the session. A rate limit passes a patience
+ * instead, because what a move costs is the prompt cache (see `POOL_RATE_LIMIT_WAIT_MS`).
+ */
+function worthWaitingFor(at: Date | null, now: Date, patienceMs: number): at is Date {
+  return at !== null && at.getTime() > now.getTime() && at.getTime() - now.getTime() <= patienceMs;
 }
