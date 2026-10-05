@@ -27,6 +27,7 @@ final class ProjectDoneWiringTests: XCTestCase {
     private static let approvals = "src/macos/OrbitApp/Sources/OrbitApp/Views/ApprovalCards.swift"
     private static let console = "src/macos/OrbitApp/Sources/OrbitApp/ConsoleModel.swift"
     private static let consoleView = "src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ConsoleView.swift"
+    private static let review = "src/macos/OrbitApp/Sources/OrbitApp/Views/ApprovalReview.swift"
     private static let projects = "src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectsView.swift"
     private static let projectsModel = "src/macos/OrbitApp/Sources/OrbitApp/ProjectsModel.swift"
 
@@ -110,8 +111,11 @@ final class ProjectDoneWiringTests: XCTestCase {
                       "Ask the coordinator sends the card's own facts as one turn")
     }
 
-    /// The transcript draws each kind, and the done card's preview opens its review.
-    func testTheTranscriptDrawsBothCardsAndTheDoneCardOpensItsReview() throws {
+    /// The transcript draws each kind, and both whole where they arrived: the done card is the
+    /// question and then its receipt, in the conversation itself (mock ⑤ ①–③, the browser's inline
+    /// `ProjectDoneCard`) — not a preview that opens a review, which is what it was before
+    /// (evidence revision 1's first gap).
+    func testTheTranscriptDrawsBothCardsWholeWhereTheyArrived() throws {
         let approvals = try source(Self.approvals)
         let dispatch = code(try section(approvals, from: "struct DeliveredDecisionCardView: View {",
                                         to: ".environment(\\.approvalReviewTarget, .delivered(card))"))
@@ -124,14 +128,24 @@ final class ProjectDoneWiringTests: XCTestCase {
         XCTAssertTrue(card.contains("onNotYet: row == nil ? nil : { await console.declineDoneRequest(note: $0) },"),
                       "Not yet… is offered only on a card the coordinator asked for")
         XCTAssertTrue(card.contains("onReopen: { await console.reopenProject() })"))
+        XCTAssertTrue(card.contains(".environment(\\.approvalReviewTarget, nil)"),
+                      "with no review target the card takes ApprovalReviewLayout's whole-card path")
         let notDone = code(try section(approvals, from: "private struct ProjectNotDoneCardView: View {",
                                        to: "/// The start card itself"))
         XCTAssertTrue(notDone.contains("onAskCoordinator: { Task { await console.askCoordinatorAboutDone() } })"))
 
+        // The whole-card path is the layout's own, and the review is opened only for a target.
+        let layout = code(try section(try source(Self.review), from: "struct ApprovalReviewLayout<",
+                                      to: "struct ApprovalReviewSheet: View {"))
+        XCTAssertTrue(layout.contains("} else if let target {"), "a preview needs a review target")
+        XCTAssertTrue(layout.contains("ApprovalHeader(symbol: symbol, title: title, tone: tone, badge: badge) content actions"),
+                      "without one the card is drawn whole: header, content, actions")
+
         let view = try source(Self.consoleView)
         let route = code(try section(view, from: "private func openReview(for row: TranscriptRow) {",
                                      to: "default:"))
-        XCTAssertTrue(route.contains(".projectDone"), "the done card's preview opens its review")
+        XCTAssertFalse(route.contains(".projectDone"),
+                       "the needs-you bar scrolls to the done card; there is no review to open")
         XCTAssertFalse(route.contains(".projectNotDone"), "why it is not done is drawn whole, inline")
     }
 

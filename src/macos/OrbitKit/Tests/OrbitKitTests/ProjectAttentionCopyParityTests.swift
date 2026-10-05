@@ -101,6 +101,34 @@ final class ProjectAttentionCopyParityTests: XCTestCase {
                       "READY_TO_START drifted from \(StartProject.readyToStart.debugDescription)")
     }
 
+    /// The sixth: its coordinator asking to record the project done (criterion 2: "the projects list
+    /// says Ready to close"). The browser's index does not draw it yet — reported to the coordinator
+    /// on 2026-10-05 — so the words are held to the shared read model, which documents the row as
+    /// saying exactly this, and are built the start request's way from the session row's own word
+    /// (`READY_TO_CLOSE` in `lib/projectDone.ts`), with its age joined on as the start's is.
+    func testTheDoneRequestChipIsTheReadModelsOwnWords() throws {
+        let shared = try String(contentsOf: try repoRoot().appendingPathComponent("src/shared/src/project-progress.ts"),
+                                encoding: .utf8)
+            .replacingOccurrences(of: "\\s*\\n\\s*\\*\\s*", with: " ", options: .regularExpression)
+        XCTAssertTrue(shared.contains("doneRequest?: { waitingSince: Instant } | null;"),
+                      "the index no longer carries the done request")
+        XCTAssertTrue(shared.contains("row names it as waiting on the owner (\"\(ProjectAttention.readyToCloseSays)\")"),
+                      "the read model no longer says the row names it \(ProjectAttention.readyToCloseSays.debugDescription)")
+        let words = try String(contentsOf: try repoRoot().appendingPathComponent("src/web/src/lib/projectDone.ts"),
+                               encoding: .utf8)
+        XCTAssertTrue(words.contains("export const READY_TO_CLOSE = '\(ProjectDone.readyToClose)';"),
+                      "READY_TO_CLOSE drifted from \(ProjectDone.readyToClose.debugDescription)")
+        let web = try web()
+        XCTAssertTrue(web.contains("export const READY_TO_START_SAYS = `Needs you · ${READY_TO_START}`;"),
+                      "the owner tier's request chips no longer open with Needs you ·")
+        XCTAssertTrue(web.contains("text: [READY_TO_START_SAYS, age].filter(Boolean).join(' · ')"),
+                      "a request's chip no longer says how long it has waited")
+        XCTAssertEqual(ProjectAttention.readyToCloseSays, "Needs you · \(ProjectDone.readyToClose)")
+        XCTAssertNotEqual(ProjectAttentionReason.doneRequest.rawValue, ProjectAttentionReason.readyToClose.rawValue,
+                          "the settled-but-unasked chip is the web's ready-to-close; the request is not it")
+        XCTAssertTrue(web.contains("| '\(ProjectAttentionReason.readyToClose.rawValue)';"))
+    }
+
     /// A done project's row on the index says who recorded it — the owner with the gaps accepted,
     /// or Orbit — in `doneProvenance`'s words, where the web's row says it.
     func testADoneProjectsRowSaysWhoRecordedIt() throws {

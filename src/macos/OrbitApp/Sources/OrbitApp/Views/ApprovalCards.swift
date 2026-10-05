@@ -2409,6 +2409,11 @@ private struct StartProjectCardView: View {
 /// is the one standing now (`ProjectDone.live`), so a request the coordinator filed again is this
 /// card with the new request in it. What it draws is `ProjectDoneCard`, which the project page's
 /// own Review and Record as done… open too.
+///
+/// Drawn whole where it arrived, not as a preview that opens a review: the card is the question
+/// and its receipt is the answer left in the conversation (mock ⑤ ①–③, the browser's
+/// `SessionProjectSettlementCard`), so neither hides behind a press. Clearing the review target
+/// is what puts `ApprovalReviewLayout` on its whole-card path.
 private struct ProjectDoneCardView: View {
     let console: ConsoleModel
 
@@ -2428,6 +2433,7 @@ private struct ProjectDoneCardView: View {
                 onRecord: { await console.recordProjectDone() },
                 onNotYet: row == nil ? nil : { await console.declineDoneRequest(note: $0) },
                 onReopen: { await console.reopenProject() })
+                .environment(\.approvalReviewTarget, nil)
         }
     }
 }

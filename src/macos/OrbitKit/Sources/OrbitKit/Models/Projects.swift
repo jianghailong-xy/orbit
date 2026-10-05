@@ -143,6 +143,17 @@ public struct ProjectListStartRequest: Codable, Equatable, Sendable {
     }
 }
 
+/// The coordinator's open request to record an OPEN project done (`DONE_REQUEST`), as the index
+/// carries it: only since when it has been asking. The request itself is the open-items read's
+/// (`ProjectOpenItemsView.doneRequest`).
+public struct ProjectListDoneRequest: Codable, Equatable, Sendable {
+    public let waitingSince: String
+
+    public init(waitingSince: String) {
+        self.waitingSince = waitingSince
+    }
+}
+
 /// Who must act on a project, and how long they have had to (`ProjectListAttention`).
 public struct ProjectListAttention: Codable, Equatable, Sendable {
     public let userBlockers: Int
@@ -158,12 +169,17 @@ public struct ProjectListAttention: Codable, Equatable, Sendable {
     /// is none of those four: nothing escalated, and nothing pushes. Nil from a server that
     /// predates start requests, and for a project nobody asked to start.
     public let startRequest: ProjectListStartRequest?
+    /// The coordinator asking its owner to record this OPEN project done — what the row names as
+    /// waiting on the owner ("Needs you · Ready to close"), apart from `ownerItems` for the reason
+    /// `startRequest` is. Nil from a server that predates done requests, and while nobody asked.
+    public let doneRequest: ProjectListDoneRequest?
 
     public init(userBlockers: Int = 0, coordinatorBlockers: Int = 0, systemBlockers: Int = 0,
                 maxSeverity: ProjectAttentionSeverity? = nil, attentionSinceAt: String? = nil,
                 nextCheckAt: String? = nil, ownerItems: [ProjectListOwnerItem] = [],
                 coordinatorItems: ProjectListCoordinatorItems? = nil,
-                startRequest: ProjectListStartRequest? = nil) {
+                startRequest: ProjectListStartRequest? = nil,
+                doneRequest: ProjectListDoneRequest? = nil) {
         self.userBlockers = userBlockers
         self.coordinatorBlockers = coordinatorBlockers
         self.systemBlockers = systemBlockers
@@ -173,6 +189,7 @@ public struct ProjectListAttention: Codable, Equatable, Sendable {
         self.ownerItems = ownerItems
         self.coordinatorItems = coordinatorItems
         self.startRequest = startRequest
+        self.doneRequest = doneRequest
     }
 
     public init(from decoder: Decoder) throws {
@@ -189,6 +206,7 @@ public struct ProjectListAttention: Codable, Equatable, Sendable {
         // Read with `try?`: a request this build cannot read is a row that names none, rather than
         // an index that fails to load.
         startRequest = (try? c.decodeIfPresent(ProjectListStartRequest.self, forKey: .startRequest)) ?? nil
+        doneRequest = (try? c.decodeIfPresent(ProjectListDoneRequest.self, forKey: .doneRequest)) ?? nil
     }
 }
 

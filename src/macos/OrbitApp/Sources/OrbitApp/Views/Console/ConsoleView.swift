@@ -1073,7 +1073,7 @@ struct TranscriptView: View {
         switch card.kind {
         case .promotionApproval(let promotionID):
             openPromotionReview(promotionID)
-        case .criteriaDecision, .acceptanceConfirmation, .startProject, .projectDone, .criteriaChange,
+        case .criteriaDecision, .acceptanceConfirmation, .startProject, .criteriaChange,
              .ownerConfirmation, .coordinatorQuestion:
             openApprovalReview(.delivered(card))
         default:

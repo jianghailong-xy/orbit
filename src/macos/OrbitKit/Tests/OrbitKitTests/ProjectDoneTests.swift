@@ -114,10 +114,30 @@ final class ProjectDoneTests: XCTestCase {
         XCTAssertNil(ProjectDone.declineNote(" \n "))
     }
 
-    func testOrbitCheckedCountsTheRequestAmongTheOpenItems() {
+    /// The request the card answers is not one of the open items Orbit checked: the close check
+    /// refuses a request while any other item is open, so a card the coordinator asked for says
+    /// "no open items" — mock ⑤ ①'s line, word for word — rather than counting itself (evidence
+    /// revision 1's seventh gap).
+    func testOrbitCheckedCountsEveryOpenItemButTheRequestItAnswers() {
         let row = ProjectOpenItemRow(itemId: "i1", kind: .unknown, title: "", waitingSince: "")
-        let items = ProjectOpenItemsView(needsYou: [row], withCoordinator: [row, row], doneRequest: row)
-        XCTAssertEqual(ProjectDone.openItemsCount(items), 4)
+        let asking = ProjectOpenItemRow(itemId: "req1", kind: .unknown, title: ProjectDone.heading,
+                                        waitingSince: "", doneRequest: request)
+        let onlyTheRequest = ProjectOpenItemsView(doneRequest: asking)
+        XCTAssertEqual(ProjectDone.openItemsCount(onlyTheRequest), 0)
+        XCTAssertEqual(ProjectDone.orbitCheckedLine(counts: closeout().counts,
+                                                    confirmedAt: "2026-09-29T10:00:00.000Z",
+                                                    openItems: ProjectDone.openItemsCount(onlyTheRequest),
+                                                    running: 0, timeZone: utc),
+                       "Orbit checked: every criterion is met by its work · nothing running · no open items · "
+                        + "criteria confirmed by you on Sep 29")
+        XCTAssertEqual(ProjectDone.openItemsCount(ProjectOpenItemsView(needsYou: [asking], doneRequest: asking)), 0,
+                       "nor counted when a server lists it among the owner's rows too")
+        // Every other item is open: the owner's and the coordinator's alike.
+        let items = ProjectOpenItemsView(needsYou: [row], withCoordinator: [row, row], doneRequest: asking)
+        XCTAssertEqual(ProjectDone.openItemsCount(items), 3)
+        XCTAssertEqual(ProjectDone.orbitCheckedLine(counts: closeout().counts, confirmedAt: nil,
+                                                    openItems: ProjectDone.openItemsCount(items), running: 0),
+                       "Orbit checked: every criterion is met by its work · nothing running · 3 open items")
         XCTAssertEqual(ProjectDone.openItemsCount(nil), 0)
         XCTAssertEqual(ProjectDone.runningCount(closeout(counts: ProjectDoneCounts(
             criteria: 3, met: 3, landed: 1, onMain: 1, byReason: [.inFlight: 2]))), 2)
@@ -172,6 +192,42 @@ final class ProjectDoneTests: XCTestCase {
                                         started: true), .none, "a server without counts draws no card")
         XCTAssertEqual(ProjectDone.slot(subject: nil, request: nil, waitingKind: nil, record: nil, started: true),
                        .none, "a read that has not answered is not an answer")
+    }
+
+    /// The card's whole life in one conversation, read the way the console adopts it after each
+    /// read: asked, recorded, read back after a reload — with the projection still withholding, as
+    /// it does whenever the owner accepted a gap — reopened, asked again and answered Not yet….
+    func testTheReceiptOutlivesAReloadAndNotYetOrReopenGiveWayToWhyItIsNotDone() {
+        let row = ProjectOpenItemRow(itemId: "req1", kind: .unknown, title: ProjectDone.heading,
+                                     waitingSince: "", doneRequest: request)
+        let asked = closeout()
+        XCTAssertEqual(ProjectDone.slot(subject: asked, request: row, waitingKind: .doneRequest, record: nil,
+                                        started: true), .done(requestID: "req1"))
+
+        // Record as done: the door's record turns the same card into its receipt, in place.
+        let record = ProjectDoneRecord(projectId: "p1", doneAt: "2026-10-01T01:40:00.000Z",
+                                       criteriaDigest: request.criteriaDigest, acceptedGaps: request.gaps)
+        XCTAssertEqual(ProjectDone.slot(subject: asked, request: nil, waitingKind: nil, record: record,
+                                        started: true), .done(requestID: nil))
+
+        // Reloaded: no record in hand, no request, and a projection that still says not done —
+        // the owner's DONE is the record, and the receipt is what the conversation keeps.
+        let reloaded = ProjectDoneSubject(title: "Project closeout", status: "DONE",
+                                          criteria: asked.criteria, derivedDone: asked.derivedDone,
+                                          doneBy: .owner, doneAt: record.doneAt,
+                                          acceptedGaps: request.gaps)
+        XCTAssertEqual(reloaded.derivedDone?.done, false)
+        XCTAssertEqual(ProjectDone.slot(subject: reloaded, request: nil, waitingKind: nil, record: nil,
+                                        started: true), .done(requestID: nil),
+                       "a project the owner recorded done is never asked why it is not done")
+        XCTAssertEqual(ProjectDone.receiptLine(reloaded, record: nil, timeZone: utc),
+                       "You recorded this project done · Oct 1, 01:40")
+        XCTAssertEqual(ProjectDone.receiptTally(reloaded, record: nil),
+                       "2 criteria met · 1 landed on main · 1 nothing to land · 1 gaps accepted")
+
+        // Reopen project, or Not yet… on a request: nothing is asked, so the card gives way.
+        XCTAssertEqual(ProjectDone.slot(subject: asked, request: nil, waitingKind: nil, record: nil,
+                                        started: true), .notDone)
     }
 
     func testTheRequestIsLiveOnlyOnAnOpenProjectWithARequestThisBuildCanRead() {

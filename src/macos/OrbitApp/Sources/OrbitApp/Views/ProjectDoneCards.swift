@@ -16,8 +16,9 @@ import OrbitKit
 /// checked, and the two answers — or, once the project is recorded done, its receipt.
 ///
 /// The look is the start card's: the same blue surface and header, the same white grouped panels.
-/// In a conversation it is a preview that opens into a review (`ApprovalReviewLayout`); over the
-/// project page it is the whole card.
+/// It is the whole card wherever it is drawn — in the coordinator conversation, where it arrived,
+/// and over the project page — never a preview that opens a review (`ApprovalReviewLayout`'s
+/// whole-card path: nobody hands it a review target).
 struct ProjectDoneCard: View {
     let subject: ProjectDoneSubject
     /// The coordinator's request, or nil for a card nobody asked for — Orbit then fills in the gaps.
@@ -77,7 +78,8 @@ struct ProjectDoneCard: View {
 
     private var question: some View {
         ApprovalReviewLayout(title: ProjectDone.heading, symbol: "checkmark.circle", tone: .blue,
-                             summary: "\(subject.title) · \(ProjectDone.cardTally(counts))") {
+                             summary: "\(subject.title) · \(ProjectDone.cardTally(counts))",
+                             badge: doneQuestionBadge) {
             content
         } actions: {
             ApprovalActions {
@@ -368,7 +370,7 @@ struct ProjectNotDoneCard: View {
                 tally
             } else {
                 ApprovalHeader(symbol: "questionmark.circle", title: ProjectDone.whyHeading, tone: .blue,
-                               badge: questionBadge)
+                               badge: doneQuestionBadge)
                 if !why.waiting.isEmpty {
                     group(ProjectDone.waitingOnWork, why.waiting, waiting: true,
                           aside: why.coordinatorOnIt ? "● \(ProjectDone.coordinatorIsOnIt)" : nil)
@@ -382,16 +384,6 @@ struct ProjectNotDoneCard: View {
             }
         }
         .approvalChrome(why.settled(subject) ? .green : .blue)
-    }
-
-    /// The provenance badge beside the question. On a phone the question takes the whole row and
-    /// the badge would be cut to "FRO…BIT", so it is left off there, as the done card leaves it off.
-    private var questionBadge: String? {
-        #if os(iOS)
-        return nil
-        #else
-        return ProjectDone.provenance
-        #endif
     }
 
     private var tally: some View {
@@ -543,6 +535,17 @@ struct ProjectOwnDoneRow: View {
 }
 
 // MARK: - the pieces
+
+/// The provenance badge beside either card's question (`FROM ORBIT`, as the browser's cards carry
+/// it). On a phone the question takes the whole row and the badge would be cut to "FRO…BIT", so it
+/// is left off there, as the phone mock leaves it off.
+private var doneQuestionBadge: String? {
+    #if os(iOS)
+    return nil
+    #else
+    return ProjectDone.provenance
+    #endif
+}
 
 /// A section's head on the done cards: small, upper-cased, secondary — with a press at its trailing
 /// edge where the section folds.

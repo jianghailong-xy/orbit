@@ -703,11 +703,13 @@ public enum ProjectDone {
         return line
     }
 
-    /// How many items the Orbit checked line counts as open: the owner's, the coordinator's, and the
-    /// request itself (the browser's `openItemsCount`).
+    /// How many items the Orbit checked line counts as open: the owner's and the coordinator's — not
+    /// the request the card itself answers. The close check refuses a request while any other item
+    /// is open, so on a card the coordinator asked for this is "no open items", as the mock says;
+    /// counting the request would make every such card say "1 open item" about itself.
     public static func openItemsCount(_ items: ProjectOpenItemsView?) -> Int {
         guard let items else { return 0 }
-        return items.needsYou.count + items.withCoordinator.count + (items.doneRequest == nil ? 0 : 1)
+        return ProjectPage.needsYouRows(items).count + items.withCoordinator.count
     }
 
     /// How many criteria are still landing — what the Orbit checked line calls running.
