@@ -1,0 +1,184 @@
+{
+  "controlPlaneTurns": [
+    {
+      "completions": [
+        {
+          "error": "",
+          "result": "answer racing the cancel",
+          "runtimeSessionId": "lc-engine-session-1",
+          "status": "INTERRUPTED",
+          "subtype": "interrupted"
+        }
+      ],
+      "deliveries": 1,
+      "kind": "message",
+      "status": "INTERRUPTED",
+      "turnId": "t1"
+    },
+    {
+      "completions": null,
+      "deliveries": 1,
+      "kind": "interrupt",
+      "status": "DELIVERED",
+      "turnId": "i1"
+    },
+    {
+      "completions": [
+        {
+          "error": "",
+          "result": "reply to m2 after [m1]",
+          "runtimeSessionId": "lc-engine-session-1",
+          "status": "SUCCEEDED",
+          "subtype": "completed"
+        }
+      ],
+      "deliveries": 1,
+      "kind": "message",
+      "status": "SUCCEEDED",
+      "turnId": "t2"
+    },
+    {
+      "completions": null,
+      "deliveries": 1,
+      "kind": "end",
+      "status": "DELIVERED",
+      "turnId": "end"
+    }
+  ],
+  "engineRequests": [
+    {
+      "id": "orbit-dsh-1",
+      "method": "initialize",
+      "pid": 3439905
+    },
+    {
+      "id": "orbit-dsh-2",
+      "method": "session/new",
+      "pid": 3439905
+    },
+    {
+      "fields": {
+        "keySuffix": "0001",
+        "method": "session/new",
+        "permissionMode": "workspace-write",
+        "profileSealed": true
+      },
+      "note": "open",
+      "pid": 3439905
+    },
+    {
+      "id": "orbit-dsh-3",
+      "method": "session/prompt",
+      "pid": 3439905
+    },
+    {
+      "id": null,
+      "method": "session/cancel",
+      "pid": 3439905
+    },
+    {
+      "id": "orbit-dsh-4",
+      "method": "session/prompt",
+      "pid": 3439905
+    },
+    {
+      "id": "orbit-dsh-5",
+      "method": "session/close",
+      "pid": 3439905
+    }
+  ],
+  "engineSessionLogs": {
+    "lc-engine-session-1": {
+      "cwd": "/tmp/orbit-dsh-p3b-kWhHCj/TestDshLifecycleInterruptcancel-beats-racing-end_turn3996243756/001/work",
+      "history": [
+        "m1 [hold]",
+        "m2"
+      ]
+    }
+  },
+  "orbitTranscript": [
+    {
+      "subtype": "launch",
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "subtype": "init",
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "text": "m1 [hold]",
+      "turn": "t1",
+      "type": "user"
+    },
+    {
+      "status": "in_progress",
+      "toolCallId": "lc-tool-3439905-1",
+      "turn": "t1",
+      "type": "tool_use"
+    },
+    {
+      "turn": "",
+      "type": "interrupt"
+    },
+    {
+      "isError": true,
+      "status": "failed",
+      "toolCallId": "lc-tool-3439905-1",
+      "turn": "t1",
+      "type": "tool_result"
+    },
+    {
+      "text": "answer racing the cancel",
+      "turn": "t1",
+      "type": "assistant"
+    },
+    {
+      "stopReason": "cancelled",
+      "subtype": "interrupted",
+      "turn": "t1",
+      "type": "turn_end"
+    },
+    {
+      "text": "m2",
+      "turn": "t2",
+      "type": "user"
+    },
+    {
+      "text": "reply to m2 after [m1]",
+      "turn": "t2",
+      "type": "assistant"
+    },
+    {
+      "subtype": "context",
+      "turn": "t2",
+      "type": "system"
+    },
+    {
+      "stopReason": "end_turn",
+      "subtype": "completed",
+      "turn": "t2",
+      "type": "turn_end"
+    }
+  ],
+  "runnerTurnLedger": {
+    "runtimeSessionId": "lc-engine-session-1",
+    "turns": {
+      "t1": {
+        "state": "settled",
+        "status": "INTERRUPTED",
+        "subtype": "interrupted",
+        "result": "answer racing the cancel"
+      },
+      "t2": {
+        "state": "settled",
+        "status": "SUCCEEDED",
+        "subtype": "completed",
+        "result": "reply to m2 after [m1]"
+      }
+    }
+  },
+  "scenario": "TestDshLifecycleInterrupt/cancel-beats-racing-end_turn",
+  "sideEffects": null
+}

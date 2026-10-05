@@ -1,0 +1,208 @@
+{
+  "controlPlaneTurns": [
+    {
+      "completions": [
+        {
+          "error": "",
+          "result": "reply to m1 after []",
+          "runtimeSessionId": "lc-engine-session-1",
+          "status": "SUCCEEDED",
+          "subtype": "completed"
+        }
+      ],
+      "deliveries": 1,
+      "kind": "message",
+      "status": "SUCCEEDED",
+      "turnId": "t1"
+    },
+    {
+      "completions": [
+        {
+          "error": "",
+          "result": "reply to m2 after [m1]",
+          "runtimeSessionId": "lc-engine-session-1",
+          "status": "SUCCEEDED",
+          "subtype": "completed"
+        }
+      ],
+      "deliveries": 1,
+      "kind": "message",
+      "status": "SUCCEEDED",
+      "turnId": "t2"
+    },
+    {
+      "completions": [
+        {
+          "error": "",
+          "result": "reply to m3 after [m1|m2]",
+          "runtimeSessionId": "lc-engine-session-1",
+          "status": "SUCCEEDED",
+          "subtype": "completed"
+        }
+      ],
+      "deliveries": 1,
+      "kind": "message",
+      "status": "SUCCEEDED",
+      "turnId": "t3"
+    },
+    {
+      "completions": null,
+      "deliveries": 1,
+      "kind": "end",
+      "status": "DELIVERED",
+      "turnId": "end"
+    }
+  ],
+  "engineRequests": [
+    {
+      "id": "orbit-dsh-1",
+      "method": "initialize",
+      "pid": 3439884
+    },
+    {
+      "id": "orbit-dsh-2",
+      "method": "session/new",
+      "pid": 3439884
+    },
+    {
+      "fields": {
+        "keySuffix": "0001",
+        "method": "session/new",
+        "permissionMode": "workspace-write",
+        "profileSealed": true
+      },
+      "note": "open",
+      "pid": 3439884
+    },
+    {
+      "id": "orbit-dsh-3",
+      "method": "session/prompt",
+      "pid": 3439884
+    },
+    {
+      "id": "orbit-dsh-4",
+      "method": "session/prompt",
+      "pid": 3439884
+    },
+    {
+      "id": "orbit-dsh-5",
+      "method": "session/prompt",
+      "pid": 3439884
+    },
+    {
+      "id": "orbit-dsh-6",
+      "method": "session/close",
+      "pid": 3439884
+    }
+  ],
+  "engineSessionLogs": {
+    "lc-engine-session-1": {
+      "cwd": "/tmp/orbit-dsh-p3b-kWhHCj/TestDshLifecycleMultiTurnQueuerunner-local-queue1154577855/001/work",
+      "history": [
+        "m1 [slow]",
+        "m2 [slow]",
+        "m3"
+      ]
+    }
+  },
+  "orbitTranscript": [
+    {
+      "subtype": "launch",
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "subtype": "init",
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "text": "m1 [slow]",
+      "turn": "t1",
+      "type": "user"
+    },
+    {
+      "text": "reply to m1 after []",
+      "turn": "t1",
+      "type": "assistant"
+    },
+    {
+      "subtype": "context",
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "stopReason": "end_turn",
+      "subtype": "completed",
+      "turn": "t1",
+      "type": "turn_end"
+    },
+    {
+      "text": "m2 [slow]",
+      "turn": "t2",
+      "type": "user"
+    },
+    {
+      "text": "reply to m2 after [m1]",
+      "turn": "t2",
+      "type": "assistant"
+    },
+    {
+      "subtype": "context",
+      "turn": "t2",
+      "type": "system"
+    },
+    {
+      "stopReason": "end_turn",
+      "subtype": "completed",
+      "turn": "t2",
+      "type": "turn_end"
+    },
+    {
+      "text": "m3",
+      "turn": "t3",
+      "type": "user"
+    },
+    {
+      "text": "reply to m3 after [m1|m2]",
+      "turn": "t3",
+      "type": "assistant"
+    },
+    {
+      "subtype": "context",
+      "turn": "t3",
+      "type": "system"
+    },
+    {
+      "stopReason": "end_turn",
+      "subtype": "completed",
+      "turn": "t3",
+      "type": "turn_end"
+    }
+  ],
+  "runnerTurnLedger": {
+    "runtimeSessionId": "lc-engine-session-1",
+    "turns": {
+      "t1": {
+        "state": "settled",
+        "status": "SUCCEEDED",
+        "subtype": "completed",
+        "result": "reply to m1 after []"
+      },
+      "t2": {
+        "state": "settled",
+        "status": "SUCCEEDED",
+        "subtype": "completed",
+        "result": "reply to m2 after [m1]"
+      },
+      "t3": {
+        "state": "settled",
+        "status": "SUCCEEDED",
+        "subtype": "completed",
+        "result": "reply to m3 after [m1|m2]"
+      }
+    }
+  },
+  "scenario": "TestDshLifecycleMultiTurnQueue/runner-local-queue",
+  "sideEffects": null
+}
