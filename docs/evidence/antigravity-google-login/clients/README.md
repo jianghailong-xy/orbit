@@ -1,22 +1,25 @@
 # Antigravity Google 登录：web 与 macOS/iOS 客户端证据
 
 任务 `34ZogkzPnQ44ODj72jrYb`，对应项目验收条目 2（`4q7GDYg6GzChkJE0bfhFGV`）。
-当前分支：`orbit/web-macos-ios-antigravity-google-29ec1b`。
+当前分支：`orbit/web-macos-ios-antigravity-google-db95c8`。
 控制面契约来自第 3 步提交 `7cd0d809be5052ef1eadd2738a2217403767eeb9`，已以 `8725dd57d` 落地。
 
-## 当前基线同步（generation 9 MAIN_SYNC）
+## 当前基线同步（generation 10 MAIN_SYNC，2026-10-05）
 
-按任务最新评论，本次只做基线同步，不重做客户端功能。源不再是启动时的项目 tip，而是上一已验证源
-`6f85136aeb7673fb420fba1138f810d36f2e12cd`（它已经含着项目 tip，并带着全部客户端修复）。
+按协调会话 05:36 的评论，本轮只做基线同步，不重做客户端功能：把项目分支 tip 与当前 upstream main tip 一起吸进本任务源分支。源不再是启动时的项目 tip，而是上一已验证源 `666e679646d632f1fec7f49c295820a562e5f5a6`（它已含项目 tip，并带着四个冲突文件的解法与 main 到 `a0a76a760` 的全部改动）。
 
-- 上一已验证源：`6f85136aeb7673fb420fba1138f810d36f2e12cd`
-- 项目 ref `refs/heads/project/34ZoXvNg4WmQIi0AiwWmu` tip：`80e7ad8fd8ee581f5c2f66490f1966f487ad3fb6`（是上一源的祖先）
-- upstream `refs/heads/main` tip：`a0a76a760a47f602382da0bafc5d6f8f92afea1a`
-- 本轮真实合并提交：`5282b77a270d6f632c793fbc5d857deefc3bcd6a`，父为 `6f85136aeb` 与 `a0a76a760`；项目 tip、main tip 与上一源都是它的祖先。
+- 上一已验证源：`666e679646d632f1fec7f49c295820a562e5f5a6`
+- 项目 ref `refs/heads/project/34ZoXvNg4WmQIi0AiwWmu` tip：`80e7ad8fd8ee581f5c2f66490f1966f487ad3fb6`
+- upstream `refs/heads/main` tip：`aaf077310ad296c0dfeb8cfdb6b76aa367cb2f08`
+- 本轮真实合并提交：`2daa7c065a663b429e20972b09e664f6faf8a5f8`，父为 `666e679646` 与 `aaf077310`；项目 tip 与 main tip 都是它的祖先。合并干净，只应用了 main 的 `OrbitLinkCardView.swift` 增量。
 
-冲突两个，都取 main 的新版本：`ConsoleView.swift`（main 的 `c13f943f1` 拆分 `rowsList` / `follows` / `chrome`，是上一源 `transcriptList` 拆分的超集，同为 iOS 类型检查）、`OrbitLinkCopyParityTests.swift`（main 把 stalled 测试改名，断言两侧逐字相同）。上一轮的四个冲突文件已由上一源解决，本轮不再出现。
+冲突文件由上一源解好，本轮的合并只带来 main 的增量，因此没有新的文本冲突。冲突解法的取舍沿用上一源：`AccountPauseAPIClientTests.swift`、`CodexSignInCopyParityTests.swift` 与 `origin/main` 逐字一致（保留 main 的测试修复）；`RunnerEngines.tsx` 删掉 main 入口重做里的 `AntigravityRow` 与三处特判（不显示认证状态、忽略 `auth=no`、固定 API key 文案），改用统一引擎行 + Google 登录；`SessionProviderChoices.swift` 在 main 的 `claude / codex / antigravity / kimi` 顺序上加 Google 账号选择与失效登录判断。
 
-本轮新基线实际跑了：web 全量 `npm test -w @orbit/web`、Antigravity 客户端 6 个 suite、OrbitKit 全量 `swift test`（`AntigravityGoogleClientTests` 9/9 也在其中）、`npm run build -w @orbit/web`、1280px / 443px 真实生产路由截图。本分支 client CI 需协调会话在确切 HEAD 上重新 dispatch；上面这些工具行、HEAD 与 Orbit 附件回执以本任务会话提交的新证据信封为准。下方旧工具行及 main 既有失败对照仅保留作历史记录，不代替本次验证。
+本轮新基线实际跑了：web 全量 `npm test -w @orbit/web`、OrbitKit 全量 `swift test`（含 `AntigravityGoogleClientTests` / `SessionProviderChoicesTests` / `EngineAuthTests` 共 125 条 0 失败）、`npm run build -w @orbit/web`、1280px / 443px 真实生产路由截图。本分支 client CI 需协调会话在确切 HEAD 上重新 dispatch；上面这些工具行、HEAD 与 Orbit 附件回执以本任务会话提交的新证据信封为准。下方旧工具行及 main 既有失败对照仅保留作历史记录，不代替本次验证。
+
+### 本轮工作树依赖修复（不是产品缺陷）
+
+第一次 `npm test -w @orbit/web` 报 121 个文件、28 条失败。原因是本 worktree 的 `node_modules/@base-ui` 与 `node_modules/@floating-ui` 是指向 `/tmp/orbit-p11-final-aa737ee0/node_modules/...` 的符号链接（另一个 checkout 的安装），Node 按 realpath 解析后 `@base-ui` 会加载 `/tmp` 里那份 `react`，与本 worktree 的 `react` 不是同一个实例，触发 `Cannot read properties of null (reading 'useRef')` 等运行环境错误。把这两个包换成 worktree 内的真实拷贝、并从同一安装补上 `reselect` 等缺失依赖后重跑，失败降到 1 条（即下方 main 既有红），与干净 main 逐条一致。这是取证环境问题，已在提交说明里注明。
 
 ## 历史 main 上的冲突处理
 
@@ -40,18 +43,13 @@
 | 生产构建的 Chromium 截图及原图总览 | `bgj_26c36e0b5189` | 退出码 0；1280px / 443px 共 16 张原图和 2 张总览，无浏览器异常或页面横向溢出 |
 | 原图及总览的 Orbit 附件上传 | `bgj_c5073ed1f127` | 退出码 0；18 个附件均返回保存回执 |
 
-### main 既有的 web 失败
+### main 既有的 web 失败（generation 10 基线）
 
-两次全量运行的 30 个失败名称及断言内容逐项一致。只移除终端 ANSI 转义并统一两个 checkout 的绝对路径后比较，没有新增失败。[web-main-comparison.json](web-main-comparison.json) 点名全部 30 个用例并记录对应工具行和失败内容哈希。
+本分支（`2daa7c065`，308 文件 / 3883 用例 / 1 失败）与干净 `origin/main` （`aaf077310`，307 文件 / 3868 用例 / 1 失败）用同一份依赖与同一 vitest 版本各跑一遍全量，唯一的失败是同一个用例，逐字一致；本分支没有新增失败，且多出 15 条通过用例。[web-main-comparison.json](web-main-comparison.json) 记录两次运行的工具行、用例数与失败断言。
 
-| 失败文件（均在 `src/web/src/components/`） | 用例数 |
-| --- | ---: |
-| `CriteriaDecisionCard.receipt.test.tsx` | 2 |
-| `CriteriaDecisionCard.sessionSwitch.test.tsx` | 2 |
-| `WorkspaceView.acceptanceConfirmationCard.test.tsx` | 8 |
-| `WorkspaceView.criteriaDecisionCard.test.tsx` | 3 |
-| `WorkspaceView.promotionPlacement.test.tsx` | 6 |
-| `WorkspaceView.settlementPointer.test.tsx` | 9 |
+| 失败文件（`src/web/src/components/`） | 用例 | 在干净 main 上同样红 |
+| --- | ---: | --- |
+| `SessionReplyCard.test.tsx` | 1 | 是（`aaf077310` 上复现同一条断言 `chat-injected-action`） |
 
 ### OrbitKit 过时断言的复验
 
@@ -61,9 +59,9 @@
 ## macOS/iOS 同源数据证明与编译
 
 `AntigravityGoogleClientTests.swift` 的 9 个测试使用此目录 `fixtures.json`，与 web 测试和截图共用脱敏控制面数据。覆盖 Google 身份、weekly / 5h 剩余量（72% / 18%）及重置时间、零额度、未知 / 失效认证、Linux / macOS / 旧 runner 登录入口、选择器、两种 API key 路径、`awaiting_code` DTO、条款和共享 SwiftUI 接线。
-9 个测试在本轮最终全量中全部实际执行并通过，作为任务允许的 macOS/iOS 截图替代证据。
+9 个测试在本轮最终全量中全部实际执行并通过，作为任务允许的 macOS/iOS 截图替代证据。本轮在合并 HEAD `2daa7c065` 上于 Swift 6.1 容器跑全量 `swift test`：2912 用例、5 个默认跳过的性能基线、0 失败；`--filter 'AntigravityGoogleClientTests|SessionProviderChoicesTests|EngineAuthTests'` 聚焦跑 125 条、0 失败。
 
-HPC 没有 `gh`。本轮需由协调会话在上述分支的最终 HEAD 重新 dispatch `client.yml`，确认 macOS `Test OrbitKit (macOS)`、`Build OrbitApp` 和 iOS `Build for iOS Simulator` 真正运行成功。确切 HEAD、CI 链接与 job / step 回执记录在本任务会话的新证据信封；历史分支的 CI 不作为本轮编译证据。
+HPC 没有 `gh`。本轮需由协调会话在分支 `orbit/web-macos-ios-antigravity-google-db95c8` 的合并 HEAD `2daa7c065a663b429e20972b09e664f6faf8a5f8` 上重新 dispatch `client.yml`，确认 macOS `Test OrbitKit (macOS)`、`Build OrbitApp` 和 iOS `Build for iOS Simulator` 真正运行成功（不是 skipped）。确切 HEAD、CI 链接与 job / step 回执记录在本任务会话的新证据信封；历史分支的 CI 不作为本轮编译证据。
 
 ## 浏览器截图
 
