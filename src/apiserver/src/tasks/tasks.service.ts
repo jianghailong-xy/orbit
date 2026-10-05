@@ -259,7 +259,7 @@ import { manualRunnableTaskSql } from './manual-runnable-task-sql';
 import { automaticAccount, runAccount } from '../providers/plan-usage-accounts';
 import { accountEnvVar } from '../providers/account';
 import { readOwnerConfirmationRows } from './owner-confirmation-read';
-import { accountPoolRuntime } from '../providers/custom-provider';
+import { accountPoolRuntime, isBuiltinProvider } from '../providers/custom-provider';
 import {
   criterionNeedsProjectRefusal,
   deriveTaskCompletionStatus,
@@ -12816,7 +12816,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // agent's name, which is a worse outcome than waiting.
     //
     // Availability, so the delivery budget is untouched: re-enabling the provider clears it.
-    if (!Object.values(AgentProvider).includes(seed.provider as AgentProvider)) {
+    if (!isBuiltinProvider(seed.provider, seed.providerBuiltin)) {
       const configured = await this.prisma.modelProvider.findFirst({
         where: {
           slug: seed.provider, enabled: true,

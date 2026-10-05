@@ -438,4 +438,6 @@ export enum AgentProvider {
   OPENCODE = 'opencode',
   /** Google's Antigravity CLI (`agy`), driven headless; see docs/antigravity-runtime-contract.md. */
   ANTIGRAVITY = 'antigravity',
+  /** DeepSeek Harness, driven through ACP; existing `deepseek` providers still borrow Claude. */
+  DSH = 'dsh',
 }
