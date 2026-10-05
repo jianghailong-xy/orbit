@@ -444,31 +444,14 @@ const questionLine = (): HTMLButtonElement | null =>
 /** What that line counts, as it says it to a screen reader, or null when no such line is drawn. */
 const counted = (): string | null =>
   questionLine()?.getAttribute('aria-label')?.split(': ')[0] ?? null;
-const settlementPreviews = (): HTMLElement[] => [...mounted().querySelectorAll<HTMLElement>('#settlement-preview')];
-const reviewDialog = (): HTMLElement | null =>
-  document.querySelector<HTMLElement>('.review-card-dialog[data-open]');
-
+// The rail reaches the full form on wide screens.
+const settlementCards = (): HTMLElement[] => [...mounted().querySelectorAll<HTMLElement>('#settlement-preview')];
 async function openSettlement(): Promise<HTMLElement> {
-  const preview = settlementPreviews()[0]?.querySelector<HTMLButtonElement>('.review-card-preview');
-  if (!preview) throw new Error('there is no settlement preview to open');
-  await act(async () => preview.click());
-  const dialog = reviewDialog();
-  expect(dialog, 'the preview did not open its dialog').toBeTruthy();
-  expect(mounted().contains(dialog), 'the details were not rendered through a portal').toBe(false);
-  expect(preview.getAttribute('aria-expanded')).toBe('true');
-  const card = dialog!.querySelector<HTMLElement>('.settlement-card');
-  if (!card) throw new Error('the open dialog has no settlement card');
+  const card = settlementCards()[0]!;
+  expect(card.querySelector('.review-card-preview')).toBeNull();
+  expect(card.querySelector('.settlement-card')).not.toBeNull();
+  expect(document.querySelector('.review-card-dialog')).toBeNull();
   return card;
-}
-
-async function closeSettlement(): Promise<void> {
-  const close = reviewDialog()?.querySelector<HTMLButtonElement>('[aria-label="Close"]');
-  if (!close) throw new Error('there is no open settlement dialog to close');
-  await act(async () => close.click());
-  expect(reviewDialog()).toBeNull();
-  const preview = settlementPreviews()[0]!.querySelector<HTMLButtonElement>('.review-card-preview')!;
-  expect(preview.getAttribute('aria-expanded')).toBe('false');
-  expect(document.activeElement, 'closing did not return focus to the preview').toBe(preview);
 }
 
 /** Presses the line, and returns every element that press scrolled to. */
@@ -487,12 +470,9 @@ async function pressLine(): Promise<Element[]> {
 async function coordinatorWithTheCard(): Promise<void> {
   await mount(`/sessions/${COORDINATOR_PUBLIC}`);
   await waitForUi(() => {
-    expect(settlementPreviews()).toHaveLength(1);
+    expect(settlementCards()).toHaveLength(1);
     expect(counted()).toBe(needsDecisionCount(2));
   });
-  expect(settlementPreviews()[0]!.textContent).toContain('the settlement pointer');
-  expect(mounted().querySelector('.settlement-card')).toBeNull();
-  expect(reviewDialog()).toBeNull();
   expect([...new Set(unstubbed)], 'every endpoint the page reads is stubbed').toEqual([]);
 }
 
@@ -511,30 +491,22 @@ describe('the settlement question on the pinned line', { timeout: 60_000 }, () =
     expect(questionLine()!.hasAttribute('aria-expanded'), 'the line is a fold').toBe(false);
     expect(strip()!.querySelectorAll('.decision-strip-body, .decision-rail-row'), 'a list is drawn under the line')
       .toHaveLength(0);
-    const card = await openSettlement();
-    const toggle = card.querySelector<HTMLButtonElement>('.settlement-card-read')!;
-    await act(async () => toggle.click());
-    expect(toggle.getAttribute('aria-expanded')).toBe('true');
-    await closeSettlement();
-    expect(counted(), 'closing the review stopped counting its unanswered question').toBe(needsDecisionCount(2));
-    expect(await openSettlement(), 'closing reset the mounted form').toBe(card);
-    expect(toggle.getAttribute('aria-expanded')).toBe('true');
-    await closeSettlement();
   });
 
   it('stops counting it once the set is confirmed at another end, while the card stays where it was', async () => {
     await coordinatorWithTheCard();
-    const card = await openSettlement();
     server.standing = standingOf('CONFIRMED');
     await reread(acceptanceConfirmationKey(PROJECT_PUBLIC), () => confirmationReads);
-    // The confirmation has reached the card: still on the page, and saying it was answered.
+    // An external answer updates the full form in place.
+    const dialog = await openSettlement();
     await waitForUi(() => {
-      expect(card.querySelector('.settlement-card-stale')?.textContent ?? '').toContain('Already confirmed');
+      expect(dialog.querySelector('.settlement-card-stale')?.textContent ?? '').toContain('Already confirmed');
     });
+    expect(dialog.querySelector<HTMLButtonElement>('.settlement-card-actions button')!.disabled).toBe(true);
     await waitForUi(() => {
       expect(counted(), 'a set confirmed at another end is still counted as a question').toBe(needsDecisionCount(1));
     });
-    expect(settlementPreviews()).toHaveLength(1);
+    expect(settlementCards()).toHaveLength(1);
   });
 
   it('counts nothing for the card while it has not been drawn, and counts it once it is', async () => {
@@ -548,7 +520,7 @@ describe('the settlement question on the pinned line', { timeout: 60_000 }, () =
     });
     await settle();
     expect(counted(), 'the line counted a card that was never drawn').toBe(needsDecisionCount(1));
-    expect(settlementPreviews()).toEqual([]);
+    expect(settlementCards()).toEqual([]);
 
     // The one fact under test changes, and the same page draws the card and counts it.
     server.criteria = criteriaOf(false, false);
@@ -556,12 +528,11 @@ describe('the settlement question on the pinned line', { timeout: 60_000 }, () =
     await waitForUi(() => {
       expect(counted()).toBe(needsDecisionCount(2));
     });
-    expect(settlementPreviews()).toHaveLength(1);
+    expect(settlementCards()).toHaveLength(1);
   });
 
   it('counts nothing for it in a conversation that coordinates no project, straight after one that did', async () => {
     await coordinatorWithTheCard();
-    await openSettlement();
     await go(`/sessions/${ORDINARY_PUBLIC}`);
     await waitForUi(() => {
       expect(mounted().textContent).toContain(`${NOTE[ORDINARY_PUBLIC]}, opening`);
@@ -569,14 +540,11 @@ describe('the settlement question on the pinned line', { timeout: 60_000 }, () =
     });
     await settle();
     expect(questionLine(), 'a conversation with no project was given a line to a settlement card').toBeNull();
-    expect(settlementPreviews()).toEqual([]);
-    expect(reviewDialog()).toBeNull();
-    expect(document.querySelector('.settlement-card')).toBeNull();
+    expect(settlementCards()).toEqual([]);
   });
 
   it('leaves no line on New session, and counts the card again on the way back', async () => {
     await coordinatorWithTheCard();
-    await openSettlement();
     await go(NEW_SESSION_PATH);
     // New session really is what is on screen, so a missing strip is not a view still loading.
     await waitForUi(() => {
@@ -584,26 +552,22 @@ describe('the settlement question on the pinned line', { timeout: 60_000 }, () =
     });
     await settle();
     expect(strip(), 'New session was left the strip').toBeNull();
-    expect(settlementPreviews()).toEqual([]);
-    expect(reviewDialog()).toBeNull();
-    expect(document.querySelector('.settlement-card')).toBeNull();
+    expect(settlementCards()).toEqual([]);
 
     await go(`/sessions/${COORDINATOR_PUBLIC}`);
     await waitForUi(() => {
       expect(counted()).toBe(needsDecisionCount(2));
     });
-    expect(reviewDialog(), 'returning to the route reopened an old review').toBeNull();
-    await openSettlement();
   });
 
   it('takes the reader to the card with one press when it is the only question, and asks the server nothing', async () => {
     server.proposals = [];
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
     await waitForUi(() => {
-      expect(settlementPreviews()).toHaveLength(1);
+      expect(settlementCards()).toHaveLength(1);
       expect(counted()).toBe(needsDecisionCount(1));
     });
-    const card = settlementPreviews()[0]!;
+    const card = settlementCards()[0]!;
     const requestedBefore = requested.length;
 
     const arrived = await pressLine();
@@ -616,7 +580,7 @@ describe('the settlement question on the pinned line', { timeout: 60_000 }, () =
 
   it('reaches the card after the weakening drawn above it, one press each, and says which it went to', async () => {
     await coordinatorWithTheCard();
-    const card = settlementPreviews()[0]!;
+    const card = settlementCards()[0]!;
     const requestedBefore = requested.length;
 
     const weakening = mounted().querySelector<HTMLElement>(`#criteria-decision-${INTENT}`);
@@ -639,9 +603,10 @@ describe('the settlement question on the pinned line', { timeout: 60_000 }, () =
     expect(stray.map((button) => button.outerHTML), 'the strip grew a control that goes nowhere').toEqual([]);
     expect(strip()!.textContent).not.toContain(ACCEPTANCE_CONFIRM_LABEL);
     expect(strip()!.textContent).not.toContain(OWNER_SEND_BACK_ACTION);
-    // The answer is still where it lives: on the card.
-    const card = await openSettlement();
-    expect([...card.querySelectorAll<HTMLButtonElement>('button')].map(labelOf))
+    // The answer is immediately available on the full card.
+    expect(settlementCards()[0]!.textContent).toContain(ACCEPTANCE_CONFIRM_LABEL);
+    const dialog = await openSettlement();
+    expect([...dialog.querySelectorAll<HTMLButtonElement>('.settlement-card-actions button')].map(labelOf))
       .toContain(ACCEPTANCE_CONFIRM_LABEL);
   });
 });
@@ -652,14 +617,14 @@ describe('the settlement question on the pinned line on a phone', { timeout: 60_
     server.proposals = [];
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
     await waitForUi(() => {
-      expect(settlementPreviews()).toHaveLength(1);
+      expect(settlementCards()).toHaveLength(1);
       expect(counted()).toBe(needsDecisionCount(1));
     });
     const controls = [...strip()!.querySelectorAll<HTMLButtonElement>('button')];
     expect(controls.map((button) => button.className), 'the phone strip is not one line').toEqual(['decision-strip-line']);
     expect(controls[0]!.hasAttribute('aria-expanded'), 'the phone line is a fold').toBe(false);
 
-    const card = settlementPreviews()[0]!;
+    const card = settlementCards()[0]!;
     const requestedBefore = requested.length;
     const arrived = await pressLine();
     expect(requested.slice(requestedBefore), 'the phone line asked the server for something').toEqual([]);

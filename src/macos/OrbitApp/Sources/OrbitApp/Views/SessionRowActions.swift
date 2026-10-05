@@ -152,6 +152,7 @@ private struct SessionRowActions: ViewModifier {
     private var moveAction: RowSwipeAction? {
         #if os(iOS)
         guard !isTrash, let onMove else { return nil }
+        if let membership = session.projectMembership, membership.role != .coordinator { return nil }
         return RowSwipeAction(title: "Move", systemImage: "folder", tint: .indigo, perform: onMove)
         #else
         return nil

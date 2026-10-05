@@ -5,6 +5,7 @@ import type { ApprovalInfo, PermissionRule } from '../api';
 import { BatchGraph } from './BatchGraph';
 import { CardActionButton, CardActions } from './CardAction';
 import { ReviewCard } from './ReviewCard';
+import { useIsMobile } from '../lib/useMediaQuery';
 import { ENTER_HINT, SHORTCUT_HINT, useApproveHotkey, useCardKeyClaim } from './CardHotkey';
 import { buildBatchGraph, describeShape, shouldDraw } from '../lib/batchGraph';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
@@ -322,11 +323,12 @@ export function ApprovalPanel({
   onDecline?: (id: string, toolName: string, subject: string) => void;
 }): JSX.Element {
   const isQuestion = approval.toolName === 'AskUserQuestion';
+  const narrow = useIsMobile();
   const [reviewOpen, setReviewOpen] = useState(false);
   const compact = isPlan(approval) || isProjectCreate(approval);
   // A dead card owns no hotkey and shows no shortcut hint: the caller already skips it when
   // choosing the active card, and this holds even when something else calls it directly.
-  const armed = active && answerable && (!compact || reviewOpen);
+  const armed = active && answerable && (!narrow || !compact || reviewOpen);
   // "Always allow" — the running session stops asking (claude's engine matches future calls),
   // and the rule is kept on this session's workspace so its other sessions start with it too.
   // Empty for questions/plans and Bash commands with no clean prefix; a compound Bash line

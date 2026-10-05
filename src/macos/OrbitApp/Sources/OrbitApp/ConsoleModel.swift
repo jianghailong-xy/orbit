@@ -368,12 +368,13 @@ final class ConsoleModel {
     }
 
     /// Whether the usage sheet should reserve room for the reset card. Unsupported/auth-unknown
-    /// answers stay hidden just like the web card; CREDITS_UNAVAILABLE remains visible with a reason.
+    /// answers and zero credits stay hidden; CREDITS_UNAVAILABLE remains visible with a reason.
     var codexResetCardVisible: Bool {
         guard let block = codexResetBlock,
               Self.isCodexResetBlockValid(block),
               let fingerprint = block.accountFingerprint,
-              Self.isCodexResetFingerprint(fingerprint) else { return false }
+              Self.isCodexResetFingerprint(fingerprint),
+              block.rateLimitResetCredits?.availableCount != 0 else { return false }
         return block.support == "SUPPORTED" || block.support == "CREDITS_UNAVAILABLE"
     }
 
@@ -643,6 +644,7 @@ final class ConsoleModel {
                                                      usage: runnerPlanUsage?.snapshot(for: engine)) ?? []
     }
     private(set) var modelCatalog: RunnerModelCatalog?
+    private var runtimeDefaultModels: [String: String]?
     /// What the session's runner last reported about each engine CLI it can host. A provider
     /// choice is a claim about that machine, so the picker greys out what it says can't run there.
     /// Nil until the runner read lands (and from an older server), which claims nothing.
@@ -846,6 +848,21 @@ final class ConsoleModel {
             for: provider, model: defaultModel, catalog: modelCatalog,
             configured: configuredProviders)
         wireWorktree()
+    }
+
+    /// Seed a console opened from a list before its first frame. The list already owns the config;
+    /// the cached runner/provider catalogs name it without waiting for `loadContext`'s REST reads.
+    func seedSessionContext(_ session: Session, modelCatalog: RunnerModelCatalog?,
+                            runtimeDefaultModels: [String: String]?,
+                            configuredProviders: [ConfiguredProvider], configuredProvidersLoaded: Bool,
+                            providerPools: [ProviderPool], sharedPools: [SharedPool]) {
+        self.modelCatalog = modelCatalog
+        self.runtimeDefaultModels = runtimeDefaultModels
+        self.providerPools = providerPools
+        self.sharedPools = sharedPools
+        self.configuredProviders = configuredProviders + ProviderPools.asProviders(allPools)
+        self.configuredProvidersLoaded = configuredProvidersLoaded
+        adoptSessionConfiguration(session)
     }
 
     /// Seed the live composer's first frame before the draft opens it. The create response owns
@@ -1502,6 +1519,7 @@ final class ConsoleModel {
         runnerHeartbeatDraining = runner.heartbeatDraining
         runnerPlanUsage = runner.planUsage
         modelCatalog = runner.modelCatalog
+        runtimeDefaultModels = runner.runtimeDefaultModels
         runnerEngines = runner.engines
         runnerAntigravity = runner.antigravity
         runnerVersion = runner.version
@@ -1516,6 +1534,7 @@ final class ConsoleModel {
         runnerHeartbeatDraining = nil
         runnerPlanUsage = nil
         modelCatalog = nil
+        runtimeDefaultModels = nil
         runnerEngines = nil
         runnerAntigravity = nil
         runnerVersion = nil
@@ -1559,7 +1578,6 @@ final class ConsoleModel {
         taskID = s.taskId
         ownerReadMoment = runMoment(s)
         if taskID != nil { Task { [weak self] in await self?.refreshOwnerConfirmation() } }
-        provider = s.provider ?? "claude"
         poolMemberProviderID = s.poolMemberProviderId
         poolKeyID = s.poolKeyId
         sessionCodexAccount = s.codexAccount
@@ -1571,31 +1589,8 @@ final class ConsoleModel {
         workspaceEnv = s.agent?.env
         workspaceAntigravityKeys = s.agent?.antigravityKeyAvailableByRunner
 
-        // A historical Session.model is authoritative and can be adopted immediately. If the user
-        // already touched the picker while the session request was in flight, their explicit value
-        // wins and no later context request may replace it.
-        if modelSelectionRevision.isPristine {
-            modelID = s.model ?? AgentDefaults.defaultModel(for: provider)
-        }
-        // A stored mode is adopted verbatim; a session with none (task- or MCP-created) resolves
-        // exactly as the server will — account default, else the floor. Web parity
-        // (`effectivePermissionMode`).
-        permissionMode = AgentDefaults.resolvePermissionMode(
-            session: s.permissionMode, accountDefault: accountDefaultPermissionMode())
-        if let ef = s.effort ?? s.agent?.effort, let e = Effort(rawValue: ef) {
-            effort = AgentDefaults.normalizeEffort(e, for: provider)
-        } else {
-            effort = .default
-        }
-        // Fast mode is stored, never inherited from the agent: a session either is in the lane or
-        // is not, and an absent field (older server, or one that never set it) is off.
-        fastMode = s.fastMode == true
+        adoptSessionConfiguration(s)
         let live = ComposerLogic.isLive(status: s.effectiveRunStatus)
-        // When the session already stores a model, this is a complete server baseline before the
-        // slower optional Runner/provider reads. A manual pick can now PATCH against it safely.
-        if live, s.model != nil, modelSelectionRevision.isPristine {
-            syncedConfig = (modelID, permissionMode.rawValue, effort.rawValue, fastMode)
-        }
 
         // Plan usage + Runtime model/default data ride the GET /runners list. A request failure is
         // merely unavailable data and must retain the model already on screen.
@@ -1654,6 +1649,29 @@ final class ConsoleModel {
         // adopted values so `applyConfig` can distinguish a real user edit from this adopt.
         // A terminal session isn't live, so its pills stay local until the next resume.
         if live, modelSelectionRevision.isPristine {
+            syncedConfig = (modelID, permissionMode.rawValue, effort.rawValue, fastMode)
+        }
+    }
+
+    /// List seeds and the later detail read resolve the same settings. A model-less session keeps
+    /// using the cached Runtime default while the runner refresh is in flight.
+    private func adoptSessionConfiguration(_ session: Session) {
+        provider = session.provider ?? "claude"
+        // A picker edit made while REST was in flight always wins over the server's seed.
+        if modelSelectionRevision.isPristine {
+            modelID = session.model ?? AgentDefaults.effectiveDefaultModel(
+                for: provider, catalog: modelCatalog, configured: configuredProviders,
+                runtimeDefaults: runtimeDefaultModels)
+        }
+        permissionMode = AgentDefaults.resolvePermissionMode(
+            session: session.permissionMode, accountDefault: accountDefaultPermissionMode())
+        effort = AgentDefaults.normalizeEffort(
+            Effort(rawValue: session.effort ?? session.agent?.effort ?? "") ?? .default,
+            for: provider)
+        // Fast mode belongs to the session; it is never inherited from the workspace.
+        fastMode = session.fastMode == true
+        if ComposerLogic.isLive(status: session.effectiveRunStatus), session.model != nil,
+           modelSelectionRevision.isPristine {
             syncedConfig = (modelID, permissionMode.rawValue, effort.rawValue, fastMode)
         }
     }

@@ -370,6 +370,9 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// nil for ordinary Sessions and when talking to an older server.
     public let projectId: String?
     public let projectTitle: String?
+    /// The project this session belongs to in any role; nil for an ordinary conversation and
+    /// from a server that predates project grouping.
+    public let projectMembership: SessionProjectMembership?
     /// The list row's second-line preview, built by `SessionLine`: the (server-truncated) last
     /// assistant reply, the tool currently in flight, and the live background-shell count.
     public let lastAssistantText: String?
@@ -508,6 +511,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         source = try values.decodeIfPresent(String.self, forKey: .source)
         projectId = try values.decodeIfPresent(String.self, forKey: .projectId)
         projectTitle = try values.decodeIfPresent(String.self, forKey: .projectTitle)
+        projectMembership = try values.decodeIfPresent(SessionProjectMembership.self, forKey: .projectMembership)
         lastAssistantText = try values.decodeIfPresent(String.self, forKey: .lastAssistantText)
         lastToolUse = try values.decodeIfPresent(String.self, forKey: .lastToolUse)
         lastUserText = try values.decodeIfPresent(String.self, forKey: .lastUserText)
@@ -550,7 +554,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 claudeAccount: String? = nil, claudeAccountPinned: Bool? = nil,
                 awaitingReplyFrom: [SessionRequestPeer]? = nil, owesReplyTo: [SessionRequestPeer]? = nil,
                 folderId: String? = nil,
-                confirmationUnderReview: ConfirmationUnderReview? = nil) {
+                confirmationUnderReview: ConfirmationUnderReview? = nil,
+                projectMembership: SessionProjectMembership? = nil) {
         self.id = id
         self.title = title
         self.status = status
@@ -586,6 +591,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.source = source
         self.projectId = projectId
         self.projectTitle = projectTitle
+        self.projectMembership = projectMembership
         self.lastAssistantText = lastAssistantText
         self.lastToolUse = lastToolUse
         self.lastUserText = lastUserText

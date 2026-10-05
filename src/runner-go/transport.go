@@ -1446,6 +1446,23 @@ func (t *Transport) requestProjectStart(sessionID, id string, body map[string]in
 	return out, err
 }
 
+// requestProjectDone files a coordinator's request that the account owner record its project done,
+// and returns at once: the owner answers on the "Is this project done?" card.
+//
+// The session header is the authority, as it is for requestProjectStart — the server checks it
+// against the project's own coordinator pointer and refuses DONE_REQUEST_COORDINATOR_ONLY for
+// anything else. A project that is not ready is a 409 DONE_REQUEST_NOT_READY carrying every finding,
+// which travels as the server raised it; `projectDoneRequestRefusal` is what renders it.
+func (t *Transport) requestProjectDone(sessionID, id string, body map[string]interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/projects/"+url.PathEscape(id)+"/done-requests", body,
+		&out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
 // resolveOpenItem closes one of the project's exception items, with the reason the assignee gives
 // (contract §4.7's "标记已处理").
 //
@@ -1464,6 +1481,23 @@ func (t *Transport) resolveOpenItem(sessionID, id, itemID, note string) (json.Ra
 	var out json.RawMessage
 	err := t.doHeaders(nil, "POST",
 		"/runner/projects/"+url.PathEscape(id)+"/open-items/"+url.PathEscape(itemID)+"/resolve",
+		map[string]interface{}{"note": note}, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
+// handOverOpenItem deliberately gives one of the project's coordinator items to the account
+// owner, retaining the explanation on the item.  The session header is the authority: the server
+// checks it against the project's coordinator pointer and performs the assignment CAS.
+func (t *Transport) handOverOpenItem(sessionID, id, itemID, note string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	if err := validatePathSegmentID(itemID); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST",
+		"/runner/projects/"+url.PathEscape(id)+"/open-items/"+url.PathEscape(itemID)+"/hand-over",
 		map[string]interface{}{"note": note}, &out, taskOpTimeout, sessionHeader(sessionID))
 	return out, err
 }

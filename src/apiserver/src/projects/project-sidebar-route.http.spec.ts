@@ -27,7 +27,7 @@ import { TaskCheckpointService } from './task-checkpoint.service';
  * which is the whole reason this is asserted over real HTTP with the real controller.
  *
  * The payload is asserted too, because it is the contract the web reads: `buckets.running` alone,
- * no task total, no `goal`. A route that answered with the whole index row would pass a test that
+ * `taskCounts`, no `goal`. A route that answered with the whole index row would pass a test that
  * only asked for a 200.
  */
 
@@ -45,6 +45,7 @@ const railRow = {
   status: 'OPEN',
   createdAt: '2026-08-01T00:00:00.000Z',
   buckets: { running: 2 },
+  taskCounts: { done: 4, failed: 1, total: 9 },
   lastActivityAt: '2026-10-02T00:00:00.000Z',
   attention: { userBlockers: 1, ownerItems: [], coordinatorItems: null, startRequest: null },
   coordinatorActivity: null,
@@ -99,6 +100,7 @@ test('GET /projects/sidebar is the rail read, not a project id', async (t) => {
   const [row] = JSON.parse(text) as Array<typeof railRow>;
   assert.deepEqual(row.buckets, { running: 2 },
     'one lane, under the name the index reports it by');
+  assert.deepEqual(row.taskCounts, { done: 4, failed: 1, total: 9 });
   assert.equal(row.title, 'the rail');
   assert.ok(!('goal' in row) && !('_count' in row),
     'the page-wide fields the rail does not draw are not sent to a poll that runs every 15s');

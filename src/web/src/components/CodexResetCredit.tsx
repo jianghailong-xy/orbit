@@ -462,6 +462,7 @@ export function CodexResetCreditCard({ state }: { state: CodexResetCreditState }
   const headingId = useId();
   const reasonId = useId();
   const { card, operation, create, notice, hiddenBy } = state;
+  if (card?.details.availableCount === 0) return null;
   const status = codexResetStatusOf(state);
   if ((!card && !status) || (hiddenBy && !status)) return null;
   const expiry = card ? codexResetExpiry(card.block, fmtDay) : null;

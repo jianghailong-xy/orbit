@@ -13,6 +13,7 @@
  */
 import type { IntegrationCheckResult, IntegrationJobKind, IntegrationJobPhase, IntegrationJobState } from './dto';
 import type { ProjectStartRequest, ProjectStartSettingKey, ProjectStartSettings } from './project-start';
+import type { DoneRequest } from './project-done';
 
 /** Where this project's finished tasks land: straight onto main, or onto a branch of its own. */
 export type IntegrationLine = 'MAIN' | 'PROJECT_BRANCH';
@@ -396,8 +397,10 @@ export interface OpenItemFacts {
  * then would be saying something nobody knows yet.
  */
 export interface OpenItemHandling<Instant = string> {
-  /** The coordinator conversation that asked for the rerun. */
-  sessionId: string;
+  /** The coordinator conversation that asked for the rerun, or null when the owner did. */
+  sessionId: string | null;
+  /** The account owner that asked for the rerun, or null when the coordinator did. */
+  userId: string | null;
   /** Why it said the rerun would come out differently, as it said it. */
   reason: string;
   startedAt: Instant;
@@ -420,10 +423,11 @@ export interface OpenItemHandling<Instant = string> {
 export interface OpenItemOutcome<Instant = string> {
   state: 'RESOLVED' | 'SUPERSEDED';
   resolution: 'HANDLED' | 'RETRIED';
-  resolvedBy: 'COORDINATOR';
-  /** The coordinator conversation it is attributed to: the one that asked for the rerun, or the one
-   *  that closed the item. */
+  resolvedBy: 'COORDINATOR' | 'USER';
+  /** The coordinator conversation it is attributed to, when a coordinator asked. */
   resolvedBySessionId: string | null;
+  /** The account owner it is attributed to, when the owner asked. */
+  resolvedByUserId: string | null;
   resolvedAt: Instant;
   /** The reason the coordinator gave — for its rerun, or for closing the item by hand. */
   note: string | null;
@@ -431,6 +435,49 @@ export interface OpenItemOutcome<Instant = string> {
   jobId: string | null;
   /** The item that took this one's place, when the rerun failed again. */
   supersededByItemId: string | null;
+}
+
+/**
+ * Where an item's handling stands right now, in one word (§4.7): what a card says beside its
+ * "Chat about this", and what the coordinator is told along with the message that press carries.
+ *
+ * `HANDLING` while the coordinator's rerun of it is queued or running (H1); `WITH_COORDINATOR` while
+ * it waits for the coordinator to act on it; `WITH_OWNER` while it is the account owner's — from
+ * birth, or because it became theirs (§4.1); `HANDLED` and `SUPERSEDED` once the coordinator's
+ * handling ended it (H2, H3).
+ */
+export type OpenItemStage =
+  | 'HANDLING'
+  | 'WITH_COORDINATOR'
+  | 'WITH_OWNER'
+  | 'HANDLED'
+  | 'SUPERSEDED';
+
+/**
+ * Why "Chat about this" cannot be had for an item, when it cannot.
+ *
+ * `NO_COORDINATOR`: the project has no coordinator conversation to hold it. `COORDINATOR_UNAVAILABLE`:
+ * it has one, and that conversation cannot take a message now — in Trash, ending, or ended with
+ * nothing to resume (the same answer every session payload publishes as `canSend`).
+ * `SUPERSEDED`: a failed rerun replaced the item with a new one, and that one is what a chat about
+ * the failure is about.
+ */
+export type OpenItemChatRefusal = 'NO_COORDINATOR' | 'COORDINATOR_UNAVAILABLE' | 'SUPERSEDED';
+
+/**
+ * "Chat about this" for one item, as the server decides it (§4.8).
+ *
+ * A message to the project's coordinator conversation and nothing else: it presses no door, so it is
+ * offered whoever holds the item, and refused only where there is nowhere for the message to go or
+ * where it would be about the wrong item. What the doors on the same card may do is still `actions`,
+ * decided as before.
+ */
+export interface OpenItemChat {
+  /** The project's coordinator conversation — where the chat is held. Null when there is none. */
+  sessionId: string | null;
+  stage: OpenItemStage;
+  /** Null when the chat can be had; otherwise why it cannot. */
+  refusal: OpenItemChatRefusal | null;
 }
 
 /**
@@ -454,6 +501,8 @@ export interface ProjectOpenItemRow<Instant = string> {
   escalateAt: Instant | null;
   escalatedAt: Instant | null;
   taskId: string | null;
+  /** Tasks filed as concrete fixes for this item, newest task state included. */
+  handledBy?: Array<{ taskId: string; title: string; state: string }>;
   /** The attempt this item is about, when there is one: the run whose failure opened it. */
   sessionId: string | null;
   promotionId: string | null;
@@ -465,6 +514,9 @@ export interface ProjectOpenItemRow<Instant = string> {
   /** The request a `START_REQUEST` carries — what the "Start this project?" card is drawn from —
    *  and null for every other kind. Absent from a server that predates start requests. */
   startRequest?: ProjectStartRequest | null;
+  /** The request a `DONE_REQUEST` carries — what the "Is this project done?" card is drawn from —
+   *  and null for every other kind. Absent from a server that predates done requests. */
+  doneRequest?: DoneRequest | null;
   /** What the item's payload holds, as the rows its card draws; null when the payload is not a
    *  shape this build reads — an item an older build opened, a pause, a question — and the card
    *  then draws what it drew before this existed. */
@@ -474,6 +526,11 @@ export interface ProjectOpenItemRow<Instant = string> {
   handling?: OpenItemHandling<Instant> | null;
   /** How it ended — only on a row of `settled`, and null on every open one. */
   outcome?: OpenItemOutcome<Instant> | null;
+  /** The coordinator's explanation when it deliberately handed the item to the owner. */
+  handoverNote?: string | null;
+  /** "Chat about this": where the item's handling stands, and whether a message about it can reach
+   *  the project's coordinator conversation. Absent from a server that predates it. */
+  chat?: OpenItemChat | null;
 }
 
 /** The project's open exceptions, split by who is expected to act (§4.8). */
@@ -495,6 +552,13 @@ export interface ProjectOpenItemsView<Instant = string> {
    * Absent from a server that predates start requests.
    */
   startRequest?: ProjectOpenItemRow<Instant> | null;
+  /**
+   * The coordinator's open request to record the project done (`DONE_REQUEST`), or null — a project
+   * holds at most one, and it is drawn only while it still describes the project: one whose criteria,
+   * tasks or landings have moved since is superseded before this is read. Kept out of `needsYou` for
+   * the reason `startRequest` is. Absent from a server that predates done requests.
+   */
+  doneRequest?: ProjectOpenItemRow<Instant> | null;
 }
 
 /**
@@ -801,7 +865,8 @@ export interface ProjectListCoordinatorItems<Instant = string> {
   count: number;
   leadKind: CoordinatorLeadKind;
   oldestWaitingSince: Instant;
-  nextEscalationAt: Instant;
+  /** Null when every held item is currently making progress (there is no expiry to count down to). */
+  nextEscalationAt: Instant | null;
 }
 
 /**
@@ -833,6 +898,14 @@ export interface ProjectListCoordinatorActivity<Instant = string> {
   lastTurnAt: Instant | null;
 }
 
+/** Stored task statuses from `project_task_status_count`, as `GET /projects/sidebar` serves them. */
+export interface ProjectSidebarTaskCounts {
+  done: number;
+  failed: number;
+  /** Every task except CANCELLED, including DONE and FAILED. */
+  total: number;
+}
+
 /**
  * What `GET /projects` says about who must act on a project, and how long they have had to — the
  * blockers the list has always aggregated plus the items behind them (§7.1 V1).
@@ -861,6 +934,13 @@ export interface ProjectListAttention<Instant = string> {
    * reason the two fields above are.
    */
   startRequest?: { waitingSince: Instant } | null;
+  /**
+   * The coordinator's open request to record this project done (`DONE_REQUEST`,
+   * `project_request_done`) while the project is OPEN — since when it has been asking — or null. The
+   * row names it as waiting on the owner ("Needs you · Ready to close"), apart from `ownerItems` for
+   * the reason `startRequest` is. Optional for the same reason the fields above are.
+   */
+  doneRequest?: { waitingSince: Instant } | null;
 }
 
 /**
@@ -882,16 +962,19 @@ export interface SessionOwnerItem<Instant = string> {
 
 /**
  * What a session row says its `pendingApprovals` is counting, when one word says it better than
- * "approval" — the three kinds whose count is not an approval at all.
+ * "approval" — the kinds whose count is not an approval at all.
  *
  * `OWNER_CONFIRMATION` is an OWNER_CONFIRMED task's run waiting for its owner to confirm it done.
  * `OWNER_ITEM` is one of the four above: the row says the oldest item's own word (`Escalated to
  * you`, `Paused`, …) — the same words the Needs-you banner and the card in the conversation use —
  * because on a project whose coordinator is switched off the item is the owner's precisely when
  * nobody else will take it. `START_REQUEST` is a project not started yet whose coordinator has asked
- * to start it: the row says "Ready to start", over the "Start this project?" card. A row counting
- * anything else (a blocked tool call, a proposal) keeps the generic approval wording, and so does
- * one counting two kinds at once.
+ * to start it: the row says "Ready to start", over the "Start this project?" card. `DONE_REQUEST` is
+ * an OPEN project whose coordinator has asked its owner to record it done: the row says "Ready to
+ * close", over the "Is this project done?" card. `RECORD_AS_DONE` is a project that looks finished
+ * and that its coordinator did not ask to have recorded done within the project's escalation window:
+ * the row says "Record as done…". A row counting anything else (a blocked tool call, a proposal)
+ * keeps the generic approval wording, and so does one counting two kinds at once.
  */
 export type SessionWaitingKind =
   | 'OWNER_CONFIRMATION'

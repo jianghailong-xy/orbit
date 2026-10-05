@@ -43,6 +43,10 @@ var cliParityExemptTools = map[string]string{
 	// missing header as the account owner — the owner's press is the user API's — so the command
 	// would be one that can only fail; inside one, the coordinator reaches it over MCP.
 	"open_item_resolve": "closes an item as the project's coordinator session: a terminal outside one is refused by the server",
+	// open_item_hand_over is the matching coordinator-session door: a terminal outside a live
+	// coordinator conversation has no authority header, so the CLI would only produce a refusal;
+	// the coordinator reaches it over MCP.
+	"open_item_hand_over": "hands an item to the account owner as the project's coordinator session: a terminal outside one is refused by the server",
 	// integration_retry reruns a failed landing AS the project's coordinator conversation (contract
 	// §2.3 J-T1b), and the runner door reads no missing header as the account owner. So, like
 	// open_item_resolve, a command typed outside a session could only ever be refused; inside one,

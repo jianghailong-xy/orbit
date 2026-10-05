@@ -29,6 +29,8 @@ import {
  * — here carrying a reply to the proposing session — is what the press contributes.
  */
 
+// These cases check the card's data/decision contract; ReviewCard.test covers the real dialog.
+vi.mock('./ReviewCard', () => import('../test/inlineReviewCard'));
 vi.mock('../api', () => ({ api: vi.fn() }));
 
 const PROJECT = '34ODoUKJGEsfbgcJDGS4q';
@@ -141,33 +143,9 @@ function labelOf(button: HTMLButtonElement): string {
 }
 
 /** The live Approve button, or null once there is none to press. */
-function approveButton(): HTMLButtonElement | null {
-  return [...(reviewDialog()?.querySelectorAll<HTMLButtonElement>('button') ?? [])]
+function approveButton(node: HTMLElement): HTMLButtonElement | null {
+  return [...node.querySelectorAll('button')]
     .find((button) => labelOf(button) === APPROVE_LABEL && !button.disabled) ?? null;
-}
-
-const previewButton = (node: HTMLElement): HTMLButtonElement | null =>
-  node.querySelector<HTMLButtonElement>('.review-card-preview');
-const reviewDialog = (): HTMLElement | null =>
-  document.querySelector<HTMLElement>('.review-card-dialog[data-open]');
-
-async function key(init: KeyboardEventInit = {}): Promise<void> {
-  await act(async () => {
-    window.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...init }),
-    );
-  });
-}
-
-async function openReview(node: HTMLElement): Promise<void> {
-  expect(previewButton(node)!.getAttribute('aria-expanded')).toBe('false');
-  expect(node.querySelector('.criteria-decision-actions'), 'the preview offers decision actions').toBeNull();
-  expect(reviewDialog()).toBeNull();
-  await act(async () => previewButton(node)!.click());
-  await until(() => approveButton() !== null, 'the open review to offer its answer');
-  expect(previewButton(node)!.getAttribute('aria-expanded')).toBe('true');
-  expect(reviewDialog()!.getAttribute('role')).toBe('dialog');
-  expect(node.contains(reviewDialog()), 'the review is not a portal').toBe(false);
 }
 
 /**
@@ -222,13 +200,10 @@ describe('a criteria card answered in this window', () => {
         />
       </QueryClientProvider>,
     ));
-    await until(() => previewButton(node) !== null, 'the card to show its preview');
-    await key({ ctrlKey: true });
-    expect(posts, 'the closed preview answered a keyboard press').toEqual([]);
-    await openReview(node);
+    await until(() => approveButton(node) !== null, 'the card to offer its answer');
 
     await act(async () => {
-      approveButton()!.click();
+      approveButton(node)!.click();
     });
     await until(() => readsSinceDecided > 0, 'the pending read to come back without the proposal');
     await until(() => !qc.isFetching(), 'that read to settle');
@@ -238,10 +213,9 @@ describe('a criteria card answered in this window', () => {
     // outcome and its seals, and the window that pressed is the only one handed the destination.
     expect(handedOn).toEqual([DECIDED]);
     // The card is gone: its question is answered, and the receipt for it is in the conversation.
-    await until(() => node.querySelectorAll('.review-card, .criteria-decision').length === 0,
+    await until(() => node.querySelectorAll('.criteria-decision').length === 0,
       'the card to give way to the receipt');
-    expect(approveButton(), 'an answered proposal still offers an answer').toBeNull();
-    expect(document.querySelector('.review-card-dialog .criteria-decision'), 'the answered review portal remains').toBeNull();
+    expect(approveButton(node), 'an answered proposal still offers an answer').toBeNull();
     expect(node.querySelector('.is-stale')).toBeNull();
   });
 });
@@ -275,11 +249,16 @@ describe('a criteria card answered from the keyboard', () => {
         <SessionCriteriaDecisionCard projectId={PROJECT} />
       </QueryClientProvider>,
     ));
-    await until(() => previewButton(node) !== null, 'the card to show its preview');
-    await key({ ctrlKey: true });
-    expect(bodies, 'the closed preview answered a keyboard press').toEqual([]);
-    await openReview(node);
-    expect(approveButton()!.querySelector('.approval-kbd')?.textContent).toBe(SHORTCUT_HINT);
+    await until(() => approveButton(node) !== null, 'the card to offer its answer');
+    expect(approveButton(node)!.querySelector('.approval-kbd')?.textContent).toBe(SHORTCUT_HINT);
+
+    const key = async (init: KeyboardEventInit = {}): Promise<void> => {
+      await act(async () => {
+        window.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...init }),
+        );
+      });
+    };
     await key();
     expect(bodies, 'the bare key moved the ruler').toEqual([]);
 
@@ -287,9 +266,6 @@ describe('a criteria card answered from the keyboard', () => {
     await until(() => bodies.length > 0, 'the approval to reach the door');
     // The same request the button sends: the proposal's own token, against the seal it was drawn on.
     expect(bodies).toEqual([{ commitToken: `token-${INTENT}`, decision: 'APPROVE', baseSeal: SEAL }]);
-    await until(() => node.querySelector('.review-card') === null, 'the answered preview to leave');
-    await key({ ctrlKey: true });
-    expect(bodies, 'the answered proposal accepted another keyboard press').toHaveLength(1);
   });
 });
 

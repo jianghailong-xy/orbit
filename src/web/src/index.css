@@ -259,6 +259,17 @@ body {
   max-width: none;
   align-items: center;
 }
+.toast-slot {
+  width: fit-content;
+  max-width: 100%;
+  animation: orbit-toast-enter 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.toast-slot:has(.toast--card) {
+  width: 100%;
+}
+.toast-slot--leaving .toast {
+  pointer-events: none;
+}
 .toast {
   box-sizing: border-box;
   display: flex;
@@ -273,7 +284,6 @@ body {
   font-size: 14px;
   line-height: 20px;
   text-align: start;
-  animation: orbit-toast-enter 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 :root[data-theme='dark'] .toast {
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4);
@@ -519,8 +529,20 @@ button.toast--pill:focus-visible {
     transform: none;
   }
 }
-.toast-viewport--narrow .toast {
+.toast-viewport--narrow .toast-slot {
   animation-name: orbit-toast-drop;
+}
+.toast-viewport .toast-slot--leaving {
+  animation: orbit-toast-exit 250ms ease-in forwards;
+}
+
+@keyframes orbit-toast-exit {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translate3d(0, -12px, 0); }
+}
+@keyframes orbit-toast-fade {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 
 @media (pointer: coarse) {
@@ -530,8 +552,11 @@ button.toast--pill:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .toast {
+  .toast-viewport .toast-slot {
     animation: none;
+  }
+  .toast-viewport .toast-slot--leaving {
+    animation: orbit-toast-fade 250ms ease-in forwards;
   }
 }
 
@@ -3322,6 +3347,9 @@ button.toast--pill:focus-visible {
 .session-section-head:first-child {
   padding-top: 2px;
 }
+.session-col-list > section:not(:first-child) > .session-section-head {
+  padding-top: 12px;
+}
 /* The Pinned heading folds its rows away, as Notes' Pinned does: the whole heading is the button,
    and the chevron at its end points down while the rows show, right once they are folded. */
 .session-section-fold {
@@ -4836,6 +4864,90 @@ html[data-theme='dark'] .session-tag-chip {
   flex: none;
   font-size: 12.5px;
   color: var(--text-4);
+}
+.session-project-icon {
+  position: relative;
+  color: var(--brand);
+  font-size: 16px;
+}
+.session-project-status {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--brand);
+  box-shadow: 0 0 0 2px var(--session-menu-surface);
+}
+.session-project-status.needs-you {
+  background: var(--warning);
+}
+.session-project-status.jobs {
+  animation: status-glyph-breathe 2.4s ease-in-out infinite;
+}
+.session-project-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  height: 18px;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-3);
+  font-size: 10px;
+  line-height: 1;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+}
+.session-project-progress.done {
+  color: var(--success);
+  border-color: var(--success-border);
+  background: var(--success-bg);
+}
+.session-project-progress:hover,
+.session-project-progress:focus-visible {
+  border-color: var(--brand);
+}
+.session-project-page-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-3);
+}
+.session-project-page-progress a {
+  margin-left: auto;
+  font-size: 16px;
+  color: var(--text-3);
+}
+.session-project-page-progress a:hover {
+  color: var(--brand);
+}
+.session-project-page-header .session-kebab {
+  border: 0;
+  background: transparent;
+}
+.session-project-progress-bar {
+  display: flex;
+  width: 32px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--text-4);
+}
+.session-project-progress-bar .done {
+  background: var(--success);
+}
+.session-project-progress-bar .running {
+  background: var(--brand);
+}
+.session-project-progress-bar .failed {
+  background: var(--error);
 }
 /* A public link opens this session (the list row's `shared`): a globe beside the time. */
 .session-shared {
@@ -13885,8 +13997,7 @@ button.chat-jump-start:hover {
 .re-card.offline .re-head {
   background: var(--fill-muted);
 }
-/* Everything that isn't the Manage link folds the card; it's the whole left half of the header,
-   so the hit target matches what reads as "this runner". */
+/* Identity has its own toggle so the adjacent Manage link stays independent. */
 .re-toggle {
   display: flex;
   align-items: center;
@@ -13945,17 +14056,20 @@ button.chat-jump-start:hover {
   white-space: nowrap;
 }
 
-/* The runner header's spare width belongs to its toggle, with Manage kept independent. */
+/* Identity expands the runner; its status and Manage link stay separate. */
 .re-runner-card .re-head {
   gap: 0;
   padding: 0;
+}
+.re-runner-card.offline .re-head {
+  background: var(--bg-subtle);
 }
 .re-runner-card .re-toggle {
   flex: 1;
   align-self: stretch;
   gap: 10px;
   min-height: 64px;
-  padding: 10px 12px;
+  padding: 10px 14px;
   border-radius: 11px 0 0 11px;
 }
 .re-runner-card .re-toggle:focus-visible {
@@ -13966,8 +14080,8 @@ button.chat-jump-start:hover {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 28px;
+  height: 24px;
   color: var(--text-2);
   transition: color 0.15s, transform 0.15s;
 }
@@ -13978,17 +14092,46 @@ button.chat-jump-start:hover {
 .re-runner-copy {
   display: flex;
   flex: 1;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 4px 9px;
+  flex-direction: column;
+  gap: 3px;
   min-width: 0;
 }
 .re-runner-copy .re-runner,
 .re-runner-copy .re-runner-meta {
   overflow-wrap: anywhere;
 }
+.re-runner-copy .re-runner {
+  font-size: 15px;
+}
+.re-runner-copy .re-runner-meta {
+  font-size: 12px;
+}
+.re-runner-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.re-runner-status > .ant-tag {
+  margin: 0;
+}
+.re-runner-status .re-summary {
+  border-left: 0;
+  padding-left: 0;
+  font-size: 12px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.re-runner-status .re-summary.warn {
+  color: var(--warning);
+}
+.re-runner-status .re-summary .anticon {
+  margin-right: 5px;
+}
 .re-runner-card .re-manage {
   display: flex;
+  flex: none;
   align-items: center;
   min-height: 44px;
   margin: 0 14px 0 8px;
@@ -13998,36 +14141,29 @@ button.chat-jump-start:hover {
   outline-offset: 3px;
   border-radius: 4px;
 }
-.re-runner-card .re-head > .ant-tag {
-  margin: 0 4px;
-}
 @container re-card (max-width: 600px) {
   .re-runner-card .re-head {
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 8px;
+    padding: 0 14px;
   }
   .re-runner-card .re-toggle {
-    flex-basis: 100%;
-    gap: 8px;
-    padding: 10px 8px;
+    grid-column: 1 / -1;
+    align-items: flex-start;
+    min-height: 54px;
+    padding: 10px 0 0;
     border-radius: 11px;
   }
-  .re-runner-copy,
-  .re-runner-copy > span {
-    display: block;
+  .re-runner-card .re-toggle > .re-dot {
+    margin-top: 8px;
   }
-  .re-runner-copy .re-runner-meta {
-    margin-top: 3px;
-  }
-  .re-runner-card .re-summary {
-    border-left: 0;
-    padding: 3px 0 0;
+  .re-runner-status {
+    margin-left: 17px;
   }
   .re-runner-card .re-manage {
-    margin-left: auto;
-    margin-right: 12px;
-  }
-  .re-runner-card .re-head > .ant-tag {
-    margin-left: 75px;
+    grid-column: 2;
+    margin: 0;
   }
 }
 
@@ -19629,6 +19765,29 @@ button.project-open-item-action:disabled {
 }
 .project-open-item-actions:empty {
   display: none;
+}
+/* "Chat about this" (lib/coordinatorChat): its own row under the doors, because it is not one of
+   them — a message to the coordinator conversation — with the reason said beside it when the
+   server refuses it. */
+.project-open-item-chat {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.project-open-item-chat-refusal,
+.project-promotion-chat-refusal {
+  font-size: 12px;
+  color: var(--text-3);
+}
+/* The merge card's presses sit on one unwrapped row; a refused chat's reason takes a line of its own
+   under them rather than squeezing every label there onto two. */
+.card-actions.project-promotion-actions.has-chat-refusal {
+  flex-wrap: wrap;
+}
+.project-promotion-chat-refusal {
+  flex-basis: 100%;
 }
 .project-open-item-error {
   flex-basis: 100%;
