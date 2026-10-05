@@ -1417,7 +1417,9 @@ function CardActions({
       {actionConsequence(row, action)}
     </span>
   );
-  const allActions = handClosable ? [...ordered, 'MARK_HANDLED' as OpenItemAction] : ordered;
+  const allActions: Array<OpenItemAction | 'MARK_HANDLED'> = handClosable
+    ? [...ordered, 'MARK_HANDLED']
+    : ordered;
   return (
     <>
       <div className="project-open-item-actions">
