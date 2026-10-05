@@ -155,7 +155,7 @@ final class RunnerArtifactWiringTests: XCTestCase {
                "a screenshot outside the console no longer has an image viewer")
         let fetch = try section(card, from: "private func fetch()")
         let decode = try XCTUnwrap(fetch.range(of: "PlatformImage(data: data)"))
-        let text = try XCTUnwrap(fetch.range(of: "String(data: data, encoding: .utf8)"))
+        let text = try XCTUnwrap(fetch.range(of: "TextFilePreview(data: data, fileName: fileName)"))
         XCTAssertLessThan(decode.lowerBound, text.lowerBound,
                           "image bytes must be recognized before choosing the document reader")
         expect(fetch, "openImage(image)", "a legacy screenshot link no longer opens after decoding")

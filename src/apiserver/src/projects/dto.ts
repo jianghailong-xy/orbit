@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -25,6 +25,7 @@ import {
   ProjectStatus,
   type AcceptedGap,
   type DoneRequestGap,
+  type ProjectDoneRequestDeclineBody,
   type ProjectDoneRequestBody,
   type ProjectStartRequestBody,
   type RequestProjectDoneBody,
@@ -39,6 +40,7 @@ import { MAX_START_REQUEST_WHY } from './project-start-request';
 import {
   MAX_DONE_REQUEST_EVIDENCE_REF,
   MAX_DONE_REQUEST_EVIDENCE_REFS,
+  MAX_DONE_REQUEST_DECLINE_NOTE,
   MAX_DONE_REQUEST_GAPS,
   MAX_DONE_REQUEST_GAP_TEXT,
   MAX_DONE_REQUEST_GAP_TITLE,
@@ -457,6 +459,17 @@ export class DoneProjectDto implements ProjectDoneRequestBody {
   /** One per criterion Orbit could not prove, each kept as it was sent. */
   @IsArray() @ArrayMaxSize(MAX_PROJECT_ACCEPTANCE_CRITERIA_ITEMS) @IsObject({ each: true })
   acceptedGaps!: AcceptedGap[];
+}
+
+/**
+ * `POST /projects/:id/done-requests/:itemId/decline`: the account owner's Not yet… note.
+ *
+ * The service trims and validates again because this DTO is only the HTTP boundary; direct callers
+ * and retries must meet the same rule.
+ */
+export class DeclineDoneRequestDto implements ProjectDoneRequestDeclineBody {
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  @IsString() @MinLength(1) @MaxLength(MAX_DONE_REQUEST_DECLINE_NOTE) note!: string;
 }
 
 /**

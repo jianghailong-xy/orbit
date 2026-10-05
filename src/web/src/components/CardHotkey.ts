@@ -9,8 +9,8 @@ import { useEffect, useRef, useState, type RefObject } from 'react';
  * allow and the project settlement card's delegation keep their ⌘/Ctrl chord, and the two cards
  * whose primary press is hard to take back — `Merge to main` and `Approve & re-seal` — take the
  * chord for it instead of the bare key. The same predicate leaves every key to a focused field with
- * text and the bare key to a focused button, whose own Enter is the same press. An empty field has
- * no typing to protect, so the card can still answer.
+ * text and the bare key to a focused button or link, whose own Enter is the same press. An empty
+ * field has no typing to protect, so the card can still answer.
  *
  * WHICH CARD HOLDS THEM
  * ---------------------
@@ -98,7 +98,12 @@ function isCardAnswer(e: KeyboardEvent, requireMod: boolean): boolean {
       : (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') &&
         (el as HTMLInputElement | HTMLTextAreaElement).value !== '');
   const isButton = el instanceof HTMLElement && el.tagName === 'BUTTON';
-  return !(isFieldWithText || (!requireMod && isButton));
+  // A focused link is a button's case: bare Enter activates the link itself — the card answering
+  // that press would take it away from the link and put it on a question nobody asked there. The
+  // chord stays the card's over a link, exactly as it does over a button, because it is no link's
+  // own press. `href` is what makes an anchor focusable and activatable in a browser.
+  const isLink = el instanceof HTMLElement && el.tagName === 'A' && el.hasAttribute('href');
+  return !(isFieldWithText || (!requireMod && (isButton || isLink)));
 }
 
 /**

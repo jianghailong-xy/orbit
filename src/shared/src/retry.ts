@@ -77,9 +77,22 @@ export function apiErrorRetryAt(
   now: Date,
   rand: () => number = Math.random,
 ): Date | null {
+  if (!apiErrorRetryBudgetLeft(attempts)) return null;
   const step = API_ERROR_RETRY_BACKOFF_MS[attempts];
-  if (step === undefined) return null;
   return new Date(now.getTime() + step + Math.floor(rand() * step * 0.25));
+}
+
+/**
+ * Whether the run-failure budget still allows one more automatic re-send, `attempts` spent.
+ *
+ * This is the *whether*, which no answer about *when* replaces: the ladder is not the only thing that
+ * can say when to try again — a pool credential's own mark is a better answer, and a rate limit is
+ * armed at it — but the count that stops a provider being re-sent to forever belongs to this budget,
+ * and a caller that arms on a time from anywhere else has to ask it first. The sweep spends one
+ * attempt per re-send whatever armed it; without this it would go on being armed.
+ */
+export function apiErrorRetryBudgetLeft(attempts: number): boolean {
+  return API_ERROR_RETRY_BACKOFF_MS[attempts] !== undefined;
 }
 
 const MONTHS = [

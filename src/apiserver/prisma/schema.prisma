@@ -5696,6 +5696,11 @@ model PoolApiKey {
   // the reset it named, else the first of the next month. No claim chooses it before; a request that
   // goes through on it, or a new secret, clears it.
   spentUntil      DateTime?          @map("spent_until")
+  // Rate-limited until then (migration 0382): OpenAI answered 429 for a request on this key and the
+  // wait it named outlasted what the gateway may hold a request open for, so the answer went back to
+  // codex. Short — minutes — and not `spent_until`, which is OpenAI's own reset. No claim chooses a
+  // key under it; the pool's retry then arms at the moment the key can run again.
+  throttledUntil  DateTime?          @map("throttled_until")
   usage           PoolUsage[]
   createdAt       DateTime           @default(now()) @map("created_at")
   updatedAt       DateTime           @updatedAt @map("updated_at")
@@ -5785,6 +5790,11 @@ model PoolCodexLogin {
   // by the next answer it takes; and the last x-codex-* window reading (a Codex PlanUsageSnapshot) and
   // when it was read.
   spentUntil      DateTime?    @map("spent_until")
+  // Migration 0382, written by the pool gateway the same way: the Codex backend answered 429 for a
+  // request on this account and the wait it named outlasted what the gateway may hold a request open
+  // for. Short (minutes) and not the subscription's own reset (`spent_until`); no claim chooses the
+  // account until it passes.
+  throttledUntil  DateTime?    @map("throttled_until")
   usage           Json?
   usageReadAt     DateTime?    @map("usage_read_at")
   createdAt       DateTime     @default(now()) @map("created_at")

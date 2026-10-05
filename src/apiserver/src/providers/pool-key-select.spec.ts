@@ -31,6 +31,7 @@ const key = (id: string, contributorId: string, over: Partial<PoolKeyCandidate> 
   shareCap: null,
   othersCostMicros: 0,
   spentUntil: null,
+  throttledUntil: null,
   ...over,
 });
 const dollars = (n: number) => n * 1_000_000;
@@ -65,6 +66,23 @@ test("own key first: a requester's own key that can run comes before everybody e
   assert.equal(pick(keys, MIA, true, 'k1'), 'k1');
   // …and gives way when her own is out of budget: the next claim moves her to somebody else's.
   assert.equal(pick([key('k1', ANN), key('k2', MIA, { spentUntil: NEXT_MONTH })], MIA, true, 'k2'), 'k1');
+});
+
+// A rate limit the gateway could not wait out (migration 0382) is a short mark rather than a budget, and
+// it is the credential that cannot run — so it gives way exactly as a spent one does, for its contributor
+// too, and comes back at its own moment rather than at a ladder step.
+test("a key rate-limited past the gateway's own wait is passed over until it can run again", () => {
+  const throttled = key('k1', ANN, { throttledUntil: later(2) });
+  assert.equal(keyCanRun(throttled, ANN, NOW), false);
+  assert.deepEqual(keyRunsAgainAt(throttled, ANN, NOW), later(2));
+  assert.equal(pick([throttled, key('k2', MIA)], MAX), 'k2');
+  // A session on it moves too: staying is only for a key that can run.
+  assert.equal(pick([throttled, key('k2', MIA)], MAX, true, 'k1'), 'k2');
+  // With nothing else to take, nothing is chosen — the session keeps the key it has, which is where the
+  // retry waits for the mark rather than at a fixed step.
+  assert.equal(pick([throttled], MAX, true, 'k1'), null);
+  // The mark has passed: it runs again.
+  assert.equal(keyCanRun(key('k1', ANN, { throttledUntil: new Date(NOW.getTime() - 1) }), MAX, NOW), true);
 });
 
 test("a key the others spent to its share cap is passed over — for everyone but its contributor", () => {

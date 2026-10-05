@@ -22,6 +22,7 @@ import { ownerConfirmationQuery } from '../lib/queries';
 import { CardActionButton, CardActions } from './CardAction';
 import { ENTER_HINT, useDecisionCardKeys } from './CardHotkey';
 import { ReviewCard } from './ReviewCard';
+import { useIsMobile } from '../lib/useMediaQuery';
 import { PROVENANCE_LABEL } from './CriteriaDecisionCard';
 import { revealOwnerConfirmationCard } from './DecisionRail';
 import { decisionReceiptTime } from './EvidenceDecisionCard';
@@ -692,6 +693,7 @@ export function SessionOwnerConfirmationCard({
   onSendBack: (waiting: OwnerConfirmationWaiting, title: string) => void;
 }): JSX.Element | null {
   const [reviewOpen, setReviewOpen] = useState(false);
+  const narrow = useIsMobile();
   const qc = useQueryClient();
   const location = useLocation();
   const read = useQuery({
@@ -757,7 +759,7 @@ export function SessionOwnerConfirmationCard({
   const asking = waiting !== null && read.data !== undefined && !answer.isPending;
   const anchor = useRef<HTMLDivElement>(null);
   const keys = useDecisionCardKeys({
-    confirmEnabled: reviewOpen && asking && answered,
+    confirmEnabled: (!narrow || reviewOpen) && asking && answered,
     onConfirm: () => decide('CONFIRM'),
     anchor,
   });

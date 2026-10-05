@@ -39,6 +39,7 @@ const account = (accountId: string, over: Partial<LoginAccount> = {}): LoginAcco
   email: `${accountId}@chatgpt.invalid`,
   state: 'ACTIVE',
   spentUntil: null,
+  throttledUntil: null,
   usage: null,
   ...over,
 });
@@ -51,6 +52,7 @@ const key = (id: string, contributorId: string, over: Partial<Key> = {}): Key =>
   shareCap: null,
   othersCostMicros: 0,
   spentUntil: null,
+  throttledUntil: null,
   ...over,
 });
 /** A reading the gateway stores off an answer: the 5-hour window, resetting in two hours, and the week. */
@@ -85,6 +87,25 @@ test('(1) the owner runs on a ChatGPT account that can run, before any key — h
   assert.deepEqual(choose(two, OLGA).chosen, on('a1', null));
   // A session on an account that can run stays there, though choosing afresh would take the other.
   assert.deepEqual(choose(two, OLGA, on('a2', null)), { chosen: on('a2', null), next: on('a2', null), notice: null });
+});
+
+// A rate limit the gateway could not wait out (migration 0382): the account it left the mark on cannot
+// run, so a session on it is moved exactly as one on a spent account is — and keeps it while nothing
+// else can take the session, which is where the retry waits for the mark instead of a fixed step.
+test('(1) an account rate-limited past the gateway\'s own wait is left for one that can run', () => {
+  const throttled = account('a1', { throttledUntil: later(2) });
+  const other = account('a2');
+  assert.deepEqual(choose(pool({ accounts: [throttled, other] }), OLGA, on('a1', null)).chosen, on('a2', null));
+  // Nothing else can take it: nothing is chosen, and the session keeps the account it has — which is where
+  // the retry waits for the mark rather than at a fixed step.
+  assert.deepEqual(choose(pool({ accounts: [throttled] }), OLGA, on('a1', null)), {
+    chosen: null,
+    next: on('a1', null),
+    notice: null,
+  });
+  // The mark has passed: choosing afresh takes it back, and a session on it stays.
+  const served = account('a1', { throttledUntil: new Date(NOW.getTime() - 1) });
+  assert.deepEqual(choose(pool({ accounts: [served, other] }), OLGA, on('a1', null)).chosen, on('a1', null));
 });
 
 test('(2) every account used up or signed out: a key, her own first, and the move says why it left the account', () => {

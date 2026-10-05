@@ -142,6 +142,28 @@ export interface ProjectDoneRequestFiled extends DoneRequest {
   superseded: { itemId: string } | null;
 }
 
+/**
+ * What the account owner sends when the answer to a coordinator's done request is "Not yet…".
+ *
+ * The note is the owner's explanation of what is still missing.  The server trims it before it is
+ * stored and before it is delivered to the coordinator; the wire type deliberately stays a plain
+ * string so the same contract is usable by the web and native clients.
+ */
+export interface ProjectDoneRequestDeclineBody {
+  note: string;
+}
+
+/** The result of ending a `DONE_REQUEST` with the owner's "Not yet…" answer. */
+export interface ProjectDoneRequestDeclined {
+  itemId: string;
+  state: 'RESOLVED';
+  resolution: 'DECLINED';
+  /** The normalized note retained in `project_open_item.answer`. */
+  note: string;
+  /** Null when the project has no current coordinator conversation. */
+  delivery: { sessionId: string; turnId: string } | null;
+}
+
 /** The 409 a done request that is not ready gets: every finding, refusals first. */
 export interface ProjectDoneNotReadyBody {
   code: 'DONE_REQUEST_NOT_READY';

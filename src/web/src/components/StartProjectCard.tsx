@@ -68,6 +68,7 @@ import { PROVENANCE_LABEL, shortSeal } from './CriteriaDecisionCard';
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 import { ago } from '../lib/watches';
 import { ReviewCard } from './ReviewCard';
+import { useIsMobile } from '../lib/useMediaQuery';
 
 /**
  * "Start this project?" — the one card on which the account owner starts a project: the criteria
@@ -450,6 +451,7 @@ export function SessionStartProjectCard({
   onViewTasks?: () => void;
 }): JSX.Element | null {
   const [reviewOpen, setReviewOpen] = useState(false);
+  const narrow = useIsMobile();
   const qc = useQueryClient();
   const project = projectId ?? '';
   const enabled = Boolean(projectId);
@@ -545,7 +547,7 @@ export function SessionStartProjectCard({
   };
   const anchor = useRef<HTMLDivElement>(null);
   const keys = useDecisionCardKeys({
-    confirmEnabled: reviewOpen && onScreen && !start.isPending && stale === null && draft !== null && startDraftComplete(draft),
+    confirmEnabled: (!narrow || reviewOpen) && onScreen && !start.isPending && stale === null && draft !== null && startDraftComplete(draft),
     onConfirm: press,
     anchor,
   });

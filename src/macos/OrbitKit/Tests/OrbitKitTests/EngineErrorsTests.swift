@@ -74,6 +74,21 @@ final class EngineErrorsTests: XCTestCase {
             "The run died on \"Selected model is at capacity\" — retrying."))
     }
 
+    func testRetryableAfterCodexGivesUpOnARateLimit() {
+        let rateLimit = "exceeded retry limit, last status: 429 Too Many Requests"
+        XCTAssertTrue(EngineErrors.isRetryableApiErrorText(
+            rateLimit + ", request id: 95e00d6c-68cc-4d64-b4da-01a6252260c2"))
+        XCTAssertTrue(EngineErrors.isRetryableApiErrorText(rateLimit))
+        XCTAssertTrue(EngineErrors.isRetryableApiErrorText("  \n" + rateLimit.uppercased()))
+        XCTAssertFalse(EngineErrors.isUsageLimitErrorText(rateLimit), "a rate limit is not a spent quota")
+        XCTAssertFalse(EngineErrors.isRetryableApiErrorText("The run failed with \"" + rateLimit + "\"."))
+        XCTAssertFalse(EngineErrors.isRetryableApiErrorText(
+            "exceeded retry limit, last status: 401 Unauthorized"))
+        XCTAssertFalse(EngineErrors.isRetryableApiErrorText(
+            "exceeded retry limit, last status: 400 Bad Request"))
+        XCTAssertFalse(EngineErrors.isRetryableApiErrorText("exceeded retry limit"))
+    }
+
     /// The reply must OPEN with the provider's sentence. An answer that investigates a quota quotes
     /// one mid-paragraph, and rendering that as the provider refusing to answer would replace the
     /// reply with a card saying the opposite of what it says.

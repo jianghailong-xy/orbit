@@ -122,13 +122,42 @@ export const RETRYABLE_API_ERROR_MARKERS = [
  *
  * Plain lowercase prefixes, and only wording actually observed — the same rule as the lists above.
  */
+/**
+ * The transient failures that are a rate limit the provider is applying right now — as opposed to a
+ * spent quota, which is a reset away and has its own wording, or an overloaded model, which says
+ * nothing about the credential.
+ *
+ * Kept apart from the list below because a pool can answer one of these itself: when a 429 outlasts the
+ * wait the pool gateway may hold a request open for, the gateway records a short throttle on the
+ * credential (providers/pool-gateway.service.ts throttledUntil), so the pool knows when the session can
+ * run again — and can take it off that credential entirely while another one can serve. Only that
+ * answer is worth preferring to the fixed backoff, which is why the two kinds are told apart here.
+ */
+export const RATE_LIMIT_ENGINE_ERROR_PREFIXES = [
+  // Codex's terminal rate-limit error, optionally followed by the upstream request id. Only this
+  // status is known to be transient; retry exhaustion on its own says nothing about the cause.
+  // Codex does not retry a 429 itself — measured on 0.160: one request, then the turn fails.
+  'exceeded retry limit, last status: 429 too many requests',
+];
+
 export const RETRYABLE_ENGINE_ERROR_PREFIXES = [
   // Codex's `serverOverloaded`: "Selected model is at capacity. Please try a different model."
   // OpenAI shedding load on one model. Codex does not retry it, but the same model answers again
   // minutes later: a task run it killed on 2026-09-29 went on, on the same model, when its owner
   // sent "continue" seven minutes after. Switching models is the fallback once retries run out.
   'selected model is at capacity',
+  ...RATE_LIMIT_ENGINE_ERROR_PREFIXES,
 ];
+
+/**
+ * Is this the rate-limit kind of transient failure? See RATE_LIMIT_ENGINE_ERROR_PREFIXES: such a
+ * failure is the one kind a pool can be asked about, rather than answered with a fixed backoff.
+ */
+export function isRateLimitApiErrorText(text: string | null | undefined): boolean {
+  if (!text) return false;
+  const opening = text.trimStart().toLowerCase();
+  return RATE_LIMIT_ENGINE_ERROR_PREFIXES.some((prefix) => opening.startsWith(prefix));
+}
 
 /**
  * Is this API error the transient kind — the provider being briefly unable to answer, rather

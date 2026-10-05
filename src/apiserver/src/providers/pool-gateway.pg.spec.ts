@@ -289,7 +289,7 @@ suite("the shared pools' gateway, end to end on real PostgreSQL", { timeout: 600
         poolSwitchNotice: true, retryAt: true, status: true,
       },
     });
-  const keyRow = (keyId: string) => db.poolApiKey.findUniqueOrThrow({ where: { id: keyId }, select: { state: true, spentUntil: true } });
+  const keyRow = (keyId: string) => db.poolApiKey.findUniqueOrThrow({ where: { id: keyId }, select: { state: true, spentUntil: true, throttledUntil: true } });
   const carriers = (sessionId: string) =>
     db.conversationTurn.findMany({ where: { sessionId, kind: 'reload' }, select: { content: true, status: true } });
   const dequeue = (who: Person, sessionId: string) =>
@@ -557,7 +557,7 @@ suite("the shared pools' gateway, end to end on real PostgreSQL", { timeout: 600
     assert.equal(seen[0].headers.authorization, `Bearer ${other.secret}`);
   });
 
-  await t.test('(5) a rate limit is waited out on the same key — never another, never a mark — and the next claim stays', async () => {
+  await t.test('(5) a rate limit is waited out on the same key; one that outlasts the wait is held against it, and the next claim moves', async () => {
     const pool = await world('Limits', [{ by: ann, label: 'orbit-org-1' }, { by: mia, label: 'orbit-org-2', shareCap: 10 }]);
     const first = pool.keys['orbit-org-1'];
     const session = await pool.sessionOf(max);
@@ -599,13 +599,20 @@ suite("the shared pools' gateway, end to end on real PostgreSQL", { timeout: 600
     assert.equal((await ask(token)).status, 429);
     assert.equal(seen.length, 1);
 
-    // No mark, no move, nothing owed: the key can run, so the failure was not the key's.
-    assert.deepEqual(await keyRow(first.id), { state: 'ACTIVE', spentUntil: null });
-    assert.equal(await queue.sharedPoolRetryAt(db, await sessionRow(session), new Date()), null);
+    // Both 429s above exhausted the gateway's own wait, so the key is held against new claims until the
+    // mark passes (migration 0382) — and it is that mark, not a budget: `spent_until` is untouched.
+    const held = await keyRow(first.id);
+    assert.deepEqual({ state: held.state, spentUntil: held.spentUntil }, { state: 'ACTIVE', spentUntil: null });
+    assert.ok(held.throttledUntil !== null, 'the key is held out');
+    const marked = held.throttledUntil!.getTime() - Date.now();
+    assert.ok(marked > 0 && marked <= 60_000, `expected the minute floor, got ${marked}ms`);
+    // The pool answers for it, and the other key can run: work goes now, and the next claim moves there.
+    const at = await queue.sharedPoolRetryAt(db, await sessionRow(session), new Date());
+    assert.ok(at !== null && at.getTime() - Date.now() < 5_000, 'another key can run, so work goes now');
     await claim(max, session);
     assert.deepEqual(
       { key: (await sessionRow(session)).poolKeyId, line: (await sessionRow(session)).poolSwitchNotice },
-      { key: first.id, line: null },
+      { key: pool.keys['orbit-org-2'].id, line: 'Switched to orbit-org-2 — orbit-org-1 is rate limited right now' },
     );
     assert.deepEqual(await carriers(session), []);
   });

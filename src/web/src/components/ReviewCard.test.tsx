@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApprovalPanel } from './ApprovalPanel';
 import type { ApprovalInfo } from '../api';
 import { ReviewCard } from './ReviewCard';
+import { MOBILE_QUERY } from '../lib/useMediaQuery';
 import {
   DecisionStrip, revealCard, revealCriteriaCard, revealOwnerConfirmationCard,
   revealSettlementCard, type PendingDecisionQueue,
@@ -15,6 +16,8 @@ let root: Root;
 let host: HTMLDivElement;
 const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
 const scrollIntoView = vi.fn();
+let narrow = true;
+const mediaListeners = new Set<() => void>();
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -23,6 +26,14 @@ beforeEach(() => {
   root = createRoot(host);
   HTMLElement.prototype.scrollIntoView = scrollIntoView;
   scrollIntoView.mockClear();
+  narrow = true;
+  mediaListeners.clear();
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    get matches() { return narrow && query === MOBILE_QUERY; },
+    media: query,
+    addEventListener: (_: string, listener: () => void) => mediaListeners.add(listener),
+    removeEventListener: (_: string, listener: () => void) => mediaListeners.delete(listener),
+  }));
 });
 
 afterEach(async () => {
@@ -30,6 +41,7 @@ afterEach(async () => {
   host.remove();
   HTMLElement.prototype.scrollIntoView = originalScrollIntoView;
   document.head.querySelectorAll('[data-review-test-style]').forEach((style) => style.remove());
+  vi.unstubAllGlobals();
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
 });
 
@@ -143,6 +155,68 @@ async function type(field: HTMLInputElement, value: string) {
     field.dispatchEvent(new Event('input', { bubbles: true }));
   });
 }
+
+describe('full reviews on wide screens', () => {
+  beforeEach(() => { narrow = false; });
+
+  it('shows the question and answer controls in the conversation and submits directly', async () => {
+    const decide = vi.fn();
+    await render(<ApprovalPanel approval={question} onDecide={decide} />);
+    expect(preview()).toBeNull();
+    expect(document.querySelector('.review-card-dialog')).toBeNull();
+    expect(host.textContent).toContain('Which branch should receive the change?');
+    await click(host.querySelector<HTMLButtonElement>('.chat-q-opt-btn')!);
+    await click(host.querySelector<HTMLButtonElement>('.approval-actions button')!);
+    expect(decide).toHaveBeenCalledWith('AskUserQuestion', 'allow', {
+      'Which branch should receive the change?': ['Main'],
+    });
+  });
+
+  it('gives a visible plan its shortcut without opening a dialog', async () => {
+    const decide = vi.fn();
+    await render(<ApprovalPanel approval={plan} active onDecide={decide} />);
+    expect(preview()).toBeNull();
+    expect(host.querySelector('.approval-actions')).not.toBeNull();
+    await enter();
+    expect(decide.mock.calls).toEqual([['ExitPlanMode', 'allow']]);
+  });
+
+  it('keeps the top bar target and scrolls to the full card without confirming it', async () => {
+    const decide = vi.fn();
+    await render(<><DecisionStrip queue={queue} open={false} onToggle={() => {}}
+      confirmation="START" onRevealConfirmation={() => revealSettlementCard()} />
+      <TargetCard id="settlement-preview" title="Start this project?" onDecide={decide} /></>);
+    const target = host.querySelector('#settlement-preview');
+    await click(host.querySelector<HTMLButtonElement>('.decision-strip-line')!);
+    expect(scrollIntoView.mock.contexts).toEqual([target]);
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center', behavior: 'smooth' });
+    expect(target?.textContent).toContain('The full details');
+    expect(dialog()).toBeNull();
+    expect(decide).not.toHaveBeenCalled();
+  });
+
+  it('preserves a question draft while resizing between inline and preview layouts', async () => {
+    const decide = vi.fn();
+    const multiple = approval('AskUserQuestion', { questions: [{
+      question: 'Which branches should receive the change?', multiSelect: true,
+      options: [{ label: 'Main' }, { label: 'Release' }],
+    }] });
+    await render(<ApprovalPanel approval={multiple} onDecide={decide} />);
+    await click(host.querySelector<HTMLButtonElement>('.chat-q-opt-btn')!);
+    await type(host.querySelector<HTMLInputElement>('.chat-q-custom')!, 'Keep this draft');
+    await act(async () => { narrow = true; mediaListeners.forEach((listener) => listener()); });
+    expect(preview()).not.toBeNull();
+    expect(dialog()).toBeNull();
+    await click(preview());
+    expect(dialog()!.querySelector<HTMLInputElement>('.chat-q-custom')!.value).toBe('Keep this draft');
+    expect(dialog()!.querySelector('.chat-q-opt-btn.is-picked')!.textContent).toBe('Main');
+    await act(async () => { narrow = false; mediaListeners.forEach((listener) => listener()); });
+    expect(document.querySelector('.review-card-dialog')).toBeNull();
+    expect(host.querySelector<HTMLInputElement>('.chat-q-custom')!.value).toBe('Keep this draft');
+    expect(host.querySelector('.chat-q-opt-btn.is-picked')!.textContent).toBe('Main');
+    expect(decide).not.toHaveBeenCalled();
+  });
+});
 
 describe('compact review dialogs', () => {
   it.each(['Escape', 'Close button'])('returns focus to the preview after %s without resetting the question', async (dismissal) => {

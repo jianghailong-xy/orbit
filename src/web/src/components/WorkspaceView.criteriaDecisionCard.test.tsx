@@ -350,7 +350,7 @@ async function rereadCriteria(): Promise<void> {
   });
 }
 
-// Count the conversation's stable anchors separately from the form in the portal.
+// The stable anchors and full forms both stay in the wide conversation.
 const previewsOnPage = (): HTMLElement[] => [...mounted().querySelectorAll<HTMLElement>('.review-card[id^="criteria-decision-"]')];
 const cardsOnPage = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>('.criteria-decision')];
 const headingOf = (card: HTMLElement): string =>
@@ -373,10 +373,10 @@ async function answeredElsewhereAfterRereads(): Promise<void> {
     expect(previewsOnPage()[0]!.textContent).toContain(CRITERIA_DECISION_HEADING);
   });
   expect(previewsOnPage()[0]!.id).toBe(`criteria-decision-${INTENT}`);
-  await act(async () => { previewsOnPage()[0]!.querySelector<HTMLButtonElement>('.review-card-preview')!.click(); });
-  expect(document.querySelector('.review-card-dialog[data-open]')).not.toBeNull();
+  expect(previewsOnPage()[0]!.querySelector('.review-card-preview')).toBeNull();
+  expect(document.querySelector('.review-card-dialog')).toBeNull();
   const arrived = cardsOnPage().find((card) => headingOf(card) === CRITERIA_DECISION_HEADING)!;
-  expect(mounted().contains(arrived), 'the form must be in the dialog portal').toBe(false);
+  expect(mounted().contains(arrived), 'the full form must be in the conversation').toBe(true);
   // Pressable before anything happens, so a disabled action later is the answer being noticed.
   expect(actionsOf(arrived).map((button) => button.disabled)).toEqual([false, false]);
   expect([...new Set(unstubbed)], 'every endpoint the page reads is stubbed').toEqual([]);

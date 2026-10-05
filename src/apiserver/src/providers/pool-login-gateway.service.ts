@@ -34,6 +34,7 @@ import {
   relayStream,
   sendUpstream,
   SPENT_ERROR_CODES,
+  throttledUntil,
   type Answer,
   type GatewayCaller,
 } from './pool-gateway.service';
@@ -111,7 +112,9 @@ type Refreshed =
  *   (QueueService.loginPoolRetryAt) — no other account is tried here. A refresh the token endpoint
  *   refuses, or a 401 on a token just refreshed, signs the account out (SIGNED_OUT, which only its owner
  *   can undo by signing in again) and is answered 403 with that — not 401, which the runner would read as
- *   its own login failing. A rate limit is waited out on the same login (sendUpstream).
+ *   its own login failing. A rate limit is waited out on the same login (sendUpstream); one that outlasts
+ *   that wait is recorded as a short `throttled_until` on the account before its 429 goes back, so no claim
+ *   picks the account until it passes and the failed turn's retry waits for that instead of a ladder.
  * - WHAT IT USED: the usage each answer ends with, per session and hour, into PoolLoginLedger, with the
  *   x-codex-* window reading the answer carried.
  *
@@ -235,6 +238,16 @@ export class PoolLoginGatewayService {
         // Recorded before the answer goes back, so the retry the failed turn arms waits for this reset.
         const resetAt = usageLimitResetAt(parsed, answer.response.headers, now);
         await this.spent(caller, login, resetAt, reading, now);
+      } else if (status === 429 && !(outcome.errorCode && SPENT_ERROR_CODES.has(outcome.errorCode))) {
+        // A rate limit the gateway's own wait did not outlast — the one kind of 429 that reaches codex,
+        // which does not retry one. Recorded before the answer goes back, and short (minutes), so the
+        // claim the failed turn's retry makes already finds this account out: it moves the session to
+        // another account that can run, or the retry waits for the moment this one can.
+        await this.logins.markThrottled(
+          caller.poolId,
+          login.accountId,
+          throttledUntil(answer.response.headers, answer.body, now),
+        );
       }
       this.record(caller, login, outcome, now);
       relayHead(res, answer.response);

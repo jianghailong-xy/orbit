@@ -154,7 +154,7 @@ test('a spent subscription waits for the reset the backend named — then a spen
 
 test('a login pool resumes at its account\'s reset, now when it is not spent, and never by waiting when there is no account or it is signed out', () => {
   const reset = new Date(NOW.getTime() + 3_600_000);
-  const account = (state: string, spentUntil: Date | null) => ({ accountId: 'acct-0000-AB12', email: null, state, spentUntil, usage: null });
+  const account = (state: string, spentUntil: Date | null) => ({ accountId: 'acct-0000-AB12', email: null, state, spentUntil, throttledUntil: null, usage: null });
   assert.deepEqual(loginPoolResumesAt([account('ACTIVE', reset)], NOW), reset);
   assert.deepEqual(loginPoolResumesAt([account('ACTIVE', new Date(NOW.getTime() - 1))], NOW), NOW);
   assert.deepEqual(loginPoolResumesAt([account('ACTIVE', null)], NOW), NOW);
@@ -164,6 +164,18 @@ test('a login pool resumes at its account\'s reset, now when it is not spent, an
   const later = new Date(NOW.getTime() + 7_200_000);
   assert.deepEqual(loginPoolResumesAt([account('ACTIVE', later), account('ACTIVE', null)], NOW), NOW);
   assert.deepEqual(loginPoolResumesAt([account('SIGNED_OUT', null), account('ACTIVE', later), account('ACTIVE', reset)], NOW), reset);
+});
+
+// The short mark the gateway leaves when a 429 outlasts its own wait (migration 0382): nothing of the
+// pool's can take the session, so it comes back at the mark rather than at a fixed step; another account
+// that can run takes it now, which is what the next claim moves the session to.
+test('an account rate-limited past the gateway\'s own wait comes back at the mark', () => {
+  const throttled = new Date(NOW.getTime() + 2 * 60_000);
+  const marked = (accountId: string, throttledUntil: Date | null) =>
+    ({ accountId, email: null, state: 'ACTIVE', spentUntil: null, throttledUntil, usage: null });
+  assert.deepEqual(loginPoolResumesAt([marked('acct-0000-AB12', throttled)], NOW), throttled);
+  assert.deepEqual(loginPoolResumesAt([marked('acct-0000-AB12', throttled), marked('acct-0000-CD34', null)], NOW), NOW);
+  assert.deepEqual(loginPoolResumesAt([marked('acct-0000-AB12', new Date(NOW.getTime() - 1))], NOW), NOW);
 });
 
 test('the session is told which window of which account is spent and when it goes again — never that it switched', () => {

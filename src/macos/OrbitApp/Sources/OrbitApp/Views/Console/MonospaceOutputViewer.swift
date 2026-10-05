@@ -27,15 +27,19 @@ extension View {
         isPresented: Binding<Bool>,
         text: String,
         lineCount: Int,
-        title: String = "Tool output"
+        title: String = "Tool output",
+        isMarkdown: Bool = false,
+        onOpenFile: (() -> Void)? = nil
     ) -> some View {
         #if os(iOS)
         fullScreenCover(isPresented: isPresented) {
-            MonospaceOutputViewer(text: text, lineCount: lineCount, title: title)
+            MonospaceOutputViewer(text: text, lineCount: lineCount, title: title,
+                                  isMarkdown: isMarkdown, onOpenFile: onOpenFile)
         }
         #else
         sheet(isPresented: isPresented) {
-            MonospaceOutputViewer(text: text, lineCount: lineCount, title: title)
+            MonospaceOutputViewer(text: text, lineCount: lineCount, title: title,
+                                  isMarkdown: isMarkdown, onOpenFile: onOpenFile)
         }
         #endif
     }
@@ -45,8 +49,15 @@ private struct MonospaceOutputViewer: View {
     let text: String
     let lineCount: Int
     let title: String
+    let isMarkdown: Bool
+    let onOpenFile: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.sessionImagePreview) private var sessionPreview
     @State private var copied = false
+    @State private var showingSource = false
+    @State private var previewTarget: ImagePreviewTarget?
+    @State private var previewImages: [PreviewImage] = []
+    @Namespace private var previewNS
     #if os(iOS)
     // Held, never read here: only the rail reads `progress`, so a flick's per-frame updates
     // invalidate the rail alone. Reading it in this body would rebuild the text view's
@@ -62,6 +73,14 @@ private struct MonospaceOutputViewer: View {
                         .font(.orbitMeta)
                         .foregroundStyle(.secondary)
                     Spacer(minLength: 0)
+                    if isMarkdown {
+                        Picker("Markdown display", selection: $showingSource) {
+                            Text("Preview").tag(false)
+                            Text("Source").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(maxWidth: 220)
+                    }
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
@@ -87,23 +106,59 @@ private struct MonospaceOutputViewer: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                 }
+                if let onOpenFile {
+                    ToolbarItem(placement: .primaryAction) {
+                        #if os(iOS)
+                        Button("Share…", systemImage: "square.and.arrow.up", action: onOpenFile)
+                        #else
+                        Button("Open file", systemImage: "arrow.up.forward.app", action: onOpenFile)
+                        #endif
+                    }
+                }
             }
         }
         #if os(macOS)
         .frame(minWidth: 720, minHeight: 520)
         #endif
         .onChange(of: text) { copied = false }
+        .imagePreview($previewTarget, images: previewImages, ns: previewNS)
+    }
+
+    /// Images in a file open above this reader, which already covers the console's own presenter.
+    /// Keep the session identity so images named by artifact path remain fetchable.
+    private var fileImagePreview: SessionImagePreview? {
+        guard let sessionPreview else { return nil }
+        return SessionImagePreview(
+            consoleID: sessionPreview.consoleID, sessionID: sessionPreview.sessionID, ns: previewNS,
+            open: { key, images, index in
+                previewImages = images
+                previewTarget = ImagePreviewTarget(index: index, id: key)
+            },
+            rememberToolImages: sessionPreview.rememberToolImages,
+            toolImages: sessionPreview.toolImages
+        )
     }
 
     /// macOS already has a real, draggable scroller on its `NSScrollView`, so only iOS overlays one.
     @ViewBuilder
     private var output: some View {
-        #if os(iOS)
-        ScrollableMonospaceText(text: text, scroll: scroll)
-            .overlay { ScrubRail(scroll: scroll) }
-        #else
-        ScrollableMonospaceText(text: text)
-        #endif
+        if isMarkdown && !showingSource {
+            ScrollView {
+                MarkdownView(source: text)
+                    .environment(\.sessionImagePreview, fileImagePreview)
+                    .font(.orbitProse)
+                    .foregroundStyle(.primary)
+                    .textSelection(.enabled)
+                    .padding(20)
+            }
+        } else {
+            #if os(iOS)
+            ScrollableMonospaceText(text: text, scroll: scroll)
+                .overlay { ScrubRail(scroll: scroll) }
+            #else
+            ScrollableMonospaceText(text: text)
+            #endif
+        }
     }
 }
 
