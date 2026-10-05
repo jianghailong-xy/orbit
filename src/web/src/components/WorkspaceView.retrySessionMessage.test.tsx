@@ -251,7 +251,9 @@ describe('the failure card’s Retry, for another session’s message', { timeou
     await press('.chat-quota-retry');
 
     await vi.waitFor(() => expect(vi.mocked(resendSessionRetryMessage)).toHaveBeenCalledTimes(1));
-    expect(vi.mocked(resendSessionRetryMessage).mock.calls[0] as unknown[]).toEqual([SESSION_PUBLIC]);
+    // Nothing picked in the composer, so the identity is empty and the re-send goes where the
+    // session already is.
+    expect(vi.mocked(resendSessionRetryMessage).mock.calls[0] as unknown[]).toEqual([SESSION_PUBLIC, {}]);
     expect(ownersSends(), 'the words went out again through the owner’s own send').toEqual([]);
   });
 
@@ -328,7 +330,10 @@ describe('the failure card’s Retry, for another session’s message', { timeou
     });
     await press('.chat-quota-retry');
     await vi.waitFor(() => expect(vi.mocked(resendSessionRetryMessage)).toHaveBeenCalledTimes(2));
-    expect(vi.mocked(resendSessionRetryMessage).mock.calls as unknown[][]).toEqual([[SESSION_PUBLIC], [SESSION_PUBLIC]]);
+    expect(vi.mocked(resendSessionRetryMessage).mock.calls as unknown[][]).toEqual([
+      [SESSION_PUBLIC, {}],
+      [SESSION_PUBLIC, {}],
+    ]);
     expect(ownersSends(), 'the words went out again through the owner’s own send').toEqual([]);
   });
 
@@ -346,7 +351,10 @@ describe('the failure card’s Retry, for another session’s message', { timeou
     });
     await press('.chat-quota-retry');
     await vi.waitFor(() => expect(vi.mocked(resendSessionRetryMessage)).toHaveBeenCalledTimes(2));
-    expect(vi.mocked(resendSessionRetryMessage).mock.calls as unknown[][]).toEqual([[SESSION_PUBLIC], [SESSION_PUBLIC]]);
+    expect(vi.mocked(resendSessionRetryMessage).mock.calls as unknown[][]).toEqual([
+      [SESSION_PUBLIC, {}],
+      [SESSION_PUBLIC, {}],
+    ]);
     expect(ownersSends()).toEqual([]);
   });
 

@@ -742,7 +742,18 @@ public struct RetryMessage: Codable, Sendable {
 /// key: the server derives one from the failed message (criterion 19), so there is nothing here for a
 /// second press to spell differently.
 public struct RetryResendRequest: Codable, Sendable {
-    public init() {}
+    /// The composer's pending pick, when Retry was pressed after choosing one. The re-send is a
+    /// resume, and what the person chose has to travel with it — otherwise picking a provider and
+    /// pressing Retry runs on the provider the session was already on, which is the bug this is for.
+    /// Both nil, the re-send goes where the session is: what a Retry pressed with nothing chosen must
+    /// do, and what every client did before this existed (nils are omitted, so the body is `{}`).
+    public let provider: String?
+    /// The account of the engine `provider` names, as SendTurnRequest.account.
+    public let account: String?
+    public init(provider: String? = nil, account: String? = nil) {
+        self.provider = provider
+        self.account = account
+    }
 }
 
 /// POST /sessions/:id/turns — send a user message or raw shell command.

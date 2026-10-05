@@ -336,8 +336,10 @@ public final class APIClient: @unchecked Sendable {
     /// in the owner's name (docs/session-request-reply-contract.md §2.1). No key is sent: the server
     /// derives one from the failed message, so a second press — a double tap, a response lost and sent
     /// again — is the turn already queued (criterion 19). Web parity: `resendSessionRetryMessage`.
-    public func resendRetryMessage(sessionID: String) async throws -> TurnAccepted {
-        try await post("sessions/\(sessionID)/retry-message", body: RetryResendRequest())
+    public func resendRetryMessage(sessionID: String, provider: String? = nil,
+                                   account: String? = nil) async throws -> TurnAccepted {
+        try await post("sessions/\(sessionID)/retry-message",
+                       body: RetryResendRequest(provider: provider, account: account))
     }
 
     /// Turn off / put back the retry a spent quota or a transient provider error armed on this

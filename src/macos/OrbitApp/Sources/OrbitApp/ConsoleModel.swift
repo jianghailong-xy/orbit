@@ -2445,7 +2445,11 @@ final class ConsoleModel {
         sending = true
         defer { sending = false }
         do {
-            _ = try await api.resendRetryMessage(sessionID: sessionID)
+            // What the composer has picked, if anything: pressing Retry after choosing a provider
+            // means "re-send this there", and the server moves the session as it would on a send.
+            _ = try await api.resendRetryMessage(sessionID: sessionID,
+                                                 provider: pendingResumeProvider,
+                                                 account: pendingResumeProvider != nil ? pendingResumeAccount : nil)
             statusMessage = ComposerLogic.statusAfterAcceptedSend(statusMessage)
         } catch {
             statusMessage = ComposerLogic.sendFailureMessage(error)

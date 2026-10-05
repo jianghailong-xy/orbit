@@ -7339,7 +7339,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // as the words, or off the server's answer when the window held none.
   const retryFromSession = retryText ? retry.sessionMessage : serverRetry?.sessionMessage;
   const resendFromSession = useMutation({
-    mutationFn: (sessionId: string) => resendSessionRetryMessage(sessionId),
+    // With whatever the composer has picked — pressing Retry after choosing a provider means
+    // "re-send this there", and the server moves the session as it would on a send.
+    mutationFn: (sessionId: string) =>
+      resendSessionRetryMessage(sessionId, {
+        ...(pendingResumeProvider ? { provider: pendingResumeProvider } : {}),
+        ...(pendingResumeAccount ? { account: pendingResumeAccount } : {}),
+      }),
     onSuccess: (_answer, sessionId) => qc.invalidateQueries({ queryKey: ['session', sessionId] }),
     // Said, not returned: an error toast stays until it is dismissed, and React Query waits on what
     // `onError` hands back before the press stops being in flight. Returned, a press that failed — or
