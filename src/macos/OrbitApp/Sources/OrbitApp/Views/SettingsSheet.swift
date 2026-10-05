@@ -238,11 +238,15 @@ struct SettingsHomeView: View {
             // The one switch on the list whose name doesn't say what it does, so the web's hint goes
             // under it.
             Toggle(isOn: $modelRouting) {
-                VStack(alignment: .leading, spacing: 2) {
-                    label
-                    Text(SettingsCopy.smartModelSelectionHint)
-                        .font(.orbitListSubtitle)
-                        .foregroundStyle(.secondary)
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(SettingsHome.title(row)).foregroundStyle(Color.primary)
+                        Text(SettingsCopy.smartModelSelectionHint)
+                            .font(.orbitListSubtitle)
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: SettingsHome.systemImage(row)).foregroundStyle(Color.primary)
                 }
             }
         case .appearance:
