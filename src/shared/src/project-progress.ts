@@ -509,6 +509,10 @@ export interface ProjectOpenItemRow<Instant = string> {
   fuseEpisodeId: string | null;
   delivery: { state: OpenItemDeliveryState; sessionId: string | null; at: Instant | null };
   actions: OpenItemAction[];
+  /** The server's one-sentence answer to "what must happen next". Optional for rolling deploys. */
+  requiredAction?: string;
+  /** The first executable door for the item, when the server can name one. */
+  primaryAction?: OpenItemAction;
   /** Present for a `COORDINATOR_QUESTION` and null for every other kind. */
   question: CoordinatorQuestion | null;
   /** The request a `START_REQUEST` carries — what the "Start this project?" card is drawn from —
@@ -609,6 +613,10 @@ export interface OpenItemDeliveryCard {
   } | null;
   /** The doors that exist for this item today, as the server decides them (§4.8). */
   actions: OpenItemAction[];
+  /** The same server-derived next-step sentence served on the project row. */
+  requiredAction?: string;
+  /** The first executable door for the item, when one is available. */
+  primaryAction?: OpenItemAction;
   /**
    * What the platform knew about the landing when it handed the item over, or null when it is not
    * answerable — an item about no task at all, which is what a promotion's is.
@@ -958,6 +966,8 @@ export interface SessionOwnerItem<Instant = string> {
   title: string;
   /** Since when it has been waiting on the owner. The banner shows the oldest. */
   since: Instant;
+  /** The short reason for an escalated item, derived from its raw kind. */
+  need?: string;
 }
 
 /**
