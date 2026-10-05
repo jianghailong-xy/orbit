@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ProjectOpenItemRow, ProjectOpenItemsView, ProjectPromotionView } from '@orbit/shared';
-import { chatAboutOf, chatSubjectIn } from './coordinatorChat';
+import { CHAT_ABOUT_INTENT, chatAboutOf, chatIntentOf, chatSubjectIn, coordinatorChatPath } from './coordinatorChat';
 import { encodeId } from './idCodec';
 
 /**
@@ -90,5 +90,28 @@ describe('chatSubjectIn', () => {
     expect(chatAboutOf({ kind: 'item', row: CHECK_FAILED })).toEqual({ itemId: CHECK_FAILED.itemId });
     expect(chatAboutOf({ kind: 'promotion', promotion: candidate('BLOCKED'), item: null }))
       .toEqual({ promotionId: PROMOTION });
+  });
+});
+
+describe('coordinatorChatPath', () => {
+  const SESSION = '0195c0de-0000-7000-8000-0000000000c6';
+
+  it('opens the conversation at the subject alone — nothing of the page the press was made on rides along', () => {
+    const item = coordinatorChatPath(SESSION, { kind: 'item', row: CHECK_FAILED });
+    expect(item.startsWith(`/sessions/${encodeId(SESSION)}?`), 'a path relative to the page the press was made on').toBe(true);
+    const itemParams = new URLSearchParams(item.slice(item.indexOf('?')));
+    expect([...itemParams]).toEqual([['intent', CHAT_ABOUT_INTENT], ['item', encodeId(CHECK_FAILED.itemId)]]);
+    expect(chatIntentOf(itemParams)).toEqual({ itemId: encodeId(CHECK_FAILED.itemId) });
+
+    const merge = coordinatorChatPath(SESSION, { kind: 'promotion', promotion: candidate('BLOCKED'), item: CHECK_FAILED });
+    const mergeParams = new URLSearchParams(merge.slice(merge.indexOf('?')));
+    expect([...mergeParams]).toEqual([['intent', CHAT_ABOUT_INTENT], ['promotion', encodeId(PROMOTION)]]);
+    expect(chatIntentOf(mergeParams)).toEqual({ promotionId: encodeId(PROMOTION) });
+  });
+
+  it('reads an arrival only from its own intent: an item or a candidate in the URL without it is not one', () => {
+    expect(chatIntentOf(new URLSearchParams(`item=${encodeId(ITEM)}`))).toBeNull();
+    expect(chatIntentOf(new URLSearchParams(`intent=project&promotion=${encodeId(PROMOTION)}`))).toBeNull();
+    expect(chatIntentOf(new URLSearchParams(`intent=${CHAT_ABOUT_INTENT}`))).toBeNull();
   });
 });
