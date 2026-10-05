@@ -615,6 +615,17 @@ func updateEngine(ctx context.Context, spec engineSpec, servicePath string, prox
 		rec := recordEngineUpdate(spec.bin, updateUpdated, "", facts)
 		return rec, spec.name + " updated " + before + " → " + after
 	}
+	// Answered before, silent after: the updater exited 0 and left an engine that no longer
+	// starts. Live on 2026-10-05 18:36Z: `codex update` rewrote the npm package to 0.160.1
+	// without its @openai/codex-linux-x64 binary, this branch logged "already up to date
+	// (codex-cli 0.160.0)", and every Codex session and real-codex test on the machine died on
+	// the first read until someone reinstalled it by hand.
+	if before != "" && after == "" {
+		detail := "`" + cmdStr + "` exited 0 but " + binPath + " no longer answers --version — reinstall it with `" + spec.installCmd + "`"
+		logln("engine-update:", spec.name, "failed:", detail)
+		rec := recordEngineUpdate(spec.bin, updateFailed, step+detail, facts)
+		return rec, spec.name + " — update failed: " + detail
+	}
 	// Exited 0 and moved nothing. Recorded as `checked` either way — but when the feed said there
 	// was something to fetch, BehindSince keeps running, and a week of that is the alarm. That is
 	// the case this used to be blindest to: an updater writing to a copy PATH doesn't resolve

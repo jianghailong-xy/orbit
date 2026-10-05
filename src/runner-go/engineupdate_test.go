@@ -953,6 +953,36 @@ func TestEngineOutputProgress(t *testing.T) {
 	}
 }
 
+// An updater that exits 0 and leaves an engine that no longer starts did not leave it "already up
+// to date". Live on 2026-10-05: `codex update` dropped the npm package's native binary and the
+// pass reported the version it had before, while every Codex run on the machine failed.
+func TestUpdateEngineReportsAnUpdateThatBrokeTheEngine(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	dir := t.TempDir()
+	stub := filepath.Join(dir, providerCodex)
+	if err := os.WriteFile(stub, []byte("#!/bin/sh\necho 'codex-cli 0.160.0'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("0.160.1"))
+	}))
+	defer feed.Close()
+	// The update "succeeds" by replacing the binary with one that cannot start.
+	broken := "printf '#!/bin/sh\\nexit 1\\n' > " + stub
+
+	rec, line := updateEngine(context.Background(), engineSpec{
+		name: "Codex", bin: providerCodex, updateCmd: broken, installCmd: "npm install -g @openai/codex", latestURL: feed.URL,
+	}, dir, nil)
+
+	if rec.Status != updateFailed || !strings.Contains(rec.Message, "no longer answers --version") ||
+		!strings.Contains(rec.Message, "npm install -g @openai/codex") {
+		t.Fatalf("record = %+v, want a failure that says the engine stopped starting and how to reinstall it", rec)
+	}
+	if strings.Contains(line, "already up to date") {
+		t.Fatalf("line = %q, want it not to call a broken engine up to date", line)
+	}
+}
+
 // The arrow needs both ends. On a loaded machine a 300MB CLI can miss the version probe's own
 // ceiling, and that machine — the one whose updates then time out — is exactly where this message
 // has to be readable. Observed live as "→ 2.1.229: `claude update` was still running…", a target
