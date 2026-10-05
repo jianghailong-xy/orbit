@@ -455,14 +455,15 @@ struct ComposerView: View {
     @ViewBuilder
     private var sendControls: some View {
         // One primary button that morphs between Send and Stop, mirroring the web composer
-        // (`showStop`): while a turn is running and there's nothing staged to send it's a
-        // Stop (interrupt); the moment the user types a follow-up it becomes Send again so
-        // the message can queue mid-turn. The running check reads the session's AUTHORITATIVE
-        // status (the live control-plane record the nav-bar title uses), not the stream-
-        // derived `console.state.status` — that never reaches `.running` on a cold open of an
-        // already-running session, so the stop affordance used to never appear.
+        // (`showStop`): while a turn is generating — or the session still has work it left
+        // running — and there's nothing staged to send, it's a Stop (interrupt); the moment the
+        // user types a follow-up it becomes Send again so the message can queue mid-turn. The
+        // check reads the session's AUTHORITATIVE record (the live control-plane row the nav-bar
+        // title and status glyph use), not the stream-derived `console.state.status` — that never
+        // reaches `.running` on a cold open of an already-running session, so the stop affordance
+        // used to never appear.
         if ComposerLogic.showsInterrupt(
-            session: app.session(id: console.sessionID)?.effectiveRunStatus,
+            session: app.session(id: console.sessionID),
             stream: console.state.status,
             hasText: !console.composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             hasAttachments: !console.pendingAttachments.isEmpty,
@@ -489,7 +490,7 @@ struct ComposerView: View {
             // (`showsInterrupt`).
             #if !os(iOS)
             if ComposerLogic.offersInterruptAndSend(
-                session: app.session(id: console.sessionID)?.effectiveRunStatus,
+                session: app.session(id: console.sessionID),
                 stream: console.state.status,
                 canSend: console.canSend,
                 ordinaryDraft: !ComposerLogic.parseShell(console.composerText).shell

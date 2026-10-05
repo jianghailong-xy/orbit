@@ -440,6 +440,14 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         let state = effectiveRunState
         return state == .running || (state == .awaitingInput && engineTurnActive == true)
     }
+    /// Whether work this session started is still running under a parked turn — a sub-agent or
+    /// workflow the runtime started, or a background process. A port of web's
+    /// `outlivingSessionWork` (src/web/src/lib/sessionActivity.ts), differing only in shape: the
+    /// stop decision needs the fact, while the row's words and glyph ask which kind it is
+    /// separately. Absent fields from an older server read as none, like web's `?? 0`.
+    public var hasOutlivingWork: Bool {
+        (runningSubagentCount ?? 0) > 0 || (runningBgCount ?? 0) > 0
+    }
     /// Whether this session's failure is one the server intends to undo by itself — a port of the
     /// web console's `sessionRetryPending`. A spent quota, a provider that couldn't answer, and a
     /// runner that vanished mid-turn all settle the run FAILED on the spot (the turn IS over and

@@ -195,23 +195,47 @@ public enum ComposerLogic {
     }
 
     /// Whether the composer's single primary button shows STOP (interrupt the turn) instead of SEND.
-    /// A 1:1 port of web's `showStop`: the session is authoritatively RUNNING *and* there's nothing
-    /// staged to send — empty text, no attachments, not replying to a question — so the moment the
-    /// user types a follow-up the button morphs back to Send and can still queue mid-turn.
+    /// A 1:1 port of web's `showStop`: there is something to stop — see `hasSomethingToStop` — *and*
+    /// nothing staged to send (empty text, no attachments, not replying to a question), so the moment
+    /// the user types a follow-up the button morphs back to Send and can still queue mid-turn.
     ///
-    /// The running check keys off the session's AUTHORITATIVE lifecycle status (`session` — the live
-    /// control-plane record the nav-bar title also reads, web's `selected?.status`), NOT the
-    /// stream-derived reducer status: that never reliably reaches `.running` on a cold open of an
-    /// already-running session (no durable "running" event is replayed — only `turn_end`/`status`
+    /// The stop check keys off the session's AUTHORITATIVE record (`session` — the live control-plane
+    /// row the nav-bar title and the status glyph also read, web's `selectedSession ?? selected`),
+    /// NOT the stream-derived reducer status: that never reliably reaches `.running` on a cold open of
+    /// an already-running session (no durable "running" event is replayed — only `turn_end`/`status`
     /// transitions move it), so the button used to never appear there. `stream` is the fallback only
-    /// when no session record is loaded yet (a fresh deep link).
-    public static func showsInterrupt(session: RunStatus?, stream: RunStatus,
+    /// when no session record is loaded yet (a fresh deep link), where nothing but its status is known.
+    public static func showsInterrupt(session: Session?, stream: RunStatus,
                                       hasText: Bool, hasAttachments: Bool, replying: Bool) -> Bool {
         guard !hasText, !hasAttachments, !replying else { return false }
-        return (session ?? stream) == .running
+        return hasSomethingToStop(session: session, stream: stream)
     }
 
-    /// Whether to offer "Stop & send" beside Send. A 1:1 port of web's `offersInterruptAndSend`.
+    /// Whether the session has something for the composer's Stop to interrupt: it is generating —
+    /// the dispatched turn, or one the engine started for itself — or it still has work it started
+    /// running behind a parked turn. The first clause of web's `showStop`
+    /// (`isGenerating(...) || outlivingSessionWork(...) !== null`), shared by Stop and "Stop & send"
+    /// so the two controls can never disagree about whether there is anything to stop.
+    ///
+    /// A turn the engine started for itself (`Session.isGenerating`: AWAITING_INPUT with
+    /// `engineTurnActive`) is exactly the case the runner asks the engine to interrupt for
+    /// unconditionally — "those are the ones somebody reaches for stop over", and gating on the
+    /// runtime's own phase would leave them unstoppable (src/runner-go/session.go, the `interrupt`
+    /// control request). Reading the raw `.running` status alone, as this did, left those turns with
+    /// no way to reach them at all.
+    ///
+    /// Counting work that outlives a parked turn is DELIBERATE, not an oversight: a session parked
+    /// with a sub-agent, workflow or background process still at work also gets a Stop (the owner's
+    /// call). Making the press stop that work too is separate, later work; until it lands the stop
+    /// still reaches the engine and what it found is written into the transcript. Do not narrow this
+    /// back to "generating".
+    public static func hasSomethingToStop(session: Session?, stream: RunStatus) -> Bool {
+        guard let session else { return stream == .running }
+        return session.isGenerating || session.hasOutlivingWork
+    }
+
+    /// Whether to offer "Stop & send" beside Send — the macOS-only second control (web has no
+    /// equivalent; its composer keeps the single morphing button).
     ///
     /// While a turn generates, Send steers — the message joins the turn that is running. "Stop this
     /// and do THIS instead" is the other intent people have at that moment, and there is no way to
@@ -221,11 +245,14 @@ public enum ComposerLogic {
     /// upload, an offline runner), and it stays out of the way of a reply to a blocking question. A
     /// `!cmd` runs on the runner beside the engine, so it is not something the engine is stopped
     /// for — and this path can only send message text.
-    public static func offersInterruptAndSend(session: RunStatus?, stream: RunStatus,
+    ///
+    /// It reads the same `hasSomethingToStop` as Stop itself — engine-driven turns and outliving
+    /// work included — so the desktop's two interrupt controls agree with the primary button.
+    public static func offersInterruptAndSend(session: Session?, stream: RunStatus,
                                               canSend: Bool, ordinaryDraft: Bool,
                                               replying: Bool, busy: Bool) -> Bool {
         guard canSend, ordinaryDraft, !replying, !busy else { return false }
-        return (session ?? stream) == .running
+        return hasSomethingToStop(session: session, stream: stream)
     }
 
     /// Whether an outgoing send will be **queued** behind an in-flight turn (→ a "Queued" bubble the
