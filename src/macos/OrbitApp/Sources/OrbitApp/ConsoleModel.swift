@@ -611,6 +611,20 @@ final class ConsoleModel {
         guard let engine = accountEngine, engineAccounts(engine).count >= 2 else { return nil }
         return CodexAccounts.label(account(for: engine), accounts: engineAccounts(engine))
     }
+    /// The same name for a session on a pool (`poolAccount`): the account its last claim recorded,
+    /// under the same rule — said only when the pool holds more than one to tell apart. Nil for a
+    /// session on no pool, one on a single-account pool, and one whose pool names no member.
+    ///
+    /// The footer has room for this name beside the gauge on a Mac, and the pool's own name is the
+    /// model control's provider row; this is what carries it into the gauge's detail as well, which is
+    /// the only place a phone's Plan usage sheet has room for it.
+    var poolAccountLabel: String? {
+        guard let pool = currentPool, let account = poolAccount else { return nil }
+        let accounts = CodexLoginPool.isLoginPool(pool)
+            ? CodexLoginPool.logins(pool).count
+            : pool.members.count
+        return accounts > 1 ? account.member.label : nil
+    }
     /// The line under that name: on a draft nothing picked an account for, how it came to that one;
     /// on a session on Automatic whose runner can move it, that it moves.
     var accountNote: String? {
