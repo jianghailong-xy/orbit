@@ -256,8 +256,13 @@ final class RetrySendWiringTests: XCTestCase {
 
         let resend = try section(console, from: "private func resendFromSession() async {",
                                  to: "// MARK: auto-retry")
-        XCTAssertTrue(resend.contains("try await api.resendRetryMessage(sessionID: sessionID)"),
+        XCTAssertTrue(resend.contains("try await api.resendRetryMessage(sessionID: sessionID,"),
                       "the server's re-send is what the route promises")
+        // …carrying what the composer has picked. Without it the button re-sends on the provider the
+        // session is already on, which on 2026-10-05 made "choose the pool, press Retry" run on the
+        // account the person was trying to leave.
+        XCTAssertTrue(resend.contains("provider: pendingResumeProvider"),
+                      "the pick the composer had was dropped on its way to the server's re-send")
         XCTAssertFalse(resend.contains("send(overrideText:"))
         XCTAssertFalse(resend.contains("postTurn("), "the re-send reached the owner's turn door")
         XCTAssertFalse(resend.contains("composerText ="), "the re-send went through the composer")

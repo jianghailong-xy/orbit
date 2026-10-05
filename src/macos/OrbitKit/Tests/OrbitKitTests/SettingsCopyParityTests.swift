@@ -82,6 +82,16 @@ final class SettingsCopyParityTests: XCTestCase {
         assertSays(page, "hint=\"\(SettingsCopy.letSessionsOrchestrateHint)\"", in: Self.settings)
     }
 
+    /// Smart model selection: the Session defaults card's switch, with its label and hint.
+    func testSmartModelSelectionSaysWhatTheWebPageSays() throws {
+        let page = try web(Self.settings)
+        assertSays(page, "label=\"\(SettingsCopy.smartModelSelection)\"", in: Self.settings)
+        assertSays(page, "hint=\"\(SettingsCopy.smartModelSelectionHint)\"", in: Self.settings)
+        assertSays(page, "checked={prefs.modelRouting === true}", in: Self.settings)
+        assertSays(page, "save.mutate({ modelRouting: v })", in: Self.settings)
+        XCTAssertEqual(SettingsHome.title(.modelRouting), SettingsCopy.smartModelSelection)
+    }
+
     /// The edit-profile card's field is called what the web Profile page calls the same value.
     func testTheNameFieldSaysWhatTheProfilePageSays() throws {
         assertSays(try web(Self.profile), ">\(SettingsCopy.nameLabel)</div>", in: Self.profile)
