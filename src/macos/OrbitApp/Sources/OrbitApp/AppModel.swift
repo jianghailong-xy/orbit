@@ -398,6 +398,10 @@ final class AppModel {
     private var sessionsLoadPending = false
     private var sessionsLoadSucceeded = false
     private var sessionsLoadGeneration = 0
+    /// The server's tag for the Open list `sessions` was last fetched as — what lets a poll that
+    /// finds it unchanged come back as an empty 304. Cleared whenever `sessions` is written any
+    /// other way (an event folded in), so a 304 only ever vouches for the list it describes.
+    private var openListETag: String?
 
     private static let instanceKey = "orbit.instance"
     /// Remembers the last agent you selected so a cold launch lands there instead of always the
@@ -465,6 +469,7 @@ final class AppModel {
         sessionsLoadTask?.cancel()
         sessionsLoadTask = nil
         sessionsLoadPending = false
+        openListETag = nil
         apiGeneration &+= 1
         sessionDetails.removeAll()
         baseURL = url
@@ -735,6 +740,7 @@ final class AppModel {
         sessionsLoadTask?.cancel()
         sessionsLoadTask = nil
         sessionsLoadPending = false
+        openListETag = nil
         controlPlaneLive = false
         consoleRegistry?.reset()   // persist open transcripts, drop the warm cache
         // The account's lists leave with it: the next launch here may be someone else's.
@@ -1381,9 +1387,15 @@ final class AppModel {
     private func fetchOpenSessions() async -> Bool {
         guard let api else { return false }
         do {
-            let list = try await api.listSessions(view: .open)
+            guard let fresh = try await api.listOpenSessions(ifNoneMatch: openListETag) else {
+                // 304: `sessions` is still the list that tag names, so there is nothing to adopt or
+                // announce. The review-due timer re-arms against it, as an adopted snapshot does.
+                scheduleReviewDueRefresh(sessions)
+                return true
+            }
             openListFromLaunchSnapshot = false
-            applySessionSnapshot(list)
+            applySessionSnapshot(fresh.sessions)
+            openListETag = fresh.etag
             return true
         } catch APIError.unauthorized {
             logout()
@@ -1401,6 +1413,7 @@ final class AppModel {
     /// `notify: false` is for a snapshot whose transitions the caller already accounted for (a local
     /// purge), where the diff would otherwise post a bogus "finished" alert.
     private func applySessionSnapshot(_ list: [Session], notify: Bool = true) {
+        openListETag = nil   // see `openListETag`; a fetch sets it again once this is done
         // Notify on snapshot-to-snapshot transitions (skip the first load, which only primes). Skip
         // the session whose console is on screen — its own stream already shows the change.
         if notify, let prev = lastSnapshot {
