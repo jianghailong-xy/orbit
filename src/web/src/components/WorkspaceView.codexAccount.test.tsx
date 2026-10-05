@@ -303,7 +303,7 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     composerRowNamesNoAccount();
 
     await click(mounted().querySelector('.np-card'));
-    expect(await accountRows()).toEqual(['Automatic resets soonest', 'Default 5h 100%', 'Work Weekly 0%']);
+    expect(await accountRows()).toEqual(['Automatic switches to soonest reset', 'Default 5h 100%', 'Work Weekly 0%']);
     expect(pickedRow()).toBe('Automatic');
     await click(mounted().querySelector('.np-card'));
 
@@ -456,7 +456,7 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     await settlesOn('Plan usage 100%');
     const rows = (await providerMenuRows())!;
     // Nothing picked it by hand, so the tick is on Automatic, not on the account it happens to be on.
-    expect(rows.map(rowText)).toEqual(['Codex', 'AutomaticResets soonest ✓', 'Default5h 100%', 'WorkWeekly 0%']);
+    expect(rows.map(rowText)).toEqual(['Codex', 'AutomaticSwitches to soonest reset ✓', 'Default5h 100%', 'WorkWeekly 0%']);
     await click(rows.find((row) => row.textContent?.startsWith('Work')));
     expect(vi.mocked(switchSessionAccount)).toHaveBeenCalledWith(SESSION, WORK);
   });
@@ -468,7 +468,7 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     await mount(`/sessions/${SESSION}`, '.composer-box textarea');
     await settlesOn('Plan usage 0%');
     const rows = (await providerMenuRows())!;
-    expect(rows.map(rowText)).toEqual(['Codex', 'AutomaticResets soonest', 'Default5h 100%', 'WorkWeekly 0% ✓']);
+    expect(rows.map(rowText)).toEqual(['Codex', 'AutomaticSwitches to soonest reset', 'Default5h 100%', 'WorkWeekly 0% ✓']);
     await click(rows.find((row) => row.textContent?.startsWith('Automatic')));
     expect(vi.mocked(switchSessionAccount)).toHaveBeenCalledWith(SESSION, 'automatic');
   });
@@ -522,7 +522,7 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     });
     const rows = (await providerMenuRows())!;
     // As the New Session picker lists them — and no tick among them: the session is on the key.
-    expect(rows.map(rowText)).toEqual(['Claude', 'AutomaticResets soonest', 'DefaultWeekly 100%', 'Work5h 30%', 'orbitd@Claude ✓']);
+    expect(rows.map(rowText)).toEqual(['Claude', 'AutomaticSwitches to soonest reset', 'DefaultWeekly 100%', 'Work5h 30%', 'orbitd@Claude ✓']);
     await click(rows.find((row) => row.textContent?.startsWith('Work')));
     expect(vi.mocked(updateSessionConfig)).toHaveBeenCalledWith(SESSION, expect.objectContaining({ provider: 'claude', account: WORK }));
     expect(vi.mocked(switchSessionAccount)).not.toHaveBeenCalled();
@@ -560,7 +560,7 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     await settlesOn('Plan usage 100%');
     const rows = (await providerMenuRows())!;
     // The row reads the window that stops it: Default's weekly one, though its 5-hour one reads 0%.
-    expect(rows.map(rowText)).toEqual(['Claude', 'AutomaticResets soonest', 'DefaultWeekly 100% ✓', 'Work5h 30%']);
+    expect(rows.map(rowText)).toEqual(['Claude', 'AutomaticSwitches to soonest reset', 'DefaultWeekly 100% ✓', 'Work5h 30%']);
     await click(rows.find((row) => row.textContent?.startsWith('Work')));
     expect(vi.mocked(switchSessionAccount)).toHaveBeenCalledWith(SESSION, WORK);
   });
