@@ -216,6 +216,8 @@ let startRow: ProjectOpenItemRow | null = START_ROW;
 let proposalsHeld = true;
 /** Every start the page pressed, as its body. */
 const starts: Array<Record<string, unknown>> = [];
+/** Every write the page sent, as `METHOD path` — the doors a stray key press must never reach. */
+const writes: string[] = [];
 let confirmationReads = 0;
 let criteriaReads = 0;
 let navigateTo: NavigateFunction | null = null;
@@ -280,6 +282,7 @@ beforeEach(() => {
   startRow = START_ROW;
   proposalsHeld = true;
   starts.length = 0;
+  writes.length = 0;
   confirmationReads = 0;
   criteriaReads = 0;
   navigateTo = null;
@@ -315,6 +318,9 @@ beforeEach(() => {
   apiMock.mockImplementation(((path: string, init?: { method?: string; body?: Record<string, unknown> }) => {
     const reply = (value: unknown) => Promise.resolve(value) as Promise<never>;
     requested.push(path);
+    if (init?.method && ['POST', 'PATCH', 'PUT', 'DELETE'].includes(init.method)) {
+      writes.push(`${init.method} ${path}`);
+    }
     // The start door: it confirms the set, starts the project and answers the request, and the
     // reads say so from then on — which is what the conversation draws the record from.
     if (init?.method === 'POST' && path === `/projects/${PROJECT_PUBLIC}/start`) {
@@ -1012,6 +1018,59 @@ describe('Chat about this on the start card', { timeout: 60_000 }, () => {
       expect(starts, 'Enter no longer reaches the visible card').toHaveLength(1);
     });
     expect(sendTurnMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * A focused row in the conversation that answers Enter itself — the failed-tool row's head, drawn
+ * `role="button"` — must not also answer the card whose Enter the page is holding. The card here is
+ * the start card, whose "Start the project" press holds the bare key on a wide screen. One press
+ * doing both would start the project while the reader only meant to open the failure's log.
+ */
+describe('a focused row that answers Enter itself, while the start card holds the bare key', { timeout: 60_000 }, () => {
+  it('expands the row and does not start the project', async () => {
+    proposalsHeld = false;
+    // The failed tool's row arrives in the loaded window, beside the opening note.
+    vi.mocked(getSessionEventPage).mockImplementation(async () => ({
+      events: [
+        { seq: 1, type: 'assistant', payload: { text: `${NOTE[COORDINATOR_PUBLIC]}, opening` }, turnId: 'turn-1', ts: '2026-09-11T03:10:00Z' },
+        { seq: 2, type: 'system', payload: { stderr: 'error=failed to parse function arguments: unknown field question' } },
+      ],
+      hasMore: false,
+    }));
+    await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    await waitForUi(() => {
+      expect(count('#settlement-preview')).toBe(1);
+    });
+    // The card is holding the bare key: its primary press draws the Enter hint.
+    const card = (): HTMLElement => reviewForm()!.querySelector<HTMLElement>('.settlement-card')!;
+    const actions = (): HTMLButtonElement[] => [
+      ...card().querySelectorAll<HTMLButtonElement>('.settlement-card-actions button'),
+    ];
+    await waitForUi(() => {
+      expect(actions()[0]!.querySelector('.approval-kbd')?.textContent).toBe(ENTER_HINT);
+    });
+
+    // The row's head, whose `role` promises Enter and whose own press expands the log.
+    const head = mounted().querySelector<HTMLElement>('.chat-error-card .chat-error-card-head');
+    expect(head, 'the failed tool drew no expandable row').toBeTruthy();
+    expect(head!.getAttribute('role')).toBe('button');
+    expect(head!.getAttribute('aria-expanded')).toBe('false');
+
+    head!.focus();
+    expect(document.activeElement).toBe(head);
+
+    const writesBefore = writes.length;
+    await act(async () => {
+      head!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    });
+
+    // The row's own action ran: the log is open.
+    expect(head!.getAttribute('aria-expanded'), 'the row did not expand on its own Enter').toBe('true');
+    expect(mounted().querySelector('.chat-error-card-log'), 'the expanded row hid the log').toBeTruthy();
+    // And nothing was written: the Enter that opened the log did not also start the project.
+    expect(starts, 'the Enter that expanded the row also started the project').toEqual([]);
+    expect(writes.slice(writesBefore), 'the Enter that expanded the row wrote to a door').toEqual([]);
   });
 });
 
