@@ -33,6 +33,7 @@ import {
   MergeRepairDto,
   MergeToMainDto,
   MoveSessionDto,
+  RetryIdentityDto,
   SessionArmRetryDto,
   SessionConfigDto,
   SessionAccountDto,
@@ -613,8 +614,14 @@ export class SessionsController {
    *  carrying `clientTurnId` from a client that predates that is ignored, not refused — the key it
    *  chose is simply not the one the re-send goes out under. */
   @Post(':id/retry-message')
-  resendRetryMessage(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
-    return this.autoRetry.resendRetryMessage(user.userId, id);
+  resendRetryMessage(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    // The composer's pending pick, when the person pressed Retry after choosing one: the re-send is
+    // a resume, and what they chose has to travel with it. Absent, the retry runs where it did.
+    @Body() dto: RetryIdentityDto,
+  ) {
+    return this.autoRetry.resendRetryMessage(user.userId, id, dto);
   }
 
   /** Turn off the pending auto-retry on this session. Arming happens by itself when a quota or a

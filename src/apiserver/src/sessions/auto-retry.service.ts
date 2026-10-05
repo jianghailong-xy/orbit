@@ -863,6 +863,8 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
   async resendRetryMessage(
     ownerId: string,
     id: string,
+    // The composer's pending pick, when Retry was pressed after choosing one — see RetryIdentityDto.
+    identity: { provider?: string; account?: string } = {},
   ): Promise<SessionResumeAnswer> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
@@ -887,7 +889,15 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
     return this.sessions.resume(
       ownerId,
       session.id,
-      { content: message.content, attachmentIds, clientTurnId: press.key, intent: 'NEXT_TURN' },
+      {
+        content: message.content,
+        attachmentIds,
+        clientTurnId: press.key,
+        intent: 'NEXT_TURN',
+        // What the composer had picked when Retry was pressed. The session moves onto it here, as it
+        // would have had the person sent a message instead — which is the whole point of the button.
+        ...(identity.provider ? { provider: identity.provider, account: identity.account } : {}),
+      },
       {
         ...this.resendCarrying(session.id, message, false),
         // Reached only by a NEW turn — a replay of a key already written answers with its turn before
