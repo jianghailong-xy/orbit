@@ -29,7 +29,8 @@ struct ToastRequest: Equatable {
 final class AppModel {
     // auth / instance
     var signedIn = false
-    var instanceField = "orbitd.io"
+    static let defaultInstance = "orbitd.io"
+    var instanceField = AppModel.defaultInstance
     var email = ""
     var password = ""
     var errorText: String?
@@ -404,6 +405,8 @@ final class AppModel {
     private var openListETag: String?
 
     private static let instanceKey = "orbit.instance"
+    /// The email of the last successful sign-in, prefilled on the login page.
+    private static let emailKey = "orbit.email"
     /// Remembers the last agent you selected so a cold launch lands there instead of always the
     /// first agent in the list. Read in `loadAgentsThenLand`, written by `selectedAgentID`'s didSet.
     private static let lastAgentKey = "orbit.lastAgent"
@@ -415,6 +418,7 @@ final class AppModel {
         tokenStore = InMemoryTokenStore()
         #endif
 
+        email = UserDefaults.standard.string(forKey: Self.emailKey) ?? ""
         // Restore the last instance; if its token is still in the Keychain, skip the login screen —
         // and draw the first frame from what the last run left rather than from nothing.
         if let saved = UserDefaults.standard.string(forKey: Self.instanceKey),
@@ -701,12 +705,14 @@ final class AppModel {
             return
         }
         configure(url)
-        UserDefaults.standard.set(instanceField, forKey: Self.instanceKey)
 
         busy = true
         defer { busy = false }
         do {
             _ = try await api!.login(email: email, password: password)
+            // Remember only what signed in, so a mistyped server or email never sticks.
+            UserDefaults.standard.set(instanceField, forKey: Self.instanceKey)
+            UserDefaults.standard.set(email, forKey: Self.emailKey)
             user = try? await api!.me()
             password = ""
             signedIn = true
