@@ -1,0 +1,10 @@
+compose-light: provider button 9 label="Provider: DeepSeek Harness. Switch" value="" frame=(36.0, 262.3333333333333, 330.3333333333333, 33.666666666666686) hittable=true
+picker-light DeepSeek Harness: 9 label="Provider: DeepSeek Harness. Switch" value="" frame=(36.0, 412.6666666666667, 330.3333333333333, 33.66666666666663) hittable=false
+picker-light Harness: 9 label="Provider: DeepSeek Harness. Switch" value="" frame=(36.0, 412.6666666666667, 330.3333333333333, 33.66666666666663) hittable=false
+picker-light Claude Code: 9 label="DeepSeek, Claude Code, DeepSeek V4 Pro" value="" frame=(23.36318407960199, 810.9485903814261, 355.27363184079604, 55.69154228855723) hittable=true
+picker-light DeepSeek V4 Pro: 48 label="DeepSeek V4 Pro" value="" frame=(148.0, 488.6666666666667, 106.0, 15.666666666666629) hittable=false
+compose-dark: provider button 9 label="Provider: DeepSeek Harness. Switch" value="" frame=(36.0, 262.3333333333333, 330.3333333333333, 33.666666666666686) hittable=true
+picker-dark DeepSeek Harness: 9 label="Provider: DeepSeek Harness. Switch" value="" frame=(36.0, 412.6666666666667, 330.3333333333333, 33.66666666666663) hittable=false
+picker-dark Harness: 9 label="Provider: DeepSeek Harness. Switch" value="" frame=(36.0, 412.6666666666667, 330.3333333333333, 33.66666666666663) hittable=false
+picker-dark Claude Code: 9 label="DeepSeek, Claude Code, DeepSeek V4 Pro" value="" frame=(23.36318407960199, 810.9485903814261, 355.27363184079604, 55.69154228855723) hittable=true
+picker-dark DeepSeek V4 Pro: 48 label="DeepSeek V4 Pro" value="" frame=(148.0, 488.6666666666667, 106.0, 15.666666666666629) hittable=false

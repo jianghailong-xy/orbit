@@ -1,0 +1,102 @@
+# P5 — DeepSeek Harness on Web, macOS and iOS
+
+Task: [P5：接通 Web、macOS 和 iOS 的 DeepSeek Harness 操作链](orbit-task:34ZvIEP5zPthoB44dNQBn).
+Branch `orbit/p5-web-macos-ios-deepseek-harness-aa3ee1`. Executed on HPC (Linux), no local Mac:
+Web was driven in headless Chromium; macOS/iOS were compiled and photographed on GitHub Actions
+through push-triggered probe branches (never merged).
+
+## What the clients do now
+
+- **Identity.** A configured key with runtime `dsh` (preset `deepseek-harness`) resolves to the
+  `dsh` runtime in web `runtimeForProvider` and native `AgentDefaults.runtime` /
+  `SessionProviderChoices.executingRuntime`. The existing `deepseek` preset keeps running on Claude
+  Code; picker rows say which: `DeepSeek Harness · Harness` vs `DeepSeek · Claude Code`, Providers
+  says "Runs on DeepSeek Harness" / "Runs on Claude Code".
+- **Model / thinking level.** From the assigned runner's `modelCatalog.dsh` (opaque ACP values, the
+  row's `reasoningLevels`, e.g. Off/Low/High/Max). A model the runner has not reported offers Default
+  only; nothing falls back to a Claude model (`defaultModel` is `''`).
+- **Permission modes.** Only Default, Auto and Don't Ask are selectable; Plan, Accept Edits and
+  Bypass are disabled with the shared table's note (web) / "— not on DeepSeek Harness" (native), and
+  a stored unsupported mode is clamped to Default. Parity: web test compares with
+  `derivePermissionSemantics(...).honored`; OrbitKit test parses `DSH_PERMISSION_MODES` from
+  `src/shared/src/enums.ts`.
+- **Availability.** `dshRunnerState` (web) / `DshRuntime.state` (native): no `provider:dsh`
+  capability → "Update runner"; `DSH_PLATFORM_UNSUPPORTED`/`DSH_NODE_UNSUPPORTED` → "Not supported
+  here"; not installed → "Not installed" (Install from Providers / the runner's engine page / the
+  repair card); incompatible version → "Unsupported version". No Harness key → a "DeepSeek Harness —
+  Add API key" row that opens the connect form.
+- **Session failures.** `dshRepair` / `DshRuntime.repair` turn `DSH_CREDENTIAL_MISSING`, a rejected
+  key (the runner's own invalid-key evidence only, not rate limits), the old-runner refusal,
+  `DSH_NOT_INSTALLED` and platform refusals into cards with the fix (Update the API key, Install,
+  Retry).
+- **Interaction limits.** No runner slash commands and no `!` shell turns on Harness (the runner has
+  no shell bridge); messages sent mid-turn queue (shared `supportsMidTurnSteer` is NEVER for dsh).
+  Text/thinking blocks render as they arrive — the runner emits committed ACP blocks, not tokens.
+
+## Operation chain evidence
+
+All three clients ran against fixtures that advance only when the client sends the real request;
+none of this is a real runner or model (end-to-end with real dsh is P6).
+
+| Step | Web (real console, Chromium) | iOS (iPhone simulator) | macOS |
+|---|---|---|---|
+| choose engine / model / effort / mode | `web/web-1b-provider-picker-*`, `web-2-mode-menu-*`, `web-2b-model-menu-*`, `web-2c-effort-menu-*` | `ios/1b-provider-picker-*`, `2-mode-menu-*`, `2b-model-menu-*` | `mac/1b-provider-picker-*`, `2-mode-menu-*` |
+| run (send → thinking, text, tool + result) | `web-3-running-*` | `3a-compose-typed-light`, `3b-running-light` | same names |
+| approve | `web-4-approval-*` → Approve | `4-approval-*` → Allow | same |
+| after approval (write done, next tool running) | `web-5-approved-running-*` | `5-approved-running-*` | same |
+| stop | `web-6-stopped-*` (tool failed, interrupted) | `6-stopped-*` | same |
+| continue | `web-7-resumed-*` | `7-resumed-*` | same |
+| invalid key / no key / not installed / old runner | `web-8*` | `8*` | same |
+| picker: old runner / not installed / no key | `web-9*` | `9*` | same |
+| Providers / connect / runner engine row | `web-10*`, `web-11*` | — | — |
+
+Each platform's request log shows the presses reached the fixture as the client's own requests:
+`POST /api/sessions` (provider from the workspace, opaque model token, `permissionMode`), the
+approval decision `{"behavior":"allow"}`, `POST …/interrupt`, and the follow-up turn —
+`web/requests.log` (light and dark passes), `ios/writes.txt`, `mac/writes.txt`.
+
+Fixture/live differences: the fixtures append canned events when the request arrives; web and native
+receive them over the same SSE stream format the server uses (`data:` frames). Session creation does
+not go through server admission, so the old-runner state is shown as the queued refusal message rather
+than the 409 the server returns at create time.
+
+## Reproduce
+
+- Web: `web-rig/` — `node server.ts` (fake API with a live SSE session stream, port 3995), vite with
+  `vite.config.mjs`, then `THEME=light|dark node drive.mjs ./plan-full.mjs` and `./plan-menus.mjs`
+  (headless Chromium over CDP). `server.ts` and `vite.config.mjs` name this worktree's absolute path;
+  point them at your checkout. The frames in `web/` were taken on `7ca6ab87e` (half size);
+  `web/requests.log` holds both passes' requests, and the four writes appear once per theme.
+- Native: probe branch `probe/p5-dsh-shots` (`.dsh-probe/`: `stub.py`, iOS `CompactShell` / Mac
+  `MainView` probe apps, `DshShotTests` XCUITests that fail on any state that does not render);
+  results on `probe/p5-dsh-shots-results`.
+
+## Runs and results (code under test: `7ca6ab87e`, which merges `origin/main` 26bf46884)
+
+- Native shots: GitHub Actions run 37384094025 on probe `probe/p5-dsh-shots` (fc66a96ba = `7ca6ab87e`
+  + `.dsh-probe/` + a push-triggered workflow), results branch `probe/p5-dsh-shots-results`
+  (521c838a9). iPhone (newest simulator) 5/5 and Mac 5/5 XCUITests passed — the tests `XCTFail` on any
+  state that does not render and on any of the four writes missing from the stub's log
+  (`native-test-summary.txt`, `ios/writes.txt`, `mac/writes.txt`, `*-notes.txt`). iPhone pictures are
+  stored at half size.
+- Client compile gates: run 37384089702 on `probe/p5-dsh-clients` (`7ca6ab87e` + gates-only
+  client.yml): macOS OrbitKit `swift test` 2937 executed / 5 skipped / 0 failures, OrbitApp
+  `swift build` success, iOS simulator build success.
+- OrbitKit on Linux: `swift test` in swift:6.1 docker, 2937 executed / 0 failures (DshRuntimeTests 9/9).
+- Web: `DshRuntime`/picker/transcript unit tests (`src/web/src/lib/dshRuntime.test.ts`,
+  `src/web/src/components/Transcript.dsh.test.tsx`), full web suite in the merge check.
+
+Probe branches `probe/p5-dsh-shots`, `probe/p5-dsh-clients` and their `-results` branches are
+temporary and never merged. An earlier shots run (37343111078) is not evidence: its tests could not
+fail, and its console frames show a cached transcript (no stream in that stub).
+
+## Not established here
+
+- No real runner, dsh process or model: every state comes from the fixtures above. Real dsh +
+  runner end to end is P6.
+- macOS: the composer's model/effort menu did not open under XCUITest (its frame shows the closed
+  pill); the levels are covered by OrbitKit tests and by the iPhone and web menus.
+- When the assigned runner reports no Harness catalogue (an old runner), a session's opaque model
+  value is shown raw in the composer; a workspace still set to a deleted Harness key shows the slug
+  with the generic removed-provider fallback.
+- Platforms other than the newest iPhone simulator and the CI Mac (no iPad, no physical device).
