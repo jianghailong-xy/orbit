@@ -15,9 +15,18 @@
 
 冲突文件由上一源解好，本轮的合并只带来 main 的增量，因此没有新的文本冲突。冲突解法的取舍沿用上一源：`AccountPauseAPIClientTests.swift`、`CodexSignInCopyParityTests.swift` 与 `origin/main` 逐字一致（保留 main 的测试修复）；`RunnerEngines.tsx` 删掉 main 入口重做里的 `AntigravityRow` 与三处特判（不显示认证状态、忽略 `auth=no`、固定 API key 文案），改用统一引擎行 + Google 登录；`SessionProviderChoices.swift` 在 main 的 `claude / codex / antigravity / kimi` 顺序上加 Google 账号选择与失效登录判断。
 
-本轮新基线实际跑了：web 全量 `npm test -w @orbit/web`、apiserver 全量 `npm test -w @orbit/apiserver`（先 `npm run prisma:generate -w @orbit/apiserver`，4383 用例 0 失败，含 `a runner signed in with Google offers built-in Antigravity to every workspace without a key`）、OrbitKit 全量 `swift test`（含 `AntigravityGoogleClientTests` / `SessionProviderChoicesTests` / `EngineAuthTests` 共 125 条 0 失败）、`npm run build -w @orbit/web`、1280px / 443px 真实生产路由截图。本分支 client CI 需协调会话在确切 HEAD 上重新 dispatch；上面这些工具行、HEAD 与 Orbit 附件回执以本任务会话提交的新证据信封为准。下方旧工具行及 main 既有失败对照仅保留作历史记录，不代替本次验证。
+本轮新基线实际跑了：web 全量 `npm test -w @orbit/web`、apiserver 全量 `npm test -w @orbit/apiserver`（先 `npm run prisma:generate -w @orbit/apiserver`，4383 用例 0 失败，含 `a runner signed in with Google offers built-in Antigravity to every workspace without a key`）、OrbitKit 全量 `swift test`（含 `AntigravityGoogleClientTests` / `SessionProviderChoicesTests` / `EngineAuthTests` 共 125 条 0 失败）、`npm run build -w @orbit/web`、1280px / 443px 真实生产路由截图。上面这些工具行、HEAD 与 Orbit 附件回执以本任务会话提交的新证据信封为准。下方旧工具行及 main 既有失败对照仅保留作历史记录，不代替本次验证。
 
-**client CI（macOS/iOS）为何不在本机跑**：本 HPC 没有 `gh`，也没有任何 GitHub token / 凭据（已确认 `~/.config/gh`、`~/.netrc`、`~/.git-credentials`、环境变量都没有）。`client.yml` 的 `macos` 与 `ios` 两个 job 都带 `if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'`（`src/macos/**` 的普通 push 只会跑两个 Linux 审计、跳过两个 Xcode job），所以从本机既不能 `workflow_dispatch`，也不能靠 push 触发这两个编译门。需要协调会话在 wikova 上对分支 `orbit/web-macos-ios-antigravity-google-db95c8` 的 HEAD 代为 dispatch；完成后把 run / job / step 回执补进下一版证据。
+### client CI（macOS + iOS）已在精确 HEAD 上真跑并全绿
+
+`client.yml` 由协调会话在 wikova 上对分支 `orbit/web-macos-ios-antigravity-google-db95c8` 的 HEAD `a3bde09398758f5257134b385c5c3abfd7106be2` 以 `workflow_dispatch` 触发：
+
+- run：<https://github.com/jianghailong-xy/orbit/actions/runs/37271149367>（run 2351，event `workflow_dispatch`，head_sha `a3bde0939`，conclusion **success**）
+- macOS (build + test)：**success** —— step `Test OrbitKit (macOS)` success、step `Build OrbitApp` success（都是 completed，不是 skipped）
+- iOS (generate + build)：**success** —— step `Build for iOS Simulator` success
+- Font tokens / Navigation：success
+
+**为什么本会话自己不能触发**：本 HPC 没有 `gh`，也没有任何 GitHub token / 凭据（已确认 `~/.config/gh`、`~/.netrc`、`~/.git-credentials`、环境变量都没有）。`client.yml` 的 `macos` 与 `ios` 两个 job 都带 `if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'`（`src/macos/**` 的普通 push 只会跑两个 Linux 审计、跳过两个 Xcode job），所以本机既不能 `workflow_dispatch`，也不能靠 push 触发这两个编译门。读结果同样没有 token，本会话是直接查 GitHub 的公开 API 拿到上面这份 job/step 回执的（证据工具行 `bgj_82b5016fcd5a`）。
 
 ### 本轮工作树依赖修复（不是产品缺陷）
 
@@ -63,7 +72,7 @@
 `AntigravityGoogleClientTests.swift` 的 9 个测试使用此目录 `fixtures.json`，与 web 测试和截图共用脱敏控制面数据。覆盖 Google 身份、weekly / 5h 剩余量（72% / 18%）及重置时间、零额度、未知 / 失效认证、Linux / macOS / 旧 runner 登录入口、选择器、两种 API key 路径、`awaiting_code` DTO、条款和共享 SwiftUI 接线。
 9 个测试在本轮最终全量中全部实际执行并通过，作为任务允许的 macOS/iOS 截图替代证据。本轮在合并 HEAD `2daa7c065` 上于 Swift 6.1 容器跑全量 `swift test`：2912 用例、5 个默认跳过的性能基线、0 失败；`--filter 'AntigravityGoogleClientTests|SessionProviderChoicesTests|EngineAuthTests'` 聚焦跑 125 条、0 失败。
 
-HPC 没有 `gh`。本轮需由协调会话在分支 `orbit/web-macos-ios-antigravity-google-db95c8` 的合并 HEAD `2daa7c065a663b429e20972b09e664f6faf8a5f8` 上重新 dispatch `client.yml`，确认 macOS `Test OrbitKit (macOS)`、`Build OrbitApp` 和 iOS `Build for iOS Simulator` 真正运行成功（不是 skipped）。确切 HEAD、CI 链接与 job / step 回执记录在本任务会话的新证据信封；历史分支的 CI 不作为本轮编译证据。
+HPC 没有 `gh`，也没有 token。协调会话已在分支 `orbit/web-macos-ios-antigravity-google-db95c8` 的 HEAD `a3bde0939` 上以 `workflow_dispatch` 触发 `client.yml`：[run 37271149367](https://github.com/jianghailong-xy/orbit/actions/runs/37271149367)，conclusion **success**，macOS `Test OrbitKit (macOS)`、`Build OrbitApp` 与 iOS `Build for iOS Simulator` 三个 step 都实际执行成功（非 skipped）。job / step 回执见上一节与本次证据信封；历史分支的 CI 不作为本轮编译证据。
 
 ## 浏览器截图
 
