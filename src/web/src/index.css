@@ -21421,6 +21421,11 @@ button.agent-progress-agent:hover {
 .re-row.account-paused {
   background: color-mix(in srgb, var(--warning, #d89614) 7%, transparent);
 }
+/* An account on its way out: the row stays readable but steps back until the runner drops it. */
+.re-row.account-removing .re-id,
+.re-row.account-removing .re-quota {
+  opacity: 0.45;
+}
 .account-pause-remaining {
   margin-top: 4px;
   font-size: 11px;

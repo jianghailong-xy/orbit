@@ -2,7 +2,7 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode 
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Dropdown, Popconfirm, Tag, type MenuProps } from 'antd';
-import { DeleteOutlined, DownloadOutlined, EditOutlined, EllipsisOutlined, LoginOutlined, PauseOutlined, PlayCircleOutlined, PlusOutlined, WarningOutlined } from '@ant-design/icons';
+import { DeleteOutlined, DownloadOutlined, EditOutlined, EllipsisOutlined, LoadingOutlined, LoginOutlined, PauseOutlined, PlayCircleOutlined, PlusOutlined, WarningOutlined } from '@ant-design/icons';
 import {
   accountToStartOn,
   type InstallEngine,
@@ -724,7 +724,9 @@ function AccountRow({
   // button says it is under way, and a machine that refused says why.
   const removal = runner.accountRemove;
   const mine = removal?.engine === engine && removal.account === account.id ? removal : null;
-  const removing = mine?.status === 'pending';
+  // Still under way once the machine says done, while the row is here: the account leaves the list
+  // only with the re-probe that follows, a beat later.
+  const removing = mine?.status === 'pending' || mine?.status === 'done';
   const refused = mine?.status === 'failed' ? mine.message : null;
   const remove = useMutation({
     mutationFn: () =>
@@ -780,7 +782,7 @@ function AccountRow({
   );
 
   return (
-    <div className={`re-row re-acct${lastOfGroup ? ' re-acct-end' : ''}${accountIsPaused(account.pausedUntil, now) ? ' account-paused' : ''}`}>
+    <div className={`re-row re-acct${lastOfGroup ? ' re-acct-end' : ''}${accountIsPaused(account.pausedUntil, now) ? ' account-paused' : ''}${removing ? ' account-removing' : ''}`}>
       <div className="re-id">
         <span className="re-rail" aria-hidden="true" />
         <div className="re-id-main" style={{ minWidth: 0 }}>
@@ -793,11 +795,17 @@ function AccountRow({
           </div>
         </div>
       </div>
-      <AccountPauseStatus until={account.pausedUntil} now={now} detail={kind === 'in' ? 'Signed in' : undefined} status={statusOf(kind, quota, now)} />
+      {removing ? (
+        <div className="re-status">
+          <Tag color="processing" icon={<LoadingOutlined />}>Removing…</Tag>
+        </div>
+      ) : (
+        <AccountPauseStatus until={account.pausedUntil} now={now} detail={kind === 'in' ? 'Signed in' : undefined} status={statusOf(kind, quota, now)} />
+      )}
       <QuotaCell kind={kind} quota={quota} />
       <div className="re-act">
         {kind !== 'in' && (
-          <Button size="small" className="re-action" type={runner.online ? 'primary' : 'default'} disabled={!runner.online} onClick={toggle}>
+          <Button size="small" className="re-action" type={runner.online ? 'primary' : 'default'} disabled={!runner.online || removing} onClick={toggle}>
             Sign in
           </Button>
         )}
