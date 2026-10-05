@@ -114,6 +114,12 @@ public enum SessionProjectGrouping {
                                          projects: [], sessions: loose,
                                          entries: loose.map(SessionProjectEntry.session))
         }
+        // Each project's share of the content list, split once rather than filtered out of the
+        // whole list per project.
+        let contentByProject = contentSessions.map { content in
+            Dictionary(grouping: content.filter { $0.projectMembership != nil },
+                       by: { $0.projectMembership!.projectId })
+        }
         var rows: [SessionProjectRow] = []
         for projectID in projectIDs {
             let members = groups[projectID]!
@@ -123,12 +129,14 @@ public enum SessionProjectGrouping {
             let summary = projects.first { $0.id == projectID }
             let membership = members[0].projectMembership!
             var content = members
-            if let contentSessions {
+            if let contentByProject {
                 content = []
-                for session in contentSessions.filter({ $0.projectMembership?.projectId == projectID }) + members {
-                    if let index = content.firstIndex(where: { $0.id == session.id }) {
+                var indexByID: [String: Int] = [:]
+                for session in (contentByProject[projectID] ?? []) + members {
+                    if let index = indexByID[session.id] {
                         content[index] = session
                     } else {
+                        indexByID[session.id] = content.count
                         content.append(session)
                     }
                 }

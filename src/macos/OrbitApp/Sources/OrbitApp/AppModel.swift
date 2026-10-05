@@ -392,6 +392,12 @@ final class AppModel {
     private var libraryRefreshQueue = CoalescedRefreshQueue<LibraryTarget, String>()
     private var libraryRefreshTask: Task<Void, Never>?
     private var libraryRefreshGeneration = 0
+    /// `loadSessions`'s single flight: the fetch on the wire, whether a call is waiting for one more,
+    /// and how the last one went. The generation retires a flight across an instance switch.
+    private var sessionsLoadTask: Task<Void, Never>?
+    private var sessionsLoadPending = false
+    private var sessionsLoadSucceeded = false
+    private var sessionsLoadGeneration = 0
 
     private static let instanceKey = "orbit.instance"
     /// Remembers the last agent you selected so a cold launch lands there instead of always the
@@ -455,6 +461,10 @@ final class AppModel {
         libraryRefreshTask?.cancel()
         libraryRefreshTask = nil
         libraryRefreshQueue = CoalescedRefreshQueue()
+        sessionsLoadGeneration &+= 1
+        sessionsLoadTask?.cancel()
+        sessionsLoadTask = nil
+        sessionsLoadPending = false
         apiGeneration &+= 1
         sessionDetails.removeAll()
         baseURL = url
@@ -473,7 +483,12 @@ final class AppModel {
         tasksModel.setSectionActive(selectedSection == .tasks)
         tasksModel.setSelectedDetailID(selectedTaskID)
         tasks = tasksModel
-        agents = AgentsModel(baseURL: url, tokenStore: tokenStore)
+        let agentsModel = AgentsModel(baseURL: url, tokenStore: tokenStore)
+        agentsModel.refreshOpen = { [weak self] in
+            guard let self, await self.loadSessions() else { return nil }
+            return self.sessions
+        }
+        agents = agentsModel
         runners = RunnersModel(baseURL: url, tokenStore: tokenStore)
         admin = AdminModel(baseURL: url, tokenStore: tokenStore)
         sharedLinks = SharedLinksModel(baseURL: url, tokenStore: tokenStore)
@@ -716,6 +731,10 @@ final class AppModel {
         libraryRefreshTask?.cancel()
         libraryRefreshTask = nil
         libraryRefreshQueue = CoalescedRefreshQueue()
+        sessionsLoadGeneration &+= 1
+        sessionsLoadTask?.cancel()
+        sessionsLoadTask = nil
+        sessionsLoadPending = false
         controlPlaneLive = false
         consoleRegistry?.reset()   // persist open transcripts, drop the warm cache
         // The account's lists leave with it: the next launch here may be someone else's.
@@ -1336,17 +1355,42 @@ final class AppModel {
         notifications.focusedSessionID = id
     }
 
-    func loadSessions() async {
-        guard let api else { return }
+    /// Refresh the Open list, one fetch at a time. A call while one is on the wire doesn't start a
+    /// second beside it — the Open list is the app's largest response, and launch alone asks for it
+    /// from the poll, the stream connecting and the list appearing. It asks for one more fetch after
+    /// that one instead, since the one in flight may have left before whatever the caller refreshes
+    /// for (the stream connecting, an event), and every call meanwhile shares it. Each call returns
+    /// once a fetch that started after it has finished: true when that fetch adopted a list.
+    @discardableResult
+    func loadSessions() async -> Bool {
+        sessionsLoadPending = true
+        if sessionsLoadTask == nil {
+            let generation = sessionsLoadGeneration
+            sessionsLoadTask = Task { @MainActor [weak self] in
+                while let self, self.sessionsLoadGeneration == generation, self.sessionsLoadPending {
+                    self.sessionsLoadPending = false
+                    self.sessionsLoadSucceeded = await self.fetchOpenSessions()
+                }
+                if let self, self.sessionsLoadGeneration == generation { self.sessionsLoadTask = nil }
+            }
+        }
+        await sessionsLoadTask?.value
+        return sessionsLoadSucceeded
+    }
+
+    private func fetchOpenSessions() async -> Bool {
+        guard let api else { return false }
         do {
             let list = try await api.listSessions(view: .open)
             openListFromLaunchSnapshot = false
             applySessionSnapshot(list)
+            return true
         } catch APIError.unauthorized {
             logout()
         } catch {
             // Transient — keep the last good list.
         }
+        return false
     }
 
     /// Adopt a new Open snapshot: the ONE place the list and everything derived from it are written,

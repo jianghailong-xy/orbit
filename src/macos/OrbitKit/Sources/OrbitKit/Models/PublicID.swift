@@ -111,7 +111,35 @@ public enum PublicID {
 
     /// Either spelling in, a stable key out. Total: an id that is neither is returned unchanged,
     /// because a cache miss is survivable and a crash on the load path is not.
-    public static func storageKey(_ id: String) -> String { toUUID(id) ?? id }
+    public static func storageKey(_ id: String) -> String {
+        if let hit = storageKeys.lookup(id) { return hit }
+        let key = toUUID(id) ?? id
+        storageKeys.store(key, for: id)
+        return key
+    }
+
+    // A session's row looks its watch up by this key on every render, for every session of a
+    // project the list groups. An id converts to one key forever, so the answer is kept; the bound
+    // only stops a long session from growing it without end. Locked: called off the main actor too.
+    private static let storageKeys = KeyCache()
+
+    private final class KeyCache: @unchecked Sendable {
+        private let lock = NSLock()
+        private var keys: [String: String] = [:]
+
+        func lookup(_ id: String) -> String? {
+            lock.lock()
+            defer { lock.unlock() }
+            return keys[id]
+        }
+
+        func store(_ key: String, for id: String) {
+            lock.lock()
+            defer { lock.unlock() }
+            if keys.count >= 16_384 { keys.removeAll(keepingCapacity: true) }
+            keys[id] = key
+        }
+    }
 
     private static func isUUID(_ id: String) -> Bool {
         let parts = id.split(separator: "-", omittingEmptySubsequences: false)
