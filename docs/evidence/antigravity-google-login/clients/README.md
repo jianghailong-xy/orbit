@@ -15,7 +15,9 @@
 
 冲突文件由上一源解好，本轮的合并只带来 main 的增量，因此没有新的文本冲突。冲突解法的取舍沿用上一源：`AccountPauseAPIClientTests.swift`、`CodexSignInCopyParityTests.swift` 与 `origin/main` 逐字一致（保留 main 的测试修复）；`RunnerEngines.tsx` 删掉 main 入口重做里的 `AntigravityRow` 与三处特判（不显示认证状态、忽略 `auth=no`、固定 API key 文案），改用统一引擎行 + Google 登录；`SessionProviderChoices.swift` 在 main 的 `claude / codex / antigravity / kimi` 顺序上加 Google 账号选择与失效登录判断。
 
-本轮新基线实际跑了：web 全量 `npm test -w @orbit/web`、OrbitKit 全量 `swift test`（含 `AntigravityGoogleClientTests` / `SessionProviderChoicesTests` / `EngineAuthTests` 共 125 条 0 失败）、`npm run build -w @orbit/web`、1280px / 443px 真实生产路由截图。本分支 client CI 需协调会话在确切 HEAD 上重新 dispatch；上面这些工具行、HEAD 与 Orbit 附件回执以本任务会话提交的新证据信封为准。下方旧工具行及 main 既有失败对照仅保留作历史记录，不代替本次验证。
+本轮新基线实际跑了：web 全量 `npm test -w @orbit/web`、apiserver 全量 `npm test -w @orbit/apiserver`（先 `npm run prisma:generate -w @orbit/apiserver`，4383 用例 0 失败，含 `a runner signed in with Google offers built-in Antigravity to every workspace without a key`）、OrbitKit 全量 `swift test`（含 `AntigravityGoogleClientTests` / `SessionProviderChoicesTests` / `EngineAuthTests` 共 125 条 0 失败）、`npm run build -w @orbit/web`、1280px / 443px 真实生产路由截图。本分支 client CI 需协调会话在确切 HEAD 上重新 dispatch；上面这些工具行、HEAD 与 Orbit 附件回执以本任务会话提交的新证据信封为准。下方旧工具行及 main 既有失败对照仅保留作历史记录，不代替本次验证。
+
+**client CI（macOS/iOS）为何不在本机跑**：本 HPC 没有 `gh`，也没有任何 GitHub token / 凭据（已确认 `~/.config/gh`、`~/.netrc`、`~/.git-credentials`、环境变量都没有）。`client.yml` 的 `macos` 与 `ios` 两个 job 都带 `if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'`（`src/macos/**` 的普通 push 只会跑两个 Linux 审计、跳过两个 Xcode job），所以从本机既不能 `workflow_dispatch`，也不能靠 push 触发这两个编译门。需要协调会话在 wikova 上对分支 `orbit/web-macos-ios-antigravity-google-db95c8` 的 HEAD 代为 dispatch；完成后把 run / job / step 回执补进下一版证据。
 
 ### 本轮工作树依赖修复（不是产品缺陷）
 
