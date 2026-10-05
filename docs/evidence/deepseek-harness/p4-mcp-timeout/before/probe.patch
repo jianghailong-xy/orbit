@@ -1,0 +1,81 @@
+diff --git a/src/runner-go/dsh_mcp_test.go b/src/runner-go/dsh_mcp_test.go
+index e91565b71..3f6ddbe37 100644
+--- a/src/runner-go/dsh_mcp_test.go
++++ b/src/runner-go/dsh_mcp_test.go
+@@ -821,3 +821,76 @@ func TestDshRealThirdPartyMCPRunsUnasked(t *testing.T) {
+ 	h.end()
+ 	h.evidence(t.Name(), map[string]interface{}{"sideEffect": true, "approvalRequests": 0})
+ }
++
++// TestDshRealMCPTimeoutCancelsTheCall measures what the pinned dsh does to an ACP-mounted MCP call
++// that outlasts its fixed 60-second toolCallTimeoutMs: what the model is told, and what the server
++// is sent. A stdio server that never answers the call records every frame it receives.
++func TestDshRealMCPTimeoutCancelsTheCall(t *testing.T) {
++	node := os.Getenv("P4_NODE_BIN")
++	if !filepath.IsAbs(node) {
++		t.Skip("P4_NODE_BIN must name node; run scripts/test-dsh-mcp-timeout.sh")
++	}
++	server, err := filepath.Abs("../../scripts/deepseek-harness-p0/mock-mcp.mjs")
++	if err != nil {
++		t.Fatal(err)
++	}
++	h := newDshRealHarness(t, "auto", true)
++	log := filepath.Join(t.TempDir(), "held-mcp.ndjson")
++	h.job.Agent.McpConfig = map[string]interface{}{"held": map[string]interface{}{"command": node, "args": []interface{}{server},
++		"env": map[string]interface{}{"P0_MCP_LOG": log}}}
++	h.model.plans = []dshPlan{{tool: "mcp__held__record", args: map[string]interface{}{"value": "hold"}}, {text: "P4 timeout answer"}}
++	h.start()
++	started := time.Now()
++	h.send("t1", "message", "Call the held MCP tool.")
++	if done := h.settled("t1"); done.Status != stSucceeded {
++		t.Fatalf("turn = %+v", done)
++	}
++	elapsed := time.Since(started)
++	_, result := h.toolResult("t1", "mcp__held__record")
++	if result["status"] != "failed" || !strings.Contains(firstString(result, "content"), "timed out") || elapsed < 60*time.Second {
++		t.Fatalf("after %s the held call ended as %+v", elapsed, result)
++	}
++	var callID interface{}
++	var cancelled map[string]interface{}
++	data, _ := os.ReadFile(log)
++	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
++		var frame struct {
++			Message map[string]interface{} `json:"message"`
++		}
++		_ = json.Unmarshal([]byte(line), &frame)
++		switch frame.Message["method"] {
++		case "tools/call":
++			callID = frame.Message["id"]
++		case "notifications/cancelled":
++			cancelled = mapValue(frame.Message["params"])
++		}
++	}
++	if callID == nil || cancelled == nil || fmt.Sprint(cancelled["requestId"]) != fmt.Sprint(callID) {
++		t.Fatalf("dsh sent no notifications/cancelled for call %v: %s", callID, data)
++	}
++	h.end()
++	h.evidence(t.Name(), map[string]interface{}{"elapsedSeconds": int(elapsed.Seconds()), "modelSaw": firstString(result, "content"),
++		"toolStatus": result["status"], "cancelledRequestId": cancelled["requestId"], "cancelReason": cancelled["reason"], "serverFrames": string(data)})
++}
++
++func TestDshRealOrbitMCPTimeoutBefore(t *testing.T) {
++	h := newDshRealHarness(t, "default", true)
++	h.model.plans = []dshPlan{
++		{tool: "mcp__orbit__task_create", args: map[string]interface{}{"title": "P4 held task", "description": "synthetic",
++			"completionCriterion": "EVIDENCE_JUDGMENT", "acceptanceCriteria": "synthetic"}},
++		{text: "P4 held answer"},
++	}
++	h.start()
++	h.send("t1", "message", "File a task.")
++	done := h.settled("t1")
++	_, result := h.toolResult("t1", "mcp__orbit__task_create")
++	card := h.waitCard(1)
++	h.cp.decide(card.ID, "ALLOWED")
++	for i := 0; i < 300 && len(h.cp.seen("POST", "/api/runner/tasks")) == 0; i++ {
++		time.Sleep(50 * time.Millisecond)
++	}
++	created := h.cp.seen("POST", "/api/runner/tasks")
++	t.Logf("turn=%s modelSaw status=%v content=%q; created after approval=%d", done.Status, result["status"], firstString(result, "content"), len(created))
++	h.end()
++	h.evidence(t.Name(), map[string]interface{}{"toolStatus": result["status"], "modelSaw": firstString(result, "content"), "tasksCreatedAfterApproval": len(created)})
++}

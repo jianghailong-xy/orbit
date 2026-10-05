@@ -1,0 +1,40 @@
+=== RUN   TestDshMCPServers
+=== RUN   TestDshMCPServers/orbit-server-and-session-identity
+--- PASS: TestDshMCPServers/orbit-server-and-session-identity (0.00s)
+=== RUN   TestDshMCPServers/sse-entry-refused-before-launch
+--- PASS: TestDshMCPServers/sse-entry-refused-before-launch (0.00s)
+=== RUN   TestDshMCPServers/unverified-remote-refused
+--- PASS: TestDshMCPServers/unverified-remote-refused (0.00s)
+=== RUN   TestDshMCPServers/relative-command-refused
+--- PASS: TestDshMCPServers/relative-command-refused (0.00s)
+=== RUN   TestDshMCPServers/third-party-server-only-where-unapproved-actions-run
+--- PASS: TestDshMCPServers/third-party-server-only-where-unapproved-actions-run (0.00s)
+=== RUN   TestDshMCPServers/session-identity-is-not-the-agents-to-set
+--- PASS: TestDshMCPServers/session-identity-is-not-the-agents-to-set (0.00s)
+--- PASS: TestDshMCPServers (0.00s)
+=== RUN   TestMCPTaskCreateBatchAsksBeforeWriting
+--- PASS: TestMCPTaskCreateBatchAsksBeforeWriting (0.00s)
+=== RUN   TestMCPTaskCreateBatchWritesNothingWhenDenied
+--- PASS: TestMCPTaskCreateBatchWritesNothingWhenDenied (0.00s)
+=== RUN   TestMCPTaskCreateBatchHeadlessDoesNotAsk
+--- PASS: TestMCPTaskCreateBatchHeadlessDoesNotAsk (0.00s)
+=== RUN   TestMCPOwnerWaitIsHandedOffUnderAnEngineDeadline
+--- PASS: TestMCPOwnerWaitIsHandedOffUnderAnEngineDeadline (2.68s)
+=== RUN   TestMCPOwnerWaitIsRefusedWithoutAJobService
+--- PASS: TestMCPOwnerWaitIsRefusedWithoutAJobService (0.00s)
+=== RUN   TestMCPOwnerWaitBlocksInTheCallWithoutAnEngineDeadline
+--- PASS: TestMCPOwnerWaitBlocksInTheCallWithoutAnEngineDeadline (0.51s)
+=== RUN   TestMCPInlineWaitsEndBeforeAnEngineDeadline
+--- PASS: TestMCPInlineWaitsEndBeforeAnEngineDeadline (0.00s)
+=== RUN   TestMCPSessionCreateWaitTellsTheModelTheWaitIsNotLost
+=== RUN   TestMCPSessionCreateWaitTellsTheModelTheWaitIsNotLost/handed_back
+--- PASS: TestMCPSessionCreateWaitTellsTheModelTheWaitIsNotLost/handed_back (0.02s)
+=== RUN   TestMCPSessionCreateWaitTellsTheModelTheWaitIsNotLost/no_watch_door
+--- PASS: TestMCPSessionCreateWaitTellsTheModelTheWaitIsNotLost/no_watch_door (0.02s)
+=== RUN   TestMCPSessionCreateWaitTellsTheModelTheWaitIsNotLost/watch_refused
+--- PASS: TestMCPSessionCreateWaitTellsTheModelTheWaitIsNotLost/watch_refused (0.00s)
+=== RUN   TestMCPSessionCreateWaitTellsTheModelTheWaitIsNotLost/recording_the_watch_failed
+--- PASS: TestMCPSessionCreateWaitTellsTheModelTheWaitIsNotLost/recording_the_watch_failed (0.02s)
+--- PASS: TestMCPSessionCreateWaitTellsTheModelTheWaitIsNotLost (0.05s)
+PASS
+ok  	orbit	4.286s
