@@ -289,6 +289,20 @@ func engineVersion(binPath string) string {
 	return strings.TrimSpace(firstLine(string(out)))
 }
 
+// engineStarts reports whether the CLI at binPath can be run at all — the question "installed"
+// never asks, and the one a damaged install needs answered.
+//
+// `<bin> --version` exits 0 on every engine Orbit supports and prints nothing a caller needs, so
+// it is the cheapest probe that separates a working CLI from a dead one. Anything else is the same
+// answer: a non-zero status, or a signal — which is what macOS gives a native install it refuses
+// to exec (exit 137, not a byte of output) — means this engine cannot run the session about to be
+// spawned on it. A probe that never returns counts as no answer either.
+func engineStarts(binPath string, timeout time.Duration) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return exec.CommandContext(ctx, binPath, "--version").Run() == nil
+}
+
 // probeAuth reports whether the engine is signed in, using each CLI's own
 // non-interactive status command:
 //

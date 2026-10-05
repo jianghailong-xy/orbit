@@ -982,6 +982,42 @@ func TestUpdateEngineMessageSurvivesAnUnreadableInstalledVersion(t *testing.T) {
 	}
 }
 
+// The update loop's one shape that is not an update failure at all: the engine it was asked to
+// update is not a runnable binary, so the updater dies in a fraction of a second and says nothing.
+// The bare `signal: killed` that leaves behind reads as a network or permission problem, and the
+// machine stays broken — every session on it failing — while the row says only that.
+func TestUpdateEngineSaysWhenTheEngineItselfDoesNotRun(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	dir := t.TempDir()
+	// A binary that is there, is executable, and dies at exec with a signal — the Mac mini's
+	// native Claude Code, which macOS killed on every launch for three hours.
+	stub := filepath.Join(dir, providerClaude)
+	if err := os.WriteFile(stub, []byte("#!/bin/sh\nkill -9 $$\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("2.1.229"))
+	}))
+	defer feed.Close()
+
+	rec, line := updateEngine(context.Background(), engineSpec{
+		name: "Claude Code", bin: providerClaude, updateCmd: "echo boom >&2; exit 1", latestURL: feed.URL,
+	}, dir, nil)
+
+	if rec.Status != updateFailed {
+		t.Fatalf("record = %+v, want a failure", rec)
+	}
+	if !strings.Contains(rec.Message, "does not run") {
+		t.Fatalf("message = %q, want it to say the engine itself does not run", rec.Message)
+	}
+	if !strings.Contains(rec.Message, "fetching 2.1.229") {
+		t.Fatalf("message = %q, want it to still name the version it was reaching for", rec.Message)
+	}
+	if !strings.Contains(line, "does not run") {
+		t.Fatalf("line = %q, want the same verdict the record carries", line)
+	}
+}
+
 // The picker's list is probed out of the engine CLIs themselves, so the one event that changes it
 // between catalog passes is a CLI that moves versions — and installing that CLI is this loop's
 // job. Live on 2026-09-24: a runner was auto-updated to Claude Code 2.1.280 at 16:20Z, a CLI that

@@ -22,6 +22,13 @@ import (
 // installer can't hold a session's first turn open indefinitely.
 const engineInstallTimeout = 10 * time.Minute
 
+// How long "can this engine run at all?" gets, and how long its second, patient ask gets. See
+// engineRunnable for why the answer is asked twice.
+const (
+	engineStartsProbe     = 5 * time.Second
+	engineStartsProbeSlow = 20 * time.Second
+)
+
 // engineInstall carries what a runtime install needs, configured once at startup from the
 // runner's config. Zero value = not allowed, which is what an older config (registered
 // before the question was asked) correctly gets.
@@ -200,8 +207,11 @@ func installEngineNow(spec engineSpec) InstallResultRequest {
 		}
 		return InstallResultRequest{Status: installDone, Command: spec.installCmd}
 	}
-	// Whoever got here first may have already installed it.
-	if _, ok := lookEngine(spec.bin); ok {
+	// Whoever got here first may have already installed it — but "there" is not "working", and a
+	// binary that is present and cannot run is the one case this button exists to fix. Answering
+	// "done" for it is how a damaged engine stays damaged: nothing else in Orbit runs an installer
+	// for an engine it can find.
+	if path, ok := lookEngine(spec.bin); ok && engineRunnableAt(path) {
 		return InstallResultRequest{Status: installDone, Command: spec.installCmd}
 	}
 
@@ -237,6 +247,16 @@ func installEngineNow(spec engineSpec) InstallResultRequest {
 			Message: "the installer finished but `" + spec.executable() + "` still isn't on this machine's service PATH.\nTry instead: " + spec.installAlt,
 		}
 	}
+	if !engineRunnable(spec.bin) {
+		// The repair was the point of running this installer, so a binary that still cannot run is
+		// the one outcome that must not be reported as done.
+		logln("engine-install (requested):", spec.name, "installer exited 0 but the binary does not run at", path)
+		return InstallResultRequest{
+			Status:  installFailed,
+			Command: spec.installCmd,
+			Message: "the installer finished but `" + spec.executable() + "` (" + path + ") does not run on this machine.\nTry instead: " + spec.installAlt,
+		}
+	}
 	logln("engine-install (requested):", spec.name, "installed at", path)
 	// The runner's own PATH was fixed when the service started, and sessions exec the engine by
 	// name — so make the new binary's dir visible to everything spawned next (cf. ensureEngine).
@@ -255,13 +275,20 @@ func ensureEngine(ctx context.Context, bin string, notify func(string)) string {
 	if bin == providerDsh {
 		return ensureDsh(ctx, notify)
 	}
-	if _, ok := lookEngine(bin); ok {
+	if engineRunnable(bin) {
 		return ""
 	}
+	// Present but unrunnable is a different machine from one that never had this engine, and it
+	// gets a different answer: the session cannot repair a damaged CLI, and "not installed" would
+	// send whoever reads it looking for the wrong thing.
+	_, installed := lookEngine(bin)
 	engineInstall.mu.Lock()
 	allowed, proxyVars := engineInstall.allowed, engineInstall.proxyVars
 	engineInstall.mu.Unlock()
 	if !allowed {
+		if installed {
+			return engineUnrunnableMessage(bin)
+		}
 		return engineMissingMessage(bin)
 	}
 	spec, ok := specFor(bin)
@@ -273,11 +300,19 @@ func ensureEngine(ctx context.Context, bin string, notify func(string)) string {
 	defer engineInstall.mu.Unlock()
 	// Re-check under the lock: a session that queued behind another one's install of the
 	// same engine has nothing left to do.
-	if _, ok := lookEngine(bin); ok {
+	if engineRunnable(bin) {
 		return ""
 	}
+	_, installed = lookEngine(bin)
 
-	notify("Installing " + spec.name + " on this runner (" + spec.installCmd + ") — first session that needs it.")
+	if installed {
+		// The installer is the repair: a binary that is present and cannot run is replaced by
+		// running it, and saying "reinstalling" is the difference between a session that looks
+		// stuck and one that explains itself.
+		notify("Reinstalling " + spec.name + " on this runner (" + spec.installCmd + ") — the installed binary does not run.")
+	} else {
+		notify("Installing " + spec.name + " on this runner (" + spec.installCmd + ") — first session that needs it.")
+	}
 	logln("engine-install:", spec.name, "->", spec.installCmd)
 	cmdCtx, cancel := context.WithTimeout(ctx, engineInstallTimeout)
 	defer cancel()
@@ -299,6 +334,12 @@ func ensureEngine(ctx context.Context, bin string, notify func(string)) string {
 	if !ok {
 		logln("engine-install:", spec.name, "installer exited 0 but the binary is still not on PATH")
 		return spec.name + " was installed on this runner but its binary still isn't on the service PATH — run `orbit doctor` on that machine."
+	}
+	if !engineRunnableAt(path) {
+		// The installer ran and left nothing this machine can exec — the one outcome an installer
+		// exit code cannot tell you about, and the reason this question is asked here at all.
+		logln("engine-install:", spec.name, "installer exited 0 but the binary does not run at", path)
+		return spec.name + " was installed on this runner (" + path + ") but does not run — run `orbit doctor` on that machine."
 	}
 	logln("engine-install:", spec.name, "installed at", path)
 	// The runner's own PATH was fixed when the service started, and sessions exec the
@@ -429,6 +470,49 @@ func lookEngine(engine string) (string, bool) {
 		return p, true
 	}
 	return lookPathIn(exe, os.Getenv("PATH"))
+}
+
+// engineRunnable answers the half of "is this engine ready?" that every other check in this file
+// skipped: not whether the binary is there, but whether it works.
+//
+// The two came apart on 2026-10-05, on a Mac mini whose native Claude Code 2.1.289 was complete,
+// correctly signed, executable and on the service PATH — and killed by macOS the instant anything
+// exec'd it (exit 137, not a byte of output, which is why the update loop could say no more about
+// it than `signal: killed`). From Orbit that machine looked healthy: `installed: true` on every
+// heartbeat, the Install button answering "done" without running an installer, and every session
+// dispatched there dying in its first second — three respawns, no events, FAILED after 33
+// seconds. Nothing in Orbit ever asked the binary whether it could start, so nothing could tell
+// that machine it was broken and nothing could repair it.
+//
+// Two probes, because the answer is worth acting on: a loaded box can miss the first one's ceiling
+// with nothing wrong with the CLI — the same 300MB CLI the update loop already documents as unable
+// to start inside a probe under load — and reinstalling an engine that was merely busy is worse
+// than not asking. A healthy CLI answers the first probe in well under a second.
+func engineRunnable(bin string) bool {
+	path, ok := lookEngine(bin)
+	if !ok {
+		return false
+	}
+	return engineRunnableAt(path)
+}
+
+// engineRunnableAt is engineRunnable asked of a path that is already resolved — what the update
+// loop has in hand, and the exact binary it is about to update.
+func engineRunnableAt(path string) bool {
+	return engineStarts(path, engineStartsProbe) || engineStarts(path, engineStartsProbeSlow)
+}
+
+// engineUnrunnableMessage is what a session is told when its engine is on this machine and cannot
+// run. Not the missing-engine message: "not found" would send whoever reads it looking for a file
+// that is right there, and this is not an install the runner is allowed to run unattended.
+func engineUnrunnableMessage(bin string) string {
+	name, install := bin, "orbit doctor"
+	if spec, ok := specFor(bin); ok {
+		name, install = spec.name, spec.installCmd
+	}
+	path, _ := lookEngine(bin)
+	return name + " is installed on this runner (" + path + ") but does not run — every session that " +
+		"needs it fails the moment it starts. Reinstall it on that machine:  " + install
 }
 
 func lastLine(s string) string {
