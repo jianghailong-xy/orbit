@@ -17,6 +17,7 @@ import {
   MERGE_CHAT_PREFIX,
 } from '../lib/coordinatorChat';
 import { IT_IS_YOURS, SEE_THE_EXCEPTION } from './ProjectPromotionCard';
+import { MOBILE_QUERY } from '../lib/useMediaQuery';
 
 /**
  * "Chat about this" where the owner meets it: the real WorkspaceView, on the project's coordinator
@@ -177,6 +178,8 @@ let openItems: { needsYou: ProjectOpenItemRow[]; withCoordinator: ProjectOpenIte
 let promotion: ProjectPromotionView | null = BLOCKED;
 /** Every element `scrollIntoView` was called on, in order — jsdom has no `scrollIntoView` of its own. */
 let scrolledTo: Element[] = [];
+/** Whether the screen is narrow (`useIsMobile`): there a decision card is a compact preview. */
+let narrow = false;
 let search = '';
 let container: HTMLDivElement | null = null;
 let root: Root | null = null;
@@ -207,6 +210,7 @@ beforeEach(() => {
   openItems = { needsYou: [TASK_ROW, PROMOTION_ROW], withCoordinator: [], settled: [] };
   promotion = BLOCKED;
   scrolledTo = [];
+  narrow = false;
   focusManager.setFocused(false);
   vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {} });
   vi.stubGlobal('EventSource', FakeEventSource);
@@ -270,7 +274,7 @@ beforeEach(() => {
     return reply([]);
   }) as unknown as typeof api);
   vi.stubGlobal('matchMedia', (query: string) => ({
-    matches: false, media: query, onchange: null,
+    matches: narrow && query === MOBILE_QUERY, media: query, onchange: null,
     addListener: () => {}, removeListener: () => {},
     addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false,
   }));
@@ -400,6 +404,36 @@ async function itemsMove(next: typeof openItems): Promise<void> {
   });
 }
 
+const WIDTHS = [
+  { width: 'wide', narrow: false },
+  { width: 'narrow', narrow: true },
+] as const;
+
+/**
+ * The blocked candidate's card, as the transcript draws it: whole on a wide screen; on a narrow
+ * one a compact preview, whose presses are in the review it opens.
+ */
+async function blockedCard(): Promise<() => Element | null> {
+  const anchor = (): Element | null => mounted().querySelector(`#promotion-${PROMOTION_ID}`);
+  await waitForUi(() => {
+    expect(anchor(), 'the blocked merge card is not drawn').not.toBeNull();
+  });
+  if (!narrow) {
+    const card = (): Element | null =>
+      anchor()?.querySelector('.project-promotion[data-state="BLOCKED"]') ?? null;
+    expect(anchor()!.querySelector('.review-card-preview'), 'a wide card was drawn as a preview').toBeNull();
+    expect(card(), 'the wide transcript did not draw the blocked candidate').not.toBeNull();
+    return card;
+  }
+  await act(async () => anchor()!.querySelector<HTMLButtonElement>('.review-card-preview')!.click());
+  const card = (): Element | null =>
+    document.querySelector('.review-card-dialog[data-open] .project-promotion[data-state="BLOCKED"]');
+  await waitForUi(() => {
+    expect(card(), 'the preview did not open the blocked candidate').not.toBeNull();
+  });
+  return card;
+}
+
 function chatPressOn(card: Element): HTMLButtonElement {
   const press = [...card.querySelectorAll<HTMLButtonElement>('button')]
     .find((button) => button.textContent?.trim() === CHAT_ABOUT_THIS);
@@ -439,19 +473,10 @@ describe('Chat about this in the coordinator conversation', { timeout: 60_000 },
     expect(armedBar(), 'the bar stayed armed after the send').toBeNull();
   });
 
-  it('promotion-scoped, “It is yours · waiting”: the blocked merge card offers the chat beside its press, and the send carries the candidate', async () => {
+  it.each(WIDTHS)('promotion-scoped, “It is yours · waiting” ($width): the blocked merge card offers the chat beside its press, and the send carries the candidate', async (width) => {
+    narrow = width.narrow;
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
-    const preview = (): Element | null => mounted().querySelector(`#promotion-${PROMOTION_ID}`);
-    await waitForUi(() => {
-      expect(preview(), 'the blocked merge card is not drawn').not.toBeNull();
-    });
-    // The candidate is a compact preview in the transcript; its presses are in the review it opens.
-    await act(async () => preview()!.querySelector<HTMLButtonElement>('.review-card-preview')!.click());
-    const card = (): Element | null =>
-      document.querySelector('.review-card-dialog[data-open] .project-promotion[data-state="BLOCKED"]');
-    await waitForUi(() => {
-      expect(card(), 'the preview did not open the blocked candidate').not.toBeNull();
-    });
+    const card = await blockedCard();
     const waiting = [...card()!.querySelectorAll<HTMLButtonElement>('button')]
       .find((button) => button.textContent?.startsWith(IT_IS_YOURS));
     expect(waiting?.disabled, 'the merge became pressable').toBe(true);
@@ -460,8 +485,10 @@ describe('Chat about this in the coordinator conversation', { timeout: 60_000 },
     await act(async () => chatPressOn(card()!).click());
     await waitForUi(() => {
       expect(armedBar()).toBe(`${MERGE_CHAT_PREFIX}project/merge-seal can’t merge into main yet`);
-      // The review gives way to the composer it armed, as the other cards' Chat about this does.
-      expect(card(), 'the review stayed open over the armed composer').toBeNull();
+      // A narrow screen's review gives way to the composer it armed, as the other cards' Chat about
+      // this does; a wide transcript draws the card whole, and it stays.
+      if (narrow) expect(card(), 'the review stayed open over the armed composer').toBeNull();
+      else expect(card(), 'the wide card went away').not.toBeNull();
     });
     await typeAndSend('is the red the baseline or the work?');
     const content = String(sendTurnMock.mock.calls[0]![1]);
@@ -475,20 +502,14 @@ describe('Chat about this in the coordinator conversation', { timeout: 60_000 },
 });
 
 describe('the blocked merge card’s way to where its handling is shown', { timeout: 60_000 }, () => {
-  it('“See the exception”: the review gives way and the item’s own card is brought into view', async () => {
+  it.each(WIDTHS)('“See the exception” ($width): the review gives way and the item’s own card is brought into view', async (width) => {
+    narrow = width.narrow;
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
-    const preview = (): Element | null => mounted().querySelector(`#promotion-${PROMOTION_ID}`);
     const itemCard = (): Element | null => mounted().querySelector(`[data-open-item="${PROMOTION_ITEM}"]`);
     await waitForUi(() => {
-      expect(preview(), 'the blocked merge card is not drawn').not.toBeNull();
       expect(itemCard(), 'the item’s own card is not drawn').not.toBeNull();
     });
-    await act(async () => preview()!.querySelector<HTMLButtonElement>('.review-card-preview')!.click());
-    const card = (): Element | null =>
-      document.querySelector('.review-card-dialog[data-open] .project-promotion[data-state="BLOCKED"]');
-    await waitForUi(() => {
-      expect(card(), 'the preview did not open the blocked candidate').not.toBeNull();
-    });
+    const card = await blockedCard();
     const link = [...card()!.querySelectorAll<HTMLAnchorElement>('a')]
       .find((anchor) => anchor.textContent === SEE_THE_EXCEPTION)!;
     expect(link.getAttribute('href')).toBe(`#open-item-${PROMOTION_ITEM}`);
@@ -496,7 +517,7 @@ describe('the blocked merge card’s way to where its handling is shown', { time
 
     await act(async () => link.click());
     await waitForUi(() => {
-      expect(card(), 'the review stayed open over the card it points at').toBeNull();
+      if (narrow) expect(card(), 'the review stayed open over the card it points at').toBeNull();
       expect(scrolledTo).toContain(itemCard());
     });
     expect(doorsPressed(), 'the link pressed a door').toEqual([]);
