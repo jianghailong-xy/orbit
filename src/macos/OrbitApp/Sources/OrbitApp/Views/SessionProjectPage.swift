@@ -46,10 +46,6 @@ struct SessionProjectRowView: View {
 
     private var firstLine: some View {
         HStack(spacing: 8) {
-            Image(systemName: "square.grid.2x2")
-                .font(.orbitMeta)
-                .foregroundStyle(.blue)
-                .accessibilityHidden(true)
             Text(row.title)
                 .foregroundStyle(.primary)
                 .lineLimit(1)
@@ -61,7 +57,8 @@ struct SessionProjectRowView: View {
                 Text(relative)
                     .font(.orbitMeta)
                     .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: regular, vertical: false)
+                    .lineLimit(1)
+                    .fixedSize()
             }
         }
     }
