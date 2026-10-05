@@ -2979,18 +2979,31 @@ function ControlPlaneNote({ kind, text }: { kind: string; text: string }) {
   const tasks = useMemo(() => parseReferencedTasks(jobs ? jobs.rest : text), [text, jobs]);
   const wiki = useMemo(() => parseWikiContext(tasks ? tasks.rest : jobs ? jobs.rest : text), [text, jobs, tasks]);
   const rest = wiki ? wiki.rest : tasks ? tasks.rest : jobs ? jobs.rest : text;
+  const baseLabel = `⊕ Orbit attached: ${kind}`;
+  const label = `${baseLabel}${tasks ? ` · ${summarizeReferencedTasks(tasks.tasks)}` : ''}${jobs ? ` · ${summarizeBackgroundJobs(jobs)}` : ''}`;
   return (
-    <div className="chat-injected">
+    <div className={`chat-injected${open ? ' is-open' : ''}`}>
       <button
         type="button"
         className="chat-injected-head"
+        data-display-kind={kind}
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
       >
-        {`⊕ Orbit attached: ${kind}`}
-        {tasks && ` · ${summarizeReferencedTasks(tasks.tasks)}`}
-        {jobs && ` · ${summarizeBackgroundJobs(jobs)}`}
+        {label}
       </button>
+      {!open && (
+        <div className="chat-injected-overview">
+          <div className="chat-injected-summary">
+            <strong>Orbit context</strong>
+            <span>Attached to this message</span>
+          </div>
+          <p>Context is kept out of your message and available when you need the full details.</p>
+          <button type="button" className="chat-injected-action" onClick={() => setOpen(true)}>
+            View full context <RightOutlined />
+          </button>
+        </div>
+      )}
       {open &&
         (tasks || jobs || wiki ? (
           <>

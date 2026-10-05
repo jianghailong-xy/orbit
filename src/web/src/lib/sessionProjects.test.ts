@@ -277,6 +277,6 @@ describe('session project copy', () => {
     expect(SESSION_PROJECT_COPY.progressHint(9, 2)).toBe('9 sessions · 2 running');
     expect(SESSION_PROJECT_COPY.pageSubtitle(9)).toBe('Project · 9 sessions');
     expect(SESSION_PROJECT_COPY.pageProgress(3, 8, 2)).toBe('3/8 done · 2 running');
-    expect([SESSION_PROJECT_COPY.openCoordinator, SESSION_PROJECT_COPY.sessions, SESSION_PROJECT_COPY.openProject, SESSION_PROJECT_COPY.pin, SESSION_PROJECT_COPY.unpin, SESSION_PROJECT_COPY.move]).toEqual(['Open Coordinator', 'Sessions', 'Open Project', 'Pin', 'Unpin', 'Move…']);
+    expect([SESSION_PROJECT_COPY.openSession, SESSION_PROJECT_COPY.openCoordinator, SESSION_PROJECT_COPY.sessions, SESSION_PROJECT_COPY.openProject, SESSION_PROJECT_COPY.pin, SESSION_PROJECT_COPY.unpin, SESSION_PROJECT_COPY.move]).toEqual(['Open Session', 'Open Coordinator', 'Sessions', 'Open Project', 'Pin', 'Unpin', 'Move…']);
   });
 });

@@ -177,12 +177,9 @@ export async function readProjectListAttention(
         count: row.count,
         leadKind,
         oldestWaitingSince: row.oldestWaitingSince,
-        // §4.1 X-E2 freezes `escalate_at` when the item is created, so a coordinator's item has
-        // one; the column is nullable for the items that were the owner's all along, which the
-        // kind check above has already excluded. The contract's §7.1 states it as a `Date` for
-        // that reason, and it is read as one — a card counting down to a missing deadline would be
-        // counting down to nothing.
-        nextEscalationAt: row.nextEscalationAt!,
+        // In-flight fixes and handling deliberately have no deadline; a null here means the
+        // coordinator's whole queue is currently making progress.
+        nextEscalationAt: row.nextEscalationAt,
       };
       continue;
     }
@@ -193,10 +190,8 @@ export async function readProjectListAttention(
       held.oldestWaitingSince = row.oldestWaitingSince;
       held.leadKind = leadKind;
     }
-    if (
-      row.nextEscalationAt
-      && (!held.nextEscalationAt || row.nextEscalationAt < held.nextEscalationAt)
-    ) {
+    if (row.nextEscalationAt != null
+      && (held.nextEscalationAt == null || row.nextEscalationAt < held.nextEscalationAt)) {
       held.nextEscalationAt = row.nextEscalationAt;
     }
   }
@@ -235,9 +230,8 @@ async function readBlockers(
  * row's chip prints.
  *
  * `next_escalation_at` is the soonest deadline among the coordinator's items: the first one that
- * will stop being theirs, as the clock decides it (`escalatesAt` — a conversation still carrying an
- * item moves its deadline on). It is null for the kinds that were the owner's from birth, which is
- * why it is null-tolerant on the way in and read only for the rows that can have one.
+ * will stop being theirs, as the clock decides it (`escalatesAt`). An in-flight fix/handling row has
+ * no deadline, so SQL `min()` skips it; when every held row is in flight the aggregate is NULL.
  *
  * A start request counts only while its project has not been started: the start answers it in the
  * same transaction, and a request somehow left open beside a start asks nobody anything. Any item

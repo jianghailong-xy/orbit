@@ -2,7 +2,7 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode 
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Dropdown, Popconfirm, Tag, type MenuProps } from 'antd';
-import { DeleteOutlined, DownloadOutlined, EditOutlined, EllipsisOutlined, LoginOutlined, PauseOutlined, PlayCircleOutlined, PlusOutlined } from '@ant-design/icons';
+import { DeleteOutlined, DownloadOutlined, EditOutlined, EllipsisOutlined, LoginOutlined, PauseOutlined, PlayCircleOutlined, PlusOutlined, WarningOutlined } from '@ant-design/icons';
 import {
   accountToStartOn,
   type InstallEngine,
@@ -983,6 +983,11 @@ function RunnerEngineCard({
 }) {
   const [signIn, setSignIn] = useState<string | null>(null);
   const engines = runner.engines ?? null;
+  const name = runner.displayName || runner.name;
+  const meta = [runner.hostname !== name && runner.hostname, runner.version && `v${runner.version}`]
+    .filter(Boolean)
+    .join(' · ');
+  const failed = runner.install?.status === 'failed' && runner.install.engine !== 'antigravity';
 
   return (
     <div className={`re-card re-runner-card${runner.online ? '' : ' offline'}${collapsed ? ' collapsed' : ''}`}>
@@ -993,9 +998,14 @@ function RunnerEngineCard({
           className="re-toggle"
           type="button"
           aria-expanded={!collapsed}
-          aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${runner.displayName || runner.name}`}
+          aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${name}`}
           onClick={onToggle}
         >
+          <span className={`re-dot${runner.online ? ' on' : ''}`} />
+          <span className="re-runner-copy">
+            <span className="re-runner">{name}</span>
+            {meta && <span className="re-runner-meta">{meta}</span>}
+          </span>
           <span className={`re-chev${collapsed ? '' : ' open'}`} aria-hidden="true">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
               <path
@@ -1007,24 +1017,23 @@ function RunnerEngineCard({
               />
             </svg>
           </span>
-          <span className={`re-dot${runner.online ? ' on' : ''}`} />
-          <span className="re-runner-copy">
-            <span className="re-runner">{runner.displayName || runner.name}</span>
-            <span className="re-runner-meta">
-              {[runner.hostname, runner.version && `runner ${runner.version}`]
-                .filter(Boolean)
-                .join(' · ')}
-            </span>
-            {collapsed && <span className="re-summary">{summaryOf(runner)}</span>}
-          </span>
         </button>
-        {!runner.online && <Tag>Offline</Tag>}
+        {(!runner.online || collapsed) && (
+          <div className="re-runner-status">
+            {!runner.online && <Tag>Offline</Tag>}
+            {collapsed && (
+              <span className={`re-summary${failed ? ' warn' : ''}`}>
+                {failed && <WarningOutlined aria-hidden />}{summaryOf(runner)}
+              </span>
+            )}
+          </div>
+        )}
         {/* Updating the engine CLIs is not here, on purpose. It takes no engine — it does every
             CLI on the machine — so its object is the runner, and this is a page about identity
             where everything else is scoped to one (runner, engine) pair. It lives behind this
             link, next to the machine's own version and slots. */}
-        <Link className="re-manage" to={`/runners/${encodeId(runner.id)}`}>
-          Manage runner →
+        <Link className="re-manage" aria-label={`Manage ${name}`} to={`/runners/${encodeId(runner.id)}`}>
+          Manage →
         </Link>
       </div>
       {collapsed ? null : engines ? (
@@ -1158,10 +1167,7 @@ export function RunnerEngines() {
       <div className="re-sec-head">
         <h3>On your runners</h3>
         <span className="re-sec-sub">
-          Signed in on the machine itself — a session spends that subscription, nothing to paste.
-          {/* Said once, here, because it is the answer to a question every row raises and none
-              of them can answer alone: a version number can't tell you it's the current one. */}
-          {list.length > 0 && ' Orbit keeps these CLIs updated every 30 min.'}
+          Use subscriptions signed in on your machines.
         </span>
         {list.length > 0 && (
           <span className="re-sec-count">

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-// Direct behavior evidence for compact reviews, not the project's final visual acceptance.
+// Direct behavior evidence for wide inline reviews and narrow compact reviews.
 const errors = new WeakMap();
 test.beforeEach(async ({ page }, info) => {
   errors.set(page, []);
@@ -53,6 +53,7 @@ async function capture(page, dialog, info, name, behavior) {
 }
 
 test('question traps focus, preserves choices and drafts, and suspends background shortcuts', async ({ page }, info) => {
+  test.skip(!info.project.use.isMobile, 'Compact reviews are used on narrow screens.');
   // A modal removes its background from the accessibility tree while it is open.
   const trigger = page.locator('.review-card-preview').filter({ hasText: 'Claude has a question for you' });
   const decisions = page.getByTestId('decisions');
@@ -103,6 +104,7 @@ test('question traps focus, preserves choices and drafts, and suspends backgroun
 });
 
 test('long plan scrolls above visible actions and owns the foreground shortcut', async ({ page }, info) => {
+  test.skip(!info.project.use.isMobile, 'Compact reviews are used on narrow screens.');
   const trigger = page.getByRole('button', { name: /Confirm: exit plan mode and proceed with this plan/ });
   await trigger.click();
   const dialog = page.getByRole('dialog', { name: /Confirm: exit plan mode and proceed with this plan/ });
@@ -123,4 +125,34 @@ test('long plan scrolls above visible actions and owns the foreground shortcut',
   await page.keyboard.press('Escape');
   await expect(dialog).not.toBeVisible();
   await expect(trigger).toBeFocused();
+});
+
+test('wide screens show full questions and actions without opening a preview', async ({ page }, info) => {
+  test.skip(info.project.use.isMobile, 'Wide screens show inline reviews.');
+  await expect(page.locator('.review-card-preview')).toHaveCount(0);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  const coordinator = page.locator('#question-review-question');
+  await expect(coordinator.getByText('The coordinator has a question', { exact: true })).toBeVisible();
+  await expect(coordinator.getByRole('radio')).toHaveCount(4);
+  await expect(coordinator.getByRole('button', { name: 'Send answer', exact: true })).toBeEnabled();
+  const geometry = await coordinator.evaluate((node) => {
+    const body = node.querySelector('.approval-body');
+    return { viewportWidth: innerWidth, documentWidth: document.documentElement.scrollWidth,
+      bodyHeight: body.clientHeight, contentHeight: body.scrollHeight, maxHeight: getComputedStyle(body).maxHeight };
+  });
+  expect(geometry.documentWidth).toBeLessThanOrEqual(geometry.viewportWidth);
+  expect(geometry.contentHeight).toBeLessThanOrEqual(geometry.bodyHeight + 1);
+  expect(geometry.maxHeight).toBe('none');
+  await info.attach('coordinator-inline.png', { body: await coordinator.screenshot(), contentType: 'image/png' });
+  await info.attach('coordinator-inline.json', { body: JSON.stringify(geometry, null, 2), contentType: 'application/json' });
+
+  const question = page.locator('.approval-card').filter({ has: page.locator('.chat-q-custom') });
+  await question.getByRole('button', { name: 'Main', exact: true }).click();
+  await question.getByPlaceholder('Or type your own answer…').fill('Keep the staging branch too');
+  await question.getByRole('button', { name: 'Submit', exact: true }).click();
+  await expect(page.getByTestId('decisions')).toHaveText(JSON.stringify([['AskUserQuestion', 'allow', {
+    'Which branches should receive the change?': ['Main', 'Keep the staging branch too'],
+  }]]));
+  await expect(page.getByRole('heading', { name: 'Step 80', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Approve & run/ })).toBeVisible();
 });

@@ -4865,9 +4865,6 @@ html[data-theme='dark'] .session-tag-chip {
   font-size: 12.5px;
   color: var(--text-4);
 }
-.session-project-row .session-title {
-  font-weight: 600;
-}
 .session-project-icon {
   position: relative;
   color: var(--brand);
@@ -7150,25 +7147,91 @@ button.chat-jump-start:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* What delivery appended to a person's message, named on one line under their words instead of
-   dumped into them (ControlPlaneNote). Muted and small: it is provenance, not content — the eye
-   should skip it unless the reply mentions something the message did not, and then it opens to
-   exactly what the model read. */
+/* What delivery appended to a person's message (ControlPlaneNote). The folded state is a compact
+   card: the message keeps its own words, while the Orbit context gets a clear status and one
+   deliberate entry point. The raw block remains the opened state for traceability. */
 .chat-injected {
   margin-top: 6px;
-  padding-top: 5px;
-  border-top: 1px dashed var(--border-subtle);
-  color: var(--text-3);
-  font-size: 11.5px;
+  overflow: hidden;
+  border: 1px solid var(--brand-border);
+  border-radius: 14px;
+  background: var(--brand-tint);
+  color: var(--text-1);
+  font-size: 12px;
 }
 .chat-injected-head {
-  padding: 0;
+  position: relative;
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  padding: 11px 12px 9px 38px;
   border: 0;
-  background: none;
-  color: inherit;
+  border-bottom: 1px solid var(--brand-border);
+  background: transparent;
+  color: transparent;
   font: inherit;
+  font-size: 0;
   text-align: left;
   cursor: pointer;
+}
+.chat-injected-head::before {
+  content: '⊕  Orbit context';
+  display: block;
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 17px;
+}
+.chat-injected-head::after {
+  content: 'Attached · ' attr(data-display-kind);
+  display: block;
+  color: var(--text-3);
+  font-size: 10.5px;
+  line-height: 14px;
+}
+.chat-injected-overview {
+  padding: 11px 12px 12px;
+}
+.chat-injected-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.chat-injected-summary strong {
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 600;
+}
+.chat-injected-summary span {
+  color: var(--text-3);
+  font-size: 11px;
+}
+.chat-injected-overview p {
+  margin: 7px 0 10px;
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.chat-injected-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 31px;
+  padding: 0 9px;
+  border: 1px solid var(--brand-border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  color: var(--brand-strong);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.chat-injected-action .anticon {
+  font-size: 10px;
+}
+.chat-injected.is-open > .chat-injected-head {
+  background: var(--bg-raised);
 }
 /* Drop the focus ring on mouse click; keep it for keyboard navigation. */
 .chat-injected-head:focus {
@@ -7180,8 +7243,15 @@ button.chat-jump-start:hover {
   outline-offset: 2px;
 }
 .chat-injected-body {
-  margin: 4px 0 0;
+  max-height: 320px;
+  margin: 0;
+  padding: 10px 12px;
+  overflow: auto;
+  border-top: 1px solid var(--brand-border);
+  background: var(--bg-raised);
   color: var(--text-2);
+  font-size: 11px;
+  line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -14000,8 +14070,7 @@ button.chat-jump-start:hover {
 .re-card.offline .re-head {
   background: var(--fill-muted);
 }
-/* Everything that isn't the Manage link folds the card; it's the whole left half of the header,
-   so the hit target matches what reads as "this runner". */
+/* Identity has its own toggle so the adjacent Manage link stays independent. */
 .re-toggle {
   display: flex;
   align-items: center;
@@ -14060,17 +14129,20 @@ button.chat-jump-start:hover {
   white-space: nowrap;
 }
 
-/* The runner header's spare width belongs to its toggle, with Manage kept independent. */
+/* Identity expands the runner; its status and Manage link stay separate. */
 .re-runner-card .re-head {
   gap: 0;
   padding: 0;
+}
+.re-runner-card.offline .re-head {
+  background: var(--bg-subtle);
 }
 .re-runner-card .re-toggle {
   flex: 1;
   align-self: stretch;
   gap: 10px;
   min-height: 64px;
-  padding: 10px 12px;
+  padding: 10px 14px;
   border-radius: 11px 0 0 11px;
 }
 .re-runner-card .re-toggle:focus-visible {
@@ -14081,8 +14153,8 @@ button.chat-jump-start:hover {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 28px;
+  height: 24px;
   color: var(--text-2);
   transition: color 0.15s, transform 0.15s;
 }
@@ -14093,17 +14165,46 @@ button.chat-jump-start:hover {
 .re-runner-copy {
   display: flex;
   flex: 1;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 4px 9px;
+  flex-direction: column;
+  gap: 3px;
   min-width: 0;
 }
 .re-runner-copy .re-runner,
 .re-runner-copy .re-runner-meta {
   overflow-wrap: anywhere;
 }
+.re-runner-copy .re-runner {
+  font-size: 15px;
+}
+.re-runner-copy .re-runner-meta {
+  font-size: 12px;
+}
+.re-runner-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.re-runner-status > .ant-tag {
+  margin: 0;
+}
+.re-runner-status .re-summary {
+  border-left: 0;
+  padding-left: 0;
+  font-size: 12px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.re-runner-status .re-summary.warn {
+  color: var(--warning);
+}
+.re-runner-status .re-summary .anticon {
+  margin-right: 5px;
+}
 .re-runner-card .re-manage {
   display: flex;
+  flex: none;
   align-items: center;
   min-height: 44px;
   margin: 0 14px 0 8px;
@@ -14113,36 +14214,29 @@ button.chat-jump-start:hover {
   outline-offset: 3px;
   border-radius: 4px;
 }
-.re-runner-card .re-head > .ant-tag {
-  margin: 0 4px;
-}
 @container re-card (max-width: 600px) {
   .re-runner-card .re-head {
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 8px;
+    padding: 0 14px;
   }
   .re-runner-card .re-toggle {
-    flex-basis: 100%;
-    gap: 8px;
-    padding: 10px 8px;
+    grid-column: 1 / -1;
+    align-items: flex-start;
+    min-height: 54px;
+    padding: 10px 0 0;
     border-radius: 11px;
   }
-  .re-runner-copy,
-  .re-runner-copy > span {
-    display: block;
+  .re-runner-card .re-toggle > .re-dot {
+    margin-top: 8px;
   }
-  .re-runner-copy .re-runner-meta {
-    margin-top: 3px;
-  }
-  .re-runner-card .re-summary {
-    border-left: 0;
-    padding: 3px 0 0;
+  .re-runner-status {
+    margin-left: 17px;
   }
   .re-runner-card .re-manage {
-    margin-left: auto;
-    margin-right: 12px;
-  }
-  .re-runner-card .re-head > .ant-tag {
-    margin-left: 75px;
+    grid-column: 2;
+    margin: 0;
   }
 }
 
@@ -19744,6 +19838,29 @@ button.project-open-item-action:disabled {
 }
 .project-open-item-actions:empty {
   display: none;
+}
+/* "Chat about this" (lib/coordinatorChat): its own row under the doors, because it is not one of
+   them — a message to the coordinator conversation — with the reason said beside it when the
+   server refuses it. */
+.project-open-item-chat {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.project-open-item-chat-refusal,
+.project-promotion-chat-refusal {
+  font-size: 12px;
+  color: var(--text-3);
+}
+/* The merge card's presses sit on one unwrapped row; a refused chat's reason takes a line of its own
+   under them rather than squeezing every label there onto two. */
+.card-actions.project-promotion-actions.has-chat-refusal {
+  flex-wrap: wrap;
+}
+.project-promotion-chat-refusal {
+  flex-basis: 100%;
 }
 .project-open-item-error {
   flex-basis: 100%;

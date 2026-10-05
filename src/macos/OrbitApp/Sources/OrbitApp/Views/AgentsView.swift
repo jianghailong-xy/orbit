@@ -213,7 +213,7 @@ struct AgentContentColumn: View {
             // goes on following the selected session. A phone never reads this — its folder page is
             // a frame the compact stack pushes (`CompactSections`).
             if let address = app.projectSessionsColumn, rowNavigation == .selection {
-                SessionProjectPage(address: address, rowNavigation: rowNavigation, searchQuery: $searchQuery)
+                SessionProjectPage(address: address, rowNavigation: rowNavigation)
             } else {
                 if let address = app.folderColumn {
                     SessionFolderPage(address: address, rowNavigation: rowNavigation, searchQuery: $searchQuery)
@@ -271,7 +271,8 @@ struct AgentContentColumn: View {
         // text); the hits replace the list's sections until the field is cleared (see `AgentPanes`).
         .sessionListSearch(text: $searchQuery,
                            fromBottom: SessionListPresentation.resolve(
-                               isCompactWidth: horizontalSizeClass == .compact).searchesFromBottom)
+                               isCompactWidth: horizontalSizeClass == .compact).searchesFromBottom,
+                           isEnabled: app.projectSessionsColumn == nil || rowNavigation != .selection)
         // The query used to be `AgentPanes`' own state, so switching workspace (`.id(a.id)`) dropped
         // it. It outlives that rebuild now, so clear it here to land on the new workspace's sessions
         // rather than on the old workspace's search results.
@@ -855,7 +856,7 @@ struct AgentPanes: View {
 
     private func projectRow(_ row: SessionProjectRow) -> some View {
         let address = SessionProjectAddress(projectID: row.projectId, agentID: agent.id, view: view)
-        return SessionProjectRowView(row: row, onOpen: {
+        let onOpen = {
             switch row.target {
             case .session(let id):
                 if let session = (app.sessions + agents.allSessions).first(where: { $0.id == id }) {
@@ -863,10 +864,9 @@ struct AgentPanes: View {
                 }
             case .project: app.openProjectSessions(address)
             }
-        }, onSessions: { app.openProjectSessions(address) })
-        .sessionProjectRowActions(row, onCoordinator: {
-            if let coordinator = row.coordinator { app.openProjectMember(coordinator, push: rowNavigation == .push) }
-        }, onSessions: { app.openProjectSessions(address) }, onProject: {
+        }
+        return SessionProjectRowView(row: row, onOpen: onOpen, onSessions: { app.openProjectSessions(address) })
+        .sessionProjectRowActions(row, onOpen: onOpen, onSessions: { app.openProjectSessions(address) }, onProject: {
             app.openProject(row.projectId)
         }, onMove: { if let coordinator = row.coordinator { movingSession = coordinator } })
     }

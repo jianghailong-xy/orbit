@@ -611,6 +611,20 @@ final class ConsoleModel {
         guard let engine = accountEngine, engineAccounts(engine).count >= 2 else { return nil }
         return CodexAccounts.label(account(for: engine), accounts: engineAccounts(engine))
     }
+    /// The same name for a session on a pool (`poolAccount`): the account its last claim recorded,
+    /// under the same rule — said only when the pool holds more than one to tell apart. Nil for a
+    /// session on no pool, one on a single-account pool, and one whose pool names no member.
+    ///
+    /// The footer has room for this name beside the gauge on a Mac, and the pool's own name is the
+    /// model control's provider row; this is what carries it into the gauge's detail as well, which is
+    /// the only place a phone's Plan usage sheet has room for it.
+    var poolAccountLabel: String? {
+        guard let pool = currentPool, let account = poolAccount else { return nil }
+        let accounts = CodexLoginPool.isLoginPool(pool)
+            ? CodexLoginPool.logins(pool).count
+            : pool.members.count
+        return accounts > 1 ? account.member.label : nil
+    }
     /// The line under that name: on a draft nothing picked an account for, how it came to that one;
     /// on a session on Automatic whose runner can move it, that it moves.
     var accountNote: String? {
@@ -691,6 +705,10 @@ final class ConsoleModel {
     /// The same read on a shared pool, whose claim names the key it chose (`session.poolKeyId`)
     /// rather than one of the viewer's own accounts.
     private(set) var poolKeyID: String?
+    /// On a Codex pool of one's own ChatGPT accounts: the account this session runs on, as the
+    /// masked view the session detail carries (`session.poolCodexLogin`) — the pool's members never
+    /// record one. Only a detail read sets it, like the two above.
+    private(set) var poolCodexLogin: CodexLogin?
 
     /// The pool this session or draft runs on, if its provider is one.
     var currentPool: ProviderPool? { allPools.first { $0.slug == provider } }
@@ -699,6 +717,14 @@ final class ConsoleModel {
     /// next claim picks. Nil once the recorded member has left the pool: nobody is guessed.
     var poolAccount: PoolAccount? {
         guard let pool = currentPool else { return nil }
+        // A login pool's session records the ChatGPT account it runs on (`session.poolCodexLogin`),
+        // and names that — not the pool's `next` member, which is the answer for a session starting
+        // now: with the pool's oldest account spent there is no next, while the session runs on that
+        // very account (web parity).
+        if !isDraft, CodexLoginPool.isLoginPool(pool), let login = poolCodexLogin,
+           let member = CodexLoginPool.sessionMember(in: pool, login: login) {
+            return PoolAccount(member: member, current: true)
+        }
         // A shared pool's session records the key its claim chose; an account pool's the account.
         let memberID = isDraft ? nil : (pool.shared != nil ? poolKeyID : poolMemberProviderID)
         return ProviderPools.sessionAccount(in: pool, memberID: memberID)
@@ -1580,6 +1606,7 @@ final class ConsoleModel {
         if taskID != nil { Task { [weak self] in await self?.refreshOwnerConfirmation() } }
         poolMemberProviderID = s.poolMemberProviderId
         poolKeyID = s.poolKeyId
+        poolCodexLogin = s.poolCodexLogin
         sessionCodexAccount = s.codexAccount
         workspaceCodexAccount = s.agent?.codexAccount
         sessionClaudeAccount = s.claudeAccount
@@ -1738,6 +1765,7 @@ final class ConsoleModel {
         adoptServerSnapshot(s)
         poolMemberProviderID = s.poolMemberProviderId
         poolKeyID = s.poolKeyId
+        poolCodexLogin = s.poolCodexLogin
         sessionCodexAccount = s.codexAccount
         workspaceCodexAccount = s.agent?.codexAccount
         sessionClaudeAccount = s.claudeAccount

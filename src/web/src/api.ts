@@ -16,6 +16,7 @@ import type {
 // Types only, so the public project page's payload is typed by the cards that draw it.
 import type { ProjectPanoramaBuckets, ProjectPanoramaShape } from './components/ProjectPanoramaHeader';
 import type { ProjectDependencyGraphResponse } from './lib/projectDependencyGraph';
+import type { CodexLogin } from './lib/codexLogin';
 import { clearTranscriptStore, setTranscriptUser } from './lib/transcriptStore';
 import type { Me } from './lib/queries';
 import { compatibleUuid as uuid } from './lib/uuid';
@@ -1375,6 +1376,10 @@ export interface SessionDetail {
   poolMemberProviderId?: string | null;
   /** On a shared pool: the key its last claim chose (null before the first, or when none could run). */
   poolKeyId?: string | null;
+  /** On a Codex pool of one's own ChatGPT accounts: the account this session runs on, as the masked
+   *  view every response names one by (email + `…AB12`, never its id). Null until a claim records
+   *  one, or on a session of any other kind. */
+  poolCodexLogin?: CodexLogin | null;
   /** The Codex account picked for this session on the New Session screen; null follows the
    *  workspace's (`workspace.codexAccount`). */
   codexAccount?: string | null;

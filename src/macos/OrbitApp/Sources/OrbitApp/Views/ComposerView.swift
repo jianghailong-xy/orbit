@@ -427,7 +427,7 @@ struct ComposerView: View {
                 // detail rather than beside it, where a phone's footer has no room for an email (web
                 // parity).
                 PlanUsageIndicator(usage: usage,
-                                   account: console.accountLabel.map {
+                                   account: (console.accountLabel ?? console.poolAccountLabel).map {
                                        PlanUsageAccount(label: $0, note: console.accountNote)
                                    }, resetConsole: console)
             }

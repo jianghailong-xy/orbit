@@ -57,6 +57,8 @@ public enum EngineErrors {
     /// that merely mentions one is not one.
     static let retryableEngineErrorPrefixes = [
         "selected model is at capacity",  // Codex's serverOverloaded: OpenAI shedding load on one model
+        // Codex's rate-limit retry budget: "exceeded retry limit, last status: 429 Too Many Requests".
+        "exceeded retry limit, last status: 429 too many requests",
     ]
 
     /// Is this the transient kind — the provider briefly unable to answer, rather than anything

@@ -39,6 +39,7 @@ final class SessionProjectCopyParityTests: XCTestCase {
         let web = try web()
         let constants: [(String, String)] = [
             ("noCoordinator", SessionProjectCopy.noCoordinator),
+            ("openSession", SessionProjectCopy.openSession),
             ("openCoordinator", SessionProjectCopy.openCoordinator),
             ("sessions", SessionProjectCopy.sessions),
             ("openProject", SessionProjectCopy.openProject),

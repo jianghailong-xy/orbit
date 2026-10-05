@@ -25,7 +25,6 @@ import {
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
 import { IntegrationSettings, configureProjectIntegration } from './project-integration-line';
-import { readProjectListAttention } from './project-list-attention';
 import { ProjectOpenItemService } from './project-open-item.service';
 
 /**
@@ -47,11 +46,11 @@ import { ProjectOpenItemService } from './project-open-item.service';
  * duration, which is what "this was opened two hours ago" IS. Nothing else in these cases is
  * rewritten — the window each item carries stays the one its project froze into it at creation.
  *
- * What the clock counts is the coordinator's silence, not the item's age (the last four cases): an
- * item stays the coordinator's while the conversation it was put on is still moving. So the
- * conversation's turns are the other half of every case's data, and they are written by the doors
- * that write them in production — the runner's claim, `dequeueTurn` handing a turn to the engine,
- * `turnComplete` ending it — and aged by `quiet`, on their own timeline, apart from the item's.
+ * What the clock counts is progress on the item, not arbitrary conversation activity (the last four
+ * cases): the answer to the item's delivery, a concrete fix, or the fix's own work session can move
+ * the deadline. A generic chat turn is deliberately not progress on this item. Those facts are
+ * written by the production doors — the runner's claim, `dequeueTurn` handing a turn to the engine,
+ * `turnComplete` ending it, and task/session writes — and aged by `quiet`/`age` on their own timelines.
  *
  * The clock is loaded by a specifier the compiler does not resolve, so this file compiles and runs
  * against a tree that has no escalation service at all. There, `tick` escalates nothing and each case
@@ -620,26 +619,26 @@ test('an item inside its window does not escalate', { skip, timeout: 180_000 }, 
 });
 
 /**
- * What the clock counts is the coordinator's silence, not the item's age (§4.6 X-E1).
+ * What the clock counts is item progress, not arbitrary coordinator chat (§4.6 X-E1).
  *
- * The case this was filed from (2026-09-23): five items delivered to a coordinator that was alive and
- * taking turns — its last one four minutes before the first of them came due — and every one of them
- * handed to the owner at exactly two hours, after which the conversation that had read them was
- * refused when it tried to close them (§4.7). The items' age said nobody had acted; the
- * conversation's turns said otherwise. An item the coordinator has in hand, and is still working
- * after, stays the coordinator's — and every reader says when it would stop being theirs.
+ * The old rule extended the deadline for any later conversation turn. The current rule is narrower:
+ * the answer to the item's own delivery counts, but an unrelated chat turn does not. This case ages
+ * the delivery answer, then sends a fresh generic chat message; the item still escalates because no
+ * item-specific progress happened in the window.
  */
-test('a coordinator that took the item and is still taking turns keeps it past its window',
+test('a generic coordinator chat turn does not renew an item progress window',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
     try {
       const w = await world(stack, 'still-carrying');
       const item = await failedTask(stack, w, 'still-carrying');
 
-      // The conversation is handed the turn that carries the item and ends it; then the owner asks it
-      // something else, and it answers that too. It has the item, and it has not stopped.
+      // Answer the delivery, then age that item-specific progress out of the window.
       const took = await takeTurn(stack, w);
       assert.match(took.content, /Task failed: still-carrying/, 'the first turn it took is the item');
+      await quiet(stack.db, w.coordinatorSessionId, 2 * 60 * MINUTE + MINUTE);
+
+      // A fresh generic chat answer is deliberately not tied to the item's delivery key.
       await stack.sessions.createTurn(w.ownerId, w.coordinatorSessionId, {
         clientTurnId: randomUUID(),
         content: 'and the rest of the project?',
@@ -647,39 +646,28 @@ test('a coordinator that took the item and is still taking turns keeps it past i
       });
       const latest = await takeTurn(stack, w);
 
-      // Opened, and put on the conversation, two hours and one minute ago: the age at which the clock
-      // that read only the item handed it to the owner.
+      // The item and its delivery are now beyond the frozen window. The generic turn remains recent,
+      // but it is not one of the progress facts for this item.
       await age(stack.db, item, 2 * 60 * MINUTE + MINUTE);
       const escalated = await tick(stack.prisma);
 
       const after = await reread(stack.db, item);
       assert.deepEqual(
-        [after.assignee, after.assigneeReason, after.escalatedAt],
-        ['COORDINATOR', 'DEFAULT', null],
-        'the conversation took this item and has taken turns since, so it is carrying it: the window '
-        + `ran out on the item's age, not on the coordinator's silence — item is ${after.assignee}`,
+        [after.assignee, after.assigneeReason],
+        ['OWNER', 'ESCALATED'],
+        'generic conversation activity does not count as progress on the delivered item',
       );
-      assert.deepEqual(escalated.filter((row) => row.projectId === w.projectId), [],
-        'nothing of this project\'s is reported, so its owner is told nothing');
+      assert.ok(after.escalatedAt, 'the item records the hand-off');
+      assert.deepEqual(escalated.filter((row) => row.projectId === w.projectId).map((row) => row.itemId), [item.id],
+        'the stale item is reported to its owner');
 
-      // Every reader says what the clock acts on: the coordinator's, and going to the owner one full
-      // window after the conversation last moved — not "due" on a deadline that did not bite.
-      const { answeredAt } = await stack.db.conversationTurn.findUniqueOrThrow({
-        where: { id: latest.turnId },
-        select: { answeredAt: true },
-      });
-      const goesAt = answeredAt!.getTime() + DEFAULT_WINDOW_SECONDS * 1_000;
       const reader = await stack.openItems.list(w.ownerId, w.projectId);
       assert.deepEqual(
-        [reader.needsYou.length, reader.withCoordinator.map((row) => row.itemId)],
-        [0, [item.id]],
-        'the owner is shown nothing they are owed',
+        [reader.needsYou.map((row) => row.itemId), reader.withCoordinator.length],
+        [[item.id], 0],
+        'the owner reads the escalated item and the coordinator group is empty',
       );
-      assert.equal(reader.withCoordinator[0]!.escalateAt?.getTime(), goesAt,
-        'the card counts down from the conversation\'s last turn');
-      const listed = (await readProjectListAttention(stack.prisma, w.ownerId)).get(w.projectId);
-      assert.equal(listed?.coordinatorItems?.nextEscalationAt.getTime(), goesAt,
-        'and so does the projects list');
+      assert.ok(latest.turnId, 'the unrelated chat turn was answered but did not renew the item');
     } finally {
       await stack.db.$disconnect();
     }
@@ -763,6 +751,9 @@ test('a coordinator conversation that has ended carries nothing, however recentl
       const w = await world(stack, 'ended');
       const item = await failedTask(stack, w, 'ended');
       await takeTurn(stack, w);
+      // The delivery answer is item progress, even after the conversation ends. Age that
+      // item-specific fact so the ended session itself is the only remaining observation.
+      await quiet(stack.db, w.coordinatorSessionId, 2 * 60 * MINUTE + MINUTE);
       // Its owner files the conversation as Completed. The item had already been handed to it, so the
       // drain that gives queued items to the owner (§4.4 X-D5) has nothing to take back: the item is
       // still the coordinator's, on a conversation that is over.

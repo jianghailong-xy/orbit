@@ -95,14 +95,16 @@ final class SessionProjectPageWiringTests: XCTestCase {
             let source = code(try appSource(relative))
             let row = try slice(source, from: "private func projectRow(_ row: SessionProjectRow)", to: "\n    }")
             XCTAssertTrue(row.contains("SessionProjectAddress(projectID: row.projectId"))
-            XCTAssertTrue(row.contains("SessionProjectRowView(row: row, onOpen:"))
+            XCTAssertTrue(row.contains("let onOpen = {"))
+            XCTAssertTrue(row.contains("SessionProjectRowView(row: row, onOpen: onOpen,"))
             XCTAssertTrue(row.contains("switch row.target"))
             XCTAssertTrue(row.contains("case .session(let id):"))
             XCTAssertTrue(row.contains("$0.id == id"))
             XCTAssertTrue(row.contains("app.openProjectMember(session, push: rowNavigation == .push)"))
             XCTAssertTrue(row.contains("case .project: app.openProjectSessions("))
             XCTAssertTrue(row.contains("onSessions: { app.openProjectSessions("))
-            XCTAssertTrue(row.contains(".sessionProjectRowActions(row, onCoordinator:"))
+            XCTAssertTrue(row.contains(".sessionProjectRowActions(row, onOpen: onOpen,"),
+                          "the row and its Open Session menu share the grouping target's callback")
             XCTAssertTrue(row.contains("app.openProject(row.projectId)"))
             XCTAssertTrue(row.contains("movingSession = coordinator"))
         }
@@ -124,7 +126,7 @@ final class SessionProjectPageWiringTests: XCTestCase {
 
         let agents = code(try appSource("Views/AgentsView.swift"))
         let column = try slice(agents, from: "if let address = app.projectSessionsColumn, rowNavigation == .selection {", to: "} else")
-        XCTAssertTrue(column.contains("SessionProjectPage(address: address, rowNavigation: rowNavigation, searchQuery: $searchQuery)"))
+        XCTAssertTrue(column.contains("SessionProjectPage(address: address, rowNavigation: rowNavigation)"))
         XCTAssertEqual(try branches(of: "if let address = app.projectSessionsColumn, rowNavigation == .selection {", in: agents), ["os(iOS)"])
 
         let app = code(try appSource("AppModel.swift"))
@@ -132,6 +134,23 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(open.contains("nav.enterProjectSessions(address)"))
         let leave = try slice(app, from: "func leaveProjectSessions(_ projectID: String? = nil) {", to: "\n    }")
         XCTAssertTrue(leave.contains("nav.leaveProjectSessions(projectID)"))
+    }
+
+    func testTheProjectPageHasNoSearchAndOtherListsKeepTheColumnsSearch() throws {
+        let page = code(try appSource("Views/SessionProjectPage.swift"))
+        for forbidden in ["searchQuery", "searchResults", "runSearch", "searchSessions", "sessionListSearch"] {
+            XCTAssertFalse(page.contains(forbidden), "the project page does not connect `\(forbidden)`")
+        }
+        let agents = code(try appSource("Views/AgentsView.swift"))
+        XCTAssertTrue(agents.contains(".sessionListSearch(text: $searchQuery,"))
+        XCTAssertTrue(agents.contains("isEnabled: app.projectSessionsColumn == nil || rowNavigation != .selection"),
+                      "only the project column removes the root search field")
+        XCTAssertTrue(agents.contains("SessionFolderPage(address: address, rowNavigation: rowNavigation, searchQuery: $searchQuery)"))
+        XCTAssertTrue(agents.contains("searchQuery: $searchQuery, rowNavigation: rowNavigation)"))
+        let search = code(try appSource("Views/SessionListSearch.swift"))
+        XCTAssertTrue(search.contains("isEnabled: Bool = true"), "existing search callers keep their field")
+        XCTAssertTrue(search.contains("if !isEnabled {\n            self"))
+        XCTAssertTrue(search.contains("searchable(text: text"))
     }
 
     func testTheRowsUseTheCompactAndRegularSessionLayouts() throws {
@@ -146,9 +165,13 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let regular = try slice(row, from: "private var regularIOSRow: some View {", to: "\n    }")
         XCTAssertTrue(regular.contains("spacing: 4"))
         XCTAssertTrue(regular.contains(".padding(.vertical, 5)"))
-        XCTAssertTrue(row.contains("square.grid.2x2"))
+        XCTAssertFalse(row.contains("square.grid.2x2"))
         XCTAssertTrue(row.contains("Text(row.title)"))
-        XCTAssertTrue(row.contains(".semibold") || row.contains(".bold"))
+        let firstLine = try slice(row, from: "private var firstLine: some View {", to: "\n    }")
+        XCTAssertTrue(firstLine.contains(".lineLimit(1)"))
+        XCTAssertTrue(firstLine.contains(".fixedSize()"))
+        XCTAssertFalse(firstLine.contains(".fixedSize(horizontal: regular, vertical: false)"))
+        XCTAssertFalse(row.contains(".bold()") || row.contains(".semibold"), "项目条目标题与会话行同一字重（owner 10-04）")
         XCTAssertTrue(row.contains("row.line.text"))
         XCTAssertFalse(row.contains("SessionCoordinatorBadge"))
         XCTAssertFalse(row.contains("NeedsYouCountCapsule"), "attention is a dot, never a count")
@@ -198,7 +221,7 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let actions = try slice(source, from: "private struct SessionProjectRowActions: ViewModifier {", to: "\n}\n")
         let menu = try slice(actions, from: "private var menu: some View {", to: "\n    }")
         let order = try [
-            XCTUnwrap(menu.range(of: "SessionProjectCopy.openCoordinator")?.lowerBound),
+            XCTUnwrap(menu.range(of: "SessionProjectCopy.openSession")?.lowerBound),
             XCTUnwrap(menu.range(of: "SessionProjectCopy.sessions")?.lowerBound),
             XCTUnwrap(menu.range(of: "SessionProjectCopy.openProject")?.lowerBound),
             XCTUnwrap(menu.range(of: "Divider()")?.lowerBound),
@@ -207,6 +230,12 @@ final class SessionProjectPageWiringTests: XCTestCase {
         ]
         XCTAssertEqual(order, order.sorted())
         XCTAssertEqual(menu.components(separatedBy: "Button(action:").count - 1, 4)
+        XCTAssertFalse(menu.contains("SessionProjectCopy.openCoordinator"))
+        XCTAssertTrue(menu.contains("Button(action: onOpen)"))
+        XCTAssertTrue(menu.contains(".disabled(!canOpenSession)"))
+        let canOpen = try slice(actions, from: "private var canOpenSession: Bool {", to: "\n    }")
+        XCTAssertTrue(canOpen.contains("if case .session = row.target { return true }"))
+        XCTAssertTrue(canOpen.contains("return false"), "a project-page fallback is not an openable session")
         for forbidden in ["Complete", "Share", "Delete", "Approve", "Answer", "Respond"] {
             XCTAssertFalse(actions.contains(forbidden), "project entries cannot offer `\(forbidden)`")
         }
@@ -223,10 +252,28 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(pin.contains("app.setPinned(coordinator, pinned: !pinned)"))
     }
 
-    func testThePageLoadsAllWorkspacesWithinTheOriginatingView() throws {
+    func testTheProjectSessionsLoadAvoidsAsyncLets() throws {
         let app = code(try appSource("AppModel.swift"))
         let load = try slice(app, from: "func loadProjectSessions(_ address: SessionProjectAddress) async {", to: "\n    }")
-        XCTAssertTrue(load.contains("api.listSessions(view: address.view, projectId: address.projectID)"))
+        XCTAssertFalse(load.contains("async let"), "project session reads must avoid async-let teardown")
+        XCTAssertTrue(load.contains("let openRead = Task { try await api.listSessions(view: .open,"))
+        XCTAssertTrue(load.contains("let completedRead = Task { try await api.listSessions(view: .completed,"))
+        XCTAssertTrue(load.contains("defer {\n                openRead.cancel()\n                completedRead.cancel()\n            }"))
+        XCTAssertTrue(load.contains("let rows = try await openRead.value + completedRead.value"))
+    }
+
+    func testThePageLoadsOpenAndCompletedAcrossAllWorkspacesAndDeduplicates() throws {
+        let app = code(try appSource("AppModel.swift"))
+        let load = try slice(app, from: "func loadProjectSessions(_ address: SessionProjectAddress) async {", to: "\n    }")
+        XCTAssertTrue(load.contains("api.listSessions(view: .open, projectId: address.projectID)"))
+        XCTAssertTrue(load.contains("api.listSessions(view: .completed, projectId: address.projectID)"))
+        XCTAssertTrue(load.contains("let rows = try await openRead.value + completedRead.value"))
+        XCTAssertTrue(load.contains("var seen = Set<String>()"))
+        XCTAssertTrue(load.contains("seen.insert($0.id).inserted"))
+        XCTAssertTrue(load.contains("$0.effectiveLifecycleState != .trash"))
+        XCTAssertTrue(load.contains(".sorted { ($0.lastTurnAt ?? $0.createdAt ?? \"\") > ($1.lastTurnAt ?? $1.createdAt ?? \"\") }"))
+        XCTAssertFalse(load.contains("view: address.view"))
+        XCTAssertFalse(load.contains("view: .trash"))
         XCTAssertFalse(load.contains("agentID:"))
         XCTAssertFalse(load.contains("agentId:"))
         XCTAssertFalse(load.contains("runnerId:"))
@@ -252,22 +299,30 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(page.contains("$0.projectMembership?.role != .coordinator"))
         let sections = try slice(page, from: "private var timeSections: [SessionTimeSection] {", to: "\n    }")
         XCTAssertTrue(sections.contains("SessionTimeGrouping.sections(sessions.filter"))
-        XCTAssertTrue(sections.contains("pinnedFirst: address.view == .open"))
+        XCTAssertTrue(sections.contains("pinnedFirst: false"))
         XCTAssertTrue(page.contains(".task(id: address)"))
         XCTAssertTrue(page.contains("await app.loadProjectSessions(address)"))
         let progress = try slice(page, from: "private var progressCard: some View {", to: "\n    }")
         XCTAssertTrue(progress.contains("project?.taskCounts"))
         XCTAssertTrue(progress.contains("SessionProjectProgressBar(counts: counts"))
         XCTAssertTrue(progress.contains("SessionProjectCopy.pageProgress(done: counts.done, total: counts.total,"))
+        XCTAssertEqual(progress.components(separatedBy: "running: runningCount").count - 1, 2)
+        XCTAssertFalse(progress.contains("buckets.running"))
+        let running = try slice(page, from: "private var runningCount: Int {", to: "\n    }")
+        XCTAssertTrue(running.contains("sessions.filter { session in"))
+        XCTAssertTrue(running.contains("if case .spinner = SessionStatusGlyph.make(for: session, watching: app.watches?.summary(for: session.id)).shape"))
+        XCTAssertTrue(running.contains("}.count"))
         XCTAssertTrue(progress.contains("app.openProject(address.projectID)"))
         XCTAssertTrue(progress.contains("chevron.right"))
 
         let row = try slice(page, from: "@ViewBuilder private func sessionRow(_ session: Session)", to: "\n    }")
         for part in ["AgentSessionRow(session: session", "app.openProjectMember(session, push: true)",
-                     ".sessionRowActions(session, scope: address.view", "onTag: { taggingSession = session }",
+                     "let scope: SessionView = session.effectiveLifecycleState == .completed ? .completed : .open",
+                     "showsPin: scope == .open", ".sessionRowActions(session, scope: scope", "onTag: { taggingSession = session }",
                      "onShare: { sharingSession = session }", "onMove: { movingSession = session }", ".tag(session.id)"] {
             XCTAssertTrue(row.contains(part), "member rows preserve `\(part)`")
         }
+        XCTAssertFalse(row.contains("address.view"), "member actions and appearance use the session's lifecycle")
         let sessionActions = code(try appSource("Views/SessionRowActions.swift"))
         let move = try slice(sessionActions, from: "private var moveAction: RowSwipeAction? {", to: "\n    }")
         XCTAssertTrue(move.contains("membership.role != .coordinator { return nil }"), "a non-coordinator member cannot move its project")

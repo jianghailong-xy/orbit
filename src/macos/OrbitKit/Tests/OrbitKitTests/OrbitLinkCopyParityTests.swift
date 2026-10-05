@@ -203,9 +203,13 @@ final class OrbitLinkCopyParityTests: XCTestCase {
         assertBuilds(web, "value.toLocaleString('en-US')", "what groups a count")
     }
 
-    /// The stalled line on a link card has the same sentence and pluralization in both clients.
-    /// The project page now describes manual readiness separately.
-    func testTheStalledLineMatchesTheWebLinkCard() throws {
+    /// The stalled line, word for word on both ends: the client's card and the web's.
+    ///
+    /// It used to be the project page's sentence too, and this test said so by finding it in
+    /// ProjectPanoramaHeader.tsx. `93d3ec580` (2026-10-04) took it off the page — the stalled banner is
+    /// driven by the ready-to-run query now, and the page no longer words it — so the card in
+    /// OrbitLinkCard.tsx is the sentence's only source, and the only one worth asserting against.
+    func testTheStalledLineIsTheProjectsOwnSentence() throws {
         let web = try flat(Self.webCard)
         XCTAssertEqual(OrbitLinkCopy.stalled(ready: 1), "1 task is ready, but nothing is running.")
         XCTAssertEqual(OrbitLinkCopy.stalled(ready: 3), "3 tasks are ready, but nothing is running.")

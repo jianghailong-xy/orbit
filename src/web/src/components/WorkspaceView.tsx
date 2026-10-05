@@ -184,7 +184,8 @@ import {
 } from '../lib/slashCommands';
 import { sessionPlanUsage } from '../lib/planUsage';
 import { accountNameOf, accountPlanUsage } from '../lib/engineAccounts';
-import { poolsAsProviders, providerPoolsQuery, sessionPoolAccount } from '../lib/providerPools';
+import { poolAccountHelp, poolsAsProviders, providerPoolsQuery, sessionPoolAccount } from '../lib/providerPools';
+import { isLoginPool, poolSessionLoginMember } from '../lib/codexLogin';
 import { sharedPoolAsProviderPool, sharedPoolsQuery } from '../lib/sharedPools';
 import {
   decideContextSeed,
@@ -282,6 +283,7 @@ import {
   revealCriteriaCard,
   revealCard,
   REVIEW_CARD_REVEALED,
+  revealOpenItemCard,
   revealSettlementCard,
   type PendingDecisionRow,
 } from './DecisionRail';
@@ -291,13 +293,33 @@ import {
   type CriteriaDecisionReply,
 } from './CriteriaDecisionCard';
 import { CoordinatorQuestions } from './CoordinatorQuestionCard';
-import { ItemAsCard, exceptionCardRows, isOwnerExceptionCard } from './ProjectProgressStatus';
+import {
+  ItemAsCard,
+  exceptionCardRows,
+  isOwnerExceptionCard,
+  openItemChatBanner,
+  openItemChatContext,
+} from './ProjectProgressStatus';
 import {
   ProjectPromotion,
   ProjectPromotionCard,
   ProjectPromotionReceipt,
+  promotionChatBanner,
+  promotionChatContext,
   promotionRecordMoment,
 } from './ProjectPromotionCard';
+import {
+  CHAT_FACTS_AS_ARMED,
+  CHAT_SUBJECT_GONE,
+  COORDINATOR_CHAT_PLACEHOLDER,
+  chatAboutOf,
+  chatIntentOf,
+  chatSubjectIn,
+  coordinatorChatPath,
+  itemChat,
+  type ChatAbout,
+  type CoordinatorChatSubject,
+} from '../lib/coordinatorChat';
 import { criteriaDecisionReceiptRows, decisionReceiptAnchor } from '../lib/decisionReceipt';
 import { acceptanceConfirmationQuery } from '../lib/acceptanceConfirmation';
 import {
@@ -1174,6 +1196,7 @@ export function SessionProjectListRow({
       role="button"
       tabIndex={0}
       onClick={onOpen}
+      onContextMenu={(e) => { e.preventDefault(); onMenuOpenChange(true); }}
       onTouchStart={swipe?.onStart}
       onTouchMove={swipe?.onMove}
       onTouchEnd={swipe?.onEnd}
@@ -1200,14 +1223,17 @@ export function SessionProjectListRow({
       <div className={`session-swipe${swipe?.dragging ? ' dragging' : ''}`}
         style={swipe?.offset ? { transform: `translateX(${swipe.offset}px)` } : undefined}>
         <span className="session-icon session-project-icon">
-          <SidebarNavIcon name="projects" />
-          {project.indicator && (
-            <span
-              className={`session-project-status ${project.indicator}`}
-              data-state={project.indicator}
-              aria-label={project.indicator === 'needs-you' ? 'Waiting for you'
-                : project.indicator === 'running' ? 'Running' : 'Background jobs'}
-            />
+          {project.indicator === 'running' ? <RunningStatusIcon /> : (
+            <>
+              <SidebarNavIcon name="projects" />
+              {project.indicator && (
+                <span
+                  className={`session-project-status ${project.indicator}`}
+                  data-state={project.indicator}
+                  aria-label={project.indicator === 'needs-you' ? 'Waiting for you' : 'Background jobs'}
+                />
+              )}
+            </>
           )}
         </span>
         <div className="session-main">
@@ -1378,6 +1404,14 @@ export function statusGlyphMotion(session: any, watching?: string | null): 'spin
 export const sessionNeedsYou = (session: any): boolean =>
   (session.pendingApprovals ?? 0) > 0 && session.waitingKind !== 'START_REQUEST';
 
+function RunningStatusIcon() {
+  return (
+    <Tooltip title="Running">
+      <LoadingOutlined spin style={{ color: 'var(--brand)', fontSize: 16 }} />
+    </Tooltip>
+  );
+}
+
 // One glyph per session state. Colour carries the meaning: blue = working,
 // amber = needs a human decision, green = the run reported success, red = real failure,
 // grey = neutral terminal (ended / interrupted / disconnected). A runner that
@@ -1421,11 +1455,7 @@ export function StatusIcon({ session, watching }: { session: any; watching?: str
       </Tooltip>
     );
   if (isGenerating(session, state)) {
-    return (
-      <Tooltip title="Running">
-        <LoadingOutlined spin style={{ color: 'var(--brand)', fontSize }} />
-      </Tooltip>
-    );
+    return <RunningStatusIcon />;
   }
   if (state === 'AWAITING_INPUT') {
     const work = parkedWorkLabel(session);
@@ -1941,6 +1971,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // `planChange` and `projectSettlement` are the two that go through no door at all. The other four
   // answer a call that is blocking on them; there the agent is idle and nothing is pending, so the
   // send is an ordinary turn with the facts it is about carried in front of it (`context`).
+  // `coordinatorChat` is the exception and blocked-merge cards' "Chat about this"
+  // (`lib/coordinatorChat`), and goes through no door either: what it carries is the card's facts,
+  // for this conversation's coordinator to act on with the doors it has.
   const [replyTo, setReplyTo] = useState<{
     target:
       | { kind: 'approval'; id: string }
@@ -1948,7 +1981,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       // `decidingSessionId`: the session the card it was armed from decides as, when that is not
       // this one (`evidenceDecidingSession`) — a dispatched task's card drawn in its run.
       | { kind: 'evidenceDecision'; taskId: string; evidenceRevision: string; decidingSessionId: string | null }
-      | { kind: 'planChange'; projectId: string; criteriaDigest: string };
+      | { kind: 'planChange'; projectId: string; criteriaDigest: string }
+      | { kind: 'coordinatorChat'; projectId: string; about: ChatAbout };
     /** What the reply bar says it is about to answer, whole — built by whoever armed it. */
     banner: string;
     /** What the empty composer asks for while this is armed. */
@@ -2070,10 +2104,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null); // the left session-list column, for arrow-key scrolling
 
-  // Every row in a list shares one swipe layout, so the edges' actions and widths are per view.
+  // Project pages mix Open and Completed; their rows use each session's lifecycle.
   const rowView = projectView ?? view;
-  const swipeActions = sessionSwipeActions(rowView);
-  const swipeSizes = swipeWidths(rowView);
+  const sessionRowView = useCallback((session: SessionListItem): SessionView => openProjectId
+    ? sessionLifecycleStateOf(session).toLowerCase() as SessionView : rowView, [openProjectId, rowView]);
   const onRowTouchStart = (e: ReactTouchEvent, session: any, canFullSwipe: boolean, projectId?: string): void => {
     if (!isMobile) return;
     const t = e.touches[0];
@@ -2084,7 +2118,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     const from = swipeOpen && swipeOpen.id === id ? swipeOpen.side : null;
     const geometry = projectId
       ? { leadingWidth: SWIPE_ACTION_WIDTH, trailingWidth: SWIPE_ACTION_WIDTH, fullSwipeAt: null, maxOffset: SWIPE_ACTION_WIDTH + 20 }
-      : swipeGeometry(rowView, e.currentTarget.getBoundingClientRect().width, canFullSwipe);
+      : swipeGeometry(sessionRowView(session), e.currentTarget.getBoundingClientRect().width, canFullSwipe);
     swipeRef.current = {
       session,
       id,
@@ -2128,7 +2162,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     const { open, fullSwipe } = settleSwipe(st.from, st.offset, st.geometry);
     setSwipeOpen(open ? { id: st.id, side: open } : null);
     setSwipeDrag(null);
-    if (fullSwipe) runSwipeAction(swipeActions.leading[0], st.session);
+    if (fullSwipe) runSwipeAction(sessionSwipeActions(sessionRowView(st.session)).leading[0], st.session);
   };
   // An OS-interrupted gesture (system swipe, incoming call) fires touchcancel, not touchend —
   // drop the drag and let the row settle back to its committed open/closed state.
@@ -2809,18 +2843,21 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     controlLive, needsYou: (s) => sessionLine(s, true, sessionWatching(watchingBySession, s.id)).tone === 'approval',
   });
   const projectSessionsQ = useQuery({
-    ...projectSessionsQuery({ projectId: openProjectId ?? '', view: effectiveView }),
+    ...projectSessionsQuery({ projectId: openProjectId ?? '', view: 'open' }),
     enabled: !!openProjectId,
     refetchInterval: controlLive ? PROJECT_SESSION_REFRESH_MS : 4000,
   });
-  const projectMembers = projectSessionsQ.data ?? [];
-  const pageCoordinator = projectMembers.find((s) => s.projectMembership?.role === 'COORDINATOR') ?? null;
-  const pageCoordinatorQ = useQuery({
-    ...projectSessionsQuery({ projectId: openProjectId ?? '', view: effectiveView === 'completed' ? 'open' : 'completed' }),
-    enabled: !!openProjectId && projectSessionsQ.isSuccess && !pageCoordinator,
+  const completedProjectSessionsQ = useQuery({
+    ...projectSessionsQuery({ projectId: openProjectId ?? '', view: 'completed' }),
+    enabled: !!openProjectId,
     refetchInterval: controlLive ? PROJECT_SESSION_REFRESH_MS : 4000,
   });
-  const pageMenuCoordinator = pageCoordinator ?? pageCoordinatorQ.data?.find((s) => s.projectMembership?.role === 'COORDINATOR') ?? null;
+  const projectMembers = useMemo(() => [...new Map(
+    [...(projectSessionsQ.data ?? []), ...(completedProjectSessionsQ.data ?? [])].map((s) => [s.id, s]),
+  ).values()].sort((a, b) => (Date.parse(b.lastTurnAt ?? b.createdAt ?? '') || 0) -
+    (Date.parse(a.lastTurnAt ?? a.createdAt ?? '') || 0)), [projectSessionsQ.data, completedProjectSessionsQ.data]);
+  const pageCoordinator = projectMembers.find((s) => s.projectMembership?.role === 'COORDINATOR') ?? null;
+  const pageMenuCoordinator = pageCoordinator;
   const pageProject = projectsQ.data?.find((p) => p.id === openProjectId);
   const pageProjectDetailsQ = useQuery({
     ...projectDetailsQuery(openProjectId ?? ''),
@@ -2834,7 +2871,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     total: Object.entries(pageTasksByStatus).reduce((total, [status, count]) => status === 'CANCELLED' ? total : total + count, 0),
   } : undefined);
   const pageProjectTitle = pageProject?.title ?? pageProjectDetailsQ.data?.title ?? projectMembers[0]?.projectMembership?.projectTitle ?? pageMenuCoordinator?.projectMembership?.projectTitle ?? 'Project';
-  const pageRunningCount = pageProject?.buckets.running ?? projectMembers.filter((s) => statusGlyphMotion(s) === 'spinner').length;
+  const pageRunningCount = projectMembers.filter((s) => statusGlyphMotion(s) === 'spinner').length;
   // The folder page the list is on: `?folder=<id>` on whichever route the console is at, so it
   // survives a reload and Back leaves it. Only a folder of this workspace, and only where the list
   // shows folders at all.
@@ -2895,7 +2932,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // is widening its window — `isPlaceholderData` is exactly that, since the guard above only
   // keeps rows within one scope. Neither is the ordinary background refresh, which must not
   // flash anything over rows that are already correct.
-  const loadingSessions = openProjectId ? projectSessionsQ.isPending : sessionsQ.isPending || sessionsQ.isPlaceholderData;
+  const loadingSessions = openProjectId ? projectSessionsQ.isPending || completedProjectSessionsQ.isPending : sessionsQ.isPending || sessionsQ.isPlaceholderData;
   const loadMoreSessions = useCallback(() => {
     if (!hasMoreSessions || sessionsQ.isFetching) return;
     setSessionLimit((n) => n + SESSION_PAGE_SIZE);
@@ -4881,6 +4918,59 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     ],
   );
 
+  // "Chat about this" on the exception cards and the blocked-merge card (`lib/coordinatorChat`): the
+  // next send is an ordinary turn to this conversation, with the card's facts — the project, the
+  // item, what failed and where its handling stands — carried in front of the reader's sentence. It
+  // presses no door: the coordinator reads it and acts with the doors it has, and the card's own
+  // presses stay where they were.
+  const chatProjectTitle = selectedSession?.projectTitle ?? null;
+  // The card's facts as they read at `now`: at the press, for the bar, and again at the send.
+  const coordinatorChatContext = useCallback(
+    (subject: CoordinatorChatSubject, projectId: string, now: number): string =>
+      subject.kind === 'item'
+        ? openItemChatContext({ projectTitle: chatProjectTitle, projectId, row: subject.row, now })
+        : promotionChatContext({
+            projectTitle: chatProjectTitle,
+            projectId,
+            promotion: subject.promotion,
+            item: subject.item,
+            now,
+          }),
+    [chatProjectTitle],
+  );
+  const startCoordinatorChat = useCallback(
+    (subject: CoordinatorChatSubject) => {
+      if (!coordinatedProjectId) return;
+      setReplyTo({
+        target: { kind: 'coordinatorChat', projectId: coordinatedProjectId, about: chatAboutOf(subject) },
+        banner:
+          subject.kind === 'item'
+            ? openItemChatBanner(subject.row)
+            : promotionChatBanner(subject.promotion),
+        placeholder: COORDINATOR_CHAT_PLACEHOLDER,
+        context: coordinatorChatContext(subject, coordinatedProjectId, Date.now()),
+      });
+      setTimeout(() => taRef.current?.focus(), 0);
+    },
+    [coordinatedProjectId, coordinatorChatContext],
+  );
+  // The press itself, as the cards drawn in this conversation make it: armed here when this IS the
+  // project's coordinator conversation — the one the read names for the item — and otherwise taken
+  // to that one (an earlier coordinator of the same project, say, still draws the project's cards),
+  // which arms its own composer on arrival.
+  const chatAboutThis = useCallback(
+    (subject: CoordinatorChatSubject) => {
+      const item = subject.kind === 'item' ? subject.row : subject.item;
+      const coordinator = item ? itemChat(item).sessionId : null;
+      if (coordinator && routeId(coordinator) !== selectedId) {
+        navigate(coordinatorChatPath(coordinator, subject));
+        return;
+      }
+      startCoordinatorChat(subject);
+    },
+    [navigate, selectedId, startCoordinatorChat],
+  );
+
   // The exceptions this project still owes somebody, drawn into the transcript at the moment each
   // became the owner's (`exceptionCardRows`) instead of as a block under it — where a card that
   // happened thirty-four minutes ago sat under the newest message saying `waiting 34m`, which is
@@ -4901,10 +4991,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           anchor,
           moment: row.escalatedAt ?? row.waitingSince,
           key: `open-item:${row.itemId}`,
-          element: <ItemAsCard projectId={coordinatedProjectId} row={row} now={Date.now()} />,
+          element: <ItemAsCard projectId={coordinatedProjectId} row={row} now={Date.now()} onChat={chatAboutThis} />,
         }];
       }),
-    [coordinatedProjectId, openItems.data, openItems.dataUpdatedAt, transcriptEvents],
+    [chatAboutThis, coordinatedProjectId, openItems.data, openItems.dataUpdatedAt, transcriptEvents],
   );
 
   // Which of those cards the owner answers by pressing — an exception that became theirs, the pause
@@ -4959,10 +5049,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           item={rows.find((row) => row.promotionId === current.promotionId) ?? null}
           project={null}
           now={Date.now()}
+          onChat={chatAboutThis}
         />
       ),
     }];
   }, [
+    chatAboutThis,
     coordinatedProjectId,
     currentPromotion.data,
     currentPromotion.dataUpdatedAt,
@@ -5012,6 +5104,76 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       { replace: true },
     );
   }, [startIntent, startCardShown, setSearchParams]);
+  // Arriving from a "Chat about this" pressed outside this conversation (`?intent=chat-about` with
+  // the item or the candidate, `coordinatorChatPath`): once this conversation has read what the
+  // chat is about, its composer is armed exactly as the card's own press would arm it, the card is
+  // brought into view, and the intent goes, so a refresh does not arm it again. A subject that has
+  // left the read since the press — or a candidate no longer blocked — is said rather than armed
+  // about (`chatSubjectIn`).
+  const chatIntent = selectedId ? chatIntentOf(searchParams) : null;
+  const chatIntentItem = chatIntent && 'itemId' in chatIntent ? chatIntent.itemId : null;
+  const chatIntentPromotion = chatIntent && 'promotionId' in chatIntent ? chatIntent.promotionId : null;
+  // Where an arrival's chat is about, until its card is on screen to be brought into view: the cards
+  // are drawn at moments of the transcript (`exceptionCardRows`), which lands after the reads do.
+  const [chatReveal, setChatReveal] = useState<{ sessionId: string; about: ChatAbout } | null>(
+    null,
+  );
+  useEffect(() => {
+    if (!chatIntentItem && !chatIntentPromotion) return;
+    const read = openItems.data;
+    if (!read) return;
+    // `undefined` is a read on its way; `null` is a project with no candidate on offer.
+    if (chatIntentPromotion && currentPromotion.data === undefined) return;
+    const subject = chatSubjectIn(
+      chatIntentItem ? { itemId: chatIntentItem } : { promotionId: chatIntentPromotion! },
+      read,
+      currentPromotion.data,
+    );
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete('intent');
+        next.delete('item');
+        next.delete('promotion');
+        return next;
+      },
+      { replace: true },
+    );
+    if (!subject) {
+      message.info(CHAT_SUBJECT_GONE);
+      return;
+    }
+    startCoordinatorChat(subject);
+    if (selectedId) setChatReveal({ sessionId: selectedId, about: chatAboutOf(subject) });
+  }, [
+    chatIntentItem,
+    chatIntentPromotion,
+    currentPromotion.data,
+    message,
+    openItems.data,
+    selectedId,
+    setSearchParams,
+    startCoordinatorChat,
+  ]);
+  // The arrival's card, once it is drawn and the transcript under it has landed. The card sits above
+  // the newest message, and a transcript still pinned to its tail follows every row that lands —
+  // which carried the reader straight back down past it — so the pin is let go first, as a reader
+  // scrolling up to it would. The jump is instant: a smooth one is still near the tail when the
+  // first scroll is measured, which pins the transcript again, and the next resize (the reply bar
+  // this arrival just armed) snaps it back down.
+  useEffect(() => {
+    if (!chatReveal || chatReveal.sessionId !== selectedId || seeding) return;
+    const { about } = chatReveal;
+    const card = 'itemId' in about
+      ? document.querySelector<HTMLElement>(`[data-open-item="${about.itemId}"]`)
+      : document.getElementById(`promotion-${about.promotionId}`);
+    if (!card) return;
+    atBottomRef.current = false;
+    setAtBottom(false);
+    if ('itemId' in about) revealOpenItemCard(about.itemId, document, 'auto');
+    else card.scrollIntoView?.({ block: 'center' });
+    setChatReveal(null);
+  }, [chatReveal, currentPromotion.data, openItems.data, seeding, selectedId, transcriptEvents]);
   // The start card's "View tasks": the tasks this conversation filed are the strip above the
   // composer, so it is opened there rather than navigating away from the card being read. The same
   // read the strip is drawn from says whether there is one; without it the card links to the
@@ -5055,8 +5217,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     }
     // Nothing answers a plan change another way: no call is pending on it, so there is no question
     // that can go out from under the reader mid-sentence. It stays armed until it is sent or the
-    // chip is dismissed.
-    if (replyTo.target.kind === 'planChange') return;
+    // chip is dismissed. A chat about an item or a blocked merge is the same: a sentence about one
+    // that has since moved is still one the coordinator can act on (the native ends keep theirs too).
+    if (replyTo.target.kind === 'planChange' || replyTo.target.kind === 'coordinatorChat') return;
     // An evidence version: the row leaving the pending read is what says it was answered elsewhere
     // or displaced by a newer revision — the two refusals the door gives. Read off the same queue
     // the card is drawn from, and only once that read has come back, for the reason below.
@@ -5760,9 +5923,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         e.stopPropagation();
         const row = orderedSessions.find((s) => s.id === menuOpenId);
         const source = selectedSession?.id === menuOpenId ? selectedSession : row;
+        const sourceView = source ? sessionRowView(source) : rowView;
         if (
-          !row || rowView !== 'open' || !source ||
-          !isCompleteShortcutEligible(source, sessionLifecycleStateOf(source, { listView: rowView }))
+          !row || sourceView !== 'open' || !source ||
+          !isCompleteShortcutEligible(source, sessionLifecycleStateOf(source, { listView: sourceView }))
         ) return;
         setMenuOpenId(null);
         requestComplete(row);
@@ -5779,7 +5943,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [menuOpenId, orderedSessions, rowView, selected, selectedSession, selectedLifecycleState, requestComplete]);
+  }, [menuOpenId, orderedSessions, rowView, sessionRowView, selected, selectedSession, selectedLifecycleState, requestComplete]);
   useEffect(() => {
     if (menuOpenId && !orderedSessions.some((s) => s.id === menuOpenId) &&
       !folderListing.projects.some((p) => p.id === menuOpenId)) setMenuOpenId(null);
@@ -6525,6 +6689,34 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         });
         return;
       }
+      // Chatting about an exception or a blocked merge (`lib/coordinatorChat`) is the same kind of
+      // ordinary turn — to the coordinator, with the card's facts in front of the sentence — and
+      // reaches no door either: a rerun, a merge or a close stays the press it was on the card. No
+      // door waits on a note, so an image alone goes too. The facts go as they stand at the send,
+      // not at the press — the item may have been handed back, rerun or handled while the sentence
+      // was typed (§4.7) — and a subject that has left the reads since goes as it read then, saying so.
+      if (replyTo.target.kind === 'coordinatorChat') {
+        if (!c && readyImages.length === 0) return;
+        const { projectId, about } = replyTo.target;
+        const live = chatSubjectIn(about, openItems.data, currentPromotion.data);
+        const carried = live
+          ? coordinatorChatContext(live, projectId, Date.now())
+          : replyTo.context
+            ? `${CHAT_FACTS_AS_ARMED}\n\n${replyTo.context}`
+            : undefined;
+        pinToBottom();
+        setReplyTo(null);
+        setText('');
+        setComposerRefs({});
+        setHistIdx(-1);
+        const typed = c ? materializeReferences(c, composerRefs) : '';
+        send.mutate({
+          content: [carried, typed].filter(Boolean).join('\n\n'),
+          images: readyImages,
+          intent,
+        });
+        return;
+      }
       const imgs = readyImages;
       if (!c && imgs.length === 0) return;
       pinToBottom();
@@ -7002,9 +7194,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const shownPoolMemberId = shownPool?.shared
     ? detailForSelected?.poolKeyId
     : detailForSelected?.poolMemberProviderId;
+  // A login pool's session records the ChatGPT account it runs on (`poolCodexLogin`), and names that —
+  // not the pool's `next` member, which is the answer for a session starting now: with the pool's
+  // oldest account spent there is no next, while the session runs on that very account.
   const shownPoolAccount =
     shownPool && (!selectedId || detailForSelected)
-      ? sessionPoolAccount(shownPool, selectedId ? shownPoolMemberId : null)
+      ? isLoginPool(shownPool) && selectedId && detailForSelected?.poolCodexLogin
+        ? poolSessionLoginMember(shownPool, detailForSelected.poolCodexLogin)
+        : sessionPoolAccount(shownPool, selectedId ? shownPoolMemberId : null)
       : null;
   // Which of the runner's accounts a built-in Codex or Claude session spends — the draft's pick, or the
   // one picked for the session, else its workspace's — and Default for an id this runner does not
@@ -7895,8 +8092,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // a ✦ on a light blue ground, and its menu opens on why — the decision's own first sentence — and
   // on where to fix the model for every run. Only while the chip still shows the pick: a model
   // changed here is this run's own. A session opened by hand has no route, and a run on an Agent
-  // without smart selection has one that was not applied, so both look as they always have.
+  // without smart selection has one that was not applied, so both look as they always have — and
+  // with the account's switch off (the default), so does every run.
   const smartRoute = (() => {
+    if (me.data?.preferences?.modelRouting !== true) return null;
     const route = detailForSelected?.route;
     return selected?.taskId && route?.applied && route.level && route.model === shownModel ? route : null;
   })();
@@ -8342,7 +8541,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             the header. ⌘K stays the primary way in; this is the only one on a touch device, where
             there's no keyboard to press it with and a `title` tooltip never shows — so the label
             and the target size have to carry it. */}
-        <div
+        {!openProjectId && <div
           className="session-search"
           role="button"
           tabIndex={0}
@@ -8356,7 +8555,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           <SearchOutlined />
           <span>Search sessions</span>
           {!isMobile && <kbd className="session-search-kbd">{SEARCH_HINT}</kbd>}
-        </div>
+        </div>}
         <div
           className="workspace-sessions session-col-list autohide-scrollbar"
           ref={listRef}
@@ -8364,7 +8563,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         >
           {openProjectId
             ? projectMembers.length === 0 && !loadingSessions &&
-              <div className="chat-note">{projectSessionsQ.isError ? 'Couldn’t load project sessions.' : 'No sessions in this project.'}</div>
+              <div className="chat-note">{projectSessionsQ.isError || completedProjectSessionsQ.isError ? 'Couldn’t load project sessions.' : 'No sessions in this project.'}</div>
             : openFolder
             ? listedSessions.length === 0 &&
               !loadingSessions && <div className="chat-note">No sessions in this folder.</div>
@@ -8413,12 +8612,6 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               {sec.sessions.map((s) => {
                 if (s.kind === 'project') {
                   const coordinator = s.coordinator;
-                  const openCoordinator = () => {
-                    if (!coordinator) return;
-                    navigateWithPaneSlide('push', () =>
-                      navigate(sessionPath(coordinator.id), { state: stampFromList() }),
-                    );
-                  };
                   const openTarget = () => {
                     if (swipeClickGuard.current) { swipeClickGuard.current = false; return; }
                     if (swipeOpen) { setSwipeOpen(null); return; }
@@ -8452,7 +8645,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                       } : undefined}
                       menu={{
                         items: [
-                          { key: 'coordinator', label: SESSION_PROJECT_COPY.openCoordinator, disabled: !coordinator },
+                          { key: 'session', label: SESSION_PROJECT_COPY.openSession, disabled: s.target.kind !== 'session' },
                           { key: 'sessions', label: SESSION_PROJECT_COPY.sessions },
                           { key: 'project', label: SESSION_PROJECT_COPY.openProject },
                           { type: 'divider' as const },
@@ -8462,7 +8655,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                         onClick: ({ key, domEvent }) => {
                           domEvent.stopPropagation();
                           setMenuOpenId(null);
-                          if (key === 'coordinator') openCoordinator();
+                          if (key === 'session') openTarget();
                           else if (key === 'sessions') enterProjectSessions(s.projectId);
                           else if (key === 'project') navigate(`/projects/${encodeId(s.projectId)}`);
                           else if (coordinator) runSwipeAction(key as SwipeAction, coordinator);
@@ -8472,11 +8665,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   );
                 }
                 const actionSession = selectedSession?.id === s.id ? selectedSession : s;
+                const memberView = sessionRowView(actionSession);
+                const swipeActions = sessionSwipeActions(memberView);
+                const swipeSizes = swipeWidths(memberView);
                 const canCompleteRow = sessionCapabilityOf(actionSession, 'canComplete', true);
                 const canRestoreRow = sessionCapabilityOf(actionSession, 'canRestore', true);
                 // Open and Completed rows open their transcript; only
                 // Trash rows stay closed.
-                const openable = rowView !== 'trash';
+                const openable = memberView !== 'trash';
                 // The selected row may have a fresher detail payload than the list poll. Use the
                 // merged row for both status surfaces so the banner and its list warning point at
                 // the same canonical obligation during that refresh gap.
@@ -8487,7 +8683,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   ? drag.dx
                   : restingOffset(swipeOpen?.id === s.id ? swipeOpen.side : null, swipeSizes);
                 // As on iOS, a full swipe runs the leading edge's first action only when it can run.
-                const canFullSwipe = rowView === 'open' ? canCompleteRow : canRestoreRow;
+                const canFullSwipe = memberView === 'open' ? canCompleteRow : canRestoreRow;
                 const swipeButtons = {
                   complete: { label: 'Complete', icon: <CheckOutlined />, disabled: !canCompleteRow },
                   restore: { label: 'Move to Open', icon: <UndoOutlined />, disabled: !canRestoreRow },
@@ -8518,7 +8714,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                       : isSessionLive(actionSession) ? 'Ends the run and moves to Completed' : undefined
                     : action === 'restore' && !canRestoreRow ? 'Move to Open unavailable right now' : undefined,
                 });
-                const menuItems: MenuProps['items'] = rowView === 'trash'
+                const menuItems: MenuProps['items'] = memberView === 'trash'
                   ? [menuItem('restore'), { type: 'divider' }, menuItem('purge')]
                   : [
                       ...swipeActions.leading.map(menuItem),
@@ -8547,7 +8743,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                           navigate(sessionPath(s.id), { state: stampFromList() }),
                         );
                     }}
-                    onTouchStart={(e) => onRowTouchStart(e, s, canFullSwipe)}
+                    onTouchStart={(e) => onRowTouchStart(e, actionSession, canFullSwipe)}
                     onTouchMove={onRowTouchMove}
                     onTouchEnd={onRowTouchEnd}
                     onTouchCancel={onRowTouchCancel}
@@ -9188,6 +9384,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   key={`promotion:${selectedId}`}
                   projectId={coordinatedProjectId}
                   drawRecords={false}
+                  onChat={chatAboutThis}
                 />
               )}
               {/* A question THIS conversation put to the account owner, drawn where it was asked
@@ -10081,7 +10278,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 // before the key reaches the window, where a waiting card answers Enter on an
                 // empty field (CardHotkey) — so the same press also started a project. An Enter on
                 // an empty box still goes on to the card.
-                if (text.trim() || readyImages.length > 0) e.stopPropagation();
+                //
+                // While a reply is armed the keys are this composer's, empty or not: the box is
+                // where that sentence is typed, and what the press would otherwise reach is either
+                // another card's door — on the chord, a READY candidate merges main
+                // (`ProjectPromotionCard`) — or the arming card's own, pressed from a box the
+                // reader is still composing in (the settlement card's Start the project, the
+                // confirmation card's Confirm done).
+                if (text.trim() || readyImages.length > 0 || replyTo) e.stopPropagation();
                 onSend();
               }
             }}
@@ -10278,15 +10482,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               </Dropdown>
             </span>
             {shownPool && shownPoolAccount && (
-              <Tooltip
-                title={
-                  shownPoolAccount.current
-                    ? `${shownPool.label} is running this session on ${shownPoolAccount.member.label}`
-                    : `A session on ${shownPool.label} starts on ${shownPoolAccount.member.label} — ${
-                        shownPool.shared ? 'the key it picks for you right now' : 'the account whose quota resets soonest'
-                      }`
-                }
-              >
+              <Tooltip title={poolAccountHelp(shownPool, shownPoolAccount)}>
                 <span className="composer-pill composer-account" data-pool-account={shownPoolAccount.member.id}>
                   <span className="composer-account-name">{shownPoolAccount.member.label}</span>
                 </span>

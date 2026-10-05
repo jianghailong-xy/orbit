@@ -18,6 +18,7 @@ import {
 import { CardActionButton, CardActions } from './CardAction';
 import { ENTER_HINT, useDecisionCardKeys } from './CardHotkey';
 import { ReviewCard } from './ReviewCard';
+import { useIsMobile } from '../lib/useMediaQuery';
 import { PROVENANCE_LABEL, receiptClock, shortSeal } from './CriteriaDecisionCard';
 // The words this card's second action uses. Imported rather than re-declared, and read inside the
 // component rather than bound at module scope: `OwnerConfirmationCard` reaches this module again
@@ -719,6 +720,7 @@ export function SessionCriteriaConfirmationCard({
   onChatAbout?: (plan: SettlementPlanChat) => void;
 }): JSX.Element | null {
   const [reviewOpen, setReviewOpen] = useState(false);
+  const narrow = useIsMobile();
   const qc = useQueryClient();
   const project = projectId ?? '';
   const [delivered, setDelivered] = useState(false);
@@ -803,15 +805,18 @@ export function SessionCriteriaConfirmationCard({
   const asking = shown && !answeredHere;
   const anchor = useRef<HTMLDivElement>(null);
   const keys = useDecisionCardKeys({
-    confirmEnabled: reviewOpen && asking && !confirm.isPending && acceptanceConfirmationAnswerable(standing),
+    confirmEnabled: (!narrow || reviewOpen) && asking && !confirm.isPending && acceptanceConfirmationAnswerable(standing),
     onConfirm: start,
     anchor,
   });
 
   if (!shown || answeredHere) return null;
+  // The preview is what stays in place, so it says why the card went stale — as the start card's
+  // does — rather than leaving that reason to a review nobody has cause to open.
   return (
     <ReviewCard id="settlement-preview" title={ACCEPTANCE_CONFIRMATION_TITLE} summary={title}
-      meta={`${criteria?.length ?? 0} criteria`} open={reviewOpen} onOpenChange={setReviewOpen}>
+      meta={acceptanceConfirmationStaleExplanation(standing) ?? `${criteria?.length ?? 0} criteria`}
+      open={reviewOpen} onOpenChange={setReviewOpen}>
     <AcceptanceConfirmationCard
       ref={anchor}
       standing={standing}

@@ -306,11 +306,16 @@ export function exceptionPointer(row: Pick<ProjectOpenItemRow, 'title' | 'assign
 
 /**
  * Take the reader to an exception card, which carries its item as `data-open-item` (`ItemCard` in
- * `ProjectProgressStatus.tsx`). Returns whether it arrived, as `revealDecisionCard` does.
+ * `ProjectProgressStatus.tsx`). Returns whether it arrived, as `revealDecisionCard` does. `behavior`
+ * is `auto` where the transcript is still landing under the card, which cancels a smooth scroll.
  */
-export function revealOpenItemCard(itemId: string, scope: ParentNode = document): boolean {
+export function revealOpenItemCard(
+  itemId: string,
+  scope: ParentNode = document,
+  behavior: ScrollBehavior = 'smooth',
+): boolean {
   const card = scope.querySelector<HTMLElement>(`[data-open-item="${itemId}"]`);
-  return revealCard(card);
+  return revealCard(card, 'center', true, behavior);
 }
 
 /** A transcript pauses following its tail before a pinned bar opens one of its previews. */
@@ -321,6 +326,7 @@ export function revealCard(
   card: HTMLElement | null | undefined,
   block: ScrollLogicalPosition = 'center',
   highlight = true,
+  behavior: ScrollBehavior = 'smooth',
 ): boolean {
   if (!card) return false;
   const preview = card.matches('.review-card-preview')
@@ -329,7 +335,7 @@ export function revealCard(
   const target = preview?.closest<HTMLElement>('.review-card') ?? card;
   // Finish positioning before the dialog locks scrolling. Its return focus stays at this preview.
   if (preview) target.dispatchEvent(new Event(REVIEW_CARD_REVEALED, { bubbles: true }));
-  target.scrollIntoView({ block, behavior: preview ? 'instant' : 'smooth' });
+  target.scrollIntoView({ block, behavior: preview ? 'instant' : behavior });
   if (highlight) markReached(target);
   if (preview?.getAttribute('aria-expanded') === 'false') preview.click();
   return true;
