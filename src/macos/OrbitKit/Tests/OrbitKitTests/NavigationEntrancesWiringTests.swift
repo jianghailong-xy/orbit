@@ -221,7 +221,7 @@ final class NavigationEntrancesWiringTests: XCTestCase {
         XCTAssertTrue(card.contains("sessionID: PublicID.toPublic(sessionID)"),
                       "the foreground card holds the lists' spelling of the pushed session")
 
-        let reconcile = try slice(app, from: "let needsYou = Set(SessionGrouping.group(list).needsYou.map(\\.id))",
+        let reconcile = try slice(app, from: "private func reconcileDeliveredApprovals(_ needsYou: Set<String>) {",
                                   to: "#endif")
         XCTAssertTrue(reconcile.contains(
             "removeDeliveredApprovals(where: { !needsYou.contains(PublicID.toPublic($0)) })"),
