@@ -298,7 +298,7 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(sections.contains("pinnedFirst: false"))
         XCTAssertTrue(page.contains(".task(id: address)"))
         XCTAssertTrue(page.contains("await app.loadProjectSessions(address)"))
-        let progress = try slice(page, from: "private var progressCard: some View {", to: "\n    }")
+        let progress = try slice(page, from: "private var progressLine: some View {", to: "\n    }")
         XCTAssertTrue(progress.contains("project?.taskCounts"))
         XCTAssertTrue(progress.contains("SessionProjectProgressBar(counts: counts"))
         XCTAssertTrue(progress.contains("SessionProjectCopy.pageProgress(done: counts.done, total: counts.total,"))
@@ -322,6 +322,32 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let sessionActions = code(try appSource("Views/SessionRowActions.swift"))
         let move = try slice(sessionActions, from: "private var moveAction: RowSwipeAction? {", to: "\n    }")
         XCTAssertTrue(move.contains("membership.role != .coordinator { return nil }"), "a non-coordinator member cannot move its project")
+    }
+
+    func testTheSummaryCardCarriesTheProjectPagesLandingLine() throws {
+        let source = code(try appSource("Views/SessionProjectPage.swift"))
+        let page = try slice(source, from: "struct SessionProjectPage: View {", to: "\n}\n")
+        let card = try slice(page, from: "private var progressCard: some View {", to: "\n    }")
+        let order = try [XCTUnwrap(card.range(of: "progressLine")?.lowerBound),
+                         XCTUnwrap(card.range(of: "landingLine")?.lowerBound)]
+        XCTAssertEqual(order, order.sorted())
+        let landing = try slice(page, from: "@ViewBuilder private var landingLine: some View {", to: "\n    }")
+        XCTAssertTrue(landing.contains("integration.inFlight != nil"), "no landing in flight leaves the card as it was")
+        XCTAssertTrue(landing.contains("TimelineView(.periodic(from: .now, by: 1))"))
+        XCTAssertTrue(landing.contains("ProjectPage.landingLine(integration, now: context.date,"))
+        XCTAssertTrue(landing.contains("updatedAt: app.projectSessionsIntegrationReadAt"))
+        XCTAssertTrue(landing.contains("refreshFailed: app.projectSessionsIntegrationReadFailed"))
+        XCTAssertTrue(landing.contains("ProjectLandingRow(line: line)"), "the same row the project page draws")
+        XCTAssertTrue(landing.contains("app.openProject(address.projectID)"))
+
+        let app = code(try appSource("AppModel.swift"))
+        let load = try slice(app, from: "func loadProjectSessions(_ address: SessionProjectAddress) async {", to: "\n    }")
+        XCTAssertTrue(load.contains("let integrationRead = Task { try await api.projectIntegration(address.projectID) }"))
+        XCTAssertTrue(load.contains("projectSessionsIntegration = nil"), "another project's landing never shows here")
+        let store = try XCTUnwrap(load.range(of: "projectSessionsIntegration = integration"))
+        let guardRange = try XCTUnwrap(load.range(of: "guard projectSessionsAddress == address, !Task.isCancelled else { return }\n        if let integration"))
+        XCTAssertLessThan(guardRange.lowerBound, store.lowerBound)
+        XCTAssertTrue(load.contains("projectSessionsIntegrationReadFailed = true"))
     }
 
     func testTheProjectUILayerIsCompiledForIOSOnly() throws {

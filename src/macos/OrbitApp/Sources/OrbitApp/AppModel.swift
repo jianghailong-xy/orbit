@@ -2062,6 +2062,10 @@ final class AppModel {
     private(set) var projectSessions: [Session] = []
     private(set) var projectSessionsLoading = false
     private(set) var projectSessionsError: String?
+    /// The project's landing read, for the summary card's landing line (`ProjectPage.landingLine`).
+    private(set) var projectSessionsIntegration: ProjectIntegrationView?
+    private(set) var projectSessionsIntegrationReadAt: Date?
+    private(set) var projectSessionsIntegrationReadFailed = false
     private var projectSessionsAddress: SessionProjectAddress?
 
     var projectSessionsColumn: SessionProjectAddress? { nav.projectSessionsColumn }
@@ -2100,9 +2104,14 @@ final class AppModel {
             projectSessionsAddress = address
             projectSessions = []
             projectSessionsError = nil
+            projectSessionsIntegration = nil
+            projectSessionsIntegrationReadAt = nil
+            projectSessionsIntegrationReadFailed = false
         }
         projectSessionsLoading = true
         defer { if projectSessionsAddress == address { projectSessionsLoading = false } }
+        let integrationRead = Task { try await api.projectIntegration(address.projectID) }
+        defer { integrationRead.cancel() }
         do {
             let openRead = Task { try await api.listSessions(view: .open, projectId: address.projectID) }
             let completedRead = Task { try await api.listSessions(view: .completed, projectId: address.projectID) }
@@ -2123,6 +2132,15 @@ final class AppModel {
         } catch {
             guard projectSessionsAddress == address, !Task.isCancelled else { return }
             projectSessionsError = APIClient.failureReason(error)
+        }
+        let integration = try? await integrationRead.value
+        guard projectSessionsAddress == address, !Task.isCancelled else { return }
+        if let integration {
+            projectSessionsIntegration = integration
+            projectSessionsIntegrationReadAt = Date()
+            projectSessionsIntegrationReadFailed = false
+        } else {
+            projectSessionsIntegrationReadFailed = true
         }
     }
 

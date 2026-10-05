@@ -353,6 +353,15 @@ struct SessionProjectPage: View {
     }
 
     private var progressCard: some View {
+        VStack(spacing: 0) {
+            progressLine
+            landingLine
+        }
+        .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+        .padding(.vertical, 4)
+    }
+
+    private var progressLine: some View {
         HStack(spacing: 10) {
             if let counts = project?.taskCounts {
                 SessionProjectProgressBar(counts: counts, running: runningCount)
@@ -378,8 +387,32 @@ struct SessionProjectPage: View {
             .foregroundStyle(Color.accentColor)
         }
         .padding(12)
-        .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
-        .padding(.vertical, 4)
+    }
+
+    /// The project page's landing line, drawn only while something is in flight; a tap opens the
+    /// project page, whose Work overview carries the same row.
+    @ViewBuilder private var landingLine: some View {
+        if let integration = app.projectSessionsIntegration, integration.inFlight != nil {
+            Divider().padding(.leading, 12)
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                if let line = ProjectPage.landingLine(integration, now: context.date,
+                                                     updatedAt: app.projectSessionsIntegrationReadAt,
+                                                     refreshFailed: app.projectSessionsIntegrationReadFailed) {
+                    Button { app.openProject(address.projectID) } label: {
+                        HStack(spacing: 8) {
+                            ProjectLandingRow(line: line)
+                            Image(systemName: "chevron.right")
+                                .font(.orbitMeta.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                }
+            }
+        }
     }
 
     private var projectMenu: some View {
