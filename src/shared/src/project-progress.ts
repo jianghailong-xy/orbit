@@ -438,6 +438,49 @@ export interface OpenItemOutcome<Instant = string> {
 }
 
 /**
+ * Where an item's handling stands right now, in one word (§4.7): what a card says beside its
+ * "Chat about this", and what the coordinator is told along with the message that press carries.
+ *
+ * `HANDLING` while the coordinator's rerun of it is queued or running (H1); `WITH_COORDINATOR` while
+ * it waits for the coordinator to act on it; `WITH_OWNER` while it is the account owner's — from
+ * birth, or because it became theirs (§4.1); `HANDLED` and `SUPERSEDED` once the coordinator's
+ * handling ended it (H2, H3).
+ */
+export type OpenItemStage =
+  | 'HANDLING'
+  | 'WITH_COORDINATOR'
+  | 'WITH_OWNER'
+  | 'HANDLED'
+  | 'SUPERSEDED';
+
+/**
+ * Why "Chat about this" cannot be had for an item, when it cannot.
+ *
+ * `NO_COORDINATOR`: the project has no coordinator conversation to hold it. `COORDINATOR_UNAVAILABLE`:
+ * it has one, and that conversation cannot take a message now — in Trash, ending, or ended with
+ * nothing to resume (the same answer every session payload publishes as `canSend`).
+ * `SUPERSEDED`: a failed rerun replaced the item with a new one, and that one is what a chat about
+ * the failure is about.
+ */
+export type OpenItemChatRefusal = 'NO_COORDINATOR' | 'COORDINATOR_UNAVAILABLE' | 'SUPERSEDED';
+
+/**
+ * "Chat about this" for one item, as the server decides it (§4.8).
+ *
+ * A message to the project's coordinator conversation and nothing else: it presses no door, so it is
+ * offered whoever holds the item, and refused only where there is nowhere for the message to go or
+ * where it would be about the wrong item. What the doors on the same card may do is still `actions`,
+ * decided as before.
+ */
+export interface OpenItemChat {
+  /** The project's coordinator conversation — where the chat is held. Null when there is none. */
+  sessionId: string | null;
+  stage: OpenItemStage;
+  /** Null when the chat can be had; otherwise why it cannot. */
+  refusal: OpenItemChatRefusal | null;
+}
+
+/**
  * One open exception, as `GET /projects/:id/open-items` serves it (§4.8).
  *
  * `detailLine` is the server's own sentence about what happened, in the words of the fact that
@@ -489,6 +532,9 @@ export interface ProjectOpenItemRow<Instant = string> {
   outcome?: OpenItemOutcome<Instant> | null;
   /** The coordinator's explanation when it deliberately handed the item to the owner. */
   handoverNote?: string | null;
+  /** "Chat about this": where the item's handling stands, and whether a message about it can reach
+   *  the project's coordinator conversation. Absent from a server that predates it. */
+  chat?: OpenItemChat | null;
 }
 
 /** The project's open exceptions, split by who is expected to act (§4.8). */

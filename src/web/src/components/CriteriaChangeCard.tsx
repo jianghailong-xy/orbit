@@ -38,6 +38,7 @@ import {
 import { CardActionButton, CardActions } from './CardAction';
 import { ENTER_HINT, useDecisionCardKeys } from './CardHotkey';
 import { ReviewCard } from './ReviewCard';
+import { useIsMobile } from '../lib/useMediaQuery';
 import { PROVENANCE_LABEL, shortSeal } from './CriteriaDecisionCard';
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 
@@ -244,6 +245,7 @@ export function SessionCriteriaChangeCard({
   onChatAbout?: (plan: SettlementPlanChat) => void;
 }): JSX.Element | null {
   const [reviewOpen, setReviewOpen] = useState(false);
+  const narrow = useIsMobile();
   const qc = useQueryClient();
   const project = projectId ?? '';
   const enabled = Boolean(projectId);
@@ -301,7 +303,7 @@ export function SessionCriteriaChangeCard({
   };
   const anchor = useRef<HTMLDivElement>(null);
   const keys = useDecisionCardKeys({
-    confirmEnabled: reviewOpen && onScreen && !confirm.isPending,
+    confirmEnabled: (!narrow || reviewOpen) && onScreen && !confirm.isPending,
     onConfirm: press,
     anchor,
   });

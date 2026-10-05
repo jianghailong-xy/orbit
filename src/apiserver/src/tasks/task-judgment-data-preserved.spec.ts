@@ -1897,7 +1897,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // Reopen landing intent (0381): one task-keyed marker row records the explicit task_reopen
       // door until the next DONE queues its LAND_TASK generation. It is consumed transactionally;
       // no existing task, project, acceptance, DONE fence, trigger or function is rewritten.
-      '0381_task_reopen_landing_intent'],
+      '0381_task_reopen_landing_intent',
+      // Credential throttle (0382): one nullable `throttled_until` on pool_codex_login and one on
+      // pool_api_key, written by the pool gateways when a 429 outlasts the wait they may hold open.
+      // Two ADD COLUMN of a nullable timestamp and nothing else — no task, project, acceptance, DONE
+      // fence, trigger or function is touched, and no existing row is backfilled.
+      '0382_pool_credential_throttle'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

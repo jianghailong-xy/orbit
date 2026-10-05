@@ -39,6 +39,16 @@ final class AttachmentLinkTests: XCTestCase {
         XCTAssertEqual(AttachmentLink.fileName(inPath: "/root/work/Transcript.tsx:106"), "Transcript.tsx")
     }
 
+    func testMarkdownAliasesAreFileReferencesWithCaseAndSourceLocations() {
+        for ext in ["markdown", "mdown", "mkd", "mkdn"] {
+            for path in ["docs/brief.\(ext)", "docs/brief.\(ext.uppercased()):12-14"] {
+                XCTAssertTrue(AttachmentLink.isFileReference(URL(string: path)!), path)
+            }
+            XCTAssertFalse(AttachmentLink.isFileReference(URL(string: "https://example.com/brief.\(ext)")!))
+            XCTAssertFalse(AttachmentLink.isFileReference(URL(string: "/pages/brief.\(ext)")!))
+        }
+    }
+
     /// The one kind of runner-local path that is not hopeless: a file in the session's own
     /// directories, which the artifact route can fetch (the runner reads it). Everything else — the
     /// generated-images dir, /tmp, another session's checkout — stays a chip, because the API would

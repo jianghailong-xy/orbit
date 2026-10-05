@@ -72,9 +72,12 @@ async function connect(): Promise<Harness> {
   const db = prismaClientFor(URL!) as unknown as PrismaClient;
   const pushes: string[] = [];
   const push = { notifyOwnerItem: async (itemId: string) => { pushes.push(itemId); } };
+  // `list` asks whether the coordinator conversation can take a message, for each row's "Chat about
+  // this"; these cases are about the hand-over, so it always can.
+  const sessions = { receiveBlockedReasonFor: async () => null };
   const openItems = new ProjectOpenItemService(
     db as unknown as PrismaService,
-    undefined as never,
+    sessions as never,
     push as never,
   );
   return { db, openItems, pushes };

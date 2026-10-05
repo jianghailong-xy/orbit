@@ -15,10 +15,13 @@ import { Prisma } from '@prisma/client';
 import {
   COORDINATOR_LEAD_KINDS,
   type DoneRequest,
+  type OpenItemChat,
   type OpenItemFacts,
   type OpenItemHandling,
   type OpenItemOutcome,
   type ProjectDoneNotReadyBody,
+  type ProjectDoneRequestDeclineBody,
+  type ProjectDoneRequestDeclined,
   type ProjectDoneRequestFiled,
   type ProjectStartNotReadyBody,
   type ProjectStartRequest,
@@ -29,6 +32,7 @@ import {
 } from '@orbit/shared';
 
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
+import { refuseProjectStatusWrite } from './coordinator-authority';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
@@ -52,6 +56,7 @@ import {
   openItemActions,
   openItemRequiredAction,
   primaryAction,
+  openItemChat,
   openItemFacts,
   openItemMessage,
   openItemOwed,
@@ -90,12 +95,16 @@ import {
 import { doorsForOpenItem } from './open-item-doors';
 import {
   DONE_REQUEST_COORDINATOR_ONLY,
+  DONE_REQUEST_DECLINE_NOTE_REQUIRED,
   DONE_REQUEST_DEDUPE_KEY,
   DONE_REQUEST_KIND,
   DONE_REQUEST_NOT_READY,
+  DONE_REQUEST_NOT_OPEN,
   DONE_REQUEST_TITLE,
+  MAX_DONE_REQUEST_DECLINE_NOTE,
   MAX_DONE_REQUEST_JUDGMENT,
   doneReadiness,
+  doneRequestDeclineMessage,
   doneRequestDetailLine,
   normalizeDoneRequestGaps,
   readDoneState,
@@ -135,6 +144,32 @@ export const OPEN_ITEM_HAND_OVER_NOTE_REQUIRED = 'OPEN_ITEM_HAND_OVER_NOTE_REQUI
 export const OPEN_ITEM_HAND_OVER_NOTE_TOO_LONG = 'OPEN_ITEM_HAND_OVER_NOTE_TOO_LONG';
 /** Another item writer won the hand-over compare-and-set. */
 export const OPEN_ITEM_HAND_OVER_RACE = 'OPEN_ITEM_HAND_OVER_RACE';
+
+function normalizedDoneRequestDeclineNote(given: ProjectDoneRequestDeclineBody | undefined): string {
+  const note = typeof given?.note === 'string' ? given.note.trim() : '';
+  if (!note) {
+    throw new BadRequestException({
+      code: DONE_REQUEST_DECLINE_NOTE_REQUIRED,
+      message: 'note is required: say what is still missing before this project is done',
+    });
+  }
+  if (note.length > MAX_DONE_REQUEST_DECLINE_NOTE) {
+    throw new BadRequestException({
+      code: DONE_REQUEST_DECLINE_NOTE_REQUIRED,
+      message: `note is at most ${MAX_DONE_REQUEST_DECLINE_NOTE} characters`,
+    });
+  }
+  return note;
+}
+
+function doneRequestDeclineNotOpen(): ConflictException {
+  return new ConflictException({
+    code: DONE_REQUEST_NOT_OPEN,
+    message:
+      'this done request is no longer an OPEN DONE_REQUEST for this project. A request gets one '
+      + 'Not yet… answer, and nothing was written.',
+  });
+}
 
 /**
  * The kinds this door ends, and what each ending is called (§4.2).
@@ -229,6 +264,8 @@ export interface OpenItemRow {
   handling: OpenItemHandling<Date> | null;
   /** How it ended, on a row of `settled` (§4.7 H5); null on every open row. */
   outcome: OpenItemOutcome<Date> | null;
+  /** "Chat about this": where its handling stands, and where a message about it goes (§4.8). */
+  chat: OpenItemChat;
 }
 
 /** A question filed, as `ask_owner` answers its caller (§5.2 R7). */
@@ -1038,6 +1075,99 @@ export class ProjectOpenItemService {
   }
 
   /**
+   * The account owner's "Not yet…" answer to a coordinator's done request.
+   *
+   * This is a separate owner door rather than another branch of `answerOpenItem`: a
+   * `DONE_REQUEST` is not a coordinator question, and ending it is coupled to the same project
+   * lock as `recordProjectDone`.  The project row is locked first and the request row second, so a
+   * concurrent new request, stale-request supersession or Record as done is ordered before this
+   * press.  Every refusal is before the first write and therefore leaves the item, the session
+   * signal and the project list unchanged.
+   */
+  async declineDoneRequest(
+    ownerId: string,
+    projectId: string,
+    itemId: string,
+    given: ProjectDoneRequestDeclineBody,
+    actingSessionId?: string,
+  ): Promise<ProjectDoneRequestDeclined> {
+    // Keep the same authority boundary as POST /projects/:id/done.  In particular, a runner JWT
+    // carrying an acting session is not turned into an owner press merely because this route writes
+    // an item rather than `project.status`.
+    const refusal = refuseProjectStatusWrite('DONE', actingSessionId);
+    if (refusal) throw new ForbiddenException(refusal);
+    const note = normalizedDoneRequestDeclineNote(given);
+    await withTransactionRetry(this.prisma, async (tx) => {
+      // Rank 40: the same first lock as requestDone and recordProjectDone.
+      const [project] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        SELECT "id"
+          FROM "project"
+         WHERE "id" = ${projectId}::uuid AND "owner_id" = ${ownerId}::uuid
+           FOR NO KEY UPDATE`);
+      if (!project) throw new NotFoundException('project not found');
+
+      // Rank 60: lock the exact item after the project.  Deliberately read by id alone and check
+      // tenancy/kind/state in code so a foreign, non-DONE or terminal item is a 409 rather than a
+      // cross-project 404, and so the check and the write share the same locked row.
+      const [request] = await tx.$queryRaw<Array<{
+        id: string;
+        projectId: string;
+        ownerId: string;
+        kind: string;
+        state: string;
+      }>>(Prisma.sql`
+        SELECT "id",
+               "project_id" AS "projectId",
+               "owner_id" AS "ownerId",
+               "kind"::text AS "kind",
+               "state"::text AS "state"
+          FROM "project_open_item"
+         WHERE "id" = ${itemId}::uuid
+           FOR UPDATE`);
+      if (!request
+        || request.projectId !== projectId
+        || request.ownerId !== ownerId
+        || request.kind !== DONE_REQUEST_KIND
+        || request.state !== 'OPEN') {
+        throw doneRequestDeclineNotOpen();
+      }
+
+      const at = new Date();
+      const written = await tx.projectOpenItem.updateMany({
+        where: {
+          id: itemId,
+          projectId,
+          ownerId,
+          kind: DONE_REQUEST_KIND,
+          state: 'OPEN',
+        },
+        data: {
+          state: 'RESOLVED',
+          resolution: 'DECLINED',
+          resolvedAt: at,
+          resolvedBy: 'USER',
+          resolvedByUserId: ownerId,
+          answer: { note } as unknown as Prisma.InputJsonValue,
+          resolutionNote: note,
+        },
+      });
+      if (written.count === 0) throw doneRequestDeclineNotOpen();
+    }, loggedRetry(this.logger, 'projectOpenItem.declineDoneRequest'));
+
+    // Delivery is deliberately after commit.  The item is the durable answer even when there is
+    // no coordinator, and a coordinator rotation between the write and this read is told at its
+    // current conversation rather than the one that originally asked.
+    const delivery = await this.deliverDoneRequestDecline(itemId);
+    return {
+      itemId,
+      state: 'RESOLVED',
+      resolution: 'DECLINED',
+      note,
+      delivery,
+    };
+  }
+
+  /**
    * The owner hands an escalated item back to the project's coordinator (§4.7).
    *
    * An item became the owner's because nobody acted on it — that is the whole of what an escalation
@@ -1740,6 +1870,76 @@ export class ProjectOpenItemService {
   }
 
   /**
+   * Tell the current coordinator that the owner declined a done request.
+   *
+   * `project_open_item_delivery` only has ITEM and ANSWER purposes.  A Not yet… press is an
+   * answer to the card, so it uses ANSWER with the shared owner-answer client-turn namespace; the
+   * item id + session id pair remains the idempotency key and cannot collide with a
+   * coordinator-question answer because those are different item rows.
+   */
+  private async deliverDoneRequestDecline(
+    itemId: string,
+  ): Promise<{ sessionId: string; turnId: string } | null> {
+    const item = await this.prisma.projectOpenItem.findUnique({
+      where: { id: itemId },
+      select: {
+        id: true,
+        ownerId: true,
+        projectId: true,
+        state: true,
+        resolution: true,
+        resolvedAt: true,
+        payload: true,
+        answer: true,
+        project: { select: { coordinatorSessionId: true } },
+      },
+    });
+    if (!item || item.state !== 'RESOLVED' || item.resolution !== 'DECLINED') return null;
+    if (!item.answer || !item.resolvedAt) return null;
+    const note = (item.answer as { note?: unknown }).note;
+    if (typeof note !== 'string' || !note) return null;
+    const sessionId = item.project.coordinatorSessionId;
+    if (!sessionId) return null;
+    // Reuse the owner-answer namespace used by deliverAnswer.  A DONE_REQUEST has its own item id,
+    // so this remains an item/session key while the transcript layer correctly marks the turn as an
+    // Orbit-authored answer rather than as a sender-typed message.
+    const clientTurnId = ownerAnswerTurnId(item.id, sessionId);
+    const content = doneRequestDeclineMessage(
+      item.payload as unknown as DoneRequest,
+      note,
+      item.resolvedAt,
+    );
+    try {
+      const turn = await this.sessions.createTurn(item.ownerId, sessionId, {
+        clientTurnId,
+        content,
+        intent: 'NEXT_TURN',
+      }, {
+        participateSendTransaction: (tx) => this.acknowledgeDoneRequestDecline(tx, {
+          itemId: item.id,
+          projectId: item.projectId,
+          sessionId,
+          clientTurnId,
+        }),
+      });
+      await this.prisma.projectOpenItemDelivery.updateMany({
+        where: { itemId: item.id, sessionId, purpose: 'ANSWER', clientTurnId, turnId: null },
+        data: { turnId: turn.turnId },
+      });
+      return { sessionId, turnId: turn.turnId };
+    } catch (error) {
+      // The answer is already durable.  A coordinator that is gone or a key already held by a turn
+      // is left for a future coordinator/read path, exactly as an answered question is.
+      if (error instanceof SessionNotSendable || error instanceof NotFoundException) return null;
+      if (error instanceof ConflictException) {
+        this.logger.warn(`the done-request decline ${item.id} is already queued on ${sessionId}`);
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  /**
    * §5.2 R11: a conversation has just become this project's coordinator. Tell it the answers it
    * still needs — the ones to questions that block work nobody has settled, and the ones asked by the
    * conversation it just replaced, which would otherwise have been answered to nobody.
@@ -1788,6 +1988,37 @@ export class ProjectOpenItemService {
 
   /** The answer's own ledger row, written in the turn's transaction under the Session lock (G6). */
   private async acknowledgeAnswer(
+    tx: Prisma.TransactionClient,
+    delivery: { itemId: string; projectId: string; sessionId: string; clientTurnId: string },
+  ): Promise<void> {
+    const session = await tx.session.findUniqueOrThrow({
+      where: { id: delivery.sessionId },
+      select: SESSION_ENDING_SELECT,
+    });
+    if (sessionHasEnded(session)) {
+      throw new SessionNotSendable('the coordinator conversation has ended');
+    }
+    await tx.projectOpenItemDelivery.upsert({
+      where: {
+        itemId_sessionId_purpose: {
+          itemId: delivery.itemId,
+          sessionId: delivery.sessionId,
+          purpose: 'ANSWER',
+        },
+      },
+      create: {
+        itemId: delivery.itemId,
+        projectId: delivery.projectId,
+        sessionId: delivery.sessionId,
+        purpose: 'ANSWER',
+        clientTurnId: delivery.clientTurnId,
+      },
+      update: { clientTurnId: delivery.clientTurnId },
+    });
+  }
+
+  /** The Not yet… answer's delivery ledger row, written in the turn's Session transaction. */
+  private async acknowledgeDoneRequestDecline(
     tx: Prisma.TransactionClient,
     delivery: { itemId: string; projectId: string; sessionId: string; clientTurnId: string },
   ): Promise<void> {
@@ -1931,6 +2162,16 @@ export class ProjectOpenItemService {
     const askable = project.coordinatorSessionId != null
       && project.coordinatorSession != null
       && !sessionHasEnded(project.coordinatorSession);
+    // Where "Chat about this" goes, for every row (`openItemChat`): the conversation coordinating the
+    // project, and whether it can be handed a message now — asked of the authority the delivering
+    // door asks (`receiveBlockedReasonFor`), once for the whole list. A pointer to a row that is not
+    // there any more is no conversation at all.
+    const coordinatorBlocked = project.coordinatorSessionId
+      ? await this.sessions.receiveBlockedReasonFor(ownerId, project.coordinatorSessionId)
+      : null;
+    const coordinator = project.coordinatorSessionId && coordinatorBlocked !== 'SESSION_GONE'
+      ? { sessionId: project.coordinatorSessionId, receiving: coordinatorBlocked == null }
+      : null;
     const open = await this.prisma.projectOpenItem.findMany({
       where: { projectId, state: 'OPEN' },
       orderBy: [{ waitingSince: 'asc' }, { id: 'asc' }],
@@ -2066,6 +2307,7 @@ export class ProjectOpenItemService {
     const view = rows.map((row): OpenItemRow => {
       const [sent] = row.deliveries;
       const handed = sent ? deliveredAt.get(`${sent.sessionId}:${sent.clientTurnId}`) ?? null : null;
+      const handling = handlingOf(row, inFlight);
       const question = row.kind === 'COORDINATOR_QUESTION'
         ? (row.payload as unknown as CoordinatorQuestion)
         : null;
@@ -2156,8 +2398,14 @@ export class ProjectOpenItemService {
           handledBy: handledBy.get(row.id) ?? [],
           handoverNote: row.handoverNote,
         }),
-        handling: handlingOf(row, inFlight),
+        handling,
         outcome: null,
+        chat: openItemChat({
+          assignee: row.assignee,
+          handling: handling != null,
+          resolution: null,
+          coordinator,
+        }),
       };
     });
     const settledView = closed.map((row): OpenItemRow => {
@@ -2213,6 +2461,12 @@ export class ProjectOpenItemService {
           jobId: row.resolvedByJobId,
           supersededByItemId: row.supersededByItemId,
         },
+        chat: openItemChat({
+          assignee: row.assignee,
+          handling: false,
+          resolution: row.resolution as OpenItemOutcome['resolution'],
+          coordinator,
+        }),
       };
     });
     return {
