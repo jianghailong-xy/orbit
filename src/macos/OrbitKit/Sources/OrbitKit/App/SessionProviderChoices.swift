@@ -96,6 +96,29 @@ public struct AccountChoice: Equatable, Sendable, Identifiable {
     }
 }
 
+/// An engine — the CLI a session runs on — as the new-session hero lists it (web `EngineChoice`).
+/// Which provider of that engine the session spends (its own sign-in, an account pool, a key that
+/// borrows it) is the composer's Provider menu's question, so a row here names the engine and the
+/// provider a pick of it lands on.
+public struct EngineChoice: Equatable, Sendable, Identifiable {
+    public let slug: String
+    public let label: String
+    /// The vendor preset whose mark the engine wears (`SessionProviderChoices.enginePreset`).
+    public let brandKey: String?
+    /// Where picking this engine lands (`SessionProviderChoices.engines`).
+    public let provider: ProviderChoice
+    public var id: String { slug }
+    /// Why none of this engine's providers can run here — the landing provider's own reason, since
+    /// there is no better one to pick — and where it is fixed.
+    public var unavailable: String? { provider.unavailable }
+    public var fixEngine: String? { provider.fixEngine }
+    /// How the hero says which provider it runs on: nothing extra for the engine's own sign-in (bar
+    /// how it signs in, for Antigravity), "via DeepSeek" for anything else (web `engineProviderDetail`).
+    public var providerDetail: String? {
+        provider.slug == slug ? provider.labelDetail : "via \(provider.label)"
+    }
+}
+
 public enum SessionProviderChoices {
     /// The runner's accounts of an engine as picker rows, each with its own quota — nil unless it has
     /// signed in more than one (web `providerChoices`).
@@ -331,11 +354,39 @@ public enum SessionProviderChoices {
             labelDetail: provider == "antigravity" ? (antigravity?.authSource == "google" ? "Google account" : "env key") : runtime == "antigravity" ? "Antigravity CLI" : nil)
     }
 
-    /// What a pool's mark counts, as web labels that badge: an account pool's accounts, a shared
-    /// pool's keys (`"2 keys"`, `"1 account"`). Screen-reader only — the number itself is what is
-    /// drawn — but it is the pool's own word for what sits in its corner, so it is web's sentence.
-    public static func poolBadgeLabel(size: Int, unit: String?) -> String {
-        "\(size) \(unit ?? "account")\(size == 1 ? "" : "s")"
+    /// The engine row for `provider`, landing on it. Also how the hero names a pick that is in no
+    /// group (`opencode`, a removed provider): its runtime, on the synthesized current choice.
+    public static func engine(for provider: ProviderChoice, configured: [ConfiguredProvider]) -> EngineChoice {
+        let slug = executingRuntime(provider.slug, configured: configured)
+        return EngineChoice(slug: slug, label: AgentDefaults.providerName(slug, configured: nil),
+                            brandKey: enginePreset[slug], provider: provider)
+    }
+
+    /// `choices` grouped by the engine that runs them, in the order the engines first appear there
+    /// (web `engineChoices`). Each engine lands on the first of `preferred` it holds that can run (the
+    /// draft's pick, then what the workspace last ran on), else its own sign-in, else the first of its
+    /// providers that can run — one in a pool last, since the pool beside it is the usual answer. An
+    /// engine none of whose providers can run lands on its own row (or its first) and carries its reason.
+    public static func engines(_ choices: [ProviderChoice], configured: [ConfiguredProvider],
+                               preferred: [String?] = []) -> [EngineChoice] {
+        var order: [String] = []
+        var groups: [String: [ProviderChoice]] = [:]
+        for choice in choices {
+            let runtime = executingRuntime(choice.slug, configured: configured)
+            if groups[runtime] == nil { order.append(runtime) }
+            groups[runtime, default: []].append(choice)
+        }
+        return order.map { engine in
+            let group = groups[engine]!
+            let ready = group.filter { $0.unavailable == nil }
+            let landing = preferred.lazy.compactMap { slug in ready.first { $0.slug == slug } }.first
+                ?? ready.first { $0.slug == engine }
+                ?? ready.first { !$0.inPool }
+                ?? ready.first
+                ?? group.first { $0.slug == engine }
+                ?? group[0]
+            return self.engine(for: landing, configured: configured)
+        }
     }
 
     /// The label for a provider's resolved default model, or a plain hint when the provider picks

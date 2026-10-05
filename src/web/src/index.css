@@ -16260,63 +16260,6 @@ button.chat-jump-start:hover {
   color: var(--text-3);
   font-size: 12px;
 }
-/* An account pool: its vendor's mark, with how many accounts it holds in the corner. */
-.np-mark-wrap {
-  position: relative;
-  flex: none;
-  display: inline-flex;
-}
-.np-pool-badge {
-  position: absolute;
-  top: -4px;
-  right: -5px;
-  min-width: 1.6em;
-  padding: 0 0.35em;
-  border-radius: 999px;
-  border: 1.5px solid var(--bg-raised);
-  background: var(--text-1);
-  color: var(--bg-raised);
-  font-weight: 700;
-  line-height: 1.45;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-/* "Pin a specific account": the accounts a pool runs on, one click further away than the pool. */
-.np-pin-toggle {
-  color: var(--text-3);
-}
-.np-pin-chev {
-  display: inline-block;
-  width: 20px;
-  text-align: center;
-  font-size: 10px;
-  transition: transform 0.15s;
-}
-.np-pin-chev.open {
-  transform: rotate(90deg);
-}
-.np-pinned {
-  padding-left: 14px;
-}
-/* An engine's own accounts on this runner, under its row: which one this session spends. The tick
-   takes the mark's column, so the account names line up with the engine's. */
-.np-account-tick {
-  flex: none;
-  width: 20px;
-  text-align: center;
-  font-size: 11px;
-  color: var(--brand);
-}
-.np-account.picked {
-  color: var(--text-1);
-}
-.np-account .np-row-model.near-limit {
-  color: var(--warning);
-}
-/* Account names are often emails, so the list makes room for one beside its quota. */
-.np-list.with-accounts {
-  width: 280px;
-}
 .np-list.with-details {
   width: 360px;
   max-width: calc(100vw - 32px);

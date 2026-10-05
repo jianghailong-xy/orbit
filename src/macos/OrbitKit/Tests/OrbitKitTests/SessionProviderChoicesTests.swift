@@ -494,19 +494,15 @@ final class SessionProviderChoicesTests: XCTestCase {
         XCTAssertEqual(tile?.poolUnit, "key")
         XCTAssertEqual(tile?.modelLabel, "GPT-5.6 Sol")
         XCTAssertNil(tile?.unavailable)
-        XCTAssertEqual(SessionProviderChoices.poolBadgeLabel(size: tile?.poolSize ?? 0, unit: tile?.poolUnit),
-                       "2 keys")
-        XCTAssertEqual(SessionProviderChoices.poolBadgeLabel(size: 1, unit: tile?.poolUnit), "1 key")
     }
 
-    /// An account pool counts accounts, and says so.
+    /// An account pool counts accounts.
     func testAnAccountPoolsBadgeCountsAccounts() {
         let pool = claudePool()
         let tile = SessionProviderChoices.choices(configured: withPools([], [pool]), pools: [pool])
             .first { $0.slug == "claude-accounts" }
         XCTAssertNil(tile?.poolUnit)
-        XCTAssertEqual(SessionProviderChoices.poolBadgeLabel(size: tile?.poolSize ?? 0, unit: tile?.poolUnit),
-                       "2 accounts")
+        XCTAssertEqual(tile?.poolSize, 2)
     }
 
     /// Its CLI is Codex, so a runner without that one can't run the pool — while the Claude CLI's
@@ -629,5 +625,46 @@ final class SessionProviderChoicesTests: XCTestCase {
             "claude-accounts", in: SessionProviderChoices.choices(configured: configured, pools: [pool]),
             configured: configured).map(\.slug)
         XCTAssertEqual(slugs, ["claude", "claude-accounts", "anthropic", "anthropic-2"])
+    }
+
+    // MARK: - Engines (web `engineChoices`)
+
+    func testEnginesListEachEngineOnceWithItsKeysFoldedIn() {
+        let configured = [deepseek, moonshot]
+        let engines = SessionProviderChoices.engines(SessionProviderChoices.choices(configured: configured),
+                                                     configured: configured)
+        XCTAssertEqual(engines.map(\.slug), ["claude", "codex", "kimi"])
+        XCTAssertEqual(engines.map(\.provider.slug), ["claude", "codex", "kimi"])
+        XCTAssertEqual(engines.map(\.label), ["Claude", "Codex", "Kimi"])
+        XCTAssertNil(engines[0].providerDetail)
+    }
+
+    func testEnginesLandOnAPreferredProviderThatCanRun() {
+        let configured = [deepseek, moonshot]
+        let engines = SessionProviderChoices.engines(SessionProviderChoices.choices(configured: configured),
+                                                     configured: configured, preferred: ["deepseek", "moonshot"])
+        XCTAssertEqual(engines.map(\.provider.slug), ["deepseek", "codex", "moonshot"])
+        XCTAssertEqual(engines[0].providerDetail, "via DeepSeek")
+    }
+
+    func testEnginesSkipASignedOutEngineForAKeyThatCanRunAndCarryTheReasonWhenNothingCan() {
+        let configured = [deepseek, moonshot]
+        let choices = SessionProviderChoices.choices(
+            configured: configured,
+            engines: [health("claude", installed: true, auth: "no"), health("kimi", installed: false, auth: "unknown")])
+        let engines = SessionProviderChoices.engines(choices, configured: configured, preferred: ["moonshot"])
+        XCTAssertEqual(engines[0].provider.slug, "deepseek")
+        XCTAssertNil(engines[0].unavailable)
+        let kimi = engines.first { $0.slug == "kimi" }!
+        XCTAssertEqual(kimi.provider.slug, "kimi")
+        XCTAssertEqual(kimi.unavailable, "Not installed")
+        XCTAssertEqual(kimi.fixEngine, "kimi")
+    }
+
+    func testEngineForAPickInNoGroupIsItsRuntime() {
+        let gone = SessionProviderChoices.current("gone-away", in: [], configured: [])
+        let engine = SessionProviderChoices.engine(for: gone, configured: [])
+        XCTAssertEqual(engine.slug, "claude")
+        XCTAssertEqual(engine.providerDetail, "via gone-away")
     }
 }

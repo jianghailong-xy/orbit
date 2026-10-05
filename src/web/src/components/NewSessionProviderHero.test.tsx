@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 import { NewSessionProviderHero } from './NewSessionProviderHero';
-import { providerChoices, currentProviderChoice } from '../lib/sessionProviderChoices';
+import { currentProviderChoice, engineChoiceFor, engineChoices, providerChoices } from '../lib/sessionProviderChoices';
 import type { ConfiguredProvider } from '../lib/workspaceDefaults';
 import type { RunnerAntigravityState, RunnerEngineHealth } from '@orbit/shared';
 
@@ -38,11 +38,17 @@ function markup(
   } = {},
 ) {
   const choices = providerChoices(configured, catalog, undefined, opts.engines, [], undefined, opts.antigravity);
+  // As WorkspaceView builds them: each engine lands on the pick when it holds it, and the current one
+  // is synthesized when none does.
+  const engines = engineChoices(choices, configured, [provider]);
   return renderToStaticMarkup(
     <MemoryRouter>
       <NewSessionProviderHero
-        current={currentProviderChoice(provider, choices, catalog, configured, undefined, opts.antigravity)}
-        choices={choices}
+        current={
+          engines.find((engine) => engine.provider.slug === provider) ??
+          engineChoiceFor(currentProviderChoice(provider, choices, catalog, configured, undefined, opts.antigravity), configured)
+        }
+        engines={engines}
         onPick={() => {}}
         runnerId="019fc086-c7c7-7c92-8215-778ad8a6280a"
         disabled={opts.disabled}
@@ -141,9 +147,15 @@ describe('NewSessionProviderHero', () => {
     expect(html).not.toContain('engine=moonshot');
   });
 
-  it('labels an unknown provider truthfully instead of falling back to Claude', () => {
+  it('names an unknown provider truthfully under the engine that would run it', () => {
     const html = markup('gone-away');
-    expect(html).toContain('gone-away');
-    expect(html).not.toContain('>Claude<');
+    expect(html).toContain('via gone-away');
+  });
+
+  it('names the engine on the card, and the provider it spends when that is not its own sign-in', () => {
+    const html = markup('deepseek');
+    expect(html).toContain('aria-label="Engine: Claude via DeepSeek"');
+    expect(html).toContain('<small class="np-label-detail">via DeepSeek</small>');
+    expect(markup('claude')).not.toContain('via ');
   });
 });

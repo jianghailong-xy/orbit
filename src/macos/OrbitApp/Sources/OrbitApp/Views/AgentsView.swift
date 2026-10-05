@@ -1216,7 +1216,7 @@ struct NewSessionView: View {
     #if os(macOS)
     @State private var showSwitcher = false
     #endif
-    @State private var showProviderPicker = false
+    @State private var showEnginePicker = false
 
     init(agent: Agent, registry: ConsoleRegistry, defaultModel: String,
          configuredProviders: [ConfiguredProvider] = [],
@@ -1257,21 +1257,21 @@ struct NewSessionView: View {
         VStack(spacing: 0) {
             if draft.localStatusCards.isEmpty {
                 VStack(spacing: 18) {
-                    // Who runs this session is the hero — the native port of web's
-                    // `NewSessionProviderHero`: the vendor's own mark, then its name as the one
-                    // tappable identity. The workspace name sits in the iOS navigation bar;
-                    // macOS keeps its workspace switcher below the hero.
+                    // Which engine runs this session is the hero — the native port of web's
+                    // `NewSessionProviderHero`: the vendor's own mark, then the engine's name as the
+                    // one tappable identity, with the provider it spends when that is not its own
+                    // sign-in ("via DeepSeek") — picked in the composer's Provider menu. The
+                    // workspace name sits in the iOS navigation bar; macOS keeps its workspace
+                    // switcher below the hero.
                     VStack(spacing: 14) {
-                        ProviderMark(provider: draft.provider, size: 68,
-                                     brandKey: currentProviderChoice.brandKey,
-                                     label: currentProviderChoice.label,
-                                     poolSize: currentProviderChoice.poolSize,
-                                     poolUnit: currentProviderChoice.poolUnit)
-                        Button { showProviderPicker = true } label: {
+                        ProviderMark(provider: currentEngine.slug, size: 68,
+                                     brandKey: currentEngine.brandKey,
+                                     label: currentEngine.label)
+                        Button { showEnginePicker = true } label: {
                             HStack(spacing: 7) {
-                                Text(currentProviderChoice.label)
+                                Text(currentEngine.label)
                                     .font(.title.weight(.bold)).foregroundStyle(.primary).lineLimit(1)
-                                if let detail = currentProviderChoice.labelDetail {
+                                if let detail = currentEngine.providerDetail {
                                     Text(detail).font(.footnote).foregroundStyle(.secondary)
                                 }
                                 Image(systemName: "chevron.down").font(.subheadline.weight(.semibold))
@@ -1280,7 +1280,7 @@ struct NewSessionView: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("Provider: \(currentProviderChoice.label). Switch")
+                        .accessibilityLabel("Engine: \(currentEngine.label)\(currentEngine.providerDetail.map { " \($0)" } ?? ""). Switch")
                     }
                     VStack(spacing: 5) {
                         // The pick is sticky, so it can point at an engine this machine can no
@@ -1403,17 +1403,12 @@ struct NewSessionView: View {
             }
         }
         #endif
-        .sheet(isPresented: $showProviderPicker) {
+        .sheet(isPresented: $showEnginePicker) {
             // The draft's own runnerID is only set for a live session, so take the agent's — it is
             // the machine this draft would run on, and the one whose Engines section fixes a row.
-            ProviderSwitchSheet(
-                choices: providerChoices.contains { $0.slug == draft.provider } ? providerChoices : [currentProviderChoice] + providerChoices, currentSlug: draft.provider, agentName: agent.name,
-                currentAccount: draft.provider == "claude" ? draft.account(for: "claude") : draft.codexAccount,
-                automatic: ["codex", "claude"].reduce(into: [String: Bool]()) { offered, engine in
-                    if draft.automaticOffered(engine) { offered[engine] = draft.draftAutomatic(engine) }
-                },
+            EngineSwitchSheet(
+                engines: engines, current: currentEngine, agentName: agent.name,
                 onSelect: { slug in draft.pickDraftProvider(slug) },
-                onSelectAccount: { slug, account in draft.pickDraftAccount(slug, account) },
                 onFixRunner: agent.runnerId.map { rid in { engine in
                     if engine == "antigravity", let url = draft.providersURL(engine: engine, runnerID: rid) { openURL(url) }
                     else { app.route(to: .runner(rid)) }
@@ -1439,6 +1434,20 @@ struct NewSessionView: View {
                                        planUsage: draft.runnerPlanUsage,
                                        antigravity: draft.runnerAntigravity,
                                        antigravityKeyAvailable: agent.antigravityKeyAvailableByRunner?[draft.runnerID ?? agent.runnerId ?? ""] == true)
+    }
+
+    /// The engines the hero offers, each landing on the draft's pick when it holds it, else on what
+    /// this workspace last ran there (web parity).
+    private var engines: [EngineChoice] {
+        SessionProviderChoices.engines(providerChoices, configured: draft.configuredProviders,
+                                       preferred: [draft.provider, agent.defaultProvider])
+    }
+
+    /// The engine of the draft's pick — synthesized when no group holds it (`opencode`, a removed
+    /// provider) or holds it but cannot run it, so the hero still names what it would run.
+    private var currentEngine: EngineChoice {
+        engines.first { $0.provider.slug == draft.provider }
+            ?? SessionProviderChoices.engine(for: currentProviderChoice, configured: draft.configuredProviders)
     }
 
     private var currentProviderChoice: ProviderChoice {
