@@ -132,6 +132,7 @@ import {
 import { decideSessionSource, type SessionSourceTaskRow } from '../projects/session-source';
 import { openItemIdOfTurn, readOpenItemDeliveryCard } from '../projects/project-open-item';
 import { projectStartOfTurn, readProjectStartedCard } from '../projects/project-started';
+import { branchName } from '../projects/project-criterion-landing';
 import {
   MERGE_RECEIPT_RESULTS,
   MergeReceiptRow,
@@ -3221,7 +3222,31 @@ export class SessionsService {
         // direction — a Session has no project column — so a client that opened the conversation
         // from a project page has no other way to find its way back. At most one row (the unique
         // index behind Project.coordinatorSessionId), reached through that index.
-        coordinatorForProject: { select: { id: true, title: true } },
+        coordinatorForProject: {
+          select: {
+            id: true,
+            title: true,
+            codebases: {
+              where: { slot: 'primary' },
+              select: { integrationRef: true },
+              take: 1,
+            },
+          },
+        },
+        task: {
+          select: {
+            codeless: true,
+            project: {
+              select: {
+                codebases: {
+                  where: { slot: 'primary' },
+                  select: { integrationRef: true },
+                  take: 1,
+                },
+              },
+            },
+          },
+        },
         // The public link, which lives in `share_link` since 0306: the one that has not ended and
         // has not run past its expiry — at most one, by that table's partial unique index. It is
         // still answered as `shareToken`/`sharedAt`, the names shipped clients read.
@@ -3289,6 +3314,7 @@ export class SessionsService {
     const {
       tagLinks,
       coordinatorForProject,
+      task,
       shareLinks,
       children,
       // The retired columns (0306): never written since, so what they hold is at best stale.
@@ -3307,6 +3333,17 @@ export class SessionsService {
     const tags = tagLinks
       .map((l) => l.tag)
       .sort((a, b) => Number(b.isSystem) - Number(a.isSystem) || a.position - b.position);
+    // The project line is display metadata for the existing worktree bar. A coordinator reads
+    // its own project's line; a code task reads the line of the project it executes. Codeless
+    // tasks intentionally stay out of this path, because they have no code diff target.
+    const integrationRef = coordinatorForProject?.codebases[0]?.integrationRef
+      ?? (task && !task.codeless ? task.project?.codebases[0]?.integrationRef : null);
+    // A code task's default merge destination is its project's integration line. An explicit
+    // session target still wins, while coordinators keep the workspace target they operate on.
+    const taskIntegrationRef = task && !task.codeless ? task.project?.codebases[0]?.integrationRef : null;
+    const mergeTarget = rest.branch
+      ? mergeTargetOf(rest, session.workspace?.defaultMergeTarget, taskIntegrationRef)
+      : null;
     // The Route Decision this task run was planned with (model routing §7.5). Only a task's run
     // can have one, so no other session pays for the read.
     const route = session.taskId
@@ -3326,6 +3363,7 @@ export class SessionsService {
       } : null,
       route,
       poolCodexLogin,
+      mergeTarget,
       mergeRepairSession: children[0] ? withSessionState(children[0]) : null,
       mergeRecoverySupported: session.assignedRunner?.capabilities.includes(SESSION_MERGE_RECOVERY_V1) ?? false,
       tags,
@@ -3340,6 +3378,7 @@ export class SessionsService {
       runningBgJobCount: freshRunningBgJobs(session.runningBgJobs, runningBgJobActivity).length,
       projectId: coordinatorForProject?.id ?? null,
       projectTitle: coordinatorForProject?.title ?? null,
+      projectIntegrationRef: integrationRef ? branchName(integrationRef) : null,
       projectMembership: await readSessionProjectMembership(this.prisma, session.id),
       shareToken: shareLinks?.[0]?.token ?? null,
       sharedAt: shareLinks?.[0]?.createdAt ?? null,
@@ -8641,6 +8680,20 @@ export class SessionsService {
     // At most one, by the unique index behind Project.coordinatorSessionId. Nothing in the database
     // keeps a coordinator in its workspace since 0164, so the move is what has to.
     coordinatorForProject: { select: { id: true } },
+    task: {
+      select: {
+        codeless: true,
+        project: {
+          select: {
+            codebases: {
+              where: { slot: 'primary' },
+              select: { integrationRef: true },
+              take: 1,
+            },
+          },
+        },
+      },
+    },
     workspace: {
       select: { env: true, claudeAccount: true, codexAccount: true, enableWorktree: true, defaultMergeTarget: true },
     },
@@ -8744,7 +8797,13 @@ export class SessionsService {
       branch: session.branch,
       changedFiles,
       unmergedFiles: branchIsMerged(session) ? 0 : changedFiles,
-      mergeTarget: session.branch ? mergeTargetOf(session, session.workspace?.defaultMergeTarget) : null,
+      mergeTarget: session.branch
+        ? mergeTargetOf(
+            session,
+            session.workspace?.defaultMergeTarget,
+            session.task && !session.task.codeless ? session.task.project?.codebases[0]?.integrationRef : null,
+          )
+        : null,
       targets: others.map((w): SessionMoveTarget => {
         const sameRunner = w.runnerId != null && w.runnerId === session.assignedRunnerId;
         return {

@@ -36,7 +36,7 @@ public enum SettingsHome {
     }
 
     public enum Row: String, CaseIterable, Sendable {
-        case defaultPermission, orchestration
+        case defaultPermission, orchestration, modelRouting
         case runners, providers
         case notifications, appearance
         case email, instance, sharedLinks, changePassword, admin
@@ -54,7 +54,7 @@ public enum SettingsHome {
     /// The rows a group shows, in order. Admin is role-gated, like its section everywhere else.
     public static func rows(_ group: Group, isAdmin: Bool) -> [Row] {
         switch group {
-        case .sessions:    return [.defaultPermission, .orchestration]
+        case .sessions:    return [.defaultPermission, .orchestration, .modelRouting]
         case .machines:    return [.runners, .providers]
         case .preferences: return [.notifications, .appearance]
         case .account:
@@ -67,6 +67,7 @@ public enum SettingsHome {
         switch row {
         case .defaultPermission: return "Default permission"
         case .orchestration:     return "Session orchestration"
+        case .modelRouting:      return SettingsCopy.smartModelSelection
         case .runners:           return AppSection.runners.title
         case .providers:         return "Providers"
         case .notifications:     return "Notifications"
@@ -84,6 +85,7 @@ public enum SettingsHome {
         switch row {
         case .defaultPermission: return "hand.raised"
         case .orchestration:     return "point.3.connected.trianglepath.dotted"
+        case .modelRouting:      return "sparkles"
         case .runners:           return AppSection.runners.systemImage
         case .providers:         return "powerplug"
         case .notifications:     return "bell"
@@ -97,8 +99,8 @@ public enum SettingsHome {
     }
 
     /// The page a row opens. Nil for the rows that are answered in place: the two pickers, which
-    /// are menus on the row itself, the orchestration switch — one for the whole account, so the
-    /// row is the switch — and the two lines that only say something.
+    /// are menus on the row itself, the orchestration and smart model selection switches — each one
+    /// for the whole account, so the row is the switch — and the two lines that only say something.
     public static func page(_ row: Row) -> SettingsPage? {
         switch row {
         case .providers:      return .providers
@@ -106,7 +108,8 @@ public enum SettingsHome {
         case .sharedLinks:    return .sharedLinks
         case .changePassword: return .changePassword
         case .admin:          return .admin
-        case .runners, .defaultPermission, .orchestration, .appearance, .email, .instance: return nil
+        case .runners, .defaultPermission, .orchestration, .modelRouting, .appearance, .email, .instance:
+            return nil
         }
     }
 
@@ -261,6 +264,13 @@ public enum SettingsCopy {
     /// row is the switch, under the row's own name.
     public static let letSessionsOrchestrate = "Let sessions orchestrate"
     public static let letSessionsOrchestrateHint = "Sessions in every workspace can spawn and manage other sessions via the orbit MCP session tools. Off → those tools are hidden and refused."
+
+    // MARK: Smart model selection (the web page's Session defaults card)
+
+    /// The account's master switch for smart model selection, off unless turned on. On iOS the row is
+    /// the switch, with the hint under its name, since nothing else on the list says what it does.
+    public static let smartModelSelection = "Smart model selection"
+    public static let smartModelSelectionHint = "Coordinators suggest a tier for each task, and Agents you turn this on for run their tasks on that tier's model and effort. Off: tasks run exactly as before."
 
     // MARK: Change password (the web's Profile page)
 

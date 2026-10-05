@@ -4750,69 +4750,90 @@ html[data-theme='dark'] .session-tag-chip {
 .session-swipe-actions.trailing {
   right: 0;
 }
+/* A swipe button as iOS 26 draws it (`CircleSwipeRow`): a coloured circle over its title, not a
+   full-height coloured rectangle. The circle carries the action colour; the title sits under it in
+   the secondary colour. The iOS row draws a 47pt circle over a 13pt title in a 75pt row; the web
+   row is 64px, so the circle is 44px and the title's line box (16px) leaves its descenders room. */
 .session-swipe-action {
   flex: 1 1 0;
   min-width: 0;
   overflow: hidden;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 4px;
   padding: 0;
   border: 0;
-  color: #fff;
-  font-size: 20px;
+  background: transparent;
   cursor: pointer;
   transition: flex-grow 0.15s ease;
+}
+.session-swipe-action .session-swipe-glyph {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 18px;
+}
+.session-swipe-action .session-swipe-title {
+  font-size: 13px;
+  line-height: 16px;
+  color: var(--text-2);
+  white-space: nowrap;
 }
 .session-swipe-action[aria-disabled='true'] {
   opacity: 0.45;
 }
-/* Past the full-swipe mark the first action fills the gap, its icon riding beside the row. */
+/* Past the full-swipe mark the first action fills the gap, its circle riding beside the row. */
 .session-swipe-actions.armed .session-swipe-action:first-child {
-  justify-content: flex-end;
+  align-items: flex-end;
   padding-right: 26px;
 }
 .session-swipe-actions.armed .session-swipe-action:not(:first-child) {
   flex-grow: 0;
 }
 /* The iOS system colours the native swipe buttons use. */
-.session-swipe-action.complete {
+.session-swipe-action.complete .session-swipe-glyph {
   background: #34c759;
 }
-.session-swipe-action.restore {
+.session-swipe-action.restore .session-swipe-glyph {
   background: #007aff;
 }
-.session-swipe-action.pin {
+.session-swipe-action.pin .session-swipe-glyph {
   background: #5856d6;
 }
-.session-swipe-action.delete,
-.session-swipe-action.purge {
+.session-swipe-action.delete .session-swipe-glyph,
+.session-swipe-action.purge .session-swipe-glyph {
   background: #ff3b30;
 }
-:root[data-theme='dark'] .session-swipe-action.complete {
+:root[data-theme='dark'] .session-swipe-action.complete .session-swipe-glyph {
   background: #30d158;
 }
-:root[data-theme='dark'] .session-swipe-action.restore {
+:root[data-theme='dark'] .session-swipe-action.restore .session-swipe-glyph {
   background: #0a84ff;
 }
-:root[data-theme='dark'] .session-swipe-action.pin {
+:root[data-theme='dark'] .session-swipe-action.pin .session-swipe-glyph {
   background: #5e5ce6;
 }
-:root[data-theme='dark'] .session-swipe-action.delete,
-:root[data-theme='dark'] .session-swipe-action.purge {
+:root[data-theme='dark'] .session-swipe-action.delete .session-swipe-glyph,
+:root[data-theme='dark'] .session-swipe-action.purge .session-swipe-glyph {
   background: #ff453a;
 }
 /* Share and Move sit inside Delete, in the colours the iOS row gives them (blue, indigo). */
-.session-swipe-action.share {
+.session-swipe-action.share .session-swipe-glyph {
   background: #007aff;
 }
-.session-swipe-action.move {
+.session-swipe-action.move .session-swipe-glyph {
   background: #5856d6;
 }
-:root[data-theme='dark'] .session-swipe-action.share {
+:root[data-theme='dark'] .session-swipe-action.share .session-swipe-glyph {
   background: #0a84ff;
 }
-:root[data-theme='dark'] .session-swipe-action.move {
+:root[data-theme='dark'] .session-swipe-action.move .session-swipe-glyph {
   background: #5e5ce6;
 }
 @media (hover: hover) {
