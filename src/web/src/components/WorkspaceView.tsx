@@ -17,6 +17,7 @@ import {
   EditOutlined,
   EllipsisOutlined,
   EyeOutlined,
+  ExportOutlined,
   FolderOutlined,
   GlobalOutlined,
   InfoCircleOutlined,
@@ -1215,7 +1216,10 @@ export function SessionProjectListRow({
             style={{ width: Math.max(0, side === 'leading' ? swipe.offset : -swipe.offset) }}>
             <button type="button" className={`session-swipe-action ${action}`} aria-label={label} tabIndex={-1}
               onClick={(e) => { e.stopPropagation(); swipe.onAction(action); }}>
-              {action === 'move' ? <FolderOutlined /> : project.coordinator?.pinnedAt ? <PushpinFilled /> : <PushpinOutlined />}
+              <span className="session-swipe-glyph">
+                {action === 'move' ? <FolderOutlined /> : project.coordinator?.pinnedAt ? <PushpinFilled /> : <PushpinOutlined />}
+              </span>
+              <span className="session-swipe-title" aria-hidden="true">{label}</span>
             </button>
           </div>
         );
@@ -8689,10 +8693,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   pin: s.pinnedAt
                     ? { label: 'Unpin', icon: <PushpinFilled />, disabled: false }
                     : { label: 'Pin', icon: <PushpinOutlined />, disabled: false },
-                  share: { label: 'Share', icon: <GlobalOutlined />, disabled: false },
+                  share: { label: 'Share', icon: <ExportOutlined />, disabled: false },
                   move: { label: 'Move', icon: <FolderOutlined />, disabled: false },
                   delete: { label: 'Delete', icon: <DeleteOutlined />, disabled: false },
-                  purge: { label: 'Delete permanently', icon: <DeleteOutlined />, disabled: false },
+                  purge: { label: 'Delete Permanently', icon: <DeleteOutlined />, disabled: false },
                 };
                 const menuItem = (action: SwipeAction) => ({
                   key: action,
@@ -8767,7 +8771,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                                 runSwipeAction(action, s);
                               }}
                             >
-                              {swipeButtons[action].icon}
+                              <span className="session-swipe-glyph">{swipeButtons[action].icon}</span>
+                              <span className="session-swipe-title" aria-hidden="true">
+                                {swipeButtons[action].label}
+                              </span>
                             </button>
                           ))}
                         </div>
