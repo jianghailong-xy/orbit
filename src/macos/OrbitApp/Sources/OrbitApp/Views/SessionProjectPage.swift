@@ -289,26 +289,9 @@ struct SessionProjectPage: View {
     private var titleText: String {
         project?.title ?? sessions.first?.projectMembership?.projectTitle ?? "Project"
     }
-    /// The members working or waiting on you right now: the Now section, and nowhere else.
-    private var nowSessions: [Session] {
-        SessionProjectGrouping.nowSessions(sessions, watching: { app.watches?.summary(for: $0.id) })
-    }
-    private var landing: ProjectIntegrationView? {
-        app.projectSessionsIntegration.flatMap { $0.inFlight == nil ? nil : $0 }
-    }
-    private var coordinatorWorking: Bool {
-        guard let coordinator else { return false }
-        if case .spinner = SessionStatusGlyph.make(for: coordinator,
-                                                   watching: app.watches?.summary(for: coordinator.id)).shape {
-            return true
-        }
-        return false
-    }
     private var timeSections: [SessionTimeSection] {
-        let now = Set(nowSessions.map(\.id))
-        return SessionTimeGrouping.sections(sessions.filter {
-            $0.projectMembership?.role != .coordinator && !now.contains($0.id)
-        }, pinnedFirst: false)
+        SessionTimeGrouping.sections(sessions.filter { $0.projectMembership?.role != .coordinator },
+                                     pinnedFirst: false)
     }
     private var selection: Binding<String?>? {
         guard rowNavigation == .selection else { return nil }
@@ -323,7 +306,6 @@ struct SessionProjectPage: View {
         List(selection: selection) {
             progressCard
                 .listRowSeparator(.hidden)
-            nowSection
             if let coordinator {
                 Section(SessionProjectCopy.coordinatorSection) { sessionRow(coordinator) }
             }
@@ -423,37 +405,6 @@ struct SessionProjectPage: View {
         .padding(12)
         .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
         .padding(.vertical, 4)
-    }
-
-    /// What the project is doing right now: a landing in flight (the project page's own row), then
-    /// every member working or waiting on you. When only the coordinator is working, its section
-    /// below already says so; when nothing is, the section says that.
-    @ViewBuilder private var nowSection: some View {
-        if !sessions.isEmpty && (landing != nil || !nowSessions.isEmpty || !coordinatorWorking) {
-            Section {
-                if let integration = landing {
-                    Button { app.openProject(address.projectID) } label: {
-                        TimelineView(.periodic(from: .now, by: 1)) { context in
-                            if let line = ProjectPage.landingLine(integration, now: context.date,
-                                                                 updatedAt: app.projectSessionsIntegrationReadAt,
-                                                                 refreshFailed: app.projectSessionsIntegrationReadFailed) {
-                                ProjectLandingRow(line: line)
-                            }
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
-                ForEach(nowSessions) { sessionRow($0) }
-                if landing == nil && nowSessions.isEmpty {
-                    Text(SessionProjectCopy.nothingRunning)
-                        .font(.orbitListSubtitle)
-                        .foregroundStyle(.secondary)
-                }
-            } header: {
-                Text(SessionProjectCopy.nowSection).textCase(nil)
-            }
-        }
     }
 
     private var projectMenu: some View {

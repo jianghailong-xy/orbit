@@ -745,9 +745,6 @@ final class AppModel {
         projectSessions = []
         projectSessionsAddress = nil
         projectSessionsError = nil
-        projectSessionsIntegration = nil
-        projectSessionsIntegrationReadAt = nil
-        projectSessionsIntegrationReadFailed = false
         #endif
         sessionDetails.removeAll()
         resetNavigation()
@@ -2066,11 +2063,6 @@ final class AppModel {
     private(set) var projectSessionsLoading = false
     private(set) var projectSessionsError: String?
     private var projectSessionsAddress: SessionProjectAddress?
-    /// The project's integration line, read with its sessions so the page's Now section can show a
-    /// landing in flight with the project page's own row.
-    private(set) var projectSessionsIntegration: ProjectIntegrationView?
-    private(set) var projectSessionsIntegrationReadAt: Date?
-    private(set) var projectSessionsIntegrationReadFailed = false
 
     var projectSessionsColumn: SessionProjectAddress? { nav.projectSessionsColumn }
 
@@ -2089,9 +2081,6 @@ final class AppModel {
             projectSessionsAddress = address
             projectSessions = []
             projectSessionsError = nil
-            projectSessionsIntegration = nil
-            projectSessionsIntegrationReadAt = nil
-            projectSessionsIntegrationReadFailed = false
         }
         projectSessionsLoading = true
         defer { if projectSessionsAddress == address { projectSessionsLoading = false } }
@@ -2102,19 +2091,8 @@ final class AppModel {
                 openRead.cancel()
                 completedRead.cancel()
             }
-            let integrationRead = Task { try await api.projectIntegration(address.projectID) }
-            defer { integrationRead.cancel() }
             let rows = try await openRead.value + completedRead.value
-            let integration = try? await integrationRead.value
             guard projectSessionsAddress == address, !Task.isCancelled else { return }
-            // A failed integration read keeps the last one and marks it, as the project page does.
-            if let integration {
-                projectSessionsIntegration = integration
-                projectSessionsIntegrationReadAt = Date()
-                projectSessionsIntegrationReadFailed = false
-            } else {
-                projectSessionsIntegrationReadFailed = true
-            }
             // An older server may ignore projectId. It must never put unrelated sessions here.
             var seen = Set<String>()
             projectSessions = rows.filter {
