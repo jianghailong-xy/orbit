@@ -13,22 +13,29 @@ type dshActiveTurn struct {
 	seen      map[string]bool
 	tools     map[string]bool // false until a terminal tool update arrives
 	toolOrder []string
+	messages  map[string]bool
 }
 
 // dsh projects committed message blocks onto ACP. Their chunk names do not mean
 // provider token deltas, so each block becomes one assistant/thinking event.
 type dshEventMapper struct {
-	mu          sync.Mutex
-	sessionID   string
-	emitFor     emitTurnFn
-	active      *dshActiveTurn
-	settled     map[string]bool
+	mu        sync.Mutex
+	sessionID string
+	emitFor   emitTurnFn
+	active    *dshActiveTurn
+	settled   map[string]bool
+	// Wire ids of settled turns. An update naming one arrived after its turn's response
+	// barrier; it belongs to no live turn and is dropped instead of joining the next one.
+	retired     map[string]bool
 	contextUsed *int
 	contextSize *int
+	// onTool, when set, observes a tool opening (done=false) or reaching a terminal status, so
+	// the session loop can keep a durable record of tools a crash would leave unfinished.
+	onTool func(turnID, toolID string, done bool)
 }
 
 func newDshEventMapper(sessionID string, emitFor emitTurnFn) *dshEventMapper {
-	return &dshEventMapper{sessionID: sessionID, emitFor: emitFor, settled: map[string]bool{}}
+	return &dshEventMapper{sessionID: sessionID, emitFor: emitFor, settled: map[string]bool{}, retired: map[string]bool{}}
 }
 
 func (m *dshEventMapper) begin(turnID string) error {
@@ -43,7 +50,7 @@ func (m *dshEventMapper) begin(turnID string) error {
 	if m.settled[turnID] {
 		return fmt.Errorf("dsh turn %s has already settled", turnID)
 	}
-	m.active = &dshActiveTurn{id: turnID, seen: map[string]bool{}, tools: map[string]bool{}}
+	m.active = &dshActiveTurn{id: turnID, seen: map[string]bool{}, tools: map[string]bool{}, messages: map[string]bool{}}
 	return nil
 }
 
@@ -108,6 +115,10 @@ func (m *dshEventMapper) update(params map[string]interface{}) error {
 		if id == "" {
 			return fmt.Errorf("dsh %s is missing messageId", kind)
 		}
+		if m.retired["message:"+id] {
+			return nil
+		}
+		a.messages[id] = true
 		content := mapValue(update["content"])
 		if firstString(content, "type") != "text" {
 			return nil
@@ -137,9 +148,15 @@ func (m *dshEventMapper) update(params map[string]interface{}) error {
 			return fmt.Errorf("dsh %s is missing toolCallId", kind)
 		}
 		done, known := a.tools[id]
+		if kind == "tool_call_update" && !known && m.retired["tool:"+id] {
+			return nil // a settled turn's tool; model-chosen ids may still open a new tool later
+		}
 		if kind == "tool_call" && !known {
 			a.tools[id] = false
 			a.toolOrder = append(a.toolOrder, id)
+			if m.onTool != nil {
+				m.onTool(turnID, id, false)
+			}
 			m.emit(turnID, evToolUse, map[string]interface{}{
 				"id": id, "toolCallId": id, "name": update["title"],
 				"input": update["rawInput"], "kind": update["kind"], "status": update["status"],
@@ -150,6 +167,9 @@ func (m *dshEventMapper) update(params map[string]interface{}) error {
 		status := firstString(update, "status")
 		if !done && (status == "completed" || status == "failed") {
 			a.tools[id] = true
+			if m.onTool != nil {
+				m.onTool(turnID, id, true)
+			}
 			m.emit(turnID, evToolResult, map[string]interface{}{
 				"toolUseId": id, "toolCallId": id, "status": status,
 				"content": dshToolOutput(update), "isError": status == "failed",
@@ -243,6 +263,12 @@ func (m *dshEventMapper) settle(turnID string, result map[string]interface{}, er
 		end["stopReason"] = stop
 	}
 	m.emit(turnID, evTurnEnd, end)
+	for _, id := range a.toolOrder {
+		m.retired["tool:"+id] = true
+	}
+	for id := range a.messages {
+		m.retired["message:"+id] = true
+	}
 	m.active = nil
 	m.settled[turnID] = true
 	return request, true

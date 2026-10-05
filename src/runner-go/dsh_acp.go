@@ -6,8 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
 )
@@ -51,6 +54,7 @@ type dshACPClient struct {
 	once          sync.Once
 	wg            sync.WaitGroup
 	configOptions []interface{} // configured only by the session loop
+	secrets       []string      // launch credentials, masked out of every diagnostic
 }
 
 func startDshACP(ctx context.Context, spec DshLaunchSpec, mapper *dshEventMapper, emit emitFn) (*dshACPClient, error) {
@@ -89,7 +93,7 @@ func startDshACP(ctx context.Context, spec DshLaunchSpec, mapper *dshEventMapper
 		cancel()
 		return nil, err
 	}
-	a := &dshACPClient{cmd: cmd, cancel: cancel, stdin: stdin, mapper: mapper,
+	a := &dshACPClient{cmd: cmd, cancel: cancel, stdin: stdin, mapper: mapper, secrets: dshLaunchSecrets(spec.Env),
 		pending: map[string]chan dshRPCReply{}, writes: make(chan dshWrite, 16), done: make(chan struct{})}
 	emit(evSystem, map[string]interface{}{"subtype": "launch", "provider": providerDsh, "runtime": "acp",
 		"executable": spec.Executable, "argv": spec.Args, "cliVersion": spec.Version,
@@ -103,7 +107,7 @@ func startDshACP(ctx context.Context, spec DshLaunchSpec, mapper *dshEventMapper
 		sc.Buffer(make([]byte, 64*1024), 4*1024*1024)
 		for sc.Scan() {
 			// Startup diagnostics remain diagnostics, never a successful ACP result.
-			logln("dsh stderr:", stripANSI(sc.Text()))
+			logln("dsh stderr:", a.redact(stripANSI(sc.Text())))
 		}
 	}()
 	return a, nil
@@ -234,25 +238,26 @@ func (a *dshACPClient) call(ctx context.Context, method string, params map[strin
 		// A response followed immediately by EOF still wins over the transport close.
 		select {
 		case reply := <-ch:
-			return dshDecodeReply(method, reply)
+			return a.decodeReply(method, reply)
 		default:
 			return nil, err
 		}
 	}
 	select {
 	case reply := <-ch:
-		return dshDecodeReply(method, reply)
+		return a.decodeReply(method, reply)
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
 }
 
-func dshDecodeReply(method string, reply dshRPCReply) (map[string]interface{}, error) {
+// The error stays an error, so a masked credential never hides a failed terminal state.
+func (a *dshACPClient) decodeReply(method string, reply dshRPCReply) (map[string]interface{}, error) {
 	if reply.err != nil {
 		return nil, reply.err
 	}
 	if e := reply.message.Error; e != nil {
-		return nil, fmt.Errorf("dsh %s (%d): %s %s", method, e.Code, e.Message, clip(kimiRPCErrorDetail(e.Data), 300))
+		return nil, fmt.Errorf("dsh %s (%d): %s %s", method, e.Code, a.redact(e.Message), clip(a.redact(kimiRPCErrorDetail(e.Data)), 300))
 	}
 	var result map[string]interface{}
 	if json.Unmarshal(reply.message.Result, &result) != nil || result == nil {
@@ -281,6 +286,17 @@ func (a *dshACPClient) open(ctx context.Context, cwd string) (string, error) {
 	}
 	a.configOptions, _ = result["configOptions"].([]interface{})
 	return sessionID, nil
+}
+
+// resume reattaches the durable runtime id. A failure is reported, never replaced by new:
+// a fresh session would silently drop the conversation the user is continuing.
+func (a *dshACPClient) resume(ctx context.Context, sessionID, cwd string) error {
+	result, err := a.call(ctx, "session/resume", map[string]interface{}{"sessionId": sessionID, "cwd": cwd, "mcpServers": []interface{}{}})
+	if err != nil {
+		return err
+	}
+	a.configOptions, _ = result["configOptions"].([]interface{})
+	return nil
 }
 
 func (a *dshACPClient) configure(ctx context.Context, sessionID string, agent AgentExecConfig) error {
@@ -353,6 +369,121 @@ func (a *dshACPClient) dispose() {
 	a.wg.Wait()
 }
 
+var dshSecretPattern = regexp.MustCompile(`sk-[A-Za-z0-9_-]{8,}`)
+
+func dshLaunchSecrets(env []string) []string {
+	var secrets []string
+	for _, entry := range env {
+		if value, ok := strings.CutPrefix(entry, "ORBIT_DSH_API_KEY="); ok && value != "" {
+			secrets = append(secrets, value)
+		}
+	}
+	return secrets
+}
+
+// redact masks the launch key, and anything shaped like a provider key, in text dsh wrote.
+func (a *dshACPClient) redact(text string) string {
+	for _, secret := range a.secrets {
+		text = strings.ReplaceAll(text, secret, "[redacted]")
+	}
+	return dshSecretPattern.ReplaceAllString(text, "sk-[redacted]")
+}
+
+const (
+	dshTurnPrompted = "prompted"
+	dshTurnSettled  = "settled"
+	// How long a stopped prompt may take to answer before its process is ended instead.
+	dshStopGrace = 10 * time.Second
+)
+
+type dshTurnRecord struct {
+	State     string   `json:"state"`
+	OpenTools []string `json:"openTools,omitempty"`
+	Status    string   `json:"status,omitempty"`
+	Subtype   string   `json:"subtype,omitempty"`
+	Result    string   `json:"result,omitempty"`
+	Error     string   `json:"error,omitempty"`
+}
+
+// dshTurnLedger lives in the retained DSH_HOME. Orbit's queue knows a turn was leased, not
+// whether its prompt reached dsh before a crash; this record does, across processes, runner
+// restarts and lease owners, so a redelivered turn is never prompted twice.
+type dshTurnLedger struct {
+	mu               sync.Mutex
+	path             string
+	RuntimeSessionID string                    `json:"runtimeSessionId,omitempty"`
+	Turns            map[string]*dshTurnRecord `json:"turns"`
+}
+
+func loadDshTurnLedger(home string) (*dshTurnLedger, error) {
+	l := &dshTurnLedger{path: filepath.Join(home, "orbit-turns.json"), Turns: map[string]*dshTurnRecord{}}
+	data, err := os.ReadFile(l.path)
+	if os.IsNotExist(err) {
+		return l, nil
+	}
+	if err != nil || json.Unmarshal(data, l) != nil {
+		return nil, fmt.Errorf("DSH_CONFIG_CONFLICT: the session's turn ledger cannot be read; recovery data retained")
+	}
+	if l.Turns == nil {
+		l.Turns = map[string]*dshTurnRecord{}
+	}
+	return l, nil
+}
+
+// update applies fn and persists the result before returning.
+func (l *dshTurnLedger) update(fn func()) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	fn()
+	data, err := json.Marshal(l)
+	if err != nil {
+		return err
+	}
+	return writeDshConfigFile(l.path, data)
+}
+
+func (l *dshTurnLedger) get(turnID string) (dshTurnRecord, bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	rec, ok := l.Turns[turnID]
+	if !ok {
+		return dshTurnRecord{}, false
+	}
+	copied := *rec
+	copied.OpenTools = append([]string(nil), rec.OpenTools...)
+	return copied, true
+}
+
+// dshSettlementOutcome applies the settlement precedence, highest first:
+//  1. a local stop (interrupt, end, shutdown, session cancel, lease loss) settles cancelled,
+//     whatever dsh answers afterwards, a late end_turn included;
+//  2. dsh's prompt response: end_turn, max_tokens (the output limit), refusal or cancelled;
+//  3. a JSON-RPC error answering the prompt (a protocol or model failure);
+//  4. process exit or transport loss without any response.
+//
+// call() already lets a response that precedes EOF win over the transport close (2 over 4),
+// and a JSON-RPC id carries exactly one of a result or an error (2 and 3 never meet).
+func dshSettlementOutcome(stopped bool, result map[string]interface{}, err error) (map[string]interface{}, error) {
+	if stopped {
+		return map[string]interface{}{"stopReason": "cancelled"}, nil
+	}
+	return result, err
+}
+
+func dshCanonicalDir(dir string) (string, error) {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return "", err
+	}
+	return filepath.EvalSymlinks(abs)
+}
+
+// What the launch environment fixes: changing any of it needs a new process.
+func dshLaunchIdentity(job *ClaimedSession) string {
+	return strings.Join([]string{job.Agent.Env["ORBIT_DSH_API_KEY"], job.Agent.Env["ORBIT_DSH_BASE_URL"],
+		dshFileModeForPermission(job.Agent.PermissionMode)}, "\x00")
+}
+
 type dshPromptResult struct {
 	turnID string
 	result map[string]interface{}
@@ -361,41 +492,82 @@ type dshPromptResult struct {
 
 func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 	p.setTurn("")
-	spec := p.dshLaunchSpec
-	if spec == nil {
-		prepared, err := prepareDshSessionLaunch(p.ctx, p.job, p.scratchDir, p.execDir)
-		if err != nil {
-			p.emit(evError, map[string]interface{}{"message": err.Error()})
-			return stFailed, true, false
-		}
-		spec = &prepared
-	}
-	if spec.Cwd != p.execDir {
-		p.emit(evError, map[string]interface{}{"message": "dsh launch cwd differs from the session workspace"})
+	fail := func(message string) (string, bool, bool) {
+		p.emit(evError, map[string]interface{}{"message": message})
 		return stFailed, true, false
 	}
-	mapper := newDshEventMapper(p.job.RuntimeSessionID, p.emitFor)
+	spec := p.dshLaunchSpec
+	prepared := spec == nil
+	if prepared {
+		launch, err := prepareDshSessionLaunch(p.ctx, p.job, p.execDir)
+		if err != nil {
+			return fail(err.Error())
+		}
+		spec = &launch
+	}
+	// One canonical cwd for the launch, new/resume and the identity P2 persisted.
+	if cwd, err := dshCanonicalDir(p.execDir); err != nil || spec.Cwd != cwd {
+		return fail("dsh launch cwd differs from the session workspace")
+	}
+	ledger, err := loadDshTurnLedger(spec.DshHome)
+	if err != nil {
+		return fail(err.Error())
+	}
+	runtimeID := p.job.RuntimeSessionID
+	if runtimeID == "" {
+		// Opened before Orbit heard the id: the retained state still names it.
+		runtimeID = ledger.RuntimeSessionID
+	} else if ledger.RuntimeSessionID != "" && ledger.RuntimeSessionID != runtimeID {
+		return fail("DSH_CONFIG_CONFLICT: Orbit's runtime session id differs from the retained Harness state; recovery data retained")
+	}
+	mapper := newDshEventMapper(runtimeID, p.emitFor)
+	mapper.onTool = func(turnID, toolID string, done bool) {
+		err := ledger.update(func() {
+			rec := ledger.Turns[turnID]
+			if rec == nil || rec.State != dshTurnPrompted {
+				return
+			}
+			if !done {
+				rec.OpenTools = append(rec.OpenTools, toolID)
+				return
+			}
+			for i, id := range rec.OpenTools {
+				if id == toolID {
+					rec.OpenTools = append(rec.OpenTools[:i:i], rec.OpenTools[i+1:]...)
+					break
+				}
+			}
+		})
+		if err != nil {
+			logln("dsh turn ledger:", err)
+		}
+	}
 	app, err := startDshACP(p.ctx, *spec, mapper, p.emit)
 	if err != nil {
-		p.emit(evError, map[string]interface{}{"message": "failed to start DeepSeek Harness: " + err.Error()})
-		return stFailed, true, false
+		return fail("failed to start DeepSeek Harness: " + err.Error())
 	}
 	defer app.dispose()
 	initCtx, initCancel := context.WithTimeout(p.ctx, 60*time.Second)
 	defer initCancel()
 	if err := app.initialize(initCtx); err != nil {
-		p.emit(evError, map[string]interface{}{"message": err.Error()})
-		return stFailed, true, false
+		return fail(err.Error())
 	}
-	// P3b owns durable recovery and its races. Never replace an existing id with new.
-	if p.job.RuntimeSessionID != "" {
-		p.emit(evError, map[string]interface{}{"message": "DeepSeek Harness recovery requires the durable session lifecycle adapter"})
-		return stFailed, true, false
+	// Seal the profile the pinned CLI generated before any session is opened or resumed.
+	if prepared {
+		if err := SealDshProfile(*spec); err != nil {
+			return fail(err.Error())
+		}
 	}
-	sessionID, err := app.open(initCtx, p.execDir)
-	if err != nil {
-		p.emit(evError, map[string]interface{}{"message": err.Error()})
-		return stFailed, true, false
+	sessionID := runtimeID
+	if sessionID == "" {
+		if sessionID, err = app.open(initCtx, spec.Cwd); err != nil {
+			return fail(err.Error())
+		}
+	} else if err := app.resume(initCtx, sessionID, spec.Cwd); err != nil {
+		return fail("DeepSeek Harness could not resume session " + sessionID + ": " + err.Error())
+	}
+	if err := ledger.update(func() { ledger.RuntimeSessionID = sessionID }); err != nil {
+		return fail("DSH_CONFIG_CONFLICT: cannot persist the runtime session id: " + err.Error())
 	}
 	p.job.RuntimeSessionID = sessionID
 	mapper.mu.Lock()
@@ -403,11 +575,10 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 	mapper.mu.Unlock()
 	writeSessionMeta(p.scratchDir, p.job, p.execDir)
 	if err := app.configure(initCtx, sessionID, p.job.Agent); err != nil {
-		p.emit(evError, map[string]interface{}{"message": err.Error()})
-		return stFailed, true, false
+		return fail(err.Error())
 	}
 	p.emit(evSystem, map[string]interface{}{"subtype": "init", "provider": providerDsh, "runtime": "acp",
-		"sessionId": sessionID, "runtimeSessionId": sessionID, "cliVersion": spec.Version})
+		"sessionId": sessionID, "runtimeSessionId": sessionID, "cliVersion": spec.Version, "resumed": runtimeID != ""})
 
 	pollCtx, pollCancel := context.WithCancel(p.ctx)
 	defer pollCancel()
@@ -452,32 +623,87 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 	var promptWG sync.WaitGroup
 	defer func() { app.fail(fmt.Errorf("dsh session loop stopped")); promptWG.Wait() }()
 	var activeID string
-	interrupted := false
+	stopped := false // a local stop of the active turn; see dshSettlementOutcome
 	seen := map[string]bool{}
 	var queued []*RunInboxResponse
-	finish := func(done dshPromptResult) {
-		if interrupted {
-			done.result, done.err = map[string]interface{}{"stopReason": "cancelled"}, nil
-		}
-		req, ok := mapper.settle(done.turnID, done.result, done.err)
-		if !ok {
-			return
-		}
+	worktree := func(req *TurnCompleteRequest) {
 		req.IsolationStatus = p.job.IsolationStatus
 		req.ChangedFiles, req.ChangedDiff = liveDiff(p.job.WT)
 		req.BaseSha = p.job.WT.baseSha()
 		req.WorktreeDirty = worktreeIsDirty(p.job.WT)
 		req.BranchSha, req.BranchMerged = effectiveBranchSha(p.job.WT), branchMergedInto(p.job.WT)
 		req.WorktreeBranch = currentBranch(p.job.WT)
+	}
+	// report=false settles only locally: after a lease loss the turn and its prompted record
+	// belong to the new owner, which settles it without replaying the prompt.
+	settle := func(done dshPromptResult, report bool) string {
+		result, err := dshSettlementOutcome(stopped, done.result, done.err)
+		req, ok := mapper.settle(done.turnID, result, err)
+		if ok && report {
+			if err := ledger.update(func() {
+				ledger.Turns[req.TurnID] = &dshTurnRecord{State: dshTurnSettled, Status: req.Status,
+					Subtype: req.Subtype, Result: req.Result, Error: req.Error}
+			}); err != nil {
+				logln("dsh turn ledger:", err)
+			}
+			worktree(&req)
+			if err := p.completeTurn(req); err != nil {
+				logln("dsh turn-complete failed:", err)
+			}
+		}
+		activeID, stopped = "", false
+		p.setTurn("")
+		return req.Status
+	}
+	awaitPrompt := func() dshPromptResult {
+		select {
+		case done := <-promptDone:
+			return done
+		case <-time.After(dshStopGrace):
+			app.fail(fmt.Errorf("dsh did not answer a stopped prompt"))
+			return <-promptDone
+		}
+	}
+	// A turn a previous process already prompted. Its first settlement is reported again; a turn
+	// that never settled is interrupted, not replayed, because its tools may already have run.
+	recoverTurn := func(resp *RunInboxResponse, rec dshTurnRecord) {
+		req := TurnCompleteRequest{TurnID: resp.TurnID, Status: rec.Status, Subtype: rec.Subtype, Result: rec.Result,
+			Error: rec.Error, NumTurns: 1, RuntimeSessionID: sessionID}
+		if rec.State != dshTurnSettled {
+			attribution := func(payload map[string]interface{}) map[string]interface{} {
+				payload["runtimeSessionId"], payload["localTurnId"] = sessionID, resp.TurnID
+				return payload
+			}
+			for _, id := range rec.OpenTools {
+				p.emitFor(resp.TurnID, evToolResult, attribution(map[string]interface{}{
+					"toolUseId": id, "toolCallId": id, "status": "failed", "isError": true,
+					"content": "dsh stopped before this tool returned a final status; side effects may have occurred",
+				}))
+			}
+			req.Status, req.Subtype = stInterrupted, "interrupted"
+			req.Error = "DeepSeek Harness stopped during this turn; it was not replayed because its tools may already have run"
+			p.emitFor(resp.TurnID, evError, attribution(map[string]interface{}{"message": req.Error}))
+			p.emitFor(resp.TurnID, evTurnEnd, attribution(map[string]interface{}{"subtype": req.Subtype, "numTurns": 1, "recovered": true}))
+			if err := ledger.update(func() {
+				ledger.Turns[req.TurnID] = &dshTurnRecord{State: dshTurnSettled, Status: req.Status, Subtype: req.Subtype, Error: req.Error}
+			}); err != nil {
+				logln("dsh turn ledger:", err)
+			}
+		}
+		worktree(&req)
 		if err := p.completeTurn(req); err != nil {
 			logln("dsh turn-complete failed:", err)
 		}
-		activeID, interrupted = "", false
-		p.setTurn("")
 	}
 	start := func(resp *RunInboxResponse) bool {
 		if !p.waitTurnPermit(p.ctx) {
 			return false
+		}
+		if rec, ok := ledger.get(resp.TurnID); ok {
+			p.setTurn(resp.TurnID)
+			recoverTurn(resp, rec)
+			p.setTurn("")
+			return true
 		}
 		activeID = resp.TurnID
 		p.setTurn(activeID)
@@ -488,10 +714,15 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 		p.emitFor(activeID, evUser, map[string]interface{}{"text": resp.Content,
 			"runtimeSessionId": sessionID, "localTurnId": activeID})
 		if len(resp.Attachments) > 0 {
-			finish(dshPromptResult{turnID: activeID, err: fmt.Errorf("DeepSeek Harness ACP does not support attachments in this composition")})
+			settle(dshPromptResult{turnID: activeID, err: fmt.Errorf("DeepSeek Harness ACP does not support attachments in this composition")}, true)
 			return true
 		}
 		turnID := activeID
+		// Recorded before the prompt is written: from here a crash leaves a turn that must not be replayed.
+		if err := ledger.update(func() { ledger.Turns[turnID] = &dshTurnRecord{State: dshTurnPrompted} }); err != nil {
+			settle(dshPromptResult{turnID: turnID, err: fmt.Errorf("cannot record the turn before prompting dsh: %v", err)}, true)
+			return true
+		}
 		promptWG.Add(1)
 		go func() {
 			defer promptWG.Done()
@@ -515,40 +746,52 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 			if !start(next) {
 				return stCancelled, true, false
 			}
+			continue
 		}
 		select {
 		case <-p.ctx.Done():
 			if activeID != "" {
-				finish(dshPromptResult{turnID: activeID, err: p.ctx.Err()})
+				stopped = true
+				settle(<-promptDone, true)
 			}
 			return stCancelled, true, false
 		case <-p.shutdownCtx.Done():
+			stopped = activeID != ""
 			closeSession()
 			if activeID != "" {
-				interrupted = true
-				finish(<-promptDone)
+				settle(awaitPrompt(), true)
 			}
 			return stCancelled, true, false
 		case err := <-pollErrors:
+			// Another owner holds the lease: end the process tree first, so nothing more runs on
+			// this session's behalf, then settle locally and leave the turn to that owner.
 			app.fail(err)
 			if activeID != "" {
-				finish(<-promptDone)
+				stopped = true
+				settle(<-promptDone, false)
 			}
 			p.onLeaseLost(err)
 			return stFailed, true, false
 		case <-app.done:
-			if activeID != "" {
-				finish(<-promptDone)
+			if activeID == "" {
+				p.emit(evSystem, map[string]interface{}{"subtype": "process_exited", "provider": providerDsh,
+					"runtimeSessionId": sessionID})
+				// An idle exit loses nothing: the session goes cold and the next message resumes it.
+				return stFailed, false, false
 			}
+			status := settle(<-promptDone, true)
 			p.emit(evSystem, map[string]interface{}{"subtype": "process_exited", "provider": providerDsh,
 				"runtimeSessionId": sessionID})
-			// No automatic prompt replay: tools may already have produced side effects.
-			return stFailed, true, false
+			// No automatic prompt replay: tools may already have produced side effects. A failed
+			// turn ends the session; a turn stopped first leaves it resumable.
+			return stFailed, status == stFailed, false
 		case done := <-promptDone:
-			finish(done)
+			settle(done, true)
 		case resp := <-inbox:
 			switch resp.Kind {
 			case "message":
+				// One prompt at a time; the rest wait in Orbit's queue, or here when a lease
+				// expiry redelivered them. A redelivered active, queued or settled turn is dropped.
 				if !seen[resp.TurnID] {
 					seen[resp.TurnID] = true
 					queued = append(queued, resp)
@@ -556,8 +799,11 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 			case "steer":
 				refuseUnsupportedSteer(resp.TurnID, resp.Content, providerDsh, p.job, p.emitFor, p.completeTurn)
 			case "interrupt":
-				interrupted = activeID != ""
 				p.emit(evInterrupt, map[string]interface{}{})
+				if activeID == "" {
+					continue
+				}
+				stopped = true
 				cancelCtx, cancel := context.WithTimeout(p.ctx, 2*time.Second)
 				err := app.write(cancelCtx, map[string]interface{}{"jsonrpc": "2.0", "method": "session/cancel",
 					"params": map[string]interface{}{"sessionId": sessionID}})
@@ -566,16 +812,52 @@ func runDshSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 					app.fail(err)
 				}
 			case "end":
+				stopped = activeID != ""
 				closeSession()
 				if activeID != "" {
-					interrupted = true
-					finish(<-promptDone)
+					settle(awaitPrompt(), true)
 				}
 				return stSucceeded, true, false
 			case "reload":
-				p.emit(evError, map[string]interface{}{"message": "DeepSeek Harness live configuration reload requires the session lifecycle adapter"})
+				before := dshLaunchIdentity(p.job)
+				applyRuntimeReload(p.job, resp.Content)
+				applyProviderEnv(p.job, resp)
+				if dshLaunchIdentity(p.job) != before {
+					// Key, endpoint and file policy are fixed in the process environment: end this
+					// process and Prepare again from the latest dispatch. Nothing is replayed.
+					if activeID != "" {
+						stopped = true
+						app.fail(fmt.Errorf("dsh launch configuration changed"))
+						settle(<-promptDone, true)
+					}
+					p.emit(evSystem, map[string]interface{}{"subtype": "reload", "reason": "launch_changed", "provider": providerDsh})
+					return stCancelled, false, true
+				}
+				if err := app.configure(p.ctx, sessionID, p.job.Agent); err != nil {
+					p.emit(evError, map[string]interface{}{"message": err.Error()})
+				}
+			case "diff":
+				files, patches := liveDiff(p.job.WT)
+				if err := p.t.diffResult(p.job.SessionID, DiffResultRequest{
+					ChangedFiles: files, ChangedDiff: patches, BaseSha: p.job.WT.baseSha(),
+					WorktreeDirty: worktreeIsDirty(p.job.WT), BranchMerged: branchMergedInto(p.job.WT),
+					BranchSha: effectiveBranchSha(p.job.WT), WorktreeBranch: currentBranch(p.job.WT),
+				}); err != nil {
+					logln("diff-result failed for", p.job.SessionID+":", err)
+				}
+			case "shell":
+				// No shell bridge in this composition; the accepted turn still reaches a terminal.
+				if seen[resp.TurnID] {
+					continue
+				}
+				seen[resp.TurnID] = true
+				if err := p.completeTurn(TurnCompleteRequest{TurnID: resp.TurnID, Status: stFailed, Subtype: subtypeUnknownKind,
+					Result: "DeepSeek Harness sessions do not run shell turns", RuntimeSessionID: sessionID,
+					BranchSha: effectiveBranchSha(p.job.WT)}); err != nil {
+					logln("dsh shell refusal turn-complete failed:", err)
+				}
 			default:
-				p.emit(evError, map[string]interface{}{"message": "unsupported DeepSeek Harness inbox kind " + resp.Kind})
+				reportUnknownInboxKind(resp, p.job, p.completeTurn)
 			}
 		}
 	}
