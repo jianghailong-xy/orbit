@@ -204,15 +204,15 @@ final class RunnerPageFormatTests: XCTestCase {
     // MARK: Engines
 
     func testEnginesAreListedInThePagesOrder() throws {
-        XCTAssertEqual(RunnerPageFormat.engines(try wikova()).map(\.engine), ["claude", "codex", "kimi", "opencode"])
+        XCTAssertEqual(RunnerPageFormat.engines(try wikova()).map(\.engine), ["claude", "codex", "kimi", "opencode", "antigravity"])
         let extra = try runner(Self.macMiniJSON, ["engines": [["engine": "gemini", "installed": true],
                                                              ["engine": "codex", "installed": false]]])
-        XCTAssertEqual(RunnerPageFormat.engines(extra).map(\.engine), ["codex", "gemini"],
+        XCTAssertEqual(RunnerPageFormat.engines(extra).map(\.engine), ["codex", "antigravity", "gemini"],
                        "an engine the page doesn't know yet comes after the ones it does")
         XCTAssertEqual(RunnerPageFormat.engineName("claude"), "Claude Code")
         XCTAssertEqual(RunnerPageFormat.engineName("kimi"), "Kimi Code")
         XCTAssertEqual(RunnerPageFormat.engineName("opencode"), "OpenCode")
-        XCTAssertEqual(RunnerPageFormat.engineName("antigravity"), "Antigravity CLI")
+        XCTAssertEqual(RunnerPageFormat.engineName("antigravity"), "Antigravity")
         XCTAssertEqual(RunnerPageFormat.engineName("gemini"), "gemini")
         let agy = try runner(Self.macMiniJSON, ["engines": [["engine": "gemini", "installed": true],
                                                            ["engine": "antigravity", "installed": true],
@@ -259,12 +259,11 @@ final class RunnerPageFormatTests: XCTestCase {
         let unsure = RunnerEngineHealth(engine: "kimi", installed: true, auth: "unknown")
         XCTAssertNil(RunnerPageFormat.engineStatus(unsure), "a CLI that wouldn't say is neither")
 
-        // agy runs on a Gemini API key from its environment: never a sign-in row, whatever its
-        // probe says — but a missing CLI is still news.
+        // Antigravity reports its own sign-in state; a missing CLI still takes precedence.
         let agy = RunnerEngineHealth(engine: "antigravity", installed: true, auth: "no")
-        XCTAssertNil(RunnerPageFormat.loginEngine("antigravity"))
-        XCTAssertNil(RunnerPageFormat.engineStatus(agy), "Antigravity has no sign-in to say anything about")
-        XCTAssertFalse(RunnerPageFormat.needsSignIn(agy))
+        XCTAssertEqual(RunnerPageFormat.loginEngine("antigravity"), .antigravity)
+        XCTAssertEqual(RunnerPageFormat.engineStatus(agy)?.text, "Signed out")
+        XCTAssertTrue(RunnerPageFormat.needsSignIn(agy))
         XCTAssertEqual(RunnerPageFormat.engineStatus(RunnerEngineHealth(engine: "antigravity", installed: false,
                                                                         auth: "unknown")),
                        RunnerPageFormat.Status(text: "Not installed", tone: .muted))

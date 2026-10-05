@@ -103,6 +103,15 @@ export class UpdatePreferencesDto {
   @IsOptional()
   @IsBoolean()
   enableOrchestration?: boolean;
+
+  /**
+   * Whether smart model selection is on for this account: the master switch over the whole
+   * feature, read wherever it acts (common/model-routing-switch.ts). Default OFF (absent = off),
+   * unlike the switches above, so it is only ever written to turn it on — or back off.
+   */
+  @IsOptional()
+  @IsBoolean()
+  modelRouting?: boolean;
 }
 
 /** Set a user's access role (admin area). */

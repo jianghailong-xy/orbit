@@ -12,12 +12,12 @@ import {
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { codexPoolUnavailableReason } from '../providers/codex-login';
-import { loginCanRun, loginPoolResumesAt, type LoginAccount } from '../providers/pool-login-select';
+import { loginCanRun, loginPoolResumesAt, loginRunsAgainAt, type LoginAccount } from '../providers/pool-login-select';
 import { choosePoolCredential } from '../providers/pool-credential-select';
 import { accountPoolRuntime, isBuiltinProvider, resolveProviderExec, type ModelProviderRow } from '../providers/custom-provider';
 import { ProviderPlanUsageService } from '../providers/plan-usage.service';
 import { isPoolCandidate, poolUnavailableReason } from '../providers/pool-admission';
-import { keyCanRun, poolKeysResumeAt } from '../providers/pool-key-select';
+import { keyCanRun, keyRunsAgainAt, poolKeysResumeAt } from '../providers/pool-key-select';
 import {
   mintPoolGatewayToken,
   mintPoolLoginToken,
@@ -65,6 +65,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { sessionSourceSnapshot } from '../projects/session-source';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
 import { currentWikiRollout, wikiClaimFields } from '../wiki/wiki-rollout';
+import { branchName } from '../projects/project-criterion-landing';
 import {
   wikiMaintenanceRunOf,
   wikiMaintenanceSessionSql,
@@ -539,6 +540,20 @@ export class QueueService {
         // The workspace's standing "always allow" grants ride along: they are what turns an
         // approval a human already answered into one this session never has to ask again.
         workspace: { include: { permissionRules: { orderBy: { createdAt: 'asc' } } } },
+        task: {
+          select: {
+            codeless: true,
+            project: {
+              select: {
+                codebases: {
+                  where: { slot: 'primary' },
+                  select: { integrationRef: true },
+                  take: 1,
+                },
+              },
+            },
+          },
+        },
         // `engines` carries the Codex and Claude accounts this runner has, which is where the chosen
         // account resolves to a CODEX_HOME or a CLAUDE_CONFIG_DIR.
         assignedRunner: {
@@ -638,6 +653,9 @@ export class QueueService {
       (await this.prisma.runEvent.aggregate({ where: { sessionId: session.id }, _max: { seq: true } }))._max.seq ??
       0;
     const workspace = session.workspace;
+    const taskIntegrationRef = session.task && !session.task.codeless
+      ? session.task.project?.codebases[0]?.integrationRef
+      : null;
     // The account this start builds the engine on — moved first off one the runner's own snapshot
     // already reports spent, on Automatic, rather than after the engine's first turn fails there.
     const accounts = await this.accountsForClaim(session);
@@ -761,10 +779,13 @@ export class QueueService {
       branch: session.branch ?? undefined,
       // Workspace opt-in: auto-`git init` a non-git workDir so it can be isolated.
       autoInitGit: workspace?.autoInitGit ?? undefined,
-      // The branch this session merges into — its own recorded target, else the workspace's
-      // remembered default (what the status bar's Merge button offers). Lets the runner
-      // judge "already merged" against that branch instead of main.
-      mergeTarget: session.mergeTarget ?? workspace?.defaultMergeTarget ?? undefined,
+      // The branch this session merges into — its own recorded target, a code task's project
+      // integration line, else the workspace's remembered default. Lets the runner judge
+      // "already merged" against that branch instead of main.
+      mergeTarget: session.mergeTarget
+        ?? (taskIntegrationRef
+          ? branchName(taskIntegrationRef)
+          : workspace?.defaultMergeTarget ?? undefined),
       sessionUuid,
       maxSeq,
       resume,
@@ -969,6 +990,11 @@ export class QueueService {
    * credential (migration 0382, providers/pool-gateway.service.ts), so the credential cannot run, and this
    * answers for it exactly as it does for a spent one. Decided from the accounts and the keys as the
    * database holds them, not from the words the engine ended with.
+   *
+   * `patienceMs` is the one thing the caller decides rather than the pool: when the credential the session
+   * is already on comes back inside it, that moment is answered instead of the pool's — see
+   * `worthWaitingFor` and `POOL_RATE_LIMIT_WAIT_MS`. Zero, the default, is the pool's own answer, which is
+   * what every caller but the rate-limited retry wants.
    */
   async sharedPoolRetryAt(
     db: Prisma.TransactionClient | PrismaService,
@@ -980,6 +1006,7 @@ export class QueueService {
       poolCodexAccountId: string | null;
     },
     now: Date,
+    patienceMs = 0,
   ): Promise<Date | null> {
     if (!session.provider || isBuiltinProvider(
       session.provider, session.providerBuiltin ?? (session.provider !== AgentProvider.DSH),
@@ -992,9 +1019,13 @@ export class QueueService {
     const account = pool.logins.find((login) => login.accountId === session.poolCodexAccountId);
     if (account) {
       if (loginCanRun(account, now)) return null;
+      const own = loginRunsAgainAt(account, now);
+      if (worthWaitingFor(own, now, patienceMs)) return own;
     } else {
       const current = keys.find((key) => key.id === session.poolKeyId);
       if (current && keyCanRun(current, session.ownerId, now)) return null;
+      const own = current ? keyRunsAgainAt(current, session.ownerId, now) : null;
+      if (worthWaitingFor(own, now, patienceMs)) return own;
     }
     return earliest(loginPoolResumesAt(pool.logins, now), poolKeysResumeAt(keys, session.ownerId, now));
   }
@@ -1016,11 +1047,15 @@ export class QueueService {
    * The pool's API keys (migration 0358) count beside its accounts: the owner's session runs on a key when
    * no account can (resolveLoginPool), so one on a key that can still run is null as one on an account is,
    * and another key that can run — or an account come back — is `now`.
+   *
+   * `patienceMs` is `sharedPoolRetryAt`'s: the moment the credential the session is already on comes back,
+   * when that is near enough to be worth more than the move.
    */
   async loginPoolRetryAt(
     db: Prisma.TransactionClient | PrismaService,
     session: { ownerId: string; provider: string | null; providerBuiltin?: boolean; poolCodexAccountId: string | null; poolKeyId?: string | null },
     now: Date,
+    patienceMs = 0,
   ): Promise<Date | null> {
     if (!session.provider || isBuiltinProvider(
       session.provider, session.providerBuiltin ?? (session.provider !== AgentProvider.DSH),
@@ -1031,9 +1066,13 @@ export class QueueService {
     if (session.poolCodexAccountId) {
       const current = pool.logins.find((login) => login.accountId === session.poolCodexAccountId);
       if (current && loginCanRun(current, now)) return null;
+      const own = current ? loginRunsAgainAt(current, now) : null;
+      if (worthWaitingFor(own, now, patienceMs)) return own;
     } else {
       const current = keys.find((key) => key.id === (session.poolKeyId ?? null));
       if (current && keyCanRun(current, session.ownerId, now)) return null;
+      const own = current ? keyRunsAgainAt(current, session.ownerId, now) : null;
+      if (worthWaitingFor(own, now, patienceMs)) return own;
     }
     return earliest(loginPoolResumesAt(pool.logins, now), poolKeysResumeAt(keys, session.ownerId, now));
   }
@@ -1480,4 +1519,17 @@ async function poolLogins(
 /** The earlier of two times, either of which may be none: when the first of two things comes back. */
 function earliest(a: Date | null, b: Date | null): Date | null {
   return a && b ? (a.getTime() <= b.getTime() ? a : b) : (a ?? b);
+}
+
+/**
+ * Whether a session is better off waiting on the credential it is already on than taking the pool's
+ * answer — the bit of the retry that is the caller's to ask for, not the pool's.
+ *
+ * `at` is when that credential can run again, and `patienceMs` 0 says no wait is worth anything: the callers
+ * that arm a session off a credential that cannot run at all (spent, signed out, refused) want the pool's
+ * answer, which is a move when another credential can take the session. A rate limit passes a patience
+ * instead, because what a move costs is the prompt cache (see `POOL_RATE_LIMIT_WAIT_MS`).
+ */
+function worthWaitingFor(at: Date | null, now: Date, patienceMs: number): at is Date {
+  return at !== null && at.getTime() > now.getTime() && at.getTime() - now.getTime() <= patienceMs;
 }

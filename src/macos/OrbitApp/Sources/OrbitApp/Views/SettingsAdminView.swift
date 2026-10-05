@@ -22,6 +22,8 @@ struct SettingsView: View {
     @State private var permMode: PermissionMode = .default
     /// The account's one orchestration switch. Absent on the server means on.
     @State private var orchestration = true
+    /// The account's switch for smart model selection. Absent on the server means off.
+    @State private var modelRouting = false
     @State private var loaded = false
 
     @State private var curPw = ""
@@ -78,6 +80,11 @@ struct SettingsView: View {
                 Picker("Default permission", selection: $permMode) {
                     ForEach(AgentDefaults.permissionModes, id: \.self) { Text(AgentDefaults.label($0)).tag($0) }
                 }
+                // Written the moment it flips, like the orchestration switch below; Save is the
+                // pickers' alone.
+                Toggle(SettingsCopy.smartModelSelection, isOn: $modelRouting)
+                Text(SettingsCopy.smartModelSelectionHint)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
                 Button("Save preferences") {
                     Task { await model.savePreferences(preferencesPatch) }
                 }
@@ -132,6 +139,7 @@ struct SettingsView: View {
         // switch that looks set but was never written is the one kind of lie this screen cannot
         // afford.
         .onChange(of: orchestration) { saveOrchestration() }
+        .onChange(of: modelRouting) { saveModelRouting() }
         .onAppear {
             guard !loaded else { return }
             loaded = true
@@ -142,6 +150,7 @@ struct SettingsView: View {
             permMode = PermissionMode(rawValue: p?.defaultPermissionMode ?? "")
                 ?? AgentDefaults.defaultPermissionMode
             orchestration = p?.enableOrchestration ?? true
+            modelRouting = p?.smartModelSelection ?? false
             name = model.user?.name ?? ""
         }
         .onChange(of: name) { accountMessage = nil }
@@ -170,6 +179,12 @@ struct SettingsView: View {
         Task {
             await model.savePreferences(UpdatePreferencesRequest(enableOrchestration: orchestration))
         }
+    }
+
+    /// The same for smart model selection: just this key, and never from the seed.
+    private func saveModelRouting() {
+        guard (model.user?.preferences?.smartModelSelection ?? false) != modelRouting else { return }
+        Task { await model.savePreferences(UpdatePreferencesRequest(modelRouting: modelRouting)) }
     }
 }
 #endif

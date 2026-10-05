@@ -86,6 +86,8 @@ const ITEM_CARD = {
     limit: 3,
   },
   actions: ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK'],
+  requiredAction: 'The coordinator must get this task past its failure — retry it, file a repair task, or close it.',
+  primaryAction: 'RETRY',
   landing: {
     receipts: 0,
     state: 'NOT_KNOWN',

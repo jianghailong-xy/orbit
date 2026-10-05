@@ -17,6 +17,7 @@ import {
   EditOutlined,
   EllipsisOutlined,
   EyeOutlined,
+  ExportOutlined,
   FolderOutlined,
   GlobalOutlined,
   InfoCircleOutlined,
@@ -184,7 +185,8 @@ import {
 } from '../lib/slashCommands';
 import { sessionPlanUsage } from '../lib/planUsage';
 import { accountNameOf, accountPlanUsage } from '../lib/engineAccounts';
-import { poolsAsProviders, providerPoolsQuery, sessionPoolAccount } from '../lib/providerPools';
+import { poolAccountHelp, poolsAsProviders, providerPoolsQuery, sessionPoolAccount } from '../lib/providerPools';
+import { isLoginPool, poolSessionLoginMember } from '../lib/codexLogin';
 import { sharedPoolAsProviderPool, sharedPoolsQuery } from '../lib/sharedPools';
 import {
   decideContextSeed,
@@ -1214,7 +1216,10 @@ export function SessionProjectListRow({
             style={{ width: Math.max(0, side === 'leading' ? swipe.offset : -swipe.offset) }}>
             <button type="button" className={`session-swipe-action ${action}`} aria-label={label} tabIndex={-1}
               onClick={(e) => { e.stopPropagation(); swipe.onAction(action); }}>
-              {action === 'move' ? <FolderOutlined /> : project.coordinator?.pinnedAt ? <PushpinFilled /> : <PushpinOutlined />}
+              <span className="session-swipe-glyph">
+                {action === 'move' ? <FolderOutlined /> : project.coordinator?.pinnedAt ? <PushpinFilled /> : <PushpinOutlined />}
+              </span>
+              <span className="session-swipe-title" aria-hidden="true">{label}</span>
             </button>
           </div>
         );
@@ -7193,9 +7198,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const shownPoolMemberId = shownPool?.shared
     ? detailForSelected?.poolKeyId
     : detailForSelected?.poolMemberProviderId;
+  // A login pool's session records the ChatGPT account it runs on (`poolCodexLogin`), and names that —
+  // not the pool's `next` member, which is the answer for a session starting now: with the pool's
+  // oldest account spent there is no next, while the session runs on that very account.
   const shownPoolAccount =
     shownPool && (!selectedId || detailForSelected)
-      ? sessionPoolAccount(shownPool, selectedId ? shownPoolMemberId : null)
+      ? isLoginPool(shownPool) && selectedId && detailForSelected?.poolCodexLogin
+        ? poolSessionLoginMember(shownPool, detailForSelected.poolCodexLogin)
+        : sessionPoolAccount(shownPool, selectedId ? shownPoolMemberId : null)
       : null;
   // Which of the runner's accounts a built-in Codex or Claude session spends — the draft's pick, or the
   // one picked for the session, else its workspace's — and Default for an id this runner does not
@@ -7333,7 +7343,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // as the words, or off the server's answer when the window held none.
   const retryFromSession = retryText ? retry.sessionMessage : serverRetry?.sessionMessage;
   const resendFromSession = useMutation({
-    mutationFn: (sessionId: string) => resendSessionRetryMessage(sessionId),
+    // With whatever the composer has picked — pressing Retry after choosing a provider means
+    // "re-send this there", and the server moves the session as it would on a send.
+    mutationFn: (sessionId: string) =>
+      resendSessionRetryMessage(sessionId, {
+        ...(pendingResumeProvider ? { provider: pendingResumeProvider } : {}),
+        ...(pendingResumeAccount ? { account: pendingResumeAccount } : {}),
+      }),
     onSuccess: (_answer, sessionId) => qc.invalidateQueries({ queryKey: ['session', sessionId] }),
     // Said, not returned: an error toast stays until it is dismissed, and React Query waits on what
     // `onError` hands back before the press stops being in flight. Returned, a press that failed — or
@@ -7911,6 +7927,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       runnerName: runner.displayName || runner.name,
       runnerId: runner.id,
       runnerVersion: runner.version,
+      googleLogin: runner.antigravity?.googleLogin,
       runtime: runtimeForProvider(shownProvider, configuredProviders),
       onConnectGemini: () => navigate(geminiProvider ? `/providers/${encodeId(geminiProvider.id)}` : '/providers/new/gemini'),
       onSwitchToGemini: geminiChoice && !geminiChoice.unavailable && !selectedTrashed && !selectedMissing
@@ -8085,8 +8102,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // a ✦ on a light blue ground, and its menu opens on why — the decision's own first sentence — and
   // on where to fix the model for every run. Only while the chip still shows the pick: a model
   // changed here is this run's own. A session opened by hand has no route, and a run on an Agent
-  // without smart selection has one that was not applied, so both look as they always have.
+  // without smart selection has one that was not applied, so both look as they always have — and
+  // with the account's switch off (the default), so does every run.
   const smartRoute = (() => {
+    if (me.data?.preferences?.modelRouting !== true) return null;
     const route = detailForSelected?.route;
     return selected?.taskId && route?.applied && route.level && route.model === shownModel ? route : null;
   })();
@@ -8681,10 +8700,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   pin: s.pinnedAt
                     ? { label: 'Unpin', icon: <PushpinFilled />, disabled: false }
                     : { label: 'Pin', icon: <PushpinOutlined />, disabled: false },
-                  share: { label: 'Share', icon: <GlobalOutlined />, disabled: false },
+                  share: { label: 'Share', icon: <ExportOutlined />, disabled: false },
                   move: { label: 'Move', icon: <FolderOutlined />, disabled: false },
                   delete: { label: 'Delete', icon: <DeleteOutlined />, disabled: false },
-                  purge: { label: 'Delete permanently', icon: <DeleteOutlined />, disabled: false },
+                  purge: { label: 'Delete Permanently', icon: <DeleteOutlined />, disabled: false },
                 };
                 const menuItem = (action: SwipeAction) => ({
                   key: action,
@@ -8759,7 +8778,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                                 runSwipeAction(action, s);
                               }}
                             >
-                              {swipeButtons[action].icon}
+                              <span className="session-swipe-glyph">{swipeButtons[action].icon}</span>
+                              <span className="session-swipe-title" aria-hidden="true">
+                                {swipeButtons[action].label}
+                              </span>
                             </button>
                           ))}
                         </div>
@@ -10473,15 +10495,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               </Dropdown>
             </span>
             {shownPool && shownPoolAccount && (
-              <Tooltip
-                title={
-                  shownPoolAccount.current
-                    ? `${shownPool.label} is running this session on ${shownPoolAccount.member.label}`
-                    : `A session on ${shownPool.label} starts on ${shownPoolAccount.member.label} — ${
-                        shownPool.shared ? 'the key it picks for you right now' : 'the account whose quota resets soonest'
-                      }`
-                }
-              >
+              <Tooltip title={poolAccountHelp(shownPool, shownPoolAccount)}>
                 <span className="composer-pill composer-account" data-pool-account={shownPoolAccount.member.id}>
                   <span className="composer-account-name">{shownPoolAccount.member.label}</span>
                 </span>
