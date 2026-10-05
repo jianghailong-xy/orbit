@@ -16,7 +16,7 @@ import {
   EXCEPTION_CHAT_PREFIX,
   MERGE_CHAT_PREFIX,
 } from '../lib/coordinatorChat';
-import { IT_IS_YOURS } from './ProjectPromotionCard';
+import { IT_IS_YOURS, SEE_THE_EXCEPTION } from './ProjectPromotionCard';
 
 /**
  * "Chat about this" where the owner meets it: the real WorkspaceView, on the project's coordinator
@@ -471,6 +471,35 @@ describe('Chat about this in the coordinator conversation', { timeout: 60_000 },
     expect(content).toContain('Where it stands: the owner’s now — no one acted on it for 2h');
     expect(content).toContain(`promotion ${PROMOTION_ID} · open item ${PROMOTION_ITEM}`);
     expect(doorsPressed(), 'the chat pressed a door').toEqual([]);
+  });
+});
+
+describe('the blocked merge card’s way to where its handling is shown', { timeout: 60_000 }, () => {
+  it('“See the exception”: the review gives way and the item’s own card is brought into view', async () => {
+    await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    const preview = (): Element | null => mounted().querySelector(`#promotion-${PROMOTION_ID}`);
+    const itemCard = (): Element | null => mounted().querySelector(`[data-open-item="${PROMOTION_ITEM}"]`);
+    await waitForUi(() => {
+      expect(preview(), 'the blocked merge card is not drawn').not.toBeNull();
+      expect(itemCard(), 'the item’s own card is not drawn').not.toBeNull();
+    });
+    await act(async () => preview()!.querySelector<HTMLButtonElement>('.review-card-preview')!.click());
+    const card = (): Element | null =>
+      document.querySelector('.review-card-dialog[data-open] .project-promotion[data-state="BLOCKED"]');
+    await waitForUi(() => {
+      expect(card(), 'the preview did not open the blocked candidate').not.toBeNull();
+    });
+    const link = [...card()!.querySelectorAll<HTMLAnchorElement>('a')]
+      .find((anchor) => anchor.textContent === SEE_THE_EXCEPTION)!;
+    expect(link.getAttribute('href')).toBe(`#open-item-${PROMOTION_ITEM}`);
+    scrolledTo = [];
+
+    await act(async () => link.click());
+    await waitForUi(() => {
+      expect(card(), 'the review stayed open over the card it points at').toBeNull();
+      expect(scrolledTo).toContain(itemCard());
+    });
+    expect(doorsPressed(), 'the link pressed a door').toEqual([]);
   });
 });
 

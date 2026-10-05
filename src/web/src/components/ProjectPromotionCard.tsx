@@ -11,6 +11,7 @@ import { CardActionButton, CardActions } from './CardAction';
 import { ReviewCard } from './ReviewCard';
 import { SHORTCUT_HINT, useApproveHotkey, useCardKeyClaim } from './CardHotkey';
 import { blockerHeadline, type ProjectBlocker } from './ProjectBlockers';
+import { revealOpenItemCard } from './DecisionRail';
 import { FROM_ORBIT, FROM_ORBIT_TITLE, itemStandingLine } from './ProjectProgressStatus';
 import { api } from '../api';
 import { checkDuration } from '../lib/checkDuration';
@@ -751,7 +752,17 @@ export function ProjectPromotionCard({
           {/* Where its handling is shown: in the conversation that handles it, the item's own card
               there; anywhere else, that conversation. */}
           {blocked && onChat && item ? (
-            <a className="project-promotion-link" href={`#open-item-${item.itemId}`}>
+            <a
+              className="project-promotion-link"
+              href={`#open-item-${item.itemId}`}
+              onClick={(event) => {
+                // The candidate is read in its review: that gives way, and the item's card is brought
+                // into view the way the pinned line brings it.
+                event.preventDefault();
+                setReviewOpen(false);
+                revealOpenItemCard(item.itemId);
+              }}
+            >
               {SEE_THE_EXCEPTION}
             </a>
           ) : blocked && !onChat && coordinator ? (

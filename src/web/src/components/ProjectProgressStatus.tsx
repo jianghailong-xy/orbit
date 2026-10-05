@@ -1128,6 +1128,10 @@ function itemFactLines(row: ProjectOpenItemRow): string[] {
     lines.push(`Into: ${facts.targetRef}${sha}${facts.nothingLanded ? ' · nothing landed' : ''}`);
   }
   if (facts.files.length > 0) lines.push(`Files: ${facts.files.join(' · ')}`);
+  if (facts.review) {
+    const declared = facts.review.declaredPaths;
+    lines.push(`Declared: ${declared.length > 0 ? declared.join(' · ') : 'no paths'}`);
+  }
   if (facts.check) {
     lines.push(`Check: ${facts.check.command} · ${checkVerdict(facts.check)} after `
       + `${checkDuration(facts.check.durationMs)}`);
@@ -1164,6 +1168,12 @@ function ownerClause(row: ProjectOpenItemRow, now: number): string {
   }
 }
 
+/** Who asked for the rerun an item's handling is, or was: the owner's own door (0380), or the
+ *  coordinator's. A settled row says it in `resolvedBy`, an open one in `handling.userId`. */
+function handledByOwner(row: ProjectOpenItemRow): boolean {
+  return row.outcome ? row.outcome.resolvedBy === 'USER' : row.handling?.userId != null;
+}
+
 /**
  * Where an item's handling stands (§4.7), as the line a chat about it carries: whose move it is,
  * since when, and what is in flight. The stage is the server's (`ProjectOpenItemRow.chat`).
@@ -1189,11 +1199,17 @@ export function itemStandingLine(row: ProjectOpenItemRow, now: number): string {
     }
     case 'WITH_OWNER':
       return ownerClause(row, now);
-    case 'HANDLED':
-      return `handled by the coordinator ${ago(row.outcome?.resolvedAt, now)}`
-        + `${outcomeLine(row) ? ` — ${outcomeLine(row)}` : ''}`;
+    case 'HANDLED': {
+      const owner = handledByOwner(row);
+      // The card's `outcomeLine` names the coordinator for a close with no job; the owner's own
+      // "Mark as handled" is one too, and the chat says whose it was.
+      const how = owner && row.outcome?.jobId == null ? 'closed by hand, with its reason' : outcomeLine(row);
+      return `handled by ${owner ? 'the owner' : 'the coordinator'} ${ago(row.outcome?.resolvedAt, now)}`
+        + `${how ? ` — ${how}` : ''}`;
+    }
     case 'SUPERSEDED':
-      return 'superseded — the coordinator’s rerun failed again, and a new item took its place';
+      return `superseded — ${handledByOwner(row) ? 'the owner’s' : 'the coordinator’s'} rerun failed `
+        + 'again, and a new item took its place';
   }
 }
 
@@ -1238,7 +1254,7 @@ export function openItemChatContext({
     ...(row.detailLine ? [row.detailLine] : []),
     ...itemFactLines(row),
     `Where it stands: ${itemStandingLine(row, now)}`,
-    ...(reason ? [`The coordinator’s reason: ${reason}`] : []),
+    ...(reason ? [`${handledByOwner(row) ? 'The owner’s' : 'The coordinator’s'} reason: ${reason}`] : []),
     '',
     `(${ids.join(' · ')})`,
   ].join('\n');

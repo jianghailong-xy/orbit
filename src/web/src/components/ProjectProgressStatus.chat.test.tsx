@@ -460,6 +460,66 @@ describe('what the coordinator is told', () => {
       .toMatch(/^About the pause:/);
   });
 
+  it('the owner’s own rerun or close (0380): says it was the owner’s, not the coordinator’s', () => {
+    const OWNER = 'user-owner';
+    const told = (row: ProjectOpenItemRow) =>
+      openItemChatContext({ projectTitle: null, projectId: PROJECT_ID, row, now: NOW });
+    const stands = (row: ProjectOpenItemRow) =>
+      told(row).split('\n').find((line) => line.startsWith('Where it stands: '));
+    const byOwner = { resolvedBy: 'USER' as const, resolvedByUserId: OWNER, resolvedBySessionId: null };
+
+    const rerunning: ProjectOpenItemRow = {
+      ...HANDLING_PROMOTION,
+      handling: { ...HANDLING_PROMOTION.handling!, sessionId: null, userId: OWNER },
+    };
+    expect(told(rerunning)).toContain('The owner’s reason: main’s merge-check baseline was repaired');
+    expect(told(rerunning)).not.toContain('The coordinator’s reason');
+
+    expect(stands({ ...HANDLED_LANDING, outcome: { ...HANDLED_LANDING.outcome!, ...byOwner } })).toBe(
+      'Where it stands: handled by the owner 12m ago — the rerun of the landing landed',
+    );
+    expect(stands({
+      ...HANDLED_LANDING,
+      outcome: { ...HANDLED_LANDING.outcome!, ...byOwner, jobId: null },
+    })).toBe('Where it stands: handled by the owner 12m ago — closed by hand, with its reason');
+    expect(stands({ ...SUPERSEDED_PROMOTION, outcome: { ...SUPERSEDED_PROMOTION.outcome!, ...byOwner } })).toBe(
+      'Where it stands: superseded — the owner’s rerun failed again, and a new item took its place',
+    );
+    // The coordinator's own endings read as they did.
+    expect(stands(SUPERSEDED_PROMOTION)).toBe(
+      'Where it stands: superseded — the coordinator’s rerun failed again, and a new item took its place',
+    );
+  });
+
+  it('a delivery under review: the stray files and the declaration they strayed from, as the card draws them', () => {
+    const review: ProjectOpenItemRow = {
+      ...LANDING,
+      kind: 'DELIVERY_REVIEW',
+      title: 'Changed files it didn’t declare: ③ 实现所有者收尾门与 Done 优先语义',
+      detailLine: '2 files outside its declaration · src/shared/src/project-done.ts · +1',
+      facts: facts({
+        task: { id: '34Y7Utvsd47A14DjMzIzD', title: '③ 实现所有者收尾门与 Done 优先语义' },
+        files: ['src/shared/src/project-done.ts', 'src/apiserver/src/projects/project-done-request.ts'],
+        check: null,
+        review: {
+          reason: 'OUTSIDE_DECLARED_SCOPE',
+          declaredPaths: ['src/apiserver/src/projects/project-owner-done.pg.spec.ts'],
+        },
+      }),
+    };
+    const context = openItemChatContext({ projectTitle: null, projectId: PROJECT_ID, row: review, now: NOW });
+    expect(context).toContain('Files: src/shared/src/project-done.ts · src/apiserver/src/projects/project-done-request.ts');
+    expect(context).toContain('Declared: src/apiserver/src/projects/project-owner-done.pg.spec.ts');
+    expect(openItemChatContext({
+      projectTitle: null,
+      projectId: PROJECT_ID,
+      row: { ...review, facts: { ...review.facts!, review: { reason: 'OUTSIDE_DECLARED_SCOPE', declaredPaths: [] } } },
+      now: NOW,
+    })).toContain('Declared: no paths');
+    expect(openItemChatContext({ projectTitle: null, projectId: PROJECT_ID, row: LANDING, now: NOW }))
+      .not.toContain('Declared:');
+  });
+
   it('says in the bar which item the message is about', () => {
     expect(openItemChatBanner(ESCALATED_TASK)).toBe(`${EXCEPTION_CHAT_PREFIX}${ESCALATED_TASK.title}`);
     expect(openItemChatBanner(PAUSE)).toBe(`${PAUSE_CHAT_PREFIX}${PAUSE.title}`);
