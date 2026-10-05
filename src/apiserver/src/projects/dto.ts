@@ -693,6 +693,11 @@ export class ResolveOpenItemDto {
   @IsString() @MinLength(1) @MaxLength(MAX_OPEN_ITEM_RESOLUTION_NOTE) note!: string;
 }
 
+/** The coordinator's explanation when it deliberately hands an open item to the account owner. */
+export class HandOverOpenItemDto {
+  @IsString() @MinLength(1) @MaxLength(MAX_OPEN_ITEM_RESOLUTION_NOTE) note!: string;
+}
+
 /**
  * The project's coordinator running one of its failed landings again (`integration_retry`, contract
  * §2.3 J-T1b). One field, required for the reason the hand-close's note is: a rerun is a decision

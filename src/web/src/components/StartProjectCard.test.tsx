@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProjectOpenItemRow, ProjectStartRequest, StartProjectRequestBody } from '@orbit/shared';
 import { api, ApiError } from '../api';
+import { MOBILE_QUERY } from '../lib/useMediaQuery';
 import { revealSettlementCard } from './DecisionRail';
 import type { StandardSetConfirmationStanding } from '../lib/acceptanceConfirmation';
 import {
@@ -182,12 +183,14 @@ const reports: Array<boolean | string | null> = [];
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
 let client: QueryClient | null = null;
+let narrow = false;
 
 function answer<T>(value: Answer<T>): Promise<T> {
   return value instanceof Error ? Promise.reject(value) : Promise.resolve(value);
 }
 
 beforeEach(() => {
+  narrow = false;
   server.standing = standingOf();
   server.document = documentOf();
   server.row = rowOf('item-1');
@@ -202,7 +205,7 @@ beforeEach(() => {
   armed.length = 0;
   reports.length = 0;
   vi.stubGlobal('matchMedia', (query: string) => ({
-    matches: false, media: query, onchange: null,
+    matches: narrow && query === MOBILE_QUERY, media: query, onchange: null,
     addListener: () => {}, removeListener: () => {},
     addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false,
   }));
@@ -290,7 +293,8 @@ const cardIn = (_node: ParentNode): HTMLElement | null => document.querySelector
 async function delivered(options: { onViewTasks?: () => void } = {}) {
   const { node, qc } = await mount(options);
   await until(() => cardIn(node) !== null && (cardIn(node)!.querySelector('.start-card-plan span') !== null), 'the card and its plan');
-  await act(async () => { node.querySelector<HTMLButtonElement>('.review-card-preview')!.click(); });
+  expect(node.querySelector('.review-card-preview')).toBeNull();
+  expect(node.contains(cardIn(node))).toBe(true);
   const card = (): HTMLElement => {
     const found = cardIn(node);
     if (!found) throw new Error('the card is not on the page');
@@ -707,6 +711,7 @@ describe('the press', () => {
 
 describe('the compact project preview', () => {
   it('holds no shortcut until opened and keeps edited settings across close and reopen', async () => {
+    narrow = true;
     const { node } = await mount();
     await until(() => node.querySelector('.review-card-preview') !== null, 'the preview');
     const preview = node.querySelector<HTMLElement>('#settlement-preview')!;

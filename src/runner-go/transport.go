@@ -1485,6 +1485,23 @@ func (t *Transport) resolveOpenItem(sessionID, id, itemID, note string) (json.Ra
 	return out, err
 }
 
+// handOverOpenItem deliberately gives one of the project's coordinator items to the account
+// owner, retaining the explanation on the item.  The session header is the authority: the server
+// checks it against the project's coordinator pointer and performs the assignment CAS.
+func (t *Transport) handOverOpenItem(sessionID, id, itemID, note string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	if err := validatePathSegmentID(itemID); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST",
+		"/runner/projects/"+url.PathEscape(id)+"/open-items/"+url.PathEscape(itemID)+"/hand-over",
+		map[string]interface{}{"note": note}, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
 // retryIntegration asks for the next generation of a DONE task's failed landing, as the acting
 // session (contract §2.3 J-T1b). The session header is the authority the server checks against the
 // project's coordinator pointer; the reason travels as the body and is kept on the new generation and

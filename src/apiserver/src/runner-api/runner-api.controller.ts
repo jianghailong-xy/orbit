@@ -4566,7 +4566,7 @@ export class RunnerApiController {
       // transaction as the DONE so the two commit together (contract §2.3 J-T1a). Outside the
       // comparison block for the same reason `recordTaskFailure` is.
       if (acceptanceTaskCompleted && current.taskId) {
-        await enqueueForDoneTask(tx, current.ownerId, current.taskId);
+        await enqueueForDoneTask(tx, current.ownerId, current.taskId, { sessionId });
       }
       // The task a successful message turn is about, read once for the two questions the completion
       // asks of it: whether an EXECUTABLE acceptance shell turn is owed now, and whether a run of an
@@ -5446,7 +5446,7 @@ export class RunnerApiController {
           return !acc || e.seq > acc.seq ? { seq: e.seq, text, turnId: e.turnId ?? null } : acc;
         }, null);
       // The same provider outage when a runtime reports it as the turn's error instead of as a reply
-      // — Codex's "Selected model is at capacity". Only an error the retry would re-send past counts:
+      // — Codex's model-at-capacity or exhausted-429 message. Only an error the retry would re-send past counts:
       // every other error line is the runtime narrating its own reconnects or a failure a re-send
       // reproduces, and neither is an answer, which is what a reply here would clear the streak for.
       const lastRetryableError = durable

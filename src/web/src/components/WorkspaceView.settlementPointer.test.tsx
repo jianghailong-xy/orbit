@@ -444,14 +444,14 @@ const questionLine = (): HTMLButtonElement | null =>
 /** What that line counts, as it says it to a screen reader, or null when no such line is drawn. */
 const counted = (): string | null =>
   questionLine()?.getAttribute('aria-label')?.split(': ')[0] ?? null;
-// The rail reaches the visible preview; the form lives in a separate dialog portal.
+// The rail reaches the full form on wide screens.
 const settlementCards = (): HTMLElement[] => [...mounted().querySelectorAll<HTMLElement>('#settlement-preview')];
 async function openSettlement(): Promise<HTMLElement> {
-  await act(async () => { settlementCards()[0]!.querySelector<HTMLButtonElement>('.review-card-preview')!.click(); });
-  const dialog = document.querySelector<HTMLElement>('.review-card-dialog[data-open]')!;
-  expect(dialog, 'the preview opened no review dialog').not.toBeNull();
-  expect(mounted().contains(dialog), 'the form did not use the dialog portal').toBe(false);
-  return dialog;
+  const card = settlementCards()[0]!;
+  expect(card.querySelector('.review-card-preview')).toBeNull();
+  expect(card.querySelector('.settlement-card')).not.toBeNull();
+  expect(document.querySelector('.review-card-dialog')).toBeNull();
+  return card;
 }
 
 /** Presses the line, and returns every element that press scrolled to. */
@@ -497,7 +497,7 @@ describe('the settlement question on the pinned line', { timeout: 60_000 }, () =
     await coordinatorWithTheCard();
     server.standing = standingOf('CONFIRMED');
     await reread(acceptanceConfirmationKey(PROJECT_PUBLIC), () => confirmationReads);
-    // Reopen the preview after an external answer: the kept form must show its stale state.
+    // An external answer updates the full form in place.
     const dialog = await openSettlement();
     await waitForUi(() => {
       expect(dialog.querySelector('.settlement-card-stale')?.textContent ?? '').toContain('Already confirmed');
@@ -603,8 +603,8 @@ describe('the settlement question on the pinned line', { timeout: 60_000 }, () =
     expect(stray.map((button) => button.outerHTML), 'the strip grew a control that goes nowhere').toEqual([]);
     expect(strip()!.textContent).not.toContain(ACCEPTANCE_CONFIRM_LABEL);
     expect(strip()!.textContent).not.toContain(OWNER_SEND_BACK_ACTION);
-    // The preview offers only review; the answer lives in the opened form.
-    expect(settlementCards()[0]!.textContent).not.toContain(ACCEPTANCE_CONFIRM_LABEL);
+    // The answer is immediately available on the full card.
+    expect(settlementCards()[0]!.textContent).toContain(ACCEPTANCE_CONFIRM_LABEL);
     const dialog = await openSettlement();
     expect([...dialog.querySelectorAll<HTMLButtonElement>('.settlement-card-actions button')].map(labelOf))
       .toContain(ACCEPTANCE_CONFIRM_LABEL);

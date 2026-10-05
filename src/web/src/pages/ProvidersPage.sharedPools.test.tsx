@@ -293,7 +293,7 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
     // Where another pool is made.
     expect(button('New pool', container.querySelector('.pool-sec-head')!)).not.toBeNull();
     expect(container.querySelector('.pool-sec .re-sec-sub')?.textContent).toBe(
-      'Several keys under one name — each session starts on one with room, and moves on when it runs out.',
+      'Several accounts under one name.',
     );
   });
 

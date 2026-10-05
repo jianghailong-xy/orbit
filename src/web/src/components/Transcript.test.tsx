@@ -139,6 +139,23 @@ describe('transient provider error card', () => {
     expect(html).not.toContain('Provider unavailable');
   });
 
+  it("turns Codex's exhausted 429 into a retry card with the request id intact", () => {
+    const message = 'exceeded retry limit, last status: 429 Too Many Requests, request id: 95e00d6c-68cc-4d64-b4da-01a6252260c2';
+    const html = renderToStaticMarkup(
+      <AutoRetryCtx.Provider
+        value={{ provider: 'codex', retryAt: new Date(Date.now() + 30_000).toISOString(), attempts: 0 }}
+      >
+        <Transcript events={[errorEvent(1, message)]} />
+      </AutoRetryCtx.Provider>,
+    );
+
+    expect(html).toContain('Provider unavailable');
+    expect(html).toContain(message);
+    expect(html).toContain('Retrying');
+    expect(html).not.toContain('chat-error');
+    expect(html).not.toContain('Usage limit reached');
+  });
+
   it('counts down to the armed retry', () => {
     const html = render(OVERLOADED, {
       provider: 'claude',

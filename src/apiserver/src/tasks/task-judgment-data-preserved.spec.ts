@@ -1879,7 +1879,25 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // device_token only. No existing token, user FK, task, project, acceptance row, fence,
       // function or trigger is changed, and there is no DML or preserved object in its scope.
       // Renumbered before landing because the delivery-review migration already occupies 0375.
-      '0376_android_push_installation'],
+      '0376_android_push_installation',
+      // Open-item hand-over history (0378): three nullable columns and two checks on
+      // project_open_item only. No existing rows are rewritten, and the session id deliberately
+      // has no foreign key so purging a conversation cannot erase the owner's explanation.
+      '0378_open_item_hand_over',
+      // A task's concrete fix for an exception item (0379): one nullable task FK to
+      // project_open_item, SET NULL on item deletion and an index for the read/escalation paths.
+      // No existing row is backfilled, and no preserved completion/fence object is touched.
+      '0379_open_item_fix_link',
+      // Owner integration retry attribution (0380): one nullable requester column on
+      // project_integration_job and one nullable owner-attribution column on project_open_item;
+      // the two existing all-or-none CHECKs are replaced with XOR checks. Existing coordinator
+      // retries satisfy the widened constraints, and no task, project, acceptance, DONE fence,
+      // trigger or function is rewritten; nothing is backfilled.
+      '0380_owner_integration_retry',
+      // Reopen landing intent (0381): one task-keyed marker row records the explicit task_reopen
+      // door until the next DONE queues its LAND_TASK generation. It is consumed transactionally;
+      // no existing task, project, acceptance, DONE fence, trigger or function is rewritten.
+      '0381_task_reopen_landing_intent'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -423,6 +423,15 @@ export async function readTaskIntegrationViews(
            AND f."serial_key" = newest_job."serial_key" AND f."phase" = 'MAIN_SYNC'
            AND i."kind" = 'INTEGRATION_CONFLICT' AND i."state" = 'OPEN'
            AND f."task_id" IS DISTINCT FROM newest_job."task_id"
+           -- H1 hands an older conflict to the task's new generation. While that generation is
+           -- queued/running, the old card is being worked and must not hold unrelated landings;
+           -- if it stops again, H3 opens a fresh item and this exemption disappears with it.
+           AND NOT EXISTS (
+             SELECT 1
+               FROM "project_integration_job" handling
+              WHERE handling."id" = i."handling_job_id"
+                AND handling."state" IN ('QUEUED', 'RUNNING')
+           )
          ORDER BY i."created_at", i."id" LIMIT 1
       ) sync_block ON true
       -- J1: one RUNNING job per repository and target ref.

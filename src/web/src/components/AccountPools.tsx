@@ -691,8 +691,7 @@ export function AccountPools({
       <div className="re-sec-head pool-sec-head">
         <h3>Account pools</h3>
         <span className="re-sec-sub">
-          Several keys under one name — each session starts on one with room, and moves on when it
-          runs out.
+          Several accounts under one name.
         </span>
         <Button size="small" className="pool-new" onClick={() => setCreating(true)}>
           New pool
