@@ -10269,7 +10269,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 // before the key reaches the window, where a waiting card answers Enter on an
                 // empty field (CardHotkey) — so the same press also started a project. An Enter on
                 // an empty box still goes on to the card.
-                if (text.trim() || readyImages.length > 0) e.stopPropagation();
+                //
+                // While a reply is armed the keys are this composer's, empty or not: the box is
+                // where that sentence is typed, and what the press would otherwise reach is either
+                // another card's door — on the chord, a READY candidate merges main
+                // (`ProjectPromotionCard`) — or the arming card's own, pressed from a box the
+                // reader is still composing in (the settlement card's Start the project, the
+                // confirmation card's Confirm done).
+                if (text.trim() || readyImages.length > 0 || replyTo) e.stopPropagation();
                 onSend();
               }
             }}

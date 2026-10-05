@@ -16,7 +16,11 @@ import {
   EXCEPTION_CHAT_PREFIX,
   MERGE_CHAT_PREFIX,
 } from '../lib/coordinatorChat';
+import type { StandardSetConfirmationStanding } from '../lib/acceptanceConfirmation';
+import { ACCEPTANCE_PLAN_CHANGE_PREFIX } from './AcceptanceConfirmationCard';
+import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 import { IT_IS_YOURS, SEE_THE_EXCEPTION } from './ProjectPromotionCard';
+import { ENTER_HINT, SHORTCUT_HINT } from './CardHotkey';
 import { MOBILE_QUERY } from '../lib/useMediaQuery';
 
 /**
@@ -62,6 +66,21 @@ const PROMOTION_ITEM = encodeId('0195c0de-0000-7000-8000-000000000066');
 const PROMOTION_ID = encodeId('0195c0de-0000-7000-8000-000000000067');
 const TASK_ID = encodeId('0195c0de-0000-7000-8000-000000000068');
 const PROJECT_TITLE = 'the merge seal';
+const SEAL = `4fc57753a6ec${'0'.repeat(52)}`;
+const ACCEPTANCE_CRITERIA = [
+  { id: 'c1', ordinal: 1, text: 'condition 1 holds', satisfied: false },
+];
+/** A started project nobody ever confirmed: the acceptance card is asking, and holds the bare
+ *  Enter (`AcceptanceConfirmationCard.tsx`). Drawn only for the case that is about that card. */
+const ACCEPTANCE_STANDING: StandardSetConfirmationStanding = {
+  state: 'UNCONFIRMED',
+  confirmed: false,
+  currentVersion: {
+    digest: SEAL,
+    material: [{ definitionId: 'c1', revision: 1, contentHash: 'h1' }],
+  },
+  confirmation: null,
+};
 
 const RUNNER = {
   id: RUNNER_ID,
@@ -176,6 +195,10 @@ class FakeEventSource {
 const requested: string[] = [];
 let openItems: { needsYou: ProjectOpenItemRow[]; withCoordinator: ProjectOpenItemRow[]; settled: ProjectOpenItemRow[] };
 let promotion: ProjectPromotionView | null = BLOCKED;
+/** The standing the confirmation door reports, when a case puts that card on screen — the one
+ *  holding the bare Enter that a focused link must not answer. Null leaves it off, as a project
+ *  nobody must confirm reads. */
+let acceptanceStanding: StandardSetConfirmationStanding | null = null;
 /** Every element `scrollIntoView` was called on, in order — jsdom has no `scrollIntoView` of its own. */
 let scrolledTo: Element[] = [];
 /** Whether the screen is narrow (`useIsMobile`): there a decision card is a compact preview. */
@@ -209,6 +232,7 @@ beforeEach(() => {
   search = '';
   openItems = { needsYou: [TASK_ROW, PROMOTION_ROW], withCoordinator: [], settled: [] };
   promotion = BLOCKED;
+  acceptanceStanding = null;
   scrolledTo = [];
   narrow = false;
   focusManager.setFocused(false);
@@ -241,13 +265,13 @@ beforeEach(() => {
         coordinatorSessionId: COORDINATOR_PUBLIC,
         startedAt: '2026-09-10T00:00:00.000Z',
         _count: { tasks: 1 },
-        acceptanceCriteriaItems: [],
+        acceptanceCriteriaItems: acceptanceStanding ? ACCEPTANCE_CRITERIA : [],
       });
     }
     if (path === `/projects/${PROJECT_PUBLIC}/open-items`) return reply(openItems);
     if (path === `/projects/${PROJECT_PUBLIC}/promotions/current`) return reply(promotion);
     if (path === `/projects/${PROJECT_PUBLIC}/promotions/merged`) return reply([]);
-    if (path === `/projects/${PROJECT_PUBLIC}/acceptance/confirmation`) return reply(null);
+    if (path === `/projects/${PROJECT_PUBLIC}/acceptance/confirmation`) return reply(acceptanceStanding);
     if (path === `/projects/${PROJECT_PUBLIC}/acceptance/criteria-decisions/pending`) {
       return reply({ readAt: '2026-09-11T03:10:00.000Z', projectId: PROJECT_PUBLIC, count: 0, oldestAgeSeconds: null, decidableCount: 0, pending: [] });
     }
@@ -458,6 +482,12 @@ describe('Chat about this in the coordinator conversation', { timeout: 60_000 },
     expect(
       [...mounted().querySelectorAll('textarea')].map((box) => box.getAttribute('placeholder')),
     ).toContain(COORDINATOR_CHAT_PLACEHOLDER);
+    // The press puts the keyboard where the sentence is typed — asserted here and not after
+    // `typeAndSend`, which focuses the box itself and would hide a focus the press had lost.
+    await waitForUi(() => {
+      expect(document.activeElement, 'the press left the keyboard outside the composer')
+        .toBe(mounted().querySelector('.composer-box textarea'));
+    });
     expect(requested.slice(before), 'arming the composer asked the server for something').toEqual([]);
 
     await typeAndSend('what would it take to land this today?');
@@ -489,6 +519,12 @@ describe('Chat about this in the coordinator conversation', { timeout: 60_000 },
       // this does; a wide transcript draws the card whole, and it stays.
       if (narrow) expect(card(), 'the review stayed open over the armed composer').toBeNull();
       else expect(card(), 'the wide card went away').not.toBeNull();
+    });
+    // Wherever the press was made and whichever screen drew it, the keyboard it leaves behind is
+    // the composer's — the wide card keeps its place beside it, the narrow review gives way.
+    await waitForUi(() => {
+      expect(document.activeElement, 'the press left the keyboard outside the composer')
+        .toBe(mounted().querySelector('.composer-box textarea'));
     });
     await typeAndSend('is the red the baseline or the work?');
     const content = String(sendTurnMock.mock.calls[0]![1]);
@@ -674,5 +710,134 @@ describe('arriving from a Chat about this pressed elsewhere', { timeout: 60_000 
       expect(document.body.textContent).toContain(CHAT_SUBJECT_GONE);
     });
     expect(armedBar()).toBeNull();
+  });
+});
+
+/**
+ * PRESSES THAT MUST NOT CARRY A CARD'S KEYS. Every one of them is wide-screen: there the decision
+ * cards share the keyboard by default (a38fb021e), so a press made in the composer or on a link
+ * inside a card has a card waiting to read it. None of these is that card's answer.
+ */
+describe('keys an armed composer and a card’s own link must not hand to a card', { timeout: 60_000 }, () => {
+  it('an empty armed chat on ⌘/Ctrl + Enter does not merge the candidate the strip is asking about', async () => {
+    // The merge is asking — a READY candidate in the strip, holding the chord (`CardHotkey.ts`) —
+    // and an exception card beside it arms the chat. What is typed goes to the coordinator; nothing
+    // typed is not a press on the merge, chord or not.
+    promotion = {
+      ...BLOCKED,
+      state: 'READY',
+      checks: BLOCKED.checks.map((check) => ({ ...check, exitCode: 0, outputTail: '' })),
+      askedAt: '2026-09-11T03:05:00.000Z',
+      decidedAt: null,
+    };
+    openItems = {
+      needsYou: [TASK_ROW, {
+        ...PROMOTION_ROW,
+        kind: 'PROMOTION_APPROVAL',
+        title: 'Merge 2 tasks into main?',
+        detailLine: '',
+        assigneeReason: 'DEFAULT',
+        escalatedAt: null,
+        actions: ['REVIEW'],
+      }],
+      withCoordinator: [],
+      settled: [],
+    };
+    await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    const card = (): Element | null => mounted().querySelector(`[data-open-item="${TASK_ITEM}"]`);
+    await waitForUi(() => {
+      expect(card(), 'the escalated card is not drawn').not.toBeNull();
+    });
+    // Non-vacuous: the merge is the card holding the keys, so a press that reached them would merge.
+    await waitForUi(() => {
+      expect(
+        mounted()
+          .querySelector(`#promotion-${PROMOTION_ID} .project-promotion[data-state="READY"] .approval-kbd`)
+          ?.textContent,
+        'the candidate is not the card holding the keys',
+      ).toBe(SHORTCUT_HINT);
+    });
+
+    await act(async () => chatPressOn(card()!).click());
+    await waitForUi(() => {
+      expect(armedBar()).toBe(`${EXCEPTION_CHAT_PREFIX}${TASK_ROW.title}`);
+    });
+    const box = mounted().querySelector<HTMLTextAreaElement>('.composer-box textarea')!;
+    expect(box.value, 'the composer was not empty').toBe('');
+    const before = requested.length;
+
+    for (const chord of [{ metaKey: true }, { ctrlKey: true }] as const) {
+      await act(async () => {
+        box.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...chord }),
+        );
+      });
+    }
+    expect(sendTurnMock, 'an empty chat sent a message').not.toHaveBeenCalled();
+    expect(requested.slice(before), 'an empty armed chat pressed a door').toEqual([]);
+    expect(armedBar(), 'the chord sent the armed chat away').toBe(
+      `${EXCEPTION_CHAT_PREFIX}${TASK_ROW.title}`,
+    );
+  });
+
+  it('Enter on an empty composer armed by the settlement card’s “Chat about this” does not start the project', async () => {
+    // The same rule at a second arming card, whose own confirm holds the bare Enter: this is the
+    // 2026-10-03 incident (`WorkspaceView.acceptanceConfirmationCard.test.tsx`) reached without
+    // typing anything at all.
+    acceptanceStanding = ACCEPTANCE_STANDING;
+    await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    const confirmation = (): HTMLElement | null =>
+      mounted().querySelector<HTMLElement>('#settlement-preview .settlement-card');
+    await waitForUi(() => {
+      expect(
+        confirmation()?.querySelector('.settlement-card-actions .approval-kbd')?.textContent,
+        'the confirmation card is not the card holding the bare key',
+      ).toBe(ENTER_HINT);
+    });
+    const chat = [...confirmation()!.querySelectorAll<HTMLButtonElement>('.settlement-card-actions button')]
+      .find((button) => button.textContent?.trim() === OWNER_SEND_BACK_ACTION)!;
+    await act(async () => chat.click());
+    await waitForUi(() => {
+      expect(armedBar()).toBe(`${ACCEPTANCE_PLAN_CHANGE_PREFIX}${PROJECT_TITLE}`);
+    });
+    const box = mounted().querySelector<HTMLTextAreaElement>('.composer-box textarea')!;
+    expect(box.value, 'the composer was not empty').toBe('');
+    const before = requested.length;
+
+    await act(async () => {
+      box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    });
+    expect(requested.slice(before), 'an empty armed chat started the project').toEqual([]);
+    expect(armedBar(), 'the press sent the armed chat away').toBe(
+      `${ACCEPTANCE_PLAN_CHANGE_PREFIX}${PROJECT_TITLE}`,
+    );
+  });
+
+  it('Enter on the blocked card’s “See the exception” link does not answer the confirmation card', async () => {
+    // The card holding the bare Enter is the acceptance confirmation — the one a focused link used
+    // to answer in its place while the link's own Enter was prevented.
+    acceptanceStanding = ACCEPTANCE_STANDING;
+    await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    const card = await blockedCard();
+    const confirmation = (): HTMLElement | null =>
+      mounted().querySelector<HTMLElement>('#settlement-preview .settlement-card');
+    await waitForUi(() => {
+      expect(
+        confirmation()?.querySelector('.settlement-card-actions .approval-kbd')?.textContent,
+        'the confirmation card is not the card holding the bare key',
+      ).toBe(ENTER_HINT);
+    });
+
+    const link = [...card()!.querySelectorAll<HTMLAnchorElement>('a')]
+      .find((anchor) => anchor.textContent === SEE_THE_EXCEPTION)!;
+    link.focus();
+    expect(document.activeElement, 'the link could not take the keyboard').toBe(link);
+    const before = requested.length;
+
+    await act(async () => {
+      link.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    });
+    expect(requested.slice(before), 'the link answered another card').toEqual([]);
+    expect(armedBar(), 'the link armed the chat').toBeNull();
   });
 });
