@@ -66,6 +66,7 @@ import {
   DeviceStartResponse,
   apiErrorRetryAt,
   apiErrorRetryBudgetLeft,
+  POOL_RATE_LIMIT_WAIT_MS,
   isAsyncAgentLaunchAck,
   isRateLimitApiErrorText,
   isRetryableApiErrorText,
@@ -6954,8 +6955,8 @@ export class RunnerApiController {
       // per re-send whatever armed it.
       if (rateLimited && apiErrorRetryBudgetLeft(session.retryAttempts)) {
         const at =
-          (await this.queue.sharedPoolRetryAt(this.prisma, session, new Date())) ??
-          (await this.queue.loginPoolRetryAt(this.prisma, session, new Date()));
+          (await this.queue.sharedPoolRetryAt(this.prisma, session, new Date(), POOL_RATE_LIMIT_WAIT_MS)) ??
+          (await this.queue.loginPoolRetryAt(this.prisma, session, new Date(), POOL_RATE_LIMIT_WAIT_MS));
         if (at) return { retryAt: at };
       }
       return { retryAt: apiErrorRetryAt(session.retryAttempts, new Date()) };

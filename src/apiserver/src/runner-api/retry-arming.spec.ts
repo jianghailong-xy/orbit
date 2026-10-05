@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   API_ERROR_RETRY_BACKOFF_MS,
   MAX_API_ERROR_RETRIES,
+  POOL_RATE_LIMIT_WAIT_MS,
   parseQuotaResetAt,
   type PlanUsageSnapshot,
 } from '@orbit/shared';
@@ -125,6 +126,67 @@ function planFor(
     }
   ).retryPlanFor(tx, 'session-1', RUNNER_ID, text, delivered);
 }
+
+/**
+ * The claim service over a Codex pool of OWNER_ID's own holding these ChatGPT accounts — the shape
+ * `loginPoolRetryAt` reads. Nothing else of the pool's is asked after.
+ */
+function codexLoginPool(
+  accounts: Array<{ accountId: string; spentUntil?: Date | null; throttledUntil?: Date | null }>,
+): { db: unknown; queue: QueueService } {
+  const db = {
+    providerPool: {
+      findFirst: async () => ({ id: 'pool-1', label: 'Codex Pool', engine: 'codex', ownKeyFirst: true, members: [] }),
+    },
+    poolCodexLogin: {
+      findMany: async () =>
+        accounts.map((account) => ({
+          poolId: 'pool-1',
+          userId: OWNER_ID,
+          email: `${account.accountId}@chatgpt.invalid`,
+          state: 'ACTIVE',
+          usage: null,
+          ...account,
+        })),
+    },
+    poolApiKey: { findMany: async () => [] },
+    poolUsage: { findMany: async () => [] },
+  };
+  return {
+    db,
+    queue: new QueueService(db as never, {} as never, { usageStanding: () => null, snapshot: () => null } as never),
+  };
+}
+
+// The pool's ordinary answer is `now` whenever another credential can run — that is the move. A rate limit
+// is the one failure a session is not moved for while the wait is short, because what a move costs is the
+// prompt cache: measured, the credential it moves to knows only the shared instruction prefix, so the whole
+// thread is billed once uncached (docs/codex-shared-pool-design.md §2.3). Everything else — spent, signed
+// out, refused — takes the move, which is what the default of no patience is for.
+test('a rate limit waits on the credential it is on while that is soon, and moves when it is not', async () => {
+  const { db, queue } = codexLoginPool([
+    { accountId: 'throttled-1', throttledUntil: new Date(Date.now() + 60_000) },
+    { accountId: 'ready-2' },
+  ]);
+  const session = { ownerId: OWNER_ID, provider: POOL, poolCodexAccountId: 'throttled-1', poolKeyId: null };
+  const soon = (await queue.loginPoolRetryAt(db as never, session, new Date(), POOL_RATE_LIMIT_WAIT_MS))!;
+
+  assert.ok(soon.getTime() - Date.now() > 30_000, 'a minute of waiting keeps the cache; the move can wait');
+  assert.ok(soon.getTime() - Date.now() <= 60_000, 'and it waits exactly as long as the mark, not a step');
+
+  // Past the patience, the wait is worse than the cache it costs, and the pool's own answer stands: the
+  // account that can run takes the session now.
+  const far = codexLoginPool([
+    { accountId: 'throttled-1', throttledUntil: new Date(Date.now() + 10 * 60_000) },
+    { accountId: 'ready-2' },
+  ]);
+  const moved = await far.queue.loginPoolRetryAt(far.db as never, session, new Date(), POOL_RATE_LIMIT_WAIT_MS);
+  assert.ok(moved !== null && moved.getTime() - Date.now() < 5_000, 'past it, another account takes the session');
+
+  // And with no patience — every other caller — the same credential gets the pool's answer, not a wait.
+  const plain = await far.queue.loginPoolRetryAt(far.db as never, session, new Date());
+  assert.ok(plain !== null && plain.getTime() - Date.now() < 5_000);
+});
 
 test('arms the first backoff step when the provider is overloaded', async () => {
   const before = Date.now();
