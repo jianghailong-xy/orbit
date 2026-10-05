@@ -1784,6 +1784,7 @@ struct AgentFormContent: View {
     let agents: AgentsModel
     let agent: Agent
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppModel.self) private var app
 
     @State private var name = ""
     @State private var effort: Effort = .default
@@ -1844,15 +1845,19 @@ struct AgentFormContent: View {
             }
 
             // Off by default, and only the owner's to turn on: it decides what task runs cost, so the
-            // agent tools cannot set it (docs/model-routing-design.md §7.2).
-            Section("Task runs") {
-                Toggle(isOn: $modelRouting) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(TaskDetailCopy.smartSelectionSwitch)
-                        Text(TaskDetailCopy.smartSelectionSwitchDetail)
-                            .font(.orbitLabel)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
+            // agent tools cannot set it (docs/model-routing-design.md §7.2). With the account's switch
+            // off (the default) the Agent has no switch of its own; its stored value is left alone,
+            // since Done sends it only when it moved.
+            if app.user?.preferences?.smartModelSelection ?? false {
+                Section("Task runs") {
+                    Toggle(isOn: $modelRouting) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(TaskDetailCopy.smartSelectionSwitch)
+                            Text(TaskDetailCopy.smartSelectionSwitchDetail)
+                                .font(.orbitLabel)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                 }
             }

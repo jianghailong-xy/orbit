@@ -17,7 +17,7 @@ final class SettingsHomeTests: XCTestCase {
     func testTheGroupsReadInTheOrderTheyWerePicked() {
         XCTAssertEqual(SettingsHome.Group.allCases.map(SettingsHome.header),
                        ["Sessions", "Machines & models", "Preferences", "Account"])
-        XCTAssertEqual(SettingsHome.rows(.sessions, isAdmin: false), [.defaultPermission, .orchestration])
+        XCTAssertEqual(SettingsHome.rows(.sessions, isAdmin: false), [.defaultPermission, .orchestration, .modelRouting])
         XCTAssertEqual(SettingsHome.rows(.machines, isAdmin: false), [.runners, .providers])
         XCTAssertEqual(SettingsHome.rows(.preferences, isAdmin: false), [.notifications, .appearance])
         XCTAssertEqual(SettingsHome.rows(.account, isAdmin: false),
