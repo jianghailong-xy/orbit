@@ -1,4 +1,5 @@
 import type { PlanUsageSnapshot } from '@orbit/shared';
+import type { Prisma } from '@prisma/client';
 
 /**
  * The accounts a codex login pool holds: each one the owner's own ChatGPT/Codex subscription login, signed
@@ -194,6 +195,60 @@ export function codexLoginView(
     usageUnavailable: usage ? null : CODEX_USAGE_UNREAD,
     spentUntil: row.spentUntil && row.spentUntil.getTime() > now.getTime() ? row.spentUntil.toISOString() : null,
   };
+}
+
+/** The columns `codexLoginView` reads, as a Prisma select — a pool's accounts read beside the pool itself
+ *  (ProvidersService.loginsByPool) and a session's read beside the session. Only these are selected, and
+ *  no token is among them: the encrypted pair is never selected on any path that builds a response. */
+export const POOL_LOGIN_SELECT = {
+  poolId: true,
+  accountId: true,
+  // Who signed it in — the person whose sign-in again brings it back, and who may take it out with the
+  // pool's admins.
+  userId: true,
+  email: true,
+  plan: true,
+  state: true,
+  lastError: true,
+  expiresAt: true,
+  createdAt: true,
+  // What the pool gateway last read off the backend's answers, and the reset it named (migration 0324).
+  usage: true,
+  spentUntil: true,
+  pausedUntil: true,
+} satisfies Prisma.PoolCodexLoginSelect;
+
+type PoolLoginRow = Prisma.PoolCodexLoginGetPayload<{ select: typeof POOL_LOGIN_SELECT }>;
+
+/** The db delegates the session read needs, named structurally so a test double can stand in. */
+type PoolLoginReader = {
+  poolCodexLogin: {
+    findFirst(args: {
+      where: { accountId: string; person: { pool: { slug: string; ownerId: string; shared: boolean } } };
+      select: typeof POOL_LOGIN_SELECT;
+    }): Promise<PoolLoginRow | null>;
+  };
+};
+
+/**
+ * The ChatGPT account a session's detail names (its `pool_codex_account_id`), as the masked view every
+ * response reads one by — the pool's own row for it, reached through its person so the pool is the one
+ * the session is on, whatever pools hold the account (a login is a person of the pool's, migration
+ * 0371). Null when the session is on none, or its provider names no pool of the owner's. No response
+ * names an account but by its email and `…AB12` (maskedAccount).
+ */
+export async function sessionPoolCodexLogin(
+  db: PoolLoginReader,
+  ownerId: string,
+  provider: string | null | undefined,
+  accountId: string | null | undefined,
+): Promise<CodexLoginView | null> {
+  if (!provider || !accountId) return null;
+  const row = await db.poolCodexLogin.findFirst({
+    where: { accountId, person: { pool: { slug: provider, ownerId, shared: false } } },
+    select: POOL_LOGIN_SELECT,
+  });
+  return codexLoginView(row, row?.usage as PlanUsageSnapshot | null);
 }
 
 /**
