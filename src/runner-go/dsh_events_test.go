@@ -307,8 +307,12 @@ func TestDshACPEventAttribution(t *testing.T) {
 	if err := mapper.begin("second"); err != nil {
 		t.Fatal(err)
 	}
-	if err := mapper.update(terminal); err == nil {
-		t.Fatal("tool result from a preceding turn leaked into the new turn")
+	before = len(events)
+	if err := mapper.update(terminal); err != nil || len(events) != before {
+		t.Fatalf("tool result from a preceding turn leaked into the new turn: err=%v", err)
+	}
+	if err := mapper.update(dshMappingParams("runtime", "tool_call_update", map[string]interface{}{"toolCallId": "never-opened", "status": "completed"})); err == nil {
+		t.Fatal("accepted a terminal update for a tool no turn opened")
 	}
 	if err := mapper.update(dshMappingParams("runtime", "usage_update", map[string]interface{}{"used": 0, "size": 321})); err != nil {
 		t.Fatal(err)
