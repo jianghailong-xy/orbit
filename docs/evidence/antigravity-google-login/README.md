@@ -2,7 +2,7 @@
 
 任务 `34Zogl1Sal7LyMPd2KcsT`（项目「Antigravity 支持 Google 账号登录」第 5 步），对应项目验收条目 3（`1c20Fd28SknYGalQD5smdG`）。验证在 HPC runner `workstation-gpu`（`34P34HcKKoFRn2j9KitgJ`）上完成，2026-10-05。
 
-**结论一句话**：Google 账号登录本身在真实机器上跑通了（登录、额度、两轮对话、`--conversation` 恢复、并发、每会话凭据副本、凭据移走/移回、泄露检查零命中全部成立），**但「用一个登录后才有的模型跑一轮」这一项到本文件第二版为止仍未通过**：控制面最初把 Google 模式特有的 Claude / GPT-OSS 模型静默换成默认的 `gemini-3.8-flash`（§6）；修复 `b5b99caa4` 之后不再替换了，但模型**根本送不到 runner**（agy argv 里没有 `--model`，详见 §9）。
+**结论一句话**：Google 账号登录在真实机器上端到端跑通——登录、额度、两轮对话、`--conversation` 恢复、并发、每会话凭据副本、凭据移走/移回、泄露检查零命中全部成立；「用一个登录后才有的模型跑一轮」在修复链走完后也通过了（§9.6：`claude-sonnet-5-5` 进入 agy 的 argv 与 agy 自己的日志）。中间那轮曲折（控制面把 Google 行静默降级成默认模型，到 `b5b99caa4` 后的三次重跑仍不生效）完整留在 §6 与 §9 里。唯一没拿到的证据是**截图**（需要 owner 的浏览器，见 §10）。
 
 脱敏规则：本文件、本次提交和所有截图里不出现 token、cookie、授权码或账号邮箱。下面每条命令的输出都先经过一个脱敏过滤器（邮箱、`4/0` / `ya29.` / `1//` 前缀的长串、JWT、长 blob 一律换成占位符，命中数只在计数里出现，行内容一律不打印）。凭据文件始终只做 stat（大小/权限/时间），从不读取内容。
 
@@ -308,6 +308,27 @@ return antigravityOffers(model, offered) ? model : fallback;   // fallback === '
 - `gemini-9.9-ultra` 的对照（R/T）是另一条线：它被回退成 `gemini-3.8-flash` **并写回了 session 行**。如果解析时用的是「前缀型、空 fallback」的判定，`gemini-9.9-ultra` 会被原样保留（argv 里会出现 `--model gemini-9.9-ultra`）；它没有出现，说明**建会话那一步就已经把它换掉了**（那时 `offered` 是有的，因为 `claude-sonnet-5-5` 被保留了下来）。这与「建会话时有目录、解析时拿不到」的假设一致。
 
 **给修复团队的落点**因此从「查构建 revision」缩小为「**为什么 `offers()` 在 claim 解析那一刻拿不到那一行**」：在 claim 里把 `args.modelCatalog?.['antigravity']` 与算出来的 `offered` 打一行日志即可一眼看出。另外请顺便注意：`fallback` 用 `''` 会把「判定失败」变成**静默降级到 agy 默认模型**——它与本次缺陷的用户观感一模一样（选了 Claude Sonnet 5.5，实际跑 Gemini），所以这一支值得单独断言。
+
+### 9.6 修复落地后重跑：**Google 模式模型真正到达 agy**（本项的通过与记录）
+
+协调会话按 main `6f96102c6` 整份重建并部署（含「claim-model 观测」），之后我重跑一场：[U](orbit-session:34acmC19gyfVO0s7bsJbG)，`claude-sonnet-5-5`，19:43:26 起跑。
+
+| 记录 | 值 |
+| --- | --- |
+| session 行 | `model = claude-sonnet-5-5`（未被替换、未被清空） |
+| **runner 上 agy 的实际 argv** | `… --print-timeout=0s` **`--model claude-sonnet-5-5 --effort high`** `--log-file=…` |
+| **agy 自己的日志**（`…/antigravity-cli/orbit-google.log`，只统计命中数） | `claude-sonnet-5-5` ×6、`claude-sonnet-5-5-high` ×8 |
+| 回答 | 「十七加十七等于三十四。」（无工具、单轮） |
+| runner 日志 | `antigravity: 01a10be0-36d2-759c-9921-87a7a3d07792: starting agy, auth source google` |
+
+也就是说：请求的 Google 模式模型既到达了 runner 的 argv，也在 agy 自己的日志里以运行时模型的身份出现——**「登录后才有的模型跑一轮」这一项至此通过**，而不再是「请求 Claude、实际跑 Gemini」。
+
+两点顺带的观察（都不影响本项判定）：
+
+1. U 的 `contextWindow` 是 `null`：runner 里 `antigravityContextWindows` 这张**静态窗口表**只有四个 `gemini-…` 行，Google 行没有条目，于是上下文占比没有分母。这是展示层的一个小缺口，与「模型是否到达」无关。
+2. 凭据文件仍是 0600，大小由 1678 字节变为 1441 字节（agy 正常刷新/轮换 token 的结果；只做 stat，从未读内容）。父目录仍 0700。
+
+**关于「claim-model 观测」**：协调会话要的 `catalogCount / catalogModels / offered / resolvedModel` 是打在控制面侧（apiserver 日志）的，本机读不到——HPC 到生产侧只有公开 HTTPS API 一个口子，runner 也不记录 claim payload。上面那张表用的是等效但本机可验的证据：runner 里 agy 的 argv 与 agy 自己的日志，两者都直接说明运行时模型是 `claude-sonnet-5-5` 而不是降级后的默认模型。
 
 ## 10. 截图
 
