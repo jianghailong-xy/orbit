@@ -13,6 +13,9 @@ type dshActiveTurn struct {
 	seen      map[string]bool
 	tools     map[string]bool // false until a terminal tool update arrives
 	toolOrder []string
+	// What each call asked for, as normalized onto its tool_use event. An approval request names
+	// only the toolCallId, so this is what the approval card shows.
+	toolCalls map[string]dshPermissionAsk
 	messages  map[string]bool
 }
 
@@ -50,7 +53,8 @@ func (m *dshEventMapper) begin(turnID string) error {
 	if m.settled[turnID] {
 		return fmt.Errorf("dsh turn %s has already settled", turnID)
 	}
-	m.active = &dshActiveTurn{id: turnID, seen: map[string]bool{}, tools: map[string]bool{}, messages: map[string]bool{}}
+	m.active = &dshActiveTurn{id: turnID, seen: map[string]bool{}, tools: map[string]bool{}, messages: map[string]bool{},
+		toolCalls: map[string]dshPermissionAsk{}}
 	return nil
 }
 
@@ -157,12 +161,25 @@ func (m *dshEventMapper) update(params map[string]interface{}) error {
 			if m.onTool != nil {
 				m.onTool(turnID, id, false)
 			}
-			m.emit(turnID, evToolUse, map[string]interface{}{
-				"id": id, "toolCallId": id, "name": update["title"],
-				"input": update["rawInput"], "kind": update["kind"], "status": update["status"],
-			})
+			call := dshPermissionAsk{TurnID: turnID, ToolCallID: id, Name: firstString(update, "title"), Input: update["rawInput"]}
+			a.toolCalls[id] = call
+			payload := map[string]interface{}{
+				"id": id, "toolCallId": id, "name": call.Name,
+				"input": call.Input, "kind": update["kind"], "status": update["status"],
+			}
+			// mcp__<server>__<tool>: dsh's model-facing name for an MCP tool, the same spelling Orbit's
+			// other runtimes use. The parts are kept so a server's own tool name is not reparsed.
+			if server, tool, ok := strings.Cut(strings.TrimPrefix(call.Name, "mcp__"), "__"); ok && strings.HasPrefix(call.Name, "mcp__") {
+				payload["mcpServer"], payload["mcpTool"] = server, tool
+			}
+			m.emit(turnID, evToolUse, payload)
 		} else if !known {
 			return fmt.Errorf("dsh tool update references unknown tool %q", id)
+		} else if raw, ok := update["rawInput"]; ok && !done {
+			// Arguments completed after the call opened: an approval must show the final ones.
+			call := a.toolCalls[id]
+			call.Input = raw
+			a.toolCalls[id] = call
 		}
 		status := firstString(update, "status")
 		if !done && (status == "completed" || status == "failed") {
@@ -177,6 +194,17 @@ func (m *dshEventMapper) update(params map[string]interface{}) error {
 		}
 	}
 	return nil
+}
+
+// toolCall returns an open call of the active turn, for the approval that names it.
+func (m *dshEventMapper) toolCall(id string) (dshPermissionAsk, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.active == nil || id == "" || m.active.tools[id] {
+		return dshPermissionAsk{}, false
+	}
+	call, ok := m.active.toolCalls[id]
+	return call, ok
 }
 
 func dshUsageCount(value interface{}) (int, bool) {

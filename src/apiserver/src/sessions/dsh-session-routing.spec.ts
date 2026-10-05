@@ -248,12 +248,12 @@ test('dsh compatibility: a disabled existing dsh provider is unavailable instead
   assert.deepEqual(history.updates, []);
 });
 
-test('dsh admission: unverified permission policies reject explicit account and code defaults before creation', async () => {
+test('dsh admission: unverified permission policies reject explicit and account-default modes before creation', async () => {
   const row = providerRow('deepseek-harness', 'dsh');
   for (const choice of [
-    { permissionMode: PermissionMode.DEFAULT, preferences: {} },
-    { permissionMode: undefined, preferences: { defaultPermissionMode: PermissionMode.AUTO } },
-    { permissionMode: undefined, preferences: {} },
+    { permissionMode: PermissionMode.PLAN, preferences: {} },
+    { permissionMode: PermissionMode.ACCEPT_EDITS, preferences: {} },
+    { permissionMode: undefined, preferences: { defaultPermissionMode: PermissionMode.BYPASS } },
   ]) {
     const fixture = createFixture([row], { preferences: choice.preferences });
     await assert.rejects(
@@ -262,10 +262,14 @@ test('dsh admission: unverified permission policies reject explicit account and 
     );
     assert.deepEqual(fixture.creates, []);
   }
+  // The code default, Auto, is a mode dsh enforces (its workspace-write sandbox) and is admitted.
+  const admitted = createFixture([row], { preferences: {} });
+  await admitted.service.create(ownerId, { ...opening, provider: 'deepseek-harness' });
+  assert.equal(admitted.creates.length, 1);
 });
 
 test('dsh admission: terminal Harness resume refuses an unverified permission policy without rewriting its id', async () => {
-  const fixture = historyFixture([], { provider: 'dsh', providerBuiltin: true });
+  const fixture = historyFixture([], { provider: 'dsh', providerBuiltin: true, permissionMode: PermissionMode.PLAN });
   await assert.rejects(
     () => fixture.service.resume(ownerId, sessionId, continuation),
     /dsh|DeepSeek Harness/,

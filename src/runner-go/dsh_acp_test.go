@@ -68,7 +68,7 @@ func dshProcessClient(t *testing.T, mode string, emit emitTurnFn) (*dshACPClient
 	t.Cleanup(cancel)
 	spec, record := dshMockLaunchSpec(t, mode)
 	mapper := newDshEventMapper(dshMockSessionID, emit)
-	client, err := startDshACP(ctx, spec, mapper, func(string, map[string]interface{}) {})
+	client, err := startDshACP(ctx, spec, mapper, nil, func(string, map[string]interface{}) {})
 	if err != nil {
 		t.Fatalf("start mock dsh: %v", err)
 	}
@@ -76,7 +76,7 @@ func dshProcessClient(t *testing.T, mode string, emit emitTurnFn) (*dshACPClient
 	if err := client.initialize(ctx); err != nil {
 		t.Fatalf("initialize: %v", err)
 	}
-	id, err := client.open(ctx, spec.Cwd)
+	id, err := client.open(ctx, spec.Cwd, nil)
 	if err != nil || id != dshMockSessionID {
 		t.Fatalf("session/new = %q, %v", id, err)
 	}
@@ -233,7 +233,7 @@ func TestDshACPStartupAndProtocolFailures(t *testing.T) {
 			} else {
 				spec.Version = "0.0.1"
 			}
-			client, err := startDshACP(context.Background(), spec, nil, func(string, map[string]interface{}) {})
+			client, err := startDshACP(context.Background(), spec, nil, nil, func(string, map[string]interface{}) {})
 			if client != nil {
 				client.dispose()
 			}
@@ -247,7 +247,7 @@ func TestDshACPStartupAndProtocolFailures(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			spec, _ := dshMockLaunchSpec(t, mode)
-			client, err := startDshACP(ctx, spec, nil, func(string, map[string]interface{}) {})
+			client, err := startDshACP(ctx, spec, nil, nil, func(string, map[string]interface{}) {})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -342,6 +342,7 @@ func TestDshACPHelperProcess(t *testing.T) {
 		write(map[string]interface{}{"jsonrpc": "2.0", "method": "session/update", "params": map[string]interface{}{"sessionId": dshMockSessionID, "update": body}})
 	}
 	model, effort, prompts := `["synthetic-provider","initial-model"]`, "high", 0
+	var heldPrompt interface{} // permission mode: the prompt waiting on the approval reply
 	options := func() []interface{} {
 		return []interface{}{
 			map[string]interface{}{"id": "model", "category": "model", "type": "select", "currentValue": model, "options": []interface{}{
@@ -362,6 +363,18 @@ func TestDshACPHelperProcess(t *testing.T) {
 		}
 		_ = recorder.Encode(request)
 		id, params := request["id"], mapValue(request["params"])
+		if request["method"] == nil && id == "perm-1" && heldPrompt != nil {
+			// The approval reply: settle the tool the way the real CLI does, then the prompt.
+			status := "failed"
+			if firstString(mapValue(mapValue(request["result"])["outcome"]), "optionId") == "allow-once" {
+				status = "completed"
+			}
+			update(map[string]interface{}{"sessionUpdate": "tool_call_update", "toolCallId": "perm-tool", "status": status, "content": []interface{}{}})
+			update(map[string]interface{}{"sessionUpdate": "agent_message_chunk", "messageId": "after-card", "content": map[string]interface{}{"type": "text", "text": "after-" + status}})
+			respond(heldPrompt, map[string]interface{}{"stopReason": "end_turn"})
+			heldPrompt = nil
+			continue
+		}
 		switch request["method"] {
 		case "initialize":
 			if mode == "malformed-stdout" {
@@ -392,6 +405,17 @@ func TestDshACPHelperProcess(t *testing.T) {
 			prompts++
 			if mode == "recover-error" && prompts == 1 {
 				write(map[string]interface{}{"jsonrpc": "2.0", "id": id, "error": map[string]interface{}{"code": -32603, "message": "synthetic 401 failure"}})
+				continue
+			}
+			if mode == "permission" {
+				update(map[string]interface{}{"sessionUpdate": "tool_call", "toolCallId": "perm-tool", "title": "write", "kind": "other", "status": "in_progress",
+					"rawInput": map[string]interface{}{"file_path": "approved.txt", "sandbox_permissions": "workspace-write"}})
+				write(map[string]interface{}{"jsonrpc": "2.0", "id": "perm-1", "method": "session/request_permission", "params": map[string]interface{}{
+					"sessionId": dshMockSessionID, "toolCall": map[string]interface{}{"toolCallId": "perm-tool"},
+					"options": []interface{}{map[string]interface{}{"optionId": "allow-once", "kind": "allow_once"}, map[string]interface{}{"optionId": "reject-once", "kind": "reject_once"}}}})
+				// Sent while the card is open: it must reach Orbit before any decision.
+				update(map[string]interface{}{"sessionUpdate": "agent_thought_chunk", "messageId": "while-card", "content": map[string]interface{}{"type": "text", "text": "while-card-open"}})
+				heldPrompt = id
 				continue
 			}
 			if mode == "barrier" {
@@ -427,4 +451,81 @@ func TestDshACPHelperProcess(t *testing.T) {
 	}
 	_ = record.Close()
 	os.Exit(0)
+}
+
+// TestDshACPPermissionRoundTrip: an approval request reaches the bridge with the call it names, the
+// reader keeps applying updates while the card is open, and the decision goes back on the wire.
+func TestDshACPPermissionRoundTrip(t *testing.T) {
+	for _, tc := range []struct{ decision, status, text string }{{dshAllowOnce, "completed", "after-completed"}, {dshRejectOnce, "failed", "after-failed"}} {
+		t.Run(tc.decision, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			spec, record := dshMockLaunchSpec(t, "permission")
+			var events dshProcessEvents
+			mapper := newDshEventMapper(dshMockSessionID, events.emit)
+			policy, _ := dshPermissionPolicyFor("default")
+			sawThought := make(chan struct{})
+			bridge := newDshPermissionBridge(func() dshPermissionPolicy { return policy }, mapper.toolCall,
+				func(ctx context.Context, ask dshPermissionAsk) string {
+					if ask.Name != "write" || mapValue(ask.Input)["file_path"] != "approved.txt" {
+						t.Errorf("card = %+v", ask)
+					}
+					select {
+					case <-sawThought:
+					case <-ctx.Done():
+						return ""
+					}
+					return tc.decision
+				}, events.emit)
+			client, err := startDshACP(ctx, spec, mapper, bridge, func(string, map[string]interface{}) {})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer client.dispose()
+			if err := client.initialize(ctx); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := client.open(ctx, spec.Cwd, nil); err != nil {
+				t.Fatal(err)
+			}
+			if err := mapper.begin("turn-1"); err != nil {
+				t.Fatal(err)
+			}
+			bridge.begin()
+			go func() {
+				for ctx.Err() == nil {
+					for _, event := range events.snapshot() {
+						if event.typ == evThinking && event.payload["text"] == "while-card-open" {
+							close(sawThought)
+							return
+						}
+					}
+					time.Sleep(5 * time.Millisecond)
+				}
+			}()
+			result, err := client.prompt(ctx, dshMockSessionID, "turn-1", "write")
+			if err != nil || result["stopReason"] != "end_turn" {
+				t.Fatalf("prompt = %+v, %v", result, err)
+			}
+			req, _ := mapper.settle("turn-1", result, nil)
+			var results map[string]interface{}
+			for _, event := range events.snapshot() {
+				if event.typ == evToolResult {
+					results = event.payload
+				}
+			}
+			if results["status"] != tc.status || req.Result != tc.text {
+				t.Fatalf("tool result %+v, turn %+v", results, req)
+			}
+			var reply map[string]interface{}
+			for _, request := range dshProcessRequests(t, record) {
+				if request["id"] == "perm-1" {
+					reply = request
+				}
+			}
+			if outcome := mapValue(mapValue(reply["result"])["outcome"]); outcome["outcome"] != "selected" || outcome["optionId"] != tc.decision {
+				t.Fatalf("wire reply = %+v", reply)
+			}
+		})
+	}
 }
