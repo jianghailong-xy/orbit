@@ -74,7 +74,7 @@ final class SessionFolderPageWiringTests: XCTestCase {
     /// behind its row rather than in the time sections below (§3.3).
     func testTheFolderRowsLeadTheListAndTakeTheirSessionsOutOfTheTimeSections() throws {
         let agents = code(try appSource("Views/AgentsView.swift"))
-        let listing = try slice(agents, from: "private var folderListing: SessionFolderListing {",
+        let listing = try slice(agents, from: "private func folderListing(_ projectListing: SessionProjectListing) -> SessionFolderListing {",
                                 to: "\n    }")
         XCTAssertTrue(listing.contains("SessionFolderGrouping.listing(shownSessions,"))
         XCTAssertTrue(listing.contains("folders: app.sessionFolders.filter { $0.workspaceId == agent.id }"),
@@ -85,7 +85,7 @@ final class SessionFolderPageWiringTests: XCTestCase {
         XCTAssertTrue(listing.contains("runnerOffline: agents.runnerIsOffline(agent.runnerId))"),
                       "an offline Runner silences a folder row's spinner, as the workspace row's")
 
-        let sections = try slice(agents, from: "private var timeSections: [SessionTimeSection] {",
+        let sections = try slice(agents, from: "private func timeSections(_ folderListing: SessionFolderListing) -> [SessionTimeSection] {",
                                  to: "\n    }")
         XCTAssertTrue(sections.contains("SessionTimeGrouping.sections(folderListing.sessions,"),
                       "the time sections are built from what the folders left")

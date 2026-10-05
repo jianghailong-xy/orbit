@@ -60,11 +60,12 @@ final class SessionProjectPageWiringTests: XCTestCase {
                      "projects: app.projects?.sidebarProjects ?? [], view: view,",
                      "byTag: tagFilter != nil || groupByTag, searching: isSearching,",
                      "runnerOffline: agents.runnerIsOffline(agent.runnerId)",
-                     "coordinators: agents.allSessions + app.sessions",
+                     "let coordinators = agents.allSessions + app.sessions",
+                     "coordinators: coordinators,",
                      "contentSessions: view == .open ? app.sessions : agents.allSessions"] {
             XCTAssertTrue(listing.contains(part), "the workspace grouping carries `\(part)`")
         }
-        let folders = try slice(agents, from: "private var folderListing: SessionFolderListing {", to: "\n    }")
+        let folders = try slice(agents, from: "private func folderListing(_ projectListing: SessionProjectListing) -> SessionFolderListing {", to: "\n    }")
         XCTAssertTrue(folders.contains("SessionFolderGrouping.listing(shownSessions,"))
         XCTAssertTrue(folders.contains("folders: projectListing.folders"))
         XCTAssertTrue(folders.contains("projectListing.entries.map(\\.timeGroupingSession)"))

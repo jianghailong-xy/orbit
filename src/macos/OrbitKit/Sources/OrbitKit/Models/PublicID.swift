@@ -15,6 +15,7 @@ import Foundation
 /// unchanged across the migration.
 public enum PublicID {
     private static let alphabet = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
+    private static let hexDigits = Array("0123456789abcdef")
 
     private static let value: [Character: UInt32] = {
         var map: [Character: UInt32] = [:]
@@ -43,10 +44,15 @@ public enum PublicID {
             if carry != 0 { return nil }
         }
 
-        let hex = bytes.map { String(format: "%02x", $0) }.joined()
-        let groups = [hex.prefix(8), hex.dropFirst(8).prefix(4), hex.dropFirst(12).prefix(4),
-                      hex.dropFirst(16).prefix(4), hex.dropFirst(20)]
-        return groups.map(String.init).joined(separator: "-")
+        // By table, not `String(format:)` per byte: rows look their watch up by this on every render.
+        var uuid = ""
+        uuid.reserveCapacity(36)
+        for (i, byte) in bytes.enumerated() {
+            if i == 4 || i == 6 || i == 8 || i == 10 { uuid.append("-") }
+            uuid.append(hexDigits[Int(byte >> 4)])
+            uuid.append(hexDigits[Int(byte & 0xF)])
+        }
+        return uuid
     }
 
     /// A fresh Base62 public id, drawn here rather than received.

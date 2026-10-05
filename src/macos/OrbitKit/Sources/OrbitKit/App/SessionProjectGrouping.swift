@@ -199,10 +199,14 @@ public enum SessionProjectGrouping {
                 line: selectedLine, target: target, taskCounts: summary?.taskCounts,
                 runningCount: summary?.buckets.running ?? runningCount))
         }
-        let entries = (loose.map(SessionProjectEntry.session) + rows.map(SessionProjectEntry.project)).sorted { a, b in
-            if view == .open, (a.pinnedAt != nil) != (b.pinnedAt != nil) { return a.pinnedAt != nil }
-            return instant(a.lastTurnAt ?? a.createdAt) > instant(b.lastTurnAt ?? b.createdAt)
-        }
+        // Each entry's time is parsed once, not twice per comparison.
+        let entries = (loose.map(SessionProjectEntry.session) + rows.map(SessionProjectEntry.project))
+            .map { ($0, instant($0.lastTurnAt ?? $0.createdAt)) }
+            .sorted { a, b in
+                if view == .open, (a.0.pinnedAt != nil) != (b.0.pinnedAt != nil) { return a.0.pinnedAt != nil }
+                return a.1 > b.1
+            }
+            .map(\.0)
         return SessionProjectListing(folders: folderID == nil ? folderListing.folders : [],
                                      projects: rows, sessions: loose, entries: entries)
     }
