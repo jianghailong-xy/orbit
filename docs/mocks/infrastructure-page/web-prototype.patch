@@ -1,0 +1,491 @@
+diff --git a/src/web/src/App.tsx b/src/web/src/App.tsx
+index 4e228f751..b4d9a9232 100644
+--- a/src/web/src/App.tsx
++++ b/src/web/src/App.tsx
+@@ -11,6 +11,7 @@ import { RunnerRegisterGuide } from './components/RunnerRegisterGuide';
+ import { ProfilePage } from './pages/ProfilePage';
+ import { SettingsPage } from './pages/SettingsPage';
+ import { AdminUsersPage } from './pages/AdminUsersPage';
++import { InfrastructurePage } from './pages/InfrastructurePage';
+ import { ProvidersPage } from './pages/ProvidersPage';
+ import { ProviderConnectPage, ProviderPickPage } from './pages/ProviderConnectPage';
+ import { ProviderPoolPage } from './pages/ProviderPoolPage';
+@@ -367,6 +368,14 @@ export function App() {
+                 </DocView>
+               }
+             />
++            <Route
++              path="infrastructure"
++              element={
++                <DocView>
++                  <InfrastructurePage />
++                </DocView>
++              }
++            />
+             <Route
+               path="runners"
+               element={
+diff --git a/src/web/src/components/ComputeOverview.tsx b/src/web/src/components/ComputeOverview.tsx
+new file mode 100644
+index 000000000..a7f8434b7
+--- /dev/null
++++ b/src/web/src/components/ComputeOverview.tsx
+@@ -0,0 +1,125 @@
++// PROTOTYPE for the Runners + Providers merge mockups — not for landing.
++import { Link } from 'react-router-dom';
++import { Button } from 'antd';
++import { encodeId } from '../lib/idCodec';
++import type { ProviderRow } from '../lib/providerAdmin';
++import type { ProviderPool } from '../lib/providerPools';
++import { ENGINE_PRESET } from '../lib/sessionProviderChoices';
++import { ProviderTile } from './ProviderGallery';
++import { ENGINE_NAME } from './RunnerSignIn';
++import type { Runner } from './TasksSidePanel';
++
++const CSS = `
++.cp-attn{margin-top:18px;border:1px solid color-mix(in srgb,var(--warning) 35%,transparent);background:color-mix(in srgb,var(--warning) 7%,var(--bg-raised));border-radius:12px;padding:4px 14px}
++.cp-attn-row{display:flex;align-items:center;gap:10px;padding:9px 0;font-size:13px;color:var(--text-1)}
++.cp-attn-row+.cp-attn-row{border-top:1px solid color-mix(in srgb,var(--warning) 18%,transparent)}
++.cp-attn-dot{width:7px;height:7px;border-radius:50%;background:var(--warning);flex:none}
++.cp-attn-dot.off{background:var(--text-4)}
++.cp-attn-row .cp-sub{color:var(--text-3);font-size:12px}
++.cp-attn-row > :last-child{margin-left:auto}
++.cp-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
++.cp-tile{border:1px solid var(--border);border-radius:12px;background:var(--bg-raised);padding:12px 14px;display:flex;gap:12px;align-items:flex-start;min-width:0}
++.cp-tile.none{background:var(--bg-subtle)}
++.cp-tile-main{min-width:0;flex:1}
++.cp-tile-name{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13.5px;color:var(--text-1)}
++.cp-state{font-size:11px;font-weight:600;padding:1px 7px;border-radius:999px;background:color-mix(in srgb,var(--success,#22a06b) 14%,transparent);color:var(--success,#1f8a5b)}
++.cp-state.none{background:var(--bg-hover,#eef0f3);color:var(--text-3)}
++.cp-src{margin-top:6px;display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--text-2)}
++.cp-src span b{font-weight:600;color:var(--text-1)}
++.cp-src .cp-dim{color:var(--text-4)}
++.cp-add{display:flex;flex-direction:column;gap:1px;padding:3px 0;max-width:300px}
++.cp-add b{font-weight:600}
++.cp-add span{font-size:12px;color:var(--text-3)}
++`;
++
++const ENGINES = ['claude', 'codex', 'kimi', 'antigravity'] as const;
++
++export function ComputeAttention({ runners }: { runners: Runner[] }) {
++  const items: { key: string; dot?: 'off'; text: React.ReactNode; sub?: string; action: React.ReactNode }[] = [];
++  for (const r of runners) {
++    const name = r.displayName || r.name;
++    if (!r.online) {
++      items.push({
++        key: `${r.id}-off`,
++        dot: 'off',
++        text: <><b>{name}</b> is offline</>,
++        sub: 'Last seen yesterday · its subscriptions are unavailable until it’s back',
++        action: <Link to={`/runners/${encodeId(r.id)}`}><Button size="small">Details</Button></Link>,
++      });
++      continue;
++    }
++    for (const e of r.engines ?? []) {
++      if (e.installed && e.auth === 'no') {
++        items.push({
++          key: `${r.id}-${e.engine}`,
++          text: <><b>{ENGINE_NAME[e.engine as keyof typeof ENGINE_NAME] ?? e.engine}</b> is signed out on <b>{name}</b></>,
++          sub: 'Sessions there can’t use it',
++          action: <Button size="small" type="primary">Sign in</Button>,
++        });
++      }
++    }
++  }
++  if (!items.length) return null;
++  return (
++    <>
++      <style>{CSS}</style>
++      <div className="cp-attn">
++        {items.map((i) => (
++          <div className="cp-attn-row" key={i.key}>
++            <span className={`cp-attn-dot${i.dot ? ' off' : ''}`} />
++            <span>{i.text} <span className="cp-sub">· {i.sub}</span></span>
++            {i.action}
++          </div>
++        ))}
++      </div>
++    </>
++  );
++}
++
++export function ComputeOverview({ runners, keys, pools }: { runners: Runner[]; keys: ProviderRow[]; pools: ProviderPool[] }) {
++  return (
++    <div className="re-sec">
++      <style>{CSS}</style>
++      <div className="re-sec-head">
++        <h3>What your agents can run on</h3>
++        <span className="re-sec-sub">Every engine, and everything that can pay for it right now.</span>
++      </div>
++      <div className="cp-grid">
++        {ENGINES.map((engine) => {
++          const subs: string[] = [];
++          for (const r of runners.filter((x) => x.online)) {
++            const e = (r.engines ?? []).find((x) => x.engine === engine);
++            if (!e?.installed) continue;
++            const n = e.accounts?.length ? e.accounts.filter((a) => a.auth === 'yes').length : e.auth === 'yes' ? 1 : 0;
++            if (n) subs.push(`${r.displayName || r.name}${n > 1 ? ` ×${n}` : ''}`);
++          }
++          const k = keys.filter((p) => p.enabled && p.runtime === engine);
++          const pl = pools.filter((p) => (p.engine ?? 'claude') === engine);
++          const ready = subs.length + k.length + pl.length > 0;
++          return (
++            <div className={`cp-tile${ready ? '' : ' none'}`} key={engine}>
++              <ProviderTile slug={ENGINE_PRESET[engine] ?? engine} label={ENGINE_NAME[engine as keyof typeof ENGINE_NAME]} size={30} />
++              <div className="cp-tile-main">
++                <div className="cp-tile-name">
++                  {ENGINE_NAME[engine as keyof typeof ENGINE_NAME]}
++                  <span className={`cp-state${ready ? '' : ' none'}`}>{ready ? 'Ready' : 'Not set up'}</span>
++                </div>
++                <div className="cp-src">
++                  {ready ? (
++                    <>
++                      {subs.length > 0 && <span><b>Subscription</b> · {subs.join(', ')}</span>}
++                      {k.length > 0 && <span><b>API key</b> · {k.map((p) => p.label).join(', ')}</span>}
++                      {pl.length > 0 && <span><b>Pool</b> · {pl.map((p) => p.label).join(', ')}</span>}
++                    </>
++                  ) : (
++                    <span className="cp-dim">No machine signed in, no key. <a className="re-link">Install on a machine</a> or <a className="re-link">connect a key</a>.</span>
++                  )}
++                </div>
++              </div>
++            </div>
++          );
++        })}
++      </div>
++    </div>
++  );
++}
+diff --git a/src/web/src/components/RunnerEngines.tsx b/src/web/src/components/RunnerEngines.tsx
+index b131ccab4..91a1b0f05 100644
+--- a/src/web/src/components/RunnerEngines.tsx
++++ b/src/web/src/components/RunnerEngines.tsx
+@@ -969,7 +969,7 @@ export function summaryOf(runner: Runner): string {
+   return ready === engines.length ? 'All signed in' : `${ready} of ${engines.length} signed in`;
+ }
+ 
+-function RunnerEngineCard({
++export function RunnerEngineCard({
+   runner,
+   collapsed,
+   onToggle,
+@@ -984,7 +984,7 @@ function RunnerEngineCard({
+   const [signIn, setSignIn] = useState<string | null>(null);
+   const engines = runner.engines ?? null;
+   const name = runner.displayName || runner.name;
+-  const meta = [runner.hostname !== name && runner.hostname, runner.version && `v${runner.version}`]
++  const meta = [runner.online && `${runner.activeSessions ?? 0} / ${runner.maxConcurrent ?? 0} running`, runner.hostname !== name && runner.hostname, runner.version && `v${runner.version}`]
+     .filter(Boolean)
+     .join(' · ');
+   const failed = runner.install?.status === 'failed' && runner.install.engine !== 'antigravity';
+@@ -1033,7 +1033,7 @@ function RunnerEngineCard({
+             where everything else is scoped to one (runner, engine) pair. It lives behind this
+             link, next to the machine's own version and slots. */}
+         <Link className="re-manage" aria-label={`Manage ${name}`} to={`/runners/${encodeId(runner.id)}`}>
+-          Manage →
++          Details →
+         </Link>
+       </div>
+       {collapsed ? null : engines ? (
+@@ -1101,7 +1101,7 @@ function RunnerEngineCard({
+  * spend the subscription signed into there, rather than on the account and billed per token — so
+  * they get their own section rather than extra rows in the same table.
+  */
+-export function RunnerEngines() {
++export function RunnerEngines({ head }: { head?: ReactNode } = {}) {
+   const [expanded, setExpanded] = useState<string[]>(readExpanded);
+   const write = (next: string[]) => {
+     try {
+@@ -1164,7 +1164,7 @@ export function RunnerEngines() {
+ 
+   return (
+     <div className="re-sec">
+-      <div className="re-sec-head">
++      {head ?? <div className="re-sec-head">
+         <h3>On your runners</h3>
+         <span className="re-sec-sub">
+           Use subscriptions signed in on your machines.
+@@ -1174,7 +1174,7 @@ export function RunnerEngines() {
+             {list.length} runner{list.length === 1 ? '' : 's'} · {ready} signed in
+           </span>
+         )}
+-      </div>
++      </div>}
+       {list.length === 0 ? (
+         <div className="re-empty">
+           <div className="re-empty-logos">
+diff --git a/src/web/src/components/TasksSidePanel.tsx b/src/web/src/components/TasksSidePanel.tsx
+index f2da2eeec..2a52288f8 100644
+--- a/src/web/src/components/TasksSidePanel.tsx
++++ b/src/web/src/components/TasksSidePanel.tsx
+@@ -140,10 +140,9 @@ const TOP: TopNavItem[] = [
+   { key: 'wiki', icon: <SidebarNavIcon name="wiki" />, label: 'Wiki' },
+   // No Following here: its watches are the waits agents keep for their own sessions, already shown
+   // in each session's header and Watching strip, and those are what link to /following.
+-  { key: 'runners', icon: <SidebarNavIcon name="runners" />, label: 'Runners' },
++  { key: 'infrastructure', icon: <SidebarNavIcon name="runners" />, label: 'Infrastructure' },
+   // Providers is for everyone: each user manages their own (BYOK) list; admins additionally
+   // manage the shared ones on the same page.
+-  { key: 'providers', icon: <SidebarNavIcon name="providers" />, label: 'Providers' },
+ ];
+ 
+ // The left sidebar is user-resizable; the chosen width persists across refreshes.
+diff --git a/src/web/src/pages/InfrastructurePage.tsx b/src/web/src/pages/InfrastructurePage.tsx
+new file mode 100644
+index 000000000..70fec1132
+--- /dev/null
++++ b/src/web/src/pages/InfrastructurePage.tsx
+@@ -0,0 +1,253 @@
++import { useNavigate } from 'react-router-dom';
++import { useRef } from 'react';
++import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
++import { DeleteOutlined, DownOutlined, EditOutlined, WarningOutlined } from '@ant-design/icons';
++import { Dropdown } from 'antd';
++import { ComputeAttention, ComputeOverview } from '../components/ComputeOverview';
++import { Button, Popconfirm, Space, Table, Tag, type TableColumnsType } from 'antd';
++import { api } from '../api';
++import { isLoginPool } from '../lib/codexLogin';
++import { routeId } from '../lib/idCodec';
++import { providersQuery, runnersQuery } from '../lib/queries';
++import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
++import { poolEligibleCount, poolRefusals, providerPoolsQuery } from '../lib/providerPools';
++import { providerDisplayLabel } from '../lib/sessionProviderChoices';
++import { ownPoolWithAccess, poolAccessQuery, sharedPoolAsProviderPool, sharedPoolsQuery } from '../lib/sharedPools';
++import { AccountPools, PoolHint } from '../components/AccountPools';
++import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
++import { RunnerEngines } from '../components/RunnerEngines';
++import { useIsMobile } from '../lib/useMediaQuery';
++import { useToast } from '../lib/toast';
++import type { Runner } from '../components/TasksSidePanel';
++
++/**
++ * Where a workspace's model comes from — two kinds of identity, in the order a new user has them.
++ *
++ * First the engines signed in on their own machines (RunnerEngines): those spend the subscription
++ * signed into that runner and need nothing pasted, which is what most sessions actually run on.
++ * Then their personal (BYOK) providers — an API key on the account, usable from every runner and
++ * billed per token. Adding or editing one of those happens on its own page (ProviderConnectPage),
++ * so a vendor's setup stays deep-linkable.
++ *
++ * Between the two, the account pools (AccountPools): several of those keys' Claude subscriptions
++ * dispatched under one name, and the shared pools the user is in — several people's OpenAI keys under
++ * one name. Its head makes a new one of either kind. Before there is an account pool, the keys list
++ * also opens with the offer to make one — but only when at least two keys could join, since a pool of
++ * one is the key.
++ */
++export function InfrastructurePage() {
++  const message = useToast();
++  const qc = useQueryClient();
++  const navigate = useNavigate();
++  const isMobile = useIsMobile();
++  const runnerSection = useRef<HTMLDivElement>(null);
++  const runners = useQuery(runnersQuery());
++  const geminiReady = ((runners.data ?? []) as Runner[]).filter(
++    (runner) => runner.online && runner.antigravity?.supported && runner.antigravity.installed === true,
++  ).length;
++  const providers = useQuery({ queryKey: PROVIDERS_LIST_KEY, queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE) });
++  // Which account is busy moves with sessions, not with provider edits, so nothing pushes it: read
++  // again while the page is open.
++  const pools = useQuery({ ...providerPoolsQuery(), refetchInterval: 60_000 });
++  const shared = useQuery({ ...sharedPoolsQuery(), refetchInterval: 60_000 });
++  // Who can use each Codex pool of the user's own, and its API keys: read pool by pool, beside its accounts.
++  const access = useQueries({
++    queries: (pools.data ?? [])
++      .filter(isLoginPool)
++      .map((pool) => ({ ...poolAccessQuery(pool.id), refetchInterval: 60_000 })),
++  });
++  const accessOf = new Map(access.flatMap((read) => (read.data ? [[routeId(read.data.id), read.data] as const] : [])));
++  const poolList = [
++    ...(shared.data ?? []).map(sharedPoolAsProviderPool),
++    ...(pools.data ?? []).map((pool) => {
++      const view = accessOf.get(routeId(pool.id));
++      return view ? ownPoolWithAccess(pool, view) : pool;
++    }),
++  ];
++  const eligible = poolEligibleCount(providers.data ?? []);
++  const refusals = poolRefusals(providers.data ?? []);
++
++  const deleteMut = useMutation({
++    mutationFn: (id: string) => api(`${PROVIDERS_BASE}/${id}`, { method: 'DELETE' }),
++    onSuccess: () => {
++      // Both this list and the de-sensitized ['providers'] catalog the pickers read
++      // must refresh on any change.
++      void qc.invalidateQueries({ queryKey: PROVIDERS_LIST_KEY });
++      void qc.invalidateQueries({ queryKey: providersQuery().queryKey });
++      message.success('Provider deleted');
++    },
++    onError: (e: Error) => message.error("Couldn't delete the provider", e.message),
++  });
++
++  const columns: TableColumnsType<ProviderRow> = [
++    {
++      title: 'Provider',
++      key: 'provider',
++      // The dispatch slug is the server's to generate and nobody's to read, so the row shows the
++      // vendor: its logo (by preset, not by the row's identifier) and the name it was given.
++      render: (_, p) => (
++        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
++          <ProviderTile slug={p.presetSlug ?? p.slug} label={providerDisplayLabel(p.label, p.presetSlug)} size={32} />
++          <div style={{ minWidth: 0 }}>
++            <div className="prov-cell-name">{providerDisplayLabel(p.label, p.presetSlug)}</div>
++            {p.runtime === 'antigravity' && (
++              <div className="prov-runtime">
++                <div>Runs on the Antigravity CLI</div>
++                <div>
++                  <span style={geminiReady === 0 ? { color: 'var(--warning)' } : undefined}>
++                    {geminiReady === 0 ? 'Not ready on any runner' : `Ready on ${geminiReady} runner${geminiReady === 1 ? '' : 's'}`}
++                  </span>{' '}
++                  <a className="re-link" href="#provider-runners" onClick={(event) => {
++                    event.preventDefault();
++                    runnerSection.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
++                  }}>
++                    See runners ↑
++                  </a>
++                </div>
++              </div>
++            )}
++          </div>
++          {/* The Enabled column collapses to a dot on narrow screens — the tag's words would
++              outrun a phone's width on their own. */}
++          {isMobile && (
++            <span
++              className={`prov-dot${p.enabled ? ' on' : ''}`}
++              title={p.enabled ? 'Enabled' : 'Disabled'}
++            />
++          )}
++        </div>
++      ),
++    },
++    {
++      title: 'Models',
++      key: 'models',
++      width: 96,
++      // A model count is the weakest signal here — what the row is, whether it's on, and its
++      // controls all outrank it — so it waits for a window wide enough for the whole table.
++      responsive: ['md'],
++      render: (_, p) => (p.models?.length ? `${p.models.length}` : '—'),
++    },
++    {
++      title: 'Endpoint',
++      dataIndex: 'baseUrl',
++      key: 'baseUrl',
++      width: 200,
++      // The widest column and the least needed on a phone: the endpoint is one tap away on the
++      // edit page, and its long URL is exactly what pushes the table past the viewport.
++      responsive: ['md'],
++      render: (u: string) => <code className="prov-endpoint">{u}</code>,
++    },
++    {
++      title: 'Enabled',
++      dataIndex: 'enabled',
++      key: 'enabled',
++      width: 100,
++      responsive: ['md'],
++      render: (on: boolean) => <Tag color={on ? 'green' : 'default'}>{on ? 'Enabled' : 'Disabled'}</Tag>,
++    },
++    {
++      title: '',
++      key: 'actions',
++      align: 'right',
++      width: isMobile ? 88 : 170,
++      render: (_, p) => (
++        <Space size={isMobile ? 4 : 8}>
++          {/* Icon-only on narrow screens: the labelled pair is what pushes the table past a
++              phone's viewport once the wide columns are hidden. */}
++          {isMobile ? (
++            <Button
++              size="small"
++              type="text"
++              icon={<EditOutlined />}
++              aria-label={`Edit ${providerDisplayLabel(p.label, p.presetSlug)}`}
++              onClick={() => navigate(`/providers/${p.id}`)}
++            />
++          ) : (
++            <Button size="small" onClick={() => navigate(`/providers/${p.id}`)}>
++              Edit
++            </Button>
++          )}
++          <Popconfirm title={`Delete ${providerDisplayLabel(p.label, p.presetSlug)}?`} onConfirm={() => deleteMut.mutate(p.id)}>
++            {isMobile ? (
++              <Button size="small" type="text" danger icon={<DeleteOutlined />} aria-label={`Delete ${providerDisplayLabel(p.label, p.presetSlug)}`} />
++            ) : (
++              <Button size="small" danger>
++                Delete
++              </Button>
++            )}
++          </Popconfirm>
++        </Space>
++      ),
++    },
++  ];
++
++  return (
++    <div style={{ maxWidth: 900, margin: '0 auto' }}>
++      <div className="prov-page-head">
++        <h1 className="page-title" style={{ marginBottom: 0 }}>
++          Infrastructure
++        </h1>
++        <Dropdown
++          trigger={['click']}
++          placement="bottomRight"
++          menu={{
++            items: [
++              { key: 'machine', label: <div className="cp-add"><b>Register a machine</b><span>Run agents on a computer you own, on its subscriptions</span></div>, onClick: () => navigate('/runners/register') },
++              { key: 'key', label: <div className="cp-add"><b>Connect an API key</b><span>Usable from every machine, billed per token</span></div>, onClick: () => navigate('/providers/new') },
++              { key: 'pool', label: <div className="cp-add"><b>New account pool</b><span>Several accounts behind one name</span></div> },
++            ],
++          }}
++        >
++          <Button type="primary">
++            Add <DownOutlined />
++          </Button>
++        </Dropdown>
++        <div className="prov-page-sub">
++          Where your agents run, and whose model quota they spend.
++        </div>
++      </div>
++
++      <ComputeAttention runners={(runners.data ?? []) as Runner[]} />
++      <ComputeOverview runners={(runners.data ?? []) as Runner[]} keys={providers.data ?? []} pools={poolList} />
++
++      <div ref={runnerSection} id="provider-runners">
++        <RunnerEngines
++          head={
++            <div className="re-sec-head" style={{ marginTop: 28 }}>
++              <h3>Machines</h3>
++              <span className="re-sec-sub">
++                Subscriptions signed in here are spent only by sessions on that machine.
++              </span>
++              <span className="re-sec-count">
++                {(runners.data ?? []).length} machines · {((runners.data ?? []) as Runner[]).reduce((n, r) => n + (r.online ? r.activeSessions ?? 0 : 0), 0)} / {((runners.data ?? []) as Runner[]).reduce((n, r) => n + (r.online ? r.maxConcurrent ?? 0 : 0), 0)} slots busy
++              </span>
++            </div>
++          }
++        />
++      </div>
++
++      <div className="re-sec-head" style={{ marginTop: 28 }}>
++        <h3>API keys</h3>
++        <span className="re-sec-sub">
++          On your account and usable from every machine — billed per token.
++        </span>
++      </div>
++
++      {providers.isLoading ? null : (
++        <Table
++          rowKey="id"
++          className="provider-keys"
++          tableLayout="fixed"
++          style={{ marginTop: 12 }}
++          dataSource={providers.data ?? []}
++          columns={columns}
++          pagination={false}
++        />
++      )}
++
++      {!pools.isPending && !shared.isPending && (
++        <AccountPools pools={poolList} refusals={refusals} rows={providers.data ?? []} />
++      )}
++    </div>
++  );
++}
