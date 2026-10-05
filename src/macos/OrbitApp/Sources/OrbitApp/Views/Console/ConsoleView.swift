@@ -884,22 +884,20 @@ struct TranscriptView: View {
     // stays nil. Queued turns are skipped (web's `:not(.chat-queued)`) — they haven't been asked yet — and
     // so is a background job's news or a wakeup coming due, a line inside an answer rather than the head
     // of one (`StickySummary.isAnchor`; web's line carries no `data-sticky-label`).
+    //
+    // Which turns are questions is read once per published state (`StickyQuestions`, kept on the
+    // ruler), so a scroll is a lookup rather than a walk re-reading every turn's text.
     private func recomputeStuck() {
-        let items = console.state.items
         // Where the reader is, for the console: the needs-you bar's direction word points at a card
         // and has to say which way it is. Reported here rather than read off the ruler by the bar,
         // which is an inset of the whole console and has no ruler of its own.
         console.noteTopVisible(ruler.topAnchorID)
+        let questions = ruler.questions(console) { StickyQuestions($0.state.items, isQuestion: namesAQuestion) }
         var found: String? = nil
         if let anchor = ruler.topAnchorID {
-            for item in items {
-                if item.id == anchor { break }                       // reached the top item; stop
-                if case .user(let b) = item, namesAQuestion(b) { found = b.id }
-            }
+            found = questions.above(anchor)
         } else if ruler.contentOffset > 40 {
-            for item in items.reversed() {
-                if case .user(let b) = item, namesAQuestion(b) { found = b.id; break }
-            }
+            found = questions.last
         }
         if found != stuckID { stuckID = found }
     }
@@ -927,7 +925,8 @@ struct TranscriptView: View {
                              statusCards: console.localStatusCards,
                              canPageOlder: canPageOlder,
                              showWorkingIndicator: console.showWorkingIndicator,
-                             decisionCards: console.decisionCards)
+                             decisionCards: console.decisionCards,
+                             clocks: console.receiptClocks)
     }
 
     /// Only the load-earlier spinner and the zero-height tail row differ from the chat-flow insets.
@@ -1577,8 +1576,21 @@ final class QuestionRuler {
     var viewportTop: CGFloat = 0      // transcript viewport's top edge, in global space
     var contentOffset: CGFloat = 0    // scroll offset (from onScrollGeometryChange) — only for the initial fallback
     var topAnchorID: String?          // id of the item straddling the viewport top — the header's sole scroll input
+    // The questions of one console's published state, rebuilt only when that state moves.
+    private var questionsCache: (console: ObjectIdentifier, revision: Int, questions: StickyQuestions)?
 
     func reset() { topAnchorID = nil; contentOffset = 0 }
+
+    @MainActor
+    func questions(_ console: ConsoleModel, read: (ConsoleModel) -> StickyQuestions) -> StickyQuestions {
+        let key = ObjectIdentifier(console)
+        if let cached = questionsCache, cached.console == key, cached.revision == console.stateRevision {
+            return cached.questions
+        }
+        let questions = read(console)
+        questionsCache = (key, console.stateRevision, questions)
+        return questions
+    }
 }
 
 struct TranscriptItemView: View {
