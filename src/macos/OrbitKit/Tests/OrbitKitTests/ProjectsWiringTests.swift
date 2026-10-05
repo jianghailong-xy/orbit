@@ -166,6 +166,9 @@ final class ProjectsWiringTests: XCTestCase {
         XCTAssertTrue(agents.contains(
             "SessionProjectPage(address: address)\n                            .background { SwipeBackGestureToggle(enabled: model.projectSessionsPage == nil) }"),
                       "and the system back-swipe is off there")
+        XCTAssertTrue(agents.contains(
+            ".background { SwipeBackGestureToggle(enabled: model.projectSessionsPage == nil) }\n                            .navigationBarBackButtonHidden()\n                            .drawerToggle(open: openDrawer)"),
+                      "and it leads with the drawer's hamburger, as the session list does, not a back button")
     }
 
     /// The iPad's sidebar is this same drawer, seated in the split's first column (the owner's pick,

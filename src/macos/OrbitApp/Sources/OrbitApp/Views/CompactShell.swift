@@ -295,8 +295,12 @@ private struct CompactSections: View {
                         // a workspace's session list (§3.3). Its own ✎ pushes a draft over it, and
                         // the session that draft creates lands in the folder.
                         case .folder(let address):       SessionFolderPage(address: address)
+                        // A project's sessions page leads like the session list it stands in for:
+                        // the drawer's hamburger, not a back button.
                         case .sessionProject(let address): SessionProjectPage(address: address)
                             .background { SwipeBackGestureToggle(enabled: model.projectSessionsPage == nil) }
+                            .navigationBarBackButtonHidden()
+                            .drawerToggle(open: openDrawer)
                         // The one place the phone's console is told that what it opens goes on
                         // this stack (`opensPagesOverConsole`): its links, its Watching card, its
                         // Tasks created here card — so the back swipe returns to the conversation
