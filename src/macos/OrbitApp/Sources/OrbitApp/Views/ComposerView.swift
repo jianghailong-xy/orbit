@@ -738,10 +738,12 @@ struct ComposerView: View {
     }
 
     /// The decision behind this task run, while the chip still shows the model it picked
-    /// (`ComposerLogic.smartRoute`); nil on a session opened by hand and on a shadow-only run.
+    /// (`ComposerLogic.smartRoute`); nil on a session opened by hand, on a shadow-only run, and on
+    /// every run while the account's switch for smart model selection is off.
     private var smartRoute: TaskRunRoute? {
         ComposerLogic.smartRoute(taskID: console.taskID, route: console.worktree.detail?.route,
-                                 modelID: console.modelID)
+                                 modelID: console.modelID,
+                                 smartSelection: app.user?.preferences?.smartModelSelection ?? false)
     }
 
     /// The model's name as the chip shows it: "Runtime default" for a draft whose provider has not
