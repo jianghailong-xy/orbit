@@ -1144,7 +1144,12 @@ export function RunnerEngines() {
           // Same for an account removal: the machine answers on its next check-in, and the page
           // has to be there to take the answer — a refusal is news the person who pressed it has
           // to see, and the row it is about leaves once the probe catches up.
-          r.accountRemove?.status === 'pending',
+          r.accountRemove?.status === 'pending' ||
+          // ...and a removal the machine reported done before the beat carrying its re-probe: the
+          // row stays until the runner stops reporting the account.
+          (r.accountRemove?.status === 'done' && !!r.online &&
+            !!r.engines?.some((e) => e.engine === r.accountRemove?.engine &&
+              e.accounts?.some((a) => a.id === r.accountRemove?.account))),
       )
         ? 4000
         : false,
