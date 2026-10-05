@@ -213,10 +213,26 @@ const mounted = (): HTMLDivElement => {
   return container;
 };
 
+/**
+ * Waits up to 8s for `assertion` to hold, in 20ms slices that are each an `act` scope of their own —
+ * not one scope around the whole wait. Inside an `act` scope React keeps every render below the
+ * sync lane queued until the scope closes, and the router renders a navigation as a transition: an
+ * arrival's intent leaving the URL, scheduled once the reads land after `mount` has flushed (a beat
+ * behind, as on a loaded host), could not be seen until the wait had already failed.
+ */
 const waitForUi = async (assertion: () => void): Promise<void> => {
-  await act(async () => {
-    await vi.waitFor(assertion, { timeout: 8_000, interval: 20 });
-  });
+  const deadline = Date.now() + 8_000;
+  for (;;) {
+    try {
+      assertion();
+      return;
+    } catch (error) {
+      if (Date.now() >= deadline) throw error;
+    }
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+  }
 };
 
 /** The doors a chat must never knock on: the hand-back, a rerun, a cancel, a close, the merge. */
@@ -625,6 +641,126 @@ describe('what the send carries is read at the send', { timeout: 60_000 }, () =>
     expect(attachmentIds).toEqual(['att-failure']);
     expect(armedBar(), 'the bar stayed armed after the send').toBeNull();
     expect(doorsPressed().filter((request) => !request.includes('/attachments'))).toEqual([]);
+  });
+});
+
+/**
+ * The arrivals below again, with the project's items read only after the mount has settled — a beat
+ * behind the first paint, as on a loaded host. The intent then leaves the URL while the case is
+ * already waiting, by a navigation the router renders as a transition; every case here waits on
+ * the URL first, the wait that went red there for the arrivals that arm nothing (`waitForUi`). What
+ * a gone subject leaves behind must not stand in for the next card's own press either.
+ */
+describe('arriving before the project’s items are read', { timeout: 60_000 }, () => {
+  const spies: Array<{ mockRestore: () => void }> = [];
+  afterEach(() => {
+    for (const spy of spies.splice(0)) spy.mockRestore();
+  });
+
+  /** What this case's view says in an info toast: the feed and its live region outlive a case. */
+  async function infoSaid(): Promise<() => unknown[]> {
+    const { useToast } = await import('../lib/toast');
+    const info = vi.spyOn(useToast(), 'info');
+    spies.push(info);
+    return () => info.mock.calls.map(([content]) => content);
+  }
+
+  /** Opens the arrival's URL with the project's items held back, and lets them in once it settled. */
+  async function arriveBeforeTheItems(about: string): Promise<void> {
+    const read = apiMock.getMockImplementation()!;
+    let letIn = (): void => {};
+    const held = new Promise<void>((resolve) => {
+      letIn = resolve;
+    });
+    apiMock.mockImplementation(((...args: Parameters<typeof api>) =>
+      args[0] === `/projects/${PROJECT_PUBLIC}/open-items`
+        ? held.then(() => read(...args))
+        : read(...args)) as unknown as typeof api);
+    const arrival = `?intent=${CHAT_ABOUT_INTENT}&${about}`;
+    await mount(`/sessions/${COORDINATOR_PUBLIC}${arrival}`);
+    expect(search, 'the intent went before what it is about was read').toBe(arrival);
+    letIn();
+    await waitForUi(() => {
+      expect(search, 'the intent stayed in the URL').toBe('');
+    });
+  }
+
+  it('an item: the intent goes, and the composer is armed for it', async () => {
+    await arriveBeforeTheItems(`item=${TASK_ITEM}`);
+    await waitForUi(() => {
+      expect(armedBar()).toBe(`${EXCEPTION_CHAT_PREFIX}${TASK_ROW.title}`);
+    });
+    expect(doorsPressed()).toEqual([]);
+  });
+
+  it('a blocked merge: the intent goes, and the composer is armed for the candidate', async () => {
+    await arriveBeforeTheItems(`promotion=${PROMOTION_ID}`);
+    await waitForUi(() => {
+      expect(armedBar()).toBe(`${MERGE_CHAT_PREFIX}project/merge-seal can’t merge into main yet`);
+    });
+    expect(doorsPressed()).toEqual([]);
+  });
+
+  it('an item that has moved on: the intent goes, it says so once, and the merge card’s own press arms for the merge alone', async () => {
+    const said = await infoSaid();
+    openItems = { needsYou: [PROMOTION_ROW], withCoordinator: [], settled: [] };
+    await arriveBeforeTheItems(`item=${TASK_ITEM}`);
+    expect(said().filter((content) => content === CHAT_SUBJECT_GONE)).toHaveLength(1);
+    expect(armedBar(), 'the gone item armed the composer').toBeNull();
+
+    const card = await blockedCard();
+    await act(async () => chatPressOn(card()!).click());
+    await waitForUi(() => {
+      expect(armedBar()).toBe(`${MERGE_CHAT_PREFIX}project/merge-seal can’t merge into main yet`);
+    });
+    expect(search, 'the press put an intent back in the URL').toBe('');
+    await typeAndSend('why is it still red?');
+    const content = String(sendTurnMock.mock.calls[0]![1]);
+    expect(content).toContain(`promotion ${PROMOTION_ID} · open item ${PROMOTION_ITEM}`);
+    expect(content, 'the gone item rode along').not.toContain(TASK_ITEM);
+    expect(doorsPressed(), 'the chat pressed a door').toEqual([]);
+  });
+
+  it('a merge no longer blocked: the intent goes, it says so once, and the task card’s own press arms for the task alone', async () => {
+    const said = await infoSaid();
+    promotion = {
+      ...BLOCKED,
+      state: 'READY',
+      checks: BLOCKED.checks.map((check) => ({ ...check, exitCode: 0, outputTail: '' })),
+      askedAt: '2026-09-11T03:05:00.000Z',
+      decidedAt: null,
+    };
+    openItems = {
+      needsYou: [TASK_ROW, {
+        ...PROMOTION_ROW,
+        kind: 'PROMOTION_APPROVAL',
+        title: 'Merge 2 tasks into main?',
+        detailLine: '',
+        assigneeReason: 'DEFAULT',
+        escalatedAt: null,
+        actions: ['REVIEW'],
+      }],
+      withCoordinator: [],
+      settled: [],
+    };
+    await arriveBeforeTheItems(`promotion=${PROMOTION_ID}`);
+    expect(said().filter((content) => content === CHAT_SUBJECT_GONE)).toHaveLength(1);
+    expect(armedBar(), 'the merge no longer blocked armed the composer').toBeNull();
+
+    const card = (): Element | null => mounted().querySelector(`[data-open-item="${TASK_ITEM}"]`);
+    await waitForUi(() => {
+      expect(card(), 'the escalated card is not drawn').not.toBeNull();
+    });
+    await act(async () => chatPressOn(card()!).click());
+    await waitForUi(() => {
+      expect(armedBar()).toBe(`${EXCEPTION_CHAT_PREFIX}${TASK_ROW.title}`);
+    });
+    expect(search, 'the press put an intent back in the URL').toBe('');
+    await typeAndSend('what is left before it can merge?');
+    const content = String(sendTurnMock.mock.calls[0]![1]);
+    expect(content).toContain(`open item ${TASK_ITEM}`);
+    expect(content, 'the candidate rode along').not.toContain(PROMOTION_ID);
+    expect(doorsPressed(), 'the chat pressed a door').toEqual([]);
   });
 });
 
