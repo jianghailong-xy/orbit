@@ -282,6 +282,7 @@ import {
   revealCriteriaCard,
   revealCard,
   REVIEW_CARD_REVEALED,
+  revealOpenItemCard,
   revealSettlementCard,
   type PendingDecisionRow,
 } from './DecisionRail';
@@ -291,13 +292,33 @@ import {
   type CriteriaDecisionReply,
 } from './CriteriaDecisionCard';
 import { CoordinatorQuestions } from './CoordinatorQuestionCard';
-import { ItemAsCard, exceptionCardRows, isOwnerExceptionCard } from './ProjectProgressStatus';
+import {
+  ItemAsCard,
+  exceptionCardRows,
+  isOwnerExceptionCard,
+  openItemChatBanner,
+  openItemChatContext,
+} from './ProjectProgressStatus';
 import {
   ProjectPromotion,
   ProjectPromotionCard,
   ProjectPromotionReceipt,
+  promotionChatBanner,
+  promotionChatContext,
   promotionRecordMoment,
 } from './ProjectPromotionCard';
+import {
+  CHAT_FACTS_AS_ARMED,
+  CHAT_SUBJECT_GONE,
+  COORDINATOR_CHAT_PLACEHOLDER,
+  chatAboutOf,
+  chatIntentOf,
+  chatSubjectIn,
+  coordinatorChatPath,
+  itemChat,
+  type ChatAbout,
+  type CoordinatorChatSubject,
+} from '../lib/coordinatorChat';
 import { criteriaDecisionReceiptRows, decisionReceiptAnchor } from '../lib/decisionReceipt';
 import { acceptanceConfirmationQuery } from '../lib/acceptanceConfirmation';
 import {
@@ -1949,6 +1970,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // `planChange` and `projectSettlement` are the two that go through no door at all. The other four
   // answer a call that is blocking on them; there the agent is idle and nothing is pending, so the
   // send is an ordinary turn with the facts it is about carried in front of it (`context`).
+  // `coordinatorChat` is the exception and blocked-merge cards' "Chat about this"
+  // (`lib/coordinatorChat`), and goes through no door either: what it carries is the card's facts,
+  // for this conversation's coordinator to act on with the doors it has.
   const [replyTo, setReplyTo] = useState<{
     target:
       | { kind: 'approval'; id: string }
@@ -1956,7 +1980,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       // `decidingSessionId`: the session the card it was armed from decides as, when that is not
       // this one (`evidenceDecidingSession`) — a dispatched task's card drawn in its run.
       | { kind: 'evidenceDecision'; taskId: string; evidenceRevision: string; decidingSessionId: string | null }
-      | { kind: 'planChange'; projectId: string; criteriaDigest: string };
+      | { kind: 'planChange'; projectId: string; criteriaDigest: string }
+      | { kind: 'coordinatorChat'; projectId: string; about: ChatAbout };
     /** What the reply bar says it is about to answer, whole — built by whoever armed it. */
     banner: string;
     /** What the empty composer asks for while this is armed. */
@@ -4892,6 +4917,59 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     ],
   );
 
+  // "Chat about this" on the exception cards and the blocked-merge card (`lib/coordinatorChat`): the
+  // next send is an ordinary turn to this conversation, with the card's facts — the project, the
+  // item, what failed and where its handling stands — carried in front of the reader's sentence. It
+  // presses no door: the coordinator reads it and acts with the doors it has, and the card's own
+  // presses stay where they were.
+  const chatProjectTitle = selectedSession?.projectTitle ?? null;
+  // The card's facts as they read at `now`: at the press, for the bar, and again at the send.
+  const coordinatorChatContext = useCallback(
+    (subject: CoordinatorChatSubject, projectId: string, now: number): string =>
+      subject.kind === 'item'
+        ? openItemChatContext({ projectTitle: chatProjectTitle, projectId, row: subject.row, now })
+        : promotionChatContext({
+            projectTitle: chatProjectTitle,
+            projectId,
+            promotion: subject.promotion,
+            item: subject.item,
+            now,
+          }),
+    [chatProjectTitle],
+  );
+  const startCoordinatorChat = useCallback(
+    (subject: CoordinatorChatSubject) => {
+      if (!coordinatedProjectId) return;
+      setReplyTo({
+        target: { kind: 'coordinatorChat', projectId: coordinatedProjectId, about: chatAboutOf(subject) },
+        banner:
+          subject.kind === 'item'
+            ? openItemChatBanner(subject.row)
+            : promotionChatBanner(subject.promotion),
+        placeholder: COORDINATOR_CHAT_PLACEHOLDER,
+        context: coordinatorChatContext(subject, coordinatedProjectId, Date.now()),
+      });
+      setTimeout(() => taRef.current?.focus(), 0);
+    },
+    [coordinatedProjectId, coordinatorChatContext],
+  );
+  // The press itself, as the cards drawn in this conversation make it: armed here when this IS the
+  // project's coordinator conversation — the one the read names for the item — and otherwise taken
+  // to that one (an earlier coordinator of the same project, say, still draws the project's cards),
+  // which arms its own composer on arrival.
+  const chatAboutThis = useCallback(
+    (subject: CoordinatorChatSubject) => {
+      const item = subject.kind === 'item' ? subject.row : subject.item;
+      const coordinator = item ? itemChat(item).sessionId : null;
+      if (coordinator && routeId(coordinator) !== selectedId) {
+        navigate(coordinatorChatPath(coordinator, subject));
+        return;
+      }
+      startCoordinatorChat(subject);
+    },
+    [navigate, selectedId, startCoordinatorChat],
+  );
+
   // The exceptions this project still owes somebody, drawn into the transcript at the moment each
   // became the owner's (`exceptionCardRows`) instead of as a block under it — where a card that
   // happened thirty-four minutes ago sat under the newest message saying `waiting 34m`, which is
@@ -4912,10 +4990,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           anchor,
           moment: row.escalatedAt ?? row.waitingSince,
           key: `open-item:${row.itemId}`,
-          element: <ItemAsCard projectId={coordinatedProjectId} row={row} now={Date.now()} />,
+          element: <ItemAsCard projectId={coordinatedProjectId} row={row} now={Date.now()} onChat={chatAboutThis} />,
         }];
       }),
-    [coordinatedProjectId, openItems.data, openItems.dataUpdatedAt, transcriptEvents],
+    [chatAboutThis, coordinatedProjectId, openItems.data, openItems.dataUpdatedAt, transcriptEvents],
   );
 
   // Which of those cards the owner answers by pressing — an exception that became theirs, the pause
@@ -4970,10 +5048,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           item={rows.find((row) => row.promotionId === current.promotionId) ?? null}
           project={null}
           now={Date.now()}
+          onChat={chatAboutThis}
         />
       ),
     }];
   }, [
+    chatAboutThis,
     coordinatedProjectId,
     currentPromotion.data,
     currentPromotion.dataUpdatedAt,
@@ -5023,6 +5103,76 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       { replace: true },
     );
   }, [startIntent, startCardShown, setSearchParams]);
+  // Arriving from a "Chat about this" pressed outside this conversation (`?intent=chat-about` with
+  // the item or the candidate, `coordinatorChatPath`): once this conversation has read what the
+  // chat is about, its composer is armed exactly as the card's own press would arm it, the card is
+  // brought into view, and the intent goes, so a refresh does not arm it again. A subject that has
+  // left the read since the press — or a candidate no longer blocked — is said rather than armed
+  // about (`chatSubjectIn`).
+  const chatIntent = selectedId ? chatIntentOf(searchParams) : null;
+  const chatIntentItem = chatIntent && 'itemId' in chatIntent ? chatIntent.itemId : null;
+  const chatIntentPromotion = chatIntent && 'promotionId' in chatIntent ? chatIntent.promotionId : null;
+  // Where an arrival's chat is about, until its card is on screen to be brought into view: the cards
+  // are drawn at moments of the transcript (`exceptionCardRows`), which lands after the reads do.
+  const [chatReveal, setChatReveal] = useState<{ sessionId: string; about: ChatAbout } | null>(
+    null,
+  );
+  useEffect(() => {
+    if (!chatIntentItem && !chatIntentPromotion) return;
+    const read = openItems.data;
+    if (!read) return;
+    // `undefined` is a read on its way; `null` is a project with no candidate on offer.
+    if (chatIntentPromotion && currentPromotion.data === undefined) return;
+    const subject = chatSubjectIn(
+      chatIntentItem ? { itemId: chatIntentItem } : { promotionId: chatIntentPromotion! },
+      read,
+      currentPromotion.data,
+    );
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete('intent');
+        next.delete('item');
+        next.delete('promotion');
+        return next;
+      },
+      { replace: true },
+    );
+    if (!subject) {
+      message.info(CHAT_SUBJECT_GONE);
+      return;
+    }
+    startCoordinatorChat(subject);
+    if (selectedId) setChatReveal({ sessionId: selectedId, about: chatAboutOf(subject) });
+  }, [
+    chatIntentItem,
+    chatIntentPromotion,
+    currentPromotion.data,
+    message,
+    openItems.data,
+    selectedId,
+    setSearchParams,
+    startCoordinatorChat,
+  ]);
+  // The arrival's card, once it is drawn and the transcript under it has landed. The card sits above
+  // the newest message, and a transcript still pinned to its tail follows every row that lands —
+  // which carried the reader straight back down past it — so the pin is let go first, as a reader
+  // scrolling up to it would. The jump is instant: a smooth one is still near the tail when the
+  // first scroll is measured, which pins the transcript again, and the next resize (the reply bar
+  // this arrival just armed) snaps it back down.
+  useEffect(() => {
+    if (!chatReveal || chatReveal.sessionId !== selectedId || seeding) return;
+    const { about } = chatReveal;
+    const card = 'itemId' in about
+      ? document.querySelector<HTMLElement>(`[data-open-item="${about.itemId}"]`)
+      : document.getElementById(`promotion-${about.promotionId}`);
+    if (!card) return;
+    atBottomRef.current = false;
+    setAtBottom(false);
+    if ('itemId' in about) revealOpenItemCard(about.itemId, document, 'auto');
+    else card.scrollIntoView?.({ block: 'center' });
+    setChatReveal(null);
+  }, [chatReveal, currentPromotion.data, openItems.data, seeding, selectedId, transcriptEvents]);
   // The start card's "View tasks": the tasks this conversation filed are the strip above the
   // composer, so it is opened there rather than navigating away from the card being read. The same
   // read the strip is drawn from says whether there is one; without it the card links to the
@@ -5066,8 +5216,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     }
     // Nothing answers a plan change another way: no call is pending on it, so there is no question
     // that can go out from under the reader mid-sentence. It stays armed until it is sent or the
-    // chip is dismissed.
-    if (replyTo.target.kind === 'planChange') return;
+    // chip is dismissed. A chat about an item or a blocked merge is the same: a sentence about one
+    // that has since moved is still one the coordinator can act on (the native ends keep theirs too).
+    if (replyTo.target.kind === 'planChange' || replyTo.target.kind === 'coordinatorChat') return;
     // An evidence version: the row leaving the pending read is what says it was answered elsewhere
     // or displaced by a newer revision — the two refusals the door gives. Read off the same queue
     // the card is drawn from, and only once that read has come back, for the reason below.
@@ -6532,6 +6683,34 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         const typed = materializeReferences(c, composerRefs);
         send.mutate({
           content: carried ? `${carried}\n\n${typed}` : typed,
+          images: readyImages,
+          intent,
+        });
+        return;
+      }
+      // Chatting about an exception or a blocked merge (`lib/coordinatorChat`) is the same kind of
+      // ordinary turn — to the coordinator, with the card's facts in front of the sentence — and
+      // reaches no door either: a rerun, a merge or a close stays the press it was on the card. No
+      // door waits on a note, so an image alone goes too. The facts go as they stand at the send,
+      // not at the press — the item may have been handed back, rerun or handled while the sentence
+      // was typed (§4.7) — and a subject that has left the reads since goes as it read then, saying so.
+      if (replyTo.target.kind === 'coordinatorChat') {
+        if (!c && readyImages.length === 0) return;
+        const { projectId, about } = replyTo.target;
+        const live = chatSubjectIn(about, openItems.data, currentPromotion.data);
+        const carried = live
+          ? coordinatorChatContext(live, projectId, Date.now())
+          : replyTo.context
+            ? `${CHAT_FACTS_AS_ARMED}\n\n${replyTo.context}`
+            : undefined;
+        pinToBottom();
+        setReplyTo(null);
+        setText('');
+        setComposerRefs({});
+        setHistIdx(-1);
+        const typed = c ? materializeReferences(c, composerRefs) : '';
+        send.mutate({
+          content: [carried, typed].filter(Boolean).join('\n\n'),
           images: readyImages,
           intent,
         });
@@ -9196,6 +9375,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   key={`promotion:${selectedId}`}
                   projectId={coordinatedProjectId}
                   drawRecords={false}
+                  onChat={chatAboutThis}
                 />
               )}
               {/* A question THIS conversation put to the account owner, drawn where it was asked
