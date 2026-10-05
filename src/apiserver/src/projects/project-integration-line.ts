@@ -550,19 +550,19 @@ async function codeTaskWork(
  * the one reading of it, for the first integration and for a start that was given no line.
  */
 export async function projectDefaultLine(
-  db: Pick<Prisma.TransactionClient, 'task' | 'taskDependency'>,
+  db: Pick<Prisma.TransactionClient, 'taskDependency'>,
   projectId: string,
 ): Promise<IntegrationLine> {
-  const codeTasks = await db.task.findMany({
-    where: { projectId, codeless: false, status: { not: TaskStatus.CANCELLED } },
+  // Filter both endpoints through their project rows instead of materializing all task IDs into
+  // two `IN` lists. Large projects can exceed PostgreSQL's bind-parameter limit that way.
+  const edge = await db.taskDependency.findFirst({
+    where: {
+      task: { projectId, codeless: false, status: { not: TaskStatus.CANCELLED } },
+      dependsOnTask: { projectId, codeless: false, status: { not: TaskStatus.CANCELLED } },
+    },
     select: { id: true },
   });
-  const ids = codeTasks.map((task) => task.id);
-  const edges = await db.taskDependency.findMany({
-    where: { taskId: { in: ids }, dependsOnTaskId: { in: ids } },
-    select: { taskId: true, dependsOnTaskId: true },
-  });
-  return defaultIntegrationLine(codeTasks, edges);
+  return edge ? 'PROJECT_BRANCH' : 'MAIN';
 }
 
 /** The line half of a start's settings — what `startProjectLine` is asked for and answers with. */

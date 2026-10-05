@@ -31,6 +31,7 @@ function harness(options: { kind?: 'steer' | 'message' } = {}) {
   /** Whether the session numbers were already written when the meter ran. */
   let writesAtMeterTime = -1;
   let committed = false;
+  let transactionOptions: unknown;
 
   const tx = {
     $queryRaw: async () => [{ id: SESSION_ID, leaseOwnerMatches: true }],
@@ -69,7 +70,8 @@ function harness(options: { kind?: 'steer' | 'message' } = {}) {
     task: { updateMany: async () => ({ count: 1 }), findUnique: async () => null },
   };
   const prisma = {
-    $transaction: async (fn: (t: typeof tx) => unknown) => {
+    $transaction: async (fn: (t: typeof tx) => unknown, options?: unknown) => {
+      transactionOptions = options;
       const out = await fn(tx);
       committed = true;
       return out;
@@ -99,7 +101,13 @@ function harness(options: { kind?: 'steer' | 'message' } = {}) {
     { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never,
     budgets,
   );
-  return { controller, metered, sessionWrites, writesAtMeterTime: () => writesAtMeterTime };
+  return {
+    controller,
+    metered,
+    sessionWrites,
+    writesAtMeterTime: () => writesAtMeterTime,
+    transactionOptions: () => transactionOptions,
+  };
 }
 
 const complete = (h: ReturnType<typeof harness>, subtype: string) =>
@@ -122,6 +130,7 @@ test('a completed turn charges the attempt budget once, after the turn is commit
   // here and not inside the transaction: the meter reads `num_turns` and `cost_usd` back out.
   assert.equal(h.writesAtMeterTime(), 1);
   assert.equal(h.sessionWrites[0].numTurns !== undefined, true);
+  assert.deepEqual(h.transactionOptions(), { timeout: 120_000, maxWait: 120_000 });
 });
 
 test('a steer completion charges nothing — it settles its own row and no spend', async () => {

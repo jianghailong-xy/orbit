@@ -220,6 +220,7 @@ import {
 import { namedRunnerEngines, sanitizeRunnerEngines } from '../common/runner-engines';
 import { runnerAccountPausedUntil } from '../common/account-pause';
 import { CLAUDE_ACCOUNT_MOVE_V1, CODEX_ACCOUNT_MOVE_V1 } from '../providers/account-move-capability';
+import { sessionPoolCodexLogin } from '../providers/codex-login';
 import {
   CURRENT_WORK_INTERRUPTED,
   CURRENT_WORK_SESSION_ENDED,
@@ -3243,6 +3244,16 @@ export class SessionsService {
         && session.numTurns > 0 && !session.runtimeSessionId
       ? { ...session, runtimeSessionId: SessionsService.RESUMABLE_PROJECTION, numTurns: 0 }
       : session;
+    // The ChatGPT account a login-pool session runs on, as the masked view every response names one by
+    // (providers/codex-login.ts): the composer of such a session names THE account it is on, not the
+    // pool's next one — which, with its oldest account spent, would be nobody. The raw column
+    // (migration 0324) is stripped below; this is all a response says of it.
+    const poolCodexLogin = await sessionPoolCodexLogin(
+      this.prisma,
+      ownerId,
+      projected.provider,
+      projected.poolCodexAccountId,
+    );
     // Flatten the join to a picker-ordered `tags` array (system first), matching the list payload.
     // The coordinated project is flattened the same way and for the same reason `taskTitle` is:
     // a name beside its id, so a client can label the link without a second request. Both keys are
@@ -3287,6 +3298,7 @@ export class SessionsService {
         antigravity: antigravityState(session.assignedRunner),
       } : null,
       route,
+      poolCodexLogin,
       mergeRepairSession: children[0] ? withSessionState(children[0]) : null,
       mergeRecoverySupported: session.assignedRunner?.capabilities.includes(SESSION_MERGE_RECOVERY_V1) ?? false,
       tags,

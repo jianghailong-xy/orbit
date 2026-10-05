@@ -66,6 +66,7 @@ import {
   DeviceStartResponse,
   apiErrorRetryAt,
   apiErrorRetryBudgetLeft,
+  POOL_RATE_LIMIT_WAIT_MS,
   isAsyncAgentLaunchAck,
   isRateLimitApiErrorText,
   isRetryableApiErrorText,
@@ -363,6 +364,11 @@ const REPO_CLEANUP_TIMEOUT_MS = 3 * 60_000;
 // itself. maxWait uses the same value: a batch that already burned its compile should queue for
 // a pool slot instead of failing fast and paying the compile again.
 const EVENTS_INGEST_TRANSACTION_TIMEOUT_MS = 120_000;
+// A first integration back-fills every other finished code task in the same transaction as the
+// turn that starts the line. That work is proportional to the project's completed tasks, so the
+// interactive 5s default expires before a large project's queue can commit. Keep the atomic
+// boundary, but give this path the same bounded window as durable event ingestion.
+const TURN_COMPLETE_TRANSACTION_TIMEOUT_MS = 120_000;
 // The WASM query compiler and the wire bind cost grow super-linearly with the row count, and a
 // backlogged batch holds thousands: one 32k-parameter createMany compiles for minutes, while 256
 // rows stay in the milliseconds. Chunked inside the same transaction, so the retry-idempotency
@@ -5002,7 +5008,12 @@ export class RunnerApiController {
         reviewToDeliver,
         reviewsAbandoned,
       };
-    }, loggedRetry(this.logger, 'runnerApi.turnComplete'));
+    }, loggedRetry(this.logger, 'runnerApi.turnComplete', {
+      transaction: {
+        timeout: TURN_COMPLETE_TRANSACTION_TIMEOUT_MS,
+        maxWait: TURN_COMPLETE_TRANSACTION_TIMEOUT_MS,
+      },
+    }));
     // The review this completion recorded, handed to its reviewer after the commit (§2 D2); and the
     // ones this completion found it had been handed and dropped, whose cards are the owner's now (T5).
     if ('reviewToDeliver' in finalized && finalized.reviewToDeliver) {
@@ -6954,8 +6965,8 @@ export class RunnerApiController {
       // per re-send whatever armed it.
       if (rateLimited && apiErrorRetryBudgetLeft(session.retryAttempts)) {
         const at =
-          (await this.queue.sharedPoolRetryAt(this.prisma, session, new Date())) ??
-          (await this.queue.loginPoolRetryAt(this.prisma, session, new Date()));
+          (await this.queue.sharedPoolRetryAt(this.prisma, session, new Date(), POOL_RATE_LIMIT_WAIT_MS)) ??
+          (await this.queue.loginPoolRetryAt(this.prisma, session, new Date(), POOL_RATE_LIMIT_WAIT_MS));
         if (at) return { retryAt: at };
       }
       return { retryAt: apiErrorRetryAt(session.retryAttempts, new Date()) };

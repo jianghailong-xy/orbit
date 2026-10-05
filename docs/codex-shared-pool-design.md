@@ -224,6 +224,11 @@ codex (custom provider "orbit") ──▶  /gw/codex/responses  ──池内某�
     换不了时会话留在原处、`loginPoolRetryAt` / `sharedPoolKeyRetryAt` 按这个时刻武装重试 —— 而不是走通用的
     30s/2m/5m API 错误梯度（那条梯度只留给池回答不了的会话，例如 BYOK 自定义 provider）。
     这会话层的一条由 `retryPlanFor` 里 `isRateLimitApiErrorText` 分流。
+    但**换号不是免费的**：换过去之后第一个请求的 prompt cache 只命中公共指令前缀，**整个线程历史按未缓存计费一次**
+    （§2.3 P0，2026-10-02 实测；cached input 是 uncached 的 1/10）。所以「等」与「换」按等待长短决定，而不是一律换：
+    会话自己那把凭据的 mark 在 `POOL_RATE_LIMIT_WAIT_MS`（2 分钟）内解除就**留在原地等它**（cache 保住），
+    超过才采用池的答案（有别的能跑就换过去）。只有限流这样判 —— 账号被用满是几天后的重置，换走正是池存在的意义。
+    实现是 `loginPoolRetryAt` / `sharedPoolRetryAt` 的 `patienceMs` 参数（默认 0＝池的答案，只有限流这条传 2 分钟）。
 - 方案 A 落地（2026-10-02，`providers/pool-credential-select.ts` 的 `choosePoolCredential`，账号之间的规则在 `pool-login-select.ts`）：
   构建引擎环境的每个入口（claim、runner 重启后的 reclaim、换 provider 的 reload）都在这里选一次，记在会话上（`pool_codex_account_id`
   或 `pool_key_id`，两者至多一个有值），网关只照着转发。
