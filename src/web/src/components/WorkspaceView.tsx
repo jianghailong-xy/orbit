@@ -154,6 +154,7 @@ import {
 import {
   type ConfiguredProvider,
   clampPermissionModeForModel,
+  permissionModeSupported,
   contextWindowFor,
   DEFAULT_MODEL,
   defaultModelForProvider,
@@ -275,6 +276,8 @@ import {
   switchSessionAccount,
   uploadAttachment,
 } from '../api';
+import { DshRepairCard } from './Transcript';
+import { DSH_RUNNER_CAPABILITY, dshRepair } from '../lib/dshRuntime';
 import { AntigravityRepairCard, antigravityRepair, AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, LiveToolOutputsCtx, MD, SessionNavCtx, StreamingDraftsCtx, TaskActivityCtx, type TaskActivity, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalPanel';
@@ -3196,7 +3199,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // `~/.codex/prompts`, nothing in the protocol for it), so `/anything` is plain text there.
   // Claude's commands and skills are meaningless in that session — don't offer them, and
   // don't gate sending on them. `/status` is ours and stays.
-  const codexComposer = !supportsRunnerSlashAssets(shownProvider);
+  // DeepSeek Harness has no runner slash registry either; its configured slug is read as its runtime.
+  const slashProvider =
+    runtimeForProvider(shownProvider, configuredProviders) === AgentProvider.DSH ? AgentProvider.DSH : shownProvider;
+  const codexComposer = !supportsRunnerSlashAssets(slashProvider);
   // The selected session's permission mode as the SERVER resolves it: its own stored mode, else
   // the owner's account default, else Auto (common/permission-mode.ts). Reading the session row
   // alone would show one fixed mode for every session that never stored one — and since the pills
@@ -3318,9 +3324,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         runner.planUsage,
         runner.antigravity,
         antigravityKeyAvailable,
+        runner,
       ),
     [
       configuredProviders,
+      runner,
       runner.modelCatalog,
       runner.runtimeDefaultModels,
       runner.engines,
@@ -3469,8 +3477,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     if (
       !live &&
       shownProviderCapabilitiesResolved &&
-      mode === 'Auto' &&
-      !supportsAuto(model, shownProvider, configuredProviders, runner.modelCatalog)
+      ((mode === 'Auto' && !supportsAuto(model, shownProvider, configuredProviders, runner.modelCatalog)) ||
+        !permissionModeSupported(MODE_TO_PERMISSION[mode], shownProvider, configuredProviders))
     ) {
       setMode('Default');
     }
@@ -3538,6 +3546,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     : false;
   const antigravityQueueRepair = selectedIsQueued && runtimeForProvider(shownProvider, configuredProviders) === 'antigravity'
     ? antigravityRepair(selectedStartingSession?.error ?? '')
+    : null;
+  const dshQueueRepair = selectedIsQueued && runtimeForProvider(shownProvider, configuredProviders) === AgentProvider.DSH
+    ? dshRepair(selectedStartingSession?.error ?? '')
     : null;
   const queuedNoticeScope = selectedId
     ? `${selectedId}:${selectedStartingSession?.lastTurnAt ?? ''}`
@@ -5435,7 +5446,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         // established "start a new session" behavior instead of sending an invalid resume.
       }
       const provider = pickedProvider;
-      const wireEffort = normalizeEffortForProvider(provider, effort);
+      // Harness levels are opaque catalogue values, so they are checked against the model's own row.
+      const wireEffort =
+        runtimeForProvider(provider, configuredProviders) === AgentProvider.DSH
+          ? normalizeEffortForProvider(provider, effort, model, runner.modelCatalog, configuredProviders)
+          : normalizeEffortForProvider(provider, effort);
       const providerResolved = providerIdentityResolved(
         provider,
         configuredProvidersLoaded,
@@ -6745,6 +6760,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     // context on the next message. A bare `!` is a no-op; images are ignored. A terminal
     // session is capability-checked in the mutation; without resumable context it starts fresh.
     if (c.startsWith('!')) {
+      // DeepSeek Harness has no shell bridge (the runner settles such a turn as a refusal), so the
+      // command is kept in the composer rather than sent to fail.
+      if (runtimeForProvider(shownProvider, configuredProviders) === AgentProvider.DSH) {
+        message.warning('DeepSeek Harness sessions don’t run ! shell commands', 'Ask the agent to run it instead.');
+        return;
+      }
       const cmd = c.slice(1).trim();
       if (cmd) send.mutate({ content: cmd, images: [], shell: true, intent: 'NEXT_TURN' });
       else setText('');
@@ -6930,11 +6951,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         })),
       ].filter(
         (it) =>
-          slashAssetMatchesProvider(it.provider, shownProvider) &&
+          slashAssetMatchesProvider(it.provider, slashProvider) &&
           (!it.workspaceId || it.workspaceId === composerWorkspaceId),
       )),
     ],
-    [runner.commands, runner.skills, composerWorkspaceId, codexComposer, shownProvider],
+    [runner.commands, runner.skills, composerWorkspaceId, codexComposer, slashProvider],
   );
   const slashMatches = useMemo(() => {
     const items = runner.online ? slashItems : slashItems.filter((it) => it.type === 'local');
@@ -7368,8 +7389,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const geminiProviders = useQuery({
     queryKey: PROVIDERS_LIST_KEY,
     queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE),
-    enabled: shownProvider === 'antigravity',
+    enabled: shownProvider === 'antigravity' || runtimeForProvider(shownProvider, configuredProviders) === AgentProvider.DSH,
   });
+  // A Harness session's key is its own provider row; that row's page is where the key is fixed.
+  const dshProviderRow = geminiProviders.data?.find((p) => p.slug === shownProvider && p.runtime === AgentProvider.DSH);
   const geminiProvider = geminiProviders.data?.find((p) => p.presetSlug === 'gemini' && p.runtime === 'antigravity');
   const geminiChoice = providerSwitchChoices.find((c) =>
     c.kind === 'byok' && configuredProviders.some((p) => p.slug === c.slug && p.presetSlug === 'gemini' && p.runtime === 'antigravity'),
@@ -7378,6 +7401,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     mutationFn: () => api(`/runners/${encodeId(runner.id)}/install`, { method: 'POST', body: { engine: 'antigravity' } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['runners'] }),
     onError: (e: Error) => void message.error("Couldn't install Antigravity CLI", e.message),
+  });
+  const installDsh = useMutation({
+    mutationFn: () => api(`/runners/${encodeId(runner.id)}/install`, { method: 'POST', body: { engine: 'dsh' } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['runners'] }),
+    onError: (e: Error) => void message.error("Couldn't install DeepSeek Harness", e.message),
   });
   // Hand an undelivered message back to the composer, so a message the engine never received can
   // be re-sent without being retyped out of a bubble. Explicitly user-initiated, so unlike the
@@ -7530,19 +7558,24 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // Only for built-in engines: a configured (BYOK) slug borrows a runtime this screen cannot name,
   // and telling someone "you will be asked" for a session that might be running on Codex is
   // exactly the false assurance this is here to remove. Unknown => say nothing.
-  const shownProviderIsBuiltin = Object.values(AgentProvider).some((p) => p === shownProvider);
+  //
+  // DeepSeek Harness is the exception: a configured Harness key can only run on Harness (its runtime
+  // can't change, providers.service), so its slug names the runtime as surely as a built-in does.
+  const shownRuntime = runtimeForProvider(shownProvider, configuredProviders);
+  const shownProviderIsBuiltin =
+    Object.values(AgentProvider).some((p) => p === shownProvider) || shownRuntime === AgentProvider.DSH;
   const permissionSemanticsFor = useCallback(
     (label: string) =>
       shownProviderIsBuiltin
         ? derivePermissionSemantics(
-            shownProvider,
+            shownRuntime,
             MODE_TO_PERMISSION[label],
             shownModel,
             runner.runsAsRoot,
             runner.modelCatalog,
           )
         : undefined,
-    [shownProvider, shownProviderIsBuiltin, shownModel, runner.runsAsRoot, runner.modelCatalog],
+    [shownRuntime, shownProviderIsBuiltin, shownModel, runner.runsAsRoot, runner.modelCatalog],
   );
   // Model, Mode, Effort & Provider can be changed any time on a live session (the runner must be
   // online to act on it), and none of them aborts the running turn. When the change lands is the
@@ -7935,7 +7968,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         : undefined,
       onOpenProviders: () => navigate(`/providers?runner=${encodeId(runner.id)}&engine=antigravity`),
       onInstall: runner.online && runner.antigravity?.supported ? () => installAntigravity.mutate() : undefined,
-      installDisabled: installAntigravity.isPending || runner.install?.status === 'installing' || runner.install?.status === 'pending',
+      installDisabled: installAntigravity.isPending || installDsh.isPending || runner.install?.status === 'installing' || runner.install?.status === 'pending',
+      onEditDshKey: () => navigate(dshProviderRow ? `/providers/${encodeId(dshProviderRow.id)}` : '/providers'),
+      onInstallDsh: runner.online && runner.capabilities?.includes(DSH_RUNNER_CAPABILITY) ? () => installDsh.mutate() : undefined,
       onRetry:
         retryText && !selectedTrashed && !selectedMissing
           ? retry.sessionMessage && selectedId
@@ -7971,6 +8006,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       pickProvider,
       installAntigravity.mutate,
       installAntigravity.isPending,
+      installDsh.mutate,
+      installDsh.isPending,
+      dshProviderRow,
+      runner.capabilities,
       shownModel,
       shownMode,
       effectiveEffort,
@@ -9302,7 +9341,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 </div>
               )}
               {placeholder === 'queued' && showQueuedNotice && (
-                antigravityQueueRepair ? <AntigravityRepairCard repair={antigravityQueueRepair} help={authErrorHelp} /> : <div className="chat-queued-state">
+                dshQueueRepair ? <DshRepairCard repair={dshQueueRepair} help={authErrorHelp} /> : antigravityQueueRepair ? <AntigravityRepairCard repair={antigravityQueueRepair} help={authErrorHelp} /> : <div className="chat-queued-state">
                   <div className="chat-queued-dots" aria-hidden="true">
                     <span />
                     <span />
@@ -9479,7 +9518,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 !selectedTrashed &&
                 showQueuedNotice &&
                 transcriptEvents.length > 0 && (
-                antigravityQueueRepair ? <AntigravityRepairCard repair={antigravityQueueRepair} help={authErrorHelp} /> : <div className="chat-note chat-slot-wait">
+                dshQueueRepair ? <DshRepairCard repair={dshQueueRepair} help={authErrorHelp} /> : antigravityQueueRepair ? <AntigravityRepairCard repair={antigravityQueueRepair} help={authErrorHelp} /> : <div className="chat-note chat-slot-wait">
                   <span>{queuedTitle(selectedSession ?? selected)}</span>
                   <span>{slotWaitDescription}</span>
                 </div>
@@ -10430,11 +10469,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   // to another machine, so Bypass on a root runner is not a mode awaiting its moment
                   // — claude exits during startup and the session never produces anything. Disabled
                   // and not hidden, so the reason is visible instead of the option silently missing.
+                  //
+                  // A mode the RUNTIME refuses outright (DeepSeek Harness outside Default, Auto and
+                  // Don't Ask) is disabled for the same reason: the server rejects the session rather
+                  // than run it as something else, so it is not an intent that can wait.
                   const semantics = permissionSemanticsFor(m);
-                  const runnable = permissionModeAvailableOnRunner(
-                    MODE_TO_PERMISSION[m],
-                    runner.runsAsRoot,
-                  );
+                  const runnable =
+                    permissionModeAvailableOnRunner(MODE_TO_PERMISSION[m], runner.runsAsRoot) &&
+                    permissionModeSupported(MODE_TO_PERMISSION[m], shownProvider, configuredProviders);
                   const shortNote = semantics?.shortNote;
                   return {
                     value: m,

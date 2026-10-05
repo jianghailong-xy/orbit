@@ -1,6 +1,7 @@
 import { AgentProvider, PROVIDER_PRESETS, type ProviderBrand } from '@orbit/shared';
 import type { PlanUsage, RunnerAntigravityState, RunnerEngineHealth, RunnerModelCatalog, RuntimeDefaultModels } from '@orbit/shared';
 import type { CodexLogin } from './codexLogin';
+import { DSH_CONNECT_HREF, DSH_PRESET_SLUG, DSH_STATE_LABEL, dshRunnerState, type DshRunnerFacts } from './dshRuntime';
 import { accountNameOf, accountPlanUsage } from './engineAccounts';
 import { encodeId } from './idCodec';
 import { bindingPlanUsageRow, currentPlanUsageRows } from './planUsage';
@@ -85,6 +86,9 @@ export interface ProviderChoice {
    *  its row, so a session can start on another account than its workspace's. Codex and Claude — the
    *  engines whose CLI keeps a login per directory (Session.codexAccount, Session.claudeAccount). */
   accounts?: AccountChoice[];
+  /** Not a provider at all: the offer to connect one (DeepSeek Harness with no key yet). Always
+   *  `unavailable`, never a session's provider, so no runtime's menu lists it. */
+  setup?: boolean;
 }
 
 /** One of the runner's accounts of an engine, as a row under that engine in the picker. */
@@ -112,6 +116,7 @@ const ENGINE_LABELS: Record<string, string> = {
   [AgentProvider.KIMI]: 'Kimi',
   [AgentProvider.OPENCODE]: 'OpenCode',
   [AgentProvider.ANTIGRAVITY]: 'Antigravity',
+  [AgentProvider.DSH]: 'DeepSeek Harness',
 };
 
 /** Use the runtime's name for the Gemini preset while preserving names the user gave their keys. */
@@ -121,14 +126,19 @@ export const providerDisplayLabel = (label: string, presetSlug?: string | null):
 /** One line about a provider's endpoint, for the gallery card and the connect form's identity bar.
  *  Claude and Codex borrow a CLI to speak a dialect the vendor exposes for it, so the dialect is
  *  the useful fact. Kimi and Antigravity are a CLI on its vendor's own API, where it isn't. */
-export const runtimeSummary = (runtime?: string | null): string =>
+export const runtimeSummary = (runtime?: string | null, presetSlug?: string | null): string =>
   runtime === AgentProvider.KIMI
     ? 'Runs on the Kimi CLI'
     : runtime === AgentProvider.ANTIGRAVITY
       ? 'Runs on the Antigravity CLI'
-      : runtime === AgentProvider.CODEX
-        ? 'OpenAI-compatible'
-        : 'Anthropic-compatible';
+      : runtime === AgentProvider.DSH
+        ? 'Runs on DeepSeek Harness'
+        : runtime === AgentProvider.CODEX
+          ? 'OpenAI-compatible'
+          : // DeepSeek's two presets share a vendor and a key; which agent runs is what tells them apart.
+            presetSlug === 'deepseek'
+            ? 'Runs on Claude Code'
+            : 'Anthropic-compatible';
 
 // A built-in engine has no ModelProvider row, so it has no preset to inherit a look from. Borrow
 // the vendor preset that ships the same mark: the engine and the BYOK provider are the same
@@ -161,6 +171,7 @@ export function brandForProvider(
   presetSlug?: string | null,
 ): { brand: ProviderBrand; glyphKey?: string } {
   if ((presetSlug ?? slug) === 'gemini') return ENGINE_BRAND[AgentProvider.ANTIGRAVITY];
+  if (slug === AgentProvider.DSH && !presetSlug) presetSlug = DSH_PRESET_SLUG;
   const presetKey = presetSlug ?? ENGINE_PRESET[slug];
   const preset = presetKey ? PROVIDER_PRESETS.find((p) => p.slug === presetKey) : undefined;
   if (preset) return { brand: preset.brand, glyphKey: preset.slug };
@@ -208,6 +219,13 @@ function byokBlocker(health?: RunnerEngineHealth): string | undefined {
   return health && !health.installed ? 'Not installed' : undefined;
 }
 
+/** Harness admission, read the way the server reads it (dshRunnerState). Its credential is the
+ *  configured key itself, so there is nothing to be signed into. */
+function dshBlocker(runner: DshRunnerFacts | null | undefined): string | undefined {
+  const state = dshRunnerState(runner);
+  return state === 'ready' ? undefined : DSH_STATE_LABEL[state];
+}
+
 /** Antigravity admission uses the runner capability the server reads when dispatching. */
 function antigravityBlocker(state?: RunnerAntigravityState, health?: RunnerEngineHealth, login = false): string | undefined {
   if (state?.supported === false) return 'Update runner';
@@ -250,6 +268,7 @@ export function providerChoices(
   planUsage?: PlanUsage | null,
   antigravity?: RunnerAntigravityState,
   antigravityKeyAvailable: boolean = antigravity?.envKeyAvailable ?? false,
+  dshRunner?: DshRunnerFacts | null,
 ): ProviderChoice[] {
   const usesGoogleAccount = antigravity?.authSource === 'google' && !(antigravityKeyAvailable && !antigravity.envKeyAvailable);
   const engines: ProviderChoice[] = ENGINE_SLUGS.filter(
@@ -327,23 +346,51 @@ export function providerChoices(
     .map((p) => {
       const runtime = runtimeForProvider(p.slug, configured);
       const health = engineHealth?.find((e) => e.engine === runtime);
-      const blocker = runtime === AgentProvider.ANTIGRAVITY ? antigravityBlocker(antigravity, health) : byokBlocker(health);
+      const blocker =
+        runtime === AgentProvider.ANTIGRAVITY
+          ? antigravityBlocker(antigravity, health)
+          : runtime === AgentProvider.DSH
+            ? dshBlocker(dshRunner)
+            : byokBlocker(health);
       return {
         slug: p.slug,
         label: providerDisplayLabel(p.label, p.presetSlug),
         kind: 'byok' as const,
         ...(runtime === AgentProvider.ANTIGRAVITY ? { labelDetail: 'API key' } : {}),
+        // DeepSeek's key runs on either agent; say which one this row is.
+        ...(runtime === AgentProvider.DSH
+          ? { labelDetail: 'Harness' }
+          : p.presetSlug === 'deepseek'
+            ? { labelDetail: 'Claude Code' }
+            : {}),
         ...brandForProvider(p.slug, p.label, p.presetSlug),
         modelLabel: defaultModelLabel(p.slug, modelCatalog, configured, runtimeDefaultModels),
         ...(blocker ? { unavailable: blocker, fixEngine: runtime } : {}),
         ...(pooled.has(p.slug) ? { inPool: true } : {}),
       };
     });
+  // No Harness key yet, on a runner that could run one: offer the connection rather than nothing, so
+  // "where is DeepSeek Harness?" has an answer in the picker itself.
+  const dshSetup: ProviderChoice[] =
+    dshRunner && dshRunnerState(dshRunner) !== 'updateRunner' &&
+    !configured.some((p) => p.runtime === AgentProvider.DSH)
+      ? [{
+          slug: `${DSH_PRESET_SLUG}:connect`,
+          label: 'DeepSeek Harness',
+          kind: 'byok' as const,
+          ...brandForProvider(AgentProvider.DSH, 'DeepSeek Harness'),
+          modelLabel: '',
+          unavailable: 'Add API key',
+          fixHref: DSH_CONNECT_HREF,
+          setup: true,
+        }]
+      : [];
   const antigravityKeys = byok.filter((choice) => runtimeForProvider(choice.slug, configured) === AgentProvider.ANTIGRAVITY);
   return [
     ...engines.flatMap((choice) => choice.slug === AgentProvider.KIMI ? [...antigravityKeys, choice] : [choice]),
     ...accountPools,
     ...byok.filter((choice) => !antigravityKeys.includes(choice)),
+    ...dshSetup,
   ];
 }
 
@@ -383,7 +430,7 @@ export function sameRuntimeChoices(
 ): ProviderChoice[] {
   const runtime = runtimeForProvider(provider, configured);
   const sameRuntime = choices.filter(
-    (choice) => runtimeForProvider(choice.slug, configured) === runtime,
+    (choice) => !choice.setup && runtimeForProvider(choice.slug, configured) === runtime,
   );
   if (sameRuntime.some((choice) => choice.slug === provider)) return sameRuntime;
   return [
