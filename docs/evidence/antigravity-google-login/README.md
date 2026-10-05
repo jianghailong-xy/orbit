@@ -217,6 +217,19 @@ UNION ALL SELECT '1//',   count(*) … AND payload::text LIKE '%1//%';
 
 **给下游的结论**：这条验收项需要的「agy 实际 `--model` = 请求的 Google 模式模型 + 正常回答」目前拿不到；修复 `b5b99caa4` 只修掉了「静默换成 gemini-3.8-flash」，没有让模型到达 runner。
 
+### 10.1 判别结果：目录里有 Google 行，问题在派发侧的匹配
+
+协调会话在生产 `orbit-postgres` 上跑了上面那条只读查询（`runner.model_catalog -> 'antigravity'`，`name='workstation-gpu'`）：
+
+```
+n = 7
+ids = claude-opus-5-5, claude-sonnet-5-5, gemini-3.1-pro, gemini-3.6-flash, gemini-3.7-flash, gemini-3.8-flash, gpt-oss-120b
+```
+
+所以 §10 判据链第 3 步的两种可能里，**(a) 被排除**：控制面手上这份目录**确实有** `claude-sonnet-5-5`（以及 `claude-opus-5-5`、`gpt-oss-120b`）。剩下的就是 **(b)：修复后的派发侧判定对目录里已经存在的 Google id 仍然匹配不上，于是回退成「不传模型」**——症状因此从「静默换成 gemini-3.8-flash」变成「静默用 agy 默认模型」，用户可见的结果一样。修复任务已按这条实测 reopen/返工，定位方向是派发目录匹配与部署树。
+
+在修复落地前不再重复「签出/签入」触发（同一条手段已用过一次且无效），等待修复结果后重跑并提交下一版证据。
+
 ## 9. 截图
 
 
