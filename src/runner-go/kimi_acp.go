@@ -1725,6 +1725,9 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 				setTurn("")
 
 			case "interrupt":
+				// RunInterruptRequest.stopBackgroundWork — the composer's Stop ends this
+				// session's background work with the turn; see bgTailer.stopBackgroundWork.
+				stopBackgroundWorkForTurn(bg, resp)
 				emit(evInterrupt, map[string]interface{}{})
 				interruptRequested = true
 				app.cancelPermissions()

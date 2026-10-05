@@ -27,7 +27,17 @@ export function mergeBackgroundShells(server: BgShell[], live: BgShell[]): BgShe
     const s = byId.get(l.shellId);
     // Keep the server row for a shell that already terminated there, unless the live row is fresher
     // (only possible while it's still running); otherwise the live row wins / introduces the shell.
-    if (s && l.status === 'running') byId.set(l.shellId, keepNewerOutput(l, s));
+    //
+    // "While it's still running" is not the only way the live row can be the newer one. The server
+    // row is a SNAPSHOT taken when this session was opened (one read per open, cached for
+    // BG_TTL_MS): a shell that was running then and has terminated since is reported by the live
+    // stream and by nothing else this client will see. Keeping the snapshot there left the tray
+    // spinning — and its completion toast silent, which is the one signal that toast exists for —
+    // for a process the person had just watched stop (a Stop's kill among them). So a live row
+    // that has left `running` also wins over a server row still in it; the two terminal rows
+    // together still keep the server's authoritative copy, and its output is not lost either way
+    // (keepNewerOutput).
+    if (s && (l.status === 'running' || s.status === 'running')) byId.set(l.shellId, keepNewerOutput(l, s));
     else if (!s) byId.set(l.shellId, l);
   }
   return [...byId.values()].sort((a, b) => a.startedSeq - b.startedSeq);

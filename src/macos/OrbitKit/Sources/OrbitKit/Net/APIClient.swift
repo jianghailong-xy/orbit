@@ -265,8 +265,13 @@ public final class APIClient: @unchecked Sendable {
         try await get("sessions/\(sessionID)/turns")
     }
 
-    public func interrupt(sessionID: String) async throws {
-        _ = try await postRaw("sessions/\(sessionID)/interrupt", body: Optional<Empty>.none)
+    /// Stop the turn the session is running. `stopBackgroundWork` is the composer's Stop and only
+    /// that: it also ends the background work the session left running (see `SessionStopRequest`).
+    /// Omitted, this is a bodyless interrupt — nothing killed, the engine and its conversation
+    /// left standing.
+    public func interrupt(sessionID: String, stopBackgroundWork: Bool = false) async throws {
+        let body: SessionStopRequest? = stopBackgroundWork ? SessionStopRequest() : nil
+        _ = try await postRaw("sessions/\(sessionID)/interrupt", body: body)
     }
 
     /// Stop the running turn and queue the follow-up in the SAME request (`SessionInterruptRequest`).

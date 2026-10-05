@@ -2073,6 +2073,16 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				// Queued on the poller's own goroutine, so the request keeps its place in
 				// the order the session intended; waited on off to the side, because this
 				// same goroutine is how `end` and the next interrupt arrive.
+				//
+				// The one exception to "no kill on this path": a turn that ASKS for the
+				// session's background work to end with it (RunInterruptRequest.
+				// stopBackgroundWork — the composer's Stop). Honoured first and on its own,
+				// because it is the runner's own instruction and does not depend on the
+				// engine answering: an engine wedged enough that its interrupt never comes
+				// back is exactly the one somebody presses Stop over, and the jobs the runner
+				// hosts are its own to end. A turn without the flag leaves this untouched and
+				// is the interrupt this arm has always been.
+				stopBackgroundWorkForTurn(bg, resp)
 				w, err := rt.requestControl(ctrlInterrupt)
 				if err != nil {
 					logln("interrupting", rt.String(), "failed for", job.SessionID+":", err)

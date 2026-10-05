@@ -665,6 +665,9 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			setTurn("")
 
 		case "interrupt":
+			// RunInterruptRequest.stopBackgroundWork — the composer's Stop ends this session's
+			// background work with the turn; see bgTailer.stopBackgroundWork.
+			stopBackgroundWorkForTurn(bg, resp)
 			emit(evInterrupt, map[string]interface{}{})
 			requestActiveInterrupt(true)
 

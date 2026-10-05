@@ -359,10 +359,19 @@ just a different transport but a different guarantee.
   generation makes a straggler recognisable instead of matching it against the new process's
   identically numbered request. Waiters live in a table owned by their own runtime, and every
   one of them is failed when that process goes terminal.
-- **No kill anywhere on this path.** The process, its conversation and its stdin survive an
+- **No kill on this path by default.** The process, its conversation and its stdin survive an
   interrupt — that is the entire difference from `end`. A kill would stop the turn too and look
   identical for a second, at the cost of a resumable context, so an interrupt that cannot be
-  confirmed is *reported*, never covered up.
+  confirmed is *reported*, never covered up. The one exception is explicit and belongs to the
+  caller: an interrupt filed with `stopBackgroundWork: true` (the composer's Stop) also ends the
+  background work the session left running — the runner-hosted jobs are killed for real
+  (`kind:'service'` included: a dev server or watcher the stopped turn started is taken down with
+  it), and the engine's own shells, Monitors and background Workflows are reported killed so the
+  session's background tray resolves instead of asserting a stopped watcher is still running. That
+  flag does not make this `end`: the engine process, its conversation and its stdin still survive,
+  and the next turn runs in the same session. Every caller that omits it — the engine's own
+  `session_interrupt`, the MCP tool, the CLI, the browser's plain interrupt — gets the interrupt
+  this bullet has always described, unchanged.
 - **The transcript marker costs an answer.** `interrupt{requestId}` is emitted only once the
   engine has confirmed; a failure emits an `error` event saying the session is still running and
   its context intact. The drain's own teardown marker (`interrupt{reason:'runner_restart'}`) is a

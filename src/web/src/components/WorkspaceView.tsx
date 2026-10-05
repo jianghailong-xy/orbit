@@ -5716,7 +5716,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     }
   };
   const control = useMutation({
-    mutationFn: (id: string) => interruptSession(id),
+    // The composer's Stop. It ends the session's background work along with the turn — the dev
+    // server or build the stopped turn left running is what the person pointing at Stop can still
+    // see running — and it is the ONLY caller that asks for that: every other interrupt keeps a
+    // plain interrupt's semantics (nothing killed; the engine and its conversation stay).
+    mutationFn: (id: string) => interruptSession(id, undefined, { stopBackgroundWork: true }),
     onSuccess: () => {
       // Interrupt drops queued follow-ups server-side. Rather than silently lose what the
       // user typed, fold their queued text back into the composer so it can be edited and

@@ -1672,6 +1672,23 @@ export interface RunInterruptRequest {
   content?: string;
   /** Ids of pre-uploaded attachments (`POST /api/attachments`) for the follow-up. */
   attachmentIds?: string[];
+  /**
+   * Stop this session's background work along with the turn: the shells and Monitors the
+   * engine's own turn launched, its background Workflows, and the jobs the runner hosts
+   * (bg_run — kind 'service' included, deliberately: a dev server or watcher is taken down
+   * too, and that cost was accepted rather than softened with an allow-list).
+   *
+   * Explicit, and this is the whole point of it being a field. An interrupt does not kill
+   * anything — the process, its conversation and its stdin survive it, which is the entire
+   * difference from `end` — and a client that omits this asks for exactly that, unchanged.
+   * The composer's Stop is the one caller that asks for more, because a turn that left its
+   * own dev server running has not stopped what the person pointed at.
+   *
+   * It is not a promise the runner can confirm the way the turn's own stop is confirmed:
+   * what the runner hosts is killed and reported, and the engine's own tasks are reported
+   * as stopped with it. The session is not ended by any of this.
+   */
+  stopBackgroundWork?: boolean;
 }
 
 /** Control plane → browser: the interrupt was accepted, and the turn the follow-up (if

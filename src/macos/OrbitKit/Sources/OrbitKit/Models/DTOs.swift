@@ -795,6 +795,26 @@ public struct SessionInterruptRequest: Codable, Sendable {
     }
 }
 
+/// POST /sessions/:id/interrupt WITHOUT a follow-up — the composer's Stop, and the one thing that
+/// makes it more than an interrupt.
+///
+/// An interrupt does not kill anything: the engine's process, its conversation and its stdin
+/// survive it, which is the entire difference from ending a session. `stopBackgroundWork` is the
+/// explicit ask to also end what the session left running — the runner's jobs (a dev server or
+/// watcher included), the engine's own shells and Monitors, and its background Workflows. It has to
+/// be a field rather than a second request for the same reason the follow-up does: one press is one
+/// decision, and two requests could apply half of it.
+///
+/// Deliberately NOT sent by `interrupt(sessionID:)`'s default: an interrupt that says nothing extra
+/// must stay an interrupt that kills nothing, or the difference between stopping a turn and ending a
+/// session disappears silently. The body is omitted entirely when the flag is off.
+public struct SessionStopRequest: Codable, Sendable {
+    public let stopBackgroundWork: Bool
+    public init(stopBackgroundWork: Bool = true) {
+        self.stopBackgroundWork = stopBackgroundWork
+    }
+}
+
 public struct TurnAccepted: Codable, Sendable {
     public let turnId: String?
     public let seq: Int?

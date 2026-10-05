@@ -797,19 +797,34 @@ export const renameSession = (sessionId: string, title: string) =>
  * that arrives just after is filed as a steer — written into the very turn being stopped.
  * Which of those happened would come down to network ordering. Sent together, the message
  * is filed after the drop and delivered as the next turn.
+ *
+ * `options.stopBackgroundWork` is the composer's Stop, and only that: it also ends the
+ * background work the session left running (the runner's jobs, the engine's own shells and
+ * Monitors, its background Workflows). Omitted, this is a plain interrupt — nothing is
+ * killed, and the engine's process, conversation and stdin survive, which is the whole
+ * difference between stopping a turn and ending a session. It rides this request rather
+ * than a second one for the same reason the follow-up does: one press is one decision.
  */
 export const interruptSession = (
   sessionId: string,
   followUp?: { content: string; attachmentIds?: string[] },
+  options?: { stopBackgroundWork?: boolean },
 ) =>
   api<{ ok: true; turnId?: string; seq?: number }>(`/sessions/${sessionId}/interrupt`, {
     method: 'POST',
-    ...(followUp
+    ...(followUp || options?.stopBackgroundWork
       ? {
           body: {
-            clientTurnId: uuid(),
-            content: followUp.content,
-            ...(followUp.attachmentIds?.length ? { attachmentIds: followUp.attachmentIds } : {}),
+            ...(followUp
+              ? {
+                  clientTurnId: uuid(),
+                  content: followUp.content,
+                  ...(followUp.attachmentIds?.length
+                    ? { attachmentIds: followUp.attachmentIds }
+                    : {}),
+                }
+              : {}),
+            ...(options?.stopBackgroundWork ? { stopBackgroundWork: true } : {}),
           },
         }
       : {}),

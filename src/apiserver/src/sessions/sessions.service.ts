@@ -5311,6 +5311,11 @@ export class SessionsService {
   ) {
     const content = dto?.content ?? '';
     const followUp = content.trim().length > 0 || (dto?.attachmentIds?.length ?? 0) > 0;
+    // The runner's copy of the request, and the only thing it reads off an interrupt turn: the
+    // follow-up the server filed separately, and the flag that says this interrupt also ends the
+    // session's background work. Shaped like `setconfig`'s payload — a JSON object in `content`,
+    // which for an interrupt is otherwise nothing a model ever reads.
+    const stopBackgroundWork = dto?.stopBackgroundWork === true;
     if (followUp) {
       assertPromptSize(content, 'message');
       if (!dto?.clientTurnId) {
@@ -5323,10 +5328,12 @@ export class SessionsService {
     const interruptClientTurnId = followUp
       ? SessionsService.interruptClientId(dto!.clientTurnId!)
       : randomUUID();
-    const interruptPayload = followUp
+    const interruptPayload = followUp || stopBackgroundWork
       ? JSON.stringify({
-          content,
-          attachmentIds: [...new Set(dto?.attachmentIds ?? [])].sort(),
+          ...(followUp
+            ? { content, attachmentIds: [...new Set(dto?.attachmentIds ?? [])].sort() }
+            : {}),
+          ...(stopBackgroundWork ? { stopBackgroundWork: true } : {}),
         })
       : undefined;
     // Retried whole: the interrupt is decided from the Session row re-read under its lock.

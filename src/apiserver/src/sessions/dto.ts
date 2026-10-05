@@ -85,6 +85,10 @@ export interface SessionInterruptDto {
   /** What to send once the current turn has stopped. Omitted → a plain interrupt. */
   content?: string;
   attachmentIds?: string[];
+  /** Also end the background work the session left running — see RunInterruptRequest,
+   *  which this mirrors. Omitted keeps the interrupt's own semantics exactly: no kill
+   *  anywhere on that path. */
+  stopBackgroundWork?: boolean;
 }
 
 export interface SessionResumeDto extends SessionTurnDto {

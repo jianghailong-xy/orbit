@@ -1208,6 +1208,9 @@ func runAntigravitySessionProcess(ctx context.Context, shutdownCtx context.Conte
 		case "steer":
 			refuseUnsupportedSteer(resp.TurnID, resp.Content, providerAntigravity, job, emitFor, completeTurn)
 		case "interrupt":
+			// RunInterruptRequest.stopBackgroundWork — the composer's Stop ends this session's
+			// background work with the turn; see bgTailer.stopBackgroundWork.
+			stopBackgroundWorkForTurn(bg, resp)
 			emit(evInterrupt, map[string]interface{}{})
 		case "reload":
 			pendingReloads = append(pendingReloads, resp)
@@ -1300,6 +1303,8 @@ func runAntigravitySessionProcess(ctx context.Context, shutdownCtx context.Conte
 			}
 			switch resp.Kind {
 			case "interrupt":
+				// RunInterruptRequest.stopBackgroundWork — see bgTailer.stopBackgroundWork.
+				stopBackgroundWorkForTurn(bg, resp)
 				emit(evInterrupt, map[string]interface{}{})
 				d.interrupt()
 			case "steer":

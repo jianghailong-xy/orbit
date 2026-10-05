@@ -2835,8 +2835,12 @@ final class ConsoleModel {
         adoptRunnerSnapshot(runner)
     }
 
+    /// The composer's Stop: end the turn, and end the background work the session left running with
+    /// it — the job, dev server or watcher the stopped turn started is still the thing the person
+    /// pointing at Stop can see running. Explicit on the request, and the only caller that asks for
+    /// it: a plain interrupt kills nothing, and the session itself is not ended by either.
     func interrupt() async {
-        do { try await api.interrupt(sessionID: sessionID) }
+        do { try await api.interrupt(sessionID: sessionID, stopBackgroundWork: true) }
         catch { statusMessage = "Interrupt failed" }
     }
 
