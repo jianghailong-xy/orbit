@@ -37,7 +37,7 @@ import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { supersessionNote, taskOutcomeChip } from '../lib/taskOutcome';
 import { taskStartOwnedByCompletionDeclaration, type FilterableTask } from '../lib/taskFilters';
 import type { ProjectTaskVerificationState } from '../lib/projectDependencyGraph';
-import { ownerConfirmationQuery, providersQuery, runnersQuery } from '../lib/queries';
+import { meQuery, ownerConfirmationQuery, providersQuery, runnersQuery } from '../lib/queries';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
 import { useToast } from '../lib/toast';
 import {
@@ -796,6 +796,10 @@ export function TaskDetailPanel({
     () => modelOptionsForProvider(effectiveProvider, assigneeRunner?.modelCatalog, configuredProviders),
     [effectiveProvider, assigneeRunner?.modelCatalog, configuredProviders],
   );
+  // The account's switch for smart model selection. Off (the default), none of it is drawn here:
+  // no Suggested, no ✦ placeholder, and runs read as they did before routing.
+  const me = useQuery(meQuery());
+  const smartSelection = me.data?.preferences?.modelRouting === true;
   // Each tier with the model and effort it runs as for this task, as the server resolved them on the
   // assignee's runner, and the work it is for.
   const modelHintOptions: ModelHintOption[] | null = q.data?.modelHintOptions ?? null;
@@ -1462,46 +1466,48 @@ export function TaskDetailPanel({
             {/* The tier the coordinator suggested (model routing §3.1), with the model and effort it
                 runs as and the reason it was given under it. A suggestion, not a pin: a failed run
                 still moves the next one up, and a model picked below wins over both. */}
-            <div className="tdp-field">
-              <span className="tdp-field-label">Suggested</span>
-              <div className="tdp-field-stack">
-                <Select<ModelHintPick['value'], ModelHintPick>
-                  className="tdp-assignee-select"
-                  classNames={{ popup: { root: 'tdp-hint-popup' } }}
-                  variant="borderless"
-                  value={q.data?.modelHint ?? undefined}
-                  placeholder={NO_SUGGESTION}
-                  loading={updateModelHint.isPending}
-                  disabled={updateModelHint.isPending}
-                  popupMatchSelectWidth={false}
-                  options={modelHintPicks}
-                  labelRender={({ value, label }) => (
-                    <span className="tdp-hint-value">
-                      <span className={`tdp-hint-dot is-${String(value).toLowerCase()}`} />
-                      {label}
-                    </span>
-                  )}
-                  optionRender={(option) => (
-                    <div className={`tdp-hint-option${option.data.value ? '' : ' is-none'}`}>
-                      {option.data.value && (
-                        <span className={`tdp-hint-dot is-${option.data.value.toLowerCase()}`} />
-                      )}
-                      <div>
-                        <div className="tdp-hint-option-name">{option.data.label}</div>
-                        <div className="tdp-hint-option-detail">{option.data.detail}</div>
+            {smartSelection && (
+              <div className="tdp-field">
+                <span className="tdp-field-label">Suggested</span>
+                <div className="tdp-field-stack">
+                  <Select<ModelHintPick['value'], ModelHintPick>
+                    className="tdp-assignee-select"
+                    classNames={{ popup: { root: 'tdp-hint-popup' } }}
+                    variant="borderless"
+                    value={q.data?.modelHint ?? undefined}
+                    placeholder={NO_SUGGESTION}
+                    loading={updateModelHint.isPending}
+                    disabled={updateModelHint.isPending}
+                    popupMatchSelectWidth={false}
+                    options={modelHintPicks}
+                    labelRender={({ value, label }) => (
+                      <span className="tdp-hint-value">
+                        <span className={`tdp-hint-dot is-${String(value).toLowerCase()}`} />
+                        {label}
+                      </span>
+                    )}
+                    optionRender={(option) => (
+                      <div className={`tdp-hint-option${option.data.value ? '' : ' is-none'}`}>
+                        {option.data.value && (
+                          <span className={`tdp-hint-dot is-${option.data.value.toLowerCase()}`} />
+                        )}
+                        <div>
+                          <div className="tdp-hint-option-name">{option.data.label}</div>
+                          <div className="tdp-hint-option-detail">{option.data.detail}</div>
+                        </div>
                       </div>
-                    </div>
+                    )}
+                    onChange={(next) => {
+                      const level = next || null;
+                      if (level !== (q.data?.modelHint ?? null)) updateModelHint.mutate(level);
+                    }}
+                  />
+                  {q.data?.modelHint && q.data.modelHintReason && (
+                    <span className="tdp-field-note">Coordinator: {q.data.modelHintReason}</span>
                   )}
-                  onChange={(next) => {
-                    const level = next || null;
-                    if (level !== (q.data?.modelHint ?? null)) updateModelHint.mutate(level);
-                  }}
-                />
-                {q.data?.modelHint && q.data.modelHintReason && (
-                  <span className="tdp-field-note">Coordinator: {q.data.modelHintReason}</span>
-                )}
+                </div>
               </div>
-            </div>
+            )}
             <div className="tdp-field">
               <span className="tdp-field-label">Provider</span>
               <Select
@@ -1544,7 +1550,9 @@ export function TaskDetailPanel({
                 variant="borderless"
                 value={q.data?.model ?? undefined}
                 // Unpinned on an assignee with smart selection on, each run's model is picked for it.
-                placeholder={assigneeWorkspace?.modelRouting ? SMART_SELECTION_PLACEHOLDER : 'Provider default'}
+                placeholder={
+                  smartSelection && assigneeWorkspace?.modelRouting ? SMART_SELECTION_PLACEHOLDER : 'Provider default'
+                }
                 allowClear
                 showSearch
                 optionFilterProp="label"
@@ -1761,8 +1769,8 @@ export function TaskDetailPanel({
                 const meta = sessionStatusMeta(s);
                 // The decision behind this run, when it named a tier (model routing §9). Applied,
                 // the run is on its pick; not, the run kept the Agent's own model and the pick is
-                // what smart selection would have made.
-                const route: TaskRunRoute | null = s.route?.level ? s.route : null;
+                // what smart selection would have made. With the account's switch off, there is none.
+                const route: TaskRunRoute | null = smartSelection && s.route?.level ? s.route : null;
                 const applied = route?.applied === true;
                 // What the run ran on: its own row, or the pick for a run not claimed yet.
                 const ranOn: string | null = s.model || (applied ? route?.model : null) || null;

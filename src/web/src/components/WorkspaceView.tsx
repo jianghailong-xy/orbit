@@ -8091,8 +8091,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // a ✦ on a light blue ground, and its menu opens on why — the decision's own first sentence — and
   // on where to fix the model for every run. Only while the chip still shows the pick: a model
   // changed here is this run's own. A session opened by hand has no route, and a run on an Agent
-  // without smart selection has one that was not applied, so both look as they always have.
+  // without smart selection has one that was not applied, so both look as they always have — and
+  // with the account's switch off (the default), so does every run.
   const smartRoute = (() => {
+    if (me.data?.preferences?.modelRouting !== true) return null;
     const route = detailForSelected?.route;
     return selected?.taskId && route?.applied && route.level && route.model === shownModel ? route : null;
   })();
