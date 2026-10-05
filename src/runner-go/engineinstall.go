@@ -192,6 +192,14 @@ func installEngineNow(spec engineSpec) InstallResultRequest {
 	engineInstall.mu.Lock()
 	proxyVars := engineInstall.proxyVars
 	defer engineInstall.mu.Unlock()
+	if spec.bin == providerDsh {
+		ctx, cancel := context.WithTimeout(context.Background(), engineInstallTimeout)
+		defer cancel()
+		if err := installDsh(ctx, proxyVars); err != nil {
+			return InstallResultRequest{Status: installFailed, Command: spec.installCmd, Message: err.Error()}
+		}
+		return InstallResultRequest{Status: installDone, Command: spec.installCmd}
+	}
 	// Whoever got here first may have already installed it.
 	if _, ok := lookEngine(spec.bin); ok {
 		return InstallResultRequest{Status: installDone, Command: spec.installCmd}
@@ -244,6 +252,9 @@ func installEngineNow(spec engineSpec) InstallResultRequest {
 //
 // Returns "" when the engine is ready, else the message to fail the session with.
 func ensureEngine(ctx context.Context, bin string, notify func(string)) string {
+	if bin == providerDsh {
+		return ensureDsh(ctx, notify)
+	}
 	if _, ok := lookEngine(bin); ok {
 		return ""
 	}
@@ -314,6 +325,11 @@ func ensureEngine(ctx context.Context, bin string, notify func(string)) string {
 // API key, and the CLI's local login is then irrelevant, so its "signed out" answer would
 // fail a session that works perfectly.
 func engineAuthPreflight(bin string, agentEnv map[string]string) string {
+	// dsh's authenticate is a no-op; credential presence and real request validation
+	// belong to its dispatched session, never to a machine-wide login probe.
+	if bin == providerDsh {
+		return ""
+	}
 	// OpenCode can use local providers that need no credential and provider-specific
 	// environment variables unknown to Orbit. Let the CLI decide at execution time.
 	if bin == providerOpenCode {
@@ -371,6 +387,8 @@ func sessionEngineAuth(bin, path string, agentEnv map[string]string) authState {
 func hasInjectedCredentials(bin string, agentEnv map[string]string) bool {
 	keys := []string{"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "CLAUDE_CODE_OAUTH_TOKEN"}
 	switch bin {
+	case providerDsh:
+		keys = []string{"ORBIT_DSH_API_KEY"}
 	case providerCodex:
 		keys = []string{"OPENAI_API_KEY", "OPENAI_BASE_URL"}
 	case providerKimi:
@@ -399,6 +417,10 @@ func hasInjectedCredentials(bin string, agentEnv map[string]string) bool {
 // process's own PATH may predate), then this process's PATH. engine is the engine's name,
 // which for every engine but antigravity (agy) is also its executable's.
 func lookEngine(engine string) (string, bool) {
+	if engine == providerDsh {
+		p, err := dshExecutablePath()
+		return p, err == nil
+	}
 	exe := engine
 	if spec, ok := specFor(engine); ok {
 		exe = spec.executable()
