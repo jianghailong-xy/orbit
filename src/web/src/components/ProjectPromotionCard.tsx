@@ -1,5 +1,5 @@
 import { useRef, useState, type JSX, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert } from 'antd';
 import type {
@@ -12,9 +12,18 @@ import { ReviewCard } from './ReviewCard';
 import { useIsMobile } from '../lib/useMediaQuery';
 import { SHORTCUT_HINT, useApproveHotkey, useCardKeyClaim } from './CardHotkey';
 import { blockerHeadline, type ProjectBlocker } from './ProjectBlockers';
-import { FROM_ORBIT, FROM_ORBIT_TITLE } from './ProjectProgressStatus';
+import { revealOpenItemCard } from './DecisionRail';
+import { FROM_ORBIT, FROM_ORBIT_TITLE, itemStandingLine } from './ProjectProgressStatus';
 import { api } from '../api';
 import { checkDuration } from '../lib/checkDuration';
+import {
+  CHAT_ABOUT_THIS,
+  CHAT_REFUSAL_LABEL,
+  MERGE_CHAT_PREFIX,
+  coordinatorChatPath,
+  itemChat,
+  type CoordinatorChatSubject,
+} from '../lib/coordinatorChat';
 import { encodeId } from '../lib/idCodec';
 import {
   projectOpenItemsQuery,
@@ -50,6 +59,9 @@ import { ago, formatSpan } from '../lib/watches';
  * press is one of the three doors §3.4 M-F3 built, and the two facts the candidate itself does not
  * carry — who is holding a blocked one, and how far the criteria have got — are read from the item
  * and the project document rather than guessed. A row it cannot fill is left out; none is invented.
+ * The one press that is no door is D's `Chat about this`: a message to the coordinator conversation
+ * about the candidate (`lib/coordinatorChat`), whose availability is the item's, as the server
+ * decided it — so a blocked card is never a grey press with nothing beside it.
  */
 
 /** The three presses, and the words the mock gives them. Exported because the tests press by name
@@ -67,6 +79,10 @@ export const RESOLVING = 'Coordinator is resolving it';
 /** The same press when the clock has handed the item to the reader: the `Who` row's other holder,
  *  carried so that moving the sentence onto the button loses nothing. */
 export const IT_IS_YOURS = 'It is yours';
+/** State D's way to where its handling is shown, inside the conversation that handles it: the
+ *  exception card the item is drawn as there, with its handling rows and whose move it is. Outside
+ *  that conversation the same way in is `Open coordinator`. */
+export const SEE_THE_EXCEPTION = 'See the exception';
 
 /** State C's heading, and state B's one sentence about what the reader has to do (nothing). */
 export const MERGED_HEADING = '✓ Merged into main';
@@ -115,6 +131,9 @@ export interface PromotionProjectView {
   tasksByStatus?: Record<string, number>;
   /** The project's open blockers, for B5's row below. */
   blockers?: { open: ProjectBlocker[] };
+  /** The project's coordinator conversation: where state D's chat goes when no item has been filed
+   *  for the candidate to say so itself. */
+  coordinatorSessionId?: string | null;
 }
 
 /** The states that ask or tell the reader something. `CHECKING` is the moment before the question
@@ -466,6 +485,73 @@ function BlockedRows({
   );
 }
 
+/** State D's `Why` row in words, for a chat about the candidate: the same three answers, in the
+ *  same order, that `BlockedRows` draws. */
+function blockedWhy(promotion: ProjectPromotionView): string {
+  const upstream = shortRef(promotion.upstreamRef);
+  if (promotion.conflicts.length > 0) {
+    return `${plural(promotion.conflicts.length, 'file')} conflict with ${upstream} after syncing: `
+      + promotion.conflicts.join(', ');
+  }
+  const failed = promotion.checks.filter((check) => !passed(check));
+  if (failed.length > 0) {
+    const verdict = (check: IntegrationCheckResult): string =>
+      check.timedOut ? 'timed out' : `exit ${check.exitCode ?? '?'}`;
+    return 'checks failed on the combined tree: '
+      + failed.map((check) => `${check.command} · ${verdict(check)}`).join('; ');
+  }
+  return `the combined tree could not be built on ${upstream}`;
+}
+
+/** What the composer's bar says once state D's "Chat about this" armed it. */
+export function promotionChatBanner(promotion: ProjectPromotionView): string {
+  return MERGE_CHAT_PREFIX + promotionHeading(promotion);
+}
+
+/**
+ * What state D's "Chat about this" carries ahead of the reader's message: the project, the merge
+ * and why it cannot happen, the exception item holding it, and where that item's handling stands —
+ * the same facts the card draws, because the conversation that reads them may not have this
+ * candidate in front of it. With the ids, so an answer about a candidate the branch has since moved
+ * past can be told apart from one about this one.
+ *
+ * It describes; it confirms nothing. Merging into main stays the owner's press on this card.
+ */
+export function promotionChatContext({
+  projectTitle,
+  projectId,
+  promotion,
+  item,
+  now,
+}: {
+  projectTitle: string | null;
+  projectId: string;
+  promotion: ProjectPromotionView;
+  item: ProjectOpenItemRow | null;
+  now: number;
+}): string {
+  const source = shortRef(promotion.sourceRef);
+  const upstream = shortRef(promotion.upstreamRef);
+  const ids = [
+    `project ${projectId}`,
+    `promotion ${promotion.promotionId}`,
+    ...(item ? [`open item ${item.itemId}`] : []),
+    ...(promotion.decidedAt ? [`blocked at ${promotion.decidedAt}`] : []),
+  ];
+  return [
+    `About the merge of ${source} into ${upstream}${projectTitle ? ` in “${projectTitle}”` : ''}, `
+      + 'which can’t happen yet:',
+    '',
+    `Why: ${blockedWhy(promotion)}`,
+    ...(item ? [`Exception: ${item.title}${item.detailLine ? ` — ${item.detailLine}` : ''}`] : []),
+    `Where it stands: ${
+      item ? itemStandingLine(item, now) : 'no exception item has been filed for it yet'
+    }`,
+    '',
+    `(${ids.join(' · ')})`,
+  ].join('\n');
+}
+
 /**
  * State D's press: who has the branch and how long they have had it, which is the sentence the
  * body's `Who` row used to carry, and whether the mark over it turns.
@@ -514,6 +600,7 @@ export function ProjectPromotionCard({
   item,
   project,
   now,
+  onChat,
 }: {
   projectId: string;
   promotion: ProjectPromotionView;
@@ -523,9 +610,13 @@ export function ProjectPromotionCard({
   project: PromotionProjectView | null;
   /** Passed in so a test reads a fixed clock; the hosts give it `Date.now()`. */
   now: number;
+  /** State D's "Chat about this" into the host's own composer — given by the coordinator
+   *  conversation, which is where the chat is held. Without it the press opens that conversation. */
+  onChat?: (subject: CoordinatorChatSubject) => void;
 }): JSX.Element | null {
   const qc = useQueryClient();
   const [reviewOpen, setReviewOpen] = useState(false);
+  const navigate = useNavigate();
   const narrow = useIsMobile();
   const decide = useMutation({
     mutationFn: (door: 'confirm' | 'decline' | 'cancel') =>
@@ -554,9 +645,22 @@ export function ProjectPromotionCard({
   const merged = promotion.state === 'MERGED';
   const merging = promotion.state === 'CONFIRMED' || promotion.state === 'RECHECKING';
   const blocked = promotion.state === 'BLOCKED';
-  const coordinator = item?.delivery.sessionId ?? null;
   // D's press says who has the branch, and the body's rows no longer repeat it (`BlockedRows`).
   const resolving = resolvingPress(item, now);
+  // D's chat: the item's, as the server decided it — where the conversation is and whether it can
+  // be had — or, with no item filed yet, the project's own coordinator conversation. A host with a
+  // composer of its own can always take the message; one without has to know where to send it.
+  const chat = item ? itemChat(item) : null;
+  const coordinator =
+    chat?.sessionId ?? item?.delivery.sessionId ?? project?.coordinatorSessionId ?? null;
+  const chatRefusal = chat?.refusal ?? (!onChat && !coordinator ? 'NO_COORDINATOR' : null);
+  const chatSubject: CoordinatorChatSubject = { kind: 'promotion', promotion, item };
+  const chatAbout = (): void => {
+    if (chatRefusal != null) return;
+    setReviewOpen(false);
+    if (onChat) onChat(chatSubject);
+    else if (coordinator) navigate(coordinatorChatPath(coordinator, chatSubject));
+  };
 
   return (
     <ReviewCard enabled={!merged} title={promotionHeading(promotion)}
@@ -599,7 +703,11 @@ export function ProjectPromotionCard({
       ) : null}
       {/* A receipt asks for nothing, so it has no action row at all. */}
       {merged ? null : (
-        <CardActions className="approval-actions project-promotion-actions">
+        <CardActions
+          className={`approval-actions project-promotion-actions${
+            blocked && chatRefusal != null ? ' has-chat-refusal' : ''
+          }`}
+        >
           <CardActionButton
             tone="primary"
             // The one rule `CardAction` exists for: a press that the door would refuse — a merge
@@ -631,18 +739,44 @@ export function ProjectPromotionCard({
             <CardActionButton disabled={decide.isPending || promotion.execution?.phase === 'PUSH'} onClick={() => decide.mutate('cancel')}>
               {CANCEL_MERGE}
             </CardActionButton>
-          ) : blocked ? null : (
+          ) : blocked ? (
+            // What a candidate that cannot merge still offers: the conversation about it. A message,
+            // not a door — the merge stays the disabled press beside it, and the doors on the item
+            // stay where they were.
+            <CardActionButton disabled={chatRefusal != null} onClick={chatAbout}>
+              {CHAT_ABOUT_THIS}
+            </CardActionButton>
+          ) : (
             <CardActionButton disabled={decide.isPending} onClick={() => decide.mutate('decline')}>
               {NOT_NOW}
             </CardActionButton>
           )}
-          {blocked && coordinator ? (
+          {/* Where its handling is shown: in the conversation that handles it, the item's own card
+              there; anywhere else, that conversation. */}
+          {blocked && onChat && item ? (
+            <a
+              className="project-promotion-link"
+              href={`#open-item-${item.itemId}`}
+              onClick={(event) => {
+                // The candidate is read in its review: that gives way, and the item's card is brought
+                // into view the way the pinned line brings it.
+                event.preventDefault();
+                setReviewOpen(false);
+                revealOpenItemCard(item.itemId);
+              }}
+            >
+              {SEE_THE_EXCEPTION}
+            </a>
+          ) : blocked && !onChat && coordinator ? (
             <Link
               className="project-promotion-link"
               to={`/sessions/${encodeURIComponent(encodeId(coordinator))}`}
             >
               {OPEN_COORDINATOR}
             </Link>
+          ) : null}
+          {blocked && chatRefusal != null ? (
+            <span className="project-promotion-chat-refusal">{CHAT_REFUSAL_LABEL[chatRefusal]}</span>
           ) : null}
           {/* Only on the card that is asking: "asked 2h ago" under a card that is merging, or that
               cannot merge, would be timing a question nobody is being asked. */}
@@ -676,12 +810,15 @@ export function ProjectPromotion({
   projectId,
   now = Date.now(),
   drawRecords = true,
+  onChat,
 }: {
   projectId: string | null | undefined;
   now?: number;
   /** Whether a candidate this project already has a moment for is drawn HERE. See this function's
    *  own note. */
   drawRecords?: boolean;
+  /** State D's "Chat about this" into the host's composer (`ProjectPromotionCard`). */
+  onChat?: (subject: CoordinatorChatSubject) => void;
 }): JSX.Element | null {
   const promotion = useQuery({
     ...projectPromotionQuery(projectId ?? ''),
@@ -711,6 +848,7 @@ export function ProjectPromotion({
       item={rows.find((row) => row.promotionId === current.promotionId) ?? null}
       project={project.data ?? null}
       now={now}
+      onChat={onChat}
     />
   );
 }

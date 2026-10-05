@@ -19766,6 +19766,29 @@ button.project-open-item-action:disabled {
 .project-open-item-actions:empty {
   display: none;
 }
+/* "Chat about this" (lib/coordinatorChat): its own row under the doors, because it is not one of
+   them — a message to the coordinator conversation — with the reason said beside it when the
+   server refuses it. */
+.project-open-item-chat {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.project-open-item-chat-refusal,
+.project-promotion-chat-refusal {
+  font-size: 12px;
+  color: var(--text-3);
+}
+/* The merge card's presses sit on one unwrapped row; a refused chat's reason takes a line of its own
+   under them rather than squeezing every label there onto two. */
+.card-actions.project-promotion-actions.has-chat-refusal {
+  flex-wrap: wrap;
+}
+.project-promotion-chat-refusal {
+  flex-basis: 100%;
+}
 .project-open-item-error {
   flex-basis: 100%;
 }

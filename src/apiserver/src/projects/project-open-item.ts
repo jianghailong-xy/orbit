@@ -2,8 +2,11 @@ import { Prisma } from '@prisma/client';
 import {
   IntegrationCheckResult,
   OpenItemAction,
+  OpenItemChat,
+  OpenItemChatRefusal,
   OpenItemDeliveryCard,
   OpenItemFacts,
+  OpenItemStage,
   OwnerItemKind,
   SessionLifecycleState,
   SessionRunState,
@@ -168,6 +171,46 @@ export interface OpenItemActionsSource {
  */
 export function openItemActions(source: OpenItemActionsSource): OpenItemAction[] {
   return openItemActionsFromDoors(source);
+}
+
+/** One item's "Chat about this", as a reader that has to draw it needs it: the columns that say
+ *  where its handling stands, and the project's coordinator conversation. */
+export interface OpenItemChatSource {
+  assignee: OpenItemAssignee | string;
+  /** Whether the coordinator's rerun of it is queued or running (§4.7 H1). */
+  handling: boolean;
+  /** How the coordinator's handling ended it, on a settled row (§4.7 H2, H3); null on an open one. */
+  resolution: 'HANDLED' | 'RETRIED' | null;
+  /** The project's coordinator conversation and whether it can be handed a message now, or null
+   *  when the project has none. One project's answer, read once for every row of its list. */
+  coordinator: { sessionId: string; receiving: boolean } | null;
+}
+
+/**
+ * "Chat about this" for one item (§4.8): where its handling stands, and whether a message about it
+ * can reach the project's coordinator conversation.
+ *
+ * Not one of `openItemActions`, and on purpose: those are doors that write, each with an owner of
+ * its own, and this writes nothing — it is a message the account owner sends to their own
+ * conversation. So it is offered on every stage, whoever holds the item, and refused only where the
+ * message would have nowhere to go, or would be about an item a newer one has replaced. Who may
+ * rerun, merge or close the item is still decided by `openItemActions` and the doors behind it.
+ *
+ * Whether the conversation can take the message is the same answer every session payload publishes
+ * as `canSend`, not `sessionHasEnded`: a conversation that ended and can still be resumed is one a
+ * person may write to — a message from its owner is what resumes it — while a platform turn may not.
+ */
+export function openItemChat(source: OpenItemChatSource): OpenItemChat {
+  const stage: OpenItemStage = source.resolution === 'RETRIED' ? 'SUPERSEDED'
+    : source.resolution === 'HANDLED' ? 'HANDLED'
+      : source.handling ? 'HANDLING'
+        : source.assignee === 'OWNER' ? 'WITH_OWNER'
+          : 'WITH_COORDINATOR';
+  const refusal: OpenItemChatRefusal | null = stage === 'SUPERSEDED' ? 'SUPERSEDED'
+    : !source.coordinator ? 'NO_COORDINATOR'
+      : !source.coordinator.receiving ? 'COORDINATOR_UNAVAILABLE'
+        : null;
+  return { sessionId: source.coordinator?.sessionId ?? null, stage, refusal };
 }
 
 /**
