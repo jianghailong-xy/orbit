@@ -457,7 +457,8 @@ suite("the shared pools' gateway, end to end on real PostgreSQL", { timeout: 600
     assert.ok(answer.body.equals(refusal.body), "OpenAI's answer did not go back as it came");
     assert.equal(seen.length, 1, 'a spent budget is not asked again');
     assert.equal(seen[0].headers.authorization, `Bearer ${first.secret}`);
-    assert.deepEqual(await keyRow(first.id), { state: 'ACTIVE', spentUntil: nextUsageWindowStart(before) });
+    // A spent budget is not a rate limit: the throttle stays unset.
+    assert.deepEqual(await keyRow(first.id), { state: 'ACTIVE', spentUntil: nextUsageWindowStart(before), throttledUntil: null });
 
     // The turn it ended fails, as codex reports it, and is armed to go again now: another key has room.
     const turn = await dequeue(max, session);
@@ -720,7 +721,7 @@ suite("the shared pools' gateway, end to end on real PostgreSQL", { timeout: 600
     script.push(openAIError(429, { message: 'You exceeded your current quota.', type: 'insufficient_quota', code: 'insufficient_quota' }));
     assert.equal((await ask(token)).status, 429);
     const reset = nextUsageWindowStart(new Date());
-    assert.deepEqual(await keyRow(key.id), { state: 'ACTIVE', spentUntil: reset });
+    assert.deepEqual(await keyRow(key.id), { state: 'ACTIVE', spentUntil: reset, throttledUntil: null });
     // Every key spent: the work waits for the first reset, and nothing moves the session meanwhile.
     assert.deepEqual(await queue.accountPoolResumesAt(max.id, pool.slug, new Date()), reset);
     assert.deepEqual(await queue.sharedPoolRetryAt(db, await sessionRow(session), new Date()), reset);
@@ -737,7 +738,7 @@ suite("the shared pools' gateway, end to end on real PostgreSQL", { timeout: 600
     for (let polls = 0; polls < 50 && (await keyRow(key.id)).spentUntil; polls += 1) {
       await new Promise((resolve) => setTimeout(resolve, 20));
     }
-    assert.deepEqual(await keyRow(key.id), { state: 'ACTIVE', spentUntil: null });
+    assert.deepEqual(await keyRow(key.id), { state: 'ACTIVE', spentUntil: null, throttledUntil: null });
     assert.deepEqual(await queue.sharedPoolRetryAt(db, await sessionRow(session), new Date()), null);
   });
 });
