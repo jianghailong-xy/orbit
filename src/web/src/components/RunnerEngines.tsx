@@ -172,6 +172,14 @@ export function tildePath(path: string): string {
   return path.replace(/^(?:\/root|\/home\/[^/]+|\/Users\/[^/]+)(?=\/|$)/, '~');
 }
 
+/** Whether this account is on its way out: asked to be removed, and still listed until the re-probe
+ *  that follows the machine's "done" drops it, a beat later. */
+function beingRemoved(runner: Runner, engine: LoginEngine, account: string): boolean {
+  const removal = runner.accountRemove;
+  return removal?.engine === engine && removal.account === account &&
+    (removal.status === 'pending' || removal.status === 'done');
+}
+
 /** The accounts a Codex row lists under itself: every one, once there is more than one — and only
  *  while the probe speaks for the engine, since an install under way is about the binary all of
  *  them share. None otherwise, which leaves the row exactly what it was before accounts. */
@@ -364,8 +372,10 @@ function EngineRow({
   // More than one Codex account: this row heads their group, and each account is a row of its own
   // below it (AccountRow), with its own state.
   const grouped = accounts.length > 0;
-  // What the head says for its group: how many of its accounts could take a session now.
-  const ready = accounts.filter((account) => {
+  // What the head says for its group: how many of its accounts could take a session now, out of
+  // those staying — one being removed is counted as gone already.
+  const kept = accounts.filter((account) => !beingRemoved(runner, engine, account.id));
+  const ready = kept.filter((account) => {
     const own = accountKindOf(account);
     return !accountIsPaused(account.pausedUntil, now) && available(own, quotaOf(own, accountPlanUsage(runner.planUsage, engine, account.id), !!runner.online, now));
   }).length;
@@ -440,7 +450,7 @@ function EngineRow({
               <>
                 {versionOf(engine, health)} ·{' '}
                 <b>
-                  {ready} of {accounts.length} accounts available
+                  {ready} of {kept.length} accounts available
                 </b>
               </>
             ) : (
@@ -724,9 +734,7 @@ function AccountRow({
   // button says it is under way, and a machine that refused says why.
   const removal = runner.accountRemove;
   const mine = removal?.engine === engine && removal.account === account.id ? removal : null;
-  // Still under way once the machine says done, while the row is here: the account leaves the list
-  // only with the re-probe that follows, a beat later.
-  const removing = mine?.status === 'pending' || mine?.status === 'done';
+  const removing = beingRemoved(runner, engine, account.id);
   const refused = mine?.status === 'failed' ? mine.message : null;
   const remove = useMutation({
     mutationFn: () =>
