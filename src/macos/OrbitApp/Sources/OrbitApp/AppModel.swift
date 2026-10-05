@@ -2070,6 +2070,25 @@ final class AppModel {
         nav.enterProjectSessions(address)
     }
 
+    /// The project's sessions page on top of a phone's stack. Like a page the drawer opened, it
+    /// hands the left edge to the drawer-open swipe; the back button still returns to the list.
+    var projectSessionsPage: SessionProjectAddress? { nav.projectSessionsPage }
+
+    /// A drawer project row: the project's sessions page in Agents, over its coordinator's
+    /// workspace (or the one already showing). Without any workspace it opens the project's page.
+    func openProjectSessionsFromDrawer(_ projectID: String) {
+        let key = PublicID.storageKey(projectID)
+        let coordinator = (sessions + (agents?.allSessions ?? [])).first {
+            $0.projectMembership?.role == .coordinator
+                && $0.projectMembership.map { PublicID.storageKey($0.projectId) } == key
+        }
+        guard let agentID = coordinator.flatMap({ $0.agent?.id ?? $0.agentId })
+                ?? selectedAgentID ?? orderedAgents.first?.id else { return openProject(projectID) }
+        selectedSection = .agents
+        if selectedAgentID != agentID { selectedAgentID = agentID }
+        nav.path = [.sessionProject(SessionProjectAddress(projectID: projectID, agentID: agentID, view: .open))]
+    }
+
     func leaveProjectSessions(_ projectID: String? = nil) {
         nav.leaveProjectSessions(projectID)
     }

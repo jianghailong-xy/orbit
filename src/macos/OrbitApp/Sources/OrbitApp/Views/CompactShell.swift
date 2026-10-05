@@ -150,10 +150,12 @@ struct CompactShell: View {
                     .offset(x: x)
 
                 // Left-edge open strip — present at a section's root, and on a page opened from the
-                // drawer — a console from Recents, a project from its row — which turns off the
-                // system back-swipe below, freeing this edge, so the drawer-open swipe is available
-                // there. A normal pushed page keeps the edge for the system back-swipe.
-                if !drawerOpen && (isAtRoot || model.consoleFromRecents || model.projectFromDrawer) {
+                // drawer — a console from Recents, a project from its row — and on a project's
+                // sessions page, which turn off the system back-swipe below, freeing this edge, so the
+                // drawer-open swipe is available there. A normal pushed page keeps the edge for the
+                // system back-swipe.
+                if !drawerOpen && (isAtRoot || model.consoleFromRecents || model.projectFromDrawer
+                                   || model.projectSessionsPage != nil) {
                     Color.clear
                         .frame(width: 18)
                         .frame(maxHeight: .infinity)
@@ -294,6 +296,7 @@ private struct CompactSections: View {
                         // the session that draft creates lands in the folder.
                         case .folder(let address):       SessionFolderPage(address: address)
                         case .sessionProject(let address): SessionProjectPage(address: address)
+                            .background { SwipeBackGestureToggle(enabled: model.projectSessionsPage == nil) }
                         // The one place the phone's console is told that what it opens goes on
                         // this stack (`opensPagesOverConsole`): its links, its Watching card, its
                         // Tasks created here card — so the back swipe returns to the conversation
@@ -985,7 +988,7 @@ struct NavigationDrawer: View {
     }
 
     /// The open projects, closing the rail: those waiting on the reader first, then by the most
-    /// recent task activity. Tapping one opens its page. Hidden until the index has loaded. A row is
+    /// recent task activity. Tapping one opens its sessions page. Hidden until the index has loaded. A row is
     /// drawn in the Workspace rows' grammar — the title leads, flush with the group label as the
     /// Recents rows were, and state takes the one trailing slot with the Workspace rows' own marks —
     /// so the rail keeps a single column for state instead of one on each side.
@@ -1000,11 +1003,14 @@ struct NavigationDrawer: View {
         }
     }
 
+    /// Selected while its sessions page is showing, from this row or a session list's project row,
+    /// or while its project page is.
     private func projectRow(_ project: ProjectSummary) -> some View {
-        let selected = model.selectedSection == .projects
-            && model.selectedProjectID.map(PublicID.storageKey) == PublicID.storageKey(project.id)
+        let key = PublicID.storageKey(project.id)
+        let selected = model.selectedSection == .projects && model.selectedProjectID.map(PublicID.storageKey) == key
+            || model.selectedSection == .agents && model.projectSessionsColumn.map({ PublicID.storageKey($0.projectID) }) == key
         return Button {
-            model.openProject(project.id, origin: .drawer)
+            model.openProjectSessionsFromDrawer(project.id)
             close()
         } label: {
             pill(selected: selected) {
@@ -1093,7 +1099,9 @@ struct NavigationDrawer: View {
     /// A compact Workspace row: folder/offline state leads; Workspace · Runner carries identity; one
     /// trailing slot shows attention or running state. Tapping jumps straight to its sessions.
     private func agentRow(_ agent: Agent, agents: AgentsModel) -> some View {
+        // A project's sessions page selects that project's row instead.
         let selected = model.selectedSection == .agents && model.selectedAgentID == agent.id
+            && model.projectSessionsColumn == nil
         let offline = agents.runnerIsOffline(agent.runnerId)
         return Button {
             openAgent(agent.id)

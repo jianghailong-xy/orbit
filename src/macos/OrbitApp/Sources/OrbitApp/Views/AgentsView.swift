@@ -865,7 +865,7 @@ struct AgentPanes: View {
             case .project: app.openProjectSessions(address)
             }
         }
-        return SessionProjectRowView(row: row, onOpen: onOpen, onSessions: { app.openProjectSessions(address) })
+        return SessionProjectRowView(row: row, onOpen: { app.openProjectSessions(address) })
         .sessionProjectRowActions(row, onOpen: onOpen, onSessions: { app.openProjectSessions(address) }, onProject: {
             app.openProject(row.projectId)
         }, onMove: { if let coordinator = row.coordinator { movingSession = coordinator } })

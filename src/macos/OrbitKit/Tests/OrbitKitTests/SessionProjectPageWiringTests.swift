@@ -90,13 +90,14 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(folderRow.contains("sessionRow(s)"))
     }
 
-    func testTheRowUsesTheGroupingTargetAndItsProgressOpensSessions() throws {
+    func testTheRowOpensSessionsAndItsMenuUsesTheGroupingTarget() throws {
         for relative in ["Views/AgentsView.swift", "Views/SessionFolderPage.swift"] {
             let source = code(try appSource(relative))
             let row = try slice(source, from: "private func projectRow(_ row: SessionProjectRow)", to: "\n    }")
             XCTAssertTrue(row.contains("SessionProjectAddress(projectID: row.projectId"))
             XCTAssertTrue(row.contains("let onOpen = {"))
-            XCTAssertTrue(row.contains("SessionProjectRowView(row: row, onOpen: onOpen,"))
+            XCTAssertTrue(row.contains("SessionProjectRowView(row: row, onOpen: { app.openProjectSessions("),
+                          "a tap on the row opens the project's sessions page")
             XCTAssertTrue(row.contains("switch row.target"))
             XCTAssertTrue(row.contains("case .session(let id):"))
             XCTAssertTrue(row.contains("$0.id == id"))
@@ -104,7 +105,7 @@ final class SessionProjectPageWiringTests: XCTestCase {
             XCTAssertTrue(row.contains("case .project: app.openProjectSessions("))
             XCTAssertTrue(row.contains("onSessions: { app.openProjectSessions("))
             XCTAssertTrue(row.contains(".sessionProjectRowActions(row, onOpen: onOpen,"),
-                          "the row and its Open Session menu share the grouping target's callback")
+                          "the Open Session menu keeps the grouping target")
             XCTAssertTrue(row.contains("app.openProject(row.projectId)"))
             XCTAssertTrue(row.contains("movingSession = coordinator"))
         }
@@ -181,18 +182,13 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(row.contains("row.lastTurnAt"), "time follows the group's newest activity")
     }
 
-    func testTheProgressLabelHasItsOwnFullHeightTapTarget() throws {
+    func testTheWholeRowIsOneButtonWithTheProgressChipInline() throws {
         let source = code(try appSource("Views/SessionProjectPage.swift"))
         let row = try slice(source, from: "struct SessionProjectRowView: View {", to: "\n}\n")
         XCTAssertTrue(row.contains("Button(action: onOpen)"))
-        let progress = try slice(row, from: "private var progressTap: some View {", to: "\n    }")
-        XCTAssertTrue(progress.contains("Button(action: onSessions)"))
-        XCTAssertTrue(progress.contains("GeometryReader { proxy in"))
-        XCTAssertTrue(progress.contains(".frame(height: proxy.size.height)"), "the progress tap follows the whole content row height")
-        XCTAssertTrue(progress.contains(".contentShape(Rectangle())"))
-        XCTAssertTrue(progress.contains(".padding(.vertical, 15)"))
-        XCTAssertTrue(progress.contains(".offset(y: -15)"), "the tag's tap area reaches the first scan line")
-        XCTAssertTrue(row.contains(".overlay(alignment: .leading) { progressTap }"), "the progress control is a sibling to the row button")
+        XCTAssertFalse(row.contains("onSessions"), "the row has one tap target")
+        XCTAssertFalse(row.contains("progressTap"))
+        XCTAssertFalse(row.contains("progressChip.hidden()"))
     }
 
     func testThePageHeaderShowsTheProjectNameCountAndTwoNavigationActions() throws {

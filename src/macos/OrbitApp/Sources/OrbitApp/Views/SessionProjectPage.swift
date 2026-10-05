@@ -3,17 +3,15 @@ import SwiftUI
 import OrbitKit
 
 /// The project occupies its coordinator's place, with the same two scan lines as a session row.
-/// The progress chip is a sibling button: its full-height hit area opens the project's sessions.
+/// A tap opens the project's sessions; Open Session in the menu reaches the grouping target.
 struct SessionProjectRowView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     let row: SessionProjectRow
     let onOpen: () -> Void
-    let onSessions: () -> Void
 
     private var regular: Bool {
         SessionListPresentation.resolve(isCompactWidth: horizontalSizeClass == .compact) == .regular
     }
-    private var verticalPadding: CGFloat { regular ? 5 : 2 }
 
     var body: some View {
         Button(action: onOpen) {
@@ -25,7 +23,6 @@ struct SessionProjectRowView: View {
             .accessibilityValue(statusWords)
         }
         .buttonStyle(.plain)
-        .overlay(alignment: .leading) { progressTap }
     }
 
     private var compactRow: some View {
@@ -65,33 +62,11 @@ struct SessionProjectRowView: View {
 
     private var secondLine: some View {
         HStack(spacing: 7) {
-            // Reserve exactly the visible chip's width; the sibling button draws it over this slot.
-            progressChip.hidden()
+            progressChip
             Text(row.line.text)
                 .font(.orbitListSubtitle)
                 .foregroundStyle(lineColor)
                 .lineLimit(1)
-        }
-    }
-
-    private var progressTap: some View {
-        GeometryReader { proxy in
-            Button(action: onSessions) {
-                VStack(spacing: 0) {
-                    Spacer(minLength: 0)
-                    progressChip
-                }
-                .padding(.bottom, verticalPadding)
-                .frame(height: proxy.size.height)
-                // Include the List's top and bottom cell insets without changing its row height.
-                .padding(.vertical, 15)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .offset(y: -15)
-            .accessibilityLabel(SessionProjectCopy.sessions)
-            .accessibilityValue(SessionProjectCopy.progressHint(sessions: row.sessionCount,
-                                                                 running: row.runningCount))
         }
     }
 

@@ -139,7 +139,33 @@ final class ProjectsWiringTests: XCTestCase {
         XCTAssertFalse(rail.contains("recentsRows"), "Recents is not in the drawer")
         XCTAssertFalse(rail.contains("taskRows"), "the task lists are not in the drawer")
         let row = code(try slice(shell, from: "private func projectRow(", to: ".drawerRow()"))
-        XCTAssertTrue(row.contains("model.openProject(project.id, origin: .drawer)"))
+        XCTAssertTrue(row.contains("model.openProjectSessionsFromDrawer(project.id)"))
+    }
+
+    /// A drawer project row opens the project's sessions page, as a session list's project row does
+    /// (the owner's ask, 2026-10-05). That page selects the project's drawer row — whichever way it
+    /// was opened — instead of the workspace's, and hands the left edge to the drawer-open swipe.
+    func testADrawerProjectRowOpensItsSessionsPageAndThatPageSelectsTheRow() throws {
+        let app = code(try appSource("AppModel.swift"))
+        let open = try slice(app, from: "func openProjectSessionsFromDrawer(_ projectID: String) {", to: "\n    }")
+        XCTAssertTrue(open.contains("selectedSection = .agents"))
+        XCTAssertTrue(open.contains("$0.projectMembership?.role == .coordinator"), "over the coordinator's workspace")
+        XCTAssertTrue(open.contains(
+            "nav.path = [.sessionProject(SessionProjectAddress(projectID: projectID, agentID: agentID, view: .open))]"))
+        XCTAssertTrue(app.contains("var projectSessionsPage: SessionProjectAddress? { nav.projectSessionsPage }"))
+
+        let shell = code(try appSource("Views/CompactShell.swift"))
+        let row = try slice(shell, from: "private func projectRow(", to: ".drawerRow()")
+        XCTAssertTrue(row.contains(
+            "model.selectedSection == .agents && model.projectSessionsColumn.map({ PublicID.storageKey($0.projectID) }) == key"),
+                      "the sessions page selects its project's row")
+        let agentRow = try slice(shell, from: "private func agentRow(", to: ".drawerRow()")
+        XCTAssertTrue(agentRow.contains("&& model.projectSessionsColumn == nil"), "and not the workspace's")
+        XCTAssertTrue(shell.contains("|| model.projectSessionsPage != nil) {"), "the drawer-open strip is up on that page")
+        let agents = try slice(shell, from: "case .agents:", to: "case .projects:")
+        XCTAssertTrue(agents.contains(
+            "SessionProjectPage(address: address)\n                            .background { SwipeBackGestureToggle(enabled: model.projectSessionsPage == nil) }"),
+                      "and the system back-swipe is off there")
     }
 
     /// The iPad's sidebar is this same drawer, seated in the split's first column (the owner's pick,
@@ -182,7 +208,7 @@ final class ProjectsWiringTests: XCTestCase {
     func testADrawerOpenedProjectPageHandsTheLeftEdgeToTheDrawer() throws {
         let shell = code(try appSource("Views/CompactShell.swift"))
         XCTAssertTrue(shell.contains(
-            "if !drawerOpen && (isAtRoot || model.consoleFromRecents || model.projectFromDrawer) {"),
+            "if !drawerOpen && (isAtRoot || model.consoleFromRecents || model.projectFromDrawer"),
                       "the drawer-open strip is up on that page")
         let projects = try slice(shell, from: "case .projects:", to: "case .runners:")
         XCTAssertTrue(projects.contains(".background { SwipeBackGestureToggle(enabled: !model.projectFromDrawer) }"),
