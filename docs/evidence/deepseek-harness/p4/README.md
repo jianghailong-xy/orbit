@@ -32,7 +32,7 @@ shared 的 `derivePermissionSemantics` 与服务端准入用同一集合 `DSH_PE
 - Orbit MCP 按 P0 契约注入每次 `session/new` 与 `session/resume` 的 `mcpServers`：无 `type` 的 stdio entry，绝对路径的 runner 可执行文件 + `mcp`，env 显式携带 `ORBIT_SESSION_ID/AGENT_ID/TASK_ID`、编排/Watch/Wiki 开关、`ORBIT_MCP_PERMISSION_PROMPT=0`、`ORBIT_SPAWN_DEPTH`、`ORBIT_HOME` 与后台作业变量（dsh 只按声明的 env 启动 stdio server）。Harness Key 不进入 MCP env。
 - 预校验，不信任 `session/new` 成功：SSE entry 会被 ACP SDK 静默丢弃，启动前以 `DSH_MCP_UNSUPPORTED` 拒绝；HTTP MCP 未经实测，同样拒绝；相对命令、占用会话身份变量的 env 被拒绝。
 - MCP 工具从不触发 ACP 审批，即使声明 `destructiveHint`（`TestDshRealThirdPartyMCPRunsUnasked`）。因此 agent 自配的 stdio server 只在 Auto 中挂载；Default 与 Don't Ask 下以 `DSH_MCP_UNENFORCEABLE` 拒绝启动。Orbit 自己的 MCP 在所有 runtime 中都属 `ALWAYS_ALLOWED_TOOLS`，其有副作用的创建类调用自带 Orbit 审批卡。
-- **实测边界**：dsh 对经 ACP 挂载的 MCP 调用固定 60 秒超时（`toolCallTimeoutMs` 默认值，ACP 不可配置）。需要人工确认超过 60 秒的 Orbit MCP 调用（如 `task_create` 的确认卡）在 dsh 侧返回 `Request timed out`，而 `orbit mcp` 仍在等待，确认后仍会执行。首版不声明此类长等待调用在 dsh 上可靠；已另行登记后续任务。
+- **60 秒调用期限**：dsh 对经 ACP 挂载的 MCP 调用固定 60 秒超时（`toolCallTimeoutMs` 默认值，ACP 不可配置），超时后模型看到 `Error: Request timed out`，并向 server 发送 `notifications/cancelled`（实测 `TestDshRealMCPTimeoutCancelsTheCall`）。修复前，需要人工确认的 Orbit MCP 调用会出现“模型收到失败、确认后副作用照常发生”。现在 runner 在 Orbit MCP env 中注入 `ORBIT_MCP_CALL_TIMEOUT_SECONDS=60`：等人的调用（`task_create`、`task_create_batch`、`project_create`、`project_blocker_resolve`、`tasklist_propose_dag`、`provider_*`）立即返回“尚未执行”，把等待交给 runner 托管的后台作业，确认后由作业执行写入并唤醒会话；无作业服务时明确拒绝、不出卡。`session_create` 的 wait 与 `session_merge` 的 `waitSeconds` 限制在 30 秒内。实测、复现命令与剩余限制见 [`../p4-mcp-timeout/README.md`](../p4-mcp-timeout/README.md)。
 
 ## Agent 配置
 

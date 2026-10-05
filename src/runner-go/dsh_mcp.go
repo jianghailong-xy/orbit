@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // dshOrbitMCPCommand is how the session's Orbit MCP server is started: this runner's own
@@ -78,6 +79,13 @@ func dshMCPServers(job *ClaimedSession, policy dshPermissionPolicy) ([]interface
 	return servers, nil
 }
 
+// dshMCPToolCallTimeout is how long dsh lets one MCP tool call run before it tells the model the call
+// timed out: @deepseek-ai/dsh-mcp-client's default toolCallTimeoutMs, which the ACP mcpServers
+// declaration has no field for. Measured on the pinned version, it also sends the server
+// notifications/cancelled. `orbit mcp` is told, so a call that waits for a person returns before it
+// (handOffOwnerWait) rather than being reported failed while its write still happens.
+const dshMCPToolCallTimeout = 60 * time.Second
+
 // dshOrbitMCPEnv is the whole environment `orbit mcp` reads its session from. dsh starts stdio
 // servers from the declared env, not from its own, so nothing is inherited implicitly.
 func dshOrbitMCPEnv(job *ClaimedSession) []map[string]string {
@@ -90,6 +98,7 @@ func dshOrbitMCPEnv(job *ClaimedSession) []map[string]string {
 		envWiki + "=" + wikiEnv(job.WikiDisabled),
 		envMCPPermissionPrompt + "=0",
 		envSpawnDepth + "=" + strconv.Itoa(job.SpawnDepth),
+		envMCPCallTimeout + "=" + strconv.Itoa(int(dshMCPToolCallTimeout/time.Second)),
 	}
 	// Where the runner's own config lives, so the server authenticates as this runner.
 	if home := machineHome(); filepath.IsAbs(home) {
