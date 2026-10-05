@@ -39,6 +39,7 @@ func cmdMcp() {
 		watchesOff:            !watchesEnabledFromEnv(),
 		wikiOff:               !wikiEnabledFromEnv(),
 		onlyTools:             mcpToolsFromEnv(),
+		callTimeout:           mcpCallTimeoutFromEnv(),
 	}
 	srv.serve(os.Stdin, os.Stdout)
 }
@@ -56,9 +57,31 @@ type mcpServer struct {
 	// Spawned with ORBIT_MCP_TOOLS: these tools and no others, listed or called (a Wiki maintenance
 	// run, wiki_maintenance_session.go). Nil serves every tool.
 	onlyTools map[string]bool
+	// How long the engine lets one tool call run before it reports the call failed (ORBIT_MCP_CALL_TIMEOUT_SECONDS);
+	// 0 when it waits for as long as the call takes. See handOffOwnerWait.
+	callTimeout time.Duration
 }
 
 const envMCPPermissionPrompt = "ORBIT_MCP_PERMISSION_PROMPT"
+
+// envMCPCallTimeout is set by a runtime whose engine ends an MCP tool call on its own deadline, and
+// whose mcpServers declaration cannot change it (DeepSeek Harness, dsh_mcp.go). Unset, every call
+// behaves as it always has.
+const envMCPCallTimeout = "ORBIT_MCP_CALL_TIMEOUT_SECONDS"
+
+func mcpCallTimeoutFromEnv() time.Duration {
+	seconds, err := strconv.Atoi(strings.TrimSpace(os.Getenv(envMCPCallTimeout)))
+	if err != nil || seconds <= 0 {
+		return 0
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+// longestInlineWait is how long a call may hold the engine's tool call waiting for something: half the
+// engine's deadline, leaving the rest for the round-trips around the wait. 0 means no cap.
+func longestInlineWait(callTimeout time.Duration) time.Duration {
+	return callTimeout / 2
+}
 
 func mcpPermissionPromptEnabled() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv(envMCPPermissionPrompt))) {
@@ -296,6 +319,9 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 	// same runWikiTool (wiki_tools.go).
 	if result, handled := s.callWikiTool(name, args); handled {
 		return result
+	}
+	if s.callTimeout > 0 && s.sessionID != "" && waitsForTheOwner(name, args) {
+		return s.handOffOwnerWait(name, args)
 	}
 	switch name {
 	case "task_list":
@@ -1364,6 +1390,11 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if err != nil {
 			return toolResult(err.Error(), true)
 		}
+		// A wait the engine cuts short would report a merge that then lands as a failed call. Running
+		// out of a shorter wait is not a failure and says so (merge_receipts has the outcome).
+		if longest := int(longestInlineWait(s.callTimeout) / time.Second); s.callTimeout > 0 && wait > longest {
+			wait = longest
+		}
 		body := map[string]interface{}{}
 		copyIfPresent(body, args, "targetBranch")
 		if wait > 0 {
@@ -1495,6 +1526,89 @@ const (
 // condition is gone and the owner's part is to agree or not — which is what this card is, and why the
 // tool cannot be reached without one.
 const blockerResolveApprovalToolName = "orbit_blocker_resolve"
+
+// ownerWaitTools are the calls that put a card in front of the owner and block until it is answered.
+var ownerWaitTools = map[string]bool{
+	"task_create": true, "task_create_batch": true, "project_create": true, "project_blocker_resolve": true,
+	"tasklist_propose_dag": true, "provider_create": true, "provider_update": true, "provider_delete": true,
+}
+
+func waitsForTheOwner(name string, args map[string]interface{}) bool {
+	// A dry-run batch writes nothing and asks nobody (task_create_batch).
+	return ownerWaitTools[name] && !(name == "task_create_batch" && getBool(args, "dryRun"))
+}
+
+// handOffOwnerWait runs a call that waits for the owner in a runner-hosted job instead of in this one,
+// when the engine ends tool calls on a deadline of its own (envMCPCallTimeout).
+//
+// A person can take longer than that deadline. Held here, the engine would tell the model the call
+// failed while this process went on waiting, and the write would still happen once the owner
+// confirmed: a failure the model acts on, and a side effect it never hears of. Cancelling on the
+// engine's say-so cannot fix that alone — the card is already on the owner's screen. So the call
+// returns at once, saying truthfully that nothing is written yet, and the job runs the very same call
+// (the same `orbit mcp`, this session's identity, its card naming the job so it outlives the turn).
+// When the owner answers, the job exits with what the call would have returned and wakes the session.
+// Without a job service to hand it to, the call is refused before any card is filed.
+func (s *mcpServer) handOffOwnerWait(name string, args map[string]interface{}) map[string]interface{} {
+	refuse := func(why string) map[string]interface{} {
+		return toolResult(fmt.Sprintf("%s was not run, and nothing was filed or written: it waits for the owner's "+
+			"confirmation, which can take longer than this engine lets a tool call run (%s), so it cannot be held "+
+			"in this call, and %s. Ask the owner in the conversation instead.", name, s.callTimeout, why), true)
+	}
+	socket, token := os.Getenv(envBgSocket), os.Getenv(envBgToken)
+	if socket == "" || token == "" {
+		return refuse("this session has no runner-hosted background job service to hand the wait to")
+	}
+	exe := orbitCLIExecutable()
+	if exe == "" {
+		return refuse("the orbit executable could not be resolved")
+	}
+	params, err := json.Marshal(map[string]interface{}{"name": name, "arguments": args})
+	if err != nil {
+		return refuse(err.Error())
+	}
+	request, _ := json.Marshal(rpcRequest{JSONRPC: "2.0", ID: json.RawMessage("1"), Method: "tools/call", Params: params})
+	file, err := os.CreateTemp("", "orbit-mcp-handoff-*.json")
+	if err != nil {
+		return refuse(err.Error())
+	}
+	_, err = file.Write(append(request, '\n'))
+	if closeErr := file.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		_ = os.Remove(file.Name())
+		return refuse(err.Error())
+	}
+	// The job's environment is the runner's, which carries this session and the job's own id but not
+	// the rest of who is asking: the agent the write is attributed to, the current task, the
+	// orchestration switch. They are this server's own, put back as it was started with them. The
+	// timeout is cleared so the job waits as long as the owner takes, and only this tool is served.
+	// The request file is unlinked once open, so nothing is left behind however the job ends.
+	command := fmt.Sprintf("{ rm -f %s && ORBIT_AGENT_ID=%s ORBIT_TASK_ID=%s %s=%s %s=%s %s= %s mcp; } < %s",
+		shellQuote(file.Name()), shellQuote(s.agentID), shellQuote(s.taskID),
+		envMCPOrchestration, orchestrationEnv(s.allowOrchestration), envMCPTools, shellQuote(name), envMCPCallTimeout,
+		shellQuote(exe), shellQuote(file.Name()))
+	raw, err := bgSocketCall(socket, token, "run", map[string]interface{}{
+		"command": command, "kind": bgKindWatch, "wakeOnExit": true,
+		"description": "Orbit " + name + ": waiting for the owner's confirmation",
+	})
+	if err != nil {
+		_ = os.Remove(file.Name())
+		return refuse("handing the wait to a runner-hosted job failed: " + err.Error())
+	}
+	var job struct {
+		JobID string `json:"jobId"`
+	}
+	_ = json.Unmarshal(raw, &job)
+	return toolResult(fmt.Sprintf("Not done yet — handed to runner-hosted job %s. %s waits for the owner's "+
+		"confirmation, which can take longer than this engine lets a tool call run (%s), so that job asks them and "+
+		"waits instead of this call. Nothing is written unless the owner confirms; if they do, the job performs the "+
+		"write itself. Do not call %s again for the same thing. When the owner answers, the job exits and Orbit "+
+		"wakes this session with its output: the JSON-RPC reply carrying exactly what this call would have "+
+		"returned (what was created, or the refusal). If there is nothing else to do, end your turn; bg_output "+
+		"reads the job at any time.\n%s", job.JobID, name, s.callTimeout, name, prettyJSON(raw)), false)
+}
 
 // askBeforeCreate files a card for a create and blocks until the human answers it. It returns
 // declined == "" for a yes, and otherwise the reason to hand back in place of the write. The MCP
@@ -3944,7 +4058,13 @@ func sessionWaitPolls(depth int) int {
 		polls /= 2
 	}
 	if polls < minSessionWaitPolls {
-		return minSessionWaitPolls
+		polls = minSessionWaitPolls
+	}
+	// Under an engine that ends the call itself (envMCPCallTimeout), the wait ends first: the session
+	// was already created, and a call reported failed would invite a second one. The watch the wait
+	// records keeps waiting either way.
+	if limit := longestInlineWait(mcpCallTimeoutFromEnv()); limit > 0 && time.Duration(polls)*sessionWaitInterval > limit {
+		polls = int(limit / sessionWaitInterval)
 	}
 	return polls
 }

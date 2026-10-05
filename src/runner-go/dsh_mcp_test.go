@@ -70,7 +70,7 @@ func TestDshMCPServers(t *testing.T) {
 		}
 		for key, want := range map[string]string{"ORBIT_SESSION_ID": publicID(job.SessionID), "ORBIT_AGENT_ID": "p4-agent",
 			"ORBIT_TASK_ID": "p4-task", envMCPOrchestration: "1", envWiki: "off", envMCPPermissionPrompt: "0",
-			envSpawnDepth: "2", "ORBIT_HOME": machineHome()} {
+			envSpawnDepth: "2", "ORBIT_HOME": machineHome(), envMCPCallTimeout: "60"} {
 			if got, ok := dshEnvValue(entry, key); !ok || got != want {
 				t.Fatalf("%s = %q (%v), want %q", key, got, ok, want)
 			}
@@ -489,6 +489,44 @@ func newDshRealHarness(t *testing.T, mode string, real bool) *dshRealHarness {
 	return h
 }
 
+// serveBgJobs gives the session the runner-hosted job service a production session has, which Orbit
+// MCP hands an owner's wait to under dsh's call deadline, and returns how to await one job's wake.
+// Call it before start: the MCP declaration reads the service's socket at launch.
+func (h *dshRealHarness) serveBgJobs() func(jobID string) bgWake {
+	t := h.t
+	// The service lives under ORBIT_HOME, and a unix socket path has to stay short.
+	home, err := os.MkdirTemp("", "dshto")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(home) })
+	config, _ := os.ReadFile(filepath.Join(os.Getenv("ORBIT_HOME"), "config.json"))
+	if err := os.WriteFile(filepath.Join(home, "config.json"), config, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ORBIT_HOME", home)
+	var mu sync.Mutex
+	wakes := map[string]bgWake{}
+	bg := newBgTailer(h.ctx, func(string, map[string]interface{}) {}, nil)
+	bg.wakeSessionVia(func(w bgWake) error { mu.Lock(); wakes[w.JobID] = w; mu.Unlock(); return nil })
+	stop, err := startSessionBgJobService(h.ctx, bg, h.job, h.work, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { stop(); bg.stopAll() })
+	return func(jobID string) bgWake {
+		t.Helper()
+		var wake bgWake
+		awaitCondition(t, 30*time.Second, "job "+jobID+" never woke the session", func() bool {
+			mu.Lock()
+			defer mu.Unlock()
+			wake = wakes[jobID]
+			return wake.JobID != ""
+		})
+		return wake
+	}
+}
+
 func (h *dshRealHarness) launched() bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -718,8 +756,10 @@ func TestDshRealOrbitMCPAndAgentInstructions(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(h.work, ".git"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	// Orbit MCP's own create card is the double's to answer, as the owner would in the app.
+	// Orbit MCP's own create card is the double's to answer, as the owner would in the app. Under dsh's
+	// call deadline the create is handed to a runner-hosted job (TestDshRealOrbitMCPConfirmationOutlastsTimeout).
 	h.cp.autoAllow["orbit_task_create"] = true
+	wakeFor := h.serveBgJobs()
 	h.model.plans = []dshPlan{
 		{tool: "mcp__orbit__task_create", args: map[string]interface{}{"title": "P4 isolated task", "description": "synthetic",
 			"completionCriterion": "EVIDENCE_JUDGMENT", "acceptanceCriteria": "synthetic"}},
@@ -756,6 +796,14 @@ func TestDshRealOrbitMCPAndAgentInstructions(t *testing.T) {
 			t.Fatalf("model tools still offer %s", gone)
 		}
 	}
+	use, result := h.toolResult("t1", "mcp__orbit__task_create")
+	if use["mcpServer"] != "orbit" || use["mcpTool"] != "task_create" || mapValue(use["input"])["title"] != "P4 isolated task" ||
+		result["status"] != "completed" || !strings.Contains(firstString(result, "content"), "Not done yet") {
+		t.Fatalf("Orbit tool events = %+v / %+v", use, result)
+	}
+	if wake := wakeFor(handedOffJobID(firstString(result, "content"))); !strings.Contains(wake.OutputExcerpt, "p4-double-task") {
+		t.Fatalf("the handed-off create reported %q", wake.OutputExcerpt)
+	}
 	created := h.cp.seen("POST", "/api/runner/tasks")
 	if len(created) != 1 || created[0].Header.Get("X-Orbit-Agent-Id") != "p4-agent" || created[0].Body["title"] != "P4 isolated task" {
 		t.Fatalf("task_create reached the double as %+v", created)
@@ -767,11 +815,6 @@ func TestDshRealOrbitMCPAndAgentInstructions(t *testing.T) {
 	cards := h.cp.cards()
 	if len(cards) != 1 || cards[0].Body["toolName"] != "orbit_task_create" {
 		t.Fatalf("only Orbit MCP's own create card may be filed; dsh asks nothing about MCP: %+v", cards)
-	}
-	use, result := h.toolResult("t1", "mcp__orbit__task_create")
-	if use["mcpServer"] != "orbit" || use["mcpTool"] != "task_create" || mapValue(use["input"])["title"] != "P4 isolated task" ||
-		result["status"] != "completed" || !strings.Contains(firstString(result, "content"), "p4-double-task") {
-		t.Fatalf("Orbit tool events = %+v / %+v", use, result)
 	}
 	_, comment := h.toolResult("t1", "mcp__orbit__task_comment")
 	if comment["status"] != "completed" {
@@ -820,4 +863,131 @@ func TestDshRealThirdPartyMCPRunsUnasked(t *testing.T) {
 	}
 	h.end()
 	h.evidence(t.Name(), map[string]interface{}{"sideEffect": true, "approvalRequests": 0})
+}
+
+// TestDshRealMCPTimeoutCancelsTheCall measures what the pinned dsh does to an ACP-mounted MCP call
+// that outlasts its fixed 60-second toolCallTimeoutMs: what the model is told, and what the server
+// is sent. A stdio server that never answers the call records every frame it receives.
+func TestDshRealMCPTimeoutCancelsTheCall(t *testing.T) {
+	node := os.Getenv("P4_NODE_BIN")
+	if !filepath.IsAbs(node) {
+		t.Skip("P4_NODE_BIN must name node; run scripts/test-dsh-mcp-timeout.sh")
+	}
+	server, err := filepath.Abs("../../scripts/deepseek-harness-p0/mock-mcp.mjs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := newDshRealHarness(t, "auto", true)
+	log := filepath.Join(t.TempDir(), "held-mcp.ndjson")
+	h.job.Agent.McpConfig = map[string]interface{}{"held": map[string]interface{}{"command": node, "args": []interface{}{server},
+		"env": map[string]interface{}{"P0_MCP_LOG": log}}}
+	h.model.plans = []dshPlan{{tool: "mcp__held__record", args: map[string]interface{}{"value": "hold"}}, {text: "P4 timeout answer"}}
+	h.start()
+	started := time.Now()
+	h.send("t1", "message", "Call the held MCP tool.")
+	if done := h.settled("t1"); done.Status != stSucceeded {
+		t.Fatalf("turn = %+v", done)
+	}
+	elapsed := time.Since(started)
+	_, result := h.toolResult("t1", "mcp__held__record")
+	if result["status"] != "failed" || !strings.Contains(firstString(result, "content"), "timed out") || elapsed < 60*time.Second {
+		t.Fatalf("after %s the held call ended as %+v", elapsed, result)
+	}
+	var callID interface{}
+	var cancelled map[string]interface{}
+	data, _ := os.ReadFile(log)
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		var frame struct {
+			Message map[string]interface{} `json:"message"`
+		}
+		_ = json.Unmarshal([]byte(line), &frame)
+		switch frame.Message["method"] {
+		case "tools/call":
+			callID = frame.Message["id"]
+		case "notifications/cancelled":
+			cancelled = mapValue(frame.Message["params"])
+		}
+	}
+	if callID == nil || cancelled == nil || fmt.Sprint(cancelled["requestId"]) != fmt.Sprint(callID) {
+		t.Fatalf("dsh sent no notifications/cancelled for call %v: %s", callID, data)
+	}
+	h.end()
+	h.evidence(t.Name(), map[string]interface{}{"elapsedSeconds": int(elapsed.Seconds()), "modelSaw": firstString(result, "content"),
+		"toolStatus": result["status"], "cancelledRequestId": cancelled["requestId"], "cancelReason": cancelled["reason"], "serverFrames": string(data)})
+}
+
+// TestDshRealOrbitMCPConfirmationOutlastsTimeout: an Orbit MCP create whose card the owner answers
+// only after dsh's 60-second call deadline. The call returns at once and says nothing is written
+// yet; the card is filed by a runner-hosted job, the write happens only on a confirmation, and the
+// session is woken with what the call would have returned. A declined card writes nothing. Either
+// way, what the model was told matches what happened.
+func TestDshRealOrbitMCPConfirmationOutlastsTimeout(t *testing.T) {
+	h := newDshRealHarness(t, "default", true)
+	wakeFor := h.serveBgJobs()
+	create := func(title string) dshPlan {
+		return dshPlan{tool: "mcp__orbit__task_create", args: map[string]interface{}{"title": title, "description": "synthetic",
+			"completionCriterion": "EVIDENCE_JUDGMENT", "acceptanceCriteria": "synthetic"}}
+	}
+	h.model.plans = []dshPlan{create("P4 confirmed late"), {text: "P4 handed off"}, create("P4 declined late"), {text: "P4 handed off again"}}
+	h.start()
+	type outcome struct {
+		ModelSaw, ToolStatus, JobID, WakeOutput string
+		CardFiledBy                             interface{}
+		TurnSeconds, CardAnsweredAfterSeconds   int
+		TasksCreated                            int
+	}
+	run := func(turn string, cardN int, decision string) outcome {
+		started := time.Now()
+		h.send(turn, "message", "File a task.")
+		if done := h.settled(turn); done.Status != stSucceeded {
+			t.Fatalf("turn = %+v", done)
+		}
+		turnTook := time.Since(started)
+		_, result := h.toolResult(turn, "mcp__orbit__task_create")
+		text := firstString(result, "content")
+		jobID := handedOffJobID(text)
+		if result["status"] != "completed" || !strings.Contains(text, "Not done yet") || jobID == "" || turnTook > 30*time.Second {
+			t.Fatalf("after %s the call ended as %+v", turnTook, result)
+		}
+		card := h.waitCard(cardN)
+		if card.Body["toolName"] != "orbit_task_create" || card.Body["backgroundJobId"] != jobID {
+			t.Fatalf("card %d = %+v", cardN, card.Body)
+		}
+		before := len(h.cp.seen("POST", "/api/runner/tasks"))
+		// Past the deadline dsh would have cut a blocking call at, nothing has been written yet.
+		time.Sleep(time.Until(started.Add(dshMCPToolCallTimeout + 5*time.Second)))
+		if now := len(h.cp.seen("POST", "/api/runner/tasks")); now != before {
+			t.Fatalf("a task was written before the owner answered")
+		}
+		h.cp.decide(card.ID, decision)
+		wake := wakeFor(jobID)
+		return outcome{ModelSaw: text, ToolStatus: fmt.Sprint(result["status"]), JobID: jobID, WakeOutput: wake.OutputExcerpt,
+			CardFiledBy: card.Body["backgroundJobId"], TurnSeconds: int(turnTook.Seconds()),
+			CardAnsweredAfterSeconds: int(time.Since(started).Seconds()), TasksCreated: len(h.cp.seen("POST", "/api/runner/tasks")) - before}
+	}
+
+	confirmed := run("t1", 1, "ALLOWED")
+	created := h.cp.seen("POST", "/api/runner/tasks")
+	if confirmed.TasksCreated != 1 || created[0].Body["title"] != "P4 confirmed late" || created[0].Header.Get("X-Orbit-Agent-Id") != "p4-agent" ||
+		created[0].Header.Get("X-Orbit-Session-Id") != publicID(h.job.SessionID) || !strings.Contains(confirmed.WakeOutput, "p4-double-task") {
+		t.Fatalf("confirmed: %+v / %+v", confirmed, created)
+	}
+	declined := run("t2", 2, "DENIED")
+	if declined.TasksCreated != 0 || !strings.Contains(declined.WakeOutput, "the human rejected this task") {
+		t.Fatalf("declined: %+v", declined)
+	}
+	h.end()
+	h.evidence(t.Name(), map[string]interface{}{"confirmed": confirmed, "declined": declined})
+}
+
+func handedOffJobID(text string) string {
+	i := strings.Index(text, "bgj_")
+	if i < 0 {
+		return ""
+	}
+	end := i + 4
+	for end < len(text) && strings.IndexByte("0123456789abcdef", text[end]) >= 0 {
+		end++
+	}
+	return text[i:end]
 }
