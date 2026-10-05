@@ -248,6 +248,46 @@ ids = claude-opus-5-5, claude-sonnet-5-5, gemini-3.1-pro, gemini-3.6-flash, gemi
 
 **给下游的结论（第三版）**：修复 `b5b99caa4` 与「第 5 版」都没有让 Google 模式模型到达 runner；三次 A/B/C 已经把范围压到控制面「目录行的模型解析」这一处。
 
+### 9.3 整份重建部署之后重跑：行为与部署前逐字相同
+
+协调会话按 upgrade 流程整份重建并重新部署了 web+apiserver（迁移无 pending、三个容器 healthy）。部署确实发生了——`https://orbitd.io/` 的 `index.html` 的 `last-modified` 由 `08:31:06Z` 变成 `10:45:56Z`。之后立刻重跑：
+
+| 会话 | 请求模型 | 结果 |
+| --- | --- | --- |
+| [S](orbit-session:34abVAaH7kebmyaV0GrIu) | `claude-sonnet-5-5` | session 行保留，回答正常（「十五加十五等于三十」），**argv 里仍然没有 `--model`** |
+| [T](orbit-session:34abVSw9ypBxcUDYqfQfz) | `gemini-9.9-ultra`（对照） | 仍然被回退成 `--model gemini-3.8-flash --effort high` |
+
+也就是说：**重建前后，这两种请求的行为逐字相同**——Google 目录行送空、目录外 id 回退成默认。
+
+### 9.4 为什么这「不可能」是 `origin/main` 的代码，指向部署的 revision
+
+这一轮我把 `origin/main`（已推进到 `6f96102c6`，`src/shared/src/models.ts` 相对本仓 `3f6c181a8` 确实 DIFFERENT）上的修复读了一遍：
+
+```ts
+const offered = runtimeCatalogModels(args.modelCatalog, provider);
+return { provider, model: modelForProvider(provider, explicitSessionModel ?? inheritedModel, offered), … };
+
+// models.ts
+if (provider === AgentProvider.ANTIGRAVITY) {
+  return antigravityOffers(model, offered) ? model : fallback;   // fallback = DEFAULT_MODEL_BY_PROVIDER[antigravity]
+}
+function antigravityOffers(model, offered) {
+  if (!offered || offered.length === 0) return model.startsWith('gemini-');
+  const base = antigravityBaseModel(model);
+  return offered.some((row) => row && (row.value === model || row.value === base));
+}
+```
+
+按这段代码：目录里**有** `claude-sonnet-5-5`（§9.1 的 n=7）时 `antigravityOffers` 为真 ⇒ payload 就是 `claude-sonnet-5-5`；否则也会是 `fallback`（即 `gemini-3.8-flash`，与 T 的观测一致）。**两条分支都不可能产出空值。** 再加上 runner 侧已用运行二进制自报的 `sourceSha` 逐字排除（非空 model 必进 argv），「argv 里没有 `--model`」在 `origin/main` 的代码下不可复现。
+
+结论：**orbitd.io 上跑着的那份构建，行为既不是 `origin/main`，也不是修复前的版本**（修复前会把 Google 行换成 `gemini-3.8-flash`，而不是送空）。它落在两者之间，最像是修复链里某个**中间 revision**——例如把「未知模型」处理成「不传模型」的那一版。因此需要确认的是**部署树到底是哪个 revision**，而不是再改代码：
+
+- 构建目录（wikova 上的 `/root/orbit`）的 `git rev-parse HEAD`，以及它是否包含 `6f96102c6`；
+- 运行中的 apiserver 镜像/build 标签；
+- 或者直接在容器里对构建产物做一次内容核对。
+
+（顺带一个不能用作依据的观察：`https://orbitd.io/assets/index-35EWT_ac.js` 的哈希在两次部署之间没变——但 web 并不引用 `modelForProvider`（`src/web` 里零命中），所以哈希不变**不能**说明构建树没变。）
+
 ## 10. 截图
 
 
