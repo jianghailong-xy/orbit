@@ -4920,17 +4920,12 @@ html[data-theme='dark'] .session-tag-chip {
   font-size: 10px;
   line-height: 1;
   background: transparent;
-  cursor: pointer;
   font-family: inherit;
 }
 .session-project-progress.done {
   color: var(--success);
   border-color: var(--success-border);
   background: var(--success-bg);
-}
-.session-project-progress:hover,
-.session-project-progress:focus-visible {
-  border-color: var(--brand);
 }
 .session-project-page-progress {
   display: flex;

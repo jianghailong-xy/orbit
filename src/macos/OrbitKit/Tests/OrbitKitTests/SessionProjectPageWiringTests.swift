@@ -308,7 +308,10 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(running.contains("sessions.filter { session in"))
         XCTAssertTrue(running.contains("if case .spinner = SessionStatusGlyph.make(for: session, watching: app.watches?.summary(for: session.id)).shape"))
         XCTAssertTrue(running.contains("}.count"))
-        XCTAssertTrue(progress.contains("app.openProject(address.projectID)"))
+        XCTAssertTrue(progress.contains("Button { openProject() } label: {"))
+        let open = try slice(page, from: "private func openProject() {", to: "\n    }")
+        XCTAssertTrue(open.contains("app.openProjectFromConversation(address.projectID, overConsole: rowNavigation == .push)"),
+                      "a phone pushes the project's page over the sessions page, so back returns to it")
         XCTAssertTrue(progress.contains("chevron.right"))
 
         let row = try slice(page, from: "@ViewBuilder private func sessionRow(_ session: Session)", to: "\n    }")

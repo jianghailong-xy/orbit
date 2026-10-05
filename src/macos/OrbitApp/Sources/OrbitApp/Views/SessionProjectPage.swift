@@ -376,7 +376,7 @@ struct SessionProjectPage: View {
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 4)
-            Button { app.openProject(address.projectID) } label: {
+            Button { openProject() } label: {
                 HStack(spacing: 4) {
                     Text("Project")
                     Image(systemName: "chevron.right")
@@ -415,9 +415,15 @@ struct SessionProjectPage: View {
         }
     }
 
+    /// On a phone the project's page is pushed over this one, so back returns here and the drawer
+    /// keeps this project selected; the iPad opens it in the Projects section.
+    private func openProject() {
+        app.openProjectFromConversation(address.projectID, overConsole: rowNavigation == .push)
+    }
+
     private var projectMenu: some View {
         Menu {
-            Button { app.openProject(address.projectID) } label: {
+            Button { openProject() } label: {
                 Label(SessionProjectCopy.openProject, systemImage: "square.grid.2x2")
             }
             Button {

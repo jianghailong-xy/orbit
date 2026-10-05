@@ -326,7 +326,7 @@ const remote = (n: number, title: string, extra: Record<string, unknown> = {}) =
 });
 
 async function openSessions(): Promise<void> {
-  await click(projectRow().querySelector('.session-project-progress'), 'the project progress tag');
+  await click(projectRow(), 'the project entry');
   await until(() => expect(page()).not.toBeNull());
 }
 
@@ -365,12 +365,14 @@ async function swipe(entry: HTMLElement, dx: number, source: Element = entry): P
 }
 
 describe('project entry navigation and actions', { timeout: 60_000 }, () => {
-  it.each([false, true])('opens the coordinator when nobody waits or the coordinator waits (waiting=%s)', async (waiting) => {
+  it.each([false, true])('opens the sessions page from the entry, and the coordinator from Open Session when nobody waits or the coordinator waits (waiting=%s)', async (waiting) => {
     rows = [LOOSE, { ...COORDINATOR, ...(waiting ? { pendingApprovals: 1, waitingKind: 'OWNER_CONFIRMATION' } : {}) }, { ...TASK, ...(waiting ? { pendingApprovals: 1, waitingKind: 'OWNER_CONFIRMATION' } : {}) }];
     await mount();
     await click(projectRow(), 'the project entry');
-    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}`));
+    await until(() => expect(page()).not.toBeNull());
+    expect(new URLSearchParams(location.split('?')[1]).get('project')).toBe(PROJECT_ID);
     await back();
+    await until(() => expect(page()).toBeNull());
     await hoverProjectMenu();
     await click(menuItem('Open Session'), 'Open Session for the coordinator');
     await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}`));
@@ -382,14 +384,11 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
     rows = [LOOSE, COORDINATOR, newer, older];
     await mount();
     expect(preview()?.textContent).toContain('Build the package');
-    await click(projectRow(), 'the project entry');
-    await until(() => expect(location).toBe(`/sessions/${TASK.id}`));
-    expect(projectRow().classList.contains('active')).toBe(true);
-    await back();
     await act(async () => projectRow().dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })));
     await until(() => expect(menuItem('Open Session')).toBeTruthy());
     await click(menuItem('Open Session'), 'Open Session for the waiting member');
     await until(() => expect(location).toBe(`/sessions/${TASK.id}`));
+    expect(projectRow().classList.contains('active')).toBe(true);
   });
 
   it('opens the project sessions page when there is no coordinator', async () => {
@@ -405,10 +404,11 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
     await until(() => expect(page()?.textContent).toContain('Build the package'));
   });
 
-  it('makes the progress tag an independent click target with the session-count hint', async () => {
+  it('draws the progress tag as part of the entry, with the session-count hint', async () => {
     await mount();
     const progress = projectRow().querySelector('.session-project-progress');
     expect(progress?.getAttribute('title')).toBe('2 sessions · 1 running');
+    expect(progress?.closest('button')).toBeNull();
     await click(progress, 'the project progress tag');
     await until(() => expect(location).toBe(`/sessions/${LOOSE.id}?project=${PROJECT_ID}`));
     expect(page()).not.toBeNull();

@@ -1571,18 +1571,6 @@ final class AppModel {
         }
     }
 
-    /// Open a **Recents** row from the drawer: jump into the session's owning agent and put its
-    /// console on screen. The Open list nests the agent, so there's no fetch (unlike a cold deep link
-    /// — see ``openSession``). A no-op agent switch leaves the page where it is; a real one replaces
-    /// it, which is also the whole of "clear the prior agent's session/compose state": both were
-    /// pages of this one stack, and a page cannot outlive the frame it was.
-    func openRecentSession(_ s: Session) {
-        // The frame records where it came from — a Recents drawer row — so the compact shell frees
-        // the left edge for the drawer-open swipe on that console (see `NavState.consoleFromRecents`).
-        // Nothing to set first, and no observer with an ordering convention to preserve it.
-        show(.console(sessionID: s.id, origin: .drawer), agent: s.agent?.id ?? s.agentId)
-    }
-
     /// The "needs you" banner's state for a screen showing `focused` (nil from a list, which shows no
     /// one session). Cheap enough to read per body pass — it filters the handful of blocked rows, not
     /// the Open list, which `applySessionSnapshot` already narrowed.
@@ -1637,16 +1625,14 @@ final class AppModel {
         return session(id: id)?.capabilities?.canComplete ?? true
     }
 
-    /// iOS compact: true when the console currently pushed on the Agents stack was opened from a
-    /// **Recents** drawer row (and is still the one showing). The compact shell uses this to free the
-    /// left screen edge for the drawer-open swipe on that page — you came from the drawer, so the edge
-    /// returns you there — while the nav-bar back button still pops to the agent's session list.
-    var consoleFromRecents: Bool { nav.consoleFromRecents }
+    /// The drawer row the screen belongs to (`NavState.drawerDestination`): the row drawn as
+    /// selected, and the one whose tap only closes the drawer.
+    var drawerDestination: DrawerDestination { nav.drawerDestination(agentID: selectedAgentID) }
 
-    /// iOS compact: the same for the project page on top of the Projects stack, when one of the
-    /// drawer's project rows opened it — the edge returns you to the drawer, the back button to the
-    /// Projects list.
-    var projectFromDrawer: Bool { nav.projectFromDrawer }
+    /// iOS compact: the page on top is its drawer destination's own — a section's list or a
+    /// project's sessions page — so the left screen edge opens the drawer; over any page pushed above
+    /// it the edge is the system back-swipe's.
+    var atDestinationRoot: Bool { nav.atDestinationRoot }
 
     /// True when the current section's navigation stack is at its root (nothing pushed) — the
     /// compact shell uses this to yield the left screen edge to its drawer-open gesture only where
@@ -2074,13 +2060,36 @@ final class AppModel {
         nav.enterProjectSessions(address)
     }
 
-    /// The project's sessions page on top of a phone's stack. Like a page the drawer opened, it
-    /// hands the left edge to the drawer-open swipe; the back button still returns to the list.
-    var projectSessionsPage: SessionProjectAddress? { nav.projectSessionsPage }
+    /// Every drawer row's tap. The row of the destination already showing only closes the drawer;
+    /// any other lands on its destination's root. On a phone that is the destination's whole stack;
+    /// in the iPad's sidebar column only the list column changes, and the detail keeps its page.
+    func openDrawerDestination(_ destination: DrawerDestination, inColumn: Bool) {
+        guard destination != drawerDestination else { return }
+        switch destination {
+        case .section(let section):
+            selectedSection = section
+            guard !inColumn else { return }
+            nav.popToRoot()
+            if section == .tasks { tasks?.selectScope(.all) }
+            syncTaskDetailStore()
+        case .workspace(let agentID):
+            selectedSection = .agents
+            if selectedAgentID != agentID {
+                selectedAgentID = agentID
+                nav.popToRoot()
+            } else if inColumn {
+                nav.leaveProjectSessions()
+            } else {
+                nav.popToRoot()
+            }
+        case .project(let projectID):
+            openProjectSessions(projectID, inColumn: inColumn)
+        }
+    }
 
-    /// A drawer project row: the project's sessions page in Agents, over its coordinator's
-    /// workspace (or the one already showing). Without any workspace it opens the project's page.
-    func openProjectSessionsFromDrawer(_ projectID: String) {
+    /// A project's sessions page over its coordinator's workspace (or the one already showing).
+    /// Without any workspace it opens the project's page.
+    private func openProjectSessions(_ projectID: String, inColumn: Bool) {
         let key = PublicID.storageKey(projectID)
         let coordinator = (sessions + (agents?.allSessions ?? [])).first {
             $0.projectMembership?.role == .coordinator
@@ -2089,8 +2098,16 @@ final class AppModel {
         guard let agentID = coordinator.flatMap({ $0.agent?.id ?? $0.agentId })
                 ?? selectedAgentID ?? orderedAgents.first?.id else { return openProject(projectID) }
         selectedSection = .agents
-        if selectedAgentID != agentID { selectedAgentID = agentID }
-        nav.path = [.sessionProject(SessionProjectAddress(projectID: projectID, agentID: agentID, view: .open))]
+        if selectedAgentID != agentID {
+            selectedAgentID = agentID
+            nav.popToRoot()
+        }
+        let address = SessionProjectAddress(projectID: projectID, agentID: agentID, view: .open)
+        if inColumn {
+            nav.enterProjectSessions(address)
+        } else {
+            nav.path = [.sessionProject(address)]
+        }
     }
 
     func leaveProjectSessions(_ projectID: String? = nil) {
@@ -2400,13 +2417,11 @@ final class AppModel {
         return try await api.taskPage(cursor: cursor, limit: 50, counts: .none, creatorSessionId: sessionID)
     }
 
-    /// Open one project's page from outside the Projects list — the drawer's project rows: the
-    /// section's list at the root and the project on top, whatever was showing there before. The
-    /// drawer's rows pass `.drawer`, so the compact shell frees the left edge for the drawer-open
-    /// swipe on that page (see `NavState.projectFromDrawer`).
-    func openProject(_ id: String, origin: NavOrigin = .list) {
+    /// Open one project's page from outside the Projects list: the section's list at the root and
+    /// the project on top, whatever was showing there before.
+    func openProject(_ id: String) {
         selectedSection = .projects
-        nav.path = [.projectDetail(projectID: id, origin: origin)]
+        nav.path = [.projectDetail(projectID: id)]
     }
 
     /// The project line on a task's page. Over that project's own page — one of its rows opened the
@@ -2418,9 +2433,9 @@ final class AppModel {
     }
 
     /// A project's page opened from inside a conversation — a coordinator conversation's title, a
-    /// project link in a transcript. On a phone (`overConsole`) it is pushed over the console, so the
-    /// back swipe returns to the conversation; on the wide shells it opens in the Projects section,
-    /// whose sidebar is the way back.
+    /// project link in a transcript — or from a project's sessions page. On a phone (`overConsole`)
+    /// it is pushed over that page, so the back swipe returns to it; on the wide shells it opens in
+    /// the Projects section, whose sidebar is the way back.
     func openProjectFromConversation(_ id: String, overConsole: Bool) {
         let id = PublicID.toPublic(id)
         guard overConsole else { return openProject(id) }

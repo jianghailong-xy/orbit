@@ -148,20 +148,17 @@ final class AgentsStackWiringTests: XCTestCase {
         let model = code(app)
 
         XCTAssertTrue(model.contains("focusedConsoleSessionID: String? { nav.focusedConsoleSessionID }"))
-        XCTAssertTrue(model.contains("consoleFromRecents: Bool { nav.consoleFromRecents }"))
 
         let root = code(try slice(app, from: "var sectionAtRoot: Bool {",
                                   to: "/// ⌘D: complete the open"))
         XCTAssertTrue(root.contains("case .agents:  return nav.sectionAtRoot"),
                       "at root is an empty stack, not two fields that could disagree with it")
 
-        // The four ways into a console pick the frame they push, and how it was opened rides that
+        // The ways into a console pick the frame they push, and how it was opened rides that
         // frame instead of a shadow variable with an assignment-ordering convention. Each one hands
         // its frame to `show` now; that the entries write nothing else, and that `show` is the one
         // place the transition happens, is `NavigationEntrancesWiringTests`'.
         let entries = [
-            ("func openRecentSession(_ s: Session) {", "\n    }",
-             "show(.console(sessionID: s.id, origin: .drawer)"),
             ("func openNeedsYouSession(_ s: Session) {", "\n    }",
              "show(.console(sessionID: s.id, origin: .banner)"),
             ("func openAgent(_ id: String) {", "\n    }", "nav.popToRoot()"),
@@ -209,11 +206,10 @@ final class AgentsStackWiringTests: XCTestCase {
             .contains("nav.replaceTop(with: .console(sessionID: session.id, origin: .list))"),
                       "and it swaps the draft's frame for that session's console, in place")
 
-        // The Recents origin is what frees the compact left edge; it rides the frame, so the page
-        // reads it instead of a marker that had to be written before the selection.
+        // A console is never a drawer destination's own page: it keeps the system back-swipe.
         let console = code(try slice(raw, from: "private struct AgentConsolePage: View {",
                                      to: "/// Toggles the enclosing"))
-        XCTAssertTrue(console.contains("SwipeBackGestureToggle(enabled: !model.consoleFromRecents)"))
+        XCTAssertFalse(console.contains("SwipeBackGestureToggle"))
     }
 
     /// An iPad's detail column is always on screen, so the Agents stack's root needs a page of its own
