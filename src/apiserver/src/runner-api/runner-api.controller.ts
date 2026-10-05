@@ -65,7 +65,9 @@ import {
   DeviceStartRequest,
   DeviceStartResponse,
   apiErrorRetryAt,
+  apiErrorRetryBudgetLeft,
   isAsyncAgentLaunchAck,
+  isRateLimitApiErrorText,
   isRetryableApiErrorText,
   IntegrationJobProgressRequest,
   IntegrationJobResultRequest,
@@ -6919,6 +6921,7 @@ export class RunnerApiController {
     delivered = true,
   ): Promise<{ retryAt?: Date | null; retryAttempts?: number; claudeAccount?: string; poolSwitchNotice?: string }> {
     const quotaSpent = isUsageLimitErrorText(text);
+    const rateLimited = isRateLimitApiErrorText(text);
     if (!quotaSpent && !isRetryableApiErrorText(text)) return { retryAt: null, retryAttempts: 0 };
     if (!delivered && !quotaSpent) return {};
     const session = await tx.session.findUnique({
@@ -6931,11 +6934,32 @@ export class RunnerApiController {
         claudeAccount: true,
         claudeAccountPinned: true,
         poolSwitchNotice: true,
+        poolCodexAccountId: true,
+        poolKeyId: true,
         workspace: { select: { env: true, codexAccount: true, claudeAccount: true } },
       },
     });
     if (!session) return {};
-    if (!quotaSpent) return { retryAt: apiErrorRetryAt(session.retryAttempts, new Date()) };
+    if (!quotaSpent) {
+      // A rate limit is the one transient failure a pool can be asked about rather than answered with the
+      // ladder below: the gateway records a short throttle on the credential when a 429 outlasts the wait
+      // it may hold a request open for (providers/pool-gateway.service.ts throttledUntil), so the pool
+      // knows the moment this session can run again — and answers `now` when another credential of the
+      // pool can take it, which the re-send's claim then moves the session to. Both return null while the
+      // credential the session is on can still run, which is also what they answer for a session on no
+      // pool at all: the failure was not the credential's, or there is none to speak for it, and the
+      // ladder stands.
+      // The budget is asked first and separately: the pool answers *when* the session can run, the
+      // budget is what stops a credential from being re-sent to forever, and the sweep spends an attempt
+      // per re-send whatever armed it.
+      if (rateLimited && apiErrorRetryBudgetLeft(session.retryAttempts)) {
+        const at =
+          (await this.queue.sharedPoolRetryAt(this.prisma, session, new Date())) ??
+          (await this.queue.loginPoolRetryAt(this.prisma, session, new Date()));
+        if (at) return { retryAt: at };
+      }
+      return { retryAt: apiErrorRetryAt(session.retryAttempts, new Date()) };
+    }
     // A turn nobody delivered, in a session that still owes its "Switched to" line, ran on the engine
     // that line's move is replacing: the account it found spent is the one already left, and taking it
     // for the new one moved the session again — back onto the spent one when the snapshot lags.
