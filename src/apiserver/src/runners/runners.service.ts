@@ -5,6 +5,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import type {
   InstallEngine,
@@ -26,6 +27,7 @@ import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { ACTIVE_TURN_STATUSES } from '../common/session-scheduling';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import {
   CLAUDE_ACCOUNT_REMOVE_V1,
   CODEX_ACCOUNT_REMOVE_V1,
@@ -66,7 +68,12 @@ export function isRunnerOnline(
 export class RunnersService {
   private readonly logger = new Logger(RunnersService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    // Optional, and last, for the specs that build this service on a bare Prisma: without it a
+    // sign-in still reaches the runner, on its next heartbeat instead of at once.
+    @Optional() private readonly realtime?: RealtimeService,
+  ) {}
 
   private readonly deviceLookups = new Map<string, number[]>();
 
@@ -453,6 +460,9 @@ export class RunnersService {
     });
     // A code still held for the sign-in this replaces belongs to nobody now.
     loginCodeRelay.drop(id);
+    // The runner picks the start up on its next heartbeat; have that be now rather than up to half a
+    // minute from now, with the person who pressed the button watching a spinner.
+    this.realtime?.notifyRunnerWake(id);
     return loginStateOf(r);
   }
 
@@ -483,6 +493,7 @@ export class RunnersService {
     if (inMemory && runner.loginAt) {
       loginCodeRelay.hold(id, runner.loginAt.toISOString(), trimmed, runner.loginAt.getTime() + LOGIN_RELAY_TIMEOUT_MS);
     }
+    this.realtime?.notifyRunnerWake(id);
     return loginStateOf(r);
   }
 
@@ -521,6 +532,7 @@ export class RunnersService {
       },
     });
     loginCodeRelay.drop(id);
+    if (stopOnRunner) this.realtime?.notifyRunnerWake(id);
     return loginStateOf(r);
   }
 

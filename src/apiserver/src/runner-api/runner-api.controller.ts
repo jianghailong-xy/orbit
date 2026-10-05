@@ -2189,6 +2189,30 @@ export class RunnerApiController {
     return job;
   }
 
+  /**
+   * Long-poll: returns `{ wake: true }` once something this runner's heartbeat carries is waiting
+   * for it — a sign-in to start, a pasted code (RealtimeService.notifyRunnerWake) — and the runner
+   * beats at once instead of at its next 30s tick. `{ wake: false }` is the poll timing out.
+   *
+   * Nothing is handed over here: the heartbeat stays the one place the work is delivered, so a runner
+   * that never polls this (an older one) is only as slow as it always was.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Get('wake')
+  async wake(
+    @CurrentRunner() runner: { id: string },
+    @Res({ passthrough: true }) res?: Response,
+  ): Promise<{ wake: boolean }> {
+    // A runner that stopped polling must not take a wake with it: the next poll is owed that one.
+    let hungUp: AbortSignal | undefined;
+    if (res) {
+      const hangUp = new AbortController();
+      res.once('close', () => hangUp.abort());
+      hungUp = hangUp.signal;
+    }
+    return { wake: await this.realtime.waitForRunnerWake(runner.id, LONG_POLL_MS, hungUp) };
+  }
+
   /** Retain every open checkout on restart; the payload status tells the runner which is active. */
   @UseGuards(RunnerAuthGuard)
   @Get('sessions/reclaim')
