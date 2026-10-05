@@ -270,7 +270,7 @@ export interface SlashCommandInfo {
 /** One model option reported by a runner runtime. For Codex this is derived from
  *  `codex debug models`, so newly shipped model slugs do not require a web release. */
 export interface RunnerModelInfo {
-  /** Runtime model id / slug, e.g. `gpt-5.6`. */
+  /** Runtime model id / slug, e.g. `gpt-5.6`; dsh ACP values are opaque configOptions tokens. */
   value: string;
   /** Human display name shown in pickers. */
   label: string;
@@ -298,7 +298,9 @@ export interface RunnerModelInfo {
 /** Models a runner says its local runtimes can use. Keys are provider ids. Antigravity's rows
  *  come from `agy models`, whose slugs carry their level (`gemini-3.8-flash-high`): the runner
  *  folds them into one row per base model (`gemini-3.8-flash`) with its levels as
- *  `reasoningLevels`, and a session passes them back as `--model` and `--effort`. */
+ *  `reasoningLevels`, and a session passes them back as `--model` and `--effort`. DeepSeek
+ *  Harness reports opaque model and reasoning option values; preserve them for ACP
+ *  session/set_config_option without reconstructing ids or inventing context windows. */
 export type RunnerModelCatalog = Partial<Record<AgentProvider, RunnerModelInfo[]>>;
 
 /** Effective default model reported by each built-in runtime on one runner heartbeat. This is
@@ -1369,6 +1371,8 @@ export interface ArtifactCommand {
   requestId: string;
   sessionId: string;
   path: string;
+  /** A changed file relative to this session's worktree; absent for legacy absolute paths. */
+  source?: 'worktree';
 }
 
 // ─────────────────────────── Interactive sessions (Route B) ───────────────────────────
@@ -2104,6 +2108,7 @@ export interface ArtifactResultRequest {
   status: 'uploaded' | 'missing' | 'error';
   attachmentId?: string;
   message?: string;
+  errorCode?: 'too_large';
 }
 
 /**

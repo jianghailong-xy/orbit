@@ -1,0 +1,13 @@
+
+> @orbit/web@0.1.0 test
+> vitest run --maxWorkers=2 src/lib/theme.test.tsx src/components/ui/boundary.test.ts
+
+
+ RUN  v5.0.2 /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web
+
+
+ Test Files  2 passed (2)
+      Tests  6 passed (6)
+   Start at  12:26:30
+   Duration  851ms (environment 40%, tests 28%, transform 23%, import 9%)
+

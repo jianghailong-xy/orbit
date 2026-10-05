@@ -1212,6 +1212,7 @@ export function ProjectDetailPage() {
               projectStatus={p.status}
               integrationLine={p.integration?.line ?? null}
               started={started}
+              paused={p.pausedAt != null}
             />
             {/* The right rail holds the coordinator only. How it runs follows the command centre at
                 full width so the settings never make the overview's column look empty. */}

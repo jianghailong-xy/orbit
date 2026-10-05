@@ -412,6 +412,17 @@ describe('the "On your runners" section', () => {
     ).toBe('Installing…');
   });
 
+  it('counts only the login engines, whatever Antigravity reports beside them', () => {
+    const loggedIn = [health({}), health({ engine: 'codex' }), health({ engine: 'kimi' })];
+    for (const auth of ['yes', 'no', 'unknown'] as const) {
+      const box = runner({ engines: [...loggedIn, health({ engine: 'antigravity', auth })] });
+      expect(summaryOf(box), auth).toBe('All signed in');
+    }
+    expect(summaryOf(runner({ engines: [health({}), health({ engine: 'antigravity' })] }))).toBe(
+      '1 of 3 signed in',
+    );
+  });
+
   it('marks the one row a "Not signed in" link came here for', () => {
     const box = runner({
       engines: [
@@ -432,11 +443,10 @@ describe('the "On your runners" section', () => {
     expect(render([box])).not.toContain('focused');
   });
 
-  it('says who keeps these current without offering to do it here', () => {
+  it('explains the subscription source and leaves machine upkeep on the runner page', () => {
     const box = runner({ engines: [health({ engine: 'claude', version: '2.1.220' })] });
     const html = render([box]);
-    // The answer to "do I have to manage this?" — said once, at the top, not per row.
-    expect(html).toContain('Orbit keeps these CLIs updated every 30 min.');
+    expect(html).toContain('Use subscriptions signed in on your machines.');
     // But not the lever. `POST /runners/:id/engine-update` takes no engine: its object is the
     // machine, and every other control on this page is scoped to one (runner, engine) pair. It
     // lives on the machine's own page, which this card already links to.

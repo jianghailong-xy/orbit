@@ -300,6 +300,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// On a shared pool: the key its last claim chose (nil before the first, or when none could
     /// run) — the same read as above, in the shared pool's own field.
     public let poolKeyId: String?
+    /// On a Codex pool of one's own ChatGPT accounts: the account this session runs on, as the
+    /// masked view every response names one by (email + `…AB12`, never its id). Nil until a claim
+    /// records one, on a session of any other kind, and from an older control plane.
+    public let poolCodexLogin: CodexLogin?
     /// Which of the runner's Codex accounts this session runs on (`default` or a slot id): picked on
     /// New Session, or the one Automatic chose when it was created. Nil follows its workspace's
     /// (`Agent.codexAccount`). Carried by the detail payload, like the two above.
@@ -370,6 +374,9 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// nil for ordinary Sessions and when talking to an older server.
     public let projectId: String?
     public let projectTitle: String?
+    /// The project this session belongs to in any role; nil for an ordinary conversation and
+    /// from a server that predates project grouping.
+    public let projectMembership: SessionProjectMembership?
     /// The list row's second-line preview, built by `SessionLine`: the (server-truncated) last
     /// assistant reply, the tool currently in flight, and the live background-shell count.
     public let lastAssistantText: String?
@@ -483,6 +490,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         provider = try values.decodeIfPresent(String.self, forKey: .provider)
         poolMemberProviderId = try values.decodeIfPresent(String.self, forKey: .poolMemberProviderId)
         poolKeyId = try values.decodeIfPresent(String.self, forKey: .poolKeyId)
+        poolCodexLogin = try values.decodeIfPresent(CodexLogin.self, forKey: .poolCodexLogin)
         codexAccount = try values.decodeIfPresent(String.self, forKey: .codexAccount)
         codexAccountPinned = try values.decodeIfPresent(Bool.self, forKey: .codexAccountPinned)
         claudeAccount = try values.decodeIfPresent(String.self, forKey: .claudeAccount)
@@ -508,6 +516,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         source = try values.decodeIfPresent(String.self, forKey: .source)
         projectId = try values.decodeIfPresent(String.self, forKey: .projectId)
         projectTitle = try values.decodeIfPresent(String.self, forKey: .projectTitle)
+        projectMembership = try values.decodeIfPresent(SessionProjectMembership.self, forKey: .projectMembership)
         lastAssistantText = try values.decodeIfPresent(String.self, forKey: .lastAssistantText)
         lastToolUse = try values.decodeIfPresent(String.self, forKey: .lastToolUse)
         lastUserText = try values.decodeIfPresent(String.self, forKey: .lastUserText)
@@ -546,11 +555,13 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 currentTurnStartedAt: String? = nil,
                 tags: [SessionTag]? = nil, retryAt: String? = nil,
                 poolMemberProviderId: String? = nil, poolKeyId: String? = nil,
+                poolCodexLogin: CodexLogin? = nil,
                 codexAccount: String? = nil, codexAccountPinned: Bool? = nil,
                 claudeAccount: String? = nil, claudeAccountPinned: Bool? = nil,
                 awaitingReplyFrom: [SessionRequestPeer]? = nil, owesReplyTo: [SessionRequestPeer]? = nil,
                 folderId: String? = nil,
-                confirmationUnderReview: ConfirmationUnderReview? = nil) {
+                confirmationUnderReview: ConfirmationUnderReview? = nil,
+                projectMembership: SessionProjectMembership? = nil) {
         self.id = id
         self.title = title
         self.status = status
@@ -566,6 +577,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.provider = provider
         self.poolMemberProviderId = poolMemberProviderId
         self.poolKeyId = poolKeyId
+        self.poolCodexLogin = poolCodexLogin
         self.codexAccount = codexAccount
         self.codexAccountPinned = codexAccountPinned
         self.claudeAccount = claudeAccount
@@ -586,6 +598,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.source = source
         self.projectId = projectId
         self.projectTitle = projectTitle
+        self.projectMembership = projectMembership
         self.lastAssistantText = lastAssistantText
         self.lastToolUse = lastToolUse
         self.lastUserText = lastUserText

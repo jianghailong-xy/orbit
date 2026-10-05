@@ -158,6 +158,8 @@ struct ToolFailureCardView: View {
 /// name→display mapping lives in `OrbitKit.ToolDisplay` so it stays in step with web and testable.
 struct ToolCardView: View {
     let card: ToolCard
+    /// Workflow rows provide their own labeled disclosure and reuse this card's full detail.
+    private let showsHeader: Bool
     /// Pulls back one event's untrimmed payload (ConsoleModel.fullPayload) for a card the server
     /// clipped to a preview. nil where no console owns the transcript (previews, tests).
     var fullPayload: (@MainActor (Int) async -> JSONValue?)? = nil
@@ -168,6 +170,7 @@ struct ToolCardView: View {
     /// and a tool card appears when the *call* does, before any result exists. Web keeps the same
     /// pair (`manualOpen ?? defaultOpen`) for the same reason.
     @State private var manualOpen: Bool?
+    @State private var scriptExpanded = false
     // Filled once, off the render path, when the untrimmed call/result lands. `fullDisplay` is
     // recomputed there rather than per-render because `describe` runs an LCS diff for Edit cards.
     @State private var fullDisplay: ToolDisplay?
@@ -187,9 +190,10 @@ struct ToolCardView: View {
     /// progress frame re-renders those and no other row.
     @Environment(\.taskActivity) private var taskActivity
 
-    init(card: ToolCard, fullPayload: (@MainActor (Int) async -> JSONValue?)? = nil) {
+    init(card: ToolCard, fullPayload: (@MainActor (Int) async -> JSONValue?)? = nil, showsHeader: Bool = true) {
         self.card = card
         self.fullPayload = fullPayload
+        self.showsHeader = showsHeader
         self.previewDisplay = ToolDisplay.describe(name: card.name, input: card.input, status: card.status, id: card.id)
     }
 
@@ -221,7 +225,15 @@ struct ToolCardView: View {
     private var taskRunning: Bool { isBackgroundTask && (taskActivity?.isRunning(card.id) ?? false) }
     /// A sub-agent's own transcript, nested under this call (TranscriptState.subagentItems).
     private var nestedItems: [TranscriptItem] {
-        card.name == "Agent" || card.name == "Task" ? (taskActivity?.subagentItems(card.id) ?? []) : []
+        guard isBackgroundTask else { return [] }
+        let items = taskActivity?.subagentItems(card.id) ?? []
+        // Workflow progress rows open these same agents. Keep the ordinary Agent cards as a
+        // fallback when replay has their calls but no progress snapshot yet.
+        let shown = Set(taskProgress?.agents.compactMap(\.transcriptKey) ?? [])
+        return items.filter {
+            if case .toolCall(let child) = $0 { return !shown.contains(child.id) }
+            return true
+        }
     }
     /// A result that only says the work STARTED: an async agent's ack (internal metadata it is told
     /// never to quote) or a workflow's receipt. What the work did is drawn instead.
@@ -241,7 +253,7 @@ struct ToolCardView: View {
     /// picture shows without a click — web parity, where `hasResultImage` joins `defaultOpen`.
     /// Keyed on the block, not the decoded bytes: a clipped image has none until the open card
     /// fetches them back.
-    private var defaultOpen: Bool { (d.autoOpen || card.resultHasImage) && hasDetail }
+    private var defaultOpen: Bool { !showsHeader || ((d.autoOpen || card.resultHasImage) && hasDetail) }
     private var expanded: Bool { manualOpen ?? defaultOpen }
     private var isOpen: Bool { expanded && hasDetail }
 
@@ -267,8 +279,10 @@ struct ToolCardView: View {
                 SessionCreateCardView(payload: payload)
             } else if card.resultTruncated, needsWholeResult, fullResult == nil {
                 EmptyView()   // nothing to show until the untrimmed JSON lands
-            } else {
+            } else if showsHeader {
                 defaultBody
+            } else {
+                detail
             }
         }
         .task(id: resolutionKey) { await resolveFull() }
@@ -407,8 +421,17 @@ struct ToolCardView: View {
         let previews = previewImages
         return VStack(alignment: .leading, spacing: 8) {
             // A workflow opens to its progress; a sub-agent's totals close its transcript instead.
-            if card.name == "Workflow", let taskProgress { TaskProgressView(progress: taskProgress) }
-            ToolBodyView(kind: d.body)
+            if card.name == "Workflow", let taskProgress {
+                TaskProgressView(progress: taskProgress, fullPayload: fullPayload)
+            }
+            if card.name == "Workflow", d.hasBody {
+                DisclosureGroup("Workflow script", isExpanded: $scriptExpanded) {
+                    if scriptExpanded { ToolBodyView(kind: d.body) }
+                }
+                .font(.orbitLabel).foregroundStyle(.secondary)
+            } else {
+                ToolBodyView(kind: d.body)
+            }
             if !nestedItems.isEmpty { SubagentTranscriptView(items: nestedItems, fullPayload: fullPayload) }
             if card.name != "Workflow", let taskProgress { TaskProgressView(progress: taskProgress) }
             // Inline tool-result images (Read on a .png, an MCP screenshot) — above any text output,

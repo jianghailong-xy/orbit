@@ -1,0 +1,89 @@
+[WebServer] (node:1431536) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 16 tests using 1 worker
+
+(node:1431610) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium-light-desktop] › src/web/ui-migration/overlays.browser.mjs:348:1 › confirmation owner unmount and immediate sequential prompts do not reuse stale state (1.4s)
+  ✓   2 [chromium-light-desktop] › src/web/ui-migration/overlays.browser.mjs:381:1 › explicit focus, native form validation, motion and document scroll restore correctly (1.8s)
+(node:1431917) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   3 [chromium-light-phone] › src/web/ui-migration/overlays.browser.mjs:348:1 › confirmation owner unmount and immediate sequential prompts do not reuse stale state (1.3s)
+  ✓   4 [chromium-light-phone] › src/web/ui-migration/overlays.browser.mjs:381:1 › explicit focus, native form validation, motion and document scroll restore correctly (1.8s)
+(node:1432051) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   5 [chromium-dark-desktop] › src/web/ui-migration/overlays.browser.mjs:348:1 › confirmation owner unmount and immediate sequential prompts do not reuse stale state (1.3s)
+  ✓   6 [chromium-dark-desktop] › src/web/ui-migration/overlays.browser.mjs:381:1 › explicit focus, native form validation, motion and document scroll restore correctly (1.8s)
+(node:1432188) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   7 [chromium-dark-phone] › src/web/ui-migration/overlays.browser.mjs:348:1 › confirmation owner unmount and immediate sequential prompts do not reuse stale state (1.3s)
+  ✓   8 [chromium-dark-phone] › src/web/ui-migration/overlays.browser.mjs:381:1 › explicit focus, native form validation, motion and document scroll restore correctly (1.7s)
+(node:1432327) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   9 [webkit-light-desktop] › src/web/ui-migration/overlays.browser.mjs:348:1 › confirmation owner unmount and immediate sequential prompts do not reuse stale state (1.1s)
+  ✓  10 [webkit-light-desktop] › src/web/ui-migration/overlays.browser.mjs:381:1 › explicit focus, native form validation, motion and document scroll restore correctly (2.0s)
+(node:1432562) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  11 [webkit-light-phone] › src/web/ui-migration/overlays.browser.mjs:348:1 › confirmation owner unmount and immediate sequential prompts do not reuse stale state (1.2s)
+  ✘  12 [webkit-light-phone] › src/web/ui-migration/overlays.browser.mjs:381:1 › explicit focus, native form validation, motion and document scroll restore correctly (1.2s)
+(node:1432798) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  13 [webkit-dark-desktop] › src/web/ui-migration/overlays.browser.mjs:348:1 › confirmation owner unmount and immediate sequential prompts do not reuse stale state (1.2s)
+  ✓  14 [webkit-dark-desktop] › src/web/ui-migration/overlays.browser.mjs:381:1 › explicit focus, native form validation, motion and document scroll restore correctly (1.7s)
+(node:1433063) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  15 [webkit-dark-phone] › src/web/ui-migration/overlays.browser.mjs:348:1 › confirmation owner unmount and immediate sequential prompts do not reuse stale state (1.1s)
+  ✘  16 [webkit-dark-phone] › src/web/ui-migration/overlays.browser.mjs:381:1 › explicit focus, native form validation, motion and document scroll restore correctly (1.2s)
+
+
+  1) [webkit-light-phone] › src/web/ui-migration/overlays.browser.mjs:381:1 › explicit focus, native form validation, motion and document scroll restore correctly 
+
+    Error: mouse.wheel: Mouse wheel is not supported in mobile WebKit
+
+      391 |   const before = await pageScroll(page);
+      392 |   await page.mouse.move(4, 60);
+    > 393 |   await page.mouse.wheel(0, 300);
+          |                    ^
+      394 |   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      395 |   expect((await pageScroll(page)).y).toBe(before.y);
+      396 |   await dialog.getByRole('textbox').fill('Valid name');
+        at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:393:20
+
+    Error Context: src/web/.overlays-results/overlays.browser.mjs-expli-a78fb-nt-scroll-restore-correctly-webkit-light-phone/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.overlays-results/overlays.browser.mjs-expli-a78fb-nt-scroll-restore-correctly-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.overlays-results/overlays.browser.mjs-expli-a78fb-nt-scroll-restore-correctly-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [webkit-dark-phone] › src/web/ui-migration/overlays.browser.mjs:381:1 › explicit focus, native form validation, motion and document scroll restore correctly 
+
+    Error: mouse.wheel: Mouse wheel is not supported in mobile WebKit
+
+      391 |   const before = await pageScroll(page);
+      392 |   await page.mouse.move(4, 60);
+    > 393 |   await page.mouse.wheel(0, 300);
+          |                    ^
+      394 |   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      395 |   expect((await pageScroll(page)).y).toBe(before.y);
+      396 |   await dialog.getByRole('textbox').fill('Valid name');
+        at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:393:20
+
+    Error Context: src/web/.overlays-results/overlays.browser.mjs-expli-a78fb-nt-scroll-restore-correctly-webkit-dark-phone/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.overlays-results/overlays.browser.mjs-expli-a78fb-nt-scroll-restore-correctly-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.overlays-results/overlays.browser.mjs-expli-a78fb-nt-scroll-restore-correctly-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2 failed
+    [webkit-light-phone] › src/web/ui-migration/overlays.browser.mjs:381:1 › explicit focus, native form validation, motion and document scroll restore correctly 
+    [webkit-dark-phone] › src/web/ui-migration/overlays.browser.mjs:381:1 › explicit focus, native form validation, motion and document scroll restore correctly 
+  14 passed (26.4s)

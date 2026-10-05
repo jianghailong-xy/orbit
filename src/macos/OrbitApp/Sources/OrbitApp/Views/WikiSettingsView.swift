@@ -322,7 +322,7 @@ struct WikiSettingsView: View {
                         return answer == nil
                     }
                 }
-                .alert(WikiCopy.refused, isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
+                .alert(WikiCopy.settingsSaveFailed, isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
                     Button("OK", role: .cancel) { notice = nil }
                 } message: {
                     Text(notice ?? "")

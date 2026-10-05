@@ -612,8 +612,8 @@ export function SessionProjectSettlementCard({
   const asking = shown && document !== null && !settled;
   const anchor = useRef<HTMLDivElement>(null);
   const keys = useCardKeyClaim(asking, anchor);
-  useApproveHotkey(keys && offersConfirmation && confirmable && !confirm.isPending, confirmSet, { requireMod: false });
-  useApproveHotkey(keys, delegate);
+  useApproveHotkey(keys && offersConfirmation && confirmable && !confirm.isPending, confirmSet, { requireMod: false, anchor });
+  useApproveHotkey(keys, delegate, { anchor });
 
   if (!shown || document === null) return null;
   const title = document.title || project;

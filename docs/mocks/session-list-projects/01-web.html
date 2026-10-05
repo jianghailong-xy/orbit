@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>Web：项目在会话列表里显示为一个条目</title>
+<link rel="stylesheet" href="web.css">
+<style>
+  .vs { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 40px; padding-top: 420px; color: #8a8a92; font-size: 22px; }
+  .stat { margin: 10px 0 0; font-size: 13.5px; color: #4a4a52; }
+  .stat b { color: #16161a; }
+  .sub2 { display: flex; gap: 28px; align-items: flex-start; margin-top: 22px; }
+</style></head>
+<body>
+<h1>Web：一个项目的会话在列表里合成一个条目</h1>
+<p class="lede" style="width:1460px">项目条目就是 coordinator 那一行，和会话行一样高：第 1 行是项目名和时间，第 2 行开头是项目进度，后面是 coordinator 说的话。点条目直接打开 coordinator 对话，这一点和文件夹不同。执行任务的会话收在它后面，列表里不展开，一个项目永远只占一行；某个执行会话等你时，第 2 行改写它，点条目直接进它。每张图都在真实 Web 控制台上截取，新加的部分直接用控制台自己的样式画进页面；红色虚线和数字是标注。</p>
+
+<div class="row" style="gap:0">
+  <div class="col" style="width:328px">
+    <div class="cap"><span class="tag n">现在</span>17 行：coordinator 和执行会话混排</div>
+    <div class="shot" style="width:328px"><img src="shots/w1.png" alt=""></div>
+    <p class="stat">3 个项目的 coordinator（带 <b>Coordinator</b> 标）和 9 个执行、判断会话按时间混在一起；你要找的 coordinator 被挤在中间。</p>
+  </div>
+  <div class="vs">→</div>
+  <div class="col" style="width:1080px">
+    <div class="cap"><span class="tag new">改后</span>9 行：每个项目一个条目，点它打开 coordinator</div>
+    <div class="shot" style="width:1080px"><img src="shots/w2.png" alt=""></div>
+    <ul class="notes" style="width:1080px">
+      <li class="n" data-n="1"><b>项目条目</b>：就是 coordinator 那一行，高度和会话行一样（64px，两行）。点它打开 coordinator，右边就是它的对话。图标是四宫格，和侧栏 Projects 用同一个；名字加粗，和普通会话分开。时间取组里最新的一次活动；原来 coordinator 行上的 <i>Coordinator</i> 标不再需要。
+        <br>第 2 行后半是 coordinator 自己的那句话，和它现在的会话行一字不差：<i>Approve merge to main</i>、<i>Question from coordinator</i>、<i>Running …</i>、最后一条回复。图标右下角的点：琥珀是组里有会话等你，蓝是有会话在跑，只剩后台作业时蓝点呼吸。</li>
+      <li class="n" data-n="2"><b>进度小标签</b>：在会话行放标签的位置，迷你进度条加完成数（蓝段在跑，红段失败，灰段还没做完）。它是单独的点击区，点了进项目会话页（见下面第一张）；悬停时提示会话数和在跑数。</li>
+      <li class="n" data-n="3"><b>coordinator 在干活</b>：第 2 行是蓝字。</li>
+      <li class="n" data-n="4"><b>执行会话等你</b>：第 2 行改写它，等你的事在前、会话名在后：<i>Waiting for your confirmation · 额度恢复后自动重试</i>；这时点条目直接进那个会话。规则是“第 2 行说的是谁，点条目就进谁”；coordinator 也在等你时先说 coordinator。会话栏窄时会话名会被截断，悬停能看全。</li>
+      <li><b>列表里不展开</b>：一个项目永远只占一行，执行会话不在列表里露面。顶部的 Needs-you 提示条和推送照旧，直接跳到等你的会话。</li>
+      <li>左边侧栏的 Projects 组不变：那边进项目页、看全局，这边进对话。</li>
+    </ul>
+    <div class="sub2">
+      <div class="col" style="width:328px">
+        <div class="cap"><span class="tag new">新增</span>悬停在进度小标签上</div>
+        <div class="shot" style="width:328px"><img src="shots/w6.png" alt=""></div>
+      </div>
+      <ul class="notes" style="width:520px;margin-top:34px">
+        <li class="n" data-n="1">悬停时小标签描边变蓝，提示 <i>6 sessions · 2 running</i>（会话数含 coordinator）。点它进项目会话页，点条目的其他地方进 coordinator。</li>
+        <li>手机上没有悬停：直接点小标签进项目会话页，点条目其他地方进 coordinator。</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col" style="width:480px">
+    <div class="cap"><span class="tag new">新增</span>项目会话页：会话栏原地换成项目的会话</div>
+    <div class="shot" style="width:328px"><img src="shots/w3.png" alt=""></div>
+    <ul class="notes">
+      <li class="n" data-n="1">‹ 回到 orbit 的列表。标题是项目名，下面一行是 <i>Project · 会话数</i>。地址栏带 <code>?project=&lt;id&gt;</code>，浏览器后退、刷新都能回到对的地方。</li>
+      <li class="n" data-n="2">⋯ 里是 <b>Open Project</b>、<b>Open Coordinator</b>。这里没有 New session：项目的会话由 coordinator 派发。</li>
+      <li class="n" data-n="3">进度条和完成数，↗ 打开项目页。</li>
+      <li class="n" data-n="4">coordinator 固定排第一，下面是成员会话，和文件夹页一样按时间分组；行、悬停按钮都和外面相同。</li>
+      <li>列的是这个项目在所有 Workspace 里的会话（新接口 <code>GET /sessions?projectId=</code>），不只当前这个 Workspace 的。</li>
+    </ul>
+  </div>
+  <div class="col" style="width:480px">
+    <div class="cap"><span class="tag new">新增</span>鼠标移到项目条目上，出现 ⋯</div>
+    <div class="shot" style="width:328px"><img src="shots/w4.png" alt=""></div>
+    <ul class="notes">
+      <li class="n" data-n="1"><b>Open Coordinator</b>、<b>Sessions</b>、<b>Open Project</b>；<b>Unpin</b> 和 <b>Move…</b> 作用在 coordinator 上，项目条目跟着走。</li>
+      <li>没有 Complete、Share、Delete，也没有任何回答按钮。完成 coordinator 会影响整个项目，应该在对话里做；回答只在对话里的卡片上（现有测试 <code>OwnerConfirmationCard.test</code> 也要求会话列表上不能有回答入口）。</li>
+      <li>手机上没有悬停：左滑是 Move，右滑是 Pin；长按菜单和这里相同。</li>
+    </ul>
+  </div>
+  <div class="col" style="width:480px">
+    <div class="cap"><span class="tag new">新增</span>项目条目的几种状态</div>
+    <div class="shot" style="width:328px"><img src="shots/w5.png" alt=""></div>
+    <ul class="notes">
+      <li class="n" data-n="1"><i>Question from coordinator</i>：等你回答，琥珀色。</li>
+      <li class="n" data-n="2"><i>Waiting for approval · engine 退出时…</i>：coordinator 不等你，但一个执行会话等你批准；点条目直接进那个会话。</li>
+      <li class="n" data-n="3"><i>Ready to start</i>：coordinator 请你启动项目，琥珀色，和现在的会话行一致。</li>
+      <li class="n" data-n="4"><i>Resolving a merge conflict · 18m</i>：coordinator 在处理例外，蓝字。用的是项目页那个蓝标签，去掉 <i>Coordinator ·</i> 前缀，因为这一行本来就是它。</li>
+      <li class="n" data-n="5"><i>Running …</i>：coordinator 正在跑。</li>
+      <li class="n" data-n="6">安静：显示 coordinator 最后一条回复；只剩后台作业时，蓝点呼吸。</li>
+      <li class="n" data-n="7"><i>Paused</i>：保险丝停了 coordinator，等你恢复。</li>
+      <li class="n" data-n="8"><i>No coordinator</i>：还没开或在回收站，点条目进项目会话页。</li>
+      <li class="n" data-n="9">项目已完成，进度小标签变绿。coordinator 和成员会话都完成后，条目只出现在 Completed。</li>
+    </ul>
+  </div>
+</div>
+
+<div class="box" style="width:1500px">
+  <h2>什么时候合成项目条目（Web 和 iOS 相同）</h2>
+  <table>
+    <tr><th style="width:230px">情况</th><th>列表怎么显示</th></tr>
+    <tr><td>Open / Completed</td><td>视图里有这个项目的任何一个会话，就显示项目条目；标记只算这个视图里的会话（同文件夹）</td></tr>
+    <tr><td>Trash、Filter by Tag、Group by Tag、搜索</td><td>平铺，不合并，免得两套分组叠在一起（同文件夹）</td></tr>
+    <tr><td>条目的位置</td><td>占 coordinator 的位置：coordinator 置顶就在 Pinned，否则按组里最新的活动时间进时间分组</td></tr>
+    <tr><td>条目的高度</td><td>和会话行一样；列表里不展开，一个项目永远只占一行</td></tr>
+    <tr><td>执行会话等你</td><td>项目条目第 2 行改写它，点条目直接进它（coordinator 也在等你时先说 coordinator）；Needs-you 提示条和推送照旧</td></tr>
+    <tr><td>文件夹</td><td>coordinator 在哪个文件夹，项目条目就在哪个文件夹；成员会话一律显示在项目条目下面，不能单独放进文件夹</td></tr>
+    <tr><td>跨 Workspace</td><td>每个有成员会话的 Workspace 都显示这个项目条目，内容相同；标记只算本 Workspace 的会话；点了照样打开 coordinator</td></tr>
+    <tr><td>哪些会话算成员</td><td>coordinator、执行任务的会话、@ 任务发起的对话、coordinator 的判断会话，以及它们的子会话（服务端新字段 <code>projectMembership</code>）</td></tr>
+        <tr><td>老服务器</td><td>不返回 <code>projectMembership</code> 时照旧平铺，和现在一样</td></tr>
+  </table>
+</div>
+</body></html>

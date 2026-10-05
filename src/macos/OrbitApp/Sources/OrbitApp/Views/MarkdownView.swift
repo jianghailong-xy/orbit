@@ -115,13 +115,6 @@ struct MarkdownView: View, Equatable {
     }
 }
 
-/// A Markdown file reference is kept in the app layer: OrbitKit knows how to parse the URL, while
-/// the SwiftUI transcript decides whether to draw a file card, an image, or ordinary prose around it.
-struct MarkdownFileRef: Equatable {
-    let href: String
-    let label: String
-}
-
 enum MarkdownRenderBlock: Equatable {
     case markdown(MarkdownBlock)
     case card(OrbitLinkRef)
@@ -175,7 +168,7 @@ extension Array where Element == MarkdownRenderBlock {
 /// never reaches this function, so image previews keep their existing full-size treatment.
 private func splitFileLinks(in block: MarkdownBlock) -> [MarkdownRenderBlock] {
     guard case .paragraph(let text) = block else { return [.markdown(block)] }
-    let matches = markdownFileLinkMatches(in: text)
+    let matches = MarkdownFileRef.matches(in: text)
     guard !matches.isEmpty else { return [.markdown(block)] }
 
     var result: [MarkdownRenderBlock] = []
@@ -183,40 +176,11 @@ private func splitFileLinks(in block: MarkdownBlock) -> [MarkdownRenderBlock] {
     for match in matches {
         let before = String(text[cursor..<match.range.lowerBound])
         appendFileProse(&result, before)
-        result.append(.file(MarkdownFileRef(href: match.href, label: match.label)))
+        result.append(.file(match.ref))
         cursor = match.range.upperBound
     }
     appendFileProse(&result, String(text[cursor...]))
     return result
-}
-
-private struct MarkdownFileLinkMatch {
-    let range: Range<String.Index>
-    let href: String
-    let label: String
-}
-
-private func markdownFileLinkMatches(in text: String) -> [MarkdownFileLinkMatch] {
-    // Agent source references use simple labels and paths. This deliberately avoids trying to be a
-    // second Markdown parser: fenced code and image blocks are already handled before this pass.
-    let pattern = #"\[([^\]\n]+)\]\(([^)\s]+)(?:\s+[\"'][^)]*)?\)"#
-    guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
-    let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
-    return regex.matches(in: text, range: nsRange).compactMap { match in
-        guard match.numberOfRanges == 3,
-              let whole = Range(match.range(at: 0), in: text),
-              let labelRange = Range(match.range(at: 1), in: text),
-              let hrefRange = Range(match.range(at: 2), in: text),
-              let url = URL(string: String(text[hrefRange])),
-              AttachmentLink.isFileReference(url) else { return nil }
-        // `![...](...)` is an image block in the normal parser. Keep this guard for malformed or
-        // inline image syntax that the block parser leaves in a paragraph.
-        if whole.lowerBound > text.startIndex,
-           text[text.index(before: whole.lowerBound)] == "!" { return nil }
-        return MarkdownFileLinkMatch(range: whole,
-                                     href: String(text[hrefRange]),
-                                     label: String(text[labelRange]).trimmingCharacters(in: .whitespaces))
-    }
 }
 
 private func appendFileProse(_ result: inout [MarkdownRenderBlock], _ text: String) {
@@ -776,17 +740,20 @@ private struct MarkdownImageView: View {
 
 /// A source or document link written in a paragraph. The web transcript turns the same link into
 /// a `chat-file` chip; native keeps that affordance but adds a small in-app text preview so a reader
-/// can inspect a `.tsx`, `.ts`, `.sql`, or Markdown file without leaving the conversation. Image
-/// links delegate to `MarkdownImageView`, which already fetches and opens the session-wide viewer.
+/// can inspect a `.tsx`, `.ts`, `.sql`, or Markdown file without leaving the conversation. Images
+/// retain the link's label under a thumbnail and open the same viewer as other session images.
 private struct MarkdownFileLinkView: View {
     let ref: MarkdownFileRef
 
     @Environment(AttachmentImageStore.self) private var store
     @Environment(AppModel.self) private var app: AppModel?
     @Environment(\.sessionImagePreview) private var sessionPreview
+    @Environment(\.previewOwnerID) private var ownerID
+    @Namespace private var previewNS
+    @State private var previewTarget: ImagePreviewTarget?
+    @State private var localImage: PlatformImage?
     @State private var fetching = false
-    @State private var previewText: String?
-    @State private var previewName = ""
+    @State private var textPreview: TextFilePreview?
 
     private var attachmentID: String? { AttachmentLink.attachmentID(source: ref.href) }
     private var artifactPath: String? {
@@ -794,19 +761,34 @@ private struct MarkdownFileLinkView: View {
               let url = URL(string: ref.href) else { return nil }
         return AttachmentLink.runnerArtifactPath(url, sessionID: sessionID)
     }
-    private var fileName: String {
-        if attachmentID != nil { return ref.label.isEmpty ? "file" : ref.label }
-        return AttachmentLink.fileName(inPath: ref.href)
+    private var fileName: String { ref.fileName }
+    private var label: String { ref.label.isEmpty ? fileName : ref.label }
+    private var image: PlatformImage? { localImage ?? attachmentID.flatMap { store.image(for: $0) } }
+    private var previewKey: String {
+        ownerID.map { SessionPreviewImages.markdownKey(itemID: $0, source: ref.href) } ?? ref.href
     }
-    private var imageLike: Bool {
-        AttachmentLink.looksLikeImage(path: ref.href) || AttachmentLink.looksLikeImage(path: ref.label)
+    private var previewImages: [PreviewImage] {
+        image.map { [.inline(id: previewKey, image: $0)] } ?? []
     }
     private var canFetch: Bool { attachmentID != nil || artifactPath != nil }
 
     var body: some View {
         Group {
-            if imageLike {
-                MarkdownImageView(source: ref.href, alt: ref.label.isEmpty ? fileName : ref.label)
+            if let image {
+                #if os(iOS)
+                card
+                    .imageTap({ openImage(image) }, sourceID: previewKey, ns: sessionPreview?.ns ?? previewNS)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(label)
+                    .accessibilityHint("Preview image")
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityAction { openImage(image) }
+                #else
+                Button { fetch() } label: { card }
+                    .buttonStyle(.plain)
+                    .disabled(fetching)
+                    .accessibilityLabel(label)
+                #endif
             } else if canFetch {
                 Button { fetch() } label: { card }
                     .buttonStyle(.plain)
@@ -819,33 +801,72 @@ private struct MarkdownFileLinkView: View {
                     .accessibilityHint("This file is unavailable from the current session")
             }
         }
+        .task(id: ref) { await loadThumbnail() }
+        .imagePreview($previewTarget, images: previewImages, ns: previewNS)
         .monospaceOutputViewer(
             isPresented: Binding(
-                get: { previewText != nil },
-                set: { if !$0 { previewText = nil } }
+                get: { textPreview != nil },
+                set: { if !$0 { textPreview = nil } }
             ),
-            text: previewText ?? "",
-            lineCount: previewText?.split(whereSeparator: { $0.isNewline }).count ?? 0,
-            title: previewName.isEmpty ? fileName : previewName
+            text: textPreview?.text ?? "",
+            lineCount: textPreview?.lineCount ?? 0,
+            title: fileName,
+            isMarkdown: textPreview?.isMarkdown ?? false
         )
     }
 
     private var card: some View {
+        VStack(spacing: 0) {
+            if let image {
+                Image(platformImage: image)
+                    .resizable().scaledToFit()
+                    .frame(height: 160)
+                    .padding(12)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.secondary.opacity(0.06))
+                    .overlay(alignment: .bottomTrailing) {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                            .font(.orbitMeta)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 26, height: 26)
+                            .background(Color.editorSurface, in: RoundedRectangle(cornerRadius: 7))
+                            .padding(8)
+                    }
+                Divider()
+            }
+            fileDetails
+        }
+        .frame(maxWidth: 320, alignment: .leading)
+        .background(Color.editorSurface)
+        .clipShape(RoundedRectangle(cornerRadius: image == nil ? 9 : 14))
+        .overlay {
+            RoundedRectangle(cornerRadius: image == nil ? 9 : 14)
+                .strokeBorder(image != nil ? Color.primary.opacity(0.10)
+                    : canFetch ? Color.accentColor.opacity(0.22) : Color.primary.opacity(0.13), lineWidth: 1)
+        }
+        .contentShape(Rectangle())
+    }
+
+    private var fileDetails: some View {
         HStack(spacing: 8) {
             Group {
                 if fetching {
                     ProgressView().controlSize(.small)
+                } else if image != nil {
+                    Image(systemName: "photo")
+                        .frame(width: 30, height: 30)
+                        .background(Color.accentColor.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
                 } else {
                     Image(systemName: icon)
                 }
             }
             .foregroundStyle(canFetch ? Color.accentColor : Color.secondary)
             VStack(alignment: .leading, spacing: 1) {
-                Text(ref.label.isEmpty ? fileName : ref.label)
+                Text(label)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 if canFetch {
-                    Text("Preview file")
+                    Text(image != nil ? imageCaption : "Preview file")
                         .font(.orbitMeta)
                         .foregroundStyle(.secondary)
                 }
@@ -858,13 +879,38 @@ private struct MarkdownFileLinkView: View {
             }
         }
         .font(.orbitLabel)
-        .padding(.vertical, 7)
-        .padding(.horizontal, 10)
-        .frame(maxWidth: 320, alignment: .leading)
-        .background(Color.editorSurface, in: RoundedRectangle(cornerRadius: 9))
-        .overlay {
-            RoundedRectangle(cornerRadius: 9)
-                .strokeBorder(canFetch ? Color.accentColor.opacity(0.22) : Color.primary.opacity(0.13), lineWidth: 1)
+        .padding(.vertical, image == nil ? 7 : 11)
+        .padding(.horizontal, image == nil ? 10 : 12)
+    }
+
+    private var imageCaption: String {
+        let kind = ref.isImage ? (fileName as NSString).pathExtension.uppercased() + " image" : "Image"
+        return kind + " · Tap to preview"
+    }
+
+    private func openImage(_ image: PlatformImage) {
+        let item = PreviewImage.inline(id: previewKey, image: image)
+        if let sessionPreview {
+            sessionPreview.open(previewKey, [item], 0)
+        } else {
+            previewTarget = ImagePreviewTarget(index: 0, id: previewKey)
+        }
+    }
+
+    private func loadThumbnail() async {
+        localImage = nil
+        guard ref.shouldLoadImage else { return }
+        if let id = attachmentID {
+            fetching = true
+            await store.load(id)
+            fetching = false
+            await store.keep(id)
+        } else if let path = artifactPath, let sessionID = sessionPreview?.sessionID {
+            fetching = true
+            defer { fetching = false }
+            if let data = await store.artifactData(sessionID: sessionID, path: path) {
+                localImage = PlatformImage(data: data)
+            }
         }
     }
 
@@ -892,14 +938,28 @@ private struct MarkdownFileLinkView: View {
             } else {
                 data = nil
             }
-            guard let data, !data.isEmpty else {
+            guard let data else {
                 app?.showToast("Couldn't open that file", detail: fileName, tone: .error)
                 return
             }
-            if let text = String(data: data, encoding: .utf8) {
-                previewName = fileName
-                previewText = String(text.prefix(20_000))
-            } else if !FileHandoff.deliver(data, named: fileName) {
+            // An old link may have lost its filename. Decode the bytes before choosing a reader:
+            // a screenshot must open as an image even when its label only says "View screenshot".
+            var handoffName = fileName
+            if let image = PlatformImage(data: data) {
+                localImage = image
+                if let id { store.seed(id, data: data) }
+                #if os(iOS)
+                openImage(image)
+                return
+                #else
+                if !ref.isImage {
+                    handoffName = AttachmentLink.suggestedFileName(id: id ?? "image", data: data)
+                }
+                #endif
+            }
+            if let preview = TextFilePreview(data: data, fileName: fileName) {
+                textPreview = preview
+            } else if !FileHandoff.deliver(data, named: handoffName) {
                 app?.showToast("Couldn't open that file", detail: fileName, tone: .error)
             }
         }

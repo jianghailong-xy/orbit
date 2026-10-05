@@ -1,0 +1,212 @@
+[
+  {
+    "id": "exec-b663d33e-2ebc-4f21-a1d8-0f0465ab25df",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 /tmp/orbit-p21-run.py overlays-typecheck node node_modules/typescript/bin/tsc -p src/web/ui-migration/overlays.tsconfig.json --noEmit"
+    ],
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "id": "exec-84daa91c-23af-4755-9468-d3399ae64c51",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 /tmp/orbit-p21-run.py public-boundary-and-theme npm test -w @orbit/web -- src/lib/theme.test.tsx src/components/ui/boundary.test.ts"
+    ],
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "id": "exec-a4c1f65f-a855-47a4-9d9a-530b2740fe7f",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 /tmp/orbit-p21-run.py web-build npm run build -w @orbit/web"
+    ],
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "id": "exec-ee177975-84d9-4cd8-a19e-d9a292fdb5f2",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 /tmp/orbit-p21-run.py overlays-second-matrix node node_modules/@playwright/test/cli.js test --config src/web/ui-migration/overlays.config.mjs"
+    ],
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "id": "exec-068c61c7-babe-4ce9-9708-6b967c5c0055",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 /tmp/orbit-p21-run.py web-test npm run test -w @orbit/web"
+    ],
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "id": "exec-ccbef3f4-6169-441c-9c2d-268de85ec326",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 /tmp/orbit-p21-run.py overlays-typecheck-final node node_modules/typescript/bin/tsc -p src/web/ui-migration/overlays.tsconfig.json --noEmit"
+    ],
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "id": "exec-877b0176-60dc-484e-b69c-1cf94d73543d",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 /tmp/orbit-p21-run.py lifecycle-and-motion node node_modules/@playwright/test/cli.js test --config src/web/ui-migration/overlays.config.mjs --grep 'owner unmount|explicit focus'"
+    ],
+    "status": "failed",
+    "exitCode": 1
+  },
+  {
+    "id": "exec-a50fb578-7601-48d1-9bd0-b7bc7cb7d07c",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 /tmp/orbit-p21-run.py controls-regression npm run test:ui-controls -w @orbit/web"
+    ],
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "id": "exec-848d0b09-0874-49b5-9bf4-a5bd66ed39da",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 /tmp/orbit-p21-run.py foundation-regression npm run test:ui-foundation -w @orbit/web"
+    ],
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "id": "exec-d18f2d5d-d70b-4668-8e24-7e85172ea39b",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 /tmp/orbit-p21-run.py overlays-final-matrix npm run test:ui-overlays -w @orbit/web"
+    ],
+    "status": "failed",
+    "exitCode": 1
+  },
+  {
+    "id": "exec-b228cd2e-f365-41cb-bffe-248fd09c5089",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 /tmp/orbit-p21-run.py p0-regression npm run test:ui-migration -w @orbit/web"
+    ],
+    "status": "failed",
+    "exitCode": 1
+  },
+  {
+    "id": "exec-115c20fc-72d6-4f06-91b4-b65db594ac93",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 /tmp/orbit-p21-run.py overlays-typecheck-complete node src/node_modules/typescript/bin/tsc --project src/web/ui-migration/overlays.tsconfig.json --noEmit"
+    ],
+    "status": "failed",
+    "exitCode": 1
+  },
+  {
+    "id": "exec-dd4881d5-ec72-4096-9bec-9377cdfa41ab",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 /tmp/orbit-p21-run.py overlays-typecheck-complete-fixed node node_modules/typescript/bin/tsc --project src/web/ui-migration/overlays.tsconfig.json --noEmit"
+    ],
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "id": "exec-4fabb99e-5cbf-4bc1-91d3-c7361851364d",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 /tmp/orbit-p21-run.py overlays-final-matrix-fixed npm run test:ui-overlays -w @orbit/web"
+    ],
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "id": "exec-248ff7ee-90e8-4b3b-9a69-6ee097986916",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 /tmp/orbit-p21-run.py collect-overlays node src/web/ui-migration/collect-overlay-evidence.mjs docs/evidence/base-ui-migration/p2.1/overlays-run"
+    ],
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "id": "exec-97dcbfa6-11b8-4ece-948b-af60e75e0809",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 /tmp/orbit-p21-run.py p0-head-reproduction node node_modules/@playwright/test/cli.js test --config /tmp/orbit-p21-head/src/web/ui-migration/playwright.config.mjs"
+    ],
+    "status": "failed",
+    "exitCode": 1
+  },
+  {
+    "id": "exec-89148a64-b11f-4d84-87da-3abb462153f3",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 /tmp/orbit-p21-run.py overlays-complete-matrix npm run test:ui-overlays -w @orbit/web"
+    ],
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "id": "exec-12c82b77-b051-4554-8429-37006da1fd55",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 /tmp/orbit-p21-run.py overlays-typecheck-with-drawers node node_modules/typescript/bin/tsc -p src/web/ui-migration/overlays.tsconfig.json --noEmit"
+    ],
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "id": "exec-cadc10db-1639-4dda-838b-94db64b3f401",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 /tmp/orbit-p21-run.py collect-complete-overlays node src/web/ui-migration/collect-overlay-evidence.mjs docs/evidence/base-ui-migration/p2.1/overlays-complete"
+    ],
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "id": "exec-7249f608-83c5-4167-afc4-c8b2018b7d45",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 /tmp/orbit-p21-run.py public-boundary-and-theme-final npm test -w @orbit/web -- src/lib/theme.test.tsx src/components/ui/boundary.test.ts"
+    ],
+    "status": "completed",
+    "exitCode": 0
+  },
+  {
+    "id": "exec-a477f65a-db4c-4980-857d-e7ac9601f3e2",
+    "command": [
+      "/bin/bash",
+      "-lc",
+      "python3 /tmp/orbit-p21-run.py web-typecheck-force node node_modules/typescript/bin/tsc -b src/web --force"
+    ],
+    "status": "completed",
+    "exitCode": 0
+  }
+]

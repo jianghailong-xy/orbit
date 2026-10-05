@@ -1,0 +1,8 @@
+{
+  "explicitFocus": true,
+  "requiredValidation": true,
+  "nativeEnter": true,
+  "motionCompleted": true,
+  "scrollMethod": "wheel",
+  "scrollLockedUntilClose": true
+}

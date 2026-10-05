@@ -128,7 +128,7 @@ public enum SessionProviderChoices {
     }
 
     /// Login engines, with Antigravity offered for Google sign-in or a workspace/runner key.
-    public static let engineSlugs = ["claude", "codex", "kimi", "antigravity"]
+    public static let engineSlugs = ["claude", "codex", "antigravity", "kimi"]
 
     /// A built-in engine has no configured row, so it has no preset to inherit a look from. Borrow
     /// the vendor preset carrying the same mark: the engine and the BYOK provider are the same

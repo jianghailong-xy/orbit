@@ -1,0 +1,19 @@
+[WebServer] (node:3761690) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 8 tests using 1 worker
+
+(node:3761807) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 [chromium-light-desktop] › ui-migration/reviews.check.mjs:55:1 › question traps focus, preserves choices and drafts, and suspends background shortcuts (17.3s)
+(node:3762825) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  2 [chromium-light-desktop] › ui-migration/reviews.check.mjs:104:1 › long plan scrolls above visible actions and owns the foreground shortcut (1.6s)
+(node:3762977) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  3 [chromium-light-phone] › ui-migration/reviews.check.mjs:55:1 › question traps focus, preserves choices and drafts, and suspends background shortcuts (16.0s)
+(node:3763881) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  4 [chromium-light-phone] › ui-migration/reviews.check.mjs:104:1 › long plan scrolls above visible actions and owns the foreground shortcut (1.7s)
+(node:3764012) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)

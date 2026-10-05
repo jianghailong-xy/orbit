@@ -28,12 +28,19 @@ struct ConsoleView: View {
     @Environment(AppModel.self) private var appModel
     /// The public read-only link's sheet — opened from the nav bar on iOS, the window toolbar on macOS.
     @State private var showShare = false
+    @State private var promotionReview: PromotionReviewTarget?
+    @State private var approvalReview: ApprovalReviewTarget?
+    @State private var approvalReviewDrafts = ApprovalReviewDrafts()
     #if os(iOS)
     /// Tapping the nav-bar title renames the session (web double-clicks its header title). Seeded
     /// from the session's own title — not `SessionHeader.title`, whose agent-name fallback would
     /// otherwise be typed in as if it were the name.
     @State private var renaming = false
     @State private var renameDraft = ""
+    @State private var taggingSession: Session?
+    @State private var movingSession: Session?
+    @State private var moveListed: [Session] = []
+    @State private var confirmPurge = false
     /// Gates the "needs you" banner to the compact shell — see the `safeAreaInset` below.
     @Environment(\.horizontalSizeClass) private var hSize
     /// A phone's stack: the project a coordinator's title opens goes over this console, so the back
@@ -65,7 +72,8 @@ struct ConsoleView: View {
             consoleID: ObjectIdentifier(console),
             progress: { console.state.taskProgress[$0] },
             isRunning: { id in console.state.background.contains { $0.id == id && $0.status == "running" } },
-            subagentItems: { console.state.subagentItems[$0] ?? [] })
+            subagentItems: { console.state.subagentItems[$0] ?? [] },
+            fullPayload: { await console.fullPayload(seq: $0) })
     }
 
     private func sessionImagePreview(_ console: ConsoleModel) -> SessionImagePreview {
@@ -76,7 +84,10 @@ struct ConsoleView: View {
             ns: imagePreviewNS,
             open: { key, fallback, fallbackIndex in
                 let pages = SessionPreviewImages
-                    .collect(console.state.items) { fetched.byCard[$0.id] ?? $0.resultImages }
+                    .collect(console.state.items,
+                             isAttachmentImage: { console.attachments.image(for: $0) != nil }) {
+                        fetched.byCard[$0.id] ?? $0.resultImages
+                    }
                     .compactMap { PreviewImage($0) }
                 if let index = pages.firstIndex(where: { $0.id == key }) {
                     imagePreviewPages = pages
@@ -112,7 +123,8 @@ struct ConsoleView: View {
         Group {
             if let console = registry.peek(sessionID) {
                 VStack(spacing: 0) {
-                    TranscriptView(console: console, hidesStickyQuestion: foldsChrome(console))
+                    TranscriptView(console: console, hidesStickyQuestion: foldsChrome(console),
+                                   reviewingCard: approvalReview != nil || promotionReview != nil)
                     // Pending approvals (incl. the AskUserQuestion form) render inline at the tail of
                     // the transcript now — as the agent's latest turn, web-style — not in a fixed panel
                     // here. See TranscriptView.
@@ -194,6 +206,20 @@ struct ConsoleView: View {
                 .environment(\.sessionImagePreview, sessionImagePreview(console))
                 // The workspace's background agents and workflows, for the cards that draw them.
                 .environment(\.taskActivity, taskActivity(console))
+                .environment(\.openPromotionReview, { promotionID in
+                    promotionReview = PromotionReviewTarget(id: promotionID)
+                })
+                .sheet(item: $promotionReview) { target in
+                    PromotionReviewSheet(console: console, promotionID: target.id)
+                }
+                .environment(approvalReviewDrafts)
+                .environment(\.openApprovalReview, { target in
+                    approvalReview = target
+                })
+                .sheet(item: $approvalReview) { target in
+                    ApprovalReviewSheet(console: console, target: target)
+                        .environment(approvalReviewDrafts)
+                }
                 .imagePreview($imagePreviewTarget, images: imagePreviewPages, ns: imagePreviewNS,
                               store: registry.attachments)
             } else {
@@ -206,6 +232,11 @@ struct ConsoleView: View {
         // keeps this off-screen view cached, and at most one session ever streams.
         .task(id: sessionID) {
             _ = registry.model(for: sessionID, agentID: agentID)
+        }
+        .onChange(of: sessionID) { _, _ in
+            promotionReview = nil
+            approvalReview = nil
+            approvalReviewDrafts = ApprovalReviewDrafts()
         }
         #if os(iOS)
         // "Another session needs you", below the nav bar and above the transcript. Compact only:
@@ -235,7 +266,7 @@ struct ConsoleView: View {
         // console reverts to the large bar the moment the session is created — the reported gap.)
         .navigationBarTitleDisplayMode(.inline)
         // …and none at all while a phone's composer holds the keyboard (`foldsChrome`): back, the
-        // title and Share come back when the keyboard goes.
+        // title and session menu come back when the keyboard goes.
         .toolbar(foldsChrome(registry.peek(sessionID)) ? .hidden : .automatic, for: .navigationBar)
         // Inline title: the session name over a "state · when" subtitle, matching the web Agent
         // console header (`AgentView.tsx`). Centered/two-line — the system convention (Messages/Phone)
@@ -276,15 +307,44 @@ struct ConsoleView: View {
                     title
                 }
             }
-            // Public read-only share link (web parity: the "Share…" menu item on the Agent console).
             ToolbarItem(placement: .topBarTrailing) {
-                Button { showShare = true } label: {
-                    Image(systemName: "square.and.arrow.up")
+                if let session = appModel.session(id: sessionID) {
+                    sessionMenu(session)
+                } else {
+                    Button {} label: { Image(systemName: "ellipsis") }
+                        .disabled(true)
+                        .accessibilityLabel("Session actions")
                 }
-                .accessibilityLabel("Share session")
             }
         }
         .sessionRenameAlert(isPresented: $renaming, draft: $renameDraft, sessionID: sessionID)
+        .sheet(item: $taggingSession) { session in
+            SessionTagSheet(session: session)
+                .environment(appModel)
+                .task { await appModel.loadSessionTags() }
+        }
+        .sheet(item: $movingSession) { session in
+            if let workspace = sessionWorkspace(session) {
+                SessionMoveSheet(session: session, workspace: workspace, listed: moveListed)
+                    .environment(appModel)
+                    .task {
+                        await appModel.loadSessionFolders()
+                        let view: SessionView = session.effectiveLifecycleState == .completed ? .completed : .open
+                        if let baseURL = appModel.baseURL {
+                            let api = APIClient(baseURL: baseURL, tokenStore: appModel.tokenStore)
+                            if let listed = try? await api.listSessions(view: view), !Task.isCancelled {
+                                moveListed = listed.filter { ($0.agent?.id ?? $0.agentId) == workspace.id }
+                            }
+                        }
+                    }
+            }
+        }
+        .confirmationDialog("Delete permanently?", isPresented: $confirmPurge, titleVisibility: .visible) {
+            Button("Delete Permanently", role: .destructive) { appModel.purgeSession(sessionID) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This session and its full transcript will be permanently deleted. This can't be undone.")
+        }
         #else
         // The same link on macOS, from the window toolbar: a detail pane's own actions sit at
         // `.primaryAction` there, as the project and task pages' menus do.
@@ -303,6 +363,108 @@ struct ConsoleView: View {
             }
         }
     }
+
+    #if os(iOS)
+    private func sessionWorkspace(_ session: Session) -> Agent? {
+        appModel.agents?.items.first { $0.id == (session.agent?.id ?? session.agentId) }
+    }
+
+    private func sessionMenu(_ session: Session) -> some View {
+        Menu {
+            if session.effectiveLifecycleState == .trash {
+                Button { appModel.moveSessionToOpen(session.id) } label: {
+                    Label("Move to Open", systemImage: "tray.and.arrow.up")
+                }
+                .disabled(session.capabilities?.canRestore == false)
+                Divider()
+                Button(role: .destructive) { confirmPurge = true } label: {
+                    Label("Delete Permanently", systemImage: "trash.slash")
+                }
+            } else {
+                Section {
+                    Button { showShare = true } label: {
+                        Label(SharePanelCopy.share, systemImage: "square.and.arrow.up")
+                    }
+                    if let url = appModel.sessionWebURL(session.id) {
+                        Button {
+                            PlatformPasteboard.copyString(url.absoluteString)
+                            appModel.showToast(SharePanelCopy.linkCopied)
+                        } label: {
+                            Label(SharePanelCopy.copyLink, systemImage: "link")
+                        }
+                    }
+                }
+                Section {
+                    Button {
+                        renameDraft = session.title ?? ""
+                        renaming = true
+                    } label: {
+                        Label("Rename…", systemImage: "pencil")
+                    }
+                    Button { appModel.setPinned(session, pinned: session.pinnedAt == nil) } label: {
+                        Label(session.pinnedAt == nil ? "Pin" : "Unpin",
+                              systemImage: session.pinnedAt == nil ? "pin" : "pin.slash")
+                    }
+                    Button {
+                        let listed = session.effectiveLifecycleState == .completed
+                            ? (appModel.agents?.agentSessions ?? []) : appModel.sessions
+                        moveListed = listed.filter {
+                            ($0.agent?.id ?? $0.agentId) == (session.agent?.id ?? session.agentId)
+                        }
+                        movingSession = session
+                    } label: {
+                        Label("Move…", systemImage: "folder")
+                    }
+                    .disabled(sessionWorkspace(session) == nil)
+                    Button { taggingSession = session } label: {
+                        Label("Tags…", systemImage: "tag")
+                    }
+                }
+                if let taskID = session.taskId {
+                    Section {
+                        Button {
+                            appModel.openFromConversation(.task(taskID), overConsole: opensPagesOverConsole)
+                        } label: {
+                            Label("Open Task", systemImage: "arrow.up.right")
+                        }
+                    }
+                } else if let projectID = session.projectId {
+                    Section {
+                        Button {
+                            appModel.openProjectFromConversation(projectID, overConsole: opensPagesOverConsole)
+                        } label: {
+                            Label("Open Project", systemImage: "arrow.up.right")
+                        }
+                    }
+                }
+                Section {
+                    if session.effectiveLifecycleState == .completed {
+                        Button { appModel.moveSessionToOpen(session.id) } label: {
+                            Label("Move to Open", systemImage: "tray.and.arrow.up")
+                        }
+                        .disabled(session.capabilities?.canRestore == false)
+                    } else if session.effectiveLifecycleState == .open {
+                        Button { appModel.completeSession(session.id) } label: {
+                            Label("Complete Session", systemImage: "checkmark.circle")
+                            if session.effectiveRunState.isLive { Text("Stops the current run") }
+                        }
+                        .disabled(session.capabilities?.canComplete == false)
+                    }
+                }
+                Section {
+                    Button(role: .destructive) { appModel.deleteSession(session.id) } label: {
+                        Label("Move to Trash", systemImage: "trash")
+                        if session.effectiveRunState.isLive { Text("Stops the current run") }
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+        }
+        .menuOrder(.fixed)
+        .accessibilityLabel("Session actions")
+    }
+    #endif
 }
 
 /// The band's cards while a phone's composer holds the keyboard (`foldsChrome`): folded to no
@@ -385,10 +547,15 @@ private struct ConsoleNavTitle: View {
 
 struct TranscriptView: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.openApprovalReview) private var openApprovalReview
+    @Environment(\.openPromotionReview) private var openPromotionReview
     let console: ConsoleModel
     /// The sticky "↑ Your question" header folds away while a phone's composer holds the keyboard,
     /// with the rest of the console's chrome (`ConsoleView.foldsChrome`).
     var hidesStickyQuestion = false
+    /// Keep the preview's place while its sheet refreshes or the conversation keeps streaming.
+    var reviewingCard = false
+    @State private var reviewSessionID: String?
     private let bottomID = TranscriptRow.bottom.id
     // Mirrors web's `atBottom` (AgentView.tsx): flips false once the user scrolls up off the live
     // tail. Drives the floating jump-to-latest button AND gates the auto-follow below, so reading
@@ -470,199 +637,241 @@ struct TranscriptView: View {
         // recycling List: a single one-shot scroll per change, not the per-frame *animated* scroll
         // that froze the old LazyVStack build.
         ScrollViewReader { proxy in
-            // ONE flat `ForEach` over pre-assembled rows — never nested `ForEach`es or an inline
-            // `if` inside a row loop. Those let a single `ForEach` element yield 0, 1 or N rows,
-            // and a count that moves while other rows are inserted in the same update is what made
-            // SwiftUI's UICollectionView-backed List abort a batch update
-            // (NSInternalInconsistencyException, "invalid number of items in section" — the two
-            // 0.1.2 (1299) TestFlight crashes). `TranscriptRows.build` is the single, unit-tested
-            // place that decides row order and identity; keep the view a pure switch over it.
-            List {
-                ForEach(rows) { row in
-                    transcriptRow(row)
-                        // Row-level preferences must sit OUT here, not inside `transcriptRow`'s
-                        // switch (or inside `AnchorRow`'s `if #available`): `listRow*` set inside a
-                        // `_ConditionalContent` branch aren't hoisted to the List on iOS — the
-                        // separators leaked back in. On the outermost row view they propagate
-                        // reliably (a chat flow, no hairlines).
-                        .listRowInsets(rowInsets(row))
-                        .listRowSeparator(.hidden)
-                        // The record a link opened (`SessionRecordLink`), marked for a moment.
-                        .listRowBackground(row.id == console.highlightedRowID
-                                           ? Color.accentColor.opacity(0.14) : Color.clear)
-                }
-            }
-            .listStyle(.plain)
-            // A transcript row is content, not a table cell, so drop the 44pt floor a List applies
-            // by default. That floor is why a folded tool card appeared to jump upward on the tap
-            // that opened it: folded, the card is ~32pt and the List padded the cell to 44 and
-            // centred it, sitting the header ~6pt low; expanded, the row is far past the floor, so
-            // the header snapped back to where it always belonged. Nothing above it moved, which is
-            // what ruled out a scroll. Every short row in the transcript was paying the same 12pt —
-            // including the 1pt scroll-anchor row at the tail.
-            .environment(\.defaultMinListRowHeight, 0)
-            .scrollContentBackground(.hidden)   // show the window background, not the List's own
-            #if os(iOS)
-            // Turn OFF the scroll view's touch delay so an in-list control (the jump-to-latest disc, the
-            // sticky header) registers a tap even while the list is still coasting. With the default
-            // (`delaysContentTouches == true`) the scroll view delays and consumes that first touch to
-            // halt deceleration, so the control only fired once the list settled. No public SwiftUI API.
-            .background { ScrollTouchConfigurator(scroll: transcriptScroll) }
-            #endif
-            .scrollDismissesKeyboard(.interactively)   // iOS: swipe the transcript to lower the keyboard
-            .defaultScrollAnchor(.bottom)
-            .modifier(tracker(ruler: ruler))
-            // The transcript viewport's top edge in global space — the line `AnchorRow` tests each row
-            // against to find the one under the top. Stable during a scroll (only shifts on layout, e.g.
-            // the keyboard), so reading it here doesn't churn.
-            .background {
-                GeometryReader { g in
-                    Color.clear.onChange(of: g.frame(in: .global).minY, initial: true) { _, y in ruler.viewportTop = y }
-                }
-            }
-            // Follow new/streaming content only while pinned at the bottom (web's smart auto-scroll):
-            // if the user has scrolled up to read, don't drag them back. A session switch always
-            // re-pins. One-shot, non-animated scrollTo — never the per-frame animated scroll that froze
-            // the old build. Keyed on `stateRevision`, not `state.items`: the revision is an O(1)
-            // compare bumped once per published snapshot, where the items array would be
-            // Equatable-compared in full on every publish just to learn "something changed".
-            .onChange(of: console.stateRevision) {
-                // A prepend published: re-pin the row under the viewport top so what the user is
-                // reading stays put (web's layout-effect scroll compensation). `ruler.topAnchorID`
-                // still holds its PRE-prepend reading here (row geometry re-fires only after the
-                // new layout), i.e. exactly the row to hold steady — even if the user scrolled
-                // away from the trigger while the fetch was in flight. Fallback: the row that was
-                // the window's first (the model's anchor; the spinner row above it carries no
-                // AnchorRow, so it never claims the top). Always consumed; while pinned at the
-                // bottom the follow below wins instead — a short transcript auto-fills upward and
-                // must not yank the user off the live tail.
-                let prependAnchor = console.takePrependAnchor()
-                // A window opened at a record ends at a gap, so its bottom is never the live tail to
-                // follow — pinning there would only walk the window down page by page.
-                if atBottom && !console.detached {
-                    proxy.scrollTo(bottomID, anchor: .bottom)
-                } else if let prependAnchor {
-                    proxy.scrollTo(ruler.topAnchorID ?? prependAnchor, anchor: .top)
-                }
-                recomputeStuck()   // a new turn — or one measured for the first time — can change the answer
-            }
-            // An Orbit link card is a reading of a live object, so the links this transcript is
-            // showing are asked for again as the console refreshes — one write per publish that
-            // costs a request only for what has gone stale, and no poll of the cards' own.
-            .onChange(of: console.stateRevision) { app.linkCards?.refreshStale() }
-            // The in-memory window cap trims the HEAD of the transcript, so it may only run while
-            // the reader is pinned at the live tail — see `ConsoleModel.setReadingHistory`.
-            // `initial: true` so a console opened (or switched to) already at the bottom is capped
-            // without waiting for a scroll that may never come.
-            .onChange(of: atBottom, initial: true) { _, pinned in
-                console.setReadingHistory(!pinned)
-            }
-            .onChange(of: console.sessionID) {
-                atBottom = true; stranded = false; ruler.reset(); stuckID = nil
-                console.setReadingHistory(false)
-                // The reader's place went with the transcript that was on screen: the new one has
-                // not been laid out yet, and the bar's direction word must not answer for the
-                // session that just left.
-                console.noteTopVisible(nil)
-                proxy.scrollTo(bottomID, anchor: .bottom)
-            }
-            // A message the user just sent forces the transcript back to the live tail — even if
-            // they'd scrolled up to read history (the stateRevision follow above only re-pins while
-            // already at the bottom). Web parity: onSend re-pins atBottom on send (AgentView.tsx).
-            .onChange(of: console.localSendTick) {
-                atBottom = true
-                proxy.scrollTo(bottomID, anchor: .bottom)
-            }
-            // A local command is an explicit new tail item, so reveal it even when the reader had
-            // scrolled up. This matches a normal local send and web's `pinToBottom()` behavior.
-            .onChange(of: console.localStatusCards.count) {
-                atBottom = true
-                proxy.scrollTo(bottomID, anchor: .bottom)
-            }
-            // The "N open questions below" bar, pressed. It sits outside this reader (it is an
-            // inset of the whole console, above the nav bar's content), so the request crosses on
-            // the model — with a tick, so pressing it twice scrolls twice. `.center` rather than
-            // `.top`: a decision card is an object to read whole, not a place to resume reading
-            // from.
-            .onChange(of: console.scrollRequest) { _, request in
-                guard let request else { return }
-                #if os(iOS)
-                // Same coast fix as the jump-to-latest disc: cancel the momentum first, or the
-                // deceleration swallows the scroll.
-                transcriptScroll.halt()
-                DispatchQueue.main.async { holdScroll(to: request.rowID, anchor: .center) }
-                #else
-                withAnimation(.easeOut(duration: 0.2)) {
-                    proxy.scrollTo(request.rowID, anchor: .center)
-                }
-                #endif
-            }
-            // A link to one record (`SessionRecordLink`): scroll to its row. The reader is taken off
-            // the live tail first, said outright as the sticky header's jump says it — a programmatic
-            // jump is no drag the scroll tracker could read, and the next publish would pull them back.
-            // `initial: true` because the page can land before this transcript first appears; the
-            // console consumes the request once followed, so reappearing does not jump back to it.
-            .onChange(of: console.recordRequest, initial: true) { _, request in
-                guard let request else { return }
-                atBottom = false
-                console.recordRequestFollowed(request)
-                #if os(iOS)
-                transcriptScroll.halt()
-                #endif
-                DispatchQueue.main.async { holdScroll(to: request.rowID, anchor: .center) }
-            }
-            // The scrolls `heldScroll` carried here, made inside this update — after the List has taken
-            // its rows, so the index path SwiftUI picks for the row is one UIKit has.
-            .onChange(of: heldScroll) { _, held in
-                guard let held else { return }
-                withAnimation(.easeOut(duration: 0.2)) {
-                    proxy.scrollTo(held.rowID, anchor: held.anchor)
-                }
-            }
-            .onAppear { proxy.scrollTo(bottomID, anchor: .bottom); recomputeStuck() }
-            // Floating jump-to-latest button (web's `.scroll-to-bottom`): shown while scrolled up, and
-            // while the tail is out of view for any other reason (`stranded`).
-            .overlay(alignment: .bottom) {
-                if !atBottom || console.detached || stranded {
-                    scrollToBottomButton(proxy: proxy)
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
-                }
-            }
-            // Whether a pinned transcript is stranded off its tail, decided once it has sat that way for
-            // a moment. A publish restarts the wait: the follow it triggers lands a frame or two after
-            // the rows grew, and the gap read in between — the normal state while a reply streams (see
-            // `TailPinning`) — must not flash the button on every update. A transcript the reader
-            // scrolled up isn't decided here: `!atBottom` shows the button already.
-            .task(id: strandKey) {
-                guard atBottom, tailOutOfView else { stranded = false; return }
-                try? await Task.sleep(for: .milliseconds(400))
-                if !Task.isCancelled { stranded = true }
-            }
-            // Sticky "↑ Your question" header (web's `.chat-sticky-question`): pin the newest question
-            // *above the fold* to the top so it stays in view during a long reply, and tap it to jump
-            // back; it steps back through earlier questions as you scroll up (see `recomputeStuck`) and
-            // hides only at the very top where no question is above. Shown whenever such a question
-            // exists — including at the bottom — exactly like web, not gated on `atBottom`. In-flow inset
-            // (not an overlay) so it pushes content down like web: a `scrollTo(anchor: .top)` then lands
-            // the target just *below* the header, not hidden under it. iOS 18+/macOS 15+ (needs the
-            // scroll/row geometry); on the earlier floor `stuckID` never updates, so this stays hidden.
-            .safeAreaInset(edge: .top, spacing: 0) {
-                if #available(iOS 18, macOS 15, *), !hidesStickyQuestion, let q = stuckBubble {
-                    stickyQuestion(q, proxy: proxy)
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                }
-            }
-            .animation(.easeOut(duration: 0.15), value: atBottom)
-            .animation(.easeOut(duration: 0.15), value: stranded)
-            // Only fires when the header appears/disappears (not on every text swap), so animating it
-            // can't churn during a scroll.
-            .animation(.easeOut(duration: 0.15), value: stuckID == nil)
+            chrome(follows(rowsList, proxy), proxy)
         }
         // macOS shows the session state in this band; iOS carries it in the nav-bar subtitle
         // (`ConsoleNavTitle`) instead, matching the web header, so the band is retired there.
         #if os(macOS)
         .safeAreaInset(edge: .top, spacing: 0) { statusBar }
         #endif
+    }
+
+    /// Split out of `body`, and out of each other, because as one expression this chain is long
+    /// enough that the iOS type-checker gives up on it — "unable to type-check this expression in
+    /// reasonable time; try breaking up the expression into distinct sub-expressions",
+    /// ConsoleView.swift:627, which is how v0.1.2-beta.174's iOS archive failed. Each piece declares
+    /// `some View`, so the checker works on it alone and one more modifier stays cheap.
+    /// The transcript itself: one flat `ForEach` over the pre-assembled rows, with the row-level
+    /// preferences that must sit on the outermost row view.
+    private var rowsList: some View {
+        List {
+            ForEach(rows) { row in
+                transcriptRow(row)
+                    // Row-level preferences must sit OUT here, not inside `transcriptRow`'s
+                    // switch (or inside `AnchorRow`'s `if #available`): `listRow*` set inside a
+                    // `_ConditionalContent` branch aren't hoisted to the List on iOS — the
+                    // separators leaked back in. On the outermost row view they propagate
+                    // reliably (a chat flow, no hairlines).
+                    .listRowInsets(rowInsets(row))
+                    .listRowSeparator(.hidden)
+                    // The record a link opened (`SessionRecordLink`), marked for a moment.
+                    .listRowBackground(row.id == console.highlightedRowID
+                                       ? Color.accentColor.opacity(0.14) : Color.clear)
+            }
+        }
+        .listStyle(.plain)
+        // A transcript row is content, not a table cell, so drop the 44pt floor a List applies
+        // by default. That floor is why a folded tool card appeared to jump upward on the tap
+        // that opened it: folded, the card is ~32pt and the List padded the cell to 44 and
+        // centred it, sitting the header ~6pt low; expanded, the row is far past the floor, so
+        // the header snapped back to where it always belonged. Nothing above it moved, which is
+        // what ruled out a scroll. Every short row in the transcript was paying the same 12pt —
+        // including the 1pt scroll-anchor row at the tail.
+        .environment(\.defaultMinListRowHeight, 0)
+        .scrollContentBackground(.hidden)   // show the window background, not the List's own
+        #if os(iOS)
+        // Turn OFF the scroll view's touch delay so an in-list control (the jump-to-latest disc, the
+        // sticky header) registers a tap even while the list is still coasting. With the default
+        // (`delaysContentTouches == true`) the scroll view delays and consumes that first touch to
+        // halt deceleration, so the control only fired once the list settled. No public SwiftUI API.
+        .background { ScrollTouchConfigurator(scroll: transcriptScroll) }
+        #endif
+        .scrollDismissesKeyboard(.interactively)   // iOS: swipe the transcript to lower the keyboard
+        .defaultScrollAnchor(.bottom)
+        .modifier(tracker(ruler: ruler))
+        // The transcript viewport's top edge in global space — the line `AnchorRow` tests each row
+        // against to find the one under the top. Stable during a scroll (only shifts on layout, e.g.
+        // the keyboard), so reading it here doesn't churn.
+        .background {
+            GeometryReader { g in
+                Color.clear.onChange(of: g.frame(in: .global).minY, initial: true) { _, y in ruler.viewportTop = y }
+            }
+        }
+        // Follow new/streaming content only while pinned at the bottom (web's smart auto-scroll):
+        // if the user has scrolled up to read, don't drag them back. A session switch always
+        // re-pins. One-shot, non-animated scrollTo — never the per-frame animated scroll that froze
+        // the old build. Keyed on `stateRevision`, not `state.items`: the revision is an O(1)
+        // compare bumped once per published snapshot, where the items array would be
+        // Equatable-compared in full on every publish just to learn "something changed".
+    }
+
+    /// Split out of `body`, and out of each other, because as one expression this chain is long
+    /// enough that the iOS type-checker gives up on it — "unable to type-check this expression in
+    /// reasonable time; try breaking up the expression into distinct sub-expressions",
+    /// ConsoleView.swift:627, which is how v0.1.2-beta.174's iOS archive failed. Each piece declares
+    /// `some View`, so the checker works on it alone and one more modifier stays cheap.
+    /// Everything that follows what the console publishes: the scrolls, the re-pins and the reading
+    /// position, in the order they were written.
+    private func follows(_ content: some View, _ proxy: ScrollViewProxy) -> some View {
+        content
+        .onChange(of: console.stateRevision) {
+            // A prepend published: re-pin the row under the viewport top so what the user is
+            // reading stays put (web's layout-effect scroll compensation). `ruler.topAnchorID`
+            // still holds its PRE-prepend reading here (row geometry re-fires only after the
+            // new layout), i.e. exactly the row to hold steady — even if the user scrolled
+            // away from the trigger while the fetch was in flight. Fallback: the row that was
+            // the window's first (the model's anchor; the spinner row above it carries no
+            // AnchorRow, so it never claims the top). Always consumed; while pinned at the
+            // bottom the follow below wins instead — a short transcript auto-fills upward and
+            // must not yank the user off the live tail.
+            let prependAnchor = console.takePrependAnchor()
+            // A window opened at a record ends at a gap, so its bottom is never the live tail to
+            // follow — pinning there would only walk the window down page by page.
+            if atBottom && !console.detached && !reviewingCard {
+                proxy.scrollTo(bottomID, anchor: .bottom)
+            } else if let prependAnchor {
+                proxy.scrollTo(ruler.topAnchorID ?? prependAnchor, anchor: .top)
+            }
+            recomputeStuck()   // a new turn — or one measured for the first time — can change the answer
+        }
+        // An Orbit link card is a reading of a live object, so the links this transcript is
+        // showing are asked for again as the console refreshes — one write per publish that
+        // costs a request only for what has gone stale, and no poll of the cards' own.
+        .onChange(of: console.stateRevision) { app.linkCards?.refreshStale() }
+        // The in-memory window cap trims the HEAD of the transcript, so it may only run while
+        // the reader is pinned at the live tail — see `ConsoleModel.setReadingHistory`.
+        // `initial: true` so a console opened (or switched to) already at the bottom is capped
+        // without waiting for a scroll that may never come.
+        .onChange(of: atBottom, initial: true) { _, pinned in
+            console.setReadingHistory(!pinned)
+        }
+        .onChange(of: reviewingCard, initial: true) {
+            if reviewingCard {
+                reviewSessionID = console.sessionID
+                atBottom = false
+            } else {
+                if reviewSessionID == console.sessionID { atBottom = false }
+                reviewSessionID = nil
+            }
+        }
+        .onChange(of: console.sessionID) {
+            atBottom = true; stranded = false; ruler.reset(); stuckID = nil
+            console.setReadingHistory(false)
+            // The reader's place went with the transcript that was on screen: the new one has
+            // not been laid out yet, and the bar's direction word must not answer for the
+            // session that just left.
+            console.noteTopVisible(nil)
+            proxy.scrollTo(bottomID, anchor: .bottom)
+        }
+        // A message the user just sent forces the transcript back to the live tail — even if
+        // they'd scrolled up to read history (the stateRevision follow above only re-pins while
+        // already at the bottom). Web parity: onSend re-pins atBottom on send (AgentView.tsx).
+        .onChange(of: console.localSendTick) {
+            atBottom = true
+            proxy.scrollTo(bottomID, anchor: .bottom)
+        }
+        // A local command is an explicit new tail item, so reveal it even when the reader had
+        // scrolled up. This matches a normal local send and web's `pinToBottom()` behavior.
+        .onChange(of: console.localStatusCards.count) {
+            atBottom = true
+            proxy.scrollTo(bottomID, anchor: .bottom)
+        }
+        // The "N open questions below" bar, pressed. It sits outside this reader (it is an
+        // inset of the whole console, above the nav bar's content), so the request crosses on
+        // the model — with a tick, so pressing it twice scrolls twice. `.center` rather than
+        // `.top`: a decision card is an object to read whole, not a place to resume reading
+        // from.
+        .onChange(of: console.scrollRequest) { _, request in
+            guard let request else { return }
+            atBottom = false
+            #if os(iOS)
+            // Same coast fix as the jump-to-latest disc: cancel the momentum first, or the
+            // deceleration swallows the scroll.
+            transcriptScroll.halt()
+            #endif
+            DispatchQueue.main.async {
+                holdScroll(to: request.rowID, anchor: .center, opensReview: true)
+            }
+        }
+        // A link to one record (`SessionRecordLink`): scroll to its row. The reader is taken off
+        // the live tail first, said outright as the sticky header's jump says it — a programmatic
+        // jump is no drag the scroll tracker could read, and the next publish would pull them back.
+        // `initial: true` because the page can land before this transcript first appears; the
+        // console consumes the request once followed, so reappearing does not jump back to it.
+        .onChange(of: console.recordRequest, initial: true) { _, request in
+            guard let request else { return }
+            atBottom = false
+            console.recordRequestFollowed(request)
+            #if os(iOS)
+            transcriptScroll.halt()
+            #endif
+            DispatchQueue.main.async { holdScroll(to: request.rowID, anchor: .center) }
+        }
+        // The scrolls `heldScroll` carried here, made inside this update — after the List has taken
+        // its rows, so the index path SwiftUI picks for the row is one UIKit has.
+        .onChange(of: heldScroll) { _, held in
+            guard let held, held.sessionID == console.sessionID else { return }
+            if held.opensReview {
+                guard let row = rows.first(where: { $0.id == held.rowID }) else { return }
+                // Settle the preview's position before presenting; an animation could be
+                // interrupted by the sheet and leave its row off-screen on return.
+                proxy.scrollTo(held.rowID, anchor: held.anchor)
+                openReview(for: row)
+            } else {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    proxy.scrollTo(held.rowID, anchor: held.anchor)
+                }
+            }
+        }
+        .onAppear { proxy.scrollTo(bottomID, anchor: .bottom); recomputeStuck() }
+    }
+
+    /// Split out of `body`, and out of each other, because as one expression this chain is long
+    /// enough that the iOS type-checker gives up on it — "unable to type-check this expression in
+    /// reasonable time; try breaking up the expression into distinct sub-expressions",
+    /// ConsoleView.swift:627, which is how v0.1.2-beta.174's iOS archive failed. Each piece declares
+    /// `some View`, so the checker works on it alone and one more modifier stays cheap.
+    /// What sits over the list rather than in it: the jump-to-latest disc, the stranded-off-tail task,
+    /// the sticky question header and their animations.
+    private func chrome(_ content: some View, _ proxy: ScrollViewProxy) -> some View {
+        content
+        // Floating jump-to-latest button (web's `.scroll-to-bottom`): shown while scrolled up, and
+        // while the tail is out of view for any other reason (`stranded`).
+        .overlay(alignment: .bottom) {
+            if !atBottom || console.detached || stranded {
+                scrollToBottomButton(proxy: proxy)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
+        }
+        // Whether a pinned transcript is stranded off its tail, decided once it has sat that way for
+        // a moment. A publish restarts the wait: the follow it triggers lands a frame or two after
+        // the rows grew, and the gap read in between — the normal state while a reply streams (see
+        // `TailPinning`) — must not flash the button on every update. A transcript the reader
+        // scrolled up isn't decided here: `!atBottom` shows the button already.
+        .task(id: strandKey) {
+            guard atBottom, tailOutOfView else { stranded = false; return }
+            try? await Task.sleep(for: .milliseconds(400))
+            if !Task.isCancelled { stranded = true }
+        }
+        // Sticky "↑ Your question" header (web's `.chat-sticky-question`): pin the newest question
+        // *above the fold* to the top so it stays in view during a long reply, and tap it to jump
+        // back; it steps back through earlier questions as you scroll up (see `recomputeStuck`) and
+        // hides only at the very top where no question is above. Shown whenever such a question
+        // exists — including at the bottom — exactly like web, not gated on `atBottom`. In-flow inset
+        // (not an overlay) so it pushes content down like web: a `scrollTo(anchor: .top)` then lands
+        // the target just *below* the header, not hidden under it. iOS 18+/macOS 15+ (needs the
+        // scroll/row geometry); on the earlier floor `stuckID` never updates, so this stays hidden.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if #available(iOS 18, macOS 15, *), !hidesStickyQuestion, let q = stuckBubble {
+                stickyQuestion(q, proxy: proxy)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.easeOut(duration: 0.15), value: atBottom)
+        .animation(.easeOut(duration: 0.15), value: stranded)
+        // Only fires when the header appears/disappears (not on every text swap), so animating it
+        // can't churn during a scroll.
+        .animation(.easeOut(duration: 0.15), value: stuckID == nil)
     }
 
     // Which question is "stuck" to the top = the last user turn that sits ABOVE the item currently under
@@ -853,8 +1062,23 @@ struct TranscriptView: View {
 
     /// Carry a scroll into the next update rather than making it from here (see `heldScroll`). A new
     /// tick each time, so asking twice for the same row scrolls twice.
-    private func holdScroll(to rowID: String, anchor: UnitPoint) {
-        heldScroll = HeldScroll(rowID: rowID, anchor: anchor, tick: (heldScroll?.tick ?? 0) &+ 1)
+    private func holdScroll(to rowID: String, anchor: UnitPoint, opensReview: Bool = false) {
+        heldScroll = HeldScroll(rowID: rowID, anchor: anchor, tick: (heldScroll?.tick ?? 0) &+ 1,
+                                sessionID: console.sessionID, opensReview: opensReview)
+    }
+
+    /// The bar opens the same review as tapping a preview. Inline cards remain scroll-only.
+    private func openReview(for row: TranscriptRow) {
+        guard case .decisionCard(let card) = row else { return }
+        switch card.kind {
+        case .promotionApproval(let promotionID):
+            openPromotionReview(promotionID)
+        case .criteriaDecision, .acceptanceConfirmation, .startProject, .criteriaChange,
+             .ownerConfirmation, .coordinatorQuestion:
+            openApprovalReview(.delivered(card))
+        default:
+            break
+        }
     }
 
     // Sticky header that names the turn above the fold and scrolls back to it — web's
@@ -1103,6 +1327,8 @@ private struct HeldScroll: Equatable {
     let rowID: String
     let anchor: UnitPoint
     let tick: Int
+    let sessionID: String
+    let opensReview: Bool
 }
 
 #if os(iOS)

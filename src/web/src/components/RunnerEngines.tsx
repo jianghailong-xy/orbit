@@ -1,8 +1,8 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, Popconfirm, Tag } from 'antd';
-import { DeleteOutlined, EditOutlined, LoginOutlined } from '@ant-design/icons';
+import { Button, Dropdown, Popconfirm, Tag, type MenuProps } from 'antd';
+import { DeleteOutlined, DownloadOutlined, EditOutlined, EllipsisOutlined, LoginOutlined, PauseOutlined, PlayCircleOutlined, PlusOutlined, WarningOutlined } from '@ant-design/icons';
 import {
   accountToStartOn,
   type InstallEngine,
@@ -15,7 +15,7 @@ import {
 } from '@orbit/shared';
 import { api } from '../api';
 import { accountIsPaused, usePauseClock } from '../lib/accountPause';
-import { AccountPauseActions, AccountPauseStatus } from './AccountPause';
+import { AccountPauseActions, AccountPauseStatus, type AccountPauseControls } from './AccountPause';
 import { routeId, encodeId } from '../lib/idCodec';
 import {
   accountDir,
@@ -274,22 +274,39 @@ function QuotaCell({ kind, quota }: { kind: RowKind; quota: Quota }) {
   );
 }
 
-/** Re-sign in, as a mark: a login that is in rarely needs it, and a word on every row read as
- *  something each of them needed doing. It is the last thing on its row, as Sign in is on a row that
- *  needs one, so the way back into every login on a card is one column down its right edge. */
-function ResignIn({ disabled, onClick }: { disabled?: boolean; onClick: () => void }) {
-  return (
-    <Button
-      size="small"
-      type="text"
-      className="re-icon"
-      icon={<LoginOutlined />}
-      aria-label="Re-sign in"
-      title="Re-sign in"
-      disabled={disabled}
-      onClick={onClick}
-    />
-  );
+/** Routine account maintenance stays in one menu. The pause dialog lives outside the dropdown
+ *  so closing the menu does not unmount the operation it just opened. */
+function RunnerAccountMenu({ onRename, onSignIn, onRemove, offline, removing, pause }: {
+  onRename?: () => void;
+  onSignIn?: () => void;
+  onRemove?: () => void;
+  offline: boolean;
+  removing?: boolean;
+  pause?: { name: string; until?: string | null; endpoint: string };
+}) {
+  const menu = (controls?: AccountPauseControls) => {
+    const items: MenuProps['items'] = [
+      ...(onRename ? [{ key: 'rename', icon: <EditOutlined aria-hidden />, label: 'Rename', onClick: onRename }] : []),
+      ...(onSignIn ? [{ key: 'login', icon: <LoginOutlined aria-hidden />, label: 'Re-sign in', disabled: offline, onClick: onSignIn }] : []),
+      ...(controls ? controls.paused ? [
+        { key: 'resume', icon: <PlayCircleOutlined aria-hidden />, label: 'Resume now', disabled: controls.pending, onClick: controls.resume },
+        { key: 'duration', icon: <PauseOutlined aria-hidden />, label: 'Change pause duration…', disabled: controls.pending, onClick: controls.choose },
+      ] : [
+        { key: 'pause', icon: <PauseOutlined aria-hidden />, label: 'Pause account…', disabled: controls.pending, onClick: controls.choose },
+      ] : []),
+      ...(onRemove ? [
+        { type: 'divider' as const },
+        { key: 'remove', icon: <DeleteOutlined aria-hidden />, label: 'Remove account', danger: true, disabled: offline || removing, onClick: onRemove },
+      ] : []),
+    ];
+    if (items.length === 0) return null;
+    return (
+      <Dropdown trigger={['click']} placement="bottomRight" menu={{ items }} classNames={{ root: 're-account-menu' }}>
+        <Button size="small" type="text" className="re-action re-more" icon={<EllipsisOutlined />} aria-label="More actions" title="More actions" />
+      </Dropdown>
+    );
+  };
+  return pause ? <AccountPauseActions {...pause}>{menu}</AccountPauseActions> : menu();
 }
 
 /** One engine on one runner: what it is, what state it's in, what it costs, and the way out. */
@@ -352,7 +369,7 @@ function EngineRow({
     const own = accountKindOf(account);
     return !accountIsPaused(account.pausedUntil, now) && available(own, quotaOf(own, accountPlanUsage(runner.planUsage, engine, account.id), !!runner.online, now));
   }).length;
-  // "+ Account" is how a machine gets from one account to two, so it is not the group's to hold:
+  // "Add account" is how a machine gets from one account to two, so it is not the group's to hold:
   // the Codex row offers it whenever the probe speaks for the engine, whether it heads a group yet
   // or not.
   const addsAccounts =
@@ -367,33 +384,35 @@ function EngineRow({
     if (antigravity?.supported === false) return null;
     if (engine === 'antigravity' && kind !== 'missing' && kind !== 'installing' && kind !== 'install-failed') {
       if (googleLogin !== 'available') return null;
-      if (kind === 'in' && !envKey) return <ResignIn disabled={offline} onClick={() => onSignIn(signIn === engine ? null : engine)} />;
+      // Signed in with Google: re-signing in (switching account) is the row menu's, as it is for
+      // every other engine — a word on the row would read as something still to do.
+      if (kind === 'in' && !envKey) return null;
       return <Button size="small" type="primary" disabled={offline} onClick={() => onSignIn(signIn === engine ? null : engine)}>Sign in with Google</Button>;
     }
     if (offline) {
-      return kind === 'in' ? <ResignIn disabled onClick={() => {}} /> : <Button size="small" disabled>Sign in</Button>;
+      return kind === 'in' ? null : <Button size="small" className="re-action" disabled>Sign in</Button>;
     }
     switch (kind) {
       case 'missing':
         return (
-          <Button size="small" type="primary" loading={install.isPending} onClick={() => install.mutate()}>
+          <Button size="small" className="re-action re-install" icon={<DownloadOutlined aria-hidden />} loading={install.isPending} onClick={() => install.mutate()}>
             Install
           </Button>
         );
       case 'installing':
         return (
-          <Button size="small" type="text" onClick={() => dismissInstall.mutate()}>
+          <Button size="small" type="text" className="re-action" onClick={() => dismissInstall.mutate()}>
             Cancel
           </Button>
         );
       case 'install-failed':
         return (
-          <Button size="small" loading={install.isPending} onClick={() => install.mutate()}>
+          <Button size="small" className="re-action" loading={install.isPending} onClick={() => install.mutate()}>
             Retry
           </Button>
         );
       case 'in':
-        return <ResignIn onClick={() => onSignIn(signIn === engine ? null : engine)} />;
+        return null;
       // Signed out, wouldn't say, or just installed. An install the probe hasn't caught up with yet
       // gets Sign in too: a CLI that was just installed has no sign-in, so that is what comes next,
       // and the runner only reports an install done once the binary is on its PATH — waiting for the
@@ -403,6 +422,7 @@ function EngineRow({
           <Button
             size="small"
             type="primary"
+            className="re-action"
             onClick={() => onSignIn(signIn === engine ? null : engine)}
           >
             Sign in
@@ -455,17 +475,26 @@ function EngineRow({
         {addsAccounts && (
           <Button
             size="small"
+            className="re-action re-add-account"
+            icon={<PlusOutlined aria-hidden />}
             disabled={offline}
             onClick={() => onSignIn(signIn === addAccountPanel(engine) ? null : addAccountPanel(engine))}
           >
-            + Account
+            Add account
           </Button>
         )}
         {/* A group's sign-ins are its accounts', each on its own row. */}
-        {!grouped && single && (kind === 'in' || accountIsPaused(single.pausedUntil, now)) && (
-          <AccountPauseActions name={accountNameOf(single)} until={single.pausedUntil} endpoint={`/runners/${runner.id}/accounts/${engine}/${single.id}/pause`} />
-        )}
         {!grouped && action()}
+        {!grouped && (
+          <RunnerAccountMenu
+            offline={offline}
+            onSignIn={kind === 'in' ? () => onSignIn(signIn === engine ? null : engine) : undefined}
+            pause={single && (kind === 'in' || accountIsPaused(single.pausedUntil, now)) ? {
+              name: accountNameOf(single), until: single.pausedUntil,
+              endpoint: `/runners/${runner.id}/accounts/${engine}/${single.id}/pause`,
+            } : undefined}
+          />
+        )}
       </div>
 
       {loginHint && <div className="re-panel-hint re-login-note">{loginHint}</div>}
@@ -543,7 +572,7 @@ function EngineRow({
 
 /**
  * An account's name on its row, and the way to change it — Default's too, which the machine never
- * names. The pencil after it, or a double-click on it, swaps it for the session title's own editor
+ * names. Rename in its menu, or a double-click on it, swaps it for the session title's own editor
  * (WorkspaceView): everything selected, Enter or a click elsewhere saves, Escape drops the draft, and
  * an empty or unchanged one changes nothing. Only a label, kept in Orbit (RunnersService.renameAccount):
  * nothing on the machine changes, so it works with the runner offline.
@@ -553,16 +582,19 @@ function AccountName({
   engine,
   account,
   next,
+  editing,
+  setEditing,
 }: {
   runner: Runner;
   engine: LoginEngine;
   account: RunnerEngineAccount;
   next?: boolean;
+  editing: boolean;
+  setEditing: (editing: boolean) => void;
 }) {
   const message = useToast();
   const qc = useQueryClient();
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = useState(accountNameOf(account));
   // Escape blurs the input too; this tells that blur not to save.
   const cancelled = useRef(false);
   // The input hugs its text, measured off an unseen twin, as the session title's does.
@@ -582,6 +614,9 @@ function AccountName({
     onError: (e: Error) => message.error("Couldn't rename the account", e.message),
   });
   const shown = rename.isPending ? (rename.variables ?? accountNameOf(account)) : accountNameOf(account);
+  useEffect(() => {
+    if (!editing) setDraft(shown);
+  }, [editing, shown]);
   // Default named something else says what it still is: the login this machine's own environment
   // selects, which a terminal shares — and which signing in there changes.
   const renamedDefault = account.id === 'default' && shown !== 'Default';
@@ -645,9 +680,6 @@ function AccountName({
           NEXT
         </span>
       )}
-      <button type="button" className="re-rename" aria-label="Rename" title="Rename" onClick={start}>
-        <EditOutlined />
-      </button>
     </div>
   );
 }
@@ -686,6 +718,8 @@ function AccountRow({
   const message = useToast();
   const qc = useQueryClient();
   const kind = accountKindOf(account);
+  const [editing, setEditing] = useState(false);
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
   const isDefault = account.id === 'default';
   const panel = accountPanel(engine, account.id);
   // What became of the last removal asked for here, if it was this account's of this engine's: the
@@ -716,8 +750,11 @@ function AccountRow({
   const toggle = () => onSignIn(signIn === panel ? null : panel);
   // Removing deletes the slot's sign-in from the machine, and only signing in again brings it back:
   // asked first, wherever it is offered.
-  const confirmRemove = (trigger: ReactNode) => (
+  const confirmRemove = (trigger: ReactNode, open?: boolean) => (
     <Popconfirm
+      open={open}
+      trigger={open === undefined ? ['click'] : []}
+      onOpenChange={open === undefined ? undefined : setConfirmingRemove}
       title={`Remove ${accountNameOf(account)}?`}
       description={
         `Its sign-in is deleted from ${runner.displayName || runner.name}. ` +
@@ -725,10 +762,23 @@ function AccountRow({
       }
       okText="Remove"
       okButtonProps={{ danger: true }}
-      onConfirm={() => remove.mutate()}
+      onConfirm={() => { remove.mutate(); setConfirmingRemove(false); }}
     >
       {trigger}
     </Popconfirm>
+  );
+  const menu = (
+    <RunnerAccountMenu
+      offline={!runner.online}
+      removing={removing}
+      onRename={() => setEditing(true)}
+      onSignIn={kind === 'in' ? toggle : undefined}
+      onRemove={isDefault ? undefined : () => setConfirmingRemove(true)}
+      pause={kind === 'in' || accountIsPaused(account.pausedUntil, now) ? {
+        name: accountNameOf(account), until: account.pausedUntil,
+        endpoint: `/runners/${runner.id}/accounts/${engine}/${account.id}/pause`,
+      } : undefined}
+    />
   );
 
   return (
@@ -736,7 +786,7 @@ function AccountRow({
       <div className="re-id">
         <span className="re-rail" aria-hidden="true" />
         <div className="re-id-main" style={{ minWidth: 0 }}>
-          <AccountName runner={runner} engine={engine} account={account} next={next} />
+          <AccountName runner={runner} engine={engine} account={account} next={next} editing={editing} setEditing={setEditing} />
           {/* Where the account lives and which one it is — never who: the account's email and id
               stay on the machine, and the fingerprint is a prefix of a non-reversible one. */}
           <div className="re-meta" title={accountDir(account)}>
@@ -748,34 +798,14 @@ function AccountRow({
       <AccountPauseStatus until={account.pausedUntil} now={now} detail={kind === 'in' ? 'Signed in' : undefined} status={statusOf(kind, quota, now)} />
       <QuotaCell kind={kind} quota={quota} />
       <div className="re-act">
-        {(kind === 'in' || accountIsPaused(account.pausedUntil, now)) && <AccountPauseActions name={accountNameOf(account)} until={account.pausedUntil} endpoint={`/runners/${runner.id}/accounts/${engine}/${account.id}/pause`} />}
-        {/* Default has nothing to remove: it is the CODEX_HOME the machine's own environment
-            selects, the one `codex` typed in a terminal shares. Every other account is a slot this
-            runner added, and this is the way back off the machine — the one thing the page could
-            not do before, which left whoever signed one in twice with a directory to delete by
-            hand. A grey mark until pointed at, like the account pools' sign-out: red on a row that
-            is fine reads as something wrong with it. */}
-        {!isDefault &&
-          confirmRemove(
-            <Button
-              size="small"
-              type="text"
-              danger
-              className="re-icon re-remove"
-              icon={<DeleteOutlined />}
-              aria-label="Remove"
-              title="Remove"
-              disabled={!runner.online || removing}
-              loading={removing}
-            />,
-          )}
-        {kind === 'in' ? (
-          <ResignIn disabled={!runner.online} onClick={toggle} />
-        ) : (
-          <Button size="small" type={runner.online ? 'primary' : 'default'} disabled={!runner.online} onClick={toggle}>
+        {kind !== 'in' && (
+          <Button size="small" className="re-action" type={runner.online ? 'primary' : 'default'} disabled={!runner.online} onClick={toggle}>
             Sign in
           </Button>
         )}
+        {/* Default is the machine's own login and cannot be removed. The confirmation for an
+            added account stays anchored to More after its menu closes. */}
+        {isDefault ? menu : confirmRemove(<span className="re-menu-anchor">{menu}</span>, confirmingRemove)}
       </div>
       {/* The same account, signed in twice. Two rows of quota for one account read as two quotas,
           so the repeat is named on the row that made it — with the one way out right there: this
@@ -813,7 +843,7 @@ function AccountRow({
 }
 
 /**
- * "+ Account": the same sign-in flow as every other here, started the moment the panel opens, under
+ * "Add account": the same sign-in flow as every other here, started the moment the panel opens, under
  * a name the page picks (defaultAccountName). The runner gives the account a config directory of its
  * own, so Default — and the CLI in a terminal — is untouched.
  *
@@ -823,7 +853,7 @@ function AccountRow({
  * leaves the account the name it was added under, for its row's rename to change.
  *
  * Once that account is signed in, reported and named, the panel folds itself away: what it added is
- * that account's own row, and the row's pencil is where its name changes from then on.
+ * that account's own row, and the row's menu is where its name changes from then on.
  */
 function AddEngineAccount({
   engine,
@@ -955,6 +985,11 @@ function RunnerEngineCard({
 }) {
   const [signIn, setSignIn] = useState<string | null>(null);
   const engines = runner.engines ?? null;
+  const name = runner.displayName || runner.name;
+  const meta = [runner.hostname !== name && runner.hostname, runner.version && `v${runner.version}`]
+    .filter(Boolean)
+    .join(' · ');
+  const failed = runner.install?.status === 'failed' && runner.install.engine !== 'antigravity';
 
   return (
     <div className={`re-card re-runner-card${runner.online ? '' : ' offline'}${collapsed ? ' collapsed' : ''}`}>
@@ -965,28 +1000,42 @@ function RunnerEngineCard({
           className="re-toggle"
           type="button"
           aria-expanded={!collapsed}
+          aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${name}`}
           onClick={onToggle}
         >
-          <span className={`re-chev${collapsed ? '' : ' open'}`} aria-hidden="true">
-            ▸
-          </span>
           <span className={`re-dot${runner.online ? ' on' : ''}`} />
-          <span className="re-runner">{runner.displayName || runner.name}</span>
-          <span className="re-runner-meta">
-            {[runner.hostname, runner.version && `runner ${runner.version}`]
-              .filter(Boolean)
-              .join(' · ')}
+          <span className="re-runner-copy">
+            <span className="re-runner">{name}</span>
+            {meta && <span className="re-runner-meta">{meta}</span>}
           </span>
-          {collapsed && <span className="re-summary">{summaryOf(runner)}</span>}
+          <span className={`re-chev${collapsed ? '' : ' open'}`} aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <path
+                d="m9 5 7 7-7 7"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </span>
         </button>
-        <span className="re-head-sp" />
-        {!runner.online && <Tag>Offline</Tag>}
+        {(!runner.online || collapsed) && (
+          <div className="re-runner-status">
+            {!runner.online && <Tag>Offline</Tag>}
+            {collapsed && (
+              <span className={`re-summary${failed ? ' warn' : ''}`}>
+                {failed && <WarningOutlined aria-hidden />}{summaryOf(runner)}
+              </span>
+            )}
+          </div>
+        )}
         {/* Updating the engine CLIs is not here, on purpose. It takes no engine — it does every
             CLI on the machine — so its object is the runner, and this is a page about identity
             where everything else is scoped to one (runner, engine) pair. It lives behind this
             link, next to the machine's own version and slots. */}
-        <Link className="re-manage" to={`/runners/${encodeId(runner.id)}`}>
-          Manage runner →
+        <Link className="re-manage" aria-label={`Manage ${name}`} to={`/runners/${encodeId(runner.id)}`}>
+          Manage →
         </Link>
       </div>
       {collapsed ? null : engines ? (
@@ -1120,10 +1169,7 @@ export function RunnerEngines() {
       <div className="re-sec-head">
         <h3>On your runners</h3>
         <span className="re-sec-sub">
-          Signed in on the machine itself — a session spends that subscription, nothing to paste.
-          {/* Said once, here, because it is the answer to a question every row raises and none
-              of them can answer alone: a version number can't tell you it's the current one. */}
-          {list.length > 0 && ' Orbit keeps these CLIs updated every 30 min.'}
+          Use subscriptions signed in on your machines.
         </span>
         {list.length > 0 && (
           <span className="re-sec-count">

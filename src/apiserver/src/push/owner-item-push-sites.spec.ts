@@ -40,9 +40,14 @@ const OWNER_ITEM_WRITERS: Record<string, string> = {
   'projects/project-open-item.ts':
     'the in-transaction writers (recordTaskFailure, recordPromotionApproval, the drain that hands a '
     + 'queue over when a conversation ends); announced by the callers below, after their commit',
-  'projects/project-open-item.service.ts': 'askOwner (R9) and handToOwner (X-D6), which announce here',
+  'projects/project-open-item.service.ts':
+    'askOwner (R9) and handToOwner (X-D6), which announce here; requestStart and requestDone file the '
+    + 'coordinator’s start and done requests, which are none of the four and ring nothing — the '
+    + 'coordinator’s row says Ready to start or Ready to close instead',
   'projects/project-fuse.service.ts': 'evaluate (F-T1), which announces after its transaction',
   'projects/owner-decision-signal.ts': 'a READ: it counts the owner’s items, it opens none',
+  'projects/project-done-request.ts':
+    'a READ: the done check reads the owner’s open items to refuse over them, it opens none',
 };
 
 /** Every file that must carry the announcement, and the fact each one announces. */

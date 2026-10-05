@@ -1,0 +1,135 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>iOS：项目在会话列表里显示为一个条目</title>
+<link rel="stylesheet" href="ios.css"><script src="ios-icons.js"></script></head>
+<body>
+<h1>iOS：一个项目的会话在列表里合成一个条目</h1>
+<p class="lede">规则和 Web 一样（见 01-web）。项目条目就是 coordinator 那一行，用 iPhone 会话行同一个版式，高度相同、都是两行。第 1 行是项目名、状态点和时间；第 2 行开头是进度小标签，后面是 coordinator 说的话。点条目进 coordinator 对话，点进度小标签进项目会话页。列表里不展开，一个项目永远只占一行；某个执行会话等你时，第 2 行改写它，点条目直接进它。</p>
+
+<div class="row3">
+  <!-- 1 · list -->
+  <div class="col">
+    <div class="cap"><span class="tag new">改后</span>Open 列表：每个项目一个条目，和会话行一样高</div>
+    <div class="device"><div class="screen">
+      <div class="island"></div>
+      <div class="status"><span>10:04</span><span class="r">5G <span class="batt"></span></span></div>
+      <div class="nav">
+        <div class="glass gcirc"><i data-ic="ham" data-s="22" data-c="#fff"></i></div>
+        <div class="navtitle">orbit <i data-ic="chevd" data-s="14" data-c="#98989f"></i></div>
+        <div class="spacer"></div>
+        <div class="glass gcap"><i data-ic="filter" data-s="22" data-c="#fff"></i><i data-ic="compose" data-s="22" data-c="#fff"></i></div>
+      </div>
+      <div class="search"><i data-ic="search" data-s="18" data-c="#8e8e93"></i>Search sessions</div>
+      <div class="list">
+        <div class="frow"><span class="fi"><i data-ic="folder" data-s="22" data-c="#8c95ff"></i></span><span class="name">Release</span><span class="cnt">2</span><span class="chev"><i data-ic="chevr" data-s="13" data-c="#6b6b70"></i></span></div>
+        <div class="frow"><span class="fi"><i data-ic="folder" data-s="22" data-c="#8c95ff"></i></span><span class="name">Wiki</span><span class="cnt">1</span><span class="chev"><i data-ic="chevr" data-s="13" data-c="#6b6b70"></i></span></div>
+        <div class="sh">Pinned</div>
+        <div class="srow prj"><div class="t"><span class="title"><span class="pglyph2"><i data-ic="grid" data-s="17" data-c="#0a84ff"></i></span>后台作业生命周期</span><span class="cue amber-dot"></span><span class="time">1m</span></div>
+          <div class="sub"><span class="pchip"><span class="meter"><i class="d" style="flex:27"></i><i class="r" style="flex:2"></i><i class="f" style="flex:1"></i><i class="w" style="flex:4"></i></span>27/34</span><span class="pv amber">Approve merge to main</span></div></div>
+        <div class="srow"><div class="t"><span class="title">分享链接的过期时间</span><span class="time">3h</span></div>
+          <div class="sub"><span class="pv">默认 7 天，可以改成永不过期。</span></div></div>
+        <div class="sh">Today</div>
+        <div class="srow prj"><div class="t"><span class="title"><span class="pglyph2"><i data-ic="grid" data-s="17" data-c="#0a84ff"></i></span>Orbit 原生 Watch</span><span class="cue"><i data-ic="spin" data-s="15" data-c="#8e8e93"></i></span><span class="time">2m</span></div>
+          <div class="sub"><span class="pchip"><span class="meter"><i class="d" style="flex:5"></i><i class="r" style="flex:1"></i><i class="w" style="flex:5"></i></span>5/11</span><span class="pv blue">Running task_get…</span></div></div>
+        <div class="srow"><div class="t"><span class="title">侧栏工作区排序</span><span class="time">35m</span></div>
+          <div class="sub"><span class="chip bl">Web</span><span class="pv">收到，做 B。先摸清现有代码和约束…</span></div></div>
+        <div class="srow prj"><div class="t"><span class="title"><span class="pglyph2"><i data-ic="grid" data-s="17" data-c="#0a84ff"></i></span>Codex 额度 Reset</span><span class="cue amber-dot"></span><span class="time">5h</span></div>
+          <div class="sub"><span class="pchip"><span class="meter"><i class="d" style="flex:9"></i><i class="w" style="flex:3"></i></span>9/12</span><span class="pv amber">Waiting for your confirmation · 额度恢复后自动重试</span></div></div>
+        <div class="sh">Yesterday</div>
+        <div class="srow"><div class="t"><span class="title">部署 0.1.206</span><span class="time">1d</span></div>
+          <div class="sub"><span class="chip gr">部署</span><span class="pv">已部署：apiserver 迁移已应用…</span></div></div>
+      </div>
+      <div class="home"></div>
+    </div></div>
+    <ul class="notes">
+      <li>项目条目用 iPhone 会话行同一个版式（<code>AgentSessionRow.compactRow</code>），高度相同、都是两行。第 1 行是四宫格小图标、加粗的项目名、状态点和时间；第 2 行开头是进度小标签（迷你进度条加完成数），放在现在 <i>Coordinator</i> 标的位置，后面是 coordinator 说的话。</li>
+      <li>状态点和会话行一样：组里有会话等你是琥珀点，有会话在跑是灰色转圈，只剩后台作业是呼吸的终端图标。</li>
+      <li><b>点条目</b>进 coordinator 对话，推进导航栈，和点会话行一样；<b>点进度小标签</b>进项目会话页。小标签的点击区加高到整行，方便点中。</li>
+      <li><b>列表里不展开</b>。执行会话等你时（最后一条），第 2 行改写它，等你的事在前、会话名在后；这时点条目直接进那个会话。第 2 行说的是谁，点条目就进谁。</li>
+    </ul>
+  </div>
+
+  <!-- 2 · the project's page -->
+  <div class="col">
+    <div class="cap"><span class="tag new">新增</span>项目会话页：点进度小标签进来</div>
+    <div class="device"><div class="screen">
+      <div class="island"></div>
+      <div class="status"><span>10:04</span><span class="r">5G <span class="batt"></span></span></div>
+      <div class="nav">
+        <div class="glass gcirc"><i data-ic="chevl" data-s="20" data-c="#fff"></i></div>
+        <div class="navtitle" style="flex-direction:column;align-items:flex-start;gap:0;line-height:1.15">后台作业生命周期<small>Project · 6 sessions</small></div>
+        <div class="spacer"></div>
+        <div class="glass gcirc"><i data-ic="ellipsis" data-s="22" data-c="#fff"></i></div>
+      </div>
+      <div class="pcard"><span class="meter"><i class="d" style="flex:27"></i><i class="r" style="flex:2"></i><i class="f" style="flex:1"></i><i class="w" style="flex:4"></i></span><span class="n">27/34 done · 2 running</span><span class="open">Project<i data-ic="chevr" data-s="11" data-c="#0a84ff"></i></span></div>
+      <div class="list" style="top:180px">
+        <div class="sh">Coordinator</div>
+        <div class="srow"><div class="t"><span class="title">后台作业生命周期</span><span class="cue amber-dot"></span><span class="time">2h</span></div>
+          <div class="sub"><span class="cbadge">Coordinator</span><span class="pv amber">Approve merge to main</span></div></div>
+        <div class="sh">Today</div>
+        <div class="srow"><div class="t"><span class="title">runner 回收孤儿进程</span><span class="cue"><i data-ic="spin" data-s="15" data-c="#8e8e93"></i></span><span class="time">3m</span></div>
+          <div class="sub"><span class="pv blue">Running Bash…</span></div></div>
+        <div class="srow"><div class="t"><span class="title">engine 退出时保留后台作业</span><span class="cue amber-dot"></span><span class="time">6m</span></div>
+          <div class="sub"><span class="pv amber">Waiting for approval</span></div></div>
+        <div class="srow"><div class="t"><span class="title">bg_output 分页</span><span class="cue red-dot"></span><span class="time">48m</span></div>
+          <div class="sub"><span class="pv">测试失败：输出截断时少了最后一行。</span></div></div>
+        <div class="srow"><div class="t"><span class="title">后台作业列表 UI</span><span class="time">3h</span></div>
+          <div class="sub"><span class="pv">已提交，等 coordinator 验收。</span></div></div>
+        <div class="srow"><div class="t"><span class="title">判断：后台作业生命周期</span><span class="time">4h</span></div>
+          <div class="sub"><span class="pv">t3 的失败和 t1 无关，可以并行重试。</span></div></div>
+      </div>
+      <div class="home"></div>
+    </div></div>
+    <ul class="notes">
+      <li>返回回到 orbit 的列表。标题是项目名，下面一行小字写 <i>Project · 会话数</i>。<b>⋯</b> 里是 Open Project、Open Coordinator；这里没有 ✎：项目的会话由 coordinator 派发。</li>
+      <li>顶部卡片是进度条和完成数，<b>Project ›</b> 进项目页。</li>
+      <li>coordinator 固定排第一，下面和文件夹页一样按时间分组；行、左右滑、长按都和外面相同。列的是这个项目在所有 Workspace 里的会话。</li>
+      <li>iPhone 推进导航栈；iPad 的中间栏原地换页，和文件夹页走同一套（<code>NavNode</code> 加一种页面）。</li>
+    </ul>
+  </div>
+
+  <!-- 3 · long press -->
+  <div class="col">
+    <div class="cap"><span class="tag n">管理</span>长按项目条目</div>
+    <div class="device"><div class="screen">
+      <div class="island"></div>
+      <div class="status"><span>10:04</span><span class="r">5G <span class="batt"></span></span></div>
+      <div class="nav">
+        <div class="glass gcirc"><i data-ic="ham" data-s="22" data-c="#fff"></i></div>
+        <div class="navtitle">orbit <i data-ic="chevd" data-s="14" data-c="#98989f"></i></div>
+        <div class="spacer"></div>
+        <div class="glass gcap"><i data-ic="filter" data-s="22" data-c="#fff"></i><i data-ic="compose" data-s="22" data-c="#fff"></i></div>
+      </div>
+      <div class="search"><i data-ic="search" data-s="18" data-c="#8e8e93"></i>Search sessions</div>
+      <div class="list">
+        <div class="frow"><span class="fi"><i data-ic="folder" data-s="22" data-c="#8c95ff"></i></span><span class="name">Release</span><span class="cnt">2</span><span class="chev"><i data-ic="chevr" data-s="13" data-c="#6b6b70"></i></span></div>
+        <div class="frow"><span class="fi"><i data-ic="folder" data-s="22" data-c="#8c95ff"></i></span><span class="name">Wiki</span><span class="cnt">1</span><span class="chev"><i data-ic="chevr" data-s="13" data-c="#6b6b70"></i></span></div>
+        <div class="sh">Pinned</div>
+        <div class="srow"></div>
+        <div class="srow"><div class="t"><span class="title">分享链接的过期时间</span><span class="time">3h</span></div>
+          <div class="sub"><span class="pv">默认 7 天，可以改成永不过期。</span></div></div>
+      </div>
+      <div class="blur"></div>
+      <div class="lift" style="top:303px;height:75px;background:#1c1c1e;border-radius:22px">
+        <div class="srow prj" style="padding-left:18px;padding-right:18px"><div class="t"><span class="title"><span class="pglyph2"><i data-ic="grid" data-s="17" data-c="#0a84ff"></i></span>后台作业生命周期</span><span class="cue amber-dot"></span><span class="time">1m</span></div>
+          <div class="sub"><span class="pchip"><span class="meter"><i class="d" style="flex:27"></i><i class="r" style="flex:2"></i><i class="f" style="flex:1"></i><i class="w" style="flex:4"></i></span>27/34</span><span class="pv amber">Approve merge to main</span></div></div>
+      </div>
+      <div class="cmenu" style="top:390px;left:18px">
+        <div class="mi"><span class="ic"><i data-ic="bubble" data-s="20" data-c="#fff"></i></span>Open Coordinator</div>
+        <div class="mi"><span class="ic"><i data-ic="list" data-s="20" data-c="#fff"></i></span>Sessions</div>
+        <div class="mi"><span class="ic"><i data-ic="grid" data-s="19" data-c="#fff"></i></span>Open Project</div>
+        <div class="gap"></div>
+        <div class="mi"><span class="ic"><i data-ic="pinslash" data-s="20" data-c="#fff"></i></span>Unpin</div>
+        <div class="mi"><span class="ic"><i data-ic="folder" data-s="20" data-c="#fff"></i></span>Move…</div>
+      </div>
+      <div class="anno-l" style="left:18px;top:712px;background:#5a5a62">右滑：Pin / Unpin　·　左滑：Move</div>
+      <div class="home"></div>
+    </div></div>
+    <ul class="notes">
+      <li>长按项目条目：<b>Open Coordinator</b>、<b>Sessions</b>、<b>Open Project</b>；<b>Unpin</b> 和 <b>Move…</b> 作用在 coordinator 上，条目跟着走。</li>
+      <li>没有 Complete、Share、Delete，也没有回答按钮：完成 coordinator 会影响整个项目，要在对话里做；回答只在对话里的卡片上。</li>
+      <li>滑动只留两个：右滑 Pin / Unpin，左滑 Move。</li>
+      <li>macOS 现在的列表连文件夹都不显示，项目条目放到第二期。</li>
+    </ul>
+  </div>
+</div>
+</body></html>

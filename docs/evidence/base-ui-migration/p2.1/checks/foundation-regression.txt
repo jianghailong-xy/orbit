@@ -1,0 +1,115 @@
+
+> @orbit/web@0.1.0 pretest:ui-foundation
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-foundation
+> playwright test --config ui-migration/foundation.config.mjs
+
+[WebServer] (node:1440105) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 48 tests using 1 worker
+
+(node:1440330) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] 12:07:59 PM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓   1 [chromium-light-desktop] › ui-migration/foundation-theme.browser.mjs:63:3 › production boot and hydration preserve cached system (1.7s)
+[WebServer] 12:08:01 PM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓   2 [chromium-light-desktop] › ui-migration/foundation-theme.browser.mjs:63:3 › production boot and hydration preserve cached light (1.6s)
+[WebServer] 12:08:02 PM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓   3 [chromium-light-desktop] › ui-migration/foundation-theme.browser.mjs:63:3 › production boot and hydration preserve cached dark (2.1s)
+[WebServer] 12:08:04 PM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓   4 [chromium-light-desktop] › ui-migration/foundation-theme.browser.mjs:89:1 › account adoption, preference writes and live system changes share the foundation theme (2.1s)
+  ✓   5 [chromium-light-desktop] › ui-migration/foundation.browser.mjs:37:1 › foundation states match current AntD and the frozen P0 palette (1.0s)
+  ✓   6 [chromium-light-desktop] › ui-migration/foundation.browser.mjs:87:1 › body and nested portals inherit theme and preserve focus ownership (2.0s)
+(node:1441333) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] 12:08:10 PM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓   7 [chromium-light-phone] › ui-migration/foundation-theme.browser.mjs:63:3 › production boot and hydration preserve cached system (2.3s)
+[WebServer] 12:08:12 PM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓   8 [chromium-light-phone] › ui-migration/foundation-theme.browser.mjs:63:3 › production boot and hydration preserve cached light (2.1s)
+[WebServer] 12:08:14 PM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓   9 [chromium-light-phone] › ui-migration/foundation-theme.browser.mjs:63:3 › production boot and hydration preserve cached dark (2.1s)
+[WebServer] 12:08:16 PM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓  10 [chromium-light-phone] › ui-migration/foundation-theme.browser.mjs:89:1 › account adoption, preference writes and live system changes share the foundation theme (2.2s)
+  ✓  11 [chromium-light-phone] › ui-migration/foundation.browser.mjs:37:1 › foundation states match current AntD and the frozen P0 palette (968ms)
+  ✓  12 [chromium-light-phone] › ui-migration/foundation.browser.mjs:87:1 › body and nested portals inherit theme and preserve focus ownership (2.4s)
+(node:1442573) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] 12:08:22 PM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓  13 [chromium-dark-desktop] › ui-migration/foundation-theme.browser.mjs:63:3 › production boot and hydration preserve cached system (1.7s)
+[WebServer] 12:08:24 PM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓  14 [chromium-dark-desktop] › ui-migration/foundation-theme.browser.mjs:63:3 › production boot and hydration preserve cached light (1.6s)
+[WebServer] 12:08:26 PM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓  15 [chromium-dark-desktop] › ui-migration/foundation-theme.browser.mjs:63:3 › production boot and hydration preserve cached dark (2.2s)
+[WebServer] 12:08:28 PM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓  16 [chromium-dark-desktop] › ui-migration/foundation-theme.browser.mjs:89:1 › account adoption, preference writes and live system changes share the foundation theme (2.5s)
+  ✓  17 [chromium-dark-desktop] › ui-migration/foundation.browser.mjs:37:1 › foundation states match current AntD and the frozen P0 palette (983ms)
+  ✓  18 [chromium-dark-desktop] › ui-migration/foundation.browser.mjs:87:1 › body and nested portals inherit theme and preserve focus ownership (2.5s)
+(node:1443416) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] 12:08:34 PM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓  19 [chromium-dark-phone] › ui-migration/foundation-theme.browser.mjs:63:3 › production boot and hydration preserve cached system (2.3s)
+[WebServer] 12:08:36 PM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓  20 [chromium-dark-phone] › ui-migration/foundation-theme.browser.mjs:63:3 › production boot and hydration preserve cached light (2.1s)
+[WebServer] 12:08:39 PM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓  21 [chromium-dark-phone] › ui-migration/foundation-theme.browser.mjs:63:3 › production boot and hydration preserve cached dark (2.1s)
+[WebServer] 12:08:41 PM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓  22 [chromium-dark-phone] › ui-migration/foundation-theme.browser.mjs:89:1 › account adoption, preference writes and live system changes share the foundation theme (2.3s)
+  ✓  23 [chromium-dark-phone] › ui-migration/foundation.browser.mjs:37:1 › foundation states match current AntD and the frozen P0 palette (1.0s)
+  ✓  24 [chromium-dark-phone] › ui-migration/foundation.browser.mjs:87:1 › body and nested portals inherit theme and preserve focus ownership (2.5s)
+(node:1444447) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] 12:08:47 PM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓  25 [webkit-light-desktop] › ui-migration/foundation-theme.browser.mjs:63:3 › production boot and hydration preserve cached system (1.8s)
+[WebServer] 12:08:49 PM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓  26 [webkit-light-desktop] › ui-migration/foundation-theme.browser.mjs:63:3 › production boot and hydration preserve cached light (1.4s)
+[WebServer] 12:08:50 PM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓  27 [webkit-light-desktop] › ui-migration/foundation-theme.browser.mjs:63:3 › production boot and hydration preserve cached dark (1.5s)
+[WebServer] 12:08:51 PM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓  28 [webkit-light-desktop] › ui-migration/foundation-theme.browser.mjs:89:1 › account adoption, preference writes and live system changes share the foundation theme (2.2s)
+  ✓  29 [webkit-light-desktop] › ui-migration/foundation.browser.mjs:37:1 › foundation states match current AntD and the frozen P0 palette (1.1s)
+  ✓  30 [webkit-light-desktop] › ui-migration/foundation.browser.mjs:87:1 › body and nested portals inherit theme and preserve focus ownership (2.1s)
+(node:1445396) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] 12:08:57 PM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓  31 [webkit-light-phone] › ui-migration/foundation-theme.browser.mjs:63:3 › production boot and hydration preserve cached system (1.7s)
+[WebServer] 12:08:59 PM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓  32 [webkit-light-phone] › ui-migration/foundation-theme.browser.mjs:63:3 › production boot and hydration preserve cached light (1.7s)
+[WebServer] 12:09:01 PM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓  33 [webkit-light-phone] › ui-migration/foundation-theme.browser.mjs:63:3 › production boot and hydration preserve cached dark (1.7s)
+[WebServer] 12:09:02 PM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓  34 [webkit-light-phone] › ui-migration/foundation-theme.browser.mjs:89:1 › account adoption, preference writes and live system changes share the foundation theme (2.3s)
+  ✓  35 [webkit-light-phone] › ui-migration/foundation.browser.mjs:37:1 › foundation states match current AntD and the frozen P0 palette (1.0s)
+  ✓  36 [webkit-light-phone] › ui-migration/foundation.browser.mjs:87:1 › body and nested portals inherit theme and preserve focus ownership (1.8s)
+(node:1446417) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] 12:09:08 PM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓  37 [webkit-dark-desktop] › ui-migration/foundation-theme.browser.mjs:63:3 › production boot and hydration preserve cached system (1.5s)
+[WebServer] 12:09:09 PM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓  38 [webkit-dark-desktop] › ui-migration/foundation-theme.browser.mjs:63:3 › production boot and hydration preserve cached light (1.5s)
+[WebServer] 12:09:11 PM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓  39 [webkit-dark-desktop] › ui-migration/foundation-theme.browser.mjs:63:3 › production boot and hydration preserve cached dark (1.6s)
+[WebServer] 12:09:13 PM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓  40 [webkit-dark-desktop] › ui-migration/foundation-theme.browser.mjs:89:1 › account adoption, preference writes and live system changes share the foundation theme (2.2s)
+  ✓  41 [webkit-dark-desktop] › ui-migration/foundation.browser.mjs:37:1 › foundation states match current AntD and the frozen P0 palette (1.1s)
+  ✓  42 [webkit-dark-desktop] › ui-migration/foundation.browser.mjs:87:1 › body and nested portals inherit theme and preserve focus ownership (2.2s)
+(node:1448225) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] 12:09:18 PM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓  43 [webkit-dark-phone] › ui-migration/foundation-theme.browser.mjs:63:3 › production boot and hydration preserve cached system (1.6s)
+[WebServer] 12:09:20 PM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓  44 [webkit-dark-phone] › ui-migration/foundation-theme.browser.mjs:63:3 › production boot and hydration preserve cached light (1.5s)
+[WebServer] 12:09:21 PM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓  45 [webkit-dark-phone] › ui-migration/foundation-theme.browser.mjs:63:3 › production boot and hydration preserve cached dark (1.5s)
+[WebServer] 12:09:23 PM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓  46 [webkit-dark-phone] › ui-migration/foundation-theme.browser.mjs:89:1 › account adoption, preference writes and live system changes share the foundation theme (2.3s)
+  ✓  47 [webkit-dark-phone] › ui-migration/foundation.browser.mjs:37:1 › foundation states match current AntD and the frozen P0 palette (1.0s)
+  ✓  48 [webkit-dark-phone] › ui-migration/foundation.browser.mjs:87:1 › body and nested portals inherit theme and preserve focus ownership (2.0s)
+
+  48 passed (1.5m)

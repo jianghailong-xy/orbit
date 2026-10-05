@@ -13,6 +13,7 @@ import {
 } from '@ant-design/icons';
 import { MentionDeliveryNotes } from './MentionDeliveryNotes';
 import { TaskInputs } from './TaskInputs';
+import { LandTaskStatus, landingBadge, landingIsLive } from './LandTaskStatus';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type { RunnerModelCatalog } from '@orbit/shared';
 import { Alert, Avatar, Button, Dropdown, Input, Modal, Popconfirm, Segmented, Select, Spin, Switch, Tooltip, Typography } from 'antd';
@@ -36,7 +37,7 @@ import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { supersessionNote, taskOutcomeChip } from '../lib/taskOutcome';
 import { taskStartOwnedByCompletionDeclaration, type FilterableTask } from '../lib/taskFilters';
 import type { ProjectTaskVerificationState } from '../lib/projectDependencyGraph';
-import { ownerConfirmationQuery, providersQuery, runnersQuery } from '../lib/queries';
+import { meQuery, ownerConfirmationQuery, providersQuery, runnersQuery } from '../lib/queries';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
 import { useToast } from '../lib/toast';
 import {
@@ -625,12 +626,14 @@ export function TaskDetailPanel({
     queryFn: () => api<any>(`/tasks/${taskId}`),
     // While the task has a busy (queued/running) session, poll so the 开始执行 button
     // leaves its running state once the run ends; stay idle otherwise.
-    // Poll while anything on this task is still moving. Two things can be:
+    // Poll while anything on this task is still moving. Three things can be:
     //
     //   a busy session — so the 开始执行 button leaves its running state when the run ends;
     //   a mention delivery that has not settled (§13.8). Its state changes on a background sweep
     //     with no request behind it, so without this the panel shows PENDING or BLOCKED for ever
     //     and a status nobody watches change is barely better than the log line it replaced.
+    //   its landing (§2.7a), which goes on after the task's own session has finished: as often as a
+    //     busy session while it runs, and more slowly while it waits, which can take hours.
     refetchInterval: (query) => {
       const data = query.state.data as any;
       const busy = (data?.sessions ?? []).some((session: any) => isSessionBusy(session));
@@ -641,7 +644,9 @@ export function TaskDetailPanel({
       const moving = (data?.comments ?? []).some((comment: any) =>
         (comment.deliveries ?? []).some((delivery: any) =>
           ['PENDING', 'DELIVERING', 'SESSION_CREATED', 'QUEUED'].includes(delivery.status)));
-      return busy || moving ? 4000 : false;
+      const landingLive = landingIsLive(data?.integration);
+      if (busy || moving || landingLive === 'RUNNING') return 4000;
+      return landingLive === 'QUEUED' ? 15_000 : false;
     },
   });
   const task = q.data ?? summary;
@@ -791,6 +796,10 @@ export function TaskDetailPanel({
     () => modelOptionsForProvider(effectiveProvider, assigneeRunner?.modelCatalog, configuredProviders),
     [effectiveProvider, assigneeRunner?.modelCatalog, configuredProviders],
   );
+  // The account's switch for smart model selection. Off (the default), none of it is drawn here:
+  // no Suggested, no ✦ placeholder, and runs read as they did before routing.
+  const me = useQuery(meQuery());
+  const smartSelection = me.data?.preferences?.modelRouting === true;
   // Each tier with the model and effort it runs as for this task, as the server resolved them on the
   // assignee's runner, and the work it is for.
   const modelHintOptions: ModelHintOption[] | null = q.data?.modelHintOptions ?? null;
@@ -1077,6 +1086,7 @@ export function TaskDetailPanel({
   // §13.6: the chip says how the task ENDED, not only what its status column holds. A cancelled
   // attempt that was re-run reads as Superseded, in amber, because the work is still happening.
   const status = taskOutcomeChip(task);
+  const landing = landingBadge(q.data?.integration);
   const supersession = supersessionNote(task);
   const comments = q.data?.comments ?? [];
   const sessions = q.data?.sessions ?? [];
@@ -1244,6 +1254,10 @@ export function TaskDetailPanel({
           <div className="tdp-title">{task?.title ?? 'Loading…'}</div>
           <div className="tdp-meta">
             <span className={`tdp-badge tone-${status.tone}`}>{status.label}</span>
+            {/* DONE is not landed: the landing gets its own badge beside the status, never in it. */}
+            {landing && (
+              <span className={`tdp-badge tone-${landing.tone}`} data-landing-badge="">{landing.label}</span>
+            )}
             {supersession && <span className="tdp-meta-item muted">· {supersession}</span>}
             {task?.assignee && (
               <span className="tdp-meta-item">
@@ -1402,6 +1416,14 @@ export function TaskDetailPanel({
         <div className="tdp-empty">Failed to load task details.</div>
       ) : (
         <div className="tdp-body">
+          {/* Where the task's work stands after DONE (§2.7a): the newest landing attempt and why it
+              waits or where it stopped, apart from the status above. Nothing to press here. */}
+          {landing ? (
+            <section className="tdp-section" aria-label="Task landing">
+              <div className="tdp-section-title">Landing</div>
+              <LandTaskStatus integration={q.data.integration} taskStatus={q.data.status} />
+            </section>
+          ) : null}
           {/* The check that settles this row, under the row it checks — the relation the database
               has always held and no surface showed. Its title, its own state and the way in. */}
           {showVerifierCard && (
@@ -1444,46 +1466,48 @@ export function TaskDetailPanel({
             {/* The tier the coordinator suggested (model routing §3.1), with the model and effort it
                 runs as and the reason it was given under it. A suggestion, not a pin: a failed run
                 still moves the next one up, and a model picked below wins over both. */}
-            <div className="tdp-field">
-              <span className="tdp-field-label">Suggested</span>
-              <div className="tdp-field-stack">
-                <Select<ModelHintPick['value'], ModelHintPick>
-                  className="tdp-assignee-select"
-                  classNames={{ popup: { root: 'tdp-hint-popup' } }}
-                  variant="borderless"
-                  value={q.data?.modelHint ?? undefined}
-                  placeholder={NO_SUGGESTION}
-                  loading={updateModelHint.isPending}
-                  disabled={updateModelHint.isPending}
-                  popupMatchSelectWidth={false}
-                  options={modelHintPicks}
-                  labelRender={({ value, label }) => (
-                    <span className="tdp-hint-value">
-                      <span className={`tdp-hint-dot is-${String(value).toLowerCase()}`} />
-                      {label}
-                    </span>
-                  )}
-                  optionRender={(option) => (
-                    <div className={`tdp-hint-option${option.data.value ? '' : ' is-none'}`}>
-                      {option.data.value && (
-                        <span className={`tdp-hint-dot is-${option.data.value.toLowerCase()}`} />
-                      )}
-                      <div>
-                        <div className="tdp-hint-option-name">{option.data.label}</div>
-                        <div className="tdp-hint-option-detail">{option.data.detail}</div>
+            {smartSelection && (
+              <div className="tdp-field">
+                <span className="tdp-field-label">Suggested</span>
+                <div className="tdp-field-stack">
+                  <Select<ModelHintPick['value'], ModelHintPick>
+                    className="tdp-assignee-select"
+                    classNames={{ popup: { root: 'tdp-hint-popup' } }}
+                    variant="borderless"
+                    value={q.data?.modelHint ?? undefined}
+                    placeholder={NO_SUGGESTION}
+                    loading={updateModelHint.isPending}
+                    disabled={updateModelHint.isPending}
+                    popupMatchSelectWidth={false}
+                    options={modelHintPicks}
+                    labelRender={({ value, label }) => (
+                      <span className="tdp-hint-value">
+                        <span className={`tdp-hint-dot is-${String(value).toLowerCase()}`} />
+                        {label}
+                      </span>
+                    )}
+                    optionRender={(option) => (
+                      <div className={`tdp-hint-option${option.data.value ? '' : ' is-none'}`}>
+                        {option.data.value && (
+                          <span className={`tdp-hint-dot is-${option.data.value.toLowerCase()}`} />
+                        )}
+                        <div>
+                          <div className="tdp-hint-option-name">{option.data.label}</div>
+                          <div className="tdp-hint-option-detail">{option.data.detail}</div>
+                        </div>
                       </div>
-                    </div>
+                    )}
+                    onChange={(next) => {
+                      const level = next || null;
+                      if (level !== (q.data?.modelHint ?? null)) updateModelHint.mutate(level);
+                    }}
+                  />
+                  {q.data?.modelHint && q.data.modelHintReason && (
+                    <span className="tdp-field-note">Coordinator: {q.data.modelHintReason}</span>
                   )}
-                  onChange={(next) => {
-                    const level = next || null;
-                    if (level !== (q.data?.modelHint ?? null)) updateModelHint.mutate(level);
-                  }}
-                />
-                {q.data?.modelHint && q.data.modelHintReason && (
-                  <span className="tdp-field-note">Coordinator: {q.data.modelHintReason}</span>
-                )}
+                </div>
               </div>
-            </div>
+            )}
             <div className="tdp-field">
               <span className="tdp-field-label">Provider</span>
               <Select
@@ -1526,7 +1550,9 @@ export function TaskDetailPanel({
                 variant="borderless"
                 value={q.data?.model ?? undefined}
                 // Unpinned on an assignee with smart selection on, each run's model is picked for it.
-                placeholder={assigneeWorkspace?.modelRouting ? SMART_SELECTION_PLACEHOLDER : 'Provider default'}
+                placeholder={
+                  smartSelection && assigneeWorkspace?.modelRouting ? SMART_SELECTION_PLACEHOLDER : 'Provider default'
+                }
                 allowClear
                 showSearch
                 optionFilterProp="label"
@@ -1743,8 +1769,8 @@ export function TaskDetailPanel({
                 const meta = sessionStatusMeta(s);
                 // The decision behind this run, when it named a tier (model routing §9). Applied,
                 // the run is on its pick; not, the run kept the Agent's own model and the pick is
-                // what smart selection would have made.
-                const route: TaskRunRoute | null = s.route?.level ? s.route : null;
+                // what smart selection would have made. With the account's switch off, there is none.
+                const route: TaskRunRoute | null = smartSelection && s.route?.level ? s.route : null;
                 const applied = route?.applied === true;
                 // What the run ran on: its own row, or the pick for a run not claimed yet.
                 const ranOn: string | null = s.model || (applied ? route?.model : null) || null;

@@ -65,6 +65,21 @@ export const API_ERROR_RETRY_BACKOFF_MS = [30_000, 2 * 60_000, 5 * 60_000];
 export const MAX_API_ERROR_RETRIES = API_ERROR_RETRY_BACKOFF_MS.length;
 
 /**
+ * How long a rate-limited pool session waits on the credential it is already on before moving to another
+ * one is worth it.
+ *
+ * A move is not free, and the price is the prompt cache: measured on a real codex thread (2026-10-02, the
+ * P0 in docs/codex-shared-pool-design.md §2.3), the credential a session moves to knows only the shared
+ * instruction prefix, so the whole thread history is billed once as uncached — at tenth of the cached
+ * price per token, and, on a pool of subscriptions, out of somebody's window rather than a card. A rate
+ * limit the gateway could not wait out is minutes, not days, so a short one is worth sitting out where the
+ * session already is; past this the wait costs more than the cache does, and the pool's ordinary answer
+ * stands — move now if another credential can run. Only the rate limit is judged this way: a spent account
+ * is a reset away and moving off it is what the pool is for.
+ */
+export const POOL_RATE_LIMIT_WAIT_MS = 2 * 60_000;
+
+/**
  * When to re-send after a transient provider error, or null once the attempts are spent.
  *
  * The jitter is the same precaution as the quota retry's, for the same reason: an overload is
@@ -77,9 +92,22 @@ export function apiErrorRetryAt(
   now: Date,
   rand: () => number = Math.random,
 ): Date | null {
+  if (!apiErrorRetryBudgetLeft(attempts)) return null;
   const step = API_ERROR_RETRY_BACKOFF_MS[attempts];
-  if (step === undefined) return null;
   return new Date(now.getTime() + step + Math.floor(rand() * step * 0.25));
+}
+
+/**
+ * Whether the run-failure budget still allows one more automatic re-send, `attempts` spent.
+ *
+ * This is the *whether*, which no answer about *when* replaces: the ladder is not the only thing that
+ * can say when to try again — a pool credential's own mark is a better answer, and a rate limit is
+ * armed at it — but the count that stops a provider being re-sent to forever belongs to this budget,
+ * and a caller that arms on a time from anywhere else has to ask it first. The sweep spends one
+ * attempt per re-send whatever armed it; without this it would go on being armed.
+ */
+export function apiErrorRetryBudgetLeft(attempts: number): boolean {
+  return API_ERROR_RETRY_BACKOFF_MS[attempts] !== undefined;
 }
 
 const MONTHS = [

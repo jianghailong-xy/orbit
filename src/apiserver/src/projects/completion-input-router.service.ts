@@ -56,6 +56,7 @@ export const COMPLETION_INPUT_DELIVERY_FAILED = 'COMPLETION_INPUT_DELIVERY_FAILE
 export type SpentFact = (CompletionInputRouteOutcome | WakeSpend) & {
   action?: MechanicalAction;
   blockerKind?: string;
+  review?: { reason: string; itemId: string | null };
 };
 
 export type CompletionInputRouteOutcome =
@@ -160,6 +161,9 @@ export class CompletionInputRouter {
     if (outcome.outcome === 'REFUSED' || outcome.outcome === 'ALREADY_AWAKE') return outcome;
     const blocker = await this.disposition.raiseBlockerIfNeeded(fact);
     if (blocker) {
+      if (blocker.route === 'EXCEPTION_ITEM') {
+        return { ...outcome, review: { reason: blocker.reason, itemId: blocker.itemId } };
+      }
       // The blocker row is the durable human handoff. Automatic also gets a separate wake keyed
       // to that episode, so the coordinator can explain it and use its existing owner-approval
       // door instead of treating the landing fact as an ordinary merge instruction.
@@ -362,6 +366,7 @@ export class CompletionInputRouter {
         ...(routed.outcome === 'REFUSED' ? { refusalCode: routed.refusalCode } : {}),
         ...(routed.action ? { action: routed.action } : {}),
         ...(routed.blockerKind ? { blockerKind: routed.blockerKind } : {}),
+        ...(routed.review ? { review: routed.review } : {}),
       });
     }
     // Last, and for every project named rather than only those with a fact left: a criterion whose

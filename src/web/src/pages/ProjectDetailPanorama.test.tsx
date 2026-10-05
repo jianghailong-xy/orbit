@@ -391,7 +391,7 @@ describe('ProjectDetailPage — the panorama, assembled', () => {
     expect(shows('Project could not be loaded')).toBe(false);
   });
 
-  it('keeps the page standing in a stalled dispatch state', async () => {
+  it('keeps idle ready work visible without diagnosing a dispatch failure', async () => {
     const stalled = panorama('chain');
     serve({
       [`${base}/panorama`]: () =>
@@ -404,7 +404,7 @@ describe('ProjectDetailPage — the panorama, assembled', () => {
 
     expect(shows('Website Revamp')).toBe(true);
     expect(shows('Work overview')).toBe(true);
-    expect(shows('Dispatch needs attention')).toBe(true);
+    expect(shows('Dispatch needs attention')).toBe(false);
     expect(shows('Run queue')).toBe(true);
     expect(shows('Acceptance')).toBe(true);
     expect(shows('Design the landing page')).toBe(true);

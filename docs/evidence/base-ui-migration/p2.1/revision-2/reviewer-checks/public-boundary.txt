@@ -1,0 +1,13 @@
+
+> @orbit/web@0.1.0 test
+> vitest run --maxWorkers=2 src/lib/theme.test.tsx src/components/ui/boundary.test.ts
+
+
+ RUN  v5.0.2 /tmp/orbit-p21-coordinator-review-ls6bdiyx/src/web
+
+
+ Test Files  2 passed (2)
+      Tests  6 passed (6)
+   Start at  12:40:00
+   Duration  766ms (environment 43%, tests 32%, transform 15%, import 9%)
+

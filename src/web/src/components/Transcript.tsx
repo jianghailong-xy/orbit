@@ -3211,8 +3211,9 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
             <ToolResult seq={node.seq} content={resultContent} isError compact markdown={isSubWorkspace} />
           )}
           {node.name === 'Workflow' && (
-            <TaskProgressDetail
-              id={node.id}
+            <WorkflowProgressDetail
+              node={node}
+              live={live}
               // Before a runner that reports progress, a workflow's receipt is still all there is.
               // An agent's ack is internal metadata; its own transcript below says what it did.
               fallback={
@@ -3222,8 +3223,13 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
               }
             />
           )}
-          {body && <div className="chat-tool-body">{body}</div>}
-          {node.children.length > 0 && (
+          {body && (node.name === 'Workflow' ? (
+            <details className="chat-workflow-source" open={exp ? true : undefined}>
+              <summary>Workflow source</summary>
+              <div className="chat-tool-body">{body}</div>
+            </details>
+          ) : <div className="chat-tool-body">{body}</div>)}
+          {node.name !== 'Workflow' && node.children.length > 0 && (
             <div className="chat-subagent">
               <NodeList nodes={node.children} live={live} />
             </div>
@@ -3395,6 +3401,41 @@ function TaskBadgeAndStatus({ node, live, meta }: { node: ToolNode; live?: boole
 function TaskProgressDetail({ id, fallback }: { id: string; fallback?: ReactNode }) {
   const progress = useContext(TaskLookupCtx).progress(id);
   return progress ? <TaskProgressBlock progress={progress} /> : <>{fallback}</>;
+}
+
+function WorkflowProgressDetail({ node, live, fallback }: { node: ToolNode; live?: boolean; fallback?: ReactNode }) {
+  const progress = useContext(TaskLookupCtx).progress(node.id);
+  const exp = useContext(ExportCtx);
+  const agents = new Map(node.children.filter((child): child is ToolNode => child.kind === 'tool').map((child) => [child.id, child]));
+  const linked = new Set(progress?.agents.map((agent) => agent.transcriptKey).filter(Boolean));
+  const remaining = node.children.filter((child) => child.kind !== 'tool' || !linked.has(child.id));
+  return (
+    <>
+      {progress ? (
+        <TaskProgressBlock
+          progress={progress}
+          defaultOpen={!!exp}
+          renderAgent={(agent) => {
+            const child = agent.transcriptKey ? agents.get(agent.transcriptKey) : undefined;
+            return child ? <WorkflowAgentTranscript node={child} live={live} /> : null;
+          }}
+        />
+      ) : fallback}
+      {remaining.length > 0 && <div className="chat-subagent"><NodeList nodes={remaining} live={live} /></div>}
+    </>
+  );
+}
+
+function WorkflowAgentTranscript({ node, live }: { node: ToolNode; live?: boolean }) {
+  const fullResult = useFullPayload(node.result?.seq ?? 0, node.result?.truncated, !!node.result);
+  return (
+    <>
+      <NodeList nodes={node.children} live={live} />
+      {node.result && (
+        <ToolResult seq={node.seq} content={fullResult ? fullResult.content : node.result.content} isError={node.result.isError} compact markdown />
+      )}
+    </>
+  );
 }
 
 function ToolStatus({ node, live }: { node: ToolNode; live?: boolean }) {

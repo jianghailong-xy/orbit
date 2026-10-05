@@ -259,6 +259,17 @@ body {
   max-width: none;
   align-items: center;
 }
+.toast-slot {
+  width: fit-content;
+  max-width: 100%;
+  animation: orbit-toast-enter 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.toast-slot:has(.toast--card) {
+  width: 100%;
+}
+.toast-slot--leaving .toast {
+  pointer-events: none;
+}
 .toast {
   box-sizing: border-box;
   display: flex;
@@ -273,7 +284,6 @@ body {
   font-size: 14px;
   line-height: 20px;
   text-align: start;
-  animation: orbit-toast-enter 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 :root[data-theme='dark'] .toast {
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4);
@@ -519,8 +529,20 @@ button.toast--pill:focus-visible {
     transform: none;
   }
 }
-.toast-viewport--narrow .toast {
+.toast-viewport--narrow .toast-slot {
   animation-name: orbit-toast-drop;
+}
+.toast-viewport .toast-slot--leaving {
+  animation: orbit-toast-exit 250ms ease-in forwards;
+}
+
+@keyframes orbit-toast-exit {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translate3d(0, -12px, 0); }
+}
+@keyframes orbit-toast-fade {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 
 @media (pointer: coarse) {
@@ -530,8 +552,11 @@ button.toast--pill:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .toast {
+  .toast-viewport .toast-slot {
     animation: none;
+  }
+  .toast-viewport .toast-slot--leaving {
+    animation: orbit-toast-fade 250ms ease-in forwards;
   }
 }
 
@@ -3322,6 +3347,9 @@ button.toast--pill:focus-visible {
 .session-section-head:first-child {
   padding-top: 2px;
 }
+.session-col-list > section:not(:first-child) > .session-section-head {
+  padding-top: 12px;
+}
 /* The Pinned heading folds its rows away, as Notes' Pinned does: the whole heading is the button,
    and the chevron at its end points down while the rows show, right once they are folded. */
 .session-section-fold {
@@ -3495,9 +3523,11 @@ html[data-theme='dark'] .session-tag-chip {
 }
 .session-row.active {
   background: var(--brand-tint);
+  --session-menu-surface: var(--brand-tint);
 }
 .session-row.active:hover {
   background: var(--brand-tint-hover);
+  --session-menu-surface: var(--brand-tint-hover);
 }
 .workspace-draft {
   display: flex;
@@ -4677,6 +4707,7 @@ html[data-theme='dark'] .session-tag-chip {
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.16);
 }
 .session-row {
+  --session-menu-surface: var(--bg-base);
   position: relative;
   display: flex;
   align-items: center;
@@ -4787,10 +4818,12 @@ html[data-theme='dark'] .session-tag-chip {
 @media (hover: hover) {
   .session-row:hover {
     background: var(--bg-hover);
+    --session-menu-surface: var(--bg-hover);
   }
 }
 .session-row.menu-open:not(.active) {
   background: var(--bg-hover);
+  --session-menu-surface: var(--bg-hover);
 }
 @media (min-width: 961px) {
   .session-row {
@@ -4832,11 +4865,89 @@ html[data-theme='dark'] .session-tag-chip {
   font-size: 12.5px;
   color: var(--text-4);
 }
-.session-pin-indicator {
+.session-project-icon {
+  position: relative;
+  color: var(--brand);
+  font-size: 16px;
+}
+.session-project-status {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--brand);
+  box-shadow: 0 0 0 2px var(--session-menu-surface);
+}
+.session-project-status.needs-you {
+  background: var(--warning);
+}
+.session-project-status.jobs {
+  animation: status-glyph-breathe 2.4s ease-in-out infinite;
+}
+.session-project-progress {
   display: inline-flex;
+  align-items: center;
+  gap: 4px;
   flex: none;
+  height: 18px;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
   color: var(--text-3);
+  font-size: 10px;
+  line-height: 1;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+}
+.session-project-progress.done {
+  color: var(--success);
+  border-color: var(--success-border);
+  background: var(--success-bg);
+}
+.session-project-progress:hover,
+.session-project-progress:focus-visible {
+  border-color: var(--brand);
+}
+.session-project-page-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
   font-size: 12px;
+  color: var(--text-3);
+}
+.session-project-page-progress a {
+  margin-left: auto;
+  font-size: 16px;
+  color: var(--text-3);
+}
+.session-project-page-progress a:hover {
+  color: var(--brand);
+}
+.session-project-page-header .session-kebab {
+  border: 0;
+  background: transparent;
+}
+.session-project-progress-bar {
+  display: flex;
+  width: 32px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--text-4);
+}
+.session-project-progress-bar .done {
+  background: var(--success);
+}
+.session-project-progress-bar .running {
+  background: var(--brand);
+}
+.session-project-progress-bar .failed {
+  background: var(--error);
 }
 /* A public link opens this session (the list row's `shared`): a globe beside the time. */
 .session-shared {
@@ -4906,12 +5017,25 @@ html[data-theme='dark'] .session-tag-chip {
 .session-preview.tone-review {
   color: var(--text-3);
 }
-/* A permanent action slot keeps text and hit targets stable as the pointer moves. */
+/* Float above full-width text without changing its layout when actions appear. */
 .session-right {
+  position: absolute;
+  top: 0;
+  right: 8px;
+  bottom: 0;
+  z-index: 1;
   display: flex;
-  flex: none;
   align-items: center;
   width: 32px;
+}
+.session-right::before {
+  content: '';
+  position: absolute;
+  inset: 0 -8px 0 -28px;
+  /* Composite translucent dark-mode tints onto an opaque surface before fading. */
+  background: linear-gradient(var(--session-menu-surface), var(--session-menu-surface)), var(--bg-base);
+  mask-image: linear-gradient(to right, transparent, #000 42%);
+  pointer-events: none;
 }
 /* Touch phones use swipes; narrow desktop windows still need the menu for mouse/keyboard. */
 @media (max-width: 960px) and (hover: none) and (pointer: coarse) {
@@ -4953,28 +5077,27 @@ html[data-theme='dark'] .session-tag-chip {
   height: 32px;
   padding: 0;
   border: 0;
-  background: transparent;
+  background: var(--bg-hover-strong);
+  color: var(--text-1);
   font: inherit;
   font-size: 16px;
   cursor: pointer;
 }
-/* Keep the slot stable and the button reachable by keyboard when hidden from the mouse. */
+/* Hide the button and its fade together, while keeping keyboard access. */
 @media (hover: hover) and (pointer: fine) {
-  .session-actions > .session-kebab {
+  .session-right {
     opacity: 0;
     pointer-events: none;
   }
-  .session-row:hover .session-actions > .session-kebab,
-  .session-row:focus-within .session-actions > .session-kebab,
-  .session-row.menu-open .session-actions > .session-kebab {
+  .session-row:hover .session-right,
+  .session-row:focus-within .session-right,
+  .session-row.menu-open .session-right {
     opacity: 1;
     pointer-events: auto;
   }
 }
-.session-actions > .session-kebab:hover,
-.session-row.menu-open .session-actions > .session-kebab {
-  background: var(--bg-hover-strong);
-  color: var(--text-1);
+.session-row.active .session-actions > .session-kebab {
+  background: color-mix(in srgb, var(--brand) 10%, var(--session-menu-surface));
 }
 .session-actions > .session-kebab:focus-visible {
   outline: 2px solid var(--brand);
@@ -13561,6 +13684,18 @@ button.chat-jump-start:hover {
 /* ============================================================================
    Provider onboarding — logo gallery + guided add flow (ProvidersPage).
    ========================================================================== */
+.prov-page-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px 12px;
+}
+.prov-page-sub {
+  flex-basis: 100%;
+  color: var(--text-3);
+  font-size: 12px;
+}
 .provider-gallery {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -13796,17 +13931,21 @@ button.chat-jump-start:hover {
 }
 .re-sec-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 10px;
   margin-bottom: 10px;
 }
 .re-sec-head h3 {
+  flex: none;
   margin: 0;
   font-size: 14px;
   font-weight: 650;
   color: var(--text-1);
 }
 .re-sec-sub {
+  order: 1;
+  flex-basis: 100%;
   font-size: 12px;
   color: var(--text-3);
 }
@@ -13829,17 +13968,19 @@ button.chat-jump-start:hover {
 .re-card + .re-card {
   margin-top: 10px;
 }
-/* An offline runner's rows describe its last check-in, not its present state: everything in them but
-   an account's rename mark, which asks nothing of the machine — a name is kept in Orbit — and so stays
-   as live as it is. Faded part by part, since nothing inside a faded element can be less faded. */
+/* An offline runner's rows describe its last check-in, not its present state. Server-side account
+   actions remain available in More; operations that need the machine are disabled in its menu. */
 .re-card.offline {
   background: var(--bg-subtle);
 }
 .re-card.offline .re-row > :not(.re-id),
 .re-card.offline .re-id > :not(.re-id-main),
 .re-card.offline .re-id-main > :not(.re-name):not(.re-name-input),
-.re-card.offline .re-name > :not(.re-rename) {
+.re-card.offline .re-name > * {
   opacity: 0.62;
+}
+.re-card.offline .re-row > .re-act:has(.re-more) {
+  opacity: 1;
 }
 .re-head {
   display: flex;
@@ -13856,8 +13997,7 @@ button.chat-jump-start:hover {
 .re-card.offline .re-head {
   background: var(--fill-muted);
 }
-/* Everything that isn't the Manage link folds the card; it's the whole left half of the header,
-   so the hit target matches what reads as "this runner". */
+/* Identity has its own toggle so the adjacent Manage link stays independent. */
 .re-toggle {
   display: flex;
   align-items: center;
@@ -13916,6 +14056,117 @@ button.chat-jump-start:hover {
   white-space: nowrap;
 }
 
+/* Identity expands the runner; its status and Manage link stay separate. */
+.re-runner-card .re-head {
+  gap: 0;
+  padding: 0;
+}
+.re-runner-card.offline .re-head {
+  background: var(--bg-subtle);
+}
+.re-runner-card .re-toggle {
+  flex: 1;
+  align-self: stretch;
+  gap: 10px;
+  min-height: 64px;
+  padding: 10px 14px;
+  border-radius: 11px 0 0 11px;
+}
+.re-runner-card .re-toggle:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -3px;
+}
+.re-runner-card .re-chev {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 24px;
+  color: var(--text-2);
+  transition: color 0.15s, transform 0.15s;
+}
+.re-runner-card .re-chev.open,
+.re-runner-card .re-toggle:hover .re-chev {
+  color: var(--brand);
+}
+.re-runner-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.re-runner-copy .re-runner,
+.re-runner-copy .re-runner-meta {
+  overflow-wrap: anywhere;
+}
+.re-runner-copy .re-runner {
+  font-size: 15px;
+}
+.re-runner-copy .re-runner-meta {
+  font-size: 12px;
+}
+.re-runner-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.re-runner-status > .ant-tag {
+  margin: 0;
+}
+.re-runner-status .re-summary {
+  border-left: 0;
+  padding-left: 0;
+  font-size: 12px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.re-runner-status .re-summary.warn {
+  color: var(--warning);
+}
+.re-runner-status .re-summary .anticon {
+  margin-right: 5px;
+}
+.re-runner-card .re-manage {
+  display: flex;
+  flex: none;
+  align-items: center;
+  min-height: 44px;
+  margin: 0 14px 0 8px;
+}
+.re-runner-card .re-manage:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+@container re-card (max-width: 600px) {
+  .re-runner-card .re-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 8px;
+    padding: 0 14px;
+  }
+  .re-runner-card .re-toggle {
+    grid-column: 1 / -1;
+    align-items: flex-start;
+    min-height: 54px;
+    padding: 10px 0 0;
+    border-radius: 11px;
+  }
+  .re-runner-card .re-toggle > .re-dot {
+    margin-top: 8px;
+  }
+  .re-runner-status {
+    margin-left: 17px;
+  }
+  .re-runner-card .re-manage {
+    grid-column: 2;
+    margin: 0;
+  }
+}
+
 .re-row {
   display: grid;
   /* The last column is sized for two small buttons side by side: `+ Account` beside `Re-sign in` on
@@ -13970,8 +14221,7 @@ button.chat-jump-start:hover {
    login with when it resets, under a status that says whether the login can run now — the account
    pools' login rows, which share these classes and keep the layout above. The status is sized for
    the longest thing it says, "Spent · resets Mon 19:00"; the last column holds the widest pair of
-   actions, `+ Account` beside `Sign in` on a one-account row that is signed out, Re-sign in and
-   Remove being marks narrower than either. On a narrow card the quota's bar gives way before the
+   actions, Add account beside More on a one-account row. On a narrow card the quota's bar gives way before the
    name does: the name keeps 137px, an engine's name on one line clear of the status beside it. */
 .re-runner-card .re-row {
   grid-template-columns: minmax(137px, 1fr) 168px minmax(128px, 190px) 160px;
@@ -14001,22 +14251,32 @@ button.chat-jump-start:hover {
   }
 }
 @media (max-width: 700px) {
-  /* Name, status and the way back in on the first line, and the quota a line of its own under the
-     name, bars and resets kept — the account pools' rows on a phone. A long status gives way with an
-     ellipsis before the name does; what it would have said is in the resets under it. */
+  /* Keep the name and its actions together. Status and quota get their own lines so Add account
+     and Sign in can both remain visible without squeezing the account's state. Reserve room for
+     the engine name and let the action column shrink so its buttons can wrap on a small phone. */
   .re-runner-card .re-row {
-    grid-template-columns: minmax(96px, 1fr) minmax(0, max-content) max-content;
+    grid-template-columns: minmax(112px, 1fr) minmax(0, max-content);
     gap: 8px 10px;
   }
   .re-runner-card .re-row > .re-act {
     grid-row: 1;
-    grid-column: 3;
+    grid-column: 2;
   }
-  .re-runner-card .re-quota {
-    display: block;
+  .re-runner-card .re-row > .re-status,
+  .re-runner-card .re-row > .ant-tag {
     grid-row: 2;
     grid-column: 1 / -1;
     margin-left: 38px;
+    justify-self: start;
+  }
+  .re-runner-card .re-quota {
+    display: block;
+    grid-row: 3;
+    grid-column: 1 / -1;
+    margin-left: 38px;
+  }
+  .re-runner-card .re-acct .re-name {
+    overflow-wrap: anywhere;
   }
 }
 .re-id {
@@ -14101,10 +14361,83 @@ button.chat-jump-start:hover {
      one child is a no-op. */
   gap: 8px;
 }
-/* Re-sign in and Remove are marks, grey at rest. Remove turns red only under the pointer, like the
-   account pools' sign-out mark: red on a row that is fine reads as something wrong with it. */
-.re-act .re-icon.ant-btn:not(:disabled) {
+.re-runner-card .re-act {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 30px;
+}
+.re-action.ant-btn {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 28px;
+  gap: 6px;
+}
+.re-action.ant-btn-default:not(:disabled) {
+  color: var(--text-2);
+  border-color: var(--border);
+  background: var(--bg-raised);
+  box-shadow: 0 1px 1px rgba(31, 35, 41, .025);
+}
+.re-action .anticon {
+  font-size: 13px;
+}
+.re-action.re-add-account,
+.re-action.re-install {
+  min-width: 112px;
+}
+.re-action.re-add-account:not(:disabled) {
+  color: var(--brand);
+  border-color: color-mix(in srgb, var(--brand) 15%, var(--bg-raised));
+  background: color-mix(in srgb, var(--brand) 5.5%, var(--bg-raised));
+}
+.re-action.re-add-account:not(:disabled):hover {
+  background: var(--brand-tint);
+  border-color: var(--brand-border);
+}
+.re-action.re-more {
+  width: 30px;
+  min-width: 30px;
+  padding: 0;
   color: var(--text-3);
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+.re-action.re-more:hover,
+.re-action.re-more.ant-dropdown-open {
+  color: var(--text-2);
+  background: var(--fill-muted);
+}
+.re-action.re-more .anticon {
+  font-size: 17px;
+}
+.re-menu-anchor {
+  display: inline-flex;
+}
+.re-account-menu .ant-dropdown-menu {
+  min-width: 176px;
+  padding: 5px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  box-shadow: 0 8px 28px rgba(31, 35, 41, .11), 0 2px 5px rgba(31, 35, 41, .04);
+}
+.re-account-menu .ant-dropdown-menu .ant-dropdown-menu-item {
+  min-height: 33px;
+  padding: 5px 9px;
+  font-size: 12px;
+  gap: 8px;
+  border-radius: 5px;
+}
+.re-account-menu .ant-dropdown-menu .ant-dropdown-menu-item-icon {
+  color: var(--text-3);
+  font-size: 13px;
+}
+.re-account-menu .ant-dropdown-menu .ant-dropdown-menu-item-danger .ant-dropdown-menu-item-icon {
+  color: inherit;
 }
 /* Codex with more than one account: the engine's row heads a group, and each account is a row
    under it. The head keeps what the engine owns — binary, version, updates — and says how many. */
@@ -14165,27 +14498,6 @@ button.chat-jump-start:hover {
   font-weight: 600;
   line-height: 16px;
   vertical-align: 1px;
-}
-/* An account's rename mark, after its name and its marks: grey at rest like the row's other marks. */
-.re-rename {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  margin-left: 3px;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  background: none;
-  color: var(--text-3);
-  font-size: 12px;
-  vertical-align: -4px;
-  cursor: pointer;
-}
-.re-rename:hover {
-  color: var(--text-1);
-  background: var(--fill-muted);
 }
 /* The name being renamed: the session title's underlined input (.workspace-name-input), at the
    name's own size, its width set from the unseen twin below so the underline hugs the text. */
@@ -15828,6 +16140,66 @@ button.chat-jump-start:hover {
   color: var(--text-1);
   font-weight: 600;
 }
+/* The current landings under the line (§2.7a): one compact block per task, in the task page's words. */
+.project-land-task {
+  border-top: 1px solid var(--border-subtle);
+  padding: 8px 10px;
+}
+.project-land-task-title {
+  display: inline-block;
+  margin-bottom: 4px;
+  font-weight: 600;
+  font-size: 12.5px;
+  color: var(--text-1);
+}
+.project-land-task-title:hover {
+  color: var(--brand);
+}
+/* A task's newest landing attempt: the task's status and the landing's apart, the reason, the facts. */
+.land-task-status {
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.land-task-status-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.land-task-task-state {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.land-task-generation,
+.land-task-step {
+  color: var(--text-3);
+}
+.land-task-reason {
+  margin-top: 5px;
+  color: var(--text-1);
+}
+.land-task-receipt {
+  margin-top: 5px;
+  color: var(--text-3);
+}
+.land-task-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 6px 0 0;
+}
+.land-task-facts > div {
+  display: flex;
+  gap: 5px;
+  min-width: 0;
+}
+.land-task-facts dt {
+  color: var(--text-3);
+}
+.land-task-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
 /* A project nobody has started: one sentence beside the mark, wrapping under itself on a phone. */
 .project-integration-undecided {
   display: flex;
@@ -16236,18 +16608,26 @@ button.chat-jump-start:hover {
    the page reads as stopped. Full width above the cells, with the same hairline under it that
    separates the cells from each other.
 
-   The ring is the Integrating cell's own mark, and it wears that cell's brand blue while the
-   combined-tree checks run. QUEUED is the third label's grey instead: nothing is being computed, the
-   job is waiting its turn, and a row that spun through that would be reporting work that is not
-   happening. The words `checking` and `queued` say both states without colour or motion — which is
-   what lets the two decorative channels be dropped under `prefers-reduced-motion` below. */
+   The ring uses brand blue while a fresh read reports a running job. Queued jobs and unavailable
+   updates remain grey and still. The state words carry the meaning without colour or motion,
+   including under `prefers-reduced-motion` below. */
 .project-landing {
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 13.5px;
+}
+.project-landing-heading {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--border-subtle);
-  font-size: 13.5px;
+}
+.project-landing-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-3);
 }
 .project-landing-ring {
   display: inline-flex;
@@ -16266,14 +16646,14 @@ button.chat-jump-start:hover {
 .project-landing-running .project-landing-word {
   color: var(--brand);
 }
-/* The row's flexible middle: the task's title, or "N jobs". It truncates rather than wrapping —
-   one row, always the same height — and it is what keeps the state and the clock right-aligned. */
+/* The task has its own line so the phase and elapsed clock stay readable on a phone. */
 .project-landing-what {
-  flex: 1;
-  min-width: 0;
+  margin-top: 8px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
   color: var(--text-1);
 }
 .project-landing-state,
@@ -16290,6 +16670,26 @@ button.chat-jump-start:hover {
 .project-landing-running .project-landing-clock {
   color: var(--brand);
 }
+.project-landing-state {
+  margin-left: auto;
+}
+.project-manual-task {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  margin-top: 10px;
+  color: var(--text-2);
+}
+.project-manual-open {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--bg-hover-strong);
+  font-weight: 600;
+}
 @keyframes project-landing-spin {
   to {
     transform: rotate(360deg);
@@ -16302,6 +16702,14 @@ button.chat-jump-start:hover {
 }
 .project-work-overview > header {
   flex-wrap: wrap;
+}
+.project-overview-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@media (max-width: 640px) {
+  .project-overview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 @media (max-width: 920px) {
   .project-command-center {
@@ -19358,6 +19766,29 @@ button.project-open-item-action:disabled {
 .project-open-item-actions:empty {
   display: none;
 }
+/* "Chat about this" (lib/coordinatorChat): its own row under the doors, because it is not one of
+   them — a message to the coordinator conversation — with the reason said beside it when the
+   server refuses it. */
+.project-open-item-chat {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.project-open-item-chat-refusal,
+.project-promotion-chat-refusal {
+  font-size: 12px;
+  color: var(--text-3);
+}
+/* The merge card's presses sit on one unwrapped row; a refused chat's reason takes a line of its own
+   under them rather than squeezing every label there onto two. */
+.card-actions.project-promotion-actions.has-chat-refusal {
+  flex-wrap: wrap;
+}
+.project-promotion-chat-refusal {
+  flex-basis: 100%;
+}
 .project-open-item-error {
   flex-basis: 100%;
 }
@@ -20617,6 +21048,32 @@ a.wkctx-title:hover { text-decoration: underline; }
   padding: 2px 0;
   font-size: 12px;
 }
+button.agent-progress-agent {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+button.agent-progress-agent:hover {
+  background: var(--bg-hover);
+}
+.agent-progress-caret {
+  flex: none;
+  font-size: 10px;
+  color: var(--text-3);
+}
+.agent-progress-transcript {
+  margin: 4px 0 8px 8px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border-subtle);
+}
+.chat-workflow-source > summary {
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--text-3);
+  cursor: pointer;
+}
 .agent-progress-label {
   flex: none;
   max-width: 45%;
@@ -20762,9 +21219,6 @@ a.wkctx-title:hover { text-decoration: underline; }
     grid-row: auto;
     justify-content: flex-start;
     margin-left: 38px;
-  }
-  .re-runner-card .re-row:has(.account-pause-actions) {
-    grid-template-columns: minmax(96px, 1fr) minmax(0, max-content);
   }
 }
 

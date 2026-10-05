@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import type { ProjectStatus } from '@prisma/client';
+import type { ProjectSidebarTaskCounts } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { sessionCarriesTaskSql } from '../sessions/task-work-carrier';
 import { everyPrerequisiteDoneOrRetiredSql } from '../tasks/task-dependencies';
@@ -32,8 +33,9 @@ export function emptyProjectListRollup(): ProjectListRollup {
   };
 }
 
-/** One rail row: work in flight, and the newest task write that orders the row. */
+/** One rail row: task progress, work in flight, and the newest task write that orders the row. */
 export interface ProjectSidebarRollup {
+  taskCounts: ProjectSidebarTaskCounts;
   /**
    * The one lane the rail draws, under the same name the index reports it by. A rail that read
    * `running` off the row while the page read `buckets.running` would be a second spelling of one
@@ -148,12 +150,15 @@ export async function readProjectListRollups(
 interface SidebarRollupRow {
   projectId: string;
   running: number;
+  done: number;
+  failed: number;
+  total: number;
   lastActivityAt: Date | null;
 }
 
 /**
- * The rail's two facts — work in flight and the newest task write — for the OPEN projects of one
- * owner.
+ * The rail's work in flight, stored status counts and newest task write for one owner's OPEN
+ * projects.
  *
  * `GET /projects/sidebar` serves what the web sidebar's Projects group draws, and that group is
  * polled every 15 seconds by every open tab, so this read may not cost what the index costs. The
@@ -186,8 +191,9 @@ interface SidebarRollupRow {
  * this read's buffers. That path exists only while the LATERAL is a lone `max()` over one table: an
  * aggregate added beside it puts the whole walk back, silently, and
  * `project-sidebar-activity-plan.pg.spec.ts` is what notices.
- * `taskCount > 0` is not asked for here: a project with no tasks is an empty aggregate and the
- * caller reads it as zero and null, like the index does.
+ * Progress counts come from the trigger-maintained `project_task_status_count`, at most one row
+ * per status per project. They stay separate from the activity aggregate so its index probe is
+ * preserved, and a project with no tasks still reports zero counts and null activity.
  */
 export async function readProjectSidebarRollups(
   prisma: PrismaService,
@@ -219,8 +225,16 @@ export async function readProjectSidebarRollups(
                     AND ${carried}
                )
                AND (${workState}) = 'RUNNING') AS "running",
+           tally."done", tally."failed", tally."total",
            activity."lastActivityAt"
       FROM "project" proj
+     CROSS JOIN LATERAL (
+       SELECT coalesce(sum(c."count") FILTER (WHERE c."status" = 'DONE'), 0)::int AS "done",
+              coalesce(sum(c."count") FILTER (WHERE c."status" = 'FAILED'), 0)::int AS "failed",
+              coalesce(sum(c."count") FILTER (WHERE c."status" <> 'CANCELLED'), 0)::int AS "total"
+         FROM "project_task_status_count" c
+        WHERE c."project_id" = proj."id"
+     ) tally
      CROSS JOIN LATERAL (
        SELECT max(t."updated_at") AS "lastActivityAt"
          FROM "task" t
@@ -232,6 +246,10 @@ export async function readProjectSidebarRollups(
 
   return new Map(rows.map((row) => [
     row.projectId,
-    { buckets: { running: row.running }, lastActivityAt: row.lastActivityAt },
+    {
+      taskCounts: { done: row.done, failed: row.failed, total: row.total },
+      buckets: { running: row.running },
+      lastActivityAt: row.lastActivityAt,
+    },
   ]));
 }

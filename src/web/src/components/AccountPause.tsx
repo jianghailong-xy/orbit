@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { PauseCircleOutlined, PlayCircleOutlined } from '@ant-design/icons';
 import { Button, InputNumber, Modal, Radio, Tag } from 'antd';
@@ -25,13 +25,21 @@ export function AccountPauseStatus({ until, now, status, detail, className = '' 
   );
 }
 
+export interface AccountPauseControls {
+  paused: boolean;
+  pending: boolean;
+  choose: () => void;
+  resume: () => void;
+}
+
 /** The same timed pause for a runner's account and a member of an account pool. */
-export function AccountPauseActions({ name, until, endpoint, shared = false, pool = false }: {
+export function AccountPauseActions({ name, until, endpoint, shared = false, pool = false, children }: {
   name: string;
   until?: string | null;
   endpoint: string;
   shared?: boolean;
   pool?: boolean;
+  children?: (controls: AccountPauseControls) => ReactNode;
 }) {
   const now = usePauseClock(until);
   const paused = accountIsPaused(until, now);
@@ -60,18 +68,19 @@ export function AccountPauseActions({ name, until, endpoint, shared = false, poo
     onError: (error: Error) => { message.error("Couldn't update the account pause", error.message); },
   });
   const choose = () => { setStartedAt(Date.now()); setDuration(2); setCustom(3); setOpen(true); };
+  const resume = () => pause.mutate(null);
   return (
     <>
-      <span className="account-pause-actions">
+      {children ? children({ paused, pending: pause.isPending, choose, resume }) : <span className="account-pause-actions">
         {paused ? (
           <>
-            <Button size="small" icon={<PlayCircleOutlined />} loading={pause.isPending} onClick={() => pause.mutate(null)}>Resume Now</Button>
+            <Button size="small" icon={<PlayCircleOutlined />} loading={pause.isPending} onClick={resume}>Resume Now</Button>
             <Button size="small" type="text" onClick={choose} disabled={pause.isPending}>Change Duration</Button>
           </>
         ) : (
           <Button size="small" icon={<PauseCircleOutlined />} onClick={choose}>Pause…</Button>
         )}
-      </span>
+      </span>}
       {open && (
         <Modal open width={460} title={paused ? 'Change pause duration' : 'Pause account'} onCancel={() => !pause.isPending && setOpen(false)}
           footer={<><Button disabled={pause.isPending} onClick={() => setOpen(false)}>Cancel</Button><Button type="primary" disabled={!valid} loading={pause.isPending} onClick={() => valid && pause.mutate(minutes!)}>{paused ? 'Update Pause' : 'Pause Account'}</Button></>}>

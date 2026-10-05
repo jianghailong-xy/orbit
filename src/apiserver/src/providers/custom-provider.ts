@@ -6,6 +6,7 @@ import {
   providerPreset,
 } from '@orbit/shared';
 import { Prisma } from '@prisma/client';
+import { BadRequestException } from '@nestjs/common';
 import { accountDir } from '@orbit/shared';
 import { accountEnvVar, accountOnRunner } from './account';
 import { catalogModels } from './model-catalog';
@@ -20,14 +21,14 @@ import {
 // Built-in, first-class providers ship their own runtime CLI. Any other `provider` value is
 // a control-plane-configured ModelProvider that borrows one of these runtimes.
 /** True for a built-in provider (or an unset one) — i.e. NOT a configured ModelProvider slug.
- * `providerBuiltin` is persisted only to fence the former custom `kimi` slug during rolling
+ * `providerBuiltin` fences configured `kimi` / `dsh` slugs during rolling
  * deployment; Claude/Codex predate the discriminator, and migrations 0080 and 0367 move any
  * pre-existing custom `opencode` / `antigravity` row (0367: or account pool) aside, so all four
  * remain unambiguous. */
 export function isBuiltinProvider(slug?: string | null, providerBuiltin = true): boolean {
   if (!slug || slug === AgentProvider.CLAUDE || slug === AgentProvider.CODEX) return true;
   if (slug === AgentProvider.OPENCODE || slug === AgentProvider.ANTIGRAVITY) return true;
-  if (slug === AgentProvider.KIMI) return providerBuiltin;
+  if (slug === AgentProvider.KIMI || slug === AgentProvider.DSH) return providerBuiltin;
   return false;
 }
 
@@ -89,10 +90,12 @@ export function declaredReasoningLevels(
 }
 
 function runtimeOf(row: ModelProviderRow): AgentProvider {
+  if (row.runtime === AgentProvider.CLAUDE) return AgentProvider.CLAUDE;
   if (row.runtime === AgentProvider.CODEX) return AgentProvider.CODEX;
   if (row.runtime === AgentProvider.KIMI) return AgentProvider.KIMI;
   if (row.runtime === AgentProvider.ANTIGRAVITY) return AgentProvider.ANTIGRAVITY;
-  return AgentProvider.CLAUDE;
+  if (row.runtime === AgentProvider.DSH) return AgentProvider.DSH;
+  throw new BadRequestException(`provider runtime not available: "${row.runtime}"`);
 }
 
 /**
@@ -107,12 +110,21 @@ export function execRuntime(args: {
   declaredProviderBuiltin?: boolean;
   customRow: ModelProviderRow | null;
 }): AgentProvider {
+  if (args.customRow && !args.customRow.enabled && (
+    args.customRow.runtime === AgentProvider.DSH ||
+    (args.declaredProvider === AgentProvider.DSH && args.customRow.runtime !== AgentProvider.CLAUDE)
+  )) {
+    throw new BadRequestException('DeepSeek Harness provider is disabled');
+  }
   if (args.customRow && args.customRow.enabled) return runtimeOf(args.customRow);
   if (args.declaredProvider === AgentProvider.CODEX) return AgentProvider.CODEX;
   if (args.declaredProvider === AgentProvider.OPENCODE) return AgentProvider.OPENCODE;
   if (args.declaredProvider === AgentProvider.ANTIGRAVITY) return AgentProvider.ANTIGRAVITY;
   if (args.declaredProvider === AgentProvider.KIMI && args.declaredProviderBuiltin !== false) {
     return AgentProvider.KIMI;
+  }
+  if (args.declaredProvider === AgentProvider.DSH && args.declaredProviderBuiltin !== false) {
+    return AgentProvider.DSH;
   }
   return AgentProvider.CLAUDE;
 }
@@ -155,8 +167,8 @@ export async function sessionExecRuntime(
  * each enabled configured row of theirs — or a shared one — that borrows it, the way a Gemini key
  * runs on Antigravity under a slug of its own. This is what a runner-capability gate has to ask
  * (ADVERTISED_RUNTIMES): a runner that never advertised the runtime is handed that runtime's job
- * whichever of these slugs the session names. A disabled row dispatches as Claude (execRuntime), so
- * it is not one of them. The claim SQL (QueueService.trySessionClaim) and migration 0372's trigger
+ * whichever of these slugs the session names. A disabled row cannot dispatch, so it is not one of
+ * them. The claim SQL (QueueService.trySessionClaim) and migration 0372's trigger
  * ask the same question of the same rows.
  */
 export async function providerSlugsOn(
@@ -169,6 +181,22 @@ export async function providerSlugsOn(
     select: { slug: true },
   });
   return [runtime, ...borrowing.map((row) => row.slug)];
+}
+
+/** A dsh keyword collision stays configured: only its row's actual runtime decides its gate. */
+export async function providerDispatchWhereOn(
+  db: Prisma.TransactionClient,
+  ownerId: string,
+  runtime: AgentProvider,
+): Promise<Prisma.SessionWhereInput> {
+  const slugs = await providerSlugsOn(db, ownerId, runtime);
+  return runtime === AgentProvider.DSH
+    ? { OR: [
+        { provider: runtime, providerBuiltin: true },
+        { provider: { in: slugs.slice(1) }, providerBuiltin: false },
+      ] }
+    : { provider: { in: slugs }, ...(slugs.includes(AgentProvider.DSH)
+        ? { NOT: { provider: AgentProvider.DSH, providerBuiltin: true } } : {}) };
 }
 
 /**
@@ -205,6 +233,11 @@ export async function accountPoolRuntime(
 // GOOGLE_GEMINI_BASE_URL.
 function injectedEnv(row: ModelProviderRow, model: string): Record<string, string> {
   const apiKey = row.sessionToken ?? decryptSecret(row.apiKeyEnc);
+  if (runtimeOf(row) === AgentProvider.DSH) {
+    // P2 fixes these in the session overlay, including apiKeyEnv=ORBIT_DSH_API_KEY. A Harness
+    // provider never falls through to Claude credentials or the project's ambient DeepSeek key.
+    return { ORBIT_DSH_API_KEY: apiKey, ORBIT_DSH_BASE_URL: row.baseUrl };
+  }
   if (runtimeOf(row) === AgentProvider.CODEX) {
     return { OPENAI_BASE_URL: row.baseUrl, OPENAI_API_KEY: apiKey };
   }
@@ -280,17 +313,16 @@ function injectedEnv(row: ModelProviderRow, model: string): Record<string, strin
 /**
  * Resolve how to actually run a (possibly custom) provider at dispatch: the runner-facing
  * built-in runtime, the model to pass, and the process env. For a configured provider
- * the runner never learns its slug — it just receives a Claude/Codex/Kimi/Antigravity job whose
- * env points at the provider's endpoint, so the runner needs no changes. A built-in may also resolve
- * directly to Kimi, OpenCode or Antigravity; a configured row can borrow Antigravity (a Gemini key)
+ * the runner never learns its slug — it receives the borrowed runtime with an environment pointing
+ * at the provider's endpoint. A configured row can borrow Claude, Codex, Kimi, Antigravity or dsh,
  * but not OpenCode.
  *
- * `customRow` is null for a built-in provider, or for a slug whose ModelProvider was
- * deleted/disabled (a safe fallback to the claude default rather than a dispatch failure).
+ * `customRow` is null only for a built-in runtime at dispatch. Unresolved, disabled and unknown
+ * configured runtimes are refused before a runner-facing job can be built.
  */
 export function resolveProviderExec(args: {
   declaredProvider?: string | null;
-  /** False only for a stale/pre-0077 custom-provider identity that happens to say `kimi`. */
+  /** False for a configured identity that collides with a discriminator-aware runtime keyword. */
   declaredProviderBuiltin?: boolean;
   customRow: ModelProviderRow | null;
   sessionModel?: string | null;
@@ -334,19 +366,25 @@ export function resolveProviderExec(args: {
   reasoningLevels?: string[];
 } {
   const { customRow, sessionModel, workspaceModel, workspaceEnv } = args;
+  if (customRow && !customRow.enabled) {
+    throw new BadRequestException('provider is disabled');
+  }
+  if (!customRow && !isBuiltinProvider(args.declaredProvider, args.declaredProviderBuiltin)) {
+    throw new BadRequestException(`provider not available: "${args.declaredProvider}"`);
+  }
   const legacyInheritance = args.usesRuntimeDefaultModel === false;
   if (customRow && customRow.enabled) {
     const runtime = execRuntime(args);
-    const pin = firstNonBlank(sessionModel);
+    const pin = nonBlankModel(runtime, sessionModel);
     const retired = retiredPin(customRow, runtime, args, pin);
     // A custom provider's model space is its own; never coerce it through the claude/gpt
     // prefix guard. Workspace.model is only a rolling-deploy bridge for model-less sessions made
     // by old replicas; current clients put their choice directly on Session.model.
     const model =
       (retired ? undefined : pin) ||
-      firstNonBlank(legacyInheritance ? workspaceModel : undefined) ||
+      firstNonBlank(legacyInheritance && runtime !== AgentProvider.DSH ? workspaceModel : undefined) ||
       runtimeCatalogDefault(customRow, runtime, args) ||
-      presetDefaultModel(customRow) ||
+      (runtime !== AgentProvider.DSH ? presetDefaultModel(customRow) : undefined) ||
       DEFAULT_MODEL_BY_PROVIDER[runtime];
     const reasoningLevels = declaredReasoningLevels(customRow, model);
     return {
@@ -360,7 +398,7 @@ export function resolveProviderExec(args: {
       ...(reasoningLevels ? { reasoningLevels } : {}),
     };
   }
-  // Built-in (or stale/disabled custom slug → treat as claude). The runtime authenticates itself:
+  // Built-in: the runtime authenticates itself.
   // each runner carries its own `claude auth login`, and a session that finds it missing surfaces
   // the sign-in card (RunnerSignIn) rather than the control plane holding a credential for it.
   const provider = execRuntime(args);
@@ -376,7 +414,7 @@ export function resolveProviderExec(args: {
     account && dirVar
       ? { ...(workspaceEnv ?? {}), [dirVar]: accountDir(account) }
       : (workspaceEnv ?? undefined);
-  const pin = firstNonBlank(sessionModel);
+  const pin = nonBlankModel(provider, sessionModel);
   const retired = retiredPin(null, provider, args, pin);
   const explicitSessionModel = retired ? undefined : pin;
   // An explicit per-session selection retains the historical safety behavior: a clearly
@@ -384,8 +422,9 @@ export function resolveProviderExec(args: {
   // deployment, old replicas can still create a model-less Session that expects Workspace.model;
   // preserve that one-time inheritance ahead of new Runtime defaults. Queue claim snapshots it
   // onto Session.model, and current Workspace create/update paths never write a new pin.
-  const legacyWorkspaceModel = legacyInheritance ? firstNonBlank(workspaceModel) : undefined;
-  const inheritedModel = legacyInheritance
+  const inheritsWorkspace = legacyInheritance && provider !== AgentProvider.DSH;
+  const legacyWorkspaceModel = inheritsWorkspace ? firstNonBlank(workspaceModel) : undefined;
+  const inheritedModel = inheritsWorkspace
     ? modelForProvider(provider, legacyWorkspaceModel)
     : firstCompatibleModel(
         provider,
@@ -418,7 +457,11 @@ function runtimeCatalogDefault(
   runtime: AgentProvider,
   args: { runtimeDefaultModels?: unknown; modelCatalog?: unknown },
 ): string | undefined {
-  if (!followsRuntimeCatalog(row)) return undefined;
+  if (runtime !== AgentProvider.DSH && !followsRuntimeCatalog(row)) return undefined;
+  if (runtime === AgentProvider.DSH) {
+    return savedRuntimeDefaultModel(args.runtimeDefaultModels, runtime) ??
+      firstRuntimeCatalogModel(args.modelCatalog, runtime);
+  }
   return firstNonBlank(
     savedRuntimeDefaultModel(args.runtimeDefaultModels, runtime),
     firstRuntimeCatalogModel(args.modelCatalog, runtime),
@@ -450,7 +493,12 @@ function retiredPin(
 ): boolean {
   if (!model) return false;
   if (runtime === AgentProvider.OPENCODE) return false;
-  if (row && !followsRuntimeCatalog(row)) return false;
+  if (row && runtime !== AgentProvider.DSH && !followsRuntimeCatalog(row)) return false;
+  if (runtime === AgentProvider.DSH) {
+    const offered = runtimeCatalogModels(args.modelCatalog, runtime);
+    return !!offered?.length && model !== savedRuntimeDefaultModel(args.runtimeDefaultModels, runtime)
+      && !offered.some((entry) => entry.value === model);
+  }
   return isRetiredModel(
     model,
     runtimeCatalogModels(args.modelCatalog, runtime),
@@ -465,12 +513,17 @@ function firstNonBlank(...values: Array<string | null | undefined>): string | un
   return undefined;
 }
 
+function nonBlankModel(runtime: AgentProvider, value?: string | null): string | undefined {
+  if (runtime === AgentProvider.DSH) return typeof value === 'string' && value.trim() ? value : undefined;
+  return firstNonBlank(value);
+}
+
 function firstCompatibleModel(
   provider: AgentProvider,
   ...values: Array<string | null | undefined>
 ): string | undefined {
   for (const value of values) {
-    const model = firstNonBlank(value);
+    const model = nonBlankModel(provider, value);
     if (model && modelForProvider(provider, model) === model) return model;
   }
   return undefined;

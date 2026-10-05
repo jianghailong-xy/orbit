@@ -46,6 +46,7 @@ public enum SessionPreviewImages {
     /// `toolImages` gives a card's bytes: its own `resultImages`, unless an open card has fetched back
     /// a screenshot the server clipped from the preview.
     public static func collect(_ items: [TranscriptItem],
+                               isAttachmentImage: (String) -> Bool = { _ in false },
                                toolImages: (ToolCard) -> [Data] = { $0.resultImages }) -> [PreviewImageRef] {
         var refs: [PreviewImageRef] = []
         var seen = Set<String>()
@@ -57,9 +58,19 @@ public enum SessionPreviewImages {
             // Only an attachment image is a tappable thumbnail — a remote one isn't — and most messages
             // carry none, so they skip the parse.
             guard markdown.contains(AttachmentLink.scheme + ":") else { return }
-            for case .image(let source, _) in parseMarkdownBlocks(markdown) {
-                guard let id = AttachmentLink.attachmentID(source: source) else { continue }
-                add(markdownKey(itemID: itemID, source: source), .attachment(id))
+            for block in parseMarkdownBlocks(markdown) {
+                switch block {
+                case .image(let source, _):
+                    guard let id = AttachmentLink.attachmentID(source: source) else { continue }
+                    add(markdownKey(itemID: itemID, source: source), .attachment(id))
+                case .paragraph(let text):
+                    for match in MarkdownFileRef.matches(in: text) {
+                        guard let id = AttachmentLink.attachmentID(source: match.ref.href),
+                              match.ref.isImage || isAttachmentImage(id) else { continue }
+                        add(markdownKey(itemID: itemID, source: match.ref.href), .attachment(id))
+                    }
+                default: break
+                }
             }
         }
 
