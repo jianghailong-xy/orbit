@@ -2,9 +2,9 @@ import SwiftUI
 import OrbitKit
 
 /// What the control plane appended to a message — a reference's summary, a list's condition board,
-/// the background work a returning engine is told about, a coordinator's standing role — named on
-/// one line as Orbit's rather than the person's, and opened by a tap (a phone has no hover to hang a
-/// tooltip on) to exactly what the model read.
+/// the background work a returning engine is told about, a coordinator's standing role — gets a
+/// compact summary card before the reader opens exactly what the model read. The old raw block is
+/// still the opened state, one tap away and selectable on a phone where a tooltip is not available.
 ///
 /// Two of the blocks open as something other than their own text: the inventory a returning engine
 /// is handed, whose lines are a list of outcomes (`BackgroundJobsNoteView`), and the tasks a person
@@ -27,11 +27,25 @@ struct AttachedNoteEntry: View {
             Button {
                 open.toggle()
             } label: {
-                Text(head(jobs, tasks))
-                    .font(.orbitLabel).foregroundStyle(.secondary)
-                    .multilineTextAlignment(.leading)
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "arrow.up.right.square.fill")
+                        .font(.orbitLabel)
+                        .foregroundStyle(.tint)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Orbit context")
+                            .font(.orbitLabel.weight(.semibold))
+                        Text("Attached · \(attached.kind)")
+                            .font(.orbitMeta)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 8)
+                    Image(systemName: open ? "chevron.up" : "chevron.down")
+                        .font(.orbitMeta.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(Text(head(jobs, tasks)))
             if open {
                 if tasks != nil || jobs != nil {
                     if let tasks { ReferencedTaskNoteView(tasks: tasks.tasks) }
@@ -41,7 +55,49 @@ struct AttachedNoteEntry: View {
                 } else {
                     verbatim(attached.text)
                 }
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text("Orbit context")
+                            .font(.orbitLabel.weight(.semibold))
+                        Text("Attached to this message")
+                            .font(.orbitMeta)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text("Context is kept out of your message and available when you need the full details.")
+                        .font(.orbitMeta)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button {
+                        open = true
+                    } label: {
+                        HStack {
+                            Text("View full context")
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.orbitMeta.weight(.semibold))
+                        }
+                        .font(.orbitMeta.weight(.semibold))
+                        .foregroundStyle(.tint)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 7)
+                        .background(.background, in: RoundedRectangle(cornerRadius: 8))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.accentColor.opacity(0.24), lineWidth: 1)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.top, 4)
             }
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 10)
+        .background(.tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.accentColor.opacity(0.18), lineWidth: 1)
         }
     }
 
