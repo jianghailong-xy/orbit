@@ -1,0 +1,349 @@
+import Foundation
+import XCTest
+@testable import OrbitKit
+
+/// The derivations behind "Is this project done?", its receipt and "Why is this project not done?",
+/// held to the browser's own examples (`ProjectDoneSettlementCard.test.tsx`) and to the payloads the
+/// server serves. The words themselves are `ProjectDoneCopyParityTests`'.
+final class ProjectDoneTests: XCTestCase {
+
+    private let utc = TimeZone(identifier: "UTC")!
+
+    /// The browser's fixture: two criteria, both met, one on main and one with nothing to land.
+    private func closeout(status: String = "OPEN", done: Bool = false,
+                          criteria: [ProjectDoneCriterion]? = nil,
+                          counts: ProjectDoneCounts? = nil) -> ProjectDoneSubject {
+        ProjectDoneSubject(
+            title: "Project closeout", status: status,
+            criteria: [.init(id: "c1", ordinal: 1, text: "The release is on main"),
+                       .init(id: "c2", ordinal: 2, text: "The live check was completed")],
+            derivedDone: ProjectDerivedDone(
+                done: done, withheld: done ? [] : ["CRITERION_UNLANDED"],
+                criteria: criteria ?? [
+                    ProjectDoneCriterion(definitionId: "c1", satisfied: true),
+                    ProjectDoneCriterion(definitionId: "c2", satisfied: true, landingReason: .nothingToLand),
+                ],
+                counts: counts ?? ProjectDoneCounts(criteria: 2, met: 2, landed: 2, onMain: 1,
+                                                    byReason: [.nothingToLand: 1])))
+    }
+
+    private let request = DoneRequest(
+        criteriaDigest: String(repeating: "a", count: 64),
+        judgment: "The goal is met. I checked the release evidence below.",
+        gaps: [AcceptedGap(criterionKey: "c2", title: "The live check was completed",
+                           whyNotProven: "The task made no commits.",
+                           coordinatorChecked: "main contains the release files",
+                           evidenceRefs: ["run-42"])])
+
+    // MARK: the counts
+
+    func testTheTalliesAreTheBrowsersExamples() {
+        let counts = closeout().counts
+        XCTAssertEqual(ProjectDone.tally(counts), "2 criteria · 2 met · 1 landed on main · 1 nothing to land")
+        XCTAssertEqual(ProjectDone.cardTally(counts), "2 met · 1 landed on main · 1 nothing to land")
+        XCTAssertEqual(ProjectDone.receiptTally(counts, acceptedGaps: 1),
+                       "2 criteria met · 1 landed on main · 1 nothing to land · 1 gaps accepted")
+        XCTAssertEqual(ProjectDone.whyNotDoneTally(counts), "2 criteria · 2 met · 1 on main · 1 nothing to land")
+        XCTAssertEqual(ProjectDone.tally(nil), "", "a read without counts says nothing rather than zeros")
+    }
+
+    func testNoCodeToLandIsCountedAsNothingToLandOnTheCardButNamedInTheTally() {
+        let counts = ProjectDoneCounts(criteria: 7, met: 4, landed: 3, onMain: 3,
+                                       byReason: [.inFlight: 1, .noReceipt: 1, .codeless: 2])
+        XCTAssertEqual(ProjectDone.cardTally(counts), "4 met · 3 landed on main · 2 nothing to land")
+        XCTAssertEqual(ProjectDone.whyNotDoneTally(counts),
+                       "7 criteria · 4 met · 3 on main · 1 in flight · 1 merged outside Orbit · 2 no code to land")
+    }
+
+    // MARK: the owner card
+
+    func testACardNobodyAskedForCarriesOrbitsOwnGaps() {
+        let subject = closeout(criteria: [
+            ProjectDoneCriterion(definitionId: "c1", satisfied: true, landingReason: .noReceipt),
+            ProjectDoneCriterion(definitionId: "c2", satisfied: true, landingReason: .nothingToLand),
+        ])
+        let gaps = ProjectDone.syntheticGaps(subject)
+        XCTAssertEqual(gaps.map(\.criterionKey), ["c1"],
+                       "nothing to land is an outcome, not a gap to paper over")
+        XCTAssertEqual(gaps.first?.title, "The release is on main")
+        XCTAssertEqual(gaps.first?.whyNotProven,
+                       "Orbit cannot prove this criterion is on main: Merged outside Orbit.")
+        let unmet = closeout(criteria: [ProjectDoneCriterion(definitionId: "c2", satisfied: false,
+                                                             landingReason: .codeless)])
+        XCTAssertEqual(ProjectDone.syntheticGaps(unmet).first?.whyNotProven,
+                       "Orbit cannot prove this criterion is met by its work yet.",
+                       "an unmet criterion is a gap whatever its landing says")
+        XCTAssertEqual(ProjectDone.gaps(subject, request: request), request.gaps,
+                       "a request's own gaps are the card's, not Orbit's")
+    }
+
+    func testThePressSendsTheRequestsSealAndItsGapsAsTheyCame() throws {
+        let subject = closeout()
+        let body = try XCTUnwrap(ProjectDone.body(subject: subject, requestID: "34Y7req", request: request,
+                                                  currentDigest: "ignored"))
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(body)) as? [String: Any])
+        XCTAssertEqual(json["requestId"] as? String, "34Y7req")
+        XCTAssertEqual(json["criteriaDigest"] as? String, request.criteriaDigest,
+                       "the request's own seal, so a request whose criteria moved is refused")
+        let gap = try XCTUnwrap((json["acceptedGaps"] as? [[String: Any]])?.first)
+        XCTAssertEqual(gap["criterionKey"] as? String, "c2")
+        XCTAssertEqual(gap["evidenceRefs"] as? [String], ["run-42"])
+
+        // Nobody asked: the seal standing now, Orbit's gaps, and a null request — as the browser sends.
+        let own = try XCTUnwrap(ProjectDone.body(subject: subject, requestID: nil, request: nil,
+                                                 currentDigest: "b"))
+        let ownJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(own)) as? [String: Any])
+        XCTAssertTrue(ownJSON["requestId"] is NSNull, "the request is sent as null, not left out")
+        XCTAssertEqual(ownJSON["criteriaDigest"] as? String, "b")
+        XCTAssertNil(ProjectDone.body(subject: subject, requestID: nil, request: nil, currentDigest: nil),
+                     "no seal read yet is no press")
+    }
+
+    func testAGapKeepsTheKeysItArrivedWith() throws {
+        let raw = #"{"criterionKey":"c2","title":"t","whyNotProven":"w","coordinatorChecked":"c","evidenceRefs":["e"],"severity":"minor"}"#
+        let gap = try JSONDecoder().decode(AcceptedGap.self, from: Data(raw.utf8))
+        XCTAssertEqual(gap.coordinatorChecked, "c")
+        let back = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(gap)) as? [String: Any])
+        XCTAssertEqual(back["severity"] as? String, "minor", "a key this build has no words for is sent back")
+        XCTAssertThrowsError(try JSONDecoder().decode(AcceptedGap.self, from: Data(#"{"title":"t"}"#.utf8)),
+                             "a gap that names no criterion is not a gap")
+    }
+
+    func testTheNoteNotYetSendsIsTrimmedAndNeverEmpty() {
+        XCTAssertEqual(ProjectDone.declineNote("  the deploy is not verified \n"), "the deploy is not verified")
+        XCTAssertNil(ProjectDone.declineNote(" \n "))
+    }
+
+    func testOrbitCheckedCountsTheRequestAmongTheOpenItems() {
+        let row = ProjectOpenItemRow(itemId: "i1", kind: .unknown, title: "", waitingSince: "")
+        let items = ProjectOpenItemsView(needsYou: [row], withCoordinator: [row, row], doneRequest: row)
+        XCTAssertEqual(ProjectDone.openItemsCount(items), 4)
+        XCTAssertEqual(ProjectDone.openItemsCount(nil), 0)
+        XCTAssertEqual(ProjectDone.runningCount(closeout(counts: ProjectDoneCounts(
+            criteria: 3, met: 3, landed: 1, onMain: 1, byReason: [.inFlight: 2]))), 2)
+    }
+
+    // MARK: the receipt
+
+    func testTheReceiptSaysWhoRecordedItAndWhatWasAccepted() {
+        let record = ProjectDoneRecord(projectId: "p1", doneAt: "2026-10-01T01:40:00.000Z",
+                                       criteriaDigest: "d", acceptedGaps: request.gaps)
+        let subject = closeout()
+        XCTAssertTrue(ProjectDone.recorded(subject, record: record))
+        XCTAssertEqual(ProjectDone.receiptMeta(subject, record: record, timeZone: utc),
+                       "Project closeout · recorded by you · 1 gaps accepted · Oct 1")
+        XCTAssertEqual(ProjectDone.receiptLine(subject, record: record, timeZone: utc),
+                       "You recorded this project done · Oct 1, 01:40")
+        XCTAssertEqual(ProjectDone.receiptTally(subject, record: record),
+                       "2 criteria met · 1 landed on main · 1 nothing to land · 1 gaps accepted")
+
+        // Recorded at another end, read back off the document after a reload.
+        let reloaded = ProjectDoneSubject(title: "Project closeout", status: "DONE",
+                                          derivedDone: closeout().derivedDone, doneBy: .owner,
+                                          doneAt: "2026-10-01T01:40:00.000Z", acceptedGaps: request.gaps)
+        XCTAssertTrue(ProjectDone.recorded(reloaded, record: nil))
+        XCTAssertEqual(ProjectDone.receiptLine(reloaded, record: nil, timeZone: utc),
+                       "You recorded this project done · Oct 1, 01:40")
+        XCTAssertFalse(ProjectDone.recorded(closeout(), record: nil))
+        XCTAssertTrue(ProjectDone.recorded(closeout(done: true), record: nil),
+                      "the projection itself calling it done is a record too")
+    }
+
+    // MARK: which card the coordinator conversation draws
+
+    func testTheConversationDrawsOneCardAndAskingOutranksExplaining() {
+        let row = ProjectOpenItemRow(itemId: "req1", kind: .unknown, title: ProjectDone.heading,
+                                     waitingSince: "", doneRequest: request)
+        let open = closeout()
+        XCTAssertEqual(ProjectDone.slot(subject: open, request: nil, waitingKind: nil, record: nil, started: true),
+                       .notDone)
+        XCTAssertEqual(ProjectDone.slot(subject: open, request: row, waitingKind: .doneRequest, record: nil,
+                                        started: true), .done(requestID: "req1"))
+        XCTAssertEqual(ProjectDone.slot(subject: open, request: nil, waitingKind: .recordAsDone, record: nil,
+                                        started: true), .done(requestID: nil),
+                       "a project that looks finished and was not asked about in time gets the card unasked")
+        XCTAssertEqual(ProjectDone.slot(subject: open, request: nil, waitingKind: nil, record: nil, started: false),
+                       .none, "a project nobody started is asked by the start card, not this one")
+        XCTAssertEqual(ProjectDone.slot(subject: closeout(status: "DONE"), request: nil, waitingKind: nil,
+                                        record: nil, started: true), .done(requestID: nil),
+                       "a done project keeps its receipt in the conversation")
+        let older = ProjectDoneSubject(title: "t", status: "OPEN", derivedDone: ProjectDerivedDone(counts: nil))
+        XCTAssertEqual(ProjectDone.slot(subject: older, request: row, waitingKind: .doneRequest, record: nil,
+                                        started: true), .none, "a server without counts draws no card")
+        XCTAssertEqual(ProjectDone.slot(subject: nil, request: nil, waitingKind: nil, record: nil, started: true),
+                       .none, "a read that has not answered is not an answer")
+    }
+
+    func testTheRequestIsLiveOnlyOnAnOpenProjectWithARequestThisBuildCanRead() {
+        let row = ProjectOpenItemRow(itemId: "req1", kind: .unknown, title: "", waitingSince: "",
+                                     doneRequest: request)
+        let bare = ProjectOpenItemRow(itemId: "req2", kind: .unknown, title: "", waitingSince: "")
+        XCTAssertEqual(ProjectDone.live(openItems: ProjectOpenItemsView(doneRequest: row), status: "OPEN"), row)
+        XCTAssertNil(ProjectDone.live(openItems: ProjectOpenItemsView(doneRequest: row), status: "DONE"))
+        XCTAssertNil(ProjectDone.live(openItems: ProjectOpenItemsView(doneRequest: bare), status: "OPEN"))
+        XCTAssertNil(ProjectDone.live(openItems: nil, status: "OPEN"))
+    }
+
+    // MARK: the Why-not-done card
+
+    func testOnlyHandledWorkSaysTheCoordinatorIsOnItAndOffersNoButton() {
+        // The browser's case: the one gap is already in flight, and an item is with the coordinator.
+        let subject = closeout(criteria: [ProjectDoneCriterion(definitionId: "c1", satisfied: true,
+                                                               landing: "ON_INTEGRATION_LINE",
+                                                               landingReason: .inFlight)])
+        let why = ProjectDone.WhyNotDone(subject: subject, withCoordinator: 1, requested: false)
+        XCTAssertEqual(why.waiting.map(\.definitionId), ["c1"])
+        XCTAssertTrue(why.coordinatorOnIt)
+        XCTAssertNil(why.action, "Ask the coordinator would be a second door to work somebody has")
+        XCTAssertTrue(why.saysCoordinatorIsOnIt)
+        // In flight alone is somebody on it, even before the open-items read caught up.
+        XCTAssertTrue(ProjectDone.WhyNotDone(subject: subject, withCoordinator: 0, requested: false).coordinatorOnIt)
+    }
+
+    func testUnmetCodelessWorkStaysWaitingOnWork() {
+        // The browser's case: CODELESS is an outcome only once its criterion is met.
+        let subject = closeout(criteria: [ProjectDoneCriterion(definitionId: "c2", satisfied: false,
+                                                               landing: "UNKNOWN", landingReason: .codeless)],
+                               counts: ProjectDoneCounts(criteria: 1, met: 0, landed: 0, onMain: 0,
+                                                         byReason: [.codeless: 1]))
+        let why = ProjectDone.WhyNotDone(subject: subject, withCoordinator: 0, requested: false)
+        XCTAssertEqual(why.waiting.map(\.definitionId), ["c2"])
+        XCTAssertFalse(why.settled(subject))
+        XCTAssertEqual(why.action, .askCoordinator, "work nobody has is handed to the coordinator")
+    }
+
+    func testAMergeOrbitNeverSawIsTheOwnersCallAndARequestIsReviewed() {
+        let subject = closeout(criteria: [
+            ProjectDoneCriterion(definitionId: "c1", satisfied: true, landingReason: .noReceipt),
+            ProjectDoneCriterion(definitionId: "c2", satisfied: true, landingReason: .onProjectBranch),
+        ])
+        let why = ProjectDone.WhyNotDone(subject: subject, withCoordinator: 0, requested: true)
+        XCTAssertEqual(why.needsCall.map(\.definitionId), ["c1"])
+        XCTAssertEqual(why.waiting.map(\.definitionId), ["c2"])
+        XCTAssertEqual(why.action, .review, "asked, the button is Review")
+        let settled = closeout(done: true, criteria: [ProjectDoneCriterion(definitionId: "c1", satisfied: true)])
+        XCTAssertTrue(ProjectDone.WhyNotDone(subject: settled, withCoordinator: 0, requested: false).settled(settled))
+    }
+
+    // MARK: the project page
+
+    func testThePageRowIsTheRequestOrTheOwnersOwnAndReadyToCloseNeedsARequest() {
+        let row = ProjectOpenItemRow(itemId: "req1", kind: .unknown, title: "", waitingSince: "",
+                                     doneRequest: request)
+        let derived = closeout().derivedDone
+        XCTAssertEqual(ProjectDone.pageRow(status: .open, derivedDone: derived,
+                                           openItems: ProjectOpenItemsView(doneRequest: row)), .asked(row))
+        XCTAssertEqual(ProjectDone.pageRow(status: .open, derivedDone: derived, openItems: ProjectOpenItemsView()),
+                       .own)
+        XCTAssertNil(ProjectDone.pageRow(status: .open, derivedDone: derived, openItems: nil),
+                     "a request still on its way is not a project nobody asked about")
+        XCTAssertNil(ProjectDone.pageRow(status: .done, derivedDone: derived, openItems: ProjectOpenItemsView()))
+        XCTAssertNil(ProjectDone.pageRow(status: .open, derivedDone: ProjectDerivedDone(counts: nil),
+                                         openItems: ProjectOpenItemsView()),
+                     "an older server keeps the status door it had")
+        XCTAssertTrue(ProjectDone.readyToClose(status: .open, openItems: ProjectOpenItemsView(doneRequest: row)))
+        XCTAssertFalse(ProjectDone.readyToClose(status: .open, openItems: ProjectOpenItemsView()),
+                       "Ready to close is the coordinator asking, not every open project")
+    }
+
+    // MARK: what the server serves
+
+    /// A project document as `GET /projects/:id` serves it today, cut to the fields these cards
+    /// read (the projection is this very project's, 2026-10-05).
+    private let documentJSON = #"""
+    {"id":"34Y7My8sqhKLWtmCQYv1l","title":"项目收尾重做","status":"DONE","doneBy":"OWNER",
+     "doneAt":"2026-10-05T06:00:00.000Z","doneCriteriaDigest":"d",
+     "acceptedGaps":[{"criterionKey":"7Q9QX5mhj3EEKrstr3A9g4","title":"Go-live","whyNotProven":"w",
+                      "coordinatorChecked":"c","evidenceRefs":["e1"]}],
+     "_count":{"tasks":29},"startedAt":"2026-10-01T02:20:05.780Z",
+     "acceptanceCriteriaItems":[{"id":"5hLCySeZVhf9jPvwD7DrNZ","key":"5hLCySeZVhf9jPvwD7DrNZ","ordinal":1,
+                                 "text":"codeless","satisfied":true,"landing":"LANDED"},
+                                {"id":"7Q9QX5mhj3EEKrstr3A9g4","key":"7Q9QX5mhj3EEKrstr3A9g4","ordinal":7,
+                                 "text":"上线","satisfied":false,"landing":"UNKNOWN"}],
+     "derivedDone":{"status":"OPEN","done":false,"withheld":["CRITERION_UNSATISFIED","CRITERION_UNLANDED"],
+                    "criteria":[{"definitionId":"5hLCySeZVhf9jPvwD7DrNZ","satisfied":true,"landing":"LANDED",
+                                 "independence":"INDEPENDENT","conflicts":[],"remedy":null,"landingReason":null,
+                                 "withheld":[]},
+                                {"definitionId":"7Q9QX5mhj3EEKrstr3A9g4","satisfied":false,"landing":"UNKNOWN",
+                                 "independence":"INDEPENDENT","conflicts":[],"remedy":null,
+                                 "landingReason":"CODELESS","withheld":["CRITERION_UNSATISFIED","CRITERION_UNLANDED"]}],
+                    "confirmation":"CONFIRMED",
+                    "counts":{"criteria":2,"met":1,"landed":1,"onMain":1,
+                              "byReason":{"IN_FLIGHT":0,"ON_PROJECT_BRANCH":0,"NOTHING_TO_LAND":0,"NO_RECEIPT":0,"CODELESS":1}}}}
+    """#
+
+    func testBothDocumentReadsCarryTheProjectionAndTheRecord() throws {
+        let page = try JSONDecoder().decode(ProjectDocument.self, from: Data(documentJSON.utf8))
+        let console = try JSONDecoder().decode(ProjectCriteriaDocument.self, from: Data(documentJSON.utf8))
+        XCTAssertEqual(page.doneSubject, console.doneSubject,
+                       "the page and the conversation read the same facts off the same document")
+        let subject = page.doneSubject
+        XCTAssertEqual(subject.doneBy, .owner)
+        XCTAssertEqual(subject.acceptedGaps.map(\.criterionKey), ["7Q9QX5mhj3EEKrstr3A9g4"])
+        XCTAssertEqual(subject.counts?.count(.codeless), 1)
+        XCTAssertEqual(subject.derivedDone?.criteria.last?.landingReason, .codeless)
+        XCTAssertEqual(subject.criterion("7Q9QX5mhj3EEKrstr3A9g4")?.ordinal, 7)
+        XCTAssertEqual(ProjectDone.receiptLine(subject, record: nil, timeZone: utc),
+                       "You recorded this project done · Oct 5, 06:00")
+        // And the page's document survives its own cache round trip.
+        let again = try JSONDecoder().decode(ProjectDocument.self, from: JSONEncoder().encode(page))
+        XCTAssertEqual(again.doneSubject, subject)
+    }
+
+    func testAnOlderServersDocumentDrawsNoDoneCard() throws {
+        let old = #"{"id":"p1","title":"t","status":"OPEN","derivedDone":{"done":false}}"#
+        let page = try JSONDecoder().decode(ProjectDocument.self, from: Data(old.utf8))
+        XCTAssertNil(page.doneSubject.counts)
+        XCTAssertEqual(ProjectDone.slot(subject: page.doneSubject, request: nil, waitingKind: .recordAsDone,
+                                        record: nil, started: true), .none)
+        let broken = #"{"id":"p1","title":"t","status":"OPEN","derivedDone":"nonsense","acceptedGaps":7}"#
+        XCTAssertNoThrow(try JSONDecoder().decode(ProjectCriteriaDocument.self, from: Data(broken.utf8)),
+                         "a projection this build cannot read must not fail the confirmation cards' read")
+    }
+
+    func testTheOpenItemsReadServesTheRequestBesideTheGroups() throws {
+        let raw = #"""
+        {"needsYou":[],"withCoordinator":[],"startRequest":null,
+         "doneRequest":{"itemId":"34Y9req","kind":"DONE_REQUEST","title":"Is this project done?",
+                        "detailLine":"","waitingSince":"2026-10-05T05:00:00.000Z","assignee":"OWNER",
+                        "assigneeReason":"DEFAULT","actions":["REVIEW"],
+                        "doneRequest":{"criteriaDigest":"\#(String(repeating: "c", count: 64))",
+                                       "judgment":"The goal is met.","stateDigest":"s",
+                                       "gaps":[{"criterionKey":"k","whyNotProven":"w","coordinatorChecked":"c",
+                                                "evidenceRefs":["e"]}],
+                                       "warnings":[{"severity":"WARN","code":"DONE_CRITERION_UNLANDED"}]}}}
+        """#
+        let items = try JSONDecoder().decode(ProjectOpenItemsView.self, from: Data(raw.utf8))
+        let row = try XCTUnwrap(items.doneRequest)
+        XCTAssertEqual(row.doneRequest?.judgment, "The goal is met.")
+        XCTAssertEqual(row.doneRequest?.gaps.first?.evidenceRefs, ["e"])
+        XCTAssertEqual(ProjectDone.live(openItems: items, status: "OPEN")?.itemId, "34Y9req")
+        let unreadable = #"{"needsYou":[],"withCoordinator":[],"doneRequest":{"itemId":"x","doneRequest":{"judgment":1}}}"#
+        let partial = try JSONDecoder().decode(ProjectOpenItemsView.self, from: Data(unreadable.utf8))
+        XCTAssertNil(partial.doneRequest?.doneRequest, "a request this build cannot read is no request")
+        XCTAssertNil(ProjectDone.live(openItems: partial, status: "OPEN"))
+    }
+
+    func testTheProjectsListSaysWhoRecordedADoneProject() throws {
+        let raw = #"""
+        [{"id":"p1","title":"a","status":"DONE","doneBy":"OWNER","acceptedGaps":[{"criterionKey":"k"},{"criterionKey":"j"}]},
+         {"id":"p2","title":"b","status":"DONE","doneBy":"DERIVED","acceptedGaps":[]},
+         {"id":"p3","title":"c","status":"OPEN","doneBy":null}]
+        """#
+        let rows = try JSONDecoder().decode([ProjectSummary].self, from: Data(raw.utf8))
+        XCTAssertEqual(rows.map(\.doneProvenance), ["recorded by you · 2 gaps accepted", "recorded by Orbit", nil])
+        let again = try JSONDecoder().decode([ProjectSummary].self, from: JSONEncoder().encode(rows))
+        XCTAssertEqual(again.map(\.doneProvenance), rows.map(\.doneProvenance))
+    }
+
+    func testTheWaitingKindsDecode() throws {
+        let kinds = try JSONDecoder().decode([SessionWaitingKind].self,
+                                             from: Data(#"["DONE_REQUEST","RECORD_AS_DONE","LATER"]"#.utf8))
+        XCTAssertEqual(kinds, [.doneRequest, .recordAsDone, .unknown])
+        let reasons = try JSONDecoder().decode([CriterionLandingReason].self,
+                                               from: Data(#"["IN_FLIGHT","SOMETHING_NEW"]"#.utf8))
+        XCTAssertEqual(reasons, [.inFlight, .unknown])
+        XCTAssertFalse(ProjectDone.isWaitingOnWork(.unknown))
+        XCTAssertFalse(ProjectDone.isNeedsYourCall(.unknown))
+    }
+}

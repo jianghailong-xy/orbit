@@ -252,13 +252,18 @@ public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
     public let coordinatorActivity: ProjectCoordinatorPulse?
     /// Stored task progress from `GET /projects/sidebar`; absent on older servers and the index.
     public let taskCounts: ProjectSidebarTaskCounts?
+    /// Who recorded a DONE project done, and the gaps they accepted — what its row says beside the
+    /// status (`ProjectDone.provenance`). Nil and empty on an open project and from an older server.
+    public let doneBy: ProjectDoneBy?
+    public let acceptedGaps: [AcceptedGap]
 
     public init(id: String, title: String, status: ProjectStatus = .open, goal: String? = nil,
                 createdAt: String = "", updatedAt: String? = nil, taskCount: Int = 0,
                 buckets: ProjectBuckets = ProjectBuckets(), lastActivityAt: String? = nil,
                 attention: ProjectListAttention? = nil, integration: ProjectListIntegration? = nil,
                 coordinatorActivity: ProjectCoordinatorPulse? = nil,
-                taskCounts: ProjectSidebarTaskCounts? = nil) {
+                taskCounts: ProjectSidebarTaskCounts? = nil, doneBy: ProjectDoneBy? = nil,
+                acceptedGaps: [AcceptedGap] = []) {
         self.id = id
         self.title = title
         self.status = status
@@ -272,6 +277,8 @@ public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
         self.integration = integration
         self.coordinatorActivity = coordinatorActivity
         self.taskCounts = taskCounts
+        self.doneBy = doneBy
+        self.acceptedGaps = acceptedGaps
     }
 
     private struct Counts: Codable {
@@ -280,7 +287,7 @@ public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
 
     enum CodingKeys: String, CodingKey {
         case id, title, status, goal, createdAt, updatedAt, buckets, lastActivityAt, attention,
-             integration, coordinatorActivity, taskCounts
+             integration, coordinatorActivity, taskCounts, doneBy, acceptedGaps
         case counts = "_count"
     }
 
@@ -299,6 +306,8 @@ public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
         integration = try c.decodeIfPresent(ProjectListIntegration.self, forKey: .integration)
         coordinatorActivity = try c.decodeIfPresent(ProjectCoordinatorPulse.self, forKey: .coordinatorActivity)
         taskCounts = try c.decodeIfPresent(ProjectSidebarTaskCounts.self, forKey: .taskCounts)
+        doneBy = try? c.decodeIfPresent(ProjectDoneBy.self, forKey: .doneBy)
+        acceptedGaps = ((try? c.decodeIfPresent([AcceptedGap].self, forKey: .acceptedGaps)) ?? nil) ?? []
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -316,5 +325,13 @@ public struct ProjectSummary: Codable, Equatable, Sendable, Identifiable {
         try c.encodeIfPresent(integration, forKey: .integration)
         try c.encodeIfPresent(coordinatorActivity, forKey: .coordinatorActivity)
         try c.encodeIfPresent(taskCounts, forKey: .taskCounts)
+        try c.encodeIfPresent(doneBy, forKey: .doneBy)
+        if !acceptedGaps.isEmpty { try c.encode(acceptedGaps, forKey: .acceptedGaps) }
+    }
+
+    /// What a DONE project's row says beside its status — who recorded it, and the gaps accepted —
+    /// or nil for any other project. Web's `doneProvenance` on the projects list.
+    public var doneProvenance: String? {
+        status == .done ? ProjectDone.provenance(doneBy: doneBy, acceptedGaps: acceptedGaps.count) : nil
     }
 }

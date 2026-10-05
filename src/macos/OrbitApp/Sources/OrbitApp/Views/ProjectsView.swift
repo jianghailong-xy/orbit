@@ -239,6 +239,14 @@ struct ProjectRow: View {
                     Text(elapsed).font(.orbitLabel).foregroundStyle(.secondary)
                 }
             }
+            // A done project says who recorded it — the owner, with the gaps they accepted, or Orbit
+            // (web's `doneProvenance` on the list).
+            if let provenance = project.doneProvenance {
+                Text(provenance)
+                    .font(.orbitLabel)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
             if let chip = ProjectAttention.chip(of: project, now: now) {
                 let warning = chip.tone == .warning
                 Text(chip.text)
@@ -522,6 +530,8 @@ struct ProjectDetailView: View {
                             withAnimation { proxy.scrollTo(anchor, anchor: .top) }
                         }
                     }
+                case .done:
+                    ProjectDoneSheet(store: store)
                 case .mergeCheck:
                     if let view = store.integration {
                         MergeCheckEditor(store: store, view: view,
@@ -584,7 +594,23 @@ struct ProjectDetailView: View {
                     .foregroundStyle(running ? Color.accentColor : Color.secondary)
                     .background((running ? Color.accentColor : Color.secondary).opacity(0.13),
                                 in: RoundedRectangle(cornerRadius: 6))
+                // The coordinator asked to record it done: the same words its session row says.
+                if ProjectDone.readyToClose(status: document.status, openItems: store.openItems) {
+                    Text(ProjectDone.readyToClose)
+                        .font(.orbitLabel.weight(.semibold))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .foregroundStyle(ProjectPalette.warningInk)
+                        .background(Color.orange.opacity(0.14), in: RoundedRectangle(cornerRadius: 6))
+                }
                 Text("\(document.taskCount) task\(document.taskCount == 1 ? "" : "s")")
+                    .font(.orbitLabel)
+                    .foregroundStyle(.secondary)
+            }
+            // Who recorded it done — the owner, with the gaps they accepted, or Orbit.
+            if document.status == .done {
+                Text(ProjectDone.provenance(doneBy: document.doneBy,
+                                            acceptedGaps: document.acceptedGaps.count))
                     .font(.orbitLabel)
                     .foregroundStyle(.secondary)
             }
@@ -699,7 +725,9 @@ struct ProjectDetailView: View {
                         openItemsSection(store, document, now: context.date)
                         if summary.count == 0,
                            StartProject.pageRow(status: document.status, started: document.started,
-                                                openItems: store.openItems) == nil {
+                                                openItems: store.openItems) == nil,
+                           ProjectDone.pageRow(status: document.status, derivedDone: document.derivedDone,
+                                               openItems: store.openItems) == nil {
                             Text("Nothing is waiting on you or the coordinator.")
                                 .font(.orbitSubtext)
                                 .foregroundStyle(.secondary)
@@ -735,11 +763,14 @@ struct ProjectDetailView: View {
                                   now: Date) -> some View {
         let start = StartProject.pageRow(status: document.status, started: document.started,
                                          openItems: store.openItems)
-        let needsYou = store.openItems?.needsYou ?? []
+        let done = ProjectDone.pageRow(status: document.status, derivedDone: document.derivedDone,
+                                       openItems: store.openItems)
+        let needsYou = store.openItems.map(ProjectPage.needsYouRows) ?? []
         let withCoordinator = store.openItems?.withCoordinator ?? []
-        if !needsYou.isEmpty || start != nil {
+        if !needsYou.isEmpty || start != nil || done != nil {
             Section {
                 if let start { startItem(start, store: store, now: now) }
+                if let done { doneItem(done, store: store, now: now) }
                 ForEach(needsYou) { row in openItem(row, store: store, now: now) }
             } header: {
                 groupLabel(ProjectPage.needsYouGroup)
@@ -809,6 +840,19 @@ struct ProjectDetailView: View {
             }
             .buttonStyle(.plain)
             .disabled(store.busy)
+        }
+    }
+
+    /// The closing row: the coordinator's request to record the project done — Ready to close, with
+    /// Review — or, nobody having asked, the owner's own Record as done…. Both open the same card
+    /// over the page (web's `ProjectDoneDialog`).
+    @ViewBuilder
+    private func doneItem(_ done: ProjectDone.PageRow, store: ProjectDetailModel, now: Date) -> some View {
+        switch done {
+        case .asked(let row):
+            ProjectDoneRequestRow(row: row, now: now, busy: store.busy) { pageSheet = .done }
+        case .own:
+            ProjectOwnDoneRow(busy: store.busy) { pageSheet = .done }
         }
     }
 
@@ -1822,7 +1866,15 @@ struct ProjectDetailView: View {
     private func menu(_ store: ProjectDetailModel, _ document: ProjectDocument) -> some View {
         Menu {
             if document.status == .open {
-                Button { confirmingStatus = .done } label: {
+                // On a server with the owner's done door, the same card the coordinator's request is
+                // answered on; on an older one, the status door it had (web's `hasDoneGate`).
+                Button {
+                    if document.derivedDone?.counts != nil {
+                        pageSheet = .done
+                    } else {
+                        confirmingStatus = .done
+                    }
+                } label: {
                     Label("Record as done", systemImage: "checkmark.circle")
                 }
                 Button { confirmingStatus = .cancelled } label: {
@@ -1975,6 +2027,8 @@ private enum ProjectPageSheet: String, Identifiable {
     case openItems
     /// The owner's own "Start…".
     case start
+    /// "Is this project done?" — Review on the coordinator's request, or Record as done….
+    case done
     /// How it runs' merge check, where a command has room.
     case mergeCheck
 
@@ -2064,6 +2118,99 @@ private struct OwnerStartProjectSheet: View {
                                                                     requestId: nil)) {
             error = refused
         } else {
+            dismiss()
+        }
+    }
+}
+
+/// "Is this project done?" over the project page — Review on the coordinator's request, or the
+/// owner's own Record as done… with the facts Orbit fills in — and the receipt it leaves. The same
+/// card the coordinator conversation draws (`ProjectDoneCard`), pressed at the same door. Web's
+/// `ProjectDoneDialog`.
+private struct ProjectDoneSheet: View {
+    let store: ProjectDetailModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var record: ProjectDoneRecord?
+    @State private var error: String?
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                card
+                    .padding()
+                    .frame(maxWidth: 640)
+                    .frame(maxWidth: .infinity)
+            }
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(record == nil ? "Cancel" : "Done") { dismiss() }
+                }
+            }
+        }
+        .task { await store.loadDoneCard() }
+    }
+
+    @ViewBuilder
+    private var card: some View {
+        if let document = store.document {
+            let subject = document.doneSubject
+            let row = ProjectDone.live(openItems: store.openItems, status: document.status.rawValue)
+            let digest = store.confirmation?.currentVersion.digest
+            ProjectDoneCard(
+                subject: subject,
+                request: row?.doneRequest,
+                askedAt: row?.waitingSince,
+                confirmedAt: store.confirmation?.confirmation?.confirmedAt,
+                openItems: ProjectDone.openItemsCount(store.openItems),
+                running: ProjectDone.runningCount(subject),
+                record: record,
+                sealRead: row?.doneRequest != nil || digest != nil,
+                error: error,
+                onRecord: { await recordDone(subject, row: row, digest: digest) },
+                onNotYet: notYet(row),
+                onReopen: { await reopen() })
+        } else {
+            ProgressView().frame(maxWidth: .infinity)
+        }
+    }
+
+    /// One press, one write: the request it answers and that request's seal — or, unasked, the seal
+    /// standing now — and the gaps the card shows. The card turns into its receipt.
+    private func recordDone(_ subject: ProjectDoneSubject, row: ProjectOpenItemRow?,
+                            digest: String?) async {
+        guard let body = ProjectDone.body(subject: subject, requestID: row?.itemId,
+                                          request: row?.doneRequest, currentDigest: digest) else { return }
+        switch await store.recordDone(body) {
+        case .success(let done):
+            record = done
+            error = nil
+        case .failure(let refused):
+            error = refused.message
+        }
+    }
+
+    /// "Not yet…", on a card the coordinator asked for: the note goes, and the sheet gives way.
+    private func notYet(_ row: ProjectOpenItemRow?) -> ((String) async -> Bool)? {
+        guard let row else { return nil }
+        return { note in
+            if let refused = await store.declineDone(itemID: row.itemId, note: note) {
+                error = refused
+                return false
+            }
+            dismiss()
+            return true
+        }
+    }
+
+    /// Reopen project, from the receipt.
+    private func reopen() async {
+        if let refused = await store.setStatus(.open) {
+            error = refused
+        } else {
+            record = nil
             dismiss()
         }
     }
