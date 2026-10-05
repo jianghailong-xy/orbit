@@ -1,15 +1,22 @@
 # Antigravity Google 登录：web 与 macOS/iOS 客户端证据
 
 任务 `34ZogkzPnQ44ODj72jrYb`，对应项目验收条目 2（`4q7GDYg6GzChkJE0bfhFGV`）。
-当前分支：`orbit/web-macos-ios-antigravity-google-747820`。
-当前同步基线：upstream main `d22b276cccbac66b672e25944be0317d6df420eb`，项目 tip `80e7ad8fd8ee581f5c2f66490f1966f487ad3fb6`。
+当前分支：`orbit/web-macos-ios-antigravity-google-29ec1b`。
 控制面契约来自第 3 步提交 `7cd0d809be5052ef1eadd2738a2217403767eeb9`，已以 `8725dd57d` 落地。
 
-## 当前基线同步
+## 当前基线同步（generation 9 MAIN_SYNC）
 
-按任务最新评论，本次只同步基线，不重做客户端功能。先纳入上一轮已通过验证的合并提交 `a2afeeacffbf8ab4cfaf96aadc83bc53468ddfb5`，再真实合并上述 upstream main，保留项目 tip、全部客户端修复和 main 测试修复的祖先历史；Git 自动合并没有遗留冲突。曾冲突的 `SessionProviderChoices.swift`、`RunnerEngines.tsx` 保留客户端行为，`AccountPauseAPIClientTests.swift`、`CodexSignInCopyParityTests.swift`、`SharedPoolCopyParityTests.swift` 与当前 main 逐字一致。
+按任务最新评论，本次只做基线同步，不重做客户端功能。源不再是启动时的项目 tip，而是上一已验证源
+`6f85136aeb7673fb420fba1138f810d36f2e12cd`（它已经含着项目 tip，并带着全部客户端修复）。
 
-合并后的 web 全量、OrbitKit 全量、生产构建、1280px / 443px 截图和本分支 client CI 必须重新验证。本次工具行、确切 HEAD、CI 链接和 Orbit 附件回执以本任务会话提交的新证据信封为准。下方旧工具行及 main 既有失败对照仅保留作历史记录，不代替本次验证。
+- 上一已验证源：`6f85136aeb7673fb420fba1138f810d36f2e12cd`
+- 项目 ref `refs/heads/project/34ZoXvNg4WmQIi0AiwWmu` tip：`80e7ad8fd8ee581f5c2f66490f1966f487ad3fb6`（是上一源的祖先）
+- upstream `refs/heads/main` tip：`a0a76a760a47f602382da0bafc5d6f8f92afea1a`
+- 本轮真实合并提交：`5282b77a270d6f632c793fbc5d857deefc3bcd6a`，父为 `6f85136aeb` 与 `a0a76a760`；项目 tip、main tip 与上一源都是它的祖先。
+
+冲突两个，都取 main 的新版本：`ConsoleView.swift`（main 的 `c13f943f1` 拆分 `rowsList` / `follows` / `chrome`，是上一源 `transcriptList` 拆分的超集，同为 iOS 类型检查）、`OrbitLinkCopyParityTests.swift`（main 把 stalled 测试改名，断言两侧逐字相同）。上一轮的四个冲突文件已由上一源解决，本轮不再出现。
+
+本轮新基线实际跑了：web 全量 `npm test -w @orbit/web`、Antigravity 客户端 6 个 suite、OrbitKit 全量 `swift test`（`AntigravityGoogleClientTests` 9/9 也在其中）、`npm run build -w @orbit/web`、1280px / 443px 真实生产路由截图。本分支 client CI 需协调会话在确切 HEAD 上重新 dispatch；上面这些工具行、HEAD 与 Orbit 附件回执以本任务会话提交的新证据信封为准。下方旧工具行及 main 既有失败对照仅保留作历史记录，不代替本次验证。
 
 ## 历史 main 上的冲突处理
 
