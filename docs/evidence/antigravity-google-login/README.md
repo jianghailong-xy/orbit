@@ -2,7 +2,7 @@
 
 任务 `34Zogl1Sal7LyMPd2KcsT`（项目「Antigravity 支持 Google 账号登录」第 5 步），对应项目验收条目 3（`1c20Fd28SknYGalQD5smdG`）。验证在 HPC runner `workstation-gpu`（`34P34HcKKoFRn2j9KitgJ`）上完成，2026-10-05。
 
-**结论一句话**：Google 账号登录本身在真实机器上跑通了（登录、额度、两轮对话、`--conversation` 恢复、并发、每会话凭据副本、凭据移走/移回、泄露检查零命中全部成立），**但「用一个登录后才有的模型跑一轮」这次做不到**——控制面一条 API key 时代的前缀规则把 Google 模式特有的 Claude / GPT-OSS 模型静默换成默认的 `gemini-3.8-flash`（详见 §6）。
+**结论一句话**：Google 账号登录本身在真实机器上跑通了（登录、额度、两轮对话、`--conversation` 恢复、并发、每会话凭据副本、凭据移走/移回、泄露检查零命中全部成立），**但「用一个登录后才有的模型跑一轮」这一项到本文件第二版为止仍未通过**：控制面最初把 Google 模式特有的 Claude / GPT-OSS 模型静默换成默认的 `gemini-3.8-flash`（§6）；修复 `b5b99caa4` 之后不再替换了，但模型**根本送不到 runner**（agy argv 里没有 `--model`，详见 §10）。
 
 脱敏规则：本文件、本次提交和所有截图里不出现 token、cookie、授权码或账号邮箱。下面每条命令的输出都先经过一个脱敏过滤器（邮箱、`4/0` / `ya29.` / `1//` 前缀的长串、JWT、长 blob 一律换成占位符，命中数只在计数里出现，行内容一律不打印）。凭据文件始终只做 stat（大小/权限/时间），从不读取内容。
 
@@ -193,7 +193,32 @@ UNION ALL SELECT '1//',   count(*) … AND payload::text LIKE '%1//%';
 
 **四个被检查的 E2E 会话（`01a10b45-39e3`、`01a10b45-3abe`、`01a10b45-62ce`、`01a10b46-3eee`）一个都没有出现在命中里**——它们的内容里三个前缀各 0 次。也就是说：宽查询的 15 次命中的是被检查文本自身（检查命令与讨论），不是任何 token 泄露。查询全程只返回计数与 session_id，没有读取或返回任何 payload 内容。
 
+## 10. 修复后重跑：结论「修复后仍不生效」
+
+协调会话确认模型修复已并入并通过（修复提交 `b5b99caa4`），要求基于修复后的控制面重跑「登录后才有的模型跑一轮」，并给出实际 init/runtime model **未被降级**的可验证记录。重跑结果：**控制面那一半生效了，模型仍然到不了 runner，这一轮没通过。**
+
+| 会话 | 请求模型 | 控制面 session 行 | runner 里 agy 的 argv | 实际运行 |
+| --- | --- | --- | --- | --- |
+| [M](orbit-session:34aa9li2Vsjrc6nAVrnBU) | `claude-sonnet-5-5` | `claude-sonnet-5-5` ✅ | **无 `--model`** | agy 自带默认模型 |
+| [O](orbit-session:34aaBAqHzJYTM2GvgOSGC) | `claude-sonnet-5-5` | `claude-sonnet-5-5` ✅ | **无 `--model`** | 同上 |
+| [P](orbit-session:34aaZDXE7oE0CvyZejgKy)（目录刷新之后） | `claude-sonnet-5-5` | `claude-sonnet-5-5` ✅ | **无 `--model`** | 同上 |
+| [N](orbit-session:34aaApZg1dqufhNCg9HPu)（对照） | `gemini-3.1-pro` | `gemini-3.1-pro` | `--model gemini-3.1-pro --effort high` ✅ | gemini-3.1-pro |
+
+对比旧行为（§6）：修复前 control plane 会把 id **换成** `gemini-3.8-flash`；修复后 session 行保留了 `claude-sonnet-5-5`（这一半确实修好了），但模型**根本没送到 runner**。
+
+判据链（每一步都实测排除）：
+
+1. **不是 runner 的透传问题。** `src/runner-go/antigravity_models.go` 的 `antigravityModelArgs` 对目录里没有的模型是**原样透传**（`--model <model>`），只有 `model` 为空才返回 `nil`。所以 argv 里完全没有 `--model` ⇒ 控制面把模型解析成了空值，而不是 runner 丢掉了它。
+2. **不是 runner 的目录旧。** 18:01:37 把凭据移到 0700 私有目录、18:07:53 移回，制造一次签入；18:11:47 runner 确实执行了 **Google 模式**的目录拉取：
+   `agy --gemini_dir=/root/.orbit/antigravity/google --log-file=/dev/null models`
+   且**没有回退到 API key 那一版**——`/root/.orbit/antigravity/catalog/antigravity-cli/log/` 里最新一份仍是 `cli-20261005_155720.log`（15:57:21），`journalctl` 全天没有任何 `model list is unavailable` / `model catalog refresh failed` / `agy models listed no models`。也就是说 runner 手上这份目录里现在有 Google 行。
+   （这条同时也是「签入触发目录重读」路径 `engineHealth.onSignIn` 的实测证据。）
+3. **剩下两种可能都在控制面侧**：(a) 控制面存的那份 `runner.model_catalog` 仍没有 Google 行（上报/落库这一段）；(b) 修复的「目录驱动判定」对**没有 level 后缀的 Google id**（`claude-sonnet-5-5` 这类 base row）匹配不上。区分二者只需要一条只读查询 `SELECT name, model_catalog::jsonb->'antigravity' FROM runner WHERE name='workstation-gpu'`——本机做不到：HPC 上 `wikova` 在 DNS 里不解析、没有 ssh、没有 psql 客户端，本机 postgres 容器只有 agy 测试库，所以这条只能由有生产库访问权的协调会话执行。
+
+**给下游的结论**：这条验收项需要的「agy 实际 `--model` = 请求的 Google 模式模型 + 正常回答」目前拿不到；修复 `b5b99caa4` 只修掉了「静默换成 gemini-3.8-flash」，没有让模型到达 runner。
+
 ## 9. 截图
+
 
 **这一项没拿到**：本轮执行会话在本机上没有任何 owner 作用域的凭据（唯一的本地 token 是本会话的 runner-orchestration JWT，用户 API 一律 401），卡片和会话页面的截图只能由 owner 的浏览器出。owner 在凭据移走窗口开放的 20 分钟里没有回话，窗口到点关闭，因此：
 
