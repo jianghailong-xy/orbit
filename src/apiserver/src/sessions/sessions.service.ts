@@ -33,6 +33,7 @@ import {
   isSessionReplyTurn,
   queuedRepliesContent,
   readOpenRequestPeers,
+  readSessionReplyCards,
   readTurnRequestIds,
   settleUnrunSessionRequests,
 } from './session-request';
@@ -67,6 +68,7 @@ import {
   type OpenItemDeliveryCard,
   type ProjectStartedCard,
   type SessionMessageCard,
+  type SessionReplyCard,
   PermissionMode,
   type PermissionRule,
   ROOT_FALLBACK_PERMISSION_MODE,
@@ -309,6 +311,10 @@ interface ListedQueuedTurn {
    *  client taking it off the queue unrun hands none of it back to the owner's composer: the words
    *  are the sending session's. Absent on every turn nobody's session sent. */
   sessionMessage?: SessionMessageCard;
+  /** The outcomes of this session's own requests a reply turn hands back (session-request.ts): the
+   *  cards the runner's echo will carry, so the queue draws reply cards rather than the blocks the
+   *  turn is delivered with, in the owner's bubble. Absent on every other turn. */
+  sessionReplies?: SessionReplyCard[];
   /** A confirmation request handed to this session for review, and a reviewer's return handed to a
    *  run (docs/owner-confirmation-review-contract.md D7, B3): the cards the runner's echo will carry,
    *  for the reason `openItemDelivery` is here. Absent on every other turn. */
@@ -5620,11 +5626,13 @@ export class SessionsService {
       const startedCards = await this.projectStartedCards(ownerId, queued.map(({ turn }) => turn));
       const messageCards = await this.sessionMessageCards(ownerId, id, queued.map(({ turn }) => turn));
       const reviewCards = await this.confirmationReviewCards(queued.map(({ turn }) => turn));
+      const replyCards = await this.sessionReplyCards(id, queued.map(({ turn }) => turn));
       return queued.map(({ turn, content }) => {
         const card = deliveryCards.get(turn.id);
         const started = startedCards.get(turn.id);
         const message = messageCards.get(turn.id);
         const review = reviewCards.get(turn.id);
+        const replies = replyCards.get(turn.id);
         return {
           turnId: turn.id,
           kind: turn.kind,
@@ -5636,6 +5644,7 @@ export class SessionsService {
           ...(card ? { openItemDelivery: card } : {}),
           ...(started ? { projectStarted: started } : {}),
           ...(message ? { sessionMessage: message } : {}),
+          ...(replies ? { sessionReplies: replies } : {}),
           ...review,
           ...(isOrbitAuthoredTurn(turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
         };
@@ -5691,12 +5700,14 @@ export class SessionsService {
     const startedCards = await this.projectStartedCards(ownerId, activeRows.map(({ turn }) => turn));
     const messageCards = await this.sessionMessageCards(ownerId, id, activeRows.map(({ turn }) => turn));
     const reviewCards = await this.confirmationReviewCards(activeRows.map(({ turn }) => turn));
+    const replyCards = await this.sessionReplyCards(id, activeRows.map(({ turn }) => turn));
     const activeTurns: ListedActiveTurn[] = activeRows
       .map(({ turn, placement, content }) => {
         const card = deliveryCards.get(turn.id);
         const started = startedCards.get(turn.id);
         const message = messageCards.get(turn.id);
         const review = reviewCards.get(turn.id);
+        const replies = replyCards.get(turn.id);
         return {
           turnId: turn.id,
           kind: turn.kind,
@@ -5715,6 +5726,7 @@ export class SessionsService {
           ...(card ? { openItemDelivery: card } : {}),
           ...(started ? { projectStarted: started } : {}),
           ...(message ? { sessionMessage: message } : {}),
+          ...(replies ? { sessionReplies: replies } : {}),
           ...review,
           ...(isOrbitAuthoredTurn(turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
           content,
@@ -5812,6 +5824,23 @@ export class SessionsService {
         this.prisma, ownerId, turn.senderSessionId!, requestOfTurn.get(turn.id),
       );
       if (card) cards.set(turn.id, card);
+    }
+    return cards;
+  }
+
+  /** The reply cards each reply turn among these is drawn as, by turn id — read by the function the
+   *  ingest path records the echo's with (`readSessionReplyCards`), for those turns only. */
+  private async sessionReplyCards(
+    sessionId: string,
+    turns: ReadonlyArray<{ id: string; clientTurnId: string | null }>,
+  ): Promise<Map<string, SessionReplyCard[]>> {
+    const replyTurns = turns.filter((turn) => isSessionReplyTurn(turn.clientTurnId));
+    const cards = new Map<string, SessionReplyCard[]>();
+    if (replyTurns.length === 0) return cards;
+    const byKey = await readSessionReplyCards(this.prisma, sessionId, replyTurns.map((turn) => turn.clientTurnId!));
+    for (const turn of replyTurns) {
+      const carried = byKey.get(turn.clientTurnId!);
+      if (carried) cards.set(turn.id, carried);
     }
     return cards;
   }

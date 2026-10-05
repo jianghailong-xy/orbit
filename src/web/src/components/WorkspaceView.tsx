@@ -209,6 +209,7 @@ import { OpenItemDeliveryCard } from './OpenItemDeliveryCard';
 import { OrbitLinkCardsProvider } from './OrbitLinkCard';
 import { ProjectStartedCard } from './ProjectStartedCard';
 import { SessionMessageCard } from './SessionMessageCard';
+import { SessionReplyCards } from './SessionReplyCard';
 import {
   parseWatchWake,
   sessionWatching,
@@ -378,6 +379,7 @@ import type {
   OpenItemDeliveryCard as OpenItemDelivery,
   ProjectStartedCard as ProjectStarted,
   SessionMessageCard as SessionMessage,
+  SessionReplyCard as SessionReply,
   SessionTurnIntent,
   SessionTurnPlacement,
   WatchView,
@@ -525,6 +527,9 @@ export interface QueuedTurn {
   /** Another Orbit session's message, and who sent it (`ActiveSessionTurn.sessionMessage`): drawn as
    *  the "From [that session]" card its echo will be, and never handed back to the reader's composer. */
   sessionMessage?: SessionMessage;
+  /** The outcomes a reply turn hands back (`ActiveSessionTurn.sessionReplies`): drawn as the reply
+   *  cards its echo will be, rather than as the blocks it is delivered with in the reader's bubble. */
+  sessionReplies?: SessionReply[];
   /** The control plane wrote this turn itself, so nobody typed it (`ActiveSessionTurn.authoredByOrbit`). */
   authoredByOrbit?: true;
 }
@@ -9641,6 +9646,23 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                       }
                     />
                   )
+                ) : q.sessionReplies ? (
+                  // The outcomes of this session's requests, handed back: nobody typed the turn, so
+                  // it gets the reply cards the transcript draws once a runner takes it.
+                  <SessionReplyCards
+                    key={q.turnId}
+                    cards={q.sessionReplies}
+                    ts={q.createdAt}
+                    attached={
+                      <QueuedTurnMeta
+                        placement={q.placement}
+                        delivery={q.delivery}
+                        deliveryCode={q.deliveryCode}
+                        deliveryReason={q.deliveryReason}
+                        onCancel={() => cancelQueued(q.turnId)}
+                      />
+                    }
+                  />
                 ) : q.projectStarted ? (
                   // The message telling the coordinator its project was started, as the card the
                   // transcript draws once a runner takes it — the same reason as the delivery above.
