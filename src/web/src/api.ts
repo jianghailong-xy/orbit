@@ -10,6 +10,7 @@ import type {
   SessionMessageCard,
   SessionMoveTargets,
   SessionRequestView,
+  SessionProjectMembership,
   SessionTurnIntent,
   SessionTurnPlacement,
 } from '@orbit/shared';
@@ -1371,6 +1372,9 @@ export interface SessionDetail {
   /** The Project this Session coordinates. Null for ordinary Sessions. */
   projectId?: string | null;
   projectTitle?: string | null;
+  projectMembership?: SessionProjectMembership | null;
+  /** The project's integration line, exposed for the existing worktree-bar display. */
+  projectIntegrationRef?: string | null;
   prompt?: string | null;
   createdAt?: string;
   lastTurnAt?: string | null;
@@ -1435,9 +1439,8 @@ export interface SessionDetail {
   mergeRecoveryAction?: MergeRecoveryAction | null;
   mergeRecoverySupported?: boolean;
   mergedAt?: string | null;
-  // The branch the user chose to merge into (status bar's branch dropdown). Null = the
-  // default (runner auto-detects main, else master). Shown on the merged ✓ chip + used by
-  // "Retry merge" to retry the same target.
+  // The server-resolved merge target: an explicit choice, a project integration line, or the
+  // workspace/runner default. Shown on the merged ✓ chip and used by Retry merge.
   mergeTarget?: string | null;
   // Candidate merge-target branches the runner reported for this session's repo (local
   // branches minus orbit/*), populating the dropdown. Empty for older runners → no dropdown.

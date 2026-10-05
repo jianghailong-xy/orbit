@@ -65,6 +65,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { sessionSourceSnapshot } from '../projects/session-source';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
 import { currentWikiRollout, wikiClaimFields } from '../wiki/wiki-rollout';
+import { branchName } from '../projects/project-criterion-landing';
 import {
   wikiMaintenanceRunOf,
   wikiMaintenanceSessionSql,
@@ -539,6 +540,20 @@ export class QueueService {
         // The workspace's standing "always allow" grants ride along: they are what turns an
         // approval a human already answered into one this session never has to ask again.
         workspace: { include: { permissionRules: { orderBy: { createdAt: 'asc' } } } },
+        task: {
+          select: {
+            codeless: true,
+            project: {
+              select: {
+                codebases: {
+                  where: { slot: 'primary' },
+                  select: { integrationRef: true },
+                  take: 1,
+                },
+              },
+            },
+          },
+        },
         // `engines` carries the Codex and Claude accounts this runner has, which is where the chosen
         // account resolves to a CODEX_HOME or a CLAUDE_CONFIG_DIR.
         assignedRunner: {
@@ -638,6 +653,9 @@ export class QueueService {
       (await this.prisma.runEvent.aggregate({ where: { sessionId: session.id }, _max: { seq: true } }))._max.seq ??
       0;
     const workspace = session.workspace;
+    const taskIntegrationRef = session.task && !session.task.codeless
+      ? session.task.project?.codebases[0]?.integrationRef
+      : null;
     // The account this start builds the engine on — moved first off one the runner's own snapshot
     // already reports spent, on Automatic, rather than after the engine's first turn fails there.
     const accounts = await this.accountsForClaim(session);
@@ -761,10 +779,13 @@ export class QueueService {
       branch: session.branch ?? undefined,
       // Workspace opt-in: auto-`git init` a non-git workDir so it can be isolated.
       autoInitGit: workspace?.autoInitGit ?? undefined,
-      // The branch this session merges into — its own recorded target, else the workspace's
-      // remembered default (what the status bar's Merge button offers). Lets the runner
-      // judge "already merged" against that branch instead of main.
-      mergeTarget: session.mergeTarget ?? workspace?.defaultMergeTarget ?? undefined,
+      // The branch this session merges into — its own recorded target, a code task's project
+      // integration line, else the workspace's remembered default. Lets the runner judge
+      // "already merged" against that branch instead of main.
+      mergeTarget: session.mergeTarget
+        ?? (taskIntegrationRef
+          ? branchName(taskIntegrationRef)
+          : workspace?.defaultMergeTarget ?? undefined),
       sessionUuid,
       maxSeq,
       resume,
