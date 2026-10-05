@@ -4920,17 +4920,12 @@ html[data-theme='dark'] .session-tag-chip {
   font-size: 10px;
   line-height: 1;
   background: transparent;
-  cursor: pointer;
   font-family: inherit;
 }
 .session-project-progress.done {
   color: var(--success);
   border-color: var(--success-border);
   background: var(--success-bg);
-}
-.session-project-progress:hover,
-.session-project-progress:focus-visible {
-  border-color: var(--brand);
 }
 .session-project-page-progress {
   display: flex;
@@ -10231,6 +10226,174 @@ button.chat-jump-start:hover {
   font-size: 11.5px;
   line-height: 1.5;
   color: var(--text-3);
+}
+
+/* ── Owner project completion card (DONE_REQUEST / owner done gate) ─────────────── */
+.project-done-card {
+  overflow: hidden;
+}
+.project-done-card .project-settlement-heading {
+  font-weight: 650;
+}
+.project-done-section-title {
+  margin: 12px 0 6px;
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: .035em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.project-done-call {
+  margin: 8px 0 2px;
+  padding: 9px 11px;
+  border: 1px solid var(--brand-border);
+  border-radius: 8px;
+  background: var(--brand-tint);
+  color: var(--text-1);
+  line-height: 1.6;
+}
+.project-done-call .project-done-section-title { margin-top: 0; }
+.project-done-call p { margin: 0; font-size: 13px; }
+.project-done-tally {
+  margin: 7px 0 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+.project-done-gaps { margin-top: 8px; }
+.project-done-when { margin-top: 2px; }
+.project-done-criteria-list {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.project-done-criteria-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  padding: 7px 10px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.project-done-criteria-list li:first-child { border-top: 0; }
+.project-done-criterion-state {
+  grid-column: 2;
+  color: var(--text-3);
+  font-size: 11px;
+}
+.project-done-gap-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--brand-border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+.project-done-gap {
+  display: flex;
+  gap: 10px;
+  padding: 9px 11px;
+  border-top: 1px solid var(--border-subtle);
+  align-items: flex-start;
+}
+.project-done-gap:first-child { border-top: 0; }
+.project-done-gap-number {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--text-1);
+  color: var(--bg-raised);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 22px;
+  text-align: center;
+}
+.project-done-gap-body { min-width: 0; }
+.project-done-gap-title { font-size: 13px; line-height: 1.45; color: var(--text-1); }
+.project-done-gap-why,
+.project-done-gap-checked {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.project-done-gap-checked { color: var(--success); }
+.project-done-gap-checked b { font-weight: 650; }
+.project-done-show-all {
+  margin: 7px 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.project-done-show-all:hover { text-decoration: underline; }
+.project-done-orbit-checked {
+  margin: 12px 0 0;
+  padding: 8px 10px;
+  border-radius: 7px;
+  background: var(--success-bg);
+  color: var(--success);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.project-done-orbit-checked > span { font-weight: 700; }
+.project-done-explanation {
+  margin: 10px 0 0;
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.project-done-not-yet { margin-top: 12px; }
+.project-done-not-yet .ant-input { font: inherit; font-size: 13px; }
+.project-done-not-yet > p {
+  margin: 6px 0 0;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.project-done-not-yet-actions { display: flex; gap: 8px; margin-top: 9px; }
+.project-done-receipt-line { margin: 9px 0 0; font-size: 14px; font-weight: 600; color: var(--text-1); }
+.project-done-accepted { margin-top: 8px; font-size: 12.5px; }
+.project-done-accepted summary { color: var(--brand); cursor: pointer; }
+.project-done-accepted .project-done-gaps { margin-top: 8px; }
+.project-done-empty { margin: 7px 0 0; color: var(--text-2); font-size: 12.5px; }
+.project-done-dialog .ant-modal-content { padding: 0; overflow: hidden; }
+.project-done-dialog .project-done-card { border: 0; border-radius: 0; margin: 0; }
+.project-done-dialog .project-done-card .approval-head { border-radius: 0; }
+.project-done-provenance,
+.project-row-done-provenance { color: var(--text-2); font-size: 12px; }
+
+/* Why-not-done grouping: reason labels are text, not colour-only state. */
+.project-why-group { margin-top: 12px; }
+.project-why-group-head { display: flex; align-items: baseline; gap: 8px; color: var(--text-3); font-size: 11.5px; font-weight: 650; letter-spacing: .035em; text-transform: uppercase; }
+.project-why-who { margin-left: auto; font-size: 12px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--text-2); }
+.project-why-who:first-letter { color: var(--success); }
+.project-why-list { margin: 5px 0 0; padding: 0; list-style: none; border: 1px solid var(--brand-border); border-radius: 8px; overflow: hidden; }
+.project-why-item { display: flex; gap: 10px; padding: 9px 11px; border-top: 1px solid var(--border-subtle); }
+.project-why-item:first-child { border-top: 0; }
+.project-why-item-title { font-size: 13px; color: var(--text-1); }
+.project-why-item-state { margin-top: 2px; font-size: 12px; color: var(--text-2); }
+.project-why-item-detail { margin-top: 3px; font-size: 12px; line-height: 1.5; color: var(--text-2); }
+.project-why-status { font-size: 12.5px; color: var(--text-2); }
+.project-open-item-state.is-ready-to-close { display: inline-block; margin-bottom: 3px; border-color: var(--warning-border); background: var(--warning-bg); color: var(--warning); }
+.project-open-item-done-own .project-open-item-dot { background: var(--text-4); }
+
+@media (max-width: 640px) {
+  .project-done-card .approval-actions { align-items: stretch; }
+  .project-done-card .approval-actions .card-action { width: 100%; }
+  .project-done-not-yet-actions { flex-direction: column; }
+  .project-done-not-yet-actions .card-action { width: 100%; }
+  .project-why-who { margin-left: 0; }
+  .project-why-group-head { flex-wrap: wrap; }
 }
 
 /* Free-text answer field: lets the user type their own answer to a question. */

@@ -3,17 +3,15 @@ import SwiftUI
 import OrbitKit
 
 /// The project occupies its coordinator's place, with the same two scan lines as a session row.
-/// The progress chip is a sibling button: its full-height hit area opens the project's sessions.
+/// A tap opens the project's sessions; Open Session in the menu reaches the grouping target.
 struct SessionProjectRowView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     let row: SessionProjectRow
     let onOpen: () -> Void
-    let onSessions: () -> Void
 
     private var regular: Bool {
         SessionListPresentation.resolve(isCompactWidth: horizontalSizeClass == .compact) == .regular
     }
-    private var verticalPadding: CGFloat { regular ? 5 : 2 }
 
     var body: some View {
         Button(action: onOpen) {
@@ -25,7 +23,6 @@ struct SessionProjectRowView: View {
             .accessibilityValue(statusWords)
         }
         .buttonStyle(.plain)
-        .overlay(alignment: .leading) { progressTap }
     }
 
     private var compactRow: some View {
@@ -65,33 +62,11 @@ struct SessionProjectRowView: View {
 
     private var secondLine: some View {
         HStack(spacing: 7) {
-            // Reserve exactly the visible chip's width; the sibling button draws it over this slot.
-            progressChip.hidden()
+            progressChip
             Text(row.line.text)
                 .font(.orbitListSubtitle)
                 .foregroundStyle(lineColor)
                 .lineLimit(1)
-        }
-    }
-
-    private var progressTap: some View {
-        GeometryReader { proxy in
-            Button(action: onSessions) {
-                VStack(spacing: 0) {
-                    Spacer(minLength: 0)
-                    progressChip
-                }
-                .padding(.bottom, verticalPadding)
-                .frame(height: proxy.size.height)
-                // Include the List's top and bottom cell insets without changing its row height.
-                .padding(.vertical, 15)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .offset(y: -15)
-            .accessibilityLabel(SessionProjectCopy.sessions)
-            .accessibilityValue(SessionProjectCopy.progressHint(sessions: row.sessionCount,
-                                                                 running: row.runningCount))
         }
     }
 
@@ -378,6 +353,15 @@ struct SessionProjectPage: View {
     }
 
     private var progressCard: some View {
+        VStack(spacing: 0) {
+            progressLine
+            landingLine
+        }
+        .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+        .padding(.vertical, 4)
+    }
+
+    private var progressLine: some View {
         HStack(spacing: 10) {
             if let counts = project?.taskCounts {
                 SessionProjectProgressBar(counts: counts, running: runningCount)
@@ -392,7 +376,7 @@ struct SessionProjectPage: View {
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 4)
-            Button { app.openProject(address.projectID) } label: {
+            Button { openProject() } label: {
                 HStack(spacing: 4) {
                     Text("Project")
                     Image(systemName: "chevron.right")
@@ -403,13 +387,43 @@ struct SessionProjectPage: View {
             .foregroundStyle(Color.accentColor)
         }
         .padding(12)
-        .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
-        .padding(.vertical, 4)
+    }
+
+    /// The project page's landing line, drawn only while something is in flight; a tap opens the
+    /// project page, whose Work overview carries the same row.
+    @ViewBuilder private var landingLine: some View {
+        if let integration = app.projectSessionsIntegration, integration.inFlight != nil {
+            Divider().padding(.leading, 12)
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                if let line = ProjectPage.landingLine(integration, now: context.date,
+                                                     updatedAt: app.projectSessionsIntegrationReadAt,
+                                                     refreshFailed: app.projectSessionsIntegrationReadFailed) {
+                    Button { app.openProject(address.projectID) } label: {
+                        HStack(spacing: 8) {
+                            ProjectLandingRow(line: line)
+                            Image(systemName: "chevron.right")
+                                .font(.orbitMeta.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                }
+            }
+        }
+    }
+
+    /// On a phone the project's page is pushed over this one, so back returns here and the drawer
+    /// keeps this project selected; the iPad opens it in the Projects section.
+    private func openProject() {
+        app.openProjectFromConversation(address.projectID, overConsole: rowNavigation == .push)
     }
 
     private var projectMenu: some View {
         Menu {
-            Button { app.openProject(address.projectID) } label: {
+            Button { openProject() } label: {
                 Label(SessionProjectCopy.openProject, systemImage: "square.grid.2x2")
             }
             Button {

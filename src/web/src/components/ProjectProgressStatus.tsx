@@ -34,6 +34,7 @@ import {
   START_ROW_OWN,
   startRequestSummary,
 } from '../lib/projectStart';
+import { PROJECT_DONE_COPY } from '../lib/projectDone';
 import { newRunRequestToken, runRequestResend } from '../lib/runRequestToken';
 import { refreshTaskScheduleViews } from '../lib/taskSchedule';
 import { readTaskRunConflict } from '../lib/taskRunHandoff';
@@ -1696,6 +1697,60 @@ function OwnStartRowView({ onStart }: { onStart: () => void }): JSX.Element {
   );
 }
 
+/** The owner-facing DONE_REQUEST row opens the same settlement card as the transcript. */
+function DoneRequestRowView({
+  row,
+  now,
+  onReview,
+  reviewing,
+}: {
+  row: ProjectOpenItemRow;
+  now: number;
+  onReview?: () => void;
+  reviewing?: boolean;
+}): JSX.Element {
+  const detail = row.doneRequest
+    ? `${PROJECT_DONE_COPY.openItemsDoneRequest} · ${row.doneRequest.gaps.length} ${PROJECT_DONE_COPY.gapsItCouldntProve}`
+    : row.detailLine;
+  return (
+    <li className="project-open-item-row is-owner project-open-item-done-request" data-kind="DONE_REQUEST">
+      <span className="project-open-item-dot" aria-hidden="true" />
+      <div className="project-open-item-main">
+        <div className="project-open-item-state is-ready-to-close">{PROJECT_DONE_COPY.readyToClose}</div>
+        <div className="project-open-item-title" title={PROJECT_DONE_COPY.heading}>{PROJECT_DONE_COPY.heading}</div>
+        {detail ? <div className="project-open-item-line" title={detail}>{detail}</div> : null}
+      </div>
+      <div className="project-open-item-who">
+        <span>{WHO.OWNER}</span>
+        <time className="project-open-item-age" dateTime={row.waitingSince}>{waitingLabel(row, now)}</time>
+      </div>
+      <div className="project-open-item-press">
+        {onReview ? (
+          <button type="button" className="project-open-item-action is-primary" disabled={reviewing} onClick={onReview}>
+            {ACTION_LABEL.REVIEW}
+          </button>
+        ) : null}
+      </div>
+    </li>
+  );
+}
+
+function OwnDoneRowView({ onRecord }: { onRecord: () => void }): JSX.Element {
+  return (
+    <li className="project-open-item-row is-owner is-own-start project-open-item-done-own" data-kind="DONE">
+      <span className="project-open-item-dot" aria-hidden="true" />
+      <div className="project-open-item-main">
+        <button type="button" className="project-open-item-title project-open-item-start" onClick={onRecord}>
+          {PROJECT_DONE_COPY.recordAsDoneRow}
+        </button>
+        <div className="project-open-item-line">{PROJECT_DONE_COPY.notAskedYet}</div>
+      </div>
+      <div className="project-open-item-who" />
+      <div className="project-open-item-press" />
+    </li>
+  );
+}
+
 /**
  * The project page's Open items card (mock 2 ②): what is waiting, in the two groups that say who is
  * expected to act, oldest first in both.
@@ -1715,6 +1770,9 @@ export function ProjectOpenItems({
   onReviewStart,
   reviewingStart,
   onStartProject,
+  onReviewDone,
+  reviewingDone,
+  onRecordDone,
 }: {
   projectId: string | null | undefined;
   now?: number;
@@ -1726,6 +1784,9 @@ export function ProjectOpenItems({
   reviewingStart?: boolean;
   /** Start… while nobody has asked: the same card, over the page. */
   onStartProject?: () => void;
+  onReviewDone?: () => void;
+  reviewingDone?: boolean;
+  onRecordDone?: () => void;
 }): JSX.Element | null {
   const items = useQuery({
     ...projectOpenItemsQuery(projectId ?? ''),
@@ -1736,18 +1797,21 @@ export function ProjectOpenItems({
   // waiting on a person the way the rows are, it is the reason some of them are waiting.
   const paused = (items.data?.needsYou ?? []).filter((row) => row.kind === 'FUSE_PAUSED');
   const startRequest = started === false ? (items.data?.startRequest ?? null) : null;
+  const doneRequest = items.data?.doneRequest ?? null;
   const needsYou = [
     ...(startRequest ? [startRequest] : []),
-    ...(items.data?.needsYou ?? []).filter((row) => row.kind !== 'FUSE_PAUSED'),
+    ...(doneRequest ? [doneRequest] : []),
+    ...(items.data?.needsYou ?? []).filter((row) => row.kind !== 'FUSE_PAUSED' && row.kind !== 'DONE_REQUEST'),
   ];
   const withCoordinator = items.data?.withCoordinator ?? [];
   // Only once the read has answered: a request still on its way is not a project nobody asked for.
   const ownStart = started === false && items.data !== undefined && !startRequest && onStartProject
     ? onStartProject
     : null;
+  const ownDone = items.data !== undefined && !doneRequest && onRecordDone ? onRecordDone : null;
   if (
     !projectId
-    || (paused.length + needsYou.length + withCoordinator.length === 0 && !ownStart)
+    || (paused.length + needsYou.length + withCoordinator.length === 0 && !ownStart && !ownDone)
   ) return null;
 
   return (
@@ -1755,17 +1819,18 @@ export function ProjectOpenItems({
       <header className="project-open-items-head">
         <span className="project-open-items-title">{OPEN_ITEMS_HEADING}</span>
         <span className="project-open-items-hint">
-          {`${needsYou.length} need you · ${withCoordinator.length} with the coordinator · oldest first`}
+          {`${needsYou.length + (ownDone ? 1 : 0)} need you · ${withCoordinator.length} with the coordinator · oldest first`}
         </span>
       </header>
       {paused.map((row) => (
         <FusePauseCard key={row.itemId} projectId={projectId} row={row} now={now} />
       ))}
-      {needsYou.length > 0 || ownStart ? (
+      {needsYou.length > 0 || ownStart || ownDone ? (
         <>
           <div className="project-open-items-group">{NEEDS_YOU_GROUP}</div>
           <ul className="project-open-items-list">
             {ownStart ? <OwnStartRowView onStart={ownStart} /> : null}
+            {ownDone ? <OwnDoneRowView onRecord={ownDone} /> : null}
             {needsYou.map((row) =>
               row === startRequest ? (
                 <StartRequestRowView
@@ -1774,6 +1839,14 @@ export function ProjectOpenItems({
                   now={now}
                   onReview={onReviewStart}
                   reviewing={reviewingStart}
+                />
+              ) : row === doneRequest ? (
+                <DoneRequestRowView
+                  key={row.itemId}
+                  row={row}
+                  now={now}
+                  onReview={onReviewDone}
+                  reviewing={reviewingDone}
                 />
               ) : (
                 <OpenItemRowView key={row.itemId} row={row} now={now} />

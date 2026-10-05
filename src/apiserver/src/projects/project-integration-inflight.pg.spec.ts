@@ -160,6 +160,12 @@ function read(db: PrismaClient, f: Fixture) {
   });
 }
 
+/** The list row's in-flight job, which the session list's project row states: the same job, by the
+ *  same rule, as the project page's line. */
+async function listInFlight(db: PrismaClient, f: Fixture) {
+  return (await readProjectIntegrationLines(db, [f.projectId])).get(f.projectId)?.inFlight;
+}
+
 /** An instant the spec names in words, so a case reads as the sequence it is describing. */
 const at = (seconds: number) => new Date(Date.UTC(2026, 8, 25, 13, 58, 0) + seconds * 1000);
 
@@ -185,7 +191,7 @@ test('the landing line describes running work before the queue, on real PostgreS
           assert.equal(view.integratingCount, 0);
           assert.equal(view.queuedCount, 0);
           assert.equal((await readProjectIntegrationLines(db, [f.projectId]))
-            .get(f.projectId)?.activeJobCount, 0);
+            .get(f.projectId)?.activeJobCount, 0);          assert.equal(await listInFlight(db, f), undefined);
         });
 
       await t.test('a queued job older than the running one cannot hide the running work', async () => {
@@ -208,7 +214,7 @@ test('the landing line describes running work before the queue, on real PostgreS
         assert.equal(view.integratingCount, 1);
         assert.equal(view.queuedCount, 1);
         assert.equal((await readProjectIntegrationLines(db, [f.projectId]))
-          .get(f.projectId)?.activeJobCount, 2);
+          .get(f.projectId)?.activeJobCount, 2);        assert.deepEqual(await listInFlight(db, f), view.inFlight);
       });
 
       await t.test('a running job older than the queued one counts from its CLAIM, not its '
@@ -230,7 +236,7 @@ test('the landing line describes running work before the queue, on real PostgreS
           state: 'RUNNING',
           startedAt: at(10),
           heartbeatAt: null,
-        });
+        });        assert.deepEqual(await listInFlight(db, f), view.inFlight);
       });
 
       await t.test('a job that names no task is described with a null title', async () => {
@@ -245,7 +251,7 @@ test('the landing line describes running work before the queue, on real PostgreS
         assert.deepEqual(view.inFlight, {
           taskTitle: null, kind: 'LAND_PROMOTION', phase: null,
           state: 'RUNNING', startedAt: at(10), heartbeatAt: null,
-        });
+        });        assert.deepEqual(await listInFlight(db, f), view.inFlight);
       });
 
       await t.test('without a running job the oldest queued job counts from its enqueue', async () => {
@@ -258,6 +264,7 @@ test('the landing line describes running work before the queue, on real PostgreS
           taskTitle: 'Oldest queued task', kind: 'LAND_TASK', phase: null,
           state: 'QUEUED', startedAt: at(0), heartbeatAt: null,
         });
+        assert.deepEqual(await listInFlight(db, f), (await read(db, f)).inFlight);
       });
 
       await t.test('a promotion check carries its operation and every reported phase', async () => {
@@ -290,6 +297,7 @@ test('the landing line describes running work before the queue, on real PostgreS
         assert.equal(view.queuedCount, 0);
         assert.equal((await readProjectIntegrationLines(db, [f.projectId]))
           .get(f.projectId)?.activeJobCount, 0);
+        assert.equal(await listInFlight(db, f), undefined);
         // The last attempt's failure remains visible even though no job is active.
         assert.equal(view.mergeCheckOnTip, 'FAILING');
       });

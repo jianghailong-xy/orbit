@@ -349,6 +349,7 @@ import {
   confirmedChangesProjectKey,
   type SettlementQuestion,
 } from '../lib/projectStart';
+import { PROJECT_DONE_COPY } from '../lib/projectDone';
 import { SessionProjectSettlementCard } from './ProjectSettlementCard';
 import {
   OWNER_SEND_BACK_LABEL,
@@ -1027,6 +1028,8 @@ const waitingLabel = (s: any): string => {
   // A project its coordinator asked to start: the row says what the card in it asks, not an
   // approval nobody is being asked for.
   if (s.waitingKind === 'START_REQUEST') return READY_TO_START;
+  if (s.waitingKind === 'DONE_REQUEST') return PROJECT_DONE_COPY.readyToClose;
+  if (s.waitingKind === 'RECORD_AS_DONE') return PROJECT_DONE_COPY.recordAsDoneRow;
   return 'Waiting for approval';
 };
 
@@ -1164,12 +1167,12 @@ function SessionProjectProgressBar({ counts, runningCount }: { counts: ProjectSi
   );
 }
 
-/** A project occupies the coordinator's row, using the same two lines as a session. */
+/** A project occupies the coordinator's row, using the same two lines as a session. A click opens
+ *  the project's sessions page; the menu's Open Session reaches the grouping target. */
 export function SessionProjectListRow({
   project,
   active,
   onOpen,
-  onSessions,
   menu,
   menuOpen,
   onMenuOpenChange,
@@ -1178,7 +1181,6 @@ export function SessionProjectListRow({
   project: SessionProjectRow<any>;
   active: boolean;
   onOpen: () => void;
-  onSessions: () => void;
   menu: MenuProps;
   menuOpen: boolean;
   onMenuOpenChange: (open: boolean) => void;
@@ -1249,12 +1251,9 @@ export function SessionProjectListRow({
             <span className="session-time">{fmtTime(project.lastTurnAt ?? project.createdAt ?? undefined)}</span>
           </div>
           <div className="session-sub">
-            <button
-              type="button"
+            <span
               className={`session-project-progress${project.status === 'DONE' ? ' done' : ''}`}
               title={SESSION_PROJECT_COPY.progressHint(project.sessionCount, project.runningCount)}
-              aria-label={`Sessions for ${project.title}`}
-              onClick={(e) => { e.stopPropagation(); onSessions(); }}
             >
               {counts ? (
                 <>
@@ -1262,7 +1261,7 @@ export function SessionProjectListRow({
                   {SESSION_PROJECT_COPY.progress(counts.done, counts.total)}
                 </>
               ) : project.status}
-            </button>
+            </span>
             <div
               className={`session-preview${project.line.tone === 'preview' ? '' : ` tone-${project.line.tone}`}`}
               title={project.line.text}
@@ -8678,10 +8677,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                       project={s}
                       active={s.members.some((member) => member.id === selectedId) ||
                         selectedSession?.projectMembership?.projectId === s.projectId}
-                      onOpen={openTarget}
-                      onSessions={() => {
+                      onOpen={() => {
                         if (swipeClickGuard.current) { swipeClickGuard.current = false; return; }
                         if (swipeOpen) { setSwipeOpen(null); return; }
+                        setMenuOpenId(null);
                         enterProjectSessions(s.projectId);
                       }}
                       menuOpen={menuOpenId === s.id}
@@ -9511,6 +9510,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 <SessionProjectSettlementCard
                   key={`settlement:${selectedId}`}
                   projectId={selectedSession?.projectId ?? null}
+                  coordinator={
+                    selectedSession?.projectMembership?.role === undefined
+                      || selectedSession?.projectMembership?.role === 'COORDINATOR'
+                  }
+                  waitingKind={selectedSession?.waitingKind ?? null}
                   onDelegate={delegateProjectSettlement}
                 />
               )}

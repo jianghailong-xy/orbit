@@ -139,7 +139,7 @@ export function readProjectCodebase(
 export async function readProjectIntegrationLines(
   prisma: Pick<PrismaService, 'projectCodebase'>,
   projectIds: readonly string[],
-): Promise<Map<string, ProjectListIntegration>> {
+): Promise<Map<string, ProjectListIntegration<Date>>> {
   if (projectIds.length === 0) return new Map();
   const rows = await prisma.projectCodebase.findMany({
     where: { projectId: { in: [...projectIds] }, slot: 'primary' },
@@ -147,19 +147,48 @@ export async function readProjectIntegrationLines(
       ...LINE_COLUMNS,
       projectId: true,
       _count: { select: { integrationJobs: { where: { state: { in: ['QUEUED', 'RUNNING'] } } } } },
+      integrationJobs: {
+        where: { state: { in: ['QUEUED', 'RUNNING'] } },
+        select: {
+          id: true, state: true, kind: true, phase: true, createdAt: true, claimedAt: true, heartbeatAt: true,
+          task: { select: { title: true } },
+        },
+      },
     },
   });
-  const lines = new Map<string, ProjectListIntegration>();
+  const lines = new Map<string, ProjectListIntegration<Date>>();
   for (const row of rows) {
     const line = decidedLine(row);
     if (!line) continue;
+    const lead = oldestInFlight(row.integrationJobs ?? []);
     lines.set(row.projectId, {
       line,
       ref: branchName(row.integrationRef),
       activeJobCount: row._count.integrationJobs,
+      ...(lead ? {
+        inFlight: {
+          taskTitle: lead.task?.title ?? null,
+          kind: lead.kind as IntegrationJobKind,
+          phase: lead.phase as IntegrationJobPhase | null,
+          state: lead.state === 'RUNNING' ? 'RUNNING' : 'QUEUED',
+          startedAt: lead.claimedAt ?? lead.createdAt,
+          heartbeatAt: lead.heartbeatAt,
+        },
+      } : {}),
     });
   }
   return lines;
+}
+
+/** `readProjectIntegrationView`'s ORDER BY over a project's active jobs, in memory: running first,
+ *  then the oldest by claim-or-enqueue, `id` breaking a tie. */
+function oldestInFlight<J extends { id: string; state: string; createdAt: Date; claimedAt: Date | null }>(
+  jobs: readonly J[],
+): J | null {
+  const startedAt = (job: J) => (job.claimedAt ?? job.createdAt).getTime();
+  return [...jobs].sort((a, b) =>
+    Number(b.state === 'RUNNING') - Number(a.state === 'RUNNING')
+    || startedAt(a) - startedAt(b) || a.id.localeCompare(b.id))[0] ?? null;
 }
 
 /** How long this project's exception items wait on its coordinator before they are the owner's. */

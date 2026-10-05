@@ -1127,6 +1127,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		beatNow()
 	})
 	engineSignedOut := func() { go reprobeAfterSignOut() }
+	// The control plane wakes this runner when a sign-in it is driving needs the next heartbeat now.
+	go runWakeLoop(loopCtx, t.waitForWake, beatNow)
 	engineSignedOutSeen.Store(&engineSignedOut)
 	defer engineSignedOutSeen.Store(nil)
 	// Heartbeat-delivered work may spawn git subprocesses that outlive the heartbeat
@@ -1460,10 +1462,12 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					// the Providers page shouldn't keep calling this engine signed out for the
 					// rest of the refresh interval — nor for the half minute until the next
 					// heartbeat, under a card that already says this runner is ready. So
-					// re-probe, and send what it found at once.
+					// re-probe, and send what it found at once. Only this engine: it is the one
+					// that changed, and asking every other CLI first kept the answer back for
+					// seconds, longer on a loaded machine.
 					if res.Status == loginDone {
 						go func() {
-							engineHealth.refresh()
+							engineHealth.refreshEngine(loginFlowFor(lr.Engine).engine)
 							beatNow()
 						}()
 					}

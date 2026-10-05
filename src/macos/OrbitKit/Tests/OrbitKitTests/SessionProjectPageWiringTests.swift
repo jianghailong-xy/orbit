@@ -90,13 +90,14 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(folderRow.contains("sessionRow(s)"))
     }
 
-    func testTheRowUsesTheGroupingTargetAndItsProgressOpensSessions() throws {
+    func testTheRowOpensSessionsAndItsMenuUsesTheGroupingTarget() throws {
         for relative in ["Views/AgentsView.swift", "Views/SessionFolderPage.swift"] {
             let source = code(try appSource(relative))
             let row = try slice(source, from: "private func projectRow(_ row: SessionProjectRow)", to: "\n    }")
             XCTAssertTrue(row.contains("SessionProjectAddress(projectID: row.projectId"))
             XCTAssertTrue(row.contains("let onOpen = {"))
-            XCTAssertTrue(row.contains("SessionProjectRowView(row: row, onOpen: onOpen,"))
+            XCTAssertTrue(row.contains("SessionProjectRowView(row: row, onOpen: { app.openProjectSessions("),
+                          "a tap on the row opens the project's sessions page")
             XCTAssertTrue(row.contains("switch row.target"))
             XCTAssertTrue(row.contains("case .session(let id):"))
             XCTAssertTrue(row.contains("$0.id == id"))
@@ -104,7 +105,7 @@ final class SessionProjectPageWiringTests: XCTestCase {
             XCTAssertTrue(row.contains("case .project: app.openProjectSessions("))
             XCTAssertTrue(row.contains("onSessions: { app.openProjectSessions("))
             XCTAssertTrue(row.contains(".sessionProjectRowActions(row, onOpen: onOpen,"),
-                          "the row and its Open Session menu share the grouping target's callback")
+                          "the Open Session menu keeps the grouping target")
             XCTAssertTrue(row.contains("app.openProject(row.projectId)"))
             XCTAssertTrue(row.contains("movingSession = coordinator"))
         }
@@ -181,18 +182,13 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(row.contains("row.lastTurnAt"), "time follows the group's newest activity")
     }
 
-    func testTheProgressLabelHasItsOwnFullHeightTapTarget() throws {
+    func testTheWholeRowIsOneButtonWithTheProgressChipInline() throws {
         let source = code(try appSource("Views/SessionProjectPage.swift"))
         let row = try slice(source, from: "struct SessionProjectRowView: View {", to: "\n}\n")
         XCTAssertTrue(row.contains("Button(action: onOpen)"))
-        let progress = try slice(row, from: "private var progressTap: some View {", to: "\n    }")
-        XCTAssertTrue(progress.contains("Button(action: onSessions)"))
-        XCTAssertTrue(progress.contains("GeometryReader { proxy in"))
-        XCTAssertTrue(progress.contains(".frame(height: proxy.size.height)"), "the progress tap follows the whole content row height")
-        XCTAssertTrue(progress.contains(".contentShape(Rectangle())"))
-        XCTAssertTrue(progress.contains(".padding(.vertical, 15)"))
-        XCTAssertTrue(progress.contains(".offset(y: -15)"), "the tag's tap area reaches the first scan line")
-        XCTAssertTrue(row.contains(".overlay(alignment: .leading) { progressTap }"), "the progress control is a sibling to the row button")
+        XCTAssertFalse(row.contains("onSessions"), "the row has one tap target")
+        XCTAssertFalse(row.contains("progressTap"))
+        XCTAssertFalse(row.contains("progressChip.hidden()"))
     }
 
     func testThePageHeaderShowsTheProjectNameCountAndTwoNavigationActions() throws {
@@ -302,7 +298,7 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(sections.contains("pinnedFirst: false"))
         XCTAssertTrue(page.contains(".task(id: address)"))
         XCTAssertTrue(page.contains("await app.loadProjectSessions(address)"))
-        let progress = try slice(page, from: "private var progressCard: some View {", to: "\n    }")
+        let progress = try slice(page, from: "private var progressLine: some View {", to: "\n    }")
         XCTAssertTrue(progress.contains("project?.taskCounts"))
         XCTAssertTrue(progress.contains("SessionProjectProgressBar(counts: counts"))
         XCTAssertTrue(progress.contains("SessionProjectCopy.pageProgress(done: counts.done, total: counts.total,"))
@@ -312,7 +308,10 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(running.contains("sessions.filter { session in"))
         XCTAssertTrue(running.contains("if case .spinner = SessionStatusGlyph.make(for: session, watching: app.watches?.summary(for: session.id)).shape"))
         XCTAssertTrue(running.contains("}.count"))
-        XCTAssertTrue(progress.contains("app.openProject(address.projectID)"))
+        XCTAssertTrue(progress.contains("Button { openProject() } label: {"))
+        let open = try slice(page, from: "private func openProject() {", to: "\n    }")
+        XCTAssertTrue(open.contains("app.openProjectFromConversation(address.projectID, overConsole: rowNavigation == .push)"),
+                      "a phone pushes the project's page over the sessions page, so back returns to it")
         XCTAssertTrue(progress.contains("chevron.right"))
 
         let row = try slice(page, from: "@ViewBuilder private func sessionRow(_ session: Session)", to: "\n    }")
@@ -326,6 +325,32 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let sessionActions = code(try appSource("Views/SessionRowActions.swift"))
         let move = try slice(sessionActions, from: "private var moveAction: RowSwipeAction? {", to: "\n    }")
         XCTAssertTrue(move.contains("membership.role != .coordinator { return nil }"), "a non-coordinator member cannot move its project")
+    }
+
+    func testTheSummaryCardCarriesTheProjectPagesLandingLine() throws {
+        let source = code(try appSource("Views/SessionProjectPage.swift"))
+        let page = try slice(source, from: "struct SessionProjectPage: View {", to: "\n}\n")
+        let card = try slice(page, from: "private var progressCard: some View {", to: "\n    }")
+        let order = try [XCTUnwrap(card.range(of: "progressLine")?.lowerBound),
+                         XCTUnwrap(card.range(of: "landingLine")?.lowerBound)]
+        XCTAssertEqual(order, order.sorted())
+        let landing = try slice(page, from: "@ViewBuilder private var landingLine: some View {", to: "\n    }")
+        XCTAssertTrue(landing.contains("integration.inFlight != nil"), "no landing in flight leaves the card as it was")
+        XCTAssertTrue(landing.contains("TimelineView(.periodic(from: .now, by: 1))"))
+        XCTAssertTrue(landing.contains("ProjectPage.landingLine(integration, now: context.date,"))
+        XCTAssertTrue(landing.contains("updatedAt: app.projectSessionsIntegrationReadAt"))
+        XCTAssertTrue(landing.contains("refreshFailed: app.projectSessionsIntegrationReadFailed"))
+        XCTAssertTrue(landing.contains("ProjectLandingRow(line: line)"), "the same row the project page draws")
+        XCTAssertTrue(landing.contains("app.openProject(address.projectID)"))
+
+        let app = code(try appSource("AppModel.swift"))
+        let load = try slice(app, from: "func loadProjectSessions(_ address: SessionProjectAddress) async {", to: "\n    }")
+        XCTAssertTrue(load.contains("let integrationRead = Task { try await api.projectIntegration(address.projectID) }"))
+        XCTAssertTrue(load.contains("projectSessionsIntegration = nil"), "another project's landing never shows here")
+        let store = try XCTUnwrap(load.range(of: "projectSessionsIntegration = integration"))
+        let guardRange = try XCTUnwrap(load.range(of: "guard projectSessionsAddress == address, !Task.isCancelled else { return }\n        if let integration"))
+        XCTAssertLessThan(guardRange.lowerBound, store.lowerBound)
+        XCTAssertTrue(load.contains("projectSessionsIntegrationReadFailed = true"))
     }
 
     func testTheProjectUILayerIsCompiledForIOSOnly() throws {

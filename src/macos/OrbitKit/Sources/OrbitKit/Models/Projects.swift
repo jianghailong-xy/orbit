@@ -211,11 +211,16 @@ public struct ProjectListIntegration: Codable, Equatable, Sendable {
     public let ref: String
     /// Queued or running landing, merge and check jobs; nil on older servers.
     public let activeJobCount: Int?
+    /// The job the project page's landing line would describe; nil when nothing is in flight and
+    /// on older servers. The session list's project row states it.
+    public let inFlight: ProjectIntegrationInFlight?
 
-    public init(line: IntegrationLine, ref: String, activeJobCount: Int? = nil) {
+    public init(line: IntegrationLine, ref: String, activeJobCount: Int? = nil,
+                inFlight: ProjectIntegrationInFlight? = nil) {
         self.line = line
         self.ref = ref
         self.activeJobCount = activeJobCount
+        self.inFlight = inFlight
     }
 }
 
