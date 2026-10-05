@@ -368,7 +368,7 @@ struct ProjectNotDoneCard: View {
                 tally
             } else {
                 ApprovalHeader(symbol: "questionmark.circle", title: ProjectDone.whyHeading, tone: .blue,
-                               badge: ProjectDone.provenance)
+                               badge: questionBadge)
                 if !why.waiting.isEmpty {
                     group(ProjectDone.waitingOnWork, why.waiting, waiting: true,
                           aside: why.coordinatorOnIt ? "● \(ProjectDone.coordinatorIsOnIt)" : nil)
@@ -382,6 +382,16 @@ struct ProjectNotDoneCard: View {
             }
         }
         .approvalChrome(why.settled(subject) ? .green : .blue)
+    }
+
+    /// The provenance badge beside the question. On a phone the question takes the whole row and
+    /// the badge would be cut to "FRO…BIT", so it is left off there, as the done card leaves it off.
+    private var questionBadge: String? {
+        #if os(iOS)
+        return nil
+        #else
+        return ProjectDone.provenance
+        #endif
     }
 
     private var tally: some View {
