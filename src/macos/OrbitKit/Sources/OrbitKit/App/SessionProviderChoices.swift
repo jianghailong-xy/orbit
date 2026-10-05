@@ -321,7 +321,7 @@ public enum SessionProviderChoices {
     /// the OpenCode slug — harmless where it is used for model defaults, but here it would offer
     /// an OpenCode session every Claude provider on the account. A Gemini key borrows Antigravity,
     /// so it executes on the same CLI as the engine's own slug.
-    static func executingRuntime(_ provider: String, configured: [ConfiguredProvider]) -> String {
+    public static func executingRuntime(_ provider: String, configured: [ConfiguredProvider]) -> String {
         if let custom = configured.first(where: { $0.slug == provider }) {
             let borrowed = custom.runtime ?? ""
             return ["codex", "kimi", "antigravity", "dsh"].contains(borrowed) ? borrowed : "claude"
