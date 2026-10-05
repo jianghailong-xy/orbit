@@ -9,6 +9,7 @@ import type {
 } from '@orbit/shared';
 import { CardActionButton, CardActions } from './CardAction';
 import { ReviewCard } from './ReviewCard';
+import { useIsMobile } from '../lib/useMediaQuery';
 import { SHORTCUT_HINT, useApproveHotkey, useCardKeyClaim } from './CardHotkey';
 import { blockerHeadline, type ProjectBlocker } from './ProjectBlockers';
 import { FROM_ORBIT, FROM_ORBIT_TITLE } from './ProjectProgressStatus';
@@ -525,6 +526,7 @@ export function ProjectPromotionCard({
 }): JSX.Element | null {
   const qc = useQueryClient();
   const [reviewOpen, setReviewOpen] = useState(false);
+  const narrow = useIsMobile();
   const decide = useMutation({
     mutationFn: (door: 'confirm' | 'decline' | 'cancel') =>
       decidePromotion(projectId, promotion.promotionId, door, {
@@ -544,7 +546,7 @@ export function ProjectPromotionCard({
   // ⌘/Ctrl + Enter is `Merge to main` while this card is asking and is the highest card asking
   // (`CardHotkey.ts`) — the chord rather than the bare key, because this press changes main.
   const anchor = useRef<HTMLDivElement>(null);
-  const keys = useCardKeyClaim(reviewOpen && promotion.state === 'READY' && !decide.isPending, anchor);
+  const keys = useCardKeyClaim((!narrow || reviewOpen) && promotion.state === 'READY' && !decide.isPending, anchor);
   useApproveHotkey(keys, () => decide.mutate('confirm'), { anchor });
 
   if (!DRAWN_STATES.includes(promotion.state as (typeof DRAWN_STATES)[number])) return null;

@@ -1,9 +1,10 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { Dialog } from './ui/Dialog';
 import { refreshCardKeys } from './CardHotkey';
+import { useIsMobile } from '../lib/useMediaQuery';
 import './ReviewCard.css';
 
-/** Keep the form mounted while its preview is in the conversation, so closing is never a reset. */
+/** Show the full form on wide screens; keep narrow-screen drafts mounted behind their preview. */
 export function ReviewCard({ title, summary, meta, open, onOpenChange, children, enabled = true, id }: {
   title: string;
   summary: string;
@@ -14,12 +15,14 @@ export function ReviewCard({ title, summary, meta, open, onOpenChange, children,
   enabled?: boolean;
   id?: string;
 }) {
+  const narrow = useIsMobile();
   const trigger = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     refreshCardKeys();
     return refreshCardKeys;
-  }, [open, enabled]);
+  }, [open, enabled, narrow]);
   if (!enabled) return children;
+  if (!narrow) return <div className="review-card" id={id}>{children}</div>;
   return (
     <div className="review-card" id={id}>
       <button ref={trigger} type="button" className="approval-card review-card-preview"

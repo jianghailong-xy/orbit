@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert } from 'antd';
 import { CardActionButton, CardActions } from './CardAction';
 import { ReviewCard } from './ReviewCard';
+import { useIsMobile } from '../lib/useMediaQuery';
 import { SHORTCUT_HINT, useApproveHotkey, useCardKeyClaim } from './CardHotkey';
 import { api } from '../api';
 import { pendingCriteriaDecisionsQuery } from '../lib/queries';
@@ -775,11 +776,12 @@ export function CriteriaDecisionCard({
 }): JSX.Element {
   const answerable = isAnswerable(standing);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const narrow = useIsMobile();
   const stale = staleExplanation(standing);
   const row =
     standing.state === 'DECIDABLE' || standing.state === 'BASE_SEAL_MOVED' ? standing.row : null;
   const anchor = useRef<HTMLDivElement>(null);
-  const keys = useCardKeyClaim(reviewOpen && answerable && !busy, anchor);
+  const keys = useCardKeyClaim((!narrow || reviewOpen) && answerable && !busy, anchor);
   useApproveHotkey(keys, () => onDecide('APPROVE'), { anchor });
   return (
     <ReviewCard title={headingFor(standing)} summary={row ? changeSummary(row.diff) : stale ?? ''}
