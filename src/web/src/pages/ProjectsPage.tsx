@@ -42,7 +42,7 @@ import {
   type CoordinatorCardLayout,
 } from '../components/ProjectCoordinatorCard';
 import { BranchMark, ProjectIntegrationLine } from '../components/ProjectIntegrationLine';
-import { ProjectOpenItems } from '../components/ProjectProgressStatus';
+import { ProjectOpenItems, useOpenDoneRequest } from '../components/ProjectProgressStatus';
 import { ProjectDoneDialog } from '../components/ProjectSettlementCard';
 import { ProjectRunSettings } from '../components/ProjectRunSettings';
 import { ProjectStartDialog } from '../components/StartProjectCard';
@@ -1042,6 +1042,9 @@ export function ProjectDetailPage() {
     enabled: Boolean(id),
   });
   const p = project.data;
+  // The header's Ready to close is the coordinator's live DONE_REQUEST, read off the open-items
+  // entry the Open items card polls — not the unified done read every OPEN project carries.
+  const doneRequest = useOpenDoneRequest(id);
   const narrow = useMediaQuery(PROJECT_COMMAND_NARROW_QUERY);
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -1125,7 +1128,7 @@ export function ProjectDetailPage() {
               ) : (
                 <Tag color={STATUS_COLOR[p.status]}>{STATUS_LABEL[p.status]}</Tag>
               )}
-              {p.status === 'OPEN' && p.derivedDone?.counts ? (
+              {p.status === 'OPEN' && doneRequest ? (
                 <Tag color="gold">{PROJECT_DONE_COPY.readyToClose}</Tag>
               ) : null}
               {p.status === 'DONE' ? (
