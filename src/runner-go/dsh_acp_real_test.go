@@ -1,4 +1,4 @@
-//go:build dsh_integration
+//go:build dsh_integration && !windows
 
 package main
 
@@ -292,5 +292,178 @@ func TestDshACPRealRunnerMultiTurn(t *testing.T) {
 		if id == "t2" && (counts[evToolUse] != 1 || counts[evToolResult] != 1) {
 			t.Fatalf("real native tool events missing: %v", counts)
 		}
+	}
+}
+
+// P3b with the official CLI: P2's real preparer and Seal, a runner restart that resumes the
+// durable session, a cancel mid-stream, and a lease loss after a native tool ran. The local
+// model records every request, so a replayed prompt or tool would show up as an extra call.
+func TestDshLifecycleRealRestartCancelAndLeaseRecovery(t *testing.T) {
+	executable, node := os.Getenv("P3A_DSH_BIN"), os.Getenv("P3A_NODE_BIN")
+	if !filepath.IsAbs(executable) || !filepath.IsAbs(node) {
+		t.Fatal("P3A_DSH_BIN and P3A_NODE_BIN must name absolute executables; run scripts/test-dsh-session-lifecycle.sh")
+	}
+	for _, name := range []string{"ORBIT_SERVICE_TOKEN", "ORBIT_SESSION_ID", "ORBIT_AGENT_ID", "ORBIT_TASK_ID"} {
+		t.Setenv(name, "")
+	}
+	t.Setenv("NO_PROXY", "127.0.0.1,localhost")
+	t.Setenv("no_proxy", "127.0.0.1,localhost")
+	h := newLCHarness(t)
+	priorPath := dshServicePath
+	dshServicePath = func() string { return filepath.Dir(node) + ":/usr/bin:/bin" }
+	t.Cleanup(func() { dshServicePath = priorPath })
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
+	defer cancel()
+	requestLog, writtenFile := filepath.Join(h.dir, "model-requests.ndjson"), filepath.Join(h.work, "written.txt")
+	mockScript, err := filepath.Abs("../../scripts/deepseek-harness-p3b/mock-model.mjs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mock := exec.CommandContext(ctx, node, mockScript, requestLog, writtenFile)
+	mock.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + os.Getenv("HOME")}
+	stdout, err := mock.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mock.Stderr = os.Stderr
+	if err := mock.Start(); err != nil {
+		t.Fatalf("start synthetic Messages endpoint: %v", err)
+	}
+	t.Cleanup(func() { _ = mock.Process.Kill(); _ = mock.Wait() })
+	address := make(chan string, 1)
+	go func() {
+		scanner := bufio.NewScanner(stdout)
+		if scanner.Scan() {
+			address <- scanner.Text()
+		}
+	}()
+	var baseURL string
+	select {
+	case baseURL = <-address:
+	case <-time.After(10 * time.Second):
+		t.Fatal("synthetic Messages endpoint did not start")
+	}
+	prepareDshSessionLaunch = func(ctx context.Context, job *ClaimedSession, execDir string) (DshLaunchSpec, error) {
+		return prepareDshConfigAt(DshLaunchInput{OrbitSessionID: job.SessionID, ExecutionDir: execDir,
+			APIKey: job.Agent.Env["ORBIT_DSH_API_KEY"], BaseURL: job.Agent.Env["ORBIT_DSH_BASE_URL"],
+			FileMode: dshFileModeForPermission(job.Agent.PermissionMode)}, executable, h.home)
+	}
+	newJob := func(runtimeID string) *ClaimedSession {
+		return &ClaimedSession{SessionID: "dsh-real-lifecycle", Provider: providerDsh, RuntimeSessionID: runtimeID,
+			Agent: AgentExecConfig{Provider: providerDsh, Env: map[string]string{"ORBIT_DSH_API_KEY": "sk-p3b-synthetic", "ORBIT_DSH_BASE_URL": baseURL}}}
+	}
+	modelCalls := func() []map[string]interface{} {
+		data, _ := os.ReadFile(requestLog)
+		var calls []map[string]interface{}
+		for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+			var call map[string]interface{}
+			if json.Unmarshal([]byte(line), &call) == nil {
+				calls = append(calls, call)
+			}
+		}
+		return calls
+	}
+	history := func(call map[string]interface{}) string {
+		data, _ := json.Marshal(mapValue(call["body"])["messages"])
+		return string(data)
+	}
+
+	run := h.start(newJob(""))
+	h.cp.add("t1", "message", "Remember P3B-WORD and answer.")
+	first := h.settledOnce("t1", stSucceeded, "P3B first answer")
+	runtimeID := first.RuntimeSessionID
+	run.shutdown()
+	run.wait(t)
+	var owner dshConfigOwner
+	if data, err := os.ReadFile(filepath.Join(h.home, "orbit-owner.json")); err != nil || json.Unmarshal(data, &owner) != nil || owner.ProfileHash == "" {
+		t.Fatalf("the real profile was not sealed after initialize: %+v (%v)", owner, err)
+	}
+	t.Logf("runner restart: runtimeSessionId=%s sealed profile=%s", runtimeID, owner.ProfileHash)
+
+	run = h.start(newJob(runtimeID))
+	h.cp.add("t2", "message", "Hold this turn.")
+	lcWaitFor(t, "held model stream", func() bool { return len(modelCalls()) == 2 })
+	h.cp.add("i1", "interrupt", "")
+	h.settledOnce("t2", stInterrupted, "")
+	h.cp.add("t3", "message", "What was the word?")
+	h.settledOnce("t3", stSucceeded, "P3B third answer")
+	h.cp.add("t4", "message", "Write the file.")
+	lcWaitFor(t, "native write then held follow-up", func() bool {
+		_, err := os.Stat(writtenFile)
+		return err == nil && len(modelCalls()) == 5
+	})
+	h.cp.setLeaseLost(true)
+	run.wait(t)
+	if run.leaseLost.Load() != 1 || len(h.cp.turn("t4").Completions) != 0 {
+		t.Fatalf("lease loss: losses=%d t4=%+v", run.leaseLost.Load(), h.cp.turn("t4"))
+	}
+	time.Sleep(300 * time.Millisecond)
+	if len(modelCalls()) != 5 {
+		t.Fatal("the engine kept working after its lease was lost")
+	}
+	h.cp.setLeaseLost(false)
+	run = h.start(newJob(runtimeID))
+	h.cp.redeliver("t4")
+	if c := h.settledOnce("t4", stInterrupted, ""); !strings.Contains(c.Error, "not replayed") {
+		t.Fatalf("recovered real turn: %+v", c)
+	}
+	h.cp.add("t5", "message", "Finish.")
+	h.settledOnce("t5", stSucceeded, "P3B final answer")
+	h.end(run, "end")
+
+	calls := modelCalls()
+	if len(calls) != 6 {
+		t.Fatalf("real dsh made %d model requests, want 6 (a replay would add more)", len(calls))
+	}
+	for _, i := range []int{2, 5} {
+		if text := history(calls[i]); !strings.Contains(text, "P3B-WORD") || !strings.Contains(text, "P3B first answer") {
+			t.Fatalf("model request %d lost the resumed context: %s", i+1, text)
+		}
+	}
+	if final := history(calls[5]); strings.Count(final, "Write the file.") != 1 || strings.Count(final, "call_p3b_write") > 2 {
+		t.Fatalf("the interrupted turn was replayed into the final context: %s", final)
+	}
+	if content, err := os.ReadFile(writtenFile); err != nil || string(content) != "P3B real dsh tool effect" {
+		t.Fatalf("native write effect = %q (%v)", content, err)
+	}
+	launches, resumed := 0, 0
+	for _, event := range h.events.snapshot() {
+		if event.typ == evSystem && event.payload["subtype"] == "launch" {
+			launches++
+		}
+		if event.typ == evSystem && event.payload["subtype"] == "init" && event.payload["resumed"] == true {
+			resumed++
+			if event.payload["runtimeSessionId"] != runtimeID {
+				t.Fatalf("resume opened another runtime session: %v", event.payload)
+			}
+		}
+	}
+	if launches != 3 || resumed != 2 {
+		t.Fatalf("three launches, two of them resuming: launches=%d resumed=%d", launches, resumed)
+	}
+	var persisted []string
+	_ = filepath.Walk(h.home, func(path string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() && strings.Contains(path, runtimeID) {
+			rel, _ := filepath.Rel(h.home, path)
+			persisted = append(persisted, rel)
+		}
+		return nil
+	})
+	if len(persisted) == 0 {
+		t.Fatal("DSH_HOME holds no engine session state for the runtime id")
+	}
+	t.Logf("engine session state retained in DSH_HOME: %v", persisted)
+	for i, call := range calls {
+		t.Logf("official Messages request #%d: historyBytes=%d", i+1, len(history(call)))
+	}
+	h.cp.checkClean(t)
+	h.recordEvidence(t.Name())
+	if dir := os.Getenv("DSH_P3B_EVIDENCE_DIR"); dir != "" {
+		var summary []map[string]interface{}
+		for _, call := range calls {
+			summary = append(summary, map[string]interface{}{"call": call["call"], "messages": mapValue(call["body"])["messages"]})
+		}
+		data, _ := json.MarshalIndent(summary, "", "  ")
+		_ = os.WriteFile(filepath.Join(dir, t.Name()+".model-requests.json"), append(data, '\n'), 0o644)
 	}
 }

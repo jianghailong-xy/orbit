@@ -49,3 +49,19 @@ P3 按以下顺序接入：
 新增场景使用假安装器、假版本探测、假 ACP 进程及本地 mock HTTP 服务。两个进程同时请求，核对不同 Key、baseURL、文件策略、目录和 HOME；重启保留各自状态；缺 Key、撤销、无效 Key、Key 更新、目录冲突、profile/overlay 哈希变化及不兼容版本均有直接检查。API 场景核对加密派发与脱敏输出。脚本对真实 HOME 下 `.dsh` 的递归内容和权限取前后指纹，变更即失败。
 
 这些测试证明 P2 启动边界的隔离与错误语义。真实 CLI 协议基线沿用 P0 已确认实验；新产品驱动、真实模型、MCP 守卫、取消与恢复竞态，以及其他平台仍由 P3、P4 和 P6 对应任务验证。
+
+## P3b 会话生命周期
+
+生产 seam 已接入：`prepareDshSessionLaunch(ctx, job, execDir)` 以会话 checkout 调用 `PrepareDshSessionLaunch`，文件策略由 `dshFileModeForPermission` 显式给出（plan 为 `read-only`，其余为 `workspace-write`，从不更宽），准备器拒绝其他取值。驱动以 canonical cwd（Abs + EvalSymlinks）核对 `spec.Cwd`，并以同一 cwd 执行 new/resume；initialize 后对准备出的 spec 调用 `SealDshProfile`，再 new 或 resume。已有 runtimeSessionId 时只 `session/resume`，失败即报错，不改用 new。
+
+DSH_HOME 内的 `orbit-turns.json` 是 runner 的回合台账：保存 runtimeSessionId，以及每个 Orbit turn 在写出 prompt 前的 `prompted` 记录、未终态工具 id 和首次结算。Orbit 尚未收到 runtime id 时，从台账恢复同一会话。已 `prompted` 却未结算的回合再次投递时（runner 崩溃、租约转移），不重发 prompt，补齐其工具的失败终态并结算为 INTERRUPTED；已结算但完成回执丢失的回合按原结算再报一次。同一进程内的重复投递直接丢弃。
+
+单会话只有一个进行中 prompt；运行中的新消息留在 Orbit 队列（服务端在 IN_FLIGHT 期间不投递下一条），租约过期造成的提前投递在 runner 本地排队，按序开始。不声明原生 mid-turn steer；shell 回合以 `unknown_kind` 失败结算，不结束会话。
+
+结算优先级由 `dshSettlementOutcome` 固定，从高到低：本地停止（interrupt、end、关机、会话取消、租约丢失）一律为 cancelled，晚到的 end_turn 也不改变；其次 prompt 响应（end_turn、max_tokens 输出上限、refusal、cancelled）；再次 JSON-RPC 错误；最后是无响应的进程退出或传输断开。每个回合只结算一次。审批请求在本阶段一律回复 cancelled，停止或断开后不会有迟到许可；已结算回合的迟到 `tool_call_update` 与消息块被丢弃，不进入下一回合。
+
+租约丢失时先结束整个进程组（含工具子进程），只在本地结算，不向新租约持有者回报，台账保留 `prompted` 给下一任处理。进程意外退出且有活动回合时，回合 FAILED 并结束会话；若该回合已先被本地停止，则结算 INTERRUPTED，会话保持可恢复。关机与 end 先 `session/close`，保留整棵 DSH_HOME。reload 改变 Key、baseURL 或文件策略时结束旧进程，由监督者从最新派发重新 Prepare 并 resume；仅模型变化时在线 `session/set_config_option`。撤销 Key 后 Prepare 以 `DSH_CREDENTIAL_MISSING` 失败，不再启动。
+
+运行时 stderr 与 RPC 错误的 Message/Data 在写入日志或结算前替换启动 Key 及 `sk-` 形态的值，错误仍为失败终态。
+
+验收入口：在仓库根运行 `bash scripts/test-dsh-session-lifecycle.sh`。脚本先以 TAP 文件运行 `test/test-dsh-session-lifecycle.test.mjs` 防护用例，再在隔离目录 `npm ci` 当前仓库的 canonical P0 锁文件，核对 CLI 版本与哈希，然后以 `go test -json` 强制执行全部具名生命周期、受影响的 P3a 驱动及真实 dsh 场景，并对进程内场景再跑 `go test -race`。缺失、未匹配、跳过、失败或启动失败均非零退出。传入 `--evidence <dir>` 时保存输出与录制；录制把控制面回合行（状态、投递次数、完成回执）、引擎会话日志、请求序列、副作用文件、runner 台账和 Orbit 事件放在一起对照。本次结果在 `docs/evidence/deepseek-harness/p3b/`。
