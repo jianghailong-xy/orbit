@@ -1,6 +1,7 @@
 import {
   AgentProvider,
   DEFAULT_MODEL_BY_PROVIDER,
+  antigravityBaseModel,
   isRetiredModel,
   modelForProvider,
   providerPreset,
@@ -424,16 +425,22 @@ export function resolveProviderExec(args: {
   // onto Session.model, and current Workspace create/update paths never write a new pin.
   const inheritsWorkspace = legacyInheritance && provider !== AgentProvider.DSH;
   const legacyWorkspaceModel = inheritsWorkspace ? firstNonBlank(workspaceModel) : undefined;
+  // The rows this provider's own space offers on the assigned runner, where the runner has
+  // reported them: what decides an Antigravity id, whose space a prefix cannot describe — a Google
+  // sign-in adds `claude-opus-5-5` and `gpt-oss-120b` rows, and dropping one here is exactly the
+  // silent fallback to Gemini this passes the catalogue in to stop.
+  const offered = runtimeCatalogModels(args.modelCatalog, provider);
   const inheritedModel = inheritsWorkspace
-    ? modelForProvider(provider, legacyWorkspaceModel)
+    ? modelForProvider(provider, legacyWorkspaceModel, offered)
     : firstCompatibleModel(
         provider,
+        offered,
         savedRuntimeDefaultModel(args.runtimeDefaultModels, provider),
         firstRuntimeCatalogModel(args.modelCatalog, provider),
       );
   return {
     provider,
-    model: modelForProvider(provider, explicitSessionModel ?? inheritedModel),
+    model: modelForProvider(provider, explicitSessionModel ?? inheritedModel, offered),
     env,
     ...(retired ? { retiredPin: true } : {}),
   };
@@ -482,8 +489,9 @@ function runtimeCatalogDefault(
  * (models.dev) or one the user maintains, and neither retires an id reliably enough to overrule a
  * deliberate choice. OpenCode is out too: it owns model selection, and the ids it reports are a
  * slice of a multi-provider space rather than the whole of it. Antigravity is judged like the rest,
- * against the base models its runner folds `agy models` into — so a full level-suffixed slug a
- * caller typed (`gemini-3.8-flash-high`, which no row is) reads as retired there.
+ * against the base models its runner folds `agy models` into — and the full level-suffixed slug a
+ * caller typed (`gemini-3.8-flash-high`, `claude-sonnet-5-5-medium`) is that same base model, so
+ * the base row is the answer rather than the whole slug reading as retired.
  */
 function retiredPin(
   row: ModelProviderRow | null,
@@ -499,8 +507,12 @@ function retiredPin(
     return !!offered?.length && model !== savedRuntimeDefaultModel(args.runtimeDefaultModels, runtime)
       && !offered.some((entry) => entry.value === model);
   }
+  // agy's catalogue reports each base model once, while the slug its CLI also accepts carries its
+  // level (`claude-sonnet-5-5-medium`): the base row is the same model's answer, so a
+  // level-suffixed id is judged by it rather than dropped as an id agy no longer lists.
+  const judged = runtime === AgentProvider.ANTIGRAVITY ? antigravityBaseModel(model) : model;
   return isRetiredModel(
-    model,
+    judged,
     runtimeCatalogModels(args.modelCatalog, runtime),
     savedRuntimeDefaultModel(args.runtimeDefaultModels, runtime),
   );
@@ -520,11 +532,12 @@ function nonBlankModel(runtime: AgentProvider, value?: string | null): string | 
 
 function firstCompatibleModel(
   provider: AgentProvider,
+  offered: Array<{ value: string }> | undefined,
   ...values: Array<string | null | undefined>
 ): string | undefined {
   for (const value of values) {
     const model = nonBlankModel(provider, value);
-    if (model && modelForProvider(provider, model) === model) return model;
+    if (model && modelForProvider(provider, model, offered) === model) return model;
   }
   return undefined;
 }

@@ -26,6 +26,7 @@ import type { Response } from 'express';
 import { PublicIdPipe } from '../common/public-id';
 import { MachineProtocol } from '../common/machine-protocol';
 import { readWorktreeArtifactRequest } from '../sessions/worktree-artifact';
+import { branchName } from '../projects/project-criterion-landing';
 import { TasksService } from '../tasks/tasks.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import {
@@ -66,6 +67,7 @@ import {
   DeviceStartResponse,
   apiErrorRetryAt,
   apiErrorRetryBudgetLeft,
+  POOL_RATE_LIMIT_WAIT_MS,
   isAsyncAgentLaunchAck,
   isRateLimitApiErrorText,
   isRetryableApiErrorText,
@@ -161,6 +163,7 @@ import {
   coordinatorOpeningIsCurrent,
   wrapCoordinatorDeliveryContext,
 } from '../projects/coordinator-opening';
+import { modelRoutingEnabled } from '../common/model-routing-switch';
 import { appendWikiContext } from '../wiki/wiki-push';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -365,6 +368,11 @@ const REPO_CLEANUP_TIMEOUT_MS = 3 * 60_000;
 // itself. maxWait uses the same value: a batch that already burned its compile should queue for
 // a pool slot instead of failing fast and paying the compile again.
 const EVENTS_INGEST_TRANSACTION_TIMEOUT_MS = 120_000;
+// A first integration back-fills every other finished code task in the same transaction as the
+// turn that starts the line. That work is proportional to the project's completed tasks, so the
+// interactive 5s default expires before a large project's queue can commit. Keep the atomic
+// boundary, but give this path the same bounded window as durable event ingestion.
+const TURN_COMPLETE_TRANSACTION_TIMEOUT_MS = 120_000;
 // The WASM query compiler and the wire bind cost grow super-linearly with the row count, and a
 // backlogged batch holds thousands: one 32k-parameter createMany compiles for minutes, while 256
 // rows stay in the milliseconds. Chunked inside the same transaction, so the retry-idempotency
@@ -2208,6 +2216,20 @@ export class RunnerApiController {
         // Same standing "always allow" grants the claim path sends: a reclaimed session must
         // not start re-asking about calls this workspace already approved permanently.
         workspace: { include: { permissionRules: { orderBy: { createdAt: 'asc' } } } },
+        task: {
+          select: {
+            codeless: true,
+            project: {
+              select: {
+                codebases: {
+                  where: { slot: 'primary' },
+                  select: { integrationRef: true },
+                  take: 1,
+                },
+              },
+            },
+          },
+        },
         // `engines` for the Codex account the workspace chose, resolved as the claim resolves it.
         assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true, engines: true } },
         // The account-level permission default and orchestration switch, which replaced the
@@ -2298,6 +2320,9 @@ export class RunnerApiController {
         continue;
       }
       const workspace = s.workspace;
+      const taskIntegrationRef = s.task && !s.task.codeless
+        ? s.task.project?.codebases[0]?.integrationRef
+        : null;
       const declared = s.provider ?? null;
       // Custom provider borrows a built-in runtime — resolve the runner-facing provider, model,
       // and injected env so a resumed session keeps talking to the configured endpoint. Owner
@@ -2450,9 +2475,12 @@ export class RunnerApiController {
         workDir: workspace?.workDir ?? undefined,
         branch: s.branch ?? undefined,
         autoInitGit: workspace?.autoInitGit ?? undefined,
-        // cf. the claim path: the branch this session merges into, so a restarted runner
-        // still judges "already merged" against it rather than main.
-        mergeTarget: s.mergeTarget ?? workspace?.defaultMergeTarget ?? undefined,
+        // cf. the claim path: the branch this session merges into (including a project task's
+        // integration line), so a restarted runner still judges "already merged" against it.
+        mergeTarget: s.mergeTarget
+          ?? (taskIntegrationRef
+            ? branchName(taskIntegrationRef)
+            : workspace?.defaultMergeTarget ?? undefined),
         agentId: s.workspaceId ?? undefined,
         taskId: s.taskId ?? undefined,
         allowOrchestration,
@@ -3396,8 +3424,11 @@ export class RunnerApiController {
             coordinatorContextEpoch: true,
             coordinatorContextAckKey: true,
             // The switch picks which instruction text is delivered, and so is part of the context
-            // key — read here and in turnComplete alike, so both sides compute the same key.
-            coordinatorForProject: { select: { id: true, coordinatorEnabled: true } },
+            // key — read here and in turnComplete alike, so both sides compute the same key. So does
+            // the project owner's smart model selection (common/model-routing-switch.ts).
+            coordinatorForProject: {
+              select: { id: true, coordinatorEnabled: true, owner: { select: { preferences: true } } },
+            },
             // What the wiki context below is decided from: which space this session's workspace is
             // bound to, and the three things about a run that take it out of the push entirely —
             // a verifier, a foreman, or a judgment session (design §7.3). The fourth, coordinating
@@ -3546,14 +3577,17 @@ export class RunnerApiController {
               sessionContext.prompt,
               sessionContext.titleBeforeProjectManagement,
               sessionContext.coordinatorForProject,
+              modelRoutingEnabled(sessionContext.coordinatorForProject?.owner ?? null),
             );
           } else if (t.kind !== 'steer' && sessionContext.coordinatorForProject) {
-            const { id: projectId, coordinatorEnabled } = sessionContext.coordinatorForProject;
+            const { id: projectId, coordinatorEnabled, owner } = sessionContext.coordinatorForProject;
+            const modelRouting = modelRoutingEnabled(owner);
             const contextKey = buildCoordinatorDeliveryContextKey(
               projectId,
               leaseGeneration!,
               sessionContext.coordinatorContextEpoch,
               coordinatorEnabled,
+              modelRouting,
             );
             if (sessionContext.coordinatorContextAckKey !== contextKey) {
               // A dedicated project-page coordinator's initial turn already IS the canonical
@@ -3565,9 +3599,9 @@ export class RunnerApiController {
                 !runtimeStarted
                 && t.clientTurnId === `initial-${sessionId}`
                 && sessionContext.titleBeforeProjectManagement == null
-                && coordinatorOpeningIsCurrent(sessionContext.prompt, projectId, coordinatorEnabled);
+                && coordinatorOpeningIsCurrent(sessionContext.prompt, projectId, coordinatorEnabled, modelRouting);
               if (!openingAlreadyPresent) {
-                content = wrapCoordinatorDeliveryContext(content, projectId, coordinatorEnabled);
+                content = wrapCoordinatorDeliveryContext(content, projectId, coordinatorEnabled, modelRouting);
               }
               if (t.coordinatorContextKey !== contextKey) {
                 await tx.conversationTurn.updateMany({
@@ -4099,7 +4133,9 @@ export class RunnerApiController {
           assignedRunnerId: true,
           inboxLeaseGeneration: true,
           coordinatorContextEpoch: true,
-          coordinatorForProject: { select: { id: true, coordinatorEnabled: true } },
+          coordinatorForProject: {
+            select: { id: true, coordinatorEnabled: true, owner: { select: { preferences: true } } },
+          },
           mergeStatus: true,
           mergedSourceSha: true,
           // Armed by the event batch that carried this turn's error (the runner flushes events
@@ -4159,6 +4195,7 @@ export class RunnerApiController {
               current.inboxLeaseGeneration,
               current.coordinatorContextEpoch,
               current.coordinatorForProject.coordinatorEnabled,
+              modelRoutingEnabled(current.coordinatorForProject.owner),
             )
           : null;
       const acknowledgedCoordinatorContextKey =
@@ -5058,7 +5095,12 @@ export class RunnerApiController {
         reviewToDeliver,
         reviewsAbandoned,
       };
-    }, loggedRetry(this.logger, 'runnerApi.turnComplete'));
+    }, loggedRetry(this.logger, 'runnerApi.turnComplete', {
+      transaction: {
+        timeout: TURN_COMPLETE_TRANSACTION_TIMEOUT_MS,
+        maxWait: TURN_COMPLETE_TRANSACTION_TIMEOUT_MS,
+      },
+    }));
     // The review this completion recorded, handed to its reviewer after the commit (§2 D2); and the
     // ones this completion found it had been handed and dropped, whose cards are the owner's now (T5).
     if ('reviewToDeliver' in finalized && finalized.reviewToDeliver) {
@@ -7010,8 +7052,8 @@ export class RunnerApiController {
       // per re-send whatever armed it.
       if (rateLimited && apiErrorRetryBudgetLeft(session.retryAttempts)) {
         const at =
-          (await this.queue.sharedPoolRetryAt(this.prisma, session, new Date())) ??
-          (await this.queue.loginPoolRetryAt(this.prisma, session, new Date()));
+          (await this.queue.sharedPoolRetryAt(this.prisma, session, new Date(), POOL_RATE_LIMIT_WAIT_MS)) ??
+          (await this.queue.loginPoolRetryAt(this.prisma, session, new Date(), POOL_RATE_LIMIT_WAIT_MS));
         if (at) return { retryAt: at };
       }
       return { retryAt: apiErrorRetryAt(session.retryAttempts, new Date()) };

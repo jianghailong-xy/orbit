@@ -7,7 +7,7 @@ import { accountPauseUntil } from '../common/account-pause';
 import { PublicIdPipe } from '../common/public-id';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
-import { codexLoginView, codexPoolUnavailableReason, maskedAccount } from './codex-login';
+import { codexLoginView, codexPoolUnavailableReason, maskedAccount, POOL_LOGIN_SELECT } from './codex-login';
 import { CreateModelProviderDto, CreateProviderPoolDto, UpdateModelProviderDto } from './dto';
 import { decryptSecret, encryptSecret } from './provider-crypto';
 import { catalogDefaultModel, catalogModels, presetCatalog } from './model-catalog';
@@ -117,23 +117,6 @@ type PoolEditRow = PoolAdmissionRow & { id: string; label: string };
  *  the encrypted pair is never selected on any path that builds a response. */
 /** A pool's ChatGPT logins, read beside the pool itself: a login belongs to a person of the pool
  *  (migration 0371), so it is no relation of the pool row. Each by its email and `…AB12`, oldest first. */
-const POOL_LOGIN_SELECT = {
-  poolId: true,
-  accountId: true,
-  // Who signed it in — the person whose sign-in again brings it back, and who may take it out with the
-  // pool's admins.
-  userId: true,
-  email: true,
-  plan: true,
-  state: true,
-  lastError: true,
-  expiresAt: true,
-  createdAt: true,
-  // What the pool gateway last read off the backend's answers, and the reset it named (migration 0324).
-  usage: true,
-  spentUntil: true,
-  pausedUntil: true,
-} satisfies Prisma.PoolCodexLoginSelect;
 
 type PoolLoginRow = Prisma.PoolCodexLoginGetPayload<{ select: typeof POOL_LOGIN_SELECT }>;
 

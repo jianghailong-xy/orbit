@@ -17,7 +17,14 @@ import {
 
 import { taskLanding, readLandingBranches } from './project-criterion-landing';
 import { LIVE_PROMOTION_STATES } from './project-promotion';
-import { openItemActionsFromDoors, openItemDoorMessageNames } from './open-item-doors';
+import {
+  doorsForOpenItem,
+  failureClassForOpenItem,
+  openItemActionsFromDoors,
+  openItemDoorMessageNames,
+  sourceJobForOpenItem,
+  type OpenItemDoorInput,
+} from './open-item-doors';
 import type { PrismaService } from '../prisma/prisma.service';
 
 /** Nest token for the post-commit delivery edge, kept structural to avoid a service import cycle. */
@@ -211,6 +218,216 @@ export function openItemChat(source: OpenItemChatSource): OpenItemChat {
       : !source.coordinator.receiving ? 'COORDINATOR_UNAVAILABLE'
         : null;
   return { sessionId: source.coordinator?.sessionId ?? null, stage, refusal };
+}
+
+/**
+ * The small row shape needed by the two human-facing next-step projections.
+ *
+ * It is deliberately wider than `OpenItemActionsSource`: list rows carry state and the tasks
+ * filed against them, while a delivery card carries only the immutable item columns.  Keeping
+ * those facts optional lets an older reader ask the same pure functions without manufacturing a
+ * second, subtly different matrix input.
+ */
+export interface OpenItemDecisionRow {
+  kind?: OpenItemKind | string;
+  /** Matrix fixtures sometimes call the same dimension `todoType`. */
+  todoType?: OpenItemKind | string;
+  assignee: OpenItemAssignee | string;
+  taskId?: string | null;
+  promotionId?: string | null;
+  fuseEpisodeId?: string | null;
+  askable?: boolean;
+  sourceJob?: string | null;
+  failureClass?: string | null;
+  phase?: string | null;
+  jobKind?: string | null;
+  payload?: unknown;
+  state?: string | null;
+  status?: string | null;
+  handledBy?: ReadonlyArray<{ taskId?: string; title?: string; state?: string }>;
+  handled_by?: ReadonlyArray<{ taskId?: string; title?: string; state?: string }>;
+  handoverNote?: string | null;
+  /** Accept the database spelling too: fixtures and raw reads sometimes use snake case. */
+  handover_note?: string | null;
+  source_job?: string | null;
+  failure_class?: string | null;
+}
+
+function doorInputForRow(row: OpenItemDecisionRow): OpenItemDoorInput {
+  return {
+    kind: row.kind ?? row.todoType ?? '',
+    assignee: row.assignee,
+    taskId: row.taskId ?? null,
+    promotionId: row.promotionId ?? null,
+    fuseEpisodeId: row.fuseEpisodeId ?? null,
+    askable: row.askable ?? true,
+    sourceJob: row.sourceJob ?? row.source_job,
+    failureClass: row.failureClass ?? row.failure_class,
+    phase: row.phase,
+    jobKind: row.jobKind,
+    payload: row.payload,
+  };
+}
+
+function decisionRowIsClosed(row: OpenItemDecisionRow): boolean {
+  const state = row.state ?? row.status;
+  return state != null && state !== 'OPEN';
+}
+
+function hasLiveFix(row: OpenItemDecisionRow): boolean {
+  return [...(row.handledBy ?? []), ...(row.handled_by ?? [])].some((task) => {
+    const state = task.state?.toUpperCase();
+    return state == null || (state !== 'DONE' && state !== 'CANCELLED');
+  });
+}
+
+function hasFix(row: OpenItemDecisionRow): boolean {
+  return (row.handledBy?.length ?? 0) + (row.handled_by?.length ?? 0) > 0;
+}
+
+/**
+ * The short reason an owner sees beside an owner item in a session row.
+ *
+ * Escalated rows intentionally retain their original kind in the open-item query.  Reading that
+ * kind here means the signal needs no follow-up query (and does not collapse every exception into
+ * the unhelpful word "Escalated").  These are also the words used by the clients for the card kind.
+ */
+export function ownerItemNeed(kind: OpenItemKind | string): string {
+  switch (kind) {
+    case 'INTEGRATION_CONFLICT': return 'Merge conflict';
+    case 'INTEGRATION_CHECK_FAILED': return 'Checks failed';
+    case 'INTEGRATION_ERROR': return 'Integration error';
+    case 'TASK_FAILED': return 'Task failed';
+    case 'PROMOTION_APPROVAL': return 'Approve merge to main';
+    case 'COORDINATOR_QUESTION': return 'Question from coordinator';
+    case 'FUSE_PAUSED': return 'Paused';
+    case 'START_REQUEST': return 'Ready to start';
+    case 'DONE_REQUEST': return 'Ready to close';
+    case 'DELIVERY_REVIEW': return 'Delivery review';
+    default: return 'Exception';
+  }
+}
+
+/** Backwards-friendly alias for callers that name the field rather than the owner surface. */
+export const openItemNeed = ownerItemNeed;
+
+function primaryActionPreference(row: OpenItemDecisionRow): OpenItemAction[] {
+  const sourceJob = sourceJobForOpenItem(doorInputForRow(row));
+  const owner = row.assignee === 'OWNER';
+  if (owner) return ['ASK_COORDINATOR_AGAIN', 'OPEN_TASK_SESSION', 'RETRY', 'REVIEW', 'ANSWER', 'RESUME'];
+  if (row.kind === 'TASK_FAILED') return ['RETRY', 'OPEN_TASK_SESSION', 'OPEN_COORDINATOR', 'CANCEL_TASK'];
+  if (row.kind === 'COORDINATOR_QUESTION') return ['ANSWER'];
+  if (row.kind === 'FUSE_PAUSED') return ['RESUME'];
+  if (row.kind === 'PROMOTION_APPROVAL') return ['REVIEW'];
+  if (row.kind === 'START_REQUEST' || row.kind === 'DONE_REQUEST') return [];
+  if (row.kind === 'DELIVERY_REVIEW') return ['OPEN_TASK_SESSION', 'RETRY', 'OPEN_COORDINATOR'];
+  if (sourceJob === 'CHECK_PROMOTION' || sourceJob === 'LAND_PROMOTION') {
+    return ['RETRY', 'REVIEW', 'OPEN_TASK_SESSION', 'OPEN_COORDINATOR'];
+  }
+  return ['OPEN_TASK_SESSION', 'RETRY', 'OPEN_COORDINATOR', 'CANCEL_TASK'];
+}
+
+/**
+ * Pick the first compact action backed by this row's actual door cell.
+ *
+ * `openItemActions` remains the compatibility projection consumed by older clients.  This helper
+ * only chooses its lead, and falls back to a directly named door for rows whose legacy identifiers
+ * are absent (for example a synthetic matrix fixture).  It never invents an action.
+ */
+export function primaryAction(row: OpenItemDecisionRow): OpenItemAction | undefined {
+  if (decisionRowIsClosed(row)) return undefined;
+  const input = doorInputForRow(row);
+  const doors = doorsForOpenItem(input);
+  const backed = (action: OpenItemAction): boolean => doors.some((candidate) =>
+    candidate.implemented && candidate.holder === (row.assignee === 'OWNER' ? 'OWNER' : 'COORDINATOR')
+      && candidate.action === action);
+  const projected = openItemActionsFromDoors(input);
+  for (const action of primaryActionPreference(row)) {
+    if (projected.includes(action) && backed(action)) return action;
+  }
+  for (const action of projected) {
+    if (backed(action)) return action;
+  }
+  return doors.find((candidate) => candidate.implemented && candidate.action !== undefined)?.action;
+}
+
+function ownerOrCoordinator(row: OpenItemDecisionRow): string {
+  return row.assignee === 'OWNER' ? 'You' : 'The coordinator';
+}
+
+/**
+ * One sentence explaining the next decision for an open item.
+ *
+ * The dimensions are read through the same door matrix as `openItemActions`; the prose therefore
+ * cannot describe a retry, hand-back, or review that this particular cell does not hold.  Status
+ * and hand-off facts are handled first because they change the question from "what failed?" to
+ * "what is already in motion?".
+ */
+export function openItemRequiredAction(row: OpenItemDecisionRow): string {
+  if (decisionRowIsClosed(row)) return 'This item is already settled — no action is required.';
+  if (hasLiveFix(row)) {
+    return 'A repair task is already handling this item — let it finish or open the task to see what it needs.';
+  }
+  if (hasFix(row)) {
+    return 'A repair task is linked to this item — inspect its result, then use the available door if the item still needs a decision.';
+  }
+  const handover = (row.handoverNote ?? row.handover_note ?? '').trim();
+  if (handover) {
+    return `The coordinator handed this item over with this note: “${handover}” — follow it, then use the available door.`;
+  }
+
+  const input = doorInputForRow(row);
+  const sourceJob = sourceJobForOpenItem(input);
+  const failureClass = failureClassForOpenItem(input);
+  const actor = ownerOrCoordinator(row);
+
+  // This is the copy approved in the project effect and is intentionally byte-for-byte stable:
+  // the three clients render this field, they do not translate it.
+  if (row.assignee === 'OWNER' && row.kind === 'INTEGRATION_CHECK_FAILED'
+      && (sourceJob === 'CHECK_PROMOTION' || sourceJob === 'LAND_PROMOTION')
+      && failureClass !== 'CONFLICT') {
+    return 'Nothing on the project branch reaches main until this check passes — re-run it or ask the coordinator to fix it.';
+  }
+
+  if (row.kind === 'COORDINATOR_QUESTION') {
+    return row.assignee === 'OWNER'
+      ? 'The coordinator is waiting for your answer — choose an option or reply to the question.'
+      : 'The coordinator must answer this open question — choose an option or reply to the question.';
+  }
+  if (row.kind === 'FUSE_PAUSED') return 'The coordinator is paused — resume the project when you are ready.';
+  if (row.kind === 'START_REQUEST') return 'The project is ready to start — approve or decline the start request.';
+  if (row.kind === 'DONE_REQUEST') return 'The project may be finished — review the work and record it done or send it back.';
+  if (row.kind === 'PROMOTION_APPROVAL') {
+    return `${actor} must decide whether this promotion reaches main — review it, then approve, decline, or cancel it.`;
+  }
+  if (row.kind === 'TASK_FAILED') {
+    return `${actor} must get this task past its failure — retry it, file a repair task, or close it.`;
+  }
+  if (row.kind === 'DELIVERY_REVIEW') {
+    return `This delivery needs a landing decision — ${actor === 'You' ? 'review it and' : 'review it, then'} retry, repair, or close it.`;
+  }
+  if (sourceJob === 'MAIN_SYNC' && failureClass === 'CONFLICT') {
+    return 'The project branch cannot move until this sync conflict is repaired — record the fix and reopen the task.';
+  }
+  if (sourceJob === 'CHECK_PROMOTION' || sourceJob === 'LAND_PROMOTION') {
+    if (failureClass === 'CONFLICT') {
+      return 'The project branch cannot reach main until this promotion conflict is repaired — create a sync task or ask the coordinator to fix it.';
+    }
+    if (failureClass === 'CHECK_TIMED_OUT') {
+      return 'The project branch cannot reach main until this check finishes — re-run it with a reason or ask the coordinator to fix it.';
+    }
+    return 'The project branch cannot reach main until this integration is repaired — re-run it or ask the coordinator to fix it.';
+  }
+  if (failureClass === 'CONFLICT') {
+    return 'This task cannot reach the project branch until its merge conflict is repaired — fix the task branch or ask the coordinator to do it.';
+  }
+  if (failureClass === 'CHECK_FAILED' || failureClass === 'CHECK_TIMED_OUT') {
+    return 'This task cannot reach the project branch until its landing check passes — re-run it or ask the coordinator to fix it.';
+  }
+  if (failureClass === 'ERROR') {
+    return 'This task cannot reach the project branch until the integration error is repaired — retry it or ask the coordinator to fix it.';
+  }
+  return `${actor} must use the available door to move this exception forward.`;
 }
 
 /**
@@ -1722,6 +1939,8 @@ export async function readOpenItemDeliveryCard(
       sessionId: true,
       projectId: true,
       assignee: true,
+      state: true,
+      handoverNote: true,
       promotionId: true,
       fuseEpisodeId: true,
     },
@@ -1785,6 +2004,29 @@ export async function readOpenItemDeliveryCard(
       promotionId: item.promotionId,
       fuseEpisodeId: item.fuseEpisodeId,
       askable: false,
+      payload: item.payload,
+    }),
+    requiredAction: openItemRequiredAction({
+      kind: item.kind,
+      assignee: item.assignee,
+      taskId: item.taskId,
+      promotionId: item.promotionId,
+      fuseEpisodeId: item.fuseEpisodeId,
+      askable: false,
+      payload: item.payload,
+      state: item.state,
+      handoverNote: item.handoverNote,
+    }),
+    primaryAction: primaryAction({
+      kind: item.kind,
+      assignee: item.assignee,
+      taskId: item.taskId,
+      promotionId: item.promotionId,
+      fuseEpisodeId: item.fuseEpisodeId,
+      askable: false,
+      payload: item.payload,
+      state: item.state,
+      handoverNote: item.handoverNote,
     }),
     landing: {
       receipts: receipts.length,

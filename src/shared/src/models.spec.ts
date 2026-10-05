@@ -106,8 +106,10 @@ describe('modelForProvider', () => {
     );
   });
 
-  it('keeps agy model slugs on Antigravity and nothing else', () => {
-    // What `agy models` lists, folded to a base name, and the full slug it also accepts.
+  it('keeps agy model slugs on Antigravity and nothing else, with no catalogue to ask', () => {
+    // A runner that has reported no catalogue yet leaves only the historical prefix rule, which is
+    // the API-key space every `agy models` list has always contained. What `agy models` lists,
+    // folded to a base name, and the full slug it also accepts:
     expect(modelForProvider(AgentProvider.ANTIGRAVITY, 'gemini-3.1-pro')).toBe('gemini-3.1-pro');
     expect(modelForProvider(AgentProvider.ANTIGRAVITY, 'gemini-3.8-flash-high')).toBe(
       'gemini-3.8-flash-high',
@@ -125,6 +127,96 @@ describe('modelForProvider', () => {
     expect(modelForProvider(AgentProvider.CODEX, 'gemini-3.1-pro')).toBe('gpt-5.6-sol');
     expect(modelForProvider(AgentProvider.KIMI, 'gemini-3.1-pro')).toBe('kimi-code/kimi-for-coding');
     expect(modelForProvider(AgentProvider.OPENCODE, 'gemini-3.1-pro')).toBe('');
+  });
+});
+
+/**
+ * Antigravity's model space is whatever the assigned runner's `agy models` lists, and a Google
+ * sign-in widens it past `gemini-…`: the account catalogue adds Claude Opus/Sonnet 5.5 and
+ * GPT-OSS rows (contract §16.7). Reading those ids by prefix discarded every one of them and the
+ * session silently ran agy's own Gemini default instead of the model that was picked.
+ *
+ * The runner folds each slug into one row per base model (`claude-opus-5-5`), so the full slug agy
+ * also accepts (`claude-opus-5-5-medium`) is matched by its base — and a runner that has not
+ * reported a catalogue keeps the historical prefix rule.
+ */
+describe('modelForProvider on Antigravity reads the assigned runner’s agy catalogue', () => {
+  // `agy models` on a runner with a Google sign-in: 18 slugs folded into 7 rows.
+  const googleCatalog = [
+    { value: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash' },
+    { value: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro' },
+    { value: 'claude-opus-5-5', label: 'Claude Opus 5.5' },
+    { value: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5' },
+    { value: 'gpt-oss-120b', label: 'GPT-OSS 120B' },
+  ];
+
+  it('keeps a Google sign-in’s models verbatim, base name and level-suffixed slug alike', () => {
+    expect(modelForProvider(AgentProvider.ANTIGRAVITY, 'claude-opus-5-5', googleCatalog)).toBe(
+      'claude-opus-5-5',
+    );
+    expect(modelForProvider(AgentProvider.ANTIGRAVITY, 'claude-sonnet-5-5', googleCatalog)).toBe(
+      'claude-sonnet-5-5',
+    );
+    expect(modelForProvider(AgentProvider.ANTIGRAVITY, 'gpt-oss-120b', googleCatalog)).toBe(
+      'gpt-oss-120b',
+    );
+    // The full slugs `agy models` prints — the runner splits them back into `--model`/`--effort`.
+    expect(modelForProvider(AgentProvider.ANTIGRAVITY, 'claude-opus-5-5-high', googleCatalog)).toBe(
+      'claude-opus-5-5-high',
+    );
+    expect(modelForProvider(AgentProvider.ANTIGRAVITY, 'claude-sonnet-5-5-medium', googleCatalog))
+      .toBe('claude-sonnet-5-5-medium');
+    expect(modelForProvider(AgentProvider.ANTIGRAVITY, 'gpt-oss-120b-medium', googleCatalog)).toBe(
+      'gpt-oss-120b-medium',
+    );
+  });
+
+  it('keeps the Gemini rows the same catalogue lists — the API-key path does not regress', () => {
+    // Every API-key runner reports the same catalogue shape, without the account's extra rows.
+    const apiKey = [
+      { value: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash' },
+      { value: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro' },
+    ];
+    for (const catalog of [googleCatalog, apiKey]) {
+      expect(modelForProvider(AgentProvider.ANTIGRAVITY, 'gemini-3.8-flash', catalog)).toBe(
+        'gemini-3.8-flash',
+      );
+      expect(modelForProvider(AgentProvider.ANTIGRAVITY, 'gemini-3.8-flash-high', catalog)).toBe(
+        'gemini-3.8-flash-high',
+      );
+    }
+    // …and a catalogue that is silent keeps the prefix rule that has always answered for it.
+    for (const silent of [undefined, null, []]) {
+      expect(modelForProvider(AgentProvider.ANTIGRAVITY, 'gemini-3.8-flash', silent)).toBe(
+        'gemini-3.8-flash',
+      );
+      expect(modelForProvider(AgentProvider.ANTIGRAVITY, 'gemini-3.8-flash-high', silent)).toBe(
+        'gemini-3.8-flash-high',
+      );
+      expect(modelForProvider(AgentProvider.ANTIGRAVITY, 'claude-opus-5-5', silent)).toBe('');
+    }
+  });
+
+  it('falls back to agy’s own default for an id the catalogue does not list', () => {
+    // A catalogue that has spoken is authoritative in both directions: an id agy does not list is
+    // one it refuses to start on, so the session runs agy's own default instead of failing the turn.
+    expect(modelForProvider(AgentProvider.ANTIGRAVITY, 'claude-opus-5', googleCatalog)).toBe('');
+    expect(modelForProvider(AgentProvider.ANTIGRAVITY, 'gpt-5.6-sol', googleCatalog)).toBe('');
+    // A Gemini id this catalogue does not carry: agy would refuse it too (the list is agy's own).
+    expect(modelForProvider(AgentProvider.ANTIGRAVITY, 'gemini-9-ultra', googleCatalog)).toBe('');
+    // An API-key session switched to an account that dropped a model it was pinned to.
+    expect(
+      modelForProvider(AgentProvider.ANTIGRAVITY, 'gemini-3.7-flash', [
+        { value: 'gemini-3.8-flash' },
+      ]),
+    ).toBe('');
+  });
+
+  it('leaves the same ids alone on the runtimes that own those prefixes', () => {
+    // The account catalogue borrows other vendors' id spaces; the runtimes that own them keep
+    // deciding for themselves, catalogue or not (`offered` is the runner's rows for THIS space).
+    expect(modelForProvider(AgentProvider.CLAUDE, 'claude-opus-5-5')).toBe('claude-opus-5-5');
+    expect(modelForProvider(AgentProvider.CODEX, 'gpt-oss-120b')).toBe('gpt-oss-120b');
   });
 });
 

@@ -127,8 +127,7 @@ public enum SessionProviderChoices {
         return short.replacingOccurrences(of: " · ", with: " ")
     }
 
-    /// Login engines, plus the environment-key Antigravity compatibility entry. The server's
-    /// workspace/runner key availability determines whether Antigravity is offered.
+    /// Login engines, with Antigravity offered for Google sign-in or a workspace/runner key.
     public static let engineSlugs = ["claude", "codex", "antigravity", "kimi"]
 
     /// A built-in engine has no configured row, so it has no preset to inherit a look from. Borrow
@@ -141,19 +140,23 @@ public enum SessionProviderChoices {
         "claude": "anthropic", "codex": "openai", "kimi": "moonshot", "antigravity": "antigravity",
     ]
 
-    /// Missing outranks signed out. Antigravity readiness and key availability are supplied by
-    /// the server separately; it has no interactive sign-in.
+    /// Missing outranks signed out. Antigravity readiness and credential availability are supplied by
+    /// the server separately.
     static func engineBlocker(_ health: RunnerEngineHealth?) -> String? {
         guard let health else { return nil }
         if health.installed == false { return "Not installed" }
-        if health.auth == "no", health.engine != "antigravity" { return "Not signed in" }
+        if health.auth == "no" { return "Not signed in" }
         return nil
     }
 
-    static func antigravityBlocker(_ state: RunnerAntigravityState?, health: RunnerEngineHealth? = nil) -> String? {
+    static func antigravityBlocker(_ state: RunnerAntigravityState?, health: RunnerEngineHealth? = nil, login: Bool = false) -> String? {
         if state?.supported == false { return "Update runner" }
         if state?.installed == false { return "Not installed" }
-        return state == nil ? byokBlocker(health) : nil
+        if login {
+            if state?.authSource == "google", state?.envKeyAvailable == false { return "Not signed in" }
+            return engineBlocker(health)
+        }
+        return byokBlocker(health)
     }
 
     /// Read only the server's key-availability result for the machine this session will run on.
@@ -179,7 +182,7 @@ public enum SessionProviderChoices {
         ProviderPools.unavailableReason(pool)
     }
 
-    /// The picker's contents. Antigravity is only offered with server-confirmed key availability;
+    /// The picker's contents. Antigravity is offered for a Google account or server-confirmed key;
     /// login engines stay listed when their CLI is missing or signed out.
     ///
     /// The user's pools come after the engines, each one choice that runs on its members' own
@@ -198,8 +201,10 @@ public enum SessionProviderChoices {
                                antigravityKeyAvailable: Bool? = nil) -> [ProviderChoice] {
         let health = { (engine: String) in engines?.first { $0.engine == engine } }
         let keyAvailable = antigravityKeyAvailable ?? antigravity?.envKeyAvailable ?? false
-        let engineChoices = engineSlugs.filter { $0 != "antigravity" || keyAvailable }.map { slug in
-            let blocker = slug == "antigravity" ? antigravityBlocker(antigravity, health: health(slug)) : engineBlocker(health(slug))
+        let googleAccount = antigravity?.authSource == "google"
+            && !(keyAvailable && antigravity?.envKeyAvailable == false)
+        let engineChoices = engineSlugs.filter { $0 != "antigravity" || keyAvailable || antigravity?.authSource == "google" }.map { slug in
+            let blocker = slug == "antigravity" ? antigravityBlocker(antigravity, health: health(slug), login: !keyAvailable || googleAccount) : engineBlocker(health(slug))
             return ProviderChoice(
                 slug: slug,
                 label: AgentDefaults.providerName(slug, configured: configured),
@@ -211,7 +216,7 @@ public enum SessionProviderChoices {
                 accounts: (slug == "codex" || slug == "claude") && blocker == nil
                     ? accountChoices(health(slug)?.accounts, usage: planUsage?.snapshot(for: slug))
                     : nil,
-                labelDetail: slug == "antigravity" ? "env key" : nil)
+                labelDetail: slug == "antigravity" ? (googleAccount ? "Google account" : "env key") : nil)
         }
         // Like a configured provider, a pool needs the CLI it runs on and nothing signed in: each run
         // carries one of its members' credentials. A missing CLI outranks the members, because it is
@@ -315,7 +320,7 @@ public enum SessionProviderChoices {
                                antigravity: RunnerAntigravityState? = nil) -> ProviderChoice {
         if let found = choices.first(where: { $0.slug == provider }) { return found }
         let runtime = executingRuntime(provider, configured: configured)
-        let blocker = runtime == "antigravity" ? antigravityBlocker(antigravity) : nil
+        let blocker = runtime == "antigravity" ? antigravityBlocker(antigravity, login: provider == "antigravity" && antigravity?.envKeyAvailable != true) : nil
         return ProviderChoice(
             slug: provider,
             label: AgentDefaults.providerName(provider, configured: configured),
@@ -323,7 +328,7 @@ public enum SessionProviderChoices {
             brandKey: enginePreset[provider] ?? configured.first { $0.slug == provider }?.presetSlug,
             modelLabel: modelLabel(for: provider, configured: configured, catalog: catalog),
             unavailable: blocker, fixEngine: blocker == nil ? nil : "antigravity",
-            labelDetail: provider == "antigravity" ? "env key" : runtime == "antigravity" ? "Antigravity CLI" : nil)
+            labelDetail: provider == "antigravity" ? (antigravity?.authSource == "google" ? "Google account" : "env key") : runtime == "antigravity" ? "Antigravity CLI" : nil)
     }
 
     /// What a pool's mark counts, as web labels that badge: an account pool's accounts, a shared

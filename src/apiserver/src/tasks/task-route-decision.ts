@@ -9,6 +9,7 @@ import {
   type PlanUsageWindow,
   type RunnerModelCatalog,
 } from '@orbit/shared';
+import { modelRoutingEnabled } from '../common/model-routing-switch';
 import { resolvePermissionMode } from '../common/permission-mode';
 import { firstRuntimeCatalogModel, sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { normalizeEffortForProvider, normalizeRuntimeProvider } from '../common/runtime-provider';
@@ -327,13 +328,18 @@ export interface TaskRouteSubject {
  * the run is then created on the routed provider, model and effort (§7.4). Otherwise it is the
  * shadow — the run is dispatched exactly as it was before routing existed, and the decision records
  * what routing would have picked.
+ *
+ * Null when the account has smart model selection off (common/model-routing-switch.ts): routing
+ * does not exist then, so there is no decision to record, shadow or not, and the run is dispatched
+ * as before routing whatever the Agent's own switch says.
  */
 export async function planTaskRunRoute(
   reads: TaskRouteReads,
   task: TaskRouteSubject,
   workspace: { id: string; runnerId: string },
   prompt: string,
-): Promise<TaskRunRoute> {
+): Promise<TaskRunRoute | null> {
+  if (!modelRoutingEnabled(await reads.owner())) return null;
   const { prisma, ownerId } = reads;
   const env = await routeEnvironment(reads, task, workspace.id, workspace.runnerId);
   const agent = await reads.workspace(workspace.id);
