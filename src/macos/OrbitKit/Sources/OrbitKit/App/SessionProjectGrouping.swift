@@ -144,6 +144,7 @@ public enum SessionProjectGrouping {
                 }
                 return a.id.localizedCompare(b.id) == .orderedAscending
             }
+            let landing = SessionProjectCopy.landingLine(summary?.integration, now: now)
             let selectedLine: SessionLine
             let target: SessionProjectRow.Target
             if let coordinator, let coordinatorLine, coordinatorLine.tone == .approval {
@@ -160,6 +161,13 @@ public enum SessionProjectGrouping {
                 selectedLine = SessionLine(text: [copy, age].compactMap { $0 }.joined(separator: " · "),
                                            tone: .running)
                 target = .session(coordinator.id)
+            } else if let coordinator, let coordinatorLine, !runnerOffline,
+                      WorkspaceActivityLogic.isRunning(coordinator, watching: watching[coordinator.id]) {
+                selectedLine = coordinatorLine
+                target = .session(coordinator.id)
+            } else if let landing {
+                selectedLine = landing
+                target = coordinator.map { .session($0.id) } ?? .project(projectID)
             } else if let coordinator, let coordinatorLine {
                 selectedLine = coordinatorLine
                 target = .session(coordinator.id)

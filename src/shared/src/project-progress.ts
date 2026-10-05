@@ -883,12 +883,15 @@ export interface ProjectListCoordinatorItems<Instant = string> {
  * Absent when nobody has decided a line and nothing has integrated yet: a project with no line has
  * no line to draw, and printing the default rule's guess there would state a decision nobody made.
  */
-export interface ProjectListIntegration {
+export interface ProjectListIntegration<Instant = string> {
   line: IntegrationLine;
   /** The branch's name, spelled as a merge receipt spells it (no `refs/heads/`). */
   ref: string;
   /** QUEUED or RUNNING jobs, including project merges and checks. Exceptions are not activity. */
   activeJobCount?: number;
+  /** The job the project page's landing line would describe, chosen by the same rule; absent when
+   *  nothing is in flight and on older servers. The session list's project row states it. */
+  inFlight?: ProjectIntegrationInFlight<Instant>;
 }
 
 /**
