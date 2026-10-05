@@ -4,7 +4,7 @@ import { renderRawQuery, noSessionRequests } from '../test-support/prisma-transa
 import { test } from 'node:test';
 import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
-import { RunEventType } from '@orbit/shared';
+import { API_ERROR_RETRY_BACKOFF_MS, MAX_API_ERROR_RETRIES, RunEventType } from '@orbit/shared';
 import { RunnerApiController } from './runner-api.controller';
 
 /** A row as it lands in `run_event`: the columns the events write path sets. */
@@ -16,6 +16,9 @@ type RunEventRow = {
   turnId: string | null;
   createdAt: Date;
 };
+
+const CODEX_RATE_LIMITED =
+  'exceeded retry limit, last status: 429 Too Many Requests, request id: 95e00d6c-68cc-4d64-b4da-01a6252260c2';
 
 function makeController(
   status: RunStatus = RunStatus.AWAITING_INPUT,
@@ -29,6 +32,7 @@ function makeController(
     runningSubagents?: string[];
     turnContents?: Record<string, string | null>;
     coordinatorContextEpoch?: number;
+    retryAttempts?: number;
   } = {},
   // An in-memory `run_event` for specs that read back what a batch actually stored. It keeps the
   // table's own key: a second row at the same (sessionId, seq) is silently skipped, which is what
@@ -110,6 +114,17 @@ function makeController(
         runningBgJobs: stored.runningBgJobs ?? [],
         runningSubagents: stored.runningSubagents ?? [],
         coordinatorContextEpoch: stored.coordinatorContextEpoch ?? 0,
+      }),
+      findUnique: async () => ({
+        ownerId: 'owner-1',
+        provider: 'claude',
+        taskId: null,
+        retryAttempts: stored.retryAttempts ?? 0,
+        codexAccount: null,
+        claudeAccount: null,
+        claudeAccountPinned: false,
+        poolSwitchNotice: null,
+        workspace: { env: null, codexAccount: null, claudeAccount: null },
       }),
       updateMany: async (args: any) => {
         calls.updateMany.push(args);
@@ -488,7 +503,76 @@ test('a failure in a turn nobody delivered arms no retry', async () => {
   assert.equal('retryAt' in data, false, 'and nothing is armed to re-send the answered message');
 });
 
-// A tool_use stores its id, and the tool_result pairs back to that row to fill the outcome —
+test('a delivered Codex 429 retry exhaustion error arms the existing bounded backoff', async () => {
+  const { calls, controller } = makeController();
+  const before = Date.now();
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      {
+        seq: 96,
+        type: RunEventType.ERROR,
+        ts: '2026-09-25T07:33:56.000Z',
+        turnId: 'turn-1',
+        payload: { message: CODEX_RATE_LIMITED },
+      },
+    ],
+  });
+
+  const retryAt = calls.update[0]?.data?.retryAt as Date | undefined;
+  assert.ok(retryAt instanceof Date, 'the delivered error arms a retry');
+  const delay = retryAt.getTime() - before;
+  assert.ok(
+    delay >= API_ERROR_RETRY_BACKOFF_MS[0] && delay <= API_ERROR_RETRY_BACKOFF_MS[0] * 1.3,
+    `expected the first step (+jitter), got ${delay}ms`,
+  );
+});
+
+test('a delivered Codex 429 retry exhaustion error leaves an exhausted budget unarmed', async () => {
+  const { calls, controller } = makeController(
+    RunStatus.AWAITING_INPUT,
+    'runtime-1',
+    { retryAttempts: MAX_API_ERROR_RETRIES },
+  );
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      {
+        seq: 97,
+        type: RunEventType.ERROR,
+        ts: '2026-09-25T07:34:56.000Z',
+        turnId: 'turn-1',
+        payload: { message: CODEX_RATE_LIMITED },
+      },
+    ],
+  });
+
+  assert.equal(calls.update[0]?.data?.retryAt, null, 'the bounded budget stays exhausted');
+  assert.equal('retryAttempts' in (calls.update[0]?.data ?? {}), false, 'ingestion does not spend an attempt');
+});
+
+test('an undelivered Codex 429 retry exhaustion error arms no automatic retry', async () => {
+  const { calls, controller } = makeController();
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      {
+        seq: 98,
+        type: RunEventType.ERROR,
+        ts: '2026-09-25T07:35:56.000Z',
+        payload: { message: CODEX_RATE_LIMITED },
+      },
+    ],
+  });
+
+  assert.equal(
+    'retryAt' in (calls.update[0]?.data ?? {}),
+    false,
+    'a background turn does not re-send a delivered message',
+  );
+});
+
+// A tool_use stores its id, and the tool_result pairs back to the row to fill the outcome —
 // output/is_error/finished_at were dead columns until the id gave the result something to join to.
 test('a tool_result fills the outcome of the tool_call its tool_use created', async () => {
   const { calls, controller } = makeController();

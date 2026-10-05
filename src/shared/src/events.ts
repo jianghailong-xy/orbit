@@ -128,6 +128,9 @@ export const RETRYABLE_ENGINE_ERROR_PREFIXES = [
   // minutes later: a task run it killed on 2026-09-29 went on, on the same model, when its owner
   // sent "continue" seven minutes after. Switching models is the fallback once retries run out.
   'selected model is at capacity',
+  // Codex's terminal rate-limit error, optionally followed by the upstream request id. Only this
+  // status is known to be transient; retry exhaustion on its own says nothing about the cause.
+  'exceeded retry limit, last status: 429 too many requests',
 ];
 
 /**
