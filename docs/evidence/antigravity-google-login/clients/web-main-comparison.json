@@ -1,0 +1,48 @@
+{
+  "baselineSync": "generation 10 MAIN_SYNC",
+  "branch": "orbit/web-macos-ios-antigravity-google-db95c8",
+  "branchHead": "2daa7c065a663b429e20972b09e664f6faf8a5f8",
+  "projectTip": "80e7ad8fd8ee581f5c2f66490f1966f487ad3fb6",
+  "upstreamMain": "aaf077310ad296c0dfeb8cfdb6b76aa367cb2f08",
+  "mergeCommit": {
+    "sha": "2daa7c065a663b429e20972b09e664f6faf8a5f8",
+    "parents": [
+      "666e679646d632f1fec7f49c295820a562e5f5a6",
+      "aaf077310ad296c0dfeb8cfdb6b76aa367cb2f08"
+    ],
+    "note": "Both the project tip and upstream main are ancestors of this commit, so the landing job (sourceCarriesTheAbsorb) lands it by MERGE."
+  },
+  "branchRun": {
+    "ref": "bgj_c6b225e5f65d",
+    "command": "npm test -w @orbit/web",
+    "exitCode": 1,
+    "files": 308,
+    "passedTests": 3882,
+    "failedTests": 1
+  },
+  "cleanMainRun": {
+    "tree": "aaf077310ad296c0dfeb8cfdb6b76aa367cb2f08 (detached worktree /var/tmp/agy-main-2daa)",
+    "command": "npm test -w @orbit/web",
+    "exitCode": 1,
+    "files": 307,
+    "passedTests": 3867,
+    "failedTests": 1
+  },
+  "comparison": {
+    "failureNamesIdentical": true,
+    "newFailures": [],
+    "branchOnlyPassingTests": 15,
+    "normalization": "Same dependency set and same vitest version on both trees; only the checkout paths differ."
+  },
+  "files": {
+    "src/components/SessionReplyCard.test.tsx": 1
+  },
+  "failedCases": [
+    {
+      "name": "src/components/SessionReplyCard.test.tsx > the recipient’s card says the message is a request, and where it stands > reads the request live and draws its state, with the deadline while it waits",
+      "assertion": "expected [ 'chat-injected-head', 'chat-injected-action' ] to deeply equal [ 'chat-injected-head' ]",
+      "preExistingOnMain": true
+    }
+  ],
+  "note": "main 上原本就红的用例只有这一条，并已在干净 main aaf077310 上复现；本分支没有新增 web 失败。先前一次 28 条失败的运行是本 worktree 的 node_modules 里 @base-ui / @floating-ui 是指向 /tmp 安装的符号链接（带第二份 react）造成的重复 React 运行环境错误，补全依赖后消失——见 README 的「本轮工作树依赖修复」一节。"
+}

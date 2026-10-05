@@ -21315,3 +21315,8 @@ button.agent-progress-agent:hover {
     margin-left: 38px;
   }
 }
+
+.re-login-note {
+  grid-column: 1 / -1;
+  min-width: 0;
+}

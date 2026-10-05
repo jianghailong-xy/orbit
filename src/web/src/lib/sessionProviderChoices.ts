@@ -18,9 +18,9 @@ import {
  * summary under the card — an engine spends the subscription you signed into on that machine, a
  * configured provider spends the API key you pasted.
  *
- * Engines are the slugs a runner can sign into (LoginEngine in @orbit/shared), plus Antigravity,
- * which has no sign-in at all — agy runs on a Gemini API key from its environment — and is
- * offered only when the server confirms an environment key. `opencode` is an AgentProvider that is neither,
+ * Engines are the slugs a runner can sign into (LoginEngine in @orbit/shared). Antigravity is
+ * offered when the server confirms an environment key or a runner Google account.
+ * `opencode` is an AgentProvider that is neither,
  * so it never appears as a choice — it only shows up as the current pick when a workspace is
  * already set to it.
  */
@@ -209,9 +209,14 @@ function byokBlocker(health?: RunnerEngineHealth): string | undefined {
 }
 
 /** Antigravity admission uses the runner capability the server reads when dispatching. */
-function antigravityBlocker(state?: RunnerAntigravityState, health?: RunnerEngineHealth): string | undefined {
+function antigravityBlocker(state?: RunnerAntigravityState, health?: RunnerEngineHealth, login = false): string | undefined {
   if (state?.supported === false) return 'Update runner';
-  return state ? (state.installed === false ? 'Not installed' : undefined) : byokBlocker(health);
+  if (state?.installed === false) return 'Not installed';
+  if (login) {
+    if (health?.auth === 'no' || (state?.authSource === 'google' && !state.envKeyAvailable)) return 'Not signed in';
+    return engineBlocker(health);
+  }
+  return byokBlocker(health);
 }
 
 /**
@@ -246,11 +251,12 @@ export function providerChoices(
   antigravity?: RunnerAntigravityState,
   antigravityKeyAvailable: boolean = antigravity?.envKeyAvailable ?? false,
 ): ProviderChoice[] {
+  const usesGoogleAccount = antigravity?.authSource === 'google' && !(antigravityKeyAvailable && !antigravity.envKeyAvailable);
   const engines: ProviderChoice[] = ENGINE_SLUGS.filter(
-    (slug) => slug !== AgentProvider.ANTIGRAVITY || antigravityKeyAvailable,
+    (slug) => slug !== AgentProvider.ANTIGRAVITY || antigravityKeyAvailable || antigravity?.authSource === 'google',
   ).map((slug) => {
     const health = engineHealth?.find((e) => e.engine === slug);
-    const blocker = slug === AgentProvider.ANTIGRAVITY ? antigravityBlocker(antigravity, health) : engineBlocker(health);
+    const blocker = slug === AgentProvider.ANTIGRAVITY ? antigravityBlocker(antigravity, health, !antigravityKeyAvailable || usesGoogleAccount) : engineBlocker(health);
     const accounts =
       (slug === AgentProvider.CODEX || slug === AgentProvider.CLAUDE) && !blocker && (health?.accounts?.length ?? 0) >= 2
         ? health!.accounts!.map((account): AccountChoice => {
@@ -276,7 +282,7 @@ export function providerChoices(
       slug,
       label: ENGINE_LABELS[slug] ?? slug,
       kind: 'engine' as const,
-      ...(slug === AgentProvider.ANTIGRAVITY ? { labelDetail: 'env key' } : {}),
+      ...(slug === AgentProvider.ANTIGRAVITY ? { labelDetail: usesGoogleAccount ? 'Google account' : 'env key' } : {}),
       ...brandForProvider(slug, ENGINE_LABELS[slug] ?? slug),
       modelLabel: defaultModelLabel(slug, modelCatalog, configured, runtimeDefaultModels),
       ...(blocker ? { unavailable: blocker, fixEngine: slug } : {}),
@@ -403,12 +409,12 @@ export function currentProviderChoice(
   const found = choices.find((c) => c.slug === provider);
   if (found) return found;
   const label = ENGINE_LABELS[provider] ?? provider;
-  const blocker = provider === AgentProvider.ANTIGRAVITY ? antigravityBlocker(antigravity) : undefined;
+  const blocker = provider === AgentProvider.ANTIGRAVITY ? antigravityBlocker(antigravity, undefined, !antigravity?.envKeyAvailable) : undefined;
   return {
     slug: provider,
     label,
     kind: Object.values(AgentProvider).some((p) => p === provider) ? 'engine' : 'byok',
-    ...(provider === AgentProvider.ANTIGRAVITY ? { labelDetail: 'env key' } : {}),
+    ...(provider === AgentProvider.ANTIGRAVITY ? { labelDetail: antigravity?.authSource === 'google' ? 'Google account' : 'env key' } : {}),
     ...(blocker ? { unavailable: blocker, fixEngine: AgentProvider.ANTIGRAVITY } : {}),
     ...brandForProvider(provider, label),
     modelLabel: defaultModelLabel(provider, modelCatalog, configured, runtimeDefaultModels),

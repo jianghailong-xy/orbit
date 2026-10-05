@@ -21,7 +21,7 @@ public enum ProvidersOverview {
     /// work then, whatever its engines say.
     public static func runnerSummary(_ runner: Runner) -> String {
         guard let engines = runner.engines else { return "Engines not reported" }
-        let all = LoginEngine.allCases
+        let all = LoginEngine.allCases.filter { $0 != .antigravity || runner.antigravity?.googleLogin == .available }
         let ready = all.filter { engine in engines.contains { $0.engine == engine.rawValue && $0.signedIn } }.count
         let line = ready == all.count ? "All signed in" : "\(ready) of \(all.count) signed in"
         return runner.online == true ? line : "Offline · \(line)"

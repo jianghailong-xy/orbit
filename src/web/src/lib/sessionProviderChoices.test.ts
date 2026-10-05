@@ -108,6 +108,23 @@ describe('providerChoices', () => {
     expect(providerChoices([{ ...gemini, label: 'Work Gemini' }], catalog).find((c) => c.slug === 'gemini')?.label).toBe('Work Gemini');
   });
 
+  it('allows a workspace key to run Antigravity after the runner Google sign-in expires', () => {
+    const expired = {
+      supported: true, installed: true, version: 'agy 1.2.16', envKeyAvailable: false,
+      authSource: 'google' as const, googleLogin: 'available' as const,
+    };
+    const health = [{ engine: 'antigravity' as const, installed: true, auth: 'no' as const, authSource: 'google' as const }];
+    const choice = (keyAvailable?: boolean) => providerChoices([gemini], catalog, undefined, health, [], undefined, expired, keyAvailable)
+      .find((c) => c.slug === 'antigravity');
+    expect(choice()).toMatchObject({ labelDetail: 'Google account', unavailable: 'Not signed in', fixEngine: 'antigravity' });
+    expect(choice(true)).toMatchObject({ kind: 'engine', labelDetail: 'env key' });
+    expect(choice(true)?.unavailable).toBeUndefined();
+    expect(choice(true)?.fixEngine).toBeUndefined();
+    const withoutCli = providerChoices([], catalog, undefined, health, [], undefined, { ...expired, installed: false }, true)
+      .find((c) => c.slug === 'antigravity');
+    expect(withoutCli).toMatchObject({ unavailable: 'Not installed', fixEngine: 'antigravity' });
+  });
+
   it.each([
     [{ supported: false, installed: true, version: '1.2.16', envKeyAvailable: true }, 'Update runner'],
     [{ supported: true, installed: false, version: null, envKeyAvailable: true }, 'Not installed'],

@@ -182,6 +182,7 @@ export interface AuthErrorHelp {
   /** Runner id, which unlocks signing in from the browser instead of on that machine. */
   runnerId?: string;
   runtime?: string;
+  googleLogin?: 'available' | 'needs_update' | 'unsupported_platform';
   runnerVersion?: string | null;
   onConnectGemini?: () => void;
   onSwitchToGemini?: () => void;
@@ -220,18 +221,23 @@ export function AntigravityRepairCard({ repair, help, seq }: {
       <div className="chat-authfix-head">
         <WarningFilled className="chat-authfix-icon" />
         <div className="chat-authfix-title">
-          {repair === 'needsKey' ? 'Antigravity needs a Gemini API key'
+          {repair === 'needsKey' ? 'Antigravity needs authentication'
             : repair === 'updateRunner' ? 'Waiting for a newer runner'
               : `Antigravity CLI isn't installed on ${machine}`}
         </div>
       </div>
       <div className="chat-authfix-desc">
         {repair === 'needsKey'
-          ? 'Connect Gemini in Providers. Orbit stores the key encrypted, and this conversation can continue on it.'
+          ? 'Sign in with Google on this runner, or connect a Gemini API key in Providers.'
           : repair === 'updateRunner'
             ? `${machine} runs Orbit runner ${help.runnerVersion || 'an unknown version'}; Antigravity needs 0.1.209 or newer. The runner updates itself when no session is running on it, and this session starts then.`
             : 'Install it from Providers, then send your message again.'}
       </div>
+      {repair === 'needsKey' && help.provider === 'antigravity' && (
+        help.googleLogin === 'available' && help.runnerId
+          ? <RunnerSignIn runnerId={help.runnerId} engine="antigravity" onDone={help.onRetry} />
+          : <div className="chat-authfix-desc">{help.googleLogin === 'unsupported_platform' ? 'Google sign-in is not supported on macOS runners yet. Use a Gemini API key.' : 'Update this runner to sign in with Google.'}</div>
+      )}
       <div className="chat-authfix-actions">
         {repair === 'needsKey' ? (
           <>
@@ -1779,10 +1785,9 @@ const LOCAL_LOGIN = new Set(['claude', 'codex', 'kimi', 'opencode', 'antigravity
  * Of those, the ones Orbit can sign in from here. OpenCode is deliberately absent: its login
  * picks an underlying provider interactively, which the browser relay's DTO cannot express, so
  * the runner refuses such a request outright (loginFlowFor in login.go). Its card names the
- * command to run instead of offering a button that cannot work. Antigravity has no sign-in at
- * all: its card connects an encrypted Gemini key in Providers.
+ * command to run instead of offering a button that cannot work.
  */
-const RELAY_LOGIN = new Set(['claude', 'codex', 'kimi']);
+const RELAY_LOGIN = new Set(['claude', 'codex', 'kimi', 'antigravity']);
 
 /**
  * A sign-in failure, rendered as a remedy rather than an error line. The runtime reports it as
