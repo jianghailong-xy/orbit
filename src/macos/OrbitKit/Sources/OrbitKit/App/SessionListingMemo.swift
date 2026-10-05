@@ -89,9 +89,42 @@ public final class SessionListingMemo<Value> {
 
     public func value(for inputs: SessionListInputs, compute: (SessionListInputs) -> Value) -> Value {
         if let last, last.inputs == inputs { return last.value }
+        if let last { Self.logWhy(last.inputs, inputs) } else { print("MEMO-WHY first") }
         let value = compute(inputs)
         computations += 1
         last = (inputs, value)
         return value
+    }
+
+    // PROBE ONLY — never merge.
+    private static func logWhy(_ a: SessionListInputs, _ b: SessionListInputs) {
+        var why: [String] = []
+        func sessions(_ name: String, _ x: [Session], _ y: [Session]) {
+            guard x != y else { return }
+            if x.map(\.id) != y.map(\.id) { why.append("\(name).ids(\(x.count)->\(y.count))"); return }
+            var fields = Set<String>()
+            for (l, r) in zip(x, y) where l != r {
+                for (lc, rc) in zip(Mirror(reflecting: l).children, Mirror(reflecting: r).children)
+                where String(describing: lc.value) != String(describing: rc.value) {
+                    fields.insert(lc.label ?? "?")
+                }
+            }
+            why.append("\(name).fields\(fields.sorted())")
+        }
+        sessions("sessions", a.sessions, b.sessions)
+        sessions("accountSessions", a.accountSessions, b.accountSessions)
+        sessions("allSessions", a.allSessions, b.allSessions)
+        if a.folders != b.folders { why.append("folders") }
+        if a.projects != b.projects { why.append("projects") }
+        if a.watches != b.watches { why.append("watches") }
+        if a.tagFilter != b.tagFilter { why.append("tagFilter") }
+        if a.folderID != b.folderID { why.append("folderID") }
+        if a.workspaceID != b.workspaceID { why.append("workspaceID") }
+        if a.view != b.view { why.append("view") }
+        if a.groupByTag != b.groupByTag { why.append("groupByTag") }
+        if a.searching != b.searching { why.append("searching") }
+        if a.runnerOffline != b.runnerOffline { why.append("runnerOffline") }
+        if a.minute != b.minute { why.append("minute") }
+        print("MEMO-WHY \(Date().timeIntervalSince1970) \(why.joined(separator: " "))")
     }
 }
