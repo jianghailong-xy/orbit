@@ -12,6 +12,7 @@ import {
   SessionAcceptanceConfirmationCard,
   acceptanceConfirmationStaleExplanation,
 } from './AcceptanceConfirmationCard';
+import { MOBILE_QUERY } from '../lib/useMediaQuery';
 
 /**
  * The settlement confirmation card as a coordinator conversation draws it since the compact
@@ -61,6 +62,11 @@ let conversation: HTMLDivElement | null = null;
 let client: QueryClient | null = null;
 
 beforeEach(() => {
+  // The compact preview is the narrow screen's: a wide one draws the card whole (`ReviewCard`).
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: query === MOBILE_QUERY, media: query,
+    addEventListener: () => {}, removeEventListener: () => {},
+  }));
   server.standing = standingOf('UNCONFIRMED');
   presses.length = 0;
   vi.mocked(api).mockImplementation((async (path: string, init?: { method?: string }) => {
@@ -86,6 +92,7 @@ afterEach(async () => {
   client?.clear();
   client = null;
   vi.mocked(api).mockReset();
+  vi.unstubAllGlobals();
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
 });
 
