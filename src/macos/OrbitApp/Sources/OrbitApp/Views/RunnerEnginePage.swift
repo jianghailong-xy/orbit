@@ -63,6 +63,8 @@ private struct RunnerEngineContent: View {
             head(health, now: now)
             if engine == "antigravity" {
                 antigravitySection(health, offline: offline, now: now)
+            } else if engine == "dsh" {
+                dshSection(offline: offline)
             } else if let health, health.installed == true, let login = RunnerPageFormat.loginEngine(engine) {
                 accountsSection(health, login: login, offline: offline, now: now)
             }
@@ -101,6 +103,33 @@ private struct RunnerEngineContent: View {
     }
 
     // MARK: sections
+
+    /// DeepSeek Harness has no sign-in here: every session runs on the configured API key it was
+    /// started with. What this machine decides is whether it can start Harness at all — and the one
+    /// fix that happens here is installing the pinned CLI (web parity: Providers' Harness row).
+    @ViewBuilder private func dshSection(offline: Bool) -> some View {
+        let state = DshRuntime.state(of: runner)
+        Section {
+            Text(state.label ?? "Ready · sessions use the DeepSeek Harness API key they were started with")
+                .foregroundStyle(state == .ready ? Color.secondary : RunnerInk.amber)
+            if let hint = state.hint {
+                Text(hint).font(.orbitLabel).foregroundStyle(Color.secondary)
+            }
+            if state.installable {
+                Button("Install DeepSeek Harness") {
+                    let id = runner.id
+                    Task {
+                        if let failure = await runners.installDsh(id) { show(failure) }
+                        await runners.load()
+                    }
+                }
+                .disabled(offline || runner.install?.inFlight == true)
+            }
+            if runner.install?.engine == "dsh", let message = runner.install?.message, !message.isEmpty {
+                Text(message).font(.orbitLabel).foregroundStyle(Color.secondary)
+            }
+        }
+    }
 
     @ViewBuilder private func antigravitySection(_ health: RunnerEngineHealth?, offline: Bool, now: Date) -> some View {
         Section {

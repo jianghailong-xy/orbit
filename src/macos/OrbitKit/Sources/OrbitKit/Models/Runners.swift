@@ -80,15 +80,19 @@ public struct RunnerModelCatalog: Codable, Equatable, Sendable {
     /// them into one row per base model (`gemini-3.8-flash`) with its levels as `reasoningLevels`,
     /// and a session passes the two back as `--model` and `--effort`.
     public let antigravity: [RunnerModelInfo]?
+    /// DeepSeek Harness's ACP `configOptions`: opaque model values (`value` is never reparsed) with
+    /// their `reasoning_effort` levels, and no context window (P0 contract §4).
+    public let dsh: [RunnerModelInfo]?
 
     public init(claude: [RunnerModelInfo]? = nil, codex: [RunnerModelInfo]? = nil,
                 kimi: [RunnerModelInfo]? = nil, opencode: [RunnerModelInfo]? = nil,
-                antigravity: [RunnerModelInfo]? = nil) {
+                antigravity: [RunnerModelInfo]? = nil, dsh: [RunnerModelInfo]? = nil) {
         self.claude = claude
         self.codex = codex
         self.kimi = kimi
         self.opencode = opencode
         self.antigravity = antigravity
+        self.dsh = dsh
     }
 
     public func models(for provider: String) -> [ModelOption]? {
@@ -98,6 +102,7 @@ public struct RunnerModelCatalog: Codable, Equatable, Sendable {
         case "kimi":     rows = kimi
         case "opencode": rows = opencode
         case "antigravity": rows = antigravity
+        case "dsh":      rows = dsh
         default:         rows = claude
         }
         guard let rows, !rows.isEmpty else { return nil }
@@ -107,7 +112,7 @@ public struct RunnerModelCatalog: Codable, Equatable, Sendable {
     public func contextWindow(for id: String) -> Int? {
         // A list rather than one `(rows ?? []) + …` chain: at five runtimes that expression is past
         // what the Swift type-checker resolves in reasonable time, and it fails the build outright.
-        let runtimes: [[RunnerModelInfo]?] = [claude, codex, kimi, opencode, antigravity]
+        let runtimes: [[RunnerModelInfo]?] = [claude, codex, kimi, opencode, antigravity, dsh]
         let all = runtimes.flatMap { $0 ?? [] }
         return all.first { $0.value == id }?.contextWindow
     }
@@ -122,6 +127,7 @@ public struct RunnerModelCatalog: Codable, Equatable, Sendable {
         case "kimi": rows = kimi
         case "opencode": rows = opencode
         case "antigravity": rows = antigravity
+        case "dsh": rows = dsh
         default: rows = claude
         }
         return rows?.first { $0.value == model }
@@ -228,6 +234,11 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
     public let update: RunnerEngineUpdate?
     public let authSource: String?
     public let planUsage: PlanUsageSnapshot?
+    /// Fixed-version/platform admission failure (`DSH_PLATFORM_UNSUPPORTED: …`), independent of
+    /// whether a binary is present. Only DeepSeek Harness reports one today.
+    public let installationError: String?
+    /// DeepSeek Harness only: what the runner's probe established, kept apart from a key's validity.
+    public let dsh: DshRuntimeHealth?
     public var id: String { engine }
     /// Only the CLI's own "yes" counts — the third state exists precisely so an engine that
     /// wouldn't answer is never shown as signed in (web's `rowKindOf`).
@@ -235,8 +246,11 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
 
     public init(engine: String, installed: Bool? = nil, version: String? = nil, auth: String? = nil,
                 accounts: [RunnerEngineAccount]? = nil, update: RunnerEngineUpdate? = nil,
-                authSource: String? = nil, planUsage: PlanUsageSnapshot? = nil) {
+                authSource: String? = nil, planUsage: PlanUsageSnapshot? = nil,
+                installationError: String? = nil, dsh: DshRuntimeHealth? = nil) {
         self.engine = engine
+        self.installationError = installationError
+        self.dsh = dsh
         self.installed = installed
         self.version = version
         self.auth = auth
@@ -244,6 +258,28 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
         self.update = update
         self.authSource = authSource
         self.planUsage = planUsage
+    }
+}
+
+/// DeepSeek Harness's half of an engine report (shared `DshRuntimeHealth`). The machine probe has no
+/// session key, so it never says whether a key works: `requestValidation` stays `unknown` there.
+public struct DshRuntimeHealth: Codable, Equatable, Sendable {
+    public let versionCompatible: Bool
+    public let credentialPresent: Bool?
+    public let modelCatalogReadable: Bool?
+    public let requestValidation: String?
+    public let sandboxEnforcement: String?
+    /// A fixed `DSH_*` code, never upstream text.
+    public let diagnostic: String?
+
+    public init(versionCompatible: Bool, credentialPresent: Bool? = nil, modelCatalogReadable: Bool? = nil,
+                requestValidation: String? = nil, sandboxEnforcement: String? = nil, diagnostic: String? = nil) {
+        self.versionCompatible = versionCompatible
+        self.credentialPresent = credentialPresent
+        self.modelCatalogReadable = modelCatalogReadable
+        self.requestValidation = requestValidation
+        self.sandboxEnforcement = sandboxEnforcement
+        self.diagnostic = diagnostic
     }
 }
 

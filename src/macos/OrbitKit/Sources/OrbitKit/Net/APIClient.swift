@@ -1229,6 +1229,12 @@ public final class APIClient: @unchecked Sendable {
         return try await post("runners/\(runnerID)/install", body: Request())
     }
 
+    /// Install the pinned DeepSeek Harness CLI on a runner (the same relay; engine `dsh`).
+    public func installDsh(_ runnerID: String) async throws -> RunnerInstallState {
+        struct Request: Encodable { let engine = "dsh" }
+        return try await post("runners/\(runnerID)/install", body: Request())
+    }
+
     @discardableResult
     public func refreshRunnerModels(_ id: String) async throws -> RunnerModelRefresh {
         try await postEmpty("runners/\(id)/refresh-models")

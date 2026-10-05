@@ -327,7 +327,8 @@ struct ProviderSwitchSheet: View {
 
     private func trailing(_ choice: ProviderChoice, greyed: Bool) -> String {
         guard let reason = choice.unavailable else { return choice.note ?? choice.modelLabel }
-        return greyed ? reason : choice.fixEngine == "antigravity" ? "\(reason) →" : "\(reason), sign in →"
+        return greyed ? reason
+            : ["antigravity", "dsh", DshRuntime.connectFix].contains(choice.fixEngine ?? "") ? "\(reason) →" : "\(reason), sign in →"
     }
 
     /// The row the pools' own accounts fold under: a chevron in the marks' column that turns when

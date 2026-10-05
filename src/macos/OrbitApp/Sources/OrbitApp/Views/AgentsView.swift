@@ -1282,8 +1282,7 @@ struct NewSessionView: View {
                            currentProviderChoice.fixEngine != nil {
                             Button {
                                 if let rid = agent.runnerId {
-                                    if currentProviderChoice.fixEngine == "antigravity",
-                                       let url = draft.providersURL(engine: "antigravity", runnerID: rid) { openURL(url) }
+                                    if let url = draft.webFixURL(engine: currentProviderChoice.fixEngine ?? "", runnerID: rid) { openURL(url) }
                                     else { app.route(to: .runner(rid)) }
                                 }
                             } label: {
@@ -1407,7 +1406,7 @@ struct NewSessionView: View {
                 onSelect: { slug in draft.pickDraftProvider(slug) },
                 onSelectAccount: { slug, account in draft.pickDraftAccount(slug, account) },
                 onFixRunner: agent.runnerId.map { rid in { engine in
-                    if engine == "antigravity", let url = draft.providersURL(engine: engine, runnerID: rid) { openURL(url) }
+                    if let url = draft.webFixURL(engine: engine, runnerID: rid) { openURL(url) }
                     else { app.route(to: .runner(rid)) }
                 } })
         }
@@ -1430,7 +1429,8 @@ struct NewSessionView: View {
                                        pools: draft.allPools,
                                        planUsage: draft.runnerPlanUsage,
                                        antigravity: draft.runnerAntigravity,
-                                       antigravityKeyAvailable: agent.antigravityKeyAvailableByRunner?[draft.runnerID ?? agent.runnerId ?? ""] == true)
+                                       antigravityKeyAvailable: agent.antigravityKeyAvailableByRunner?[draft.runnerID ?? agent.runnerId ?? ""] == true,
+                                       dshState: draft.dshRunnerState)
     }
 
     private var currentProviderChoice: ProviderChoice {
