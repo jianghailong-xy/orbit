@@ -121,7 +121,7 @@ async function owner() {
     return body;
   };
   const since = (cursor: string) => read(`/sessions?view=open&since=${encodeURIComponent(cursor)}`) as Promise<Delta>;
-  return { h, session, read, since };
+  return { h, ownerId, session, read, since };
 }
 
 function delta(answer: Delta) {
@@ -168,6 +168,17 @@ test('a changed field arrives as an upsert of that row only', { skip }, async ()
   assert.deepEqual(answer.upserts.map((r) => [r.id, r.title]), [[uuidToBase62(changed), 'after']]);
   assert.deepEqual(answer.removedIds, []);
   assert.equal(answer.order, undefined);
+});
+
+test('a runner heartbeat alone is not a change to the rows it hosts', { skip }, async () => {
+  const o = await owner();
+  const runner = await o.h.db.runner.create({
+    data: { ownerId: o.ownerId, name: `delta-${randomUUID()}`, tokenHash: randomUUID(), status: 'ONLINE', lastHeartbeatAt: new Date() },
+  });
+  await o.session('hosted', { assignedRunnerId: runner.id });
+  const { cursor } = await o.since('');
+  await o.h.db.runner.update({ where: { id: runner.id }, data: { lastHeartbeatAt: new Date(Date.now() + 1_000) } });
+  assert.deepEqual(await o.since(cursor), { full: false, upserts: [], removedIds: [], cursor });
 });
 
 test('a deleted session arrives as a removed id', { skip }, async () => {

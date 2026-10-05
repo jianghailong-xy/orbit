@@ -62,11 +62,13 @@ export class OpenListDeltaStore {
     scope: string,
     rows: T[],
     since: string | undefined,
+    /** What of a row counts as a change; the whole row unless the caller says otherwise. */
+    fingerprint: (row: T) => unknown = (row) => row,
   ): OpenListDelta<T> {
     const now = this.now();
     this.sweep(now);
     const order = rows.map((row) => row.id);
-    const hashes = new Map(rows.map((row) => [row.id, hashRow(row)]));
+    const hashes = new Map(rows.map((row) => [row.id, hashRow(fingerprint(row))]));
     const cursor = cursorOf(scope, order, hashes);
 
     let snapshots = this.owners.get(ownerId);

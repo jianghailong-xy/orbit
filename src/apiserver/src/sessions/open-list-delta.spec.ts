@@ -108,3 +108,11 @@ test('a cursor stays good after use, so a retried read still gets its delta', ()
   assert.equal(retried.full, false);
   assert.deepEqual(!retried.full && retried.upserts, [b]);
 });
+
+test('a field the fingerprint leaves out is not a change', () => {
+  const s = store();
+  const fingerprint = (row: Row & { seen?: number }) => ({ ...row, seen: undefined });
+  const cursor = s.answer(OWNER, SCOPE, [{ ...a, seen: 1 }], '', fingerprint).cursor;
+  const answer = s.answer(OWNER, SCOPE, [{ ...a, seen: 2 }], cursor, fingerprint);
+  assert.deepEqual(answer, { full: false, upserts: [], removedIds: [], cursor });
+});

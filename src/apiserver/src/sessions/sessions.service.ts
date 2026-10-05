@@ -2820,7 +2820,14 @@ export class SessionsService {
     const scope = JSON.stringify([
       filters.runnerId ?? null, filters.workspaceId ?? null, filters.tagId ?? null, filters.projectId ?? null,
     ]);
-    const delta = this.openListDelta.answer(ownerId, scope, rows, since);
+    // A runner's heartbeat restamps every row it hosts every 30 seconds; with a few runners that
+    // alone would resend most of the list on most polls. The clients that read this delta draw
+    // nothing from the raw timestamp — what it decides (the queue gate, capabilities) are fields of
+    // their own and still count — so it is left out of what counts as a change, and a row sent
+    // here may carry an older heartbeat than the plain list would.
+    const delta = this.openListDelta.answer(ownerId, scope, rows, since, (row) =>
+      row.assignedRunner ? { ...row, assignedRunner: { ...row.assignedRunner, lastHeartbeatAt: null } } : row,
+    );
     if (delta.full) return delta;
     // Rows have their `id` rewritten to the public spelling on the way out; bare id lists are not
     // walked by that pass, so they are spelled here to match.
