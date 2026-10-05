@@ -615,7 +615,8 @@ suite("the shared pools' gateway, end to end on real PostgreSQL", { timeout: 600
       { key: (await sessionRow(session)).poolKeyId, line: (await sessionRow(session)).poolSwitchNotice },
       { key: pool.keys['orbit-org-2'].id, line: 'Switched to orbit-org-2 — orbit-org-1 is rate limited right now' },
     );
-    assert.deepEqual(await carriers(session), []);
+    // A move owes the line to a resident engine: the no-op reload it says it on, as any move does.
+    assert.deepEqual(await carriers(session), [{ content: '{}', status: 'PENDING' }]);
   });
 
   await t.test('(6) own key first; the others held to a share cap — by the gateway the moment it is spent, and by the claim — its contributor never', async () => {
