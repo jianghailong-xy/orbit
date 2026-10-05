@@ -108,6 +108,9 @@ function makeService(rows: SessionRow[] = [LIVE], insertFails?: Error) {
   const sessionUpdateSql: string[] = [];
   const sessionCreates: unknown[][] = [];
   const prisma = {
+    // The owner's smart model selection, which the promotion's instructions are rendered under:
+    // an account that never turned it on.
+    user: { findUnique: async () => ({ preferences: {} }) },
     session: {
       findFirst: async ({ where }: any) => {
         lookups.push(where);

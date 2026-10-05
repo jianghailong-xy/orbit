@@ -55,6 +55,7 @@ import {
 } from '../api';
 import { routeId, encodeId } from '../lib/idCodec';
 import {
+  meQuery,
   providersQuery,
   publishedRunnerVersionQuery,
   workspacePermissionRulesQuery,
@@ -250,6 +251,9 @@ export function RunnerDetailPage() {
   // account's runners, whichever is newer.
   const publishedVersion = useQuery(publishedRunnerVersionQuery()).data;
   const latestVersion = latestRunnerVersion(publishedVersion, runners.data ?? []);
+  // The account's switch for smart model selection: off (the default), the Agent has no switch of
+  // its own for it, and its Model line reads as it always has.
+  const smartSelection = useQuery(meQuery()).data?.preferences?.modelRouting === true;
 
   // Rename / delete the runner — same API the Runners grid uses.
   const [renaming, setRenaming] = useState(false);
@@ -731,24 +735,26 @@ export function RunnerDetailPage() {
       />
       {/* Off by default, and only the owner's to turn on: it decides what task runs cost, so the
           agent tools cannot set it (docs/model-routing-design.md §7.2). */}
-      <SettingRow
-        label="Smart model selection for tasks"
-        desc="Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected."
-        checked={fModelRouting}
-        onChange={(v) => {
-          setFModelRouting(v);
-          setDirty(true);
-        }}
-      >
-        <RoutingEngines
-          own={formProvider}
-          value={fRoutingEngines}
-          onChange={(next) => {
-            setFRoutingEngines(next);
+      {smartSelection && (
+        <SettingRow
+          label="Smart model selection for tasks"
+          desc="Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected."
+          checked={fModelRouting}
+          onChange={(v) => {
+            setFModelRouting(v);
             setDirty(true);
           }}
-        />
-      </SettingRow>
+        >
+          <RoutingEngines
+            own={formProvider}
+            value={fRoutingEngines}
+            onChange={(next) => {
+              setFRoutingEngines(next);
+              setDirty(true);
+            }}
+          />
+        </SettingRow>
+      )}
 
       {/* Model is not a workspace field: it resolves from the runtime/provider this project last
           ran on. Stated read-only because the row displays it — otherwise it reads as a setting
@@ -756,7 +762,7 @@ export function RunnerDetailPage() {
           per-session choices, made in the session where the context for them is. With smart
           selection on, that model is only what the sessions opened by hand start on. */}
       <div className="rd-form-derived">
-        {fModelRouting ? (
+        {smartSelection && fModelRouting ? (
           <>
             Task runs: model picked per task by smart selection. Sessions you open yourself:{' '}
             <b>{formModel || '—'}</b> · resolved by {providerLabelFor(formProvider)} on this runner.

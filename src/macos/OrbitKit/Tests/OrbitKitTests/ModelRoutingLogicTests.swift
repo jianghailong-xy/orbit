@@ -177,24 +177,24 @@ final class ModelRoutingLogicTests: XCTestCase {
     }
 
     func testOnlyADecisionThatNamedATierIsShownBesideItsRun() throws {
-        XCTAssertNotNil(TaskDetailLogic.runRoute(detail.sessions![0]))
-        XCTAssertNil(TaskDetailLogic.runRoute(detail.sessions![1]), "No suggestion routed nothing")
-        XCTAssertNil(TaskDetailLogic.runRoute(try session(route: nil)), "a run with no decision at all")
+        XCTAssertNotNil(TaskDetailLogic.runRoute(detail.sessions![0], smartSelection: true))
+        XCTAssertNil(TaskDetailLogic.runRoute(detail.sessions![1], smartSelection: true), "No suggestion routed nothing")
+        XCTAssertNil(TaskDetailLogic.runRoute(try session(route: nil), smartSelection: true), "a run with no decision at all")
     }
 
     func testARunSaysWhatItRanOn() throws {
         // Its own row first: a shadow run kept the Agent's model, whatever the pick was.
         let shadow = try session(model: "claude-opus-5-5", effort: "ultra", route: route(applied: false))
-        XCTAssertEqual(TaskDetailLogic.runModelLine(shadow, modelLabel: modelName), "Opus 5.5 · ultra")
+        XCTAssertEqual(TaskDetailLogic.runModelLine(shadow, smartSelection: true, modelLabel: modelName), "Opus 5.5 · ultra")
         // An applied run not claimed yet is on the pick.
         let unclaimed = try session(route: route(model: "claude-opus-5-5", effort: "high"))
-        XCTAssertEqual(TaskDetailLogic.runModelLine(unclaimed, modelLabel: modelName), "Opus 5.5 · high")
+        XCTAssertEqual(TaskDetailLogic.runModelLine(unclaimed, smartSelection: true, modelLabel: modelName), "Opus 5.5 · high")
         // A shadow run not claimed yet says nothing of a model it may not run on.
-        XCTAssertNil(TaskDetailLogic.runModelLine(try session(route: route(applied: false)), modelLabel: modelName))
+        XCTAssertNil(TaskDetailLogic.runModelLine(try session(route: route(applied: false)), smartSelection: true, modelLabel: modelName))
         // No effort of its own is the model's default.
         let noEffort = try session(model: "claude-sonnet-5-5", route: nil)
-        XCTAssertEqual(TaskDetailLogic.runModelLine(noEffort, modelLabel: modelName), "Sonnet 5.5 · default effort")
-        XCTAssertNil(TaskDetailLogic.runModelLine(try session(route: nil), modelLabel: modelName))
+        XCTAssertEqual(TaskDetailLogic.runModelLine(noEffort, smartSelection: true, modelLabel: modelName), "Sonnet 5.5 · default effort")
+        XCTAssertNil(TaskDetailLogic.runModelLine(try session(route: nil), smartSelection: true, modelLabel: modelName))
     }
 
     func testTheTierTagThePickAndTheWhy() {
@@ -276,15 +276,36 @@ final class ModelRoutingLogicTests: XCTestCase {
 
     func testTheChipIsMarkedOnlyWhileATaskRunIsOnItsPick() {
         let picked = route(model: "claude-opus-5-5", effort: "high")
-        XCTAssertEqual(ComposerLogic.smartRoute(taskID: "T", route: picked, modelID: "claude-opus-5-5"), picked)
-        XCTAssertNil(ComposerLogic.smartRoute(taskID: "T", route: picked, modelID: "claude-sonnet-5-5"),
+        XCTAssertEqual(ComposerLogic.smartRoute(taskID: "T", route: picked, modelID: "claude-opus-5-5", smartSelection: true), picked)
+        XCTAssertNil(ComposerLogic.smartRoute(taskID: "T", route: picked, modelID: "claude-sonnet-5-5", smartSelection: true),
                      "a model changed here is this run's own")
-        XCTAssertNil(ComposerLogic.smartRoute(taskID: nil, route: picked, modelID: "claude-opus-5-5"),
+        XCTAssertNil(ComposerLogic.smartRoute(taskID: nil, route: picked, modelID: "claude-opus-5-5", smartSelection: true),
                      "a session opened by hand")
         XCTAssertNil(ComposerLogic.smartRoute(taskID: "T", route: route(model: "claude-opus-5-5", applied: false),
-                                              modelID: "claude-opus-5-5"), "a shadow-only run")
+                                              modelID: "claude-opus-5-5", smartSelection: true), "a shadow-only run")
         XCTAssertNil(ComposerLogic.smartRoute(taskID: "T", route: route(level: nil, model: "claude-opus-5-5"),
-                                              modelID: "claude-opus-5-5"), "a decision that named no tier")
-        XCTAssertNil(ComposerLogic.smartRoute(taskID: "T", route: nil, modelID: "claude-opus-5-5"))
+                                              modelID: "claude-opus-5-5", smartSelection: true), "a decision that named no tier")
+        XCTAssertNil(ComposerLogic.smartRoute(taskID: "T", route: nil, modelID: "claude-opus-5-5", smartSelection: true))
+    }
+
+    // MARK: the account's switch (preferences.modelRouting, off by default)
+
+    /// Off, every run reads as it did before routing — no tier, no shadow line, no Why — and its
+    /// model line is its own row alone (web parity: `route` in TaskDetailPanel.tsx is null).
+    func testWithTheAccountSwitchOffNoRunShowsADecision() throws {
+        XCTAssertNil(TaskDetailLogic.runRoute(detail.sessions![0], smartSelection: false))
+        let shadow = try session(model: "claude-opus-5-5", effort: "ultra", route: route(applied: false))
+        XCTAssertNil(TaskDetailLogic.runRoute(shadow, smartSelection: false), "no purple line, no Why")
+        XCTAssertEqual(TaskDetailLogic.runModelLine(shadow, smartSelection: false, modelLabel: modelName),
+                       "Opus 5.5 · ultra", "what it ran on is still said")
+        let unclaimed = try session(route: route(model: "claude-opus-5-5", effort: "high"))
+        XCTAssertNil(TaskDetailLogic.runModelLine(unclaimed, smartSelection: false, modelLabel: modelName),
+                     "not the pick of a decision that is not drawn")
+    }
+
+    func testWithTheAccountSwitchOffTheChipIsNeverMarked() {
+        let picked = route(model: "claude-opus-5-5", effort: "high")
+        XCTAssertNil(ComposerLogic.smartRoute(taskID: "T", route: picked, modelID: "claude-opus-5-5",
+                                              smartSelection: false))
     }
 }
