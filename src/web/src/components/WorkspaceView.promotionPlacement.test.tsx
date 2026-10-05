@@ -219,7 +219,7 @@ const mounted = (): HTMLDivElement => {
 const count = (selector: string): number => mounted().querySelectorAll(selector).length;
 const record = (): HTMLElement | null =>
   mounted().querySelector<HTMLElement>('.project-promotion-receipt');
-/** The candidate's visible preview stays in the transcript; its full card lives in a portal. */
+/** The candidate's anchor and full card stay in the wide transcript. */
 const promotionPreview = (): HTMLElement | null =>
   mounted().querySelector<HTMLElement>(`#promotion-${NEXT_PROMOTION_ID}`);
 /** Every promotion form or receipt, including the form opened from a compact preview. */
@@ -248,21 +248,15 @@ const waitForUi = async (assertion: () => void): Promise<void> => {
 };
 
 async function openPromotion(state: ProjectPromotionView['state']): Promise<HTMLElement> {
+  const selector = `.project-promotion[data-state="${state}"]`;
   await waitForUi(() => {
     expect(count(`.review-card#promotion-${NEXT_PROMOTION_ID}`)).toBe(1);
     // A re-offer moves this id from the blocked transcript card to the strip's new mount.
-    // Wait for that preview to update before pressing, rather than opening the old card.
-    expect(promotionPreview()!.querySelector('.review-card-meta')?.textContent).toBe(
-      state === 'READY' ? 'Ready to merge · review checks and included work' : state.toLowerCase(),
-    );
+    expect(promotionPreview()!.querySelector(selector)).not.toBeNull();
   });
-  const trigger = promotionPreview()!.querySelector<HTMLButtonElement>('.review-card-preview')!;
-  await act(async () => trigger.click());
-  const selector = `.review-card-dialog[data-open] .project-promotion[data-state="${state}"]`;
-  await waitForUi(() => {
-    expect(document.querySelector(selector), `the preview did not open the ${state} candidate`).not.toBeNull();
-  });
-  return document.querySelector<HTMLElement>(selector)!;
+  expect(promotionPreview()!.querySelector('.review-card-preview')).toBeNull();
+  expect(document.querySelector('.review-card-dialog')).toBeNull();
+  return promotionPreview()!.querySelector<HTMLElement>(selector)!;
 }
 
 beforeEach(() => {

@@ -753,8 +753,7 @@ private struct MarkdownFileLinkView: View {
     @State private var previewTarget: ImagePreviewTarget?
     @State private var localImage: PlatformImage?
     @State private var fetching = false
-    @State private var previewText: String?
-    @State private var previewName = ""
+    @State private var textPreview: TextFilePreview?
 
     private var attachmentID: String? { AttachmentLink.attachmentID(source: ref.href) }
     private var artifactPath: String? {
@@ -806,12 +805,13 @@ private struct MarkdownFileLinkView: View {
         .imagePreview($previewTarget, images: previewImages, ns: previewNS)
         .monospaceOutputViewer(
             isPresented: Binding(
-                get: { previewText != nil },
-                set: { if !$0 { previewText = nil } }
+                get: { textPreview != nil },
+                set: { if !$0 { textPreview = nil } }
             ),
-            text: previewText ?? "",
-            lineCount: previewText?.split(whereSeparator: { $0.isNewline }).count ?? 0,
-            title: previewName.isEmpty ? fileName : previewName
+            text: textPreview?.text ?? "",
+            lineCount: textPreview?.lineCount ?? 0,
+            title: fileName,
+            isMarkdown: textPreview?.isMarkdown ?? false
         )
     }
 
@@ -938,7 +938,7 @@ private struct MarkdownFileLinkView: View {
             } else {
                 data = nil
             }
-            guard let data, !data.isEmpty else {
+            guard let data else {
                 app?.showToast("Couldn't open that file", detail: fileName, tone: .error)
                 return
             }
@@ -957,9 +957,8 @@ private struct MarkdownFileLinkView: View {
                 }
                 #endif
             }
-            if let text = String(data: data, encoding: .utf8) {
-                previewName = fileName
-                previewText = String(text.prefix(20_000))
+            if let preview = TextFilePreview(data: data, fileName: fileName) {
+                textPreview = preview
             } else if !FileHandoff.deliver(data, named: handoffName) {
                 app?.showToast("Couldn't open that file", detail: fileName, tone: .error)
             }

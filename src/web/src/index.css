@@ -13997,8 +13997,7 @@ button.chat-jump-start:hover {
 .re-card.offline .re-head {
   background: var(--fill-muted);
 }
-/* Everything that isn't the Manage link folds the card; it's the whole left half of the header,
-   so the hit target matches what reads as "this runner". */
+/* Identity has its own toggle so the adjacent Manage link stays independent. */
 .re-toggle {
   display: flex;
   align-items: center;
@@ -14057,17 +14056,20 @@ button.chat-jump-start:hover {
   white-space: nowrap;
 }
 
-/* The runner header's spare width belongs to its toggle, with Manage kept independent. */
+/* Identity expands the runner; its status and Manage link stay separate. */
 .re-runner-card .re-head {
   gap: 0;
   padding: 0;
+}
+.re-runner-card.offline .re-head {
+  background: var(--bg-subtle);
 }
 .re-runner-card .re-toggle {
   flex: 1;
   align-self: stretch;
   gap: 10px;
   min-height: 64px;
-  padding: 10px 12px;
+  padding: 10px 14px;
   border-radius: 11px 0 0 11px;
 }
 .re-runner-card .re-toggle:focus-visible {
@@ -14078,8 +14080,8 @@ button.chat-jump-start:hover {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 28px;
+  height: 24px;
   color: var(--text-2);
   transition: color 0.15s, transform 0.15s;
 }
@@ -14090,17 +14092,46 @@ button.chat-jump-start:hover {
 .re-runner-copy {
   display: flex;
   flex: 1;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 4px 9px;
+  flex-direction: column;
+  gap: 3px;
   min-width: 0;
 }
 .re-runner-copy .re-runner,
 .re-runner-copy .re-runner-meta {
   overflow-wrap: anywhere;
 }
+.re-runner-copy .re-runner {
+  font-size: 15px;
+}
+.re-runner-copy .re-runner-meta {
+  font-size: 12px;
+}
+.re-runner-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.re-runner-status > .ant-tag {
+  margin: 0;
+}
+.re-runner-status .re-summary {
+  border-left: 0;
+  padding-left: 0;
+  font-size: 12px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.re-runner-status .re-summary.warn {
+  color: var(--warning);
+}
+.re-runner-status .re-summary .anticon {
+  margin-right: 5px;
+}
 .re-runner-card .re-manage {
   display: flex;
+  flex: none;
   align-items: center;
   min-height: 44px;
   margin: 0 14px 0 8px;
@@ -14110,36 +14141,29 @@ button.chat-jump-start:hover {
   outline-offset: 3px;
   border-radius: 4px;
 }
-.re-runner-card .re-head > .ant-tag {
-  margin: 0 4px;
-}
 @container re-card (max-width: 600px) {
   .re-runner-card .re-head {
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 8px;
+    padding: 0 14px;
   }
   .re-runner-card .re-toggle {
-    flex-basis: 100%;
-    gap: 8px;
-    padding: 10px 8px;
+    grid-column: 1 / -1;
+    align-items: flex-start;
+    min-height: 54px;
+    padding: 10px 0 0;
     border-radius: 11px;
   }
-  .re-runner-copy,
-  .re-runner-copy > span {
-    display: block;
+  .re-runner-card .re-toggle > .re-dot {
+    margin-top: 8px;
   }
-  .re-runner-copy .re-runner-meta {
-    margin-top: 3px;
-  }
-  .re-runner-card .re-summary {
-    border-left: 0;
-    padding: 3px 0 0;
+  .re-runner-status {
+    margin-left: 17px;
   }
   .re-runner-card .re-manage {
-    margin-left: auto;
-    margin-right: 12px;
-  }
-  .re-runner-card .re-head > .ant-tag {
-    margin-left: 75px;
+    grid-column: 2;
+    margin: 0;
   }
 }
 
