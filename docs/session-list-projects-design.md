@@ -65,11 +65,11 @@
 
 和会话行**一样高**：Web 64px，iPhone 75pt（`compactRow`），都是两行。iPad 用 `regularIOSRow` 的版式，同样两行。
 
-- **第 1 行**：四宫格图标（Web 侧栏 Projects 的 `square.grid.2x2`，品牌蓝；iOS 是标题前的小图标）、**加粗**的项目名、状态点、时间。
+- **第 1 行**：四宫格图标（Web 侧栏 Projects 的 `square.grid.2x2`，品牌蓝；iOS 是标题前的小图标）、项目名（和会话行同一字重，不加粗：owner 10-04 的决定，效果图里的粗体以此为准）、状态点、时间。
   - 时间：组里成员会话最新的 `lastTurnAt ?? createdAt`。
   - 不再画 `Coordinator` 标：图标已经说明这是项目。
 - **第 2 行**：开头是**进度小标签**，放在会话行放标签的位置（现在 coordinator 行放 `Coordinator` 标的位置）：迷你进度条（绿 done、蓝 running、红 failed、灰其余）加 `done/total`。项目 DONE 时小标签变绿。后面是“第 2 行的话”（§4.2）。
-- **状态点**：组里任一会话的状态是“等你” → 琥珀；否则任一在跑 → Web 图标右下角蓝点、iOS 灰色转圈；否则只剩后台作业 → 呼吸。读法和会话行、文件夹行同一套（Web `statusGlyphMotion` / `sessionNeedsYou`，iOS `SessionLiveIndicator`）。
+- **状态点**：组里任一会话的状态是“等你” → 琥珀；否则任一在跑 → 图标位置和会话行一样转圈（Web 蓝色转圈代替四宫格，iOS 灰色转圈：owner 10-04 的决定，效果图里的运行状态以此为准）；否则只剩后台作业 → 呼吸。读法和会话行、文件夹行同一套（Web `statusGlyphMotion` / `sessionNeedsYou`，iOS `SessionLiveIndicator`）。
 - 条目上**没有琥珀计数**，也**没有子行**：列表里不展开。
 
 ### 4.2 第 2 行的话
@@ -86,7 +86,7 @@
 
 - **点条目**：进第 2 行所说的那个会话。第 1、3、4 种是 coordinator；第 2 种是那个等你的执行会话；第 5 种进项目会话页。
 - **点进度小标签**：进项目会话页（§5）。它是单独的点击区：Web 悬停时描边变蓝，提示 `<n> sessions · <m> running`（n 含 coordinator）；iOS 把它的点击区加高到整行。
-- **Web 悬停 ⋯ / iOS 长按**：`Open Coordinator`、`Sessions`、`Open Project`，分隔线，`Pin` / `Unpin`、`Move…`。后两项作用在 coordinator 上，条目跟着走。
+- **Web 悬停 ⋯ / 右键 / iOS 长按**：`Open Session`、`Sessions`、`Open Project`，分隔线，`Pin` / `Unpin`、`Move…`（owner 10-04 的决定）。`Open Session` 和点条目一样，打开第 2 行所说的会话；没有可打开的会话时置灰。后两项作用在 coordinator 上，条目跟着走。
   - **不放** `Complete`、`Share`、`Delete`：完成 coordinator 会影响整个项目，要在对话里做。
   - **不放任何回答按钮**：回答只在对话里的卡片上（`OwnerConfirmationCard.test` 钉着“会话列表上不能有回答入口”）。
 - **滑动**（iOS、Web 手机）：右滑 `Pin` / `Unpin`，左滑 `Move`。
@@ -109,7 +109,8 @@
 - **iOS**：iPhone 推进导航栈（`NavNode` 加一种页面）；iPad 中间栏原地换页。和文件夹页走同一套。
 - **页头**：‹ 回到 Workspace 的列表；标题是项目名，下面一行小字 `Project · <n> sessions`；⋯ 里是 `Open Project`、`Open Coordinator`。这里没有 New session：项目的会话由 coordinator 派发。
 - **进度条**：页头下面一条，迷你进度条 + `<done>/<total> done · <m> running`，Web 用 ↗、iOS 用 `Project ›` 进项目页。
-- **列表**：`Coordinator` 一节放 coordinator（行上照旧带 `Coordinator` 标），下面是成员会话，按时间分组；行、悬停按钮、左右滑、长按都和外面一样。列的是 `GET /sessions?projectId=` 返回的全部 Workspace 的成员会话，范围跟着进来时的视图（Open 或 Completed）。
+- **搜索**：页头和进度条下面直接是列表，没有搜索框（owner 10-04 的决定）。Web 的 ⌘K 仍能打开全局搜索面板；iOS 项目页不接全局搜索。Workspace 列表和文件夹页的搜索保持原样。
+- **列表**：`Coordinator` 一节放 coordinator（行上照旧带 `Coordinator` 标），下面是成员会话，按时间分组。列出全部 Workspace 的全部成员会话（Open 和 Completed，不含 Trash），每行操作按它自己的状态，行、悬停按钮、左右滑、长按和外面同状态的会话行一样（owner 10-04 的决定）。客户端分别请求 `GET /sessions?projectId=<id>&view=open` 和 `view=completed`，按 id 合并去重；页头会话数和进度条 running 数按合并后的全部会话计算。
 
 ## 6. 文案（Web 与 OrbitKit 逐字一致）
 
@@ -120,7 +121,8 @@
 | 执行会话等你 | `<等待原话> · <会话名>` |
 | coordinator 处理例外 | `Resolving a merge conflict · <age>`、`Checks failed · <age>`、`Handling an integration error · <age>`、`Handling a failed task · <age>`、`Reviewing a delivery · <age>` |
 | 没有 coordinator | `No coordinator` |
-| 菜单 | `Open Coordinator`、`Sessions`、`Open Project`、`Pin`、`Unpin`、`Move…` |
+| 条目菜单（owner 10-04 的决定） | `Open Session`、`Sessions`、`Open Project`、`Pin`、`Unpin`、`Move…` |
+| 项目会话页页头菜单 | `Open Project`、`Open Coordinator` |
 | 项目会话页 | `Project · <n> sessions`、`Coordinator`（节名）、`<done>/<total> done · <m> running`、`Project ›`（iOS） |
 
 等待原话、coordinator 的话沿用会话行已有的常量，不另写。处理例外的五句来自 `projectAttention.ts` 的 `COORDINATOR_LEAD_COPY`，首字母大写。Swift 侧加对照测试，读取 `src/web/src/lib/sessionProjects.ts`（照 `ProjectAttentionCopyParityTests`）。

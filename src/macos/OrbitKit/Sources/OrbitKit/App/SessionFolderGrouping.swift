@@ -53,7 +53,8 @@ public enum SessionFolderGrouping {
     /// was fetched, or not loaded yet — stays in the list rather than vanishing into a folder
     /// nobody can open.
     public static func listing(_ sessions: [Session], folders: [SessionFolder], view: SessionView,
-                               byTag: Bool, runnerOffline: Bool = false) -> SessionFolderListing {
+                               byTag: Bool, runnerOffline: Bool = false,
+                               watching: [String: WatchSessionSummary] = [:]) -> SessionFolderListing {
         guard view != .trash, !byTag else {
             return SessionFolderListing(folders: [], sessions: sessions)
         }
@@ -71,7 +72,7 @@ public enum SessionFolderGrouping {
             let inside = filed[folder.id] ?? []
             if view == .completed && inside.isEmpty { return nil }
             return SessionFolderRow(folder: folder, sessionCount: inside.count,
-                                    status: status(of: inside, runnerOffline: runnerOffline))
+                                    status: status(of: inside, runnerOffline: runnerOffline, watching: watching))
         }
         return SessionFolderListing(folders: rows, sessions: loose)
     }
@@ -90,11 +91,12 @@ public enum SessionFolderGrouping {
     /// A folder row's trailing slot: `WorkspaceNavigationStatusLogic` over the same per-session
     /// readings the drawer's Workspace row is made of (`NeedsYouLogic.byAgent`,
     /// `WorkspaceActivityLogic`), so a folder and its workspace can't read a session differently.
-    static func status(of sessions: [Session], runnerOffline: Bool) -> WorkspaceNavigationStatus {
+    static func status(of sessions: [Session], runnerOffline: Bool,
+                       watching: [String: WatchSessionSummary] = [:]) -> WorkspaceNavigationStatus {
         WorkspaceNavigationStatusLogic.resolve(
             waiting: sessions.filter(NeedsYouLogic.isCounted).count,
-            running: sessions.contains(where: WorkspaceActivityLogic.isRunning),
-            jobs: sessions.contains(where: WorkspaceActivityLogic.isRunningJob),
+            running: sessions.contains { WorkspaceActivityLogic.isRunning($0, watching: watching[$0.id]) },
+            jobs: sessions.contains { WorkspaceActivityLogic.isRunningJob($0, watching: watching[$0.id]) },
             runnerOffline: runnerOffline)
     }
 

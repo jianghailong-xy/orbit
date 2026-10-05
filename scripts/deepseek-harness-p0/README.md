@@ -1,6 +1,8 @@
 # P0 真 DeepSeek Harness ACP 复现
 
 固定 `@deepseek-ai/dsh@0.2.0-rc.2`；完整依赖和 integrity 在 `package-lock.json`。
+2026-10-04 将 `libreoffice-kit` 的嵌套 `fflate` 覆盖到 0.8.3，理由和摘除条件见[依赖安全记录](../../docs/dependency-security.md#fflate-in-the-deepseek-p0-harness-2026-10-04)。
+已提交录制中的 lockfile 哈希对应修复前的历史实验；重新运行会记录当前锁文件的哈希。
 实验使用官方 npm 可执行文件、本地 Messages SSE mock、真实 stdio MCP 子进程，不替换 dsh/ACP 实现。
 本脚本的可执行验收范围是 Linux；macOS/Windows 只做源码前提核对。
 

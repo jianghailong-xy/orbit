@@ -964,9 +964,11 @@ export class QueueService {
    * then chooses; the first reset while nothing can; null when nothing comes back by waiting.
    *
    * Null too when the credential the session is on can still run — the failure was not its, and the
-   * ordinary rules apply: a rate limit, above all, is waited out on its own key and never moves a session
-   * (docs/codex-shared-pool-design.md §2.3) — and when `session` is on no such pool. Decided from the
-   * accounts and the keys as the database holds them, not from the words the engine ended with.
+   * ordinary rules apply — and when `session` is on no such pool. A rate limit is one of these only while
+   * the gateway could wait it out: one that outlasted that wait leaves a short `throttled_until` on the
+   * credential (migration 0382, providers/pool-gateway.service.ts), so the credential cannot run, and this
+   * answers for it exactly as it does for a spent one. Decided from the accounts and the keys as the
+   * database holds them, not from the words the engine ended with.
    */
   async sharedPoolRetryAt(
     db: Prisma.TransactionClient | PrismaService,
@@ -1006,8 +1008,10 @@ export class QueueService {
    * account to come back while none can; null when none comes back by waiting.
    *
    * Null too when the account the session is on can still run — the failure was not the account's, and the
-   * ordinary rules apply — and when `session` is on no login pool of its owner's. Decided from the accounts
-   * as the database holds them, not from the words the engine ended with.
+   * ordinary rules apply — and when `session` is on no login pool of its owner's. A rate limit counts among
+   * the reasons only once the gateway could not wait it out and marked the account `throttled_until`
+   * (migration 0382); a short one is waited out inside the request it was answered to, and moves nothing.
+   * Decided from the accounts as the database holds them, not from the words the engine ended with.
    *
    * The pool's API keys (migration 0358) count beside its accounts: the owner's session runs on a key when
    * no account can (resolveLoginPool), so one on a key that can still run is null as one on an account is,
@@ -1468,7 +1472,7 @@ async function poolLogins(
   const rows = await db.poolCodexLogin.findMany({
     where: { poolId },
     orderBy: [{ createdAt: 'asc' }, { accountId: 'asc' }],
-    select: { accountId: true, userId: true, email: true, state: true, spentUntil: true, pausedUntil: true, usage: true },
+    select: { accountId: true, userId: true, email: true, state: true, spentUntil: true, throttledUntil: true, pausedUntil: true, usage: true },
   });
   return rows.map((login) => ({ ...login, usage: login.usage as PlanUsageSnapshot | null }));
 }

@@ -350,16 +350,11 @@ async function rereadCriteria(): Promise<void> {
   });
 }
 
-const cardsOnPage = (): HTMLElement[] => [
-  ...mounted().querySelectorAll<HTMLElement>('.review-card[id^="criteria-decision-"], .criteria-decision'),
-];
-const reviewCards = (): HTMLElement[] => [
-  ...document.querySelectorAll<HTMLElement>('.review-card-dialog .criteria-decision'),
-];
-const reviewDialog = (): HTMLElement | null =>
-  document.querySelector<HTMLElement>('.review-card-dialog[data-open]');
+// The stable anchors and full forms both stay in the wide conversation.
+const previewsOnPage = (): HTMLElement[] => [...mounted().querySelectorAll<HTMLElement>('.review-card[id^="criteria-decision-"]')];
+const cardsOnPage = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>('.criteria-decision')];
 const headingOf = (card: HTMLElement): string =>
-  card.querySelector('.review-card-title, .criteria-decision-heading')?.textContent ?? '';
+  card.querySelector('.criteria-decision-heading')?.textContent ?? '';
 const actionsOf = (card: HTMLElement): HTMLButtonElement[] => [
   ...card.querySelectorAll<HTMLButtonElement>('.criteria-decision-actions button'),
 ];
@@ -374,28 +369,16 @@ const actionsOf = (card: HTMLElement): HTMLButtonElement[] => [
 async function answeredElsewhereAfterRereads(): Promise<void> {
   await mount();
   await waitForUi(() => {
-    expect(cardsOnPage().map(headingOf)).toContain(CRITERIA_DECISION_HEADING);
+    expect(previewsOnPage()).toHaveLength(1);
+    expect(previewsOnPage()[0]!.textContent).toContain(CRITERIA_DECISION_HEADING);
   });
+  expect(previewsOnPage()[0]!.id).toBe(`criteria-decision-${INTENT}`);
+  expect(previewsOnPage()[0]!.querySelector('.review-card-preview')).toBeNull();
+  expect(document.querySelector('.review-card-dialog')).toBeNull();
   const arrived = cardsOnPage().find((card) => headingOf(card) === CRITERIA_DECISION_HEADING)!;
-  expect(arrived.id).toBe(`criteria-decision-${INTENT}`);
-  expect(arrived.querySelector('.criteria-decision-actions'), 'the preview offers decision actions').toBeNull();
-  expect(reviewDialog()).toBeNull();
-  await act(async () => {
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }));
-  });
-  expect(doorRequests, 'the closed preview answered a keyboard press').toEqual([]);
-  const preview = arrived.querySelector<HTMLButtonElement>('.review-card-preview')!;
-  expect(preview.getAttribute('aria-expanded')).toBe('false');
-  await act(async () => preview.click());
-  await waitForUi(() => {
-    expect(reviewDialog()).toBeTruthy();
-    expect(reviewCards()).toHaveLength(1);
-  });
-  expect(preview.getAttribute('aria-expanded')).toBe('true');
-  expect(reviewDialog()!.getAttribute('role')).toBe('dialog');
-  expect(mounted().contains(reviewDialog()), 'the review is not a portal').toBe(false);
+  expect(mounted().contains(arrived), 'the full form must be in the conversation').toBe(true);
   // Pressable before anything happens, so a disabled action later is the answer being noticed.
-  expect(actionsOf(reviewCards()[0]!).map((button) => button.disabled)).toEqual([false, false]);
+  expect(actionsOf(arrived).map((button) => button.disabled)).toEqual([false, false]);
   expect([...new Set(unstubbed)], 'every endpoint the page reads is stubbed').toEqual([]);
 
   for (const round of [1, 2, 3]) {
@@ -413,22 +396,22 @@ async function answeredElsewhereAfterRereads(): Promise<void> {
   await rereadCriteria();
   await waitForUi(() => {
     expect(cardsOnPage().map(headingOf)).toContain(CRITERIA_DECISION_STALE_HEADING);
-    expect(reviewCards().map(headingOf)).toEqual([CRITERIA_DECISION_STALE_HEADING]);
   });
 }
 
 describe('the criteria decision card in an open coordinator conversation', () => {
   it('is on the page once for its intent, through every re-read and after the answer elsewhere', async () => {
     await answeredElsewhereAfterRereads();
+    expect(previewsOnPage().map((preview) => preview.id)).toEqual([`criteria-decision-${INTENT}`]);
     expect(
-      cardsOnPage().map((card) => `${card.id} · ${headingOf(card)}`),
+      cardsOnPage().map(headingOf),
       'the same intent is drawn more than once',
-    ).toEqual([`criteria-decision-${INTENT} · ${CRITERIA_DECISION_STALE_HEADING}`]);
+    ).toEqual([CRITERIA_DECISION_STALE_HEADING]);
   });
 
   it('offers no answer once settled — from any card on the page — and sends nothing to the door', async () => {
     await answeredElsewhereAfterRereads();
-    const cards = reviewCards();
+    const cards = cardsOnPage();
     const settled = cards.find((card) => headingOf(card) === CRITERIA_DECISION_STALE_HEADING)!;
     expect(actionsOf(settled).map((button) => button.textContent)).toEqual([APPROVE_LABEL, REFUSE_LABEL]);
     expect(actionsOf(settled).map((button) => button.disabled)).toEqual([true, true]);
@@ -441,7 +424,6 @@ describe('the criteria decision card in an open coordinator conversation', () =>
     );
     await act(async () => {
       for (const button of cards.flatMap(actionsOf)) button.click();
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }));
     });
     expect(offered, 'a card of the settled intent still offers an answer').toEqual([]);
     expect(doorRequests, 'a press on the settled intent reached the decision door').toEqual([]);
@@ -469,14 +451,8 @@ describe('the criteria decision card in an open coordinator conversation', () =>
     expect(cardsOnPage().map((card) => card.id)).toEqual([`criteria-decision-${INTENT}`]);
   });
 
-  it.each(['open', 'closed'] as const)('leaves no %s review behind on New session, which has no project', async (reviewState) => {
+  it('leaves no card behind on New session, which has no project', async () => {
     await answeredElsewhereAfterRereads();
-    if (reviewState === 'closed') {
-      await act(async () => reviewDialog()!.querySelector<HTMLButtonElement>('[aria-label="Close"]')!.click());
-      expect(reviewDialog()).toBeNull();
-      expect(reviewCards(), 'closing discarded the retained review').toHaveLength(1);
-      expect(cardsOnPage()[0]!.querySelector('.review-card-preview')?.getAttribute('aria-expanded')).toBe('false');
-    }
     await act(async () => {
       navigateTo!(NEW_SESSION_PATH);
     });
@@ -484,11 +460,11 @@ describe('the criteria decision card in an open coordinator conversation', () =>
     await waitForUi(() => {
       expect(mounted().querySelector('.workspace-sessions.workspace-draft')).toBeTruthy();
     });
+    expect(previewsOnPage()).toEqual([]);
+    expect(document.querySelector('.review-card-dialog[data-open]')).toBeNull();
     expect(
-      cardsOnPage().map((card) => `${card.id} · ${headingOf(card)}`),
+      cardsOnPage().map(headingOf),
       'a card is left on the New session page',
     ).toEqual([]);
-    expect(reviewDialog(), 'the open review was left on New session').toBeNull();
-    expect(reviewCards(), 'a retained review portal was left on New session').toEqual([]);
   });
 });

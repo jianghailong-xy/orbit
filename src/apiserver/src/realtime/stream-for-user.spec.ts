@@ -57,6 +57,15 @@ function fakePrisma(
 ): PrismaService {
   return {
     $executeRawUnsafe: async () => 0,
+    $queryRaw: async ({ values }: { values: unknown[] }) => {
+      const row = rows[values[0] as string];
+      return [{ projectMembership: row?.coordinatorForProject ? {
+        projectId: row.coordinatorForProject.id,
+        projectTitle: row.coordinatorForProject.title,
+        projectStatus: 'OPEN',
+        role: 'COORDINATOR',
+      } : null }];
+    },
     session: {
       findUnique: async ({ where }: { where: { id: string } }) => {
         const row = rows[where.id];
@@ -172,6 +181,12 @@ test('a STATUS event reaches the owner as session.updated with a full summary', 
   });
   assert.equal(data.projectId, 'projectA');
   assert.equal(data.projectTitle, 'Fix the project');
+  assert.deepEqual(data.projectMembership, {
+    projectId: 'projectA',
+    projectTitle: 'Fix the project',
+    projectStatus: 'OPEN',
+    role: 'COORDINATOR',
+  });
 });
 
 test('a parked conversation counts the cards a live runner-hosted job is still reading', async () => {
@@ -674,6 +689,8 @@ test('session.updated explicitly clears project relation metadata for an ordinar
   assert.equal(Object.hasOwn(data, 'projectTitle'), true);
   assert.equal(data.projectId, null);
   assert.equal(data.projectTitle, null);
+  assert.equal(Object.hasOwn(data, 'projectMembership'), true);
+  assert.equal(data.projectMembership, null);
 });
 
 /**

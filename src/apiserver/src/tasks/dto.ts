@@ -381,6 +381,9 @@ export class CreateTaskDto {
   // The project this task is work towards. Must be owned by the caller. Orthogonal to listId:
   // a list decides how the task runs, a project states what it is for.
   @IsOptional() @IsPublicId() projectId?: string;
+  // The OPEN integration/TASK_FAILED item this task is intended to fix. The service checks the
+  // item, project and responsible writer under the same transaction as the task write.
+  @IsOptional() @IsPublicId() fixesOpenItemId?: string;
   // Unit L3: the coordination scope this write claims to be made under, as one opaque field
   // (`psc:v1:<projectId>:<generation>`).
   //
@@ -627,6 +630,8 @@ export class UpdateTaskDto {
   // would leave this task in a different project from its parent or its subtasks — see
   // TasksService.assertHierarchyConsistent.
   @IsOptional() @IsPublicId() projectId?: string | null;
+  // Omit to preserve the link, pass an id to attach a concrete fix, or null to detach it.
+  @IsOptional() @IsPublicId() fixesOpenItemId?: string | null;
   // See CreateTaskDto.scopeToken. Compared, never trusted.
   @IsOptional() @IsString() @MaxLength(128) scopeToken?: string;
   // Unit L4: declare that this write crosses into another project (see TaskHandoffDto). Only

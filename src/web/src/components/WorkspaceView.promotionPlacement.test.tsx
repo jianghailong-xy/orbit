@@ -219,18 +219,12 @@ const mounted = (): HTMLDivElement => {
 const count = (selector: string): number => mounted().querySelectorAll(selector).length;
 const record = (): HTMLElement | null =>
   mounted().querySelector<HTMLElement>('.project-promotion-receipt');
-/** Count the previews in the conversation, rather than their retained portal contents. */
-const previewsOfState = (state: string): HTMLButtonElement[] =>
-  [...mounted().querySelectorAll<HTMLButtonElement>('.review-card[id^="promotion-"] > .review-card-preview')]
-    .filter((preview) => preview.querySelector('.review-card-meta')?.textContent ===
-      (state === 'READY' ? 'Ready to merge · review checks and included work' : state.toLowerCase()));
-/** The blocked preview's wrapper is what occupies a moment in the conversation's flow. */
-const blockedCard = (): HTMLElement | null => previewsOfState('BLOCKED')[0]?.parentElement ?? null;
-/** Questions and blocked candidates are previews; a merged record stays inline in full. */
+/** The candidate's anchor and full card stay in the wide transcript. */
+const promotionPreview = (): HTMLElement | null =>
+  mounted().querySelector<HTMLElement>(`#promotion-${NEXT_PROMOTION_ID}`);
+/** Every promotion form or receipt, including the form opened from a compact preview. */
 const cardsOfState = (state: string): number =>
-  state === 'MERGED'
-    ? mounted().querySelectorAll('.project-promotion[data-state="MERGED"]').length
-    : previewsOfState(state).length;
+  document.querySelectorAll(`.project-promotion[data-state="${state}"]`).length;
 
 const waitForUi = async (assertion: () => void): Promise<void> => {
   // The act environment is off while the window is waited out, as RTL's own asyncWrapper
@@ -252,6 +246,18 @@ const waitForUi = async (assertion: () => void): Promise<void> => {
   // keeps that, without the freeze that made the wait itself blind.
   await act(async () => {});
 };
+
+async function openPromotion(state: ProjectPromotionView['state']): Promise<HTMLElement> {
+  const selector = `.project-promotion[data-state="${state}"]`;
+  await waitForUi(() => {
+    expect(count(`.review-card#promotion-${NEXT_PROMOTION_ID}`)).toBe(1);
+    // A re-offer moves this id from the blocked transcript card to the strip's new mount.
+    expect(promotionPreview()!.querySelector(selector)).not.toBeNull();
+  });
+  expect(promotionPreview()!.querySelector('.review-card-preview')).toBeNull();
+  expect(document.querySelector('.review-card-dialog')).toBeNull();
+  return promotionPreview()!.querySelector<HTMLElement>(selector)!;
+}
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -458,6 +464,7 @@ describe('the record a merge leaves, in the conversation it happened in', { time
     // exactly the moment the old card used to start describing a merge that had not happened.
     currentPromotion = candidate();
     await rereadProject([() => currentReads, () => mergedReads]);
+    await openPromotion('READY');
 
     await waitForUi(() => {
       expect(cardsOfState('READY'), 'the next candidate is not being asked about').toBe(1);
@@ -519,13 +526,14 @@ describe('the card a blocked candidate leaves, in the conversation it happened i
   it('is drawn among the events, at the moment it was blocked, and not in the pane’s card strip', async () => {
     currentPromotion = blocked();
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    const details = await openPromotion('BLOCKED');
     await waitForUi(() => {
       expect(cardsOfState('BLOCKED'), 'no blocked candidate is drawn').toBe(1);
     });
     await note(COORDINATOR_PUBLIC, 2);
 
-    const card = blockedCard()!;
-    expect(card.textContent, 'the card does not name the branch it could not merge').toContain(
+    const card = promotionPreview()!;
+    expect(details.textContent, 'the card does not name the branch it could not merge').toContain(
       'orbit/runner-web-714027',
     );
     // It is IN the flow: the thing after it is an event of the conversation, and the message
@@ -543,35 +551,26 @@ describe('the card a blocked candidate leaves, in the conversation it happened i
     currentPromotion = blocked();
     openItemRows = { needsYou: [], withCoordinator: [blockedItem()] };
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    const details = await openPromotion('BLOCKED');
     // The card is a RECORD of the block and still a LIVE reading of it: the row it reads names who
     // is resolving the candidate, which is nowhere on the candidate itself. The press says it now,
     // with how long they have had it — and the wait is the row's to know.
     await waitForUi(() => {
-      expect(cardsOfState('BLOCKED')).toBe(1);
-    });
-    const preview = previewsOfState('BLOCKED')[0]!;
-    expect(preview.textContent).toContain('orbit/runner-web-714027 can’t merge into main yet');
-    expect(preview.getAttribute('aria-expanded')).toBe('false');
-    expect(mounted().querySelector('.project-promotion[data-state="BLOCKED"]')).toBeNull();
-    await act(async () => preview.click());
-    await waitForUi(() => {
-      const dialog = document.querySelector<HTMLElement>('.review-card-dialog[data-open]');
-      expect(dialog).not.toBeNull();
-      expect(mounted().contains(dialog)).toBe(false);
-      expect(dialog?.querySelector('.project-promotion[data-state="BLOCKED"]')?.textContent)
-        .toContain(`${RESOLVING} · `);
+      expect(details.textContent).toContain(`${RESOLVING} · `);
     });
   });
 
   it('goes once the branch is offered again, which the strip draws as the question it is', async () => {
     currentPromotion = blocked();
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    await openPromotion('BLOCKED');
     await waitForUi(() => {
       expect(cardsOfState('BLOCKED')).toBe(1);
     });
 
     currentPromotion = candidate();
     await rereadProject([() => currentReads]);
+    await openPromotion('READY');
     await waitForUi(() => {
       expect(cardsOfState('READY'), 'the next candidate is not being asked about').toBe(1);
     });
@@ -581,13 +580,14 @@ describe('the card a blocked candidate leaves, in the conversation it happened i
   it('keeps the strip’s card when the stamp is one nothing can parse', async () => {
     currentPromotion = blocked({ decidedAt: 'some time last Tuesday' });
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    await openPromotion('BLOCKED');
     await waitForUi(() => {
       expect(cardsOfState('BLOCKED')).toBe(1);
     });
     await note(COORDINATOR_PUBLIC, 2);
     // Drawn at the tail rather than dropped: a candidate is not taken off the screen for a clock
     // this build cannot read (the fallback `DeliveryAnchor.exception` keeps on the native ends).
-    const card = blockedCard()!;
+    const card = promotionPreview()!;
     const later = mounted().querySelector<HTMLElement>('[data-seq="3"]')!;
     expect(
       later.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -604,6 +604,7 @@ describe('what is not a record', { timeout: 60_000 }, () => {
   it('draws no card, and leaves the events as themselves, when nothing has merged', async () => {
     currentPromotion = candidate();
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    await openPromotion('READY');
     await waitForUi(() => {
       expect(cardsOfState('READY'), 'no candidate is being asked about').toBe(1);
     });

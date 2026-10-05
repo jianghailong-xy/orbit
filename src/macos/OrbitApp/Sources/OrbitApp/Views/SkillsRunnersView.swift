@@ -129,7 +129,7 @@ struct RunnersListView: View {
 /// A plain push list — each runner pushes its detail within the Settings navigation stack, reusing
 /// `RunnerRow`/`RunnerDetailContent` instead of the sidebar's split-view selection. The row pushes the
 /// same `NavNode.runnerDetail` frame the Runners section pushes, so the shape of a runner's record is
-/// one page in both places. Under the rows, Add Runner; Edit reorders and removes them.
+/// one page in both places. Under the rows, Add Runner.
 struct RunnersSettingsList: View {
     @Environment(AppModel.self) private var model
     @State private var addingRunner = false
@@ -242,8 +242,7 @@ private struct RunnerAddSection: View {
 }
 
 /// What both runners lists add around their rows: Add Runner's sheet; removing a runner, which asks
-/// first in the words its own page's Remove card says; and — on iOS — Edit, which puts the rows in
-/// the list's own reorder / delete mode (the web list's drag order, POST /runners/reorder).
+/// first in the words its own page's Remove card says.
 private struct RunnerListEditing: ViewModifier {
     let runners: RunnersModel
     @Binding var addingRunner: Bool
@@ -261,11 +260,6 @@ private struct RunnerListEditing: ViewModifier {
             } message: { _ in
                 Text(RunnerPageCopy.RUNNER_REMOVE_FOOTER)
             }
-            #if os(iOS)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) { EditButton() }
-            }
-            #endif
             .task { await runners.loadReleaseVersion() }
     }
 

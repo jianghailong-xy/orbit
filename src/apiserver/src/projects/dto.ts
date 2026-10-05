@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -24,8 +24,11 @@ import {
 import {
   ProjectStatus,
   type AcceptedGap,
+  type DoneRequestGap,
+  type ProjectDoneRequestDeclineBody,
   type ProjectDoneRequestBody,
   type ProjectStartRequestBody,
+  type RequestProjectDoneBody,
   type StartProjectRequestBody,
 } from '@orbit/shared';
 import { IsPublicId } from '../common/public-id';
@@ -34,6 +37,15 @@ import { MAX_BLOCKER_RESOLUTION_REASON_CHARS } from './project-blocker-resolutio
 import { MAX_OPEN_ITEM_RESOLUTION_NOTE, MAX_QUESTION_CHARS } from './project-open-item';
 import { MAX_INTEGRATION_RETRY_REASON } from './project-integration-retry';
 import { MAX_START_REQUEST_WHY } from './project-start-request';
+import {
+  MAX_DONE_REQUEST_EVIDENCE_REF,
+  MAX_DONE_REQUEST_EVIDENCE_REFS,
+  MAX_DONE_REQUEST_DECLINE_NOTE,
+  MAX_DONE_REQUEST_GAPS,
+  MAX_DONE_REQUEST_GAP_TEXT,
+  MAX_DONE_REQUEST_GAP_TITLE,
+  MAX_DONE_REQUEST_JUDGMENT,
+} from './project-done-request';
 import type { IntegrationLine, IntegrationSettings } from './project-integration-line';
 
 const PROJECT_STATUSES = Object.values(ProjectStatus);
@@ -450,6 +462,17 @@ export class DoneProjectDto implements ProjectDoneRequestBody {
 }
 
 /**
+ * `POST /projects/:id/done-requests/:itemId/decline`: the account owner's Not yet… note.
+ *
+ * The service trims and validates again because this DTO is only the HTTP boundary; direct callers
+ * and retries must meet the same rule.
+ */
+export class DeclineDoneRequestDto implements ProjectDoneRequestDeclineBody {
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  @IsString() @MinLength(1) @MaxLength(MAX_DONE_REQUEST_DECLINE_NOTE) note!: string;
+}
+
+/**
  * `POST /projects/:id/start` (`@orbit/shared` `StartProjectRequestBody`): the version of the
  * criteria the owner read, and every setting the project is to run with — each one required,
  * because a start writes the whole set and a field left out would be a setting nobody chose.
@@ -495,6 +518,35 @@ export class RequestProjectStartDto implements ProjectStartRequestBody {
   mergeCheckCommand?: string | null;
   /** Shown to the owner on the card, as written. */
   @IsString() @MinLength(1) @MaxLength(MAX_START_REQUEST_WHY) why!: string;
+}
+
+/**
+ * One gap a project's coordinator names when it asks for the project to be recorded done
+ * (`@orbit/shared` `DoneRequestGap`): the criterion by the key `project_get` gives it, why Orbit
+ * cannot prove it, what the coordinator checked instead and where that evidence is, and optionally a
+ * few words naming it. The service restates every rule, which is where both doors meet.
+ */
+export class DoneRequestGapDto implements DoneRequestGap {
+  [key: string]: unknown;
+  @IsString() @MinLength(1) @MaxLength(64) criterionKey!: string;
+  @IsOptional() @IsString() @MaxLength(MAX_DONE_REQUEST_GAP_TITLE) title?: string;
+  @IsString() @MinLength(1) @MaxLength(MAX_DONE_REQUEST_GAP_TEXT) whyNotProven!: string;
+  @IsString() @MinLength(1) @MaxLength(MAX_DONE_REQUEST_GAP_TEXT) coordinatorChecked!: string;
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(MAX_DONE_REQUEST_EVIDENCE_REFS)
+  @IsString({ each: true }) @MaxLength(MAX_DONE_REQUEST_EVIDENCE_REF, { each: true })
+  evidenceRefs!: string[];
+}
+
+/**
+ * `POST /runner/projects/:id/done-requests` (`@orbit/shared` `RequestProjectDoneBody`): the
+ * coordinator's call on whether its project is done, and every criterion Orbit cannot prove.
+ */
+export class RequestProjectDoneDto implements RequestProjectDoneBody {
+  /** Shown to the owner first on the card, as written. */
+  @IsString() @MinLength(1) @MaxLength(MAX_DONE_REQUEST_JUDGMENT) judgment!: string;
+  @IsArray() @ArrayMaxSize(MAX_DONE_REQUEST_GAPS)
+  @ValidateNested({ each: true }) @Type(() => DoneRequestGapDto)
+  gaps!: DoneRequestGapDto[];
 }
 
 /** The two spellings a criteria decision can have. `REJECT` settles the proposal and applies
@@ -638,6 +690,11 @@ export class AnswerOpenItemDto {
  * length, so a caller that reaches it another way is held to the same rule.
  */
 export class ResolveOpenItemDto {
+  @IsString() @MinLength(1) @MaxLength(MAX_OPEN_ITEM_RESOLUTION_NOTE) note!: string;
+}
+
+/** The coordinator's explanation when it deliberately hands an open item to the account owner. */
+export class HandOverOpenItemDto {
   @IsString() @MinLength(1) @MaxLength(MAX_OPEN_ITEM_RESOLUTION_NOTE) note!: string;
 }
 

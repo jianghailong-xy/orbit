@@ -1,0 +1,35 @@
+{
+  "node": "26.10.0",
+  "checks": [
+    {
+      "cwd": "repository root",
+      "command": "NO_COLOR=1 npx vitest run src/web/src/lib/sessionProjects.test.ts",
+      "exitCode": 0,
+      "output": "Test Files 1 passed (1); Tests 30 passed (30)"
+    },
+    {
+      "cwd": "src/web",
+      "command": "NO_COLOR=1 npx vitest run src/lib/sessionProjects.test.ts src/components/WorkspaceView src/components/OwnerConfirmationCard.test.tsx src/lib/useControlPlane --maxWorkers=1",
+      "exitCode": 0,
+      "output": "\n RUN  v5.0.2 /root/.orbit/worktrees/426c361b-3e85-53a2-9b1c-dab8128b6263/src/web\n\n\n Test Files  45 passed (45)\n      Tests  337 passed (337)\n   Start at  15:52:35\n   Duration  164.15s (tests 67%, import 22%, environment 8%, transform 3%)\n\n    Isolate  45 workers spawned · ~354ms startup each (spawn + environment, per file)\n             at least ~15.57s faster with isolate: false — reuses workers across files instead of one per file\n\n"
+    },
+    {
+      "cwd": "src/web",
+      "command": "NO_COLOR=1 npx vitest run src/components/WorkspaceView.sessionProjects.test.tsx --maxWorkers=1",
+      "exitCode": 0,
+      "output": "Test Files 1 passed (1); Tests 18 passed (18)"
+    },
+    {
+      "cwd": "repository root",
+      "command": "npx tsc -p src/web/tsconfig.json",
+      "exitCode": 0,
+      "output": ""
+    }
+  ],
+  "screenshot": {
+    "path": "docs/evidence/session-list-projects/web.png",
+    "sha256": "8c2e3f4330d3cf3dc0e8214727d7812ce56bab50c0dd1e7b1fb8c5c55eba95a9",
+    "attachment": "orbit-attachment:34Zxl9cMh2ypXWwI8hAJN"
+  },
+  "scope": "Project list entries; row opens coordinator temporarily. Progress navigation and project sessions page belong to the dependent task."
+}

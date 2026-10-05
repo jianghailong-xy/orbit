@@ -128,6 +128,114 @@ final class TranscriptScrollWiringTests: XCTestCase {
                                     "the four hops each carry their scroll as a held request")
     }
 
+    /// The waiting-card bar is both a reading jump and an invitation to answer. Unpin before the
+    /// next publish, halt iOS momentum, and carry the review request into the same safe update as
+    /// the scroll; opening a sheet directly in the bar callback would race the row's relocation.
+    func testTheWaitingCardJumpUnpinsBeforeDeferringItsScrollAndReview() throws {
+        let view = try transcriptView()
+        let callback = try XCTUnwrap(blocks(opening: ".onChange(of: console.scrollRequest) {",
+                                            in: view).first)
+        let ordered = ["atBottom = false", "transcriptScroll.halt()", "DispatchQueue.main.async",
+                       "holdScroll(to: request.rowID, anchor: .center, opensReview: true)"]
+        let positions = ordered.map { callback.range(of: $0)?.lowerBound }
+        XCTAssertFalse(positions.contains(nil), "the waiting-card jump lost a step: \(ordered)")
+        XCTAssertEqual(positions.compactMap { $0 }, positions.compactMap { $0 }.sorted(),
+                       "unpin and halt before requesting the deferred scroll and review")
+        XCTAssertFalse(callback.contains("scrollTo("), "the next List update owns the scroll")
+        XCTAssertFalse(callback.contains("openReview("), "the review follows that update's scroll")
+        XCTAssertFalse(callback.contains("openApprovalReview("))
+        XCTAssertFalse(callback.contains("openPromotionReview("))
+    }
+
+    /// A card can disappear between the press and the next update. Only a row that survived may
+    /// be scrolled to or opened, and the nonanimated scroll finishes before its sheet is raised.
+    func testTheDeferredReviewUsesALiveRowAndScrollsBeforeOpening() throws {
+        let view = try transcriptView()
+        let update = try XCTUnwrap(blocks(opening: ".onChange(of: heldScroll) {", in: view).first)
+        XCTAssertTrue(update.contains("guard let held, held.sessionID == console.sessionID else { return }"),
+                      "a queued jump from the previous conversation must not open this one's sheet")
+        let review = try XCTUnwrap(blocks(opening: "if held.opensReview {", in: update).first)
+        let ordered = ["rows.first(where: { $0.id == held.rowID })",
+                       "proxy.scrollTo(held.rowID, anchor: held.anchor)", "openReview(for: row)"]
+        let positions = ordered.map { review.range(of: $0)?.lowerBound }
+        XCTAssertFalse(positions.contains(nil), "the review lost its live row, scroll, or open: \(ordered)")
+        XCTAssertEqual(positions.compactMap { $0 }, positions.compactMap { $0 }.sorted(),
+                       "resolve the current row, reveal it, then open its review")
+        XCTAssertTrue(review.contains("else { return }"), "a removed row must not open a stale review")
+        XCTAssertFalse(review.contains("withAnimation"), "the sheet must not cover an unfinished scroll")
+        XCTAssertEqual(view.components(separatedBy: "openReview(for:").count - 1, 1,
+                       "only the held update may open the review after scrolling")
+    }
+
+    /// Record links, the sticky question, and jump-to-latest all use held scrolls too. Opening a
+    /// review is opt-in only for the waiting-card bar; none of the reading jumps acquires a sheet.
+    func testOrdinaryHeldScrollsDoNotOptIntoOpeningAReview() throws {
+        let view = try transcriptView()
+        XCTAssertTrue(view.contains("opensReview: Bool = false"),
+                      "ordinary held scroll callers keep their existing reading-only behavior")
+        XCTAssertEqual(view.components(separatedBy: "opensReview: true").count - 1, 1,
+                       "only the waiting-card request opts into a review")
+        let ordinary = try XCTUnwrap(blocks(opening: ".onChange(of: heldScroll) {", in: view).first)
+        XCTAssertTrue(ordinary.contains("withAnimation(.easeOut(duration: 0.2))"),
+                      "ordinary reading jumps retain their existing scroll animation")
+    }
+
+    /// Only cards drawn as previews have reviews. The merge keeps its existing sheet, the six
+    /// other preview families share theirs, and inline evidence/exception/receipt rows only scroll.
+    func testTheWaitingCardJumpOpensOnlyTheExistingPreviewSheets() throws {
+        let view = try transcriptView()
+        let route = try XCTUnwrap(blocks(opening: "private func openReview(for row: TranscriptRow) {",
+                                         in: view).first)
+        XCTAssertTrue(route.contains("guard case .decisionCard(let card) = row else { return }"),
+                      "ordinary transcript rows and pending tool cards keep their inline behavior")
+        let promotion = try section(route, from: "case .promotionApproval(let promotionID):",
+                                    to: "case .criteriaDecision")
+        XCTAssertTrue(promotion.contains("openPromotionReview(promotionID)"))
+        XCTAssertFalse(promotion.contains("openApprovalReview("), "merge uses its own existing review")
+        let shared = try section(route, from: "case .criteriaDecision", to: "default:")
+        for kind in [".criteriaDecision", ".acceptanceConfirmation", ".startProject", ".criteriaChange",
+                     ".ownerConfirmation", ".coordinatorQuestion"] {
+            XCTAssertTrue(shared.contains(kind), "\(kind) has a preview and must open its review")
+        }
+        XCTAssertTrue(shared.contains("openApprovalReview(.delivered(card))"),
+                      "the review receives the addressed card, not a copy of its displayed content")
+        for inline in [".evidenceDecision", ".escalatedItem", ".fusePause", "Receipt", "case .approval"] {
+            XCTAssertFalse(route.contains(inline), "\(inline) is inline and must not gain a sheet")
+        }
+        XCTAssertTrue(route.contains("default:\n            break"), "other rows remain scroll-only")
+    }
+
+    /// Both review sheets may refresh the console while they are open. Streaming after that read
+    /// must not pull the transcript off the preview the owner will return to when closing the sheet.
+    func testReviewPresentationKeepsThePreviewAwayFromTheLiveTail() throws {
+        let source = code(try source(Self.viewPath))
+        XCTAssertTrue(source.contains("reviewingCard: approvalReview != nil || promotionReview != nil"),
+                      "both existing sheet hosts tell the transcript that the owner is reviewing")
+        let view = try transcriptView()
+        let follow = try XCTUnwrap(blocks(opening: ".onChange(of: console.stateRevision) {", in: view).first)
+        XCTAssertTrue(follow.contains("if atBottom && !console.detached && !reviewingCard {"),
+                      "a sheet's refresh or streamed update must not follow the live tail")
+        let presentation = try XCTUnwrap(blocks(opening: ".onChange(of: reviewingCard, initial: true) {",
+                                                in: view).first)
+        let opened = try XCTUnwrap(blocks(opening: "if reviewingCard {", in: presentation).first)
+        XCTAssertTrue(opened.contains("reviewSessionID = console.sessionID"),
+                      "opening or restoring a sheet remembers the conversation being reviewed")
+        XCTAssertTrue(opened.contains("atBottom = false"), "opening the review preserves its preview")
+        let closed = try section(presentation, from: "} else {", to: "reviewSessionID = nil")
+        let sameSession = "if reviewSessionID == console.sessionID { atBottom = false }"
+        XCTAssertTrue(closed.contains(sameSession),
+                      "closing a sheet only unpins the conversation that presented it")
+        XCTAssertFalse(closed.replacingOccurrences(of: sameSession, with: "").contains("atBottom"),
+                       "dismissing the old conversation's sheet must not unpin the new conversation")
+        XCTAssertTrue(presentation.contains("reviewSessionID = nil"),
+                      "the dismissed review releases its remembered conversation")
+        let held = try XCTUnwrap(blocks(opening:
+            "private func holdScroll(to rowID: String, anchor: UnitPoint, opensReview: Bool = false) {",
+                                       in: view).first)
+        XCTAssertTrue(held.contains("sessionID: console.sessionID, opensReview: opensReview"),
+                      "the deferred request keeps its originating conversation and review intent")
+    }
+
     /// The reading-history trim is published a turn later. `setReadingHistory` is called from inside
     /// the transcript's own update; a publish there lands between the scroll that update asks for next
     /// (`onAppear`, a session switch) and the List update that makes it, and the trim is the publish

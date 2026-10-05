@@ -46,6 +46,8 @@ public enum NavNode: Hashable, Sendable {
     /// top of its session list opens the sessions filed in that folder. iOS only — macOS and web
     /// show no folders (§1).
     case folder(SessionFolderAddress)
+    /// A project's sessions across workspaces, opened from its progress label (design §5).
+    case sessionProject(SessionProjectAddress)
     case taskDetail(taskID: String)
     case taskListsDirectory
     case runnerDetail(runnerID: String)
@@ -205,6 +207,20 @@ public struct NavState: Equatable, Sendable {
     /// section's stack is a folder's. The detail pane's console, when one is open, sits above it.
     public var folderColumn: SessionFolderAddress? {
         if case .folder(let address) = path.first { return address }
+        return nil
+    }
+
+    /// The project's session page on a phone, when it is the frame on top.
+    public var projectSessionsPage: SessionProjectAddress? {
+        if case .sessionProject(let address) = path.last { return address }
+        return nil
+    }
+
+    /// The page the iPad's session column shows, beneath any selected console and over a folder.
+    public var projectSessionsColumn: SessionProjectAddress? {
+        for frame in path.reversed() {
+            if case .sessionProject(let address) = frame { return address }
+        }
         return nil
     }
 
@@ -392,7 +408,12 @@ public struct NavState: Equatable, Sendable {
     /// folder already open is left behind — one folder's page at a time.
     public mutating func enterFolder(_ address: SessionFolderAddress) {
         var frames = path
-        frames.removeAll { if case .folder = $0 { return true }; return false }
+        frames.removeAll {
+            switch $0 {
+            case .folder, .sessionProject: return true
+            default: return false
+            }
+        }
         frames.insert(.folder(address), at: 0)
         path = frames
     }
@@ -404,6 +425,24 @@ public struct NavState: Equatable, Sendable {
         path = path.filter { frame in
             guard case .folder(let address) = frame else { return true }
             return folderID.map { $0 != address.folderID } ?? false
+        }
+    }
+
+    /// Open a project's session list over the workspace's list or its folder. The detail console
+    /// stays above it on an iPad; a phone's back button returns to the list it came from.
+    public mutating func enterProjectSessions(_ address: SessionProjectAddress) {
+        var frames = path
+        frames.removeAll { if case .sessionProject = $0 { return true }; return false }
+        let index = frames.first.map { if case .folder = $0 { return 1 }; return 0 } ?? 0
+        frames.insert(.sessionProject(address), at: index)
+        path = frames
+    }
+
+    /// Leave the project's list without closing a console in the detail pane or its folder.
+    public mutating func leaveProjectSessions(_ projectID: String? = nil) {
+        path = path.filter { frame in
+            guard case .sessionProject(let address) = frame else { return true }
+            return projectID.map { $0 != address.projectID } ?? false
         }
     }
 
@@ -425,7 +464,7 @@ public struct NavState: Equatable, Sendable {
     /// the session list draws beside the console. Every other frame behaves exactly as
     /// ``replaceTop(with:)``.
     public mutating func selectConsole(_ node: NavNode) {
-        if folderPage != nil {
+        if folderPage != nil || projectSessionsPage != nil {
             withPath { $0.append(node) }
         } else {
             replaceTop(with: node)
@@ -506,6 +545,19 @@ public struct SessionFolderAddress: Hashable, Sendable {
 
     public init(folderID: String, agentID: String, view: SessionView) {
         self.folderID = folderID
+        self.agentID = agentID
+        self.view = view
+    }
+}
+
+/// The project and originating workspace, with the Open/Completed scope carried into its page.
+public struct SessionProjectAddress: Hashable, Sendable {
+    public let projectID: String
+    public let agentID: String
+    public let view: SessionView
+
+    public init(projectID: String, agentID: String, view: SessionView) {
+        self.projectID = projectID
         self.agentID = agentID
         self.view = view
     }

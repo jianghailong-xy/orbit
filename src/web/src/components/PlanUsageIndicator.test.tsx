@@ -699,15 +699,6 @@ describe('the reset entry', () => {
     { name: 'there is no lease', runner: () => resetRunner(at(), { heartbeatLeaseOwner: null }), reason: "The runner hasn't checked in yet." },
     { name: 'the runner is draining', runner: () => resetRunner(at(), { heartbeatDraining: true }), reason: 'The runner is restarting.' },
     {
-      name: 'there are no credits',
-      runner: () => {
-        const now = at();
-        return resetRunner(now, {}, resetBlock(now, { rateLimitResetCredits: { availableCount: 0, credits: [] } }));
-      },
-      reason: 'No reset credits available.',
-      also: '0 available',
-    },
-    {
       name: 'Codex reports no credit summary',
       runner: () => {
         const now = at();
@@ -731,6 +722,19 @@ describe('the reset entry', () => {
       expect(server.posts()).toHaveLength(0);
     });
   }
+
+  it('hides the reset section when there are no credits, keeping the usage windows', async () => {
+    const server = new FakeResetApi();
+    const now = at();
+    await mount(resetRunner(now, {}, resetBlock(now, { rateLimitResetCredits: { availableCount: 0, credits: [] } })));
+    await openUsage();
+    expect(usagePanel()!.querySelector('.cu-rc')).toBeNull();
+    expect(button('Use reset credit')).toBeNull();
+    expect(panelText()).toContain('5h limit92%');
+    expect(panelText()).toContain('Weekly limit68%');
+    expect(panelText()).toContain('Resets ');
+    expect(server.posts()).toHaveLength(0);
+  });
 
   it('is not drawn for an unsupported sign-in, an older runner, or a session off the built-in Codex', async () => {
     const now = new Date();
