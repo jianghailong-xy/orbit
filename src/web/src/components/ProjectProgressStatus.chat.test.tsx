@@ -99,6 +99,7 @@ const HANDLING_LANDING: ProjectOpenItemRow = {
   ...LANDING,
   handling: {
     sessionId: COORDINATOR,
+    userId: null,
     reason: REASON,
     startedAt: at(4 * MINUTE),
     jobId: '34ZRerunJob0000000001',
@@ -151,6 +152,7 @@ const HANDLING_PROMOTION: ProjectOpenItemRow = {
   ...PROMOTION,
   handling: {
     sessionId: COORDINATOR,
+    userId: null,
     reason: 'main’s merge-check baseline was repaired',
     startedAt: at(MINUTE),
     jobId: '34ZRecheckJob00000001',
@@ -196,6 +198,7 @@ const HANDLED_LANDING = settled(LANDING, {
   resolution: 'HANDLED',
   resolvedBy: 'COORDINATOR',
   resolvedBySessionId: COORDINATOR,
+  resolvedByUserId: null,
   resolvedAt: at(12 * MINUTE),
   note: REASON,
   jobId: '34ZRerunJob0000000001',
@@ -207,6 +210,7 @@ const SUPERSEDED_PROMOTION = settled(PROMOTION, {
   resolution: 'RETRIED',
   resolvedBy: 'COORDINATOR',
   resolvedBySessionId: COORDINATOR,
+  resolvedByUserId: null,
   resolvedAt: at(2 * MINUTE),
   note: 'main’s merge-check baseline was repaired',
   jobId: '34ZRecheckJob00000001',

@@ -545,7 +545,8 @@ test('task-scoped: with the coordinator, being handled, superseded, then the own
       });
 
       // §4.6: the clock hands the new failure to the owner — still a conversation to have, with the
-      // owner's own presses exactly what they were, and the coordinator's rerun still refused.
+      // owner's own presses what the door matrix gives them (`open-item-doors.ts`), and the
+      // coordinator's rerun still refused.
       await escalate(stack, second);
       read = await rowOf(stack, w, second);
       assert.equal(read.group, 'needsYou');
@@ -554,7 +555,7 @@ test('task-scoped: with the coordinator, being handled, superseded, then the own
         stage: 'WITH_OWNER',
         refusal: null,
       });
-      assert.deepEqual(read.row.actions, ['ASK_COORDINATOR_AGAIN', 'OPEN_TASK_SESSION', 'CANCEL_TASK'],
+      assert.deepEqual(read.row.actions, ['ASK_COORDINATOR_AGAIN', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK'],
         'the owner\'s doors are what they were: the chat is not one of them');
       const rerunAgain = await denied(() => stack.openItems.retryIntegration(w.ownerId, w.projectId,
         red.taskId, { reason: REASON }, w.coordinatorSessionId));
@@ -583,7 +584,7 @@ test('promotion-scoped: the blocked merge\'s item — with the coordinator, bein
         stage: 'WITH_COORDINATOR',
         refusal: null,
       });
-      assert.deepEqual(read.row.actions, ['REVIEW'], 'the merge card is still the one way in');
+      assert.deepEqual(read.row.actions, ['RETRY', 'REVIEW'], 'the re-check and the merge card, and no chat door');
 
       await stack.openItems.retryPromotionCheck(w.ownerId, w.projectId, blocked.promotionId,
         { reason: REASON }, w.coordinatorSessionId);
@@ -627,8 +628,9 @@ test('promotion-scoped, escalated ("It is yours"): the chat is open to the owner
         refusal: null,
       });
       // The presses `openItemActions` gives an escalated failure of the merge — the way back to the
-      // coordinator (§4.7) and the merge card — and nothing beside them for the chat.
-      assert.deepEqual(read.row.actions, ['ASK_COORDINATOR_AGAIN', 'REVIEW'], 'no new door beside the merge card');
+      // coordinator (§4.7), the owner's own re-check and the merge card — and nothing beside them
+      // for the chat.
+      assert.deepEqual(read.row.actions, ['ASK_COORDINATOR_AGAIN', 'RETRY', 'REVIEW'], 'no new door beside the merge card');
 
       // The owner-only edges, unmoved by a chat being on offer.
       const recheck = await denied(() => stack.openItems.retryPromotionCheck(w.ownerId, w.projectId,
