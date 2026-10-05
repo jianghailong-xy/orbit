@@ -82,6 +82,9 @@ final class DshRuntimeTests: XCTestCase {
         XCTAssertEqual(AgentDefaults.defaultModel(for: "deepseek-harness", catalog: catalog, configured: configured), token)
         // Never a Claude model while no catalogue is reported: the runtime picks.
         XCTAssertEqual(AgentDefaults.defaultModel(for: "deepseek-harness", catalog: nil, configured: configured), "")
+        XCTAssertEqual(AgentDefaults.friendlyName("", for: "deepseek-harness", catalog: nil, configured: configured),
+                       "Picked by DeepSeek Harness")
+        XCTAssertEqual(AgentDefaults.friendlyName(token, catalog: catalog), "DeepSeek V4 Pro")
         XCTAssertEqual(AgentDefaults.models(for: "deepseek-harness", catalog: nil, configured: configured), [])
     }
 

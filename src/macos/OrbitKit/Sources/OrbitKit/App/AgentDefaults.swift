@@ -366,7 +366,7 @@ public enum AgentDefaults {
     /// optional chains blows up combinatorially — and started failing every Swift job outright with
     /// "unable to type-check this expression in reasonable time". Same provider order, same result.
     public static func friendlyName(_ id: String, catalog: RunnerModelCatalog?) -> String {
-        for provider in ["claude", "codex", "kimi", "opencode", "antigravity"] {
+        for provider in ["claude", "codex", "kimi", "opencode", "antigravity", "dsh"] {
             let models: [ModelOption] = catalog?.models(for: provider) ?? []
             if let name = models.first(where: { $0.id == id })?.name { return name }
         }
@@ -401,6 +401,11 @@ public enum AgentDefaults {
         // after its catalog replaced that row would read "Managed by OpenCode". Its own row names it.
         if id.isEmpty, let name = models(for: provider).first(where: { $0.id == id })?.name {
             return name
+        }
+        // A Harness key with no model reported yet: the runtime picks, and no other runtime's
+        // "it picks for itself" row describes that.
+        if id.isEmpty, runtime(for: provider, configured: configured) == "dsh" {
+            return "Picked by DeepSeek Harness"
         }
         return friendlyName(id, catalog: catalog, configured: configured)
     }

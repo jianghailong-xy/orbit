@@ -194,10 +194,20 @@ struct ProviderSwitchSheet: View {
                     Button("Done") { dismiss() }
                 }
             }
+            #else
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
             #endif
         }
         #if os(iOS)
         .presentationDetents([.medium, .large])
+        #else
+        // A macOS sheet takes its content's ideal size, and a List has none: without a frame the
+        // sheet collapsed to its title and first header, and no row could be picked.
+        .frame(minWidth: 420, idealWidth: 460, minHeight: 420, idealHeight: 520)
         #endif
     }
 
