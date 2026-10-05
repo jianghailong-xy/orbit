@@ -199,6 +199,18 @@ public enum SessionProjectGrouping {
                                      projects: rows, sessions: loose, entries: entries)
     }
 
+    /// The project sessions page's Now section (iOS): the members other than the coordinator that
+    /// are working or waiting on you, in the order given. The coordinator keeps its own section.
+    public static func nowSessions(_ sessions: [Session],
+                                   watching: (Session) -> WatchSessionSummary? = { _ in nil }) -> [Session] {
+        sessions.filter { session in
+            guard session.projectMembership?.role != .coordinator else { return false }
+            let glyph = SessionStatusGlyph.make(for: session, watching: watching(session))
+            if case .spinner = glyph.shape { return true }
+            return glyph.tone == .warning
+        }
+    }
+
     private static func instant(_ iso: String?) -> TimeInterval {
         iso.flatMap(RelativeTime.parse)?.timeIntervalSince1970 ?? -.infinity
     }

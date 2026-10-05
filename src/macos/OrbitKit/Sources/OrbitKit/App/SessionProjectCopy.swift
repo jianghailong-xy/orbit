@@ -22,6 +22,9 @@ public enum SessionProjectCopy {
 
     public static func pageSubtitle(sessions: Int) -> String { "Project · \(sessions) sessions" }
     public static let coordinatorSection = "Coordinator"
+    /// The page's Now section (iOS only, not yet on the web) and what it says when it is empty.
+    public static let nowSection = "Now"
+    public static let nothingRunning = "Nothing running"
     public static func pageProgress(done: Int, total: Int, running: Int) -> String {
         "\(done)/\(total) done · \(running) running"
     }

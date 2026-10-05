@@ -177,7 +177,7 @@ export function NewSessionProviderHero({
           {picked ? '✓' : ''}
         </span>
         <span className="np-row-name">Automatic</span>
-        <span className="np-row-model">resets soonest</span>
+        <span className="np-row-model">switches to soonest reset</span>
       </button>
     );
   };
