@@ -192,6 +192,7 @@ var catalogRuntimes = []catalogRuntime{
 	{providerOpenCode, openCodeCLIAvailable, fetchGlobalOpenCodeModelCatalog},
 	// agy lists the models built into its binary: the same on every machine and for every key.
 	{providerAntigravity, antigravityCLIAvailable, fetchAntigravityModelCatalog},
+	{providerDsh, dshCLIAvailable, fetchDshModelCatalog},
 }
 
 // models is where c keeps engine's list.
@@ -207,6 +208,8 @@ func (c *ModelCatalog) models(engine string) *[]ModelInfo {
 		return &c.OpenCode
 	case providerAntigravity:
 		return &c.Antigravity
+	case providerDsh:
+		return &c.Dsh
 	}
 	return nil
 }
@@ -255,7 +258,7 @@ func readModelCatalog(ctx context.Context, runtimes []catalogRuntime, signedOut 
 // carrying over must not keep. A first round that read nothing reports nothing, as before.
 func mergeModelCatalog(prev, next *ModelCatalog, signedOut map[string]bool) *ModelCatalog {
 	if prev == nil && len(next.Codex) == 0 && len(next.Claude) == 0 && len(next.Kimi) == 0 &&
-		len(next.OpenCode) == 0 && len(next.Antigravity) == 0 {
+		len(next.OpenCode) == 0 && len(next.Antigravity) == 0 && len(next.Dsh) == 0 {
 		return nil
 	}
 	merged := carryOverModelCatalog(prev, next)
@@ -290,6 +293,9 @@ func carryOverModelCatalog(prev, next *ModelCatalog) *ModelCatalog {
 	}
 	if len(next.Antigravity) == 0 {
 		next.Antigravity = prev.Antigravity
+	}
+	if len(next.Dsh) == 0 {
+		next.Dsh = prev.Dsh
 	}
 	return next
 }

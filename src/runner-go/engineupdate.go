@@ -344,6 +344,9 @@ func plural(n int, word string) string {
 // Best-effort by construction: an unreachable feed means we do not know, never that we are
 // current. The updater then runs exactly as it did before this existed.
 func latestEngineVersion(ctx context.Context, spec engineSpec) string {
+	if spec.bin == providerDsh {
+		return dshSupportedVersion // Fixed P0 admission; never query npm latest.
+	}
 	if spec.latestURL == "" {
 		return ""
 	}
@@ -470,6 +473,30 @@ func updateEngine(ctx context.Context, spec engineSpec, servicePath string, prox
 	// the version probes too, so `before` can't be measured against another updater's write.
 	engineInstall.mu.Lock()
 	defer engineInstall.mu.Unlock()
+	if spec.bin == providerDsh {
+		if _, err := os.Stat(dshVersionDir()); errors.Is(err, os.ErrNotExist) {
+			if !dshHasPublishedInstall() {
+				return EngineUpdateReport{}, "" // On-demand/browser install owns missing engines.
+			}
+			cmdCtx, cancel := context.WithTimeout(ctx, engineUpdateTimeout)
+			defer cancel()
+			if err := installDsh(cmdCtx, proxyVars); err != nil {
+				rec := recordEngineUpdate(spec.bin, updateFailed, err.Error(), engineUpdateFacts{latest: dshSupportedVersion})
+				return rec, spec.name + " — update failed: " + err.Error()
+			}
+			rec := recordEngineUpdate(spec.bin, updateUpdated, "Installed the supported version beside the retained previous versions.", engineUpdateFacts{installed: dshSupportedVersion, latest: dshSupportedVersion})
+			return rec, spec.name + " updated to fixed supported version " + dshSupportedVersion
+		}
+		_, err := dshExecutablePath()
+		if err != nil {
+			rec := recordEngineUpdate(spec.bin, updateFailed, err.Error(), engineUpdateFacts{latest: dshSupportedVersion})
+			return rec, spec.name + " — update failed: " + err.Error()
+		}
+		// Published directories are immutable, so even a damaged version is never
+		// repaired in place. Changing the supported version creates another directory.
+		rec := recordEngineUpdate(spec.bin, updateChecked, "Pinned to the P0 supported version; npm latest is not followed.", engineUpdateFacts{installed: dshSupportedVersion, latest: dshSupportedVersion})
+		return rec, spec.name + " — fixed supported version " + dshSupportedVersion
+	}
 	// Resolve the exact binary the runner would exec (service PATH order) and measure the
 	// version against THAT path before and after: an update that exits 0 without moving
 	// this binary's version wrote to a copy the runner never runs.
@@ -777,6 +804,9 @@ func recordEngineUpdate(bin, status, message string, facts engineUpdateFacts) En
 // with drift measured only when a command runs, a permanently busy machine can fall arbitrarily
 // far behind while its row says nothing at all.
 func noteEngineDrift(ctx context.Context, spec engineSpec, servicePath string) {
+	if spec.bin == providerDsh {
+		return // Busy dsh sessions stay pinned; no release feed or binary probe runs here.
+	}
 	binPath, ok := lookPathIn(spec.executable(), servicePath)
 	if !ok {
 		return
