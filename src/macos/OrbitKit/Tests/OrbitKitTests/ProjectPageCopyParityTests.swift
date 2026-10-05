@@ -150,6 +150,44 @@ final class ProjectPageCopyParityTests: XCTestCase {
         }
     }
 
+    /// The closing row in Open items: the coordinator's request leads Needs you beside the start
+    /// request — Ready to close over the card's question, who asked and how many gaps it could not
+    /// prove, and Review — and with nobody asking, the owner's own Record as done…, quiet.
+    func testTheClosingRowsInOpenItemsAreTheWebs() throws {
+        let web = try source(Self.progress)
+        assertSays(web, "...(doneRequest ? [doneRequest] : []),", in: Self.progress)
+        assertSays(web, "row.kind !== 'DONE_REQUEST'", in: Self.progress)
+        assertSays(web, "{ownDone ? <OwnDoneRowView onRecord={ownDone} /> : null}", in: Self.progress)
+        assertSays(web, "<div className=\"project-open-item-state is-ready-to-close\">{PROJECT_DONE_COPY.readyToClose}</div>",
+                   in: Self.progress)
+        assertSays(web, "title={PROJECT_DONE_COPY.heading}>{PROJECT_DONE_COPY.heading}</div>", in: Self.progress)
+        assertSays(web, "`${PROJECT_DONE_COPY.openItemsDoneRequest} · ${row.doneRequest.gaps.length} ${PROJECT_DONE_COPY.gapsItCouldntProve}`",
+                   in: Self.progress)
+        assertSays(web, "{PROJECT_DONE_COPY.recordAsDoneRow}", in: Self.progress)
+        assertSays(web, "<div className=\"project-open-item-line\">{PROJECT_DONE_COPY.notAskedYet}</div>", in: Self.progress)
+        let row = ProjectOpenItemRow(itemId: "d", kind: .unknown, title: ProjectDone.heading, waitingSince: "",
+                                     doneRequest: DoneRequest(criteriaDigest: "c", judgment: "j", gaps: [
+                                         AcceptedGap(criterionKey: "a"), AcceptedGap(criterionKey: "b"),
+                                     ]))
+        XCTAssertEqual(ProjectDone.requestRowDetail(row), "The coordinator asked · 2 gaps it couldn’t prove")
+        XCTAssertEqual(ProjectPage.needsYouRows(ProjectOpenItemsView(needsYou: [row])), [],
+                       "the request is drawn once, in its own row, as the browser filters it")
+    }
+
+    /// The page's header: Ready to close beside the status while the coordinator asks, and once the
+    /// project is done, who recorded it — in `doneProvenance`'s words.
+    func testTheHeaderSaysReadyToCloseAndWhoRecordedItDone() throws {
+        let web = try source(Self.page)
+        assertSays(web, "<Tag color=\"gold\">{PROJECT_DONE_COPY.readyToClose}</Tag>", in: Self.page)
+        assertSays(web, "<span className=\"project-done-provenance\">{doneProvenance(p)}</span>", in: Self.page)
+        assertSays(web, "DONE: 'Completed',", in: Self.page)
+        XCTAssertEqual(ProjectDone.readyToClose, "Ready to close")
+        XCTAssertEqual(ProjectDone.provenance(doneBy: .owner, acceptedGaps: 2), "recorded by you · 2 gaps accepted")
+        XCTAssertEqual(ProjectDone.provenance(doneBy: .derived, acceptedGaps: 0), "recorded by Orbit")
+        // Record as done opens the owner's door on a current server, the old status door on an older.
+        assertSays(web, "const hasDoneGate = project.derivedDone != null && 'counts' in project.derivedDone;", in: Self.page)
+    }
+
     func testIntegrationLineWords() throws {
         let web = try source(Self.integration)
         for phrase in ["PASSING: { text: '✓ passing'", "FAILING: { text: '✕ failing'", "UNKNOWN: { text: 'not checked'",

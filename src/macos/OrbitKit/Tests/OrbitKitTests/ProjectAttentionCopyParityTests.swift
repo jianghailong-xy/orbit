@@ -101,6 +101,26 @@ final class ProjectAttentionCopyParityTests: XCTestCase {
                       "READY_TO_START drifted from \(StartProject.readyToStart.debugDescription)")
     }
 
+    /// A done project's row on the index says who recorded it — the owner with the gaps accepted,
+    /// or Orbit — in `doneProvenance`'s words, where the web's row says it.
+    func testADoneProjectsRowSaysWhoRecordedIt() throws {
+        let page = try String(contentsOf: try repoRoot().appendingPathComponent("src/web/src/pages/ProjectsPage.tsx"),
+                              encoding: .utf8)
+        XCTAssertTrue(page.contains("{p.status === 'DONE' ? (\n                        <span className=\"project-row-done-provenance\">{doneProvenance(p)}</span>"),
+                      "the web's projects list no longer says who recorded a done project")
+        let words = try String(contentsOf: try repoRoot().appendingPathComponent("src/web/src/lib/projectDone.ts"),
+                               encoding: .utf8)
+        XCTAssertTrue(words.contains("return `${PROJECT_DONE_COPY.recordedByYou} · ${n} ${PROJECT_DONE_COPY.gapsAccepted}`;"))
+        XCTAssertTrue(words.contains("return PROJECT_DONE_COPY.recordedByOrbit;"))
+        let gaps = [AcceptedGap(criterionKey: "a"), AcceptedGap(criterionKey: "b")]
+        XCTAssertEqual(ProjectSummary(id: "p", title: "t", status: .done, doneBy: .owner, acceptedGaps: gaps).doneProvenance,
+                       "recorded by you · 2 gaps accepted")
+        XCTAssertEqual(ProjectSummary(id: "p", title: "t", status: .done, doneBy: .derived).doneProvenance,
+                       "recorded by Orbit")
+        XCTAssertNil(ProjectSummary(id: "p", title: "t", status: .open, doneBy: .owner).doneProvenance,
+                     "an open project's row says nothing of who recorded it")
+    }
+
     func testCoordinatorAndBlockerWordsAreTheWebsOwn() throws {
         let web = try web()
         let phrases: [(String, String)] = [
