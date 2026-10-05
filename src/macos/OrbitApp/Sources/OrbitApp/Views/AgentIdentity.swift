@@ -276,7 +276,7 @@ struct ProviderSwitchSheet: View {
             HStack(spacing: 12) {
                 Text("Automatic").foregroundStyle(.primary).lineLimit(1)
                 Spacer(minLength: 8)
-                Text("Resets soonest").font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
+                Text("Switches to soonest reset").font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
                 if picked {
                     Image(systemName: "checkmark")
                         .font(.body.weight(.semibold)).foregroundStyle(Color.accentColor)
@@ -286,7 +286,7 @@ struct ProviderSwitchSheet: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Automatic: the \(choice.label) account whose quota resets soonest")
+        .accessibilityLabel("Automatic: starts on the \(choice.label) account whose quota resets soonest, and switches when it hits its limit")
     }
 
     /// One of an engine's accounts: its name and its own quota — amber once a window is nearly spent.

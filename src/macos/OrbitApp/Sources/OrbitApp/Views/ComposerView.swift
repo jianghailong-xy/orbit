@@ -615,26 +615,33 @@ struct ComposerView: View {
                         let fixable = blocked && choice.fixEngine != nil
                         let reason = choice.unavailable ?? ""
                         let fix = fixable ? (choice.fixEngine == "antigravity" ? " →" : ", sign in →") : ""
-                        Button {
-                            // Picking a blocked row isn't a switch — it's a request for the
-                            // sign-in that would make it one, so go to that runner's Engines
-                            // section rather than doing nothing.
-                            if fixable {
-                                if choice.fixEngine == "antigravity", let url = console.antigravityProvidersURL { openURL(url) }
-                                else if let rid = console.runnerID { app.route(to: .runner(rid)) }
-                            } else if !blocked {
-                                Task { await console.selectProvider(choice.slug) }
+                        // On iOS the engine names a section of its accounts instead of a row above
+                        // them (`accountsUnderHeader`).
+                        let headsSection = Self.accountsUnderHeader && listsAccounts
+                        if !headsSection {
+                            Button {
+                                // Picking a blocked row isn't a switch — it's a request for the
+                                // sign-in that would make it one, so go to that runner's Engines
+                                // section rather than doing nothing.
+                                if fixable {
+                                    if choice.fixEngine == "antigravity", let url = console.antigravityProvidersURL { openURL(url) }
+                                    else if let rid = console.runnerID { app.route(to: .runner(rid)) }
+                                } else if !blocked {
+                                    Task { await console.selectProvider(choice.slug) }
+                                }
+                            } label: {
+                                menuItemLabel(
+                                    blocked ? "\(choice.label) — \(reason)\(fix)" : [choice.label, choice.labelDetail].compactMap { $0 }.joined(separator: " · "),
+                                    selected: choice.slug == console.provider && !listsAccounts)
                             }
-                        } label: {
-                            menuItemLabel(
-                                blocked ? "\(choice.label) — \(reason)\(fix)" : [choice.label, choice.labelDetail].compactMap { $0 }.joined(separator: " · "),
-                                selected: choice.slug == console.provider && !listsAccounts)
+                            .disabled(blocked && !fixable)
                         }
-                        .disabled(blocked && !fixable)
-                        if here && console.accountRowsOffered {
-                            accountItems(choice.slug)
-                        } else if !elsewhere.isEmpty {
-                            switchAccountItems(choice.slug, elsewhere)
+                        if headsSection {
+                            Section([choice.label, choice.labelDetail].compactMap { $0 }.joined(separator: " · ")) {
+                                engineAccountItems(choice.slug, here: here, elsewhere: elsewhere)
+                            }
+                        } else {
+                            engineAccountItems(choice.slug, here: here, elsewhere: elsewhere)
                         }
                     }
                 } label: {
@@ -911,6 +918,28 @@ struct ComposerView: View {
             .contentShape(Rectangle())
     }
 
+    /// An engine's accounts in the Provider submenu: on the engine the session is on, the ones it moves
+    /// between; under another, the ones a switch onto that engine lands on.
+    @ViewBuilder
+    private func engineAccountItems(_ engine: String, here: Bool, elsewhere: [AccountChoice]) -> some View {
+        if here && console.accountRowsOffered {
+            accountItems(engine)
+        } else if !elsewhere.isEmpty {
+            switchAccountItems(engine, elsewhere)
+        }
+    }
+
+    /// iOS 26 gives every row of a menu the image column once any row has an image, so an account
+    /// can't be drawn one level in from its engine: the engine names a section of its accounts
+    /// instead. Its own row would add nothing there — on the session's engine it is the pick already
+    /// (`selectProvider` returns), and a switch onto another lands through its Automatic row or an
+    /// account. macOS keeps the engine row with its accounts under it.
+    #if os(iOS)
+    private static let accountsUnderHeader = true
+    #else
+    private static let accountsUnderHeader = false
+    #endif
+
     /// The runner's accounts of the session's engine, right under it in the Provider submenu (web
     /// parity): Automatic first where its workspace leaves the account to Orbit, then each account with
     /// its own quota. A pick moves the session there (`ConsoleModel.switchAccount`); a signed-out
@@ -924,10 +953,10 @@ struct ComposerView: View {
                 #if os(iOS)
                 // Once it is the pick, "Current" says all there is: what Automatic does is why
                 // someone picks it, not news to the session already on it.
-                accountRowLabel("Automatic", detail: console.sessionAutomatic ? nil : "Resets soonest",
+                accountRowLabel("Automatic", detail: console.sessionAutomatic ? nil : "Switches to soonest reset",
                                 selected: console.sessionAutomatic)
                 #else
-                menuItemLabel("Automatic · Resets soonest", selected: console.sessionAutomatic)
+                menuItemLabel("Automatic · Switches to soonest reset", selected: console.sessionAutomatic)
                 #endif
             }
         }
@@ -965,9 +994,9 @@ struct ComposerView: View {
                 Task { await console.selectProvider(engine, account: CodexAccounts.automaticID) }
             } label: {
                 #if os(iOS)
-                accountRowLabel("Automatic", detail: "Resets soonest", selected: false)
+                accountRowLabel("Automatic", detail: "Switches to soonest reset", selected: false)
                 #else
-                menuItemLabel("Automatic · Resets soonest", selected: false)
+                menuItemLabel("Automatic · Switches to soonest reset", selected: false)
                 #endif
             }
         }
@@ -1018,24 +1047,18 @@ struct ComposerView: View {
     }
 
     #if os(iOS)
-    /// An account under its engine in the Provider submenu, one level in from the provider rows: the
-    /// transparent glyph takes the image column the provider rows leave empty, and iOS starts the
-    /// title of a row with an image past that column. Its quota — or what Automatic does — goes
-    /// underneath; the account the session is on says "Current" there first.
+    /// An account in its engine's section of the Provider submenu (`accountsUnderHeader`), on the
+    /// margin like every other row. Its quota — or what Automatic does — goes underneath; the account
+    /// the session is on says "Current" there first.
     @ViewBuilder
     private func accountRowLabel(_ name: String, detail: String?, selected: Bool) -> some View {
-        Label { Text(Self.menuBreakable(name)) } icon: { Image(uiImage: Self.clearGlyph) }
+        Text(Self.menuBreakable(name))
         if selected {
             Text(detail.map { "Current · \($0)" } ?? "Current")
         } else if let detail {
             Text(detail)
         }
     }
-
-    /// The indent for `accountRowLabel`: a checkmark drawn fully transparent, rendered as is — a
-    /// template image would be tinted back into a visible check by the menu.
-    private static let clearGlyph = UIImage(systemName: "checkmark")?
-        .withTintColor(.clear, renderingMode: .alwaysOriginal) ?? UIImage()
 
     /// A name the menu has to wrap — an email, a "name@Provider" — breaks before its "@" or after a
     /// dot, where a zero-width space marks the line's break opportunities, rather than where the

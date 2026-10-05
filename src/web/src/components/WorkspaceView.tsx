@@ -8196,7 +8196,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                         label: (
                           <span className="scope-menu-row">
                             <span className="composer-account-row-name">Automatic</span>
-                            {menuValue('Resets soonest')}
+                            {menuValue('Switches to soonest reset')}
                             {checkSlot(here && sessionAutomatic)}
                           </span>
                         ),
