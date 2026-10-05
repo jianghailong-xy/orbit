@@ -4,7 +4,7 @@ import XCTest
 /// SwiftUI doesn't exist on Linux, so nothing here compiles the app shells. These hold the Runners
 /// list and a runner's pages to the effect mocks they were built from (ios-list.png, ios-detail.png)
 /// by reading the source they now *are*: a row whose label is the label colour and which pushes by
-/// hand, Add Runner and Edit wired under the rows, the page's sections in the mocks' order, the engine
+/// hand, Add Runner wired under the rows, the page's sections in the mocks' order, the engine
 /// and name pages one push away on whichever stack the record rides — and every word and rule taken
 /// from OrbitKit (`RunnerAttention`, `RunnerPageCopy`, `RunnerPageFormat`), where it is tested.
 /// Each check reads the slice of the file it is about, so a match somewhere else can't pass it.
@@ -176,9 +176,9 @@ final class RunnersPageWiringTests: XCTestCase {
         XCTAssertTrue(model.contains("self.api.approveDevice(userCode: userCode)"))
     }
 
-    /// ⑦ Edit: the list's own move and delete, a move saved as the web list's drag order is, and a
-    /// delete that asks first.
-    func testEditReordersAndRemovesAfterAsking() throws {
+    /// The list's own move and delete, a move saved as the web list's drag order is, and a delete
+    /// that asks first. The list does not show an Edit button.
+    func testListReordersAndRemovesAfterAsking() throws {
         let text = try runners()
         for list in try lists() {
             XCTAssertTrue(list.code.contains(".onMove { moveRunners(runners, from: $0, to: $1) }"), list.name)
@@ -187,8 +187,7 @@ final class RunnersPageWiringTests: XCTestCase {
             XCTAssertTrue(list.code.contains(".modifier(RunnerListEditing("), list.name)
         }
         let editing = try slice(text, from: "private struct RunnerListEditing: ViewModifier {", to: "/// A drag in Edit")
-        try assertInOrder(editing, ["#if os(iOS)", "ToolbarItem(placement: .topBarTrailing) { EditButton() }", "#endif"],
-                          "Edit is iOS's")
+        XCTAssertFalse(code(text).contains("EditButton("), "Runners lists do not show an Edit button")
         let asked = code(editing)
         XCTAssertTrue(asked.contains(".confirmationDialog(removalTitle, isPresented: removalAsked"))
         XCTAssertTrue(asked.contains("Text(RunnerPageCopy.RUNNER_REMOVE_FOOTER)"))
