@@ -19,15 +19,17 @@ import {
   wikiPlanFromVersion,
   wikiPlanLook,
   wikiPlanPath,
+  wikiPlanWaitingBanners,
   type WikiPlanLook,
 } from '../lib/wikiPlan';
+import { wikiInSpace } from '../lib/wiki';
 import { redraftWikiPlan, useWikiWrite } from '../lib/wikiWrites';
 import { useToast } from '../lib/toast';
 
 /**
- * The plan on the Wiki home (owner's call 2026-09-29, mocks 25 ③ and 26 ③): the first card of the right
- * rail on a desktop, the second banner on a phone, under Review's. Its changes are handled on the plan
- * page and not in Review.
+ * The plan on Activity (design §12.3.2; on the Wiki home from 2026-09-29 to 10-06, mocks 25 ③ and 26 ③):
+ * a card on a desktop, banners on a phone, under Review's. Its changes are handled on the plan page and
+ * not in Review.
  *
  * ONE LOOK, TWO SHAPES (`wikiPlanLook`): amber while something waits on the owner — a held draft, a draft
  * that failed, a draft to confirm, changes to review — which the directory's Plan count counts too; blue
@@ -43,17 +45,34 @@ function usePlanLook(space: WikiSpace) {
   return { plan: plan.data, look, counts, maintenance };
 }
 
-/** The phone's banner: one line, pressed into the plan page — or, held, into the space's Maintenance. */
-export function WikiPlanBanner({ space }: { space: WikiSpace }) {
+/**
+ * Activity's plan banners (design §12.3.3): the plan's banner once for each kind of thing the plan waits
+ * on the owner for — how many it is in `data-waiting`, so the page's amber banners add up to the head's
+ * badge — and, with nothing waiting, the plan's one banner as it stands. Another space's
+ * (`elsewhere`, its name) are only what waits there, each saying which space it is, and a desktop draws
+ * them too: its Plan card is this space's alone.
+ */
+export function WikiPlanBanners({ space, elsewhere = null }: { space: WikiSpace; elsewhere?: string | null }) {
   const { plan, look, counts, maintenance } = usePlanLook(space);
   if (!plan || !look) return null;
-  const banner = wikiPlanBanner(look, plan, { now: Date.now(), docs: counts, runnerOnline: maintenance.runnerOnline });
+  const context = { now: Date.now(), docs: counts, runnerOnline: maintenance.runnerOnline };
+  const waiting = wikiPlanWaitingBanners(plan, context);
+  const banners = waiting.length > 0 || elsewhere ? waiting : [{ ...wikiPlanBanner(look, plan, context), look, count: 0 }];
   return (
-    <Link className={`wk-banner wk-plan-banner ${banner.tone}`} to={banner.to === 'settings' ? wikiSettingsPath(space.slug) : wikiPlanPath(space.slug)}>
-      <WikiDot tone={banner.tone === 'amber' ? 'amber' : 'blue'} />
-      <span className="t">{banner.text}</span>
-      <RightOutlined className="ic" />
-    </Link>
+    <>
+      {banners.map((banner) => (
+        <Link
+          key={banner.look}
+          className={`wk-banner wk-plan-banner ${banner.tone}${elsewhere ? ' elsewhere' : ''}`}
+          data-waiting={banner.tone === 'amber' ? banner.count : undefined}
+          to={banner.to === 'settings' ? wikiSettingsPath(space.slug) : wikiPlanPath(space.slug)}
+        >
+          <WikiDot tone={banner.tone === 'amber' ? 'amber' : 'blue'} />
+          <span className="t">{elsewhere ? `${banner.text} ${wikiInSpace(elsewhere)}` : banner.text}</span>
+          <RightOutlined className="ic" />
+        </Link>
+      ))}
+    </>
   );
 }
 

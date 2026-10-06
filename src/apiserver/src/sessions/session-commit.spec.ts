@@ -23,6 +23,7 @@ function makeService(
     ...overrides,
   };
   const updates: unknown[] = [];
+  const wakes: string[] = [];
   let reads = 0;
   const prisma = {
     session: {
@@ -36,11 +37,32 @@ function makeService(
       },
     },
   } as never;
+  const realtime = { notifyRunnerWake: (runnerId: string) => wakes.push(runnerId) } as never;
   return {
-    service: new SessionsService(prisma, {} as never, {} as never),
+    service: new SessionsService(prisma, {} as never, realtime),
     updates,
+    wakes,
   };
 }
+
+test('a queued commit wakes its runner instead of waiting for the next heartbeat', async () => {
+  const { service, wakes } = makeService();
+
+  await service.commitWorktree('owner-1', 'session-1');
+
+  assert.deepEqual(wakes, ['runner-1']);
+});
+
+test('a commit request that queued nothing wakes no runner', async () => {
+  const pending = makeService({ commitStatus: 'pending' });
+  await pending.service.commitWorktree('owner-1', 'session-1');
+  const raced = makeService({}, 0, { commitStatus: 'pending' });
+  await raced.service.commitWorktree('owner-1', 'session-1');
+  const running = makeService({ status: RunStatus.RUNNING });
+  await assert.rejects(() => running.service.commitWorktree('owner-1', 'session-1'));
+
+  assert.deepEqual([...pending.wakes, ...raced.wakes, ...running.wakes], []);
+});
 
 test('commit queues atomically only while a session is truly idle', async () => {
   const { service, updates } = makeService();

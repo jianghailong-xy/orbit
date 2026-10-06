@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import type { Prisma as PrismaTypes } from '@prisma/client';
+import { uuidToBase62 } from '@orbit/shared';
 import { criterionKeyOf } from '../projects/project-acceptance';
 import {
   type CriterionStandingTask,
@@ -33,7 +34,8 @@ import {
  *     produced the work does not get to settle it. The decision door is the one place that
  *     boundary GRANTS authority rather than withholding it — to a session that never touched this
  *     task — and that grant is the entire reason a CONFIRM here is a check rather than a signature
- *     on one's own homework.
+ *     on one's own homework. Nor may a session that acts for another project decide it: a task's
+ *     evidence is its project's to decide, and the project it was moved out of no longer is that.
  *  4. **A rejection says what to do next.** SEND_BACK carries a note; the task is not written to at
  *     all, so it stays OPEN and waits for the next evidence revision.
  *
@@ -51,6 +53,8 @@ export const CRITERION_MOVED_CODE = 'EVIDENCE_JUDGMENT_CRITERION_MOVED';
 export const CRITERION_MOVED_ACTION = 'ASK_FOR_EVIDENCE_AGAINST_THE_CURRENT_CRITERION';
 export const REQUIRES_INDEPENDENT_SESSION_CODE = 'EVIDENCE_JUDGMENT_REQUIRES_INDEPENDENT_SESSION';
 export const REQUIRES_INDEPENDENT_SESSION_ACTION = 'DECIDE_FROM_A_SESSION_THAT_DID_NOT_DO_THIS_WORK';
+export const TASK_IN_ANOTHER_PROJECT_CODE = 'EVIDENCE_JUDGMENT_TASK_IN_ANOTHER_PROJECT';
+export const TASK_IN_ANOTHER_PROJECT_ACTION = 'DECIDE_FROM_THE_PROJECT_THE_TASK_IS_IN';
 export const SEND_BACK_NOTE_CODE = 'EVIDENCE_JUDGMENT_SEND_BACK_REQUIRES_NOTE';
 export const SEND_BACK_NOTE_ACTION = 'SAY_WHAT_THE_NEXT_EVIDENCE_REVISION_MUST_SHOW';
 
@@ -287,6 +291,74 @@ export async function assertIndependentDecidingSession(
       'recording when it comes from a run that did not produce the work, which is the whole ' +
       'reason this criterion is a check rather than a self-report',
     requiredAction: REQUIRES_INDEPENDENT_SESSION_ACTION,
+  });
+}
+
+/**
+ * The project a deciding session acts for, read the way a write's scope is
+ * (`TasksService.deriveProjectScope`): the project it coordinates, the one a judgment session was
+ * opened for, or else the project of the task it runs. Null for a session that acts for none.
+ */
+export async function decidingSessionProject(
+  tx: PrismaTypes.TransactionClient,
+  ownerId: string,
+  sessionId: string,
+): Promise<string | null> {
+  const session = await tx.session.findFirst({
+    where: { id: sessionId, ownerId },
+    select: {
+      coordinatorForProject: { select: { id: true } },
+      coordinatorWakes: { where: { status: 'SESSION_OPENED' }, select: { projectId: true }, take: 1 },
+      task: { select: { projectId: true } },
+    },
+  });
+  // `?.` on the list as well, as `deriveProjectScope` has it: a hand-built double of the row omits it.
+  return session?.coordinatorForProject?.id
+    ?? session?.coordinatorWakes?.[0]?.projectId
+    ?? session?.task?.projectId
+    ?? null;
+}
+
+/**
+ * Check 3's other half: a session that acts for one project does not decide the evidence of a task
+ * filed under another. Asked against the project the task is in NOW, because a task can leave one:
+ * a confirmed MOVE_TASK takes its undecided evidence with it, to be decided by the project it
+ * moved into (decision of 2026-10-06), so the project it left — its coordinator, its judgment
+ * sessions, its other runs — can no longer settle it, whatever it was told before the move. A
+ * session that acts for no project, and a task in none, are not this check's to refuse.
+ *
+ * The same two-function shape as independence, for the same reason: the pending read asks it of
+ * every row without being refused (`readPendingEvidenceJudgments`).
+ */
+export function taskProjectDisqualification(
+  taskProjectId: string | null,
+  sessionProjectId: string | null,
+): string | null {
+  if (taskProjectId === null || sessionProjectId === null || sessionProjectId === taskProjectId) {
+    return null;
+  }
+  return `this session acts for project ${uuidToBase62(sessionProjectId)}, and this task is in `
+    + `project ${uuidToBase62(taskProjectId)}`;
+}
+
+export async function assertDecidingSessionInTaskProject(
+  tx: PrismaTypes.TransactionClient,
+  scope: { ownerId: string; projectId: string | null },
+  session: { id: string },
+): Promise<void> {
+  if (scope.projectId === null) return;
+  const why = taskProjectDisqualification(
+    scope.projectId,
+    await decidingSessionProject(tx, scope.ownerId, session.id),
+  );
+  if (!why) return;
+  throw new ForbiddenException({
+    code: TASK_IN_ANOTHER_PROJECT_CODE,
+    message:
+      `${why}; nothing was written. A task's evidence is decided from the project it is in — by `
+      + 'that project\'s coordinator, or by the account owner on the card drawn there — and a task '
+      + 'moved to another project takes its undecided evidence with it',
+    requiredAction: TASK_IN_ANOTHER_PROJECT_ACTION,
   });
 }
 

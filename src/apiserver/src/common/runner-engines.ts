@@ -14,20 +14,19 @@ import { ACCOUNT_ID_PATTERN } from '../runners/dto';
 import { runnerAccountPausedUntil } from './account-pause';
 
 /**
- * The engines a runner can sign into (LoginEngine's full set), in the order they're shown.
- * Antigravity signs in one Google account per runner, like Kimi's one login: it is not in
- * ACCOUNT_ENGINES, and only a runner that can relay it is asked to (antigravityGoogleLogin).
+ * The engines a runner can sign into (LoginEngine's full set), in the order they're shown. Only a
+ * runner that can relay Antigravity's Google sign-in is asked to (antigravityGoogleLogin).
  */
 export const LOGIN_ENGINES: readonly LoginEngine[] = ['claude', 'codex', 'kimi', 'antigravity'];
 
 /**
  * The engines whose CLI keeps one login per config directory, so one machine can sign in several
- * accounts of them: a Codex CODEX_HOME, a Claude Code CLAUDE_CONFIG_DIR. Everything account-shaped —
- * a per-account sign-in, the account list on a report, a workspace pinning a session to one — is
- * gated on this rather than on the engine name, so the next engine is a line here and a descriptor
- * on the runner (src/runner-go/account_slot.go).
+ * accounts of them: a Codex CODEX_HOME, a Claude Code CLAUDE_CONFIG_DIR, an Antigravity Google
+ * sign-in's Gemini directory. Everything account-shaped — a per-account sign-in, the account list on a
+ * report, a workspace pinning a session to one — is gated on this rather than on the engine name, so
+ * the next engine is a line here and a descriptor on the runner (src/runner-go/account_slot.go).
  */
-export const ACCOUNT_ENGINES: readonly LoginEngine[] = ['claude', 'codex'];
+export const ACCOUNT_ENGINES: readonly LoginEngine[] = ['claude', 'codex', 'antigravity'];
 
 export function engineKeepsAccounts(engine: unknown): engine is LoginEngine {
   return typeof engine === 'string' && ACCOUNT_ENGINES.includes(engine as LoginEngine);
@@ -95,13 +94,15 @@ export function sanitizeRunnerEngines(value: unknown): RunnerEngineHealth[] | nu
     const dsh = entry.engine === 'dsh' ? sanitizeDshHealth(entry.dsh) : undefined;
     const installationError = entry.engine === 'dsh' ? dshDiagnosticCode(entry.installationError) : undefined;
     // Antigravity alone says which credential `auth` is about, and carries the quota its Google
-    // sign-in reads (docs/antigravity-runtime-contract.md §16.6).
+    // accounts read (docs/antigravity-runtime-contract.md §16.6): Default's while the runner's own
+    // sign-in answers yes, every other account's under `accounts`.
     const authSource =
       entry.engine === 'antigravity' && (entry.authSource === 'google' || entry.authSource === 'env_key')
         ? entry.authSource
         : undefined;
-    const planUsage =
-      authSource === 'google' && auth === 'yes' ? sanitizeGooglePlanUsage(entry.planUsage) : undefined;
+    const planUsage = entry.engine === 'antigravity'
+      ? sanitizeGooglePlanUsage(entry.planUsage, authSource === 'google' && auth === 'yes')
+      : undefined;
     byEngine.set(entry.engine, {
       engine: entry.engine,
       installed: entry.installed === true,
@@ -171,20 +172,52 @@ export const PLAN_USAGE_BUCKETS_MAX = 16;
  *  token its `/`, and an access token or a JWT its capitals. */
 const BUCKET_LABEL = /^[a-z0-9][a-z0-9._-]{0,47}$/;
 
+/** An account a runner added: 4 random bytes in lowercase hex (src/runner-go/account_slot.go). Default
+ *  is no entry of a snapshot's `accounts`: its buckets are the snapshot's own. */
+const ADDED_ACCOUNT_ID = /^[0-9a-f]{8}$/;
+
 /**
- * Normalize the quota an Antigravity Google sign-in reported, the way an account is normalized:
- * rebuilt from the four fields of each bucket the contract names, so nothing else the report carried
- * — an email, a token, agy's descriptions — is stored or served. A bucket that can't be read is
- * dropped whole rather than repaired; with none left there is no quota to show, and the engine's
- * row reads as one that has not reported any.
+ * Normalize the quota an Antigravity engine reported, the way an account is normalized: rebuilt from
+ * the four fields of each bucket the contract names, so nothing else the report carried — an email,
+ * a token, agy's descriptions — is stored or served. Default's buckets are kept only when `own` (the
+ * runner's own sign-in answered yes); every other account's under `accounts`, by the id of an account
+ * the runner added, at most ENGINE_ACCOUNTS_MAX of them. A bucket that can't be read is dropped whole
+ * rather than repaired; with none left anywhere there is no quota to show, and the engine's row reads
+ * as one that has not reported any.
  */
-function sanitizeGooglePlanUsage(value: unknown): PlanUsageSnapshot | undefined {
+function sanitizeGooglePlanUsage(value: unknown, own: boolean): PlanUsageSnapshot | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const raw = value as Record<string, unknown>;
-  if (!Array.isArray(raw.buckets)) return undefined;
+  const buckets = own ? sanitizeBuckets(raw.buckets) : [];
+  const accounts: Record<string, PlanUsageSnapshot> = {};
+  let kept = 0;
+  const reported = raw.accounts && typeof raw.accounts === 'object' && !Array.isArray(raw.accounts)
+    ? Object.entries(raw.accounts as Record<string, unknown>) : [];
+  for (const [id, entry] of reported) {
+    if (kept === ENGINE_ACCOUNTS_MAX) break;
+    if (!ADDED_ACCOUNT_ID.test(id) || !entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    const theirs = sanitizeBuckets((entry as Record<string, unknown>).buckets);
+    if (!theirs.length) continue;
+    const fetchedAt = isoOrUndefined((entry as Record<string, unknown>).fetchedAt);
+    accounts[id] = { provider: AgentProvider.ANTIGRAVITY, ...(fetchedAt ? { fetchedAt } : {}), buckets: theirs };
+    kept += 1;
+  }
+  if (!buckets.length && !kept) return undefined;
+  const fetchedAt = buckets.length ? isoOrUndefined(raw.fetchedAt) : undefined;
+  return {
+    provider: AgentProvider.ANTIGRAVITY,
+    ...(fetchedAt ? { fetchedAt } : {}),
+    ...(buckets.length ? { buckets } : {}),
+    ...(kept ? { accounts } : {}),
+  };
+}
+
+/** The buckets of one Antigravity snapshot, each rebuilt from the four fields the contract names. */
+function sanitizeBuckets(value: unknown): PlanUsageBucket[] {
+  if (!Array.isArray(value)) return [];
   const buckets: PlanUsageBucket[] = [];
   const seen = new Set<string>();
-  for (const item of raw.buckets) {
+  for (const item of value) {
     if (buckets.length === PLAN_USAGE_BUCKETS_MAX) break;
     if (!item || typeof item !== 'object') continue;
     const bucket = item as Record<string, unknown>;
@@ -197,9 +230,7 @@ function sanitizeGooglePlanUsage(value: unknown): PlanUsageSnapshot | undefined 
     seen.add(id);
     buckets.push({ id, window, remainingFraction, ...(resetTime ? { resetTime } : {}) });
   }
-  if (!buckets.length) return undefined;
-  const fetchedAt = isoOrUndefined(raw.fetchedAt);
-  return { provider: AgentProvider.ANTIGRAVITY, ...(fetchedAt ? { fetchedAt } : {}), buckets };
+  return buckets;
 }
 
 /**

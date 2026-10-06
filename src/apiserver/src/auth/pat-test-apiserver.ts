@@ -26,6 +26,7 @@ export interface Reply {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   json: any;
   text: string;
+  headers: http.IncomingHttpHeaders;
 }
 
 async function freePort(): Promise<number> {
@@ -61,7 +62,7 @@ export function call(server: Apiserver, method: string, route: string, bearer?: 
       (res) => {
         res.on('error', () => undefined);
         if (res.statusCode === 200 && String(res.headers['content-type']).startsWith('text/event-stream')) {
-          resolve({ status: 200, json: null, text: '' });
+          resolve({ status: 200, json: null, text: '', headers: res.headers });
           req.destroy();
           return;
         }
@@ -75,7 +76,7 @@ export function call(server: Apiserver, method: string, route: string, bearer?: 
           } catch {
             json = null;
           }
-          resolve({ status: res.statusCode ?? 0, json, text });
+          resolve({ status: res.statusCode ?? 0, json, text, headers: res.headers });
         });
       },
     );

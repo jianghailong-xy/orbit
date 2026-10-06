@@ -1083,6 +1083,9 @@ describe('a focused row that answers Enter itself, while the start card holds th
 describe('Ask the coordinator to handle it, on the project settlement card', { timeout: 60_000 }, () => {
   it('sends the card’s own facts as a turn, and leaves the card where it stands', async () => {
     settlementHeld = true;
+    // Started: "why is it not done?" is asked only of a project somebody started — an unstarted
+    // one is the start card's question (`settlementHeldOnProject`).
+    projectStartedAt = '2026-09-11T03:00:00.000Z';
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
     await waitForUi(() => {
       expect(count('.project-settlement')).toBe(1);

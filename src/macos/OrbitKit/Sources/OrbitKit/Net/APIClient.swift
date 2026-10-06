@@ -136,14 +136,15 @@ public final class APIClient: @unchecked Sendable {
 
     /// List one canonical lifecycle scope. During a rolling upgrade, retry the legacy query spelling
     /// if the new one is rejected. Older servers silently treat unknown Completed/Trash values as
-    /// Open, so a mismatched (or empty, for those two scopes) response also triggers the fallback.
+    /// Open, so a response holding rows of another scope also triggers the fallback. An empty one is
+    /// an answer: a project with nothing completed is common, and asking again under the old
+    /// spelling only doubled that read, on every poll. (A pre-Completed server with nothing Open
+    /// answers an empty list for Completed too, and keeps it.)
     public func listSessions(view: SessionView = .open,
                              runnerId: String? = nil, projectId: String? = nil) async throws -> [Session] {
         do {
             let sessions = try await listSessions(queryValue: view.queryValue, runnerId: runnerId, projectId: projectId)
-            if view == .open || (!sessions.isEmpty && sessions.allSatisfy({
-                $0.effectiveLifecycleState == view.lifecycleState
-            })) {
+            if view == .open || sessions.allSatisfy({ $0.effectiveLifecycleState == view.lifecycleState }) {
                 return sessions
             }
         } catch APIError.http(let status, _) where [400, 404, 422].contains(status) {
@@ -468,6 +469,24 @@ public final class APIClient: @unchecked Sendable {
         return result.count
     }
 
+    // MARK: personal access tokens — listed and revoked here, issued only on the web
+    // (docs/personal-access-token-design.md §6.5, §9)
+
+    /// Every token this account has issued, newest first — Active, Revoked and Expired alike — for
+    /// Settings → Access tokens. Never the token itself: the server keeps only its hash. Web parity:
+    /// `listAccessTokens`.
+    public func accessTokens() async throws -> [AccessToken] {
+        let list: AccessTokenList = try await get("access-tokens")
+        return list.tokens
+    }
+
+    /// Revoke one of this account's tokens at once; anything using it gets a 401 from then on.
+    /// Idempotent. Web parity: `revokeAccessToken`.
+    @discardableResult
+    public func revokeAccessToken(_ id: String) async throws -> RevokedAccessToken {
+        try await delete("access-tokens/\(id)")
+    }
+
     // MARK: approvals
 
     public func approvals(sessionID: String, status: String = "PENDING") async throws -> [ApprovalInfo] {
@@ -714,6 +733,26 @@ public final class APIClient: @unchecked Sendable {
     public func cancelPromotion(projectID: String,
                                 promotionID: String) async throws -> ProjectPromotionView {
         try await postEmpty("projects/\(projectID)/promotions/\(promotionID)/cancel")
+    }
+
+    // MARK: a project's crossings — work asked across its line, answered by its owner
+
+    /// What has been asked about work crossing into or out of this project, in either direction:
+    /// filings, dependencies and moves, whether answered or not (`ProjectCrossings`).
+    public func projectCrossings(projectID: String) async throws -> [ProjectCrossing] {
+        try await get("projects/\(projectID)/handoffs")
+    }
+
+    /// Answer one crossing, from this project's page. The crossing key travels with the answer, so
+    /// one given on a list that changed since it was read is refused rather than recorded against
+    /// another crossing. A yes to a move IS the move: the server moves the task and spends the
+    /// request in the same write, or refuses with nothing written. The owner's own credential —
+    /// the door refuses a personal access token. The answer is not read here: the list the press
+    /// re-reads says what it left, as the browser does.
+    public func decideProjectCrossing(projectID: String, crossing: ProjectCrossing,
+                                      _ decision: ProjectCrossingDecision) async throws {
+        try await postRaw("projects/\(projectID)/handoffs/\(ProjectCrossings.doorID(crossing))/decision",
+                          body: ProjectCrossings.request(crossing, decision))
     }
 
     // MARK: projects — the index and one project's page
@@ -1012,9 +1051,12 @@ public final class APIClient: @unchecked Sendable {
     public func wikiSpace(_ id: String) async throws -> WikiSpace {
         try await get("wiki/spaces/\(id)", query: [URLQueryItem(name: "include", value: "usage")])
     }
-    /// `GET /wiki/spaces/:id/entries`: a space's entries of every status, newest recorded first.
-    public func wikiEntries(spaceID: String, limit: Int = 200) async throws -> [WikiEntry] {
-        try await get("wiki/spaces/\(spaceID)/entries", query: [URLQueryItem(name: "limit", value: String(limit))])
+    /// `GET /wiki/spaces/:id/entries`: a space's entries of every status, newest recorded first — of one
+    /// kind when `kind` is given. The server answers 200 at most.
+    public func wikiEntries(spaceID: String, kind: WikiEntryKind? = nil, limit: Int = 200) async throws -> [WikiEntry] {
+        var query = [URLQueryItem(name: "limit", value: String(limit))]
+        if let kind { query.insert(URLQueryItem(name: "kind", value: kind.rawValue), at: 0) }
+        return try await get("wiki/spaces/\(spaceID)/entries", query: query)
     }
     /// `GET /wiki/spaces/:id/timeline`: what changed, newest first.
     public func wikiTimeline(spaceID: String) async throws -> WikiTimeline {

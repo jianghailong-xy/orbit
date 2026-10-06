@@ -145,6 +145,15 @@ export function SettingsPage() {
         </Field>
       </Card>
 
+      <Card title="Access tokens" style={{ marginTop: 16 }}>
+        <Field
+          label="Personal access tokens"
+          hint="Let scripts and the orbit CLI use the Orbit API as you: what each token can reach, when it was last used, and a way to revoke it."
+        >
+          <Button onClick={() => navigate('/settings/access-tokens')}>Manage</Button>
+        </Field>
+      </Card>
+
     </div>
   );
 }

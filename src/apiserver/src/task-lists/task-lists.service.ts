@@ -323,6 +323,15 @@ export class TaskListsService {
 
   async update(ownerId: string, id: string, dto: UpdateTaskListDto, author?: RevisionAuthor) {
     await this.assertOwned(ownerId, id);
+    // The foreman runs as one of this list's tasks, in the workspace named here: only the owner's
+    // own. Another account's is not found, as a workspace the owner does not have always is.
+    if (dto.foremanWorkspaceId) {
+      const workspace = await this.prisma.workspace.findFirst({
+        where: { id: dto.foremanWorkspaceId, ownerId },
+        select: { id: true },
+      });
+      if (!workspace) throw new NotFoundException('workspace not found');
+    }
     // Each field is written only when the caller sent it, so a title rename cannot silently
     // clear a pause and a pause cannot blank a title. `maxConcurrent: null` is a meaningful
     // value (uncap), which is why it is distinguished from "absent" rather than falsy-checked.

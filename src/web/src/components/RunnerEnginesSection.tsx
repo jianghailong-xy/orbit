@@ -2,9 +2,9 @@ import { RightOutlined } from '@ant-design/icons';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from 'antd';
 import { Link } from 'react-router-dom';
-import { accountToStartOn, type ReportedEngine, type RunnerEngineHealth } from '@orbit/shared';
+import { accountToStartOn, withEnginePlanUsage, type ReportedEngine, type RunnerEngineHealth } from '@orbit/shared';
 import { api } from '../api';
-import { accountNameOf, accountPlanUsage, engineKeepsAccounts } from '../lib/engineAccounts';
+import { accountNameOf, accountPlanUsage, engineKeepsAccounts, runsOnEnvKey } from '../lib/engineAccounts';
 import { encodeId } from '../lib/idCodec';
 import { currentPlanUsageRows, planUsageSnapshotForProvider } from '../lib/planUsage';
 import { formatResetTime } from '../lib/providerPools';
@@ -165,7 +165,9 @@ type Tone = 'ok' | 'warn' | 'muted';
 /**
  * What a row says about its sign-in, read the way Providers reads it (rowKindOf): a CLI that
  * wouldn't say is never "Signed in". With several accounts on the machine the row speaks for all of
- * them — every one in, or the one that is out.
+ * them — every one in, or the one that is out. Antigravity's Google accounts are said the same way;
+ * a machine that runs it on its Gemini key says "env key", and its Default on that key is never the
+ * one that is out (runsOnEnvKey).
  */
 function signInOf(runner: Runner, health: RunnerEngineHealth): { text: string; tone: Tone } {
   const none = { text: '—', tone: 'muted' as const };
@@ -189,15 +191,15 @@ function signInOf(runner: Runner, health: RunnerEngineHealth): { text: string; t
   if (kind !== 'in' && kind !== 'out' && kind !== 'unknown') return none;
   const accounts = engineKeepsAccounts(health.engine) ? (health.accounts ?? []) : [];
   if (accounts.length >= 2) {
-    if (accounts.every((account) => account.auth === 'yes')) {
+    if (accounts.every((account) => account.auth === 'yes' || runsOnEnvKey(health, account))) {
       return { text: runnerEngineAccountsSignedIn(accounts.length), tone: 'ok' };
     }
-    if (accounts.some((account) => account.auth === 'no')) {
+    if (accounts.some((account) => account.auth === 'no' && !runsOnEnvKey(health, account))) {
       return { text: RUNNER_ENGINE_SIGNED_OUT, tone: 'warn' };
     }
     return none;
   }
-  if (kind === 'in') return { text: health.engine === 'antigravity' ? (health.authSource === 'google' ? 'Google account' : 'env key') : RUNNER_ENGINE_SIGNED_IN, tone: 'ok' };
+  if (kind === 'in') return { text: health.engine === 'antigravity' && health.authSource !== 'google' ? 'env key' : RUNNER_ENGINE_SIGNED_IN, tone: 'ok' };
   if (kind === 'out') return { text: RUNNER_ENGINE_SIGNED_OUT, tone: 'warn' };
   return none;
 }
@@ -218,17 +220,19 @@ function EngineLine({ runner, health }: { runner: Runner; health: RunnerEngineHe
   // With several accounts the engine's own snapshot is Default's alone, and one account's windows
   // under "2 accounts signed in" would read as the machine's. The windows shown are those of the
   // account a new session starts on, named — what an account pool's head shows for its next one.
-  const engine = health.engine === 'claude' || health.engine === 'codex' ? health.engine : null;
+  // Antigravity's quota comes with its engine's health, folded in beside the rest.
+  const usage = withEnginePlanUsage(runner.planUsage, runner.engines);
+  const engine = engineKeepsAccounts(health.engine) ? health.engine : null;
   const accounts = engine && (kind === 'in' || kind === 'out' || kind === 'unknown') ? (health.accounts ?? []) : [];
   const nextId =
-    engine && accounts.length >= 2 ? accountToStartOn(engine, accounts, runner.planUsage, new Date()) : null;
+    engine && accounts.length >= 2 ? accountToStartOn(engine, accounts, usage, new Date()) : null;
   const next = accounts.find((account) => account.id === nextId);
   const signedIn = accounts.length >= 2 ? !!next : kind === 'in';
   const snapshot = !signedIn
     ? null
     : engine && next
-      ? accountPlanUsage(runner.planUsage, engine, next.id)
-      : health.engine === 'antigravity' ? (health.authSource === 'google' ? health.planUsage : null) : planUsageSnapshotForProvider(runner.planUsage, health.engine);
+      ? accountPlanUsage(usage, engine, next.id)
+      : planUsageSnapshotForProvider(usage, health.engine);
   const quota = snapshot ? currentPlanUsageRows(snapshot) : [];
   const name = ENGINE_CLI_NAME[health.engine] ?? health.engine;
   return (

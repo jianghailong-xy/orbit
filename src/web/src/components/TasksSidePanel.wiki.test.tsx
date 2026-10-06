@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '../lib/theme';
 import type { WikiSpaceRow } from '../lib/wiki';
+import { wikiWaiting } from '../lib/wikiSpace';
 import { TasksSidePanel } from './TasksSidePanel';
 
 // The panel is drawn in a browser and reads the browser's own state as it renders: the theme's
@@ -29,13 +30,15 @@ vi.mock('../api', async (importOriginal) => ({
  * The Wiki's row in the left sidebar: where it sits, what its amber number counts, and the sentence
  * that number explains itself with.
  *
- * WHAT THE NUMBER IS: the proposals waiting for the owner, summed over every space — the same count
- * Review's own page opens on, because the number and its destination have to agree or the pill is a
- * dead end. It wears `.tp-count.needs-you`, which is the pill a workspace row uses for the same kind
- * of fact ("this is on you"), and it is not drawn at zero: an amber 0 is a demand that isn't there.
+ * WHAT THE NUMBER IS: what waits on the owner across every space — the proposals in Review and what
+ * each plan waits on them for (design §12.3.3) — the number the Wiki head's Activity badge shows, from
+ * the same function (`wikiWaiting`), and what Activity's amber banners add up to: the number and its
+ * destination have to agree or the pill is a dead end. It wears `.tp-count.needs-you`, which is the pill
+ * a workspace row uses for the same kind of fact ("this is on you"), says itself the way the Projects
+ * row does (`N waiting on you`), and is not drawn at zero: an amber 0 is a demand that isn't there.
  */
 
-function space(pendingOps: number): WikiSpaceRow {
+function space(pendingOps: number, planWaiting = 0): WikiSpaceRow {
   return {
     id: `0196d000-0000-7000-8000-00000000000${pendingOps}`,
     slug: 'orbit',
@@ -46,6 +49,7 @@ function space(pendingOps: number): WikiSpaceRow {
     createdAt: '2026-09-01T00:00:00.000Z',
     updatedAt: '2026-09-01T00:00:00.000Z',
     pendingOps,
+    planWaiting,
   };
 }
 
@@ -85,23 +89,35 @@ describe('the sidebar’s Wiki entry', () => {
     expect(html).toContain('role="link" tabindex="0" title="Wiki"');
   });
 
-  it('counts the proposals waiting, and explains the number on hover', () => {
+  it('counts what waits on the owner, and explains the number on hover and to a screen reader', () => {
     const html = paint([space(3)]);
     expect(html).toContain('tp-count needs-you');
     expect(html).toContain('>3</span>');
-    expect(html).toContain('title="3 proposals to review"');
+    expect(html).toContain('title="3 waiting on you" aria-label="3 waiting on you"');
+    // The collapsed rail's badge says the same.
+    expect(html).toContain('class="tp-rail-badge needs-you" title="3 waiting on you"');
+    expect(html).not.toContain('proposals to review');
   });
 
   it('draws no amber number when nothing is waiting', () => {
     const html = paint([space(0)]);
     expect(html).toContain('>Wiki<');
     expect(html).not.toContain('needs-you');
-    expect(html).not.toContain('proposals to review');
+    expect(html).not.toContain('waiting on you');
   });
 
-  it('adds up every space, because Review’s own page asks across all of them', () => {
-    const html = paint([space(2), { ...space(1), id: 'other', slug: 'wikova' }]);
-    expect(html).toContain('title="3 proposals to review"');
+  it('adds up every space’s proposals and every thing its plan waits on — the head badge’s own sum', () => {
+    // orbit: 2 proposals and a draft to confirm; wikova: 1 proposal and 2 plan changes.
+    const rows = [space(2, 1), { ...space(1, 2), id: 'other', slug: 'wikova', repoUrlNorm: 'github.com/jianghailong-xy/wikova' }];
+    const html = paint(rows);
+    expect(wikiWaiting(rows)).toBe(6);
+    expect(html).toContain('title="6 waiting on you"');
+    expect(html).toContain('>6</span>');
+  });
+
+  it('counts a plan waiting when no proposal is', () => {
+    const html = paint([space(0, 2)]);
+    expect(html).toContain('title="2 waiting on you"');
   });
 
   it('marks the row as the open one on a wiki route', () => {

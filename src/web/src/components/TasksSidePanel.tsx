@@ -48,10 +48,12 @@ import type {
 } from '@orbit/shared';
 import { api, clearToken, logoutSession } from '../api';
 import { routeId, encodeId } from '../lib/idCodec';
+import { useIsMobile } from '../lib/useMediaQuery';
 import {
   avatarQuery,
   meQuery,
   openProjectsQuery,
+  projectDetailsQuery,
   sessionQuery,
   wikiSpacesQuery,
   workspaceSessionCountsQuery,
@@ -65,7 +67,8 @@ import {
   sidebarProjects,
   type SidebarProject,
 } from '../lib/projectAttention';
-import { wikiProposalsToReview, wikiShown } from '../lib/wiki';
+import { wikiShown, wikiWaitingOnYou } from '../lib/wiki';
+import { wikiWaiting, writeWikiFromWorkspace } from '../lib/wikiSpace';
 import { SidebarNavIcon } from './SidebarNavIcon';
 
 const IS_MAC_PLATFORM =
@@ -314,11 +317,12 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   const avatar = useQuery(avatarQuery(me.data?.avatarUpdatedAt));
   const { mode, setMode } = useThemeMode();
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  // The Wiki's amber count: the proposals waiting for the owner, summed over every space (a wiki
-  // belongs to the account, and Review's own page asks across all of them). Its own key root, so the
-  // control plane's `wiki.changed` refresh reaches it and nothing else has to.
+  // The Wiki's amber count: what waits on the owner across every space — the proposals in Review and
+  // what each plan waits for (design §12.3.3) — the number the Wiki head's Activity badge shows, from the
+  // same function. Its own key root, so the control plane's `wiki.changed` refresh reaches it and nothing
+  // else has to.
   const wikiSpaces = useQuery({ ...wikiSpacesQuery(), enabled: !!me.data });
-  const wikiPending = (wikiSpaces.data ?? []).reduce((sum, space) => sum + (space.pendingOps ?? 0), 0);
+  const wikiWaitingCount = wikiWaiting(wikiSpaces.data ?? []);
   // No Wiki row at all for an account the server has not switched the wiki on for (WIKI_DISABLED):
   // an entry that led to a refusal would be worse than none.
   const topItems = wikiShown(wikiSpaces) ? TOP : TOP.filter((t) => t.key !== 'wiki');
@@ -334,6 +338,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   const agentsMatch = useMatch('/agents/:id/*');
   const openWorkspaceId = routeId((workspacesMatch ?? agentsMatch)?.params.id);
   const sessionId = routeId(useMatch('/sessions/:id')?.params.id);
+  const narrow = useIsMobile();
   const sessionQ = useQuery({
     ...sessionQuery(sessionId),
     // Keep the previous session's data while the next one loads so activeWorkspaceId
@@ -380,6 +385,18 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
       ? `project:${projectPageId}`
       : null;
   const litWorkspaceId = projectPageKey ? null : activeWorkspaceId;
+
+  // Where this tab is, for the space `/wiki` opens (design §12.3.4): the active workspace, or on a
+  // project's page or its sessions page the workspace the project's coordinator runs in. A page that
+  // is neither — the Projects or Tasks list — is nowhere, and the Wiki's own pages keep what the page
+  // before them said.
+  const projectInViewId = openProjectId ?? projectPageId;
+  const projectInView = useQuery({ ...projectDetailsQuery(projectInViewId ?? ''), enabled: !!projectInViewId });
+  const hereWorkspaceId = projectInViewId ? routeId(projectInView.data?.coordinatorWorkspaceId) : activeWorkspaceId;
+  const onWiki = loc.pathname === '/wiki' || loc.pathname.startsWith('/wiki/');
+  useEffect(() => {
+    if (!onWiki) writeWikiFromWorkspace(hereWorkspaceId);
+  }, [onWiki, hereWorkspaceId]);
 
   // Workspace/session routes have no proxy parent in TOP: a resolved Workspace highlights its own
   // row, while an unresolved deep link briefly leaves the fixed nav unselected. Runner management
@@ -645,12 +662,18 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
 
   // A project's row opens its sessions page over the workspace showing (members span workspaces,
   // so the workspace only decides where the page's back leads), or the first one; with no
-  // workspace to show it over, the project's own page.
+  // workspace to show it over, the project's own page. Beside an open conversation on a wide screen
+  // only the list column changes and the conversation stays, as the iPad's sidebar has it; a phone
+  // shows one pane, so there the page is what opens.
   const openProject = (project: SidebarProject) => {
     onNavigate?.();
     const key = encodeId(project.id);
     if (sel === `project:${key}`) return;
     setSel(`project:${key}`);
+    if (sessionId && !narrow) {
+      navigate(`/sessions/${encodeId(sessionId)}?project=${key}`);
+      return;
+    }
     const over = activeWorkspaceId ?? orderedWorkspaces.find((a) => a.runner?.id ?? a.runnerId)?.id;
     navigate(over ? `/workspaces/${encodeId(over)}?project=${key}` : `/projects/${key}`);
   };
@@ -706,8 +729,14 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
             title={`${t.label}${t.shortcut ? `  ${t.shortcut}` : ''}`}
           >
             <span className="tp-ico">{t.icon}</span>
-            {t.key === 'wiki' && wikiPending > 0 && (
-              <span className="tp-rail-badge needs-you">{wikiPending}</span>
+            {t.key === 'wiki' && wikiWaitingCount > 0 && (
+              <span
+                className="tp-rail-badge needs-you"
+                title={wikiWaitingOnYou(wikiWaitingCount)}
+                aria-label={wikiWaitingOnYou(wikiWaitingCount)}
+              >
+                {wikiWaitingCount}
+              </span>
             )}
           </div>
         ))}
@@ -761,13 +790,13 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
             >
               <span className="tp-ico">{t.icon}</span>
               <span className="tp-label">{t.label}</span>
-              {t.key === 'wiki' && wikiPending > 0 ? (
+              {t.key === 'wiki' && wikiWaitingCount > 0 ? (
                 <span
                   className="tp-count needs-you"
-                  title={wikiProposalsToReview(wikiPending)}
-                  aria-label={wikiProposalsToReview(wikiPending)}
+                  title={wikiWaitingOnYou(wikiWaitingCount)}
+                  aria-label={wikiWaitingOnYou(wikiWaitingCount)}
                 >
-                  {wikiPending}
+                  {wikiWaitingCount}
                 </span>
               ) : (
                 t.shortcut && (

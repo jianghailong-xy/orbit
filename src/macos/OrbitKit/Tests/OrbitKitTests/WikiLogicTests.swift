@@ -10,17 +10,55 @@ final class WikiLogicTests: XCTestCase {
 
     // MARK: the drawer's number
 
-    /// Summed over every space, exactly as the web sidebar sums `pendingOps` — the same number the
-    /// home page's banner and Review's subtitle say.
-    func testTheAmberNumberSumsEverySpacesProposals() throws {
+    /// Summed over every space as the web sidebar sums it (`wikiWaiting`): each space's proposals and the
+    /// things its plan waits on the owner for — the number the bar's Activity badge shows too. The
+    /// proposals alone are Activity's first banner and Review's head.
+    func testTheAmberNumberSumsWhatWaitsInEverySpace() throws {
         let spaces = try WikiFixtures.decode([WikiSpace].self, WikiFixtures.spaces)
-        XCTAssertEqual(WikiLogic.proposalsToReview(spaces), 3)
-        XCTAssertEqual(WikiLogic.proposalsToReview([]), 0, "nothing waiting draws no number")
-        XCTAssertEqual(WikiLogic.proposalsToReview([WikiSpace(id: "a", slug: "a", pendingOps: 2),
-                                                    WikiSpace(id: "b", slug: "b", pendingOps: 5),
-                                                    WikiSpace(id: "c", slug: "c")]), 7,
-                       "a space an older server sent no count for adds nothing")
+        XCTAssertEqual(WikiSpaceLogic.waiting(spaces), 3, "a server older than planWaiting: the proposals alone")
+        XCTAssertEqual(WikiSpaceLogic.waiting([]), 0, "nothing waiting draws no number")
+        let planned = [WikiSpace(id: "a", slug: "a", pendingOps: 2, planWaiting: 1),
+                       WikiSpace(id: "b", slug: "b", pendingOps: 5),
+                       WikiSpace(id: "c", slug: "c", planWaiting: 2),
+                       WikiSpace(id: "d", slug: "d")]
+        XCTAssertEqual(WikiSpaceLogic.waiting(planned), 10, "a count an older server did not send adds nothing")
+        XCTAssertEqual(WikiSpaceLogic.proposalsWaiting(planned), 7)
+        XCTAssertEqual(WikiCopy.waitingOnYou(10), "10 waiting on you", "the Projects row's own words")
         XCTAssertEqual(WikiCopy.proposalsToReview(3), "3 proposals to review")
+        XCTAssertEqual(WikiCopy.proposalsToReview(1), "1 proposal to review", "one proposal is one proposal")
+    }
+
+    // MARK: whether the account has the wiki
+
+    /// A 404 carrying WIKI_DISABLED is the server saying the wiki is off for this account — and only
+    /// that: a plain 404, another code, or the code on another status is not (`isWikiDisabled`).
+    func testWikiDisabledIsA404CarryingItsCode() {
+        let disabled = APIError.http(status: 404, body: #"{"code":"WIKI_DISABLED","message":"The Orbit wiki is not on for this account"}"#)
+        XCTAssertTrue(WikiLogic.isDisabled(disabled))
+        XCTAssertFalse(WikiLogic.isDisabled(APIError.http(status: 404, body: #"{"message":"Not Found"}"#)))
+        XCTAssertFalse(WikiLogic.isDisabled(APIError.http(status: 404, body: #"{"code":"NOT_FOUND"}"#)))
+        XCTAssertFalse(WikiLogic.isDisabled(APIError.http(status: 500, body: #"{"code":"WIKI_DISABLED"}"#)))
+        XCTAssertFalse(WikiLogic.isDisabled(APIError.http(status: 404, body: nil)))
+        XCTAssertFalse(WikiLogic.isDisabled(APIError.invalidResponse))
+    }
+
+    /// The drawer's Wiki row — the iPad sidebar's too — is drawn as the web sidebar's is (`wikiShown`):
+    /// once the spaces read answered anything but WIKI_DISABLED, and when it failed for another reason;
+    /// never while it is on its way.
+    func testTheWikiRowIsDrawnAsTheWebSidebarDrawsIt() {
+        var state = ListLoadState()
+        XCTAssertFalse(WikiLogic.shown(state, disabled: false), "nothing answered yet: no row to press")
+        state.begin()
+        XCTAssertFalse(WikiLogic.shown(state, disabled: false))
+        state.succeed()
+        XCTAssertTrue(WikiLogic.shown(state, disabled: false), "a list, even an empty one, is a wiki")
+        XCTAssertFalse(WikiLogic.shown(state, disabled: true), "WIKI_DISABLED: no row at all")
+        state.fail()
+        XCTAssertFalse(WikiLogic.shown(state, disabled: true), "a refresh that failed does not undo the answer")
+        var failed = ListLoadState()
+        failed.begin()
+        failed.fail()
+        XCTAssertTrue(WikiLogic.shown(failed, disabled: false), "a failure is not the server saying no")
     }
 
     // MARK: marks
@@ -169,17 +207,46 @@ final class WikiLogicTests: XCTestCase {
         XCTAssertEqual(WikiLogic.entrySections, ["Details", "Sources", "Anchors", "Where it's used", "History"])
     }
 
+    /// Activity's blocks, top to bottom (mock 31 ②): the home's management blocks in their order, the
+    /// other spaces' plan banners after the space's own, and Principles not among them — it is content.
+    func testTheActivityBandsOrder() {
+        XCTAssertEqual(WikiLogic.ActivityBand.allCases, [.status, .reviewBanner, .planBanners, .otherPlanBanners,
+                                                         .recentDecisions, .recentlyChanged, .agentsUsed])
+        XCTAssertEqual(WikiLogic.ActivityBand.allCases.compactMap(\.title),
+                       ["Recent decisions", "Recently changed", "Agents used the wiki"])
+        XCTAssertFalse(WikiLogic.ActivityBand.allCases.map(\.rawValue).contains("principles"))
+    }
+
+    /// Recently changed's rows that came after the reader last looked: all of them the first time, then
+    /// only what is newer than the stamp — a run by its newest change.
+    func testRecentlyChangedCountsWhatIsNewSinceTheReaderLastLooked() throws {
+        let items = try XCTUnwrap(try WikiFixtures.decode(WikiTimeline.self, WikiFixtures.timeline).items)
+        let home = WikiHomeContent(space: try WikiFixtures.decode(WikiSpace.self, WikiFixtures.space), spaces: [],
+                                   entries: [], timeline: items, proposals: 0)
+        XCTAssertEqual(home.newRows(seen: 0), home.recentRows.count, "never looked: every row is new")
+        let times = home.recentRows.compactMap { WikiHomeContent.time(of: $0) }.compactMap(RelativeTime.parse)
+        XCTAssertEqual(times.count, home.recentRows.count, "every row has its time")
+        let newest = try XCTUnwrap(times.max()).timeIntervalSince1970
+        XCTAssertEqual(home.newRows(seen: newest), 0, "nothing after the newest")
+        let middle = times.sorted()[times.count / 2].timeIntervalSince1970
+        XCTAssertEqual(home.newRows(seen: middle), times.filter { $0.timeIntervalSince1970 > middle }.count)
+    }
+
     /// The home page's bands, read out of the fixture: the four principles oldest first and said to
     /// be the owner's once, the four newest decisions, five changes, three most used, and the status
     /// line without the count the banner says.
     func testTheHomePagesBands() throws {
         let spaces = try WikiFixtures.decode([WikiSpace].self, WikiFixtures.spaces)
+        let entries = try WikiFixtures.decode([WikiEntry].self, WikiFixtures.entries)
+        // The two bands' own reads (`?kind=principle`, `?kind=decision`), as the server answers them.
         let home = WikiHomeContent(space: try WikiFixtures.decode(WikiSpace.self, WikiFixtures.space),
                                    spaces: spaces,
-                                   entries: try WikiFixtures.decode([WikiEntry].self, WikiFixtures.entries),
+                                   entries: entries,
+                                   principles: entries.filter { $0.kind == .principle },
+                                   decisions: entries.filter { $0.kind == .decision },
                                    timeline: try XCTUnwrap(try WikiFixtures.decode(WikiTimeline.self,
                                                                                    WikiFixtures.timeline).items),
-                                   proposals: WikiLogic.proposalsToReview(spaces))
+                                   proposals: WikiSpaceLogic.proposalsWaiting(spaces))
         XCTAssertEqual(home.principles.map(\.title), ["Agent-writable data never becomes a system instruction",
                                                        "Completion is adjudicated, not claimed",
                                                        "A clock never starts agent work", "Delete means forget"])
@@ -248,6 +315,16 @@ final class WikiLogicTests: XCTestCase {
         let named = WikiEntry(id: "34UDFnrgM4q5oWakeLost", kind: .pitfall,
                               title: "Claude's ScheduleWakeup is lost when the engine is recycled")
         XCTAssertEqual(WikiLogic.cardTitle(cards[1], entry: named), named.title)
+        // Review's read carries the title of the entry each op names: the card says it before — or
+        // without — the entry's own read.
+        let carried = try WikiFixtures.decode(WikiChangesetOp.self, """
+            {"id":"34UDOpRetireWakeup002","seq":0,"op":"retire","entryId":"34UDFnrgM4q5oWakeLost",
+             "decision":"pending","entryTitle":"Claude's ScheduleWakeup is lost when the engine is recycled",
+             "payload":{"op":"retire","reason":"Fix landed."}}
+            """)
+        let card = WikiLogic.ReviewCard(changeset: cards[1].changeset, op: carried)
+        XCTAssertEqual(WikiLogic.cardTitle(card, entry: nil), named.title)
+        XCTAssertEqual(WikiLogic.knownTitle(card, entry: nil), named.title)
         XCTAssertEqual(WikiLogic.cardTitle(cards[2], entry: named), named.title,
                        "an amend that leaves the title alone is about the entry it names")
         XCTAssertEqual(WikiLogic.cardKind(cards[1], entry: named), .pitfall)

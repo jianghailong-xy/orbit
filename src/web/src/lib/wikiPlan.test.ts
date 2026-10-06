@@ -289,6 +289,37 @@ describe('every state of the plan', () => {
   });
 });
 
+/**
+ * Activity's plan banners (design §12.3.3): the home's amber banner once for each kind of thing waiting,
+ * so a page's amber banners add up to the number the head's badge and the sidebar show — the plan's part
+ * of it being exactly what `pending` counts, the server's `planWaiting` vectors.
+ */
+describe("Activity's amber plan banners", () => {
+  for (const [name, expected] of Object.entries(plan.states)) {
+    it(`${name}: one for each kind of thing waiting, adding up to what the plan waits on`, () => {
+      const state = stateOf(expected.spec);
+      const runnerOnline = expected.spec.runnerOnline;
+      const docs = state.confirmed ? { written: 3, total: 5 } : null;
+      inTimeZone(fixture.timeZone, () => {
+        const banners = P.wikiPlanWaitingBanners(state, { now, docs, runnerOnline });
+        expect(banners.reduce((sum, banner) => sum + banner.count, 0)).toBe(expected.pending);
+        expect(banners.every((banner) => banner.tone === 'amber' && banner.count > 0)).toBe(true);
+        // The first is the home's own banner whenever that one is amber, and there is none otherwise.
+        if (expected.banner?.tone === 'amber') expect(banners[0]).toMatchObject(expected.banner);
+        else expect(banners).toEqual([]);
+      });
+    });
+  }
+
+  it('draws a draft to confirm and the changes beside it as two banners', () => {
+    const state = { ...stateOf(plan.states.draftReady.spec), proposals: plan.proposals };
+    const banners = P.wikiPlanWaitingBanners(state, { now, docs: null, runnerOnline: true });
+    expect(banners.map((banner) => banner.look)).toEqual(['draftReady', 'changes']);
+    expect(banners.map((banner) => banner.count)).toEqual([1, plan.proposals.length]);
+    expect(banners.reduce((sum, banner) => sum + banner.count, 0)).toBe(P.wikiPlanPending(state, true));
+  });
+});
+
 describe('the version menu, a document’s and a section’s pages', () => {
   it('lists every version with a failed draft over them', () => {
     inTimeZone(fixture.timeZone, () => {

@@ -48,15 +48,18 @@ describe('Antigravity Google login across client surfaces', () => {
     expect(rendered.querySelector('a')?.getAttribute('href')).toBe('https://antigravity.google/terms');
   });
 
-  it('shows Google identity, each remaining quota and reset, and re-login', () => {
+  it('shows the one Google account as signed in, each remaining quota and reset, and re-login', () => {
     const rendered = row('google');
-    expect(rendered.textContent).toContain('Google account');
+    // One Google account reads as one account of any other engine does: signed in, nothing beside
+    // its version to say which kind.
+    expect(rendered.textContent).not.toContain('Google account');
     expect(rendered.textContent).toContain('Weekly72% remaining');
     expect(rendered.textContent).toContain('5-hour18% remaining');
     expect(rendered.querySelectorAll('.re-reset')).toHaveLength(2);
     expect(rendered.querySelector('[aria-label="More actions"]')).not.toBeNull();
     const summary = renderToStaticMarkup(wrap(<RunnerEnginesSection runner={fixtures.google} />, fixtures.google));
-    expect(summary).toContain('Google account');
+    expect(summary).toContain('class="rd-engine-auth ok">Signed in<');
+    expect(summary).not.toContain('Google account');
     expect(summary).toContain('72% remaining');
     expect(summary).toContain('resets');
   });
@@ -165,7 +168,8 @@ describe('Antigravity Google login across client surfaces', () => {
       await act(async () => { root.render(wrap(<RunnerEngines />, fixtures[state])); });
       const engineRow = container.querySelector<HTMLElement>('[data-engine="antigravity"]')!;
       if (state === 'google') await clickRunnerMenuItem(engineRow, 'Re-sign in');
-      else await act(async () => engineRow.querySelector<HTMLButtonElement>('.re-act button')!.click());
+      // By its words: a runner that keeps Google accounts puts Add account first.
+      else await act(async () => [...engineRow.querySelectorAll<HTMLButtonElement>('.re-act button')].find((b) => b.textContent === 'Sign in with Google')!.click());
       await act(async () => container.querySelector<HTMLButtonElement>('.rsi-btn')!.click());
       await vi.waitFor(() => expect(vi.mocked(api)).toHaveBeenCalledWith(`/runners/${fixtures.google.id}/login`, { method: 'POST', body: { engine: 'antigravity' } }));
       await vi.waitFor(() => expect(container.querySelector('.rsi-input')).not.toBeNull());

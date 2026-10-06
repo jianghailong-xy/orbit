@@ -141,6 +141,36 @@ test('cross project: a declared handoff is a request, and the user is the one wh
   assert.equal(granted.rule, 'R14_HANDOFF_APPROVED');
 });
 
+test('cross project: a declared move is asked for from one of its ends, never by a bystander', () => {
+  // Pushing a task out of the scope it holds, and pulling one into it: both ends may ask.
+  assert.equal(decide(handoff()).rule, 'R10_NO_APPROVAL');
+  const pulled = decide(handoff({ currentProjectId: B, targetProjectId: A }));
+  assert.equal(pulled.rule, 'R10_NO_APPROVAL');
+  assert.deepEqual(pulled.ends, { from: B, to: A });
+
+  // Between two projects this session holds neither of: refused before any answer is read, and
+  // before a settled end is — who is asking comes first.
+  const bystander = decide(handoff({ currentProjectId: B, targetProjectId: C }));
+  assert.equal(bystander.rule, 'R6_OUT_OF_SCOPE');
+  assert.equal(bystander.code, 'PROJECT_SCOPE_MISMATCH');
+  assert.equal(bystander.crossing, true);
+  assert.deepEqual(bystander.ends, { from: B, to: C });
+  assert.equal(decide(handoff({
+    currentProjectId: B, targetProjectId: C,
+    world: { approval: approval({ fromProjectId: B, toProjectId: C }) },
+  })).rule, 'R6_OUT_OF_SCOPE', 'a yes about the move does not make a bystander one of its ends');
+  assert.equal(decide(handoff({
+    currentProjectId: B, targetProjectId: C, world: { projectStatus: { [A]: 'OPEN', [B]: 'OPEN', [C]: 'DONE' } },
+  })).rule, 'R6_OUT_OF_SCOPE');
+
+  // Undeclared, the same move stays R7's, as it always was: same code, same remedy.
+  const undeclared = decide(write({
+    operation: 'UPDATE_TASK', taskId: TASK, currentProjectId: B, targetProjectId: C,
+  }));
+  assert.equal(undeclared.rule, 'R7_UNDECLARED_CROSSING');
+  assert.equal(undeclared.code, bystander.code);
+});
+
 test('cross project: a yes about another move is not a yes about this one', () => {
   const otherTask = decide(handoff({ world: { approval: approval({ taskId: 'another-task' }) } }));
   assert.equal(otherTask.rule, 'R9_APPROVAL_TARGET_MISMATCH');
@@ -204,7 +234,8 @@ test('DONE project: a settled project takes no new work, and no approval buys a 
   assert.equal(approvedIntoDone.rule, 'R8_SETTLED_PROJECT',
     'an approved handoff into an accepted project would give it work its acceptance never saw');
 
-  // Leaving a settled project changes ITS task set too, so the source end is checked as well.
+  // Leaving a settled project changes ITS task set too, so the source end is checked as well —
+  // and when nobody read what the task serves there, it stays R8's, as it always was.
   const outOfDone = decide(handoff({
     world: { approval: approval(), projectStatus: { [A]: 'DONE', [B]: 'OPEN' } },
   }));
@@ -213,6 +244,101 @@ test('DONE project: a settled project takes no new work, and no approval buys a 
   assert.equal(decide(write({ world: { projectStatus: { [A]: 'CANCELLED' } } })).code, 'PROJECT_REOPEN_REQUIRED');
   // Fail closed: a status the snapshot did not carry is not an OPEN project.
   assert.equal(decide(write({ world: { projectStatus: {} } })).code, 'PROJECT_REOPEN_REQUIRED');
+});
+
+test('DONE project: a task none of its criteria count may be moved out, by a confirmed move into an open project', () => {
+  // The 2026-10-06 shape: B's coordinator asks for a task of settled A to be brought over, and the
+  // task serves none of A's criteria. It is a question for the account owner like any other move —
+  // R10, then R11 while it waits, R14 once answered yes.
+  for (const settled of ['DONE', 'CANCELLED'] as const) {
+    const pull = (over: Partial<ScopeWriteRequest['world']> = {}) => handoff({
+      presentedScope: { projectId: B, generation: GEN, token: projectScopeToken(B, GEN) },
+      world: {
+        scope: { projectId: B, generation: GEN },
+        projectStatus: { [A]: settled, [B]: 'OPEN' },
+        servesSourceCriterion: false,
+        ...over,
+      },
+    });
+    const asked = decide(pull());
+    assert.equal(asked.rule, 'R10_NO_APPROVAL', settled);
+    assert.equal(asked.decision, 'REQUIRE_APPROVAL', settled);
+    assert.equal(asked.code, 'CROSS_PROJECT_APPROVAL_REQUIRED', settled);
+    assert.deepEqual(asked.ends, { from: A, to: B });
+    assert.equal(decide(pull({ approval: approval({ state: 'PENDING' }) })).rule, 'R11_APPROVAL_PENDING');
+    assert.equal(decide(pull({ approval: approval({ state: 'DENIED' }) })).rule, 'R12_APPROVAL_DENIED');
+    assert.equal(decide(pull({ approval: approval({ state: 'EXPIRED' }) })).rule, 'R13_APPROVAL_EXPIRED');
+    const confirmed = decide(pull({ approval: approval() }));
+    assert.equal(confirmed.decision, 'ALLOW', settled);
+    assert.equal(confirmed.rule, 'R14_HANDOFF_APPROVED', settled);
+    // Pushed out by the settled project's own coordinator: the same question.
+    assert.equal(decide(handoff({
+      world: { projectStatus: { [A]: settled, [B]: 'OPEN' }, servesSourceCriterion: false },
+    })).rule, 'R10_NO_APPROVAL', settled);
+  }
+});
+
+test('DONE project: a task one of its criteria counts stays where it is, approved or not', () => {
+  const serving = (over: Partial<ScopeWriteRequest['world']> = {}) => handoff({
+    world: { projectStatus: { [A]: 'DONE', [B]: 'OPEN' }, servesSourceCriterion: true, ...over },
+  });
+  const refused = decide(serving());
+  assert.equal(refused.decision, 'REFUSE');
+  assert.equal(refused.rule, 'R8B_SETTLED_CRITERION_SERVED');
+  assert.equal(refused.code, 'MOVE_TASK_SERVES_SETTLED_CRITERION',
+    'a code that says why: the task is part of what the settled project was accepted on');
+  assert.equal(refused.requiredAction, 'REOPEN_PROJECT_FIRST');
+  assert.equal(refused.responsible, 'USER');
+  assert.equal(refused.blockerKind, 'AWAITING_USER_APPROVAL');
+  assert.deepEqual(refused.ends, { from: A, to: B });
+  // Above the approvals, like R8: a yes about this very move does not buy it.
+  for (const state of ['APPROVED', 'PENDING', 'DENIED', 'EXPIRED'] as const) {
+    assert.equal(decide(serving({ approval: approval({ state }) })).rule, 'R8B_SETTLED_CRITERION_SERVED', state);
+  }
+  assert.equal(decide(handoff({
+    world: { projectStatus: { [A]: 'CANCELLED', [B]: 'OPEN' }, servesSourceCriterion: true },
+  })).rule, 'R8B_SETTLED_CRITERION_SERVED');
+  // Between two open projects the same task moves as it always could: what it serves goes back
+  // with the move, and nobody's accepted record is rewritten by that.
+  assert.equal(decide(handoff({ world: { servesSourceCriterion: true } })).rule, 'R10_NO_APPROVAL');
+});
+
+test('DONE project: nothing is moved INTO a settled project, whatever it serves and whoever said yes', () => {
+  for (const servesSourceCriterion of [false, true, undefined]) {
+    for (const source of ['OPEN', 'DONE', 'CANCELLED'] as const) {
+      for (const target of ['DONE', 'CANCELLED'] as const) {
+        const refused = decide(handoff({
+          world: { projectStatus: { [A]: source, [B]: target }, servesSourceCriterion, approval: approval() },
+        }));
+        const why = `${source} → ${target}, serves ${servesSourceCriterion}`;
+        assert.equal(refused.rule, 'R8_SETTLED_PROJECT', why);
+        assert.equal(refused.code, 'PROJECT_REOPEN_REQUIRED', why);
+      }
+    }
+  }
+});
+
+test('DONE project: only the declared move of an existing task is let out — every other write is as it was', () => {
+  const settledA = { projectStatus: { [A]: 'DONE', [B]: 'OPEN' } as const, servesSourceCriterion: false };
+  // New work declared from the settled scope into an open project (FILE_TASK).
+  assert.equal(decide(write({ operation: 'HANDOFF_TASK', targetProjectId: B, world: settledA })).rule,
+    'R8_SETTLED_PROJECT');
+  assert.equal(decide(write({
+    operation: 'HANDOFF_TASK', targetProjectId: B, world: { ...settledA, approval: approval({ taskId: null }) },
+  })).rule, 'R8_SETTLED_PROJECT');
+  // An edit inside the settled project, and new work aimed at it.
+  assert.equal(decide(write({ operation: 'UPDATE_TASK', taskId: TASK, currentProjectId: A, world: settledA })).rule,
+    'R8_SETTLED_PROJECT');
+  assert.equal(decide(write({ world: settledA })).rule, 'R8_SETTLED_PROJECT');
+  // The same move, undeclared, is still R7's: the exemption is for a question, never for a write.
+  assert.equal(decide(write({
+    operation: 'UPDATE_TASK', taskId: TASK, currentProjectId: A, targetProjectId: B, world: settledA,
+  })).rule, 'R7_UNDECLARED_CROSSING');
+  // And a bystander is still R6's before anything about A is read.
+  assert.equal(decide(handoff({
+    currentProjectId: B, targetProjectId: C,
+    world: { projectStatus: { [A]: 'OPEN', [B]: 'DONE', [C]: 'OPEN' }, servesSourceCriterion: false },
+  })).rule, 'R6_OUT_OF_SCOPE');
 });
 
 test('takeover: a write from a scope that has moved is refused, and told to yield rather than retry', () => {
@@ -273,6 +399,8 @@ test('the user is refused by nothing here — including everything refused above
     { world: { projectStatus: { [A]: 'DONE' } } },
     { presentedScope: { projectId: A, generation: '1', token: projectScopeToken(A, '1') } },
     { operation: 'UPDATE_TASK', taskId: TASK, currentProjectId: B, targetProjectId: A },
+    { operation: 'HANDOFF_TASK', taskId: TASK, currentProjectId: A, targetProjectId: B,
+      world: { projectStatus: { [A]: 'DONE', [B]: 'OPEN' }, servesSourceCriterion: true } },
   ];
   for (const over of refusedForAgents) {
     const asAgent = decide(write(over));
@@ -304,6 +432,8 @@ test('SC7: provenance is evidence, so it moves no decision anywhere', () => {
     ['R6_OUT_OF_SCOPE', { operation: 'UPDATE_TASK', taskId: TASK, currentProjectId: B, targetProjectId: B }],
     ['R7_UNDECLARED_CROSSING', { targetProjectId: B }],
     ['R8_SETTLED_PROJECT', { world: { projectStatus: { [A]: 'DONE' } } }],
+    ['R8B_SETTLED_CRITERION_SERVED', { operation: 'HANDOFF_TASK', taskId: TASK, currentProjectId: A,
+      targetProjectId: B, world: { projectStatus: { [A]: 'DONE', [B]: 'OPEN' }, servesSourceCriterion: true } }],
     ['R9_APPROVAL_TARGET_MISMATCH', { operation: 'HANDOFF_TASK', taskId: TASK, currentProjectId: A,
       targetProjectId: B, world: { approval: approval({ taskId: 'other' }) } }],
     ['R10_NO_APPROVAL', { operation: 'HANDOFF_TASK', taskId: TASK, currentProjectId: A, targetProjectId: B }],

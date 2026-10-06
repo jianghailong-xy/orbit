@@ -274,6 +274,13 @@ private struct CompactSections: View {
             NavigationStack(path: $model.nav.path) {
                 AgentContentColumn(rowNavigation: .push)
                     .drawerToggle(open: openDrawer)
+                    // The list stays mounted under whatever this stack pushes over it — that is what
+                    // keeps its rows and scroll position for the pop back — but none of it is on
+                    // screen then. Its rows' animated cues (the running spinner, the breathing
+                    // terminal) are held back until it is the page showing again: same switch, and
+                    // same reasoning, as the drawer's own `live:` above. The pushed pages keep their
+                    // own cues — this is set on the list, not on the stack.
+                    .environment(\.liveRowCues, model.sectionAtRoot)
                     // New session is a page of its own (not a bottom sheet): it leads into the
                     // session rather than back to a list, so a push reads more naturally and flows
                     // straight into the console once the first message is sent. One destination per
@@ -349,6 +356,7 @@ private struct CompactSections: View {
                         switch node {
                         case .wikiEntry(let entryID): WikiEntryView(entryID: entryID)
                         case .wikiReview:             WikiReviewView()
+                        case .wikiActivity:           WikiActivityView()
                         case .wikiSettings:           WikiSettingsView()
                         case .wikiRun(let changesetID): WikiRunView(changesetID: changesetID)
                         case .wikiArticle(let topic, let part):
@@ -701,7 +709,10 @@ struct NavigationDrawer: View {
                     if section == .projects {
                         projectsRow
                     } else if section == .wiki {
-                        wikiRow
+                        // No row at all for an account the server has not switched the wiki on for
+                        // (WIKI_DISABLED), as the web sidebar draws none: a row that led to a refusal
+                        // would be worse than none.
+                        if model.wiki?.shown == true { wikiRow }
                     } else {
                         sectionRow(section)
                     }
@@ -725,8 +736,8 @@ struct NavigationDrawer: View {
             // The rail's first row counts the projects waiting on you, and its last rows are the
             // open projects: fetch them with the drawer rather than waiting for the section.
             .task { await model.projects?.load() }
-            // The Wiki row counts the proposals waiting for review — the spaces list, fetched with
-            // the drawer for the same reason.
+            // The Wiki row counts what waits on the owner across the spaces — the spaces list, fetched
+            // with the drawer for the same reason.
             .task { await model.wiki?.loadSpaces() }
             // The action bar *floats over* the rail (ChatGPT-style) rather than being docked below a
             // divider, so the list keeps the full drawer height and rows slide under the buttons. The
@@ -937,14 +948,15 @@ struct NavigationDrawer: View {
 
     // MARK: Wiki
 
-    /// The Wiki: what the work learned, after the work itself. The amber number is the proposals
-    /// waiting for review, summed over every space — the web sidebar's count, the home page banner's
-    /// and Review's — written the way the Projects row writes its own, and nothing at all at zero.
-    /// Opening the Wiki never clears it: only deciding a proposal does. Selected whenever the Wiki is
-    /// what is showing, since the drawer has no rows below it for the Wiki's pages.
+    /// The Wiki: what the work learned, after the work itself. The amber number is what waits on the
+    /// owner across every space — the proposals in Review and what each plan waits for (design
+    /// §12.3.3) — the web sidebar's count and the Wiki bar's Activity badge, written and said the way the
+    /// Projects row writes and says its own, and nothing at all at zero. Opening the Wiki never clears
+    /// it: only answering what waits does. Selected whenever the Wiki is what is showing, since the
+    /// drawer has no rows below it for the Wiki's pages.
     private var wikiRow: some View {
         let selected = model.drawerDestination == .section(.wiki)
-        let waiting = model.wiki?.proposalsToReview ?? 0
+        let waiting = model.wiki?.waiting ?? 0
         return Button {
             open(.section(.wiki))
         } label: {
@@ -961,7 +973,7 @@ struct NavigationDrawer: View {
                         Text("\(waiting)")
                             .font(.orbitMeta.weight(.semibold))
                             .foregroundStyle(.orange)
-                            .accessibilityLabel(WikiCopy.proposalsToReview(waiting))
+                            .accessibilityLabel(WikiCopy.waitingOnYou(waiting))
                     }
                 }
             }
