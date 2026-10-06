@@ -1,0 +1,33 @@
+{
+  "target": "orbit-field",
+  "sequence": "down-enter",
+  "mode": "burst",
+  "run": 14,
+  "keys": [
+    "ArrowDown",
+    "Enter"
+  ],
+  "before": "null",
+  "after": "null",
+  "expected": "never",
+  "listboxOpen": false,
+  "active": "combobox:Expires",
+  "keyLog": [
+    {
+      "key": "ArrowDown",
+      "t": 36.6,
+      "target": "combobox:Expires",
+      "trusted": true,
+      "listbox": false,
+      "highlighted": null
+    },
+    {
+      "key": "Enter",
+      "t": 52.5,
+      "target": "combobox:Expires",
+      "trusted": true,
+      "listbox": true,
+      "highlighted": "Never"
+    }
+  ]
+}
