@@ -1,3 +1,4 @@
+import AuthenticationServices
 import Foundation
 import Observation
 import OrbitKit
@@ -35,6 +36,14 @@ final class AppModel {
     var password = ""
     var errorText: String?
     var busy = false
+    /// Continue with Google is under way: its sheet is up, or its ticket is being traded.
+    var googleBusy = false
+    /// What the login page's server offers besides a password (`GET /auth/methods`,
+    /// docs/google-sign-in-design.md §6), read when the page appears and again when the server
+    /// changes. Password only until the server answers, and for a server that can't say.
+    private(set) var signInMethods = SignInMethods.passwordOnly
+    /// The server `signInMethods` was asked of.
+    @ObservationIgnored private var signInMethodsServer: URL?
 
     // data
     var user: User? {
@@ -746,6 +755,67 @@ final class AppModel {
         } catch {
             errorText = LoginFailure.message(for: error)
         }
+    }
+
+    /// Ask the login page's server how it signs people in (`signInMethods`). A server from before
+    /// Google sign-in answers 404, which reads as password only; so does one that can't be reached.
+    func loadSignInMethods() async {
+        guard let url = ServerURL.normalize(instanceField) else {
+            signInMethods = .passwordOnly
+            signInMethodsServer = nil
+            return
+        }
+        // Never another server's Google button, not even while this one is asked.
+        if url != signInMethodsServer { signInMethods = .passwordOnly }
+        signInMethodsServer = url
+        let methods = (try? await APIClient(baseURL: url, tokenStore: tokenStore).signInMethods()) ?? .passwordOnly
+        // The server changed while this one was asked: the answer isn't the page's any more.
+        guard ServerURL.normalize(instanceField) == url else { return }
+        signInMethods = methods
+    }
+
+    /// Continue with Google (docs/google-sign-in-design.md §8.2): the server's Google sign-in in the
+    /// system's web authentication sheet, then in the way `login` is — the session kept and read
+    /// back, the server remembered, the account read. Closing the sheet is not a failure.
+    func loginWithGoogle() async {
+        errorText = nil
+        guard let url = ServerURL.normalize(instanceField) else {
+            errorText = "Enter a valid instance URL"
+            return
+        }
+        guard let anchor = googleSignInAnchor else {
+            errorText = LoginFailure.googleUnavailable
+            return
+        }
+        configure(url)
+
+        googleBusy = true
+        defer { googleBusy = false }
+        let sheet = GoogleWebAuthentication(anchor: anchor)
+        do {
+            _ = try await GoogleSignIn.signIn(api: api!) { try await sheet.authenticate($0) }
+            UserDefaults.standard.set(instanceField, forKey: Self.instanceKey)
+            user = try? await api!.me()
+            password = ""
+            signedIn = true
+        } catch GoogleSignInError.cancelled {
+            // The sheet was closed: the page stays as it was.
+        } catch {
+            errorText = LoginFailure.googleMessage(for: error)
+        }
+    }
+
+    /// The window Continue with Google's sheet is presented over, which macOS has to be told: the
+    /// key window, whose button was just pressed.
+    private var googleSignInAnchor: ASPresentationAnchor? {
+        #if os(macOS)
+        NSApp.keyWindow ?? NSApp.mainWindow
+        #else
+        let scene = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive }
+        return scene?.windows.first(where: { $0.isKeyWindow }) ?? scene?.windows.first
+        #endif
     }
 
     func logout() {
