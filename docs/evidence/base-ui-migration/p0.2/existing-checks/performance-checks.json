@@ -1,0 +1,28 @@
+{
+  "command": "NO_COLOR=1 npm run test:ui-migration -w @orbit/web -- performance.browser.mjs --project=chromium-light-desktop",
+  "attempts": [
+    {
+      "log": "performance-test.log",
+      "exitCode": 1,
+      "reason": "Local webServer failed to start inside restricted sandbox."
+    },
+    {
+      "log": "performance-test-network.log",
+      "exitCode": 1,
+      "reason": "Initial harness incorrectly expected exact menuitem accessible name File; real icon contributes paper-clip prefix. Preserved partial measurements as performance-first-attempt.json and error context. Corrected locator to /File$/; visible menu assertion unchanged."
+    },
+    {
+      "log": "performance-test-verified.log",
+      "exitCode": 0,
+      "reason": "Verified all 15 fresh-context page loads and 30 input/menu actions with corrected accessible-name locator."
+    },
+    {
+      "log": "performance-test-painted-ready.log",
+      "exitCode": 0,
+      "reason": "Final baseline: menu-open additionally waits for every ancestor opacity 1 and visibility visible, so timing includes the real entrance transition. All 15 page loads and 30 input/menu actions passed."
+    }
+  ],
+  "artifact": "../performance.json",
+  "source": "../../../../../src/web/ui-migration/performance.browser.mjs",
+  "artifactSha256": "900d79b1362020401969ba3232fc7bcb11076c243b5a2656b68fae492623b52a"
+}

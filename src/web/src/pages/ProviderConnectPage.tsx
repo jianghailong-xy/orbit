@@ -13,7 +13,7 @@ import {
   type ProviderRow,
 } from '../lib/providerAdmin';
 import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
-import { runtimeSummary } from '../lib/sessionProviderChoices';
+import { providerDisplayLabel, runtimeSummary } from '../lib/sessionProviderChoices';
 import { useToast } from '../lib/toast';
 
 // A model row while it's being edited in the form. contextWindow is a free InputNumber (null when
@@ -163,8 +163,11 @@ function ProviderForm({
 
   const [advOpen, setAdvOpen] = useState(isCustom && !editing);
   const [label, setLabel] = useState(
-    editing?.label ??
-      (preset ? suggestProviderName(preset.label, siblings.map((s) => s.label)) : ''),
+    editing
+      ? editing.label
+      : preset
+        ? suggestProviderName(providerDisplayLabel(preset.label, preset.slug), siblings.map((s) => providerDisplayLabel(s.label, s.presetSlug)))
+        : '',
   );
   const [baseUrl, setBaseUrl] = useState(editing?.baseUrl ?? preset?.baseUrl ?? '');
   const [apiKey, setApiKey] = useState('');
@@ -188,7 +191,7 @@ function ProviderForm({
   // runtime back as it is, so every one of them has to survive the round trip.
   const [runtime, setRuntime] = useState<Runtime>(
     editing
-      ? editing.runtime === 'codex' || editing.runtime === 'kimi' || editing.runtime === 'antigravity'
+      ? editing.runtime === 'codex' || editing.runtime === 'kimi' || editing.runtime === 'antigravity' || editing.runtime === 'dsh'
         ? editing.runtime
         : 'claude'
       : (preset?.runtime ?? 'claude'),
@@ -340,12 +343,17 @@ function ProviderForm({
     saveMut.mutate();
   };
 
-  const title = editing ? `Edit ${editing.label}` : preset ? `Connect ${preset.label}` : 'Add a custom provider';
+  const title = editing
+    ? `Edit ${providerDisplayLabel(editing.label, editing.presetSlug)}`
+    : preset
+      ? `Connect ${providerDisplayLabel(preset.label, preset.slug)}`
+      : 'Add a custom provider';
   // The hero above the form: the row being edited, or the vendor being connected. A blank custom
   // provider has no identity yet, so it gets none.
   const identity = editing
     ? {
         ...editing,
+        label: providerDisplayLabel(editing.label, editing.presetSlug),
         // The logo follows the vendor, not the row's identifier — a second Anthropic key sits on
         // "anthropic-2" and is still Anthropic.
         slug: editing.presetSlug ?? editing.slug,
@@ -353,7 +361,7 @@ function ProviderForm({
         counted: 'configured',
       }
     : preset
-      ? { ...preset, runtime: preset.runtime ?? 'claude', count: presetModels.length, counted: 'included' }
+      ? { ...preset, label: providerDisplayLabel(preset.label, preset.slug), runtime: preset.runtime ?? 'claude', count: presetModels.length, counted: 'included' }
       : null;
 
   return (
@@ -371,7 +379,7 @@ function ProviderForm({
           <div style={{ minWidth: 0 }}>
             <div style={{ fontWeight: 600 }}>{identity.label}</div>
             <div style={{ color: 'var(--text-3)', fontSize: 12 }}>
-              {runtimeSummary(identity.runtime)} ·{' '}
+              {runtimeSummary(identity.runtime, identity.slug)} ·{' '}
               {/* Counting a shipped list would misstate what this offers — the runner's CLI
                   decides, and that list changes without us. */}
               {preset?.modelsFromRuntime
@@ -492,6 +500,15 @@ function ProviderForm({
             has no setting that turns them off.
           </div>
         )}
+        {/* What a Harness key does and doesn't prove at connect time (docs/deepseek-harness-
+            runtime-environment.md): nothing checks it until a session sends its first request. */}
+        {runtime === 'dsh' && (
+          <div className="ps-hint">
+            Sessions on DeepSeek Harness use this key — not the DeepSeek provider, which runs on Claude
+            Code. The key is checked by the first request a session sends; a rejected key shows in
+            that session with a link back here.
+          </div>
+        )}
       </Step>
 
       <div className="provider-adv" style={{ marginTop: 20 }}>
@@ -527,6 +544,8 @@ function ProviderForm({
                             ? `${preset.label}'s own API, which the Kimi CLI speaks natively.`
                             : preset.runtime === 'antigravity'
                               ? `${preset.label}'s own API, which the Antigravity CLI speaks natively.`
+                              : preset.runtime === 'dsh'
+                                ? `DeepSeek's Anthropic-compatible API, which DeepSeek Harness's API key adapter speaks.`
                               : `The endpoint ${preset.label} documents for Claude Code.`)}
                     </div>
                   </Field>
@@ -541,7 +560,7 @@ function ProviderForm({
                   preset!.modelsFromRuntime ? (
                     <div style={{ color: 'var(--text-3)', fontSize: 12 }}>
                       Provided by the{' '}
-                      {runtime === 'codex' ? 'Codex' : runtime === 'antigravity' ? 'Antigravity' : 'Claude Code'}{' '}
+                      {runtime === 'codex' ? 'Codex' : runtime === 'antigravity' ? 'Antigravity' : runtime === 'dsh' ? 'DeepSeek Harness' : 'Claude Code'}{' '}
                       CLI on each runner, refreshed automatically — new models appear without any
                       change here.
                     </div>

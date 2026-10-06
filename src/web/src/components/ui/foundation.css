@@ -1,0 +1,95 @@
+/* Orbit control foundations. The existing index.css palette remains authoritative
+   for surfaces/text/borders. These additional roles come from P0.2 computed styles,
+   including darkAlgorithm output (not the brand seed). See this directory's README.
+   Variables only: no second reset, global control styles, or new stacking context. */
+:root {
+  --orbit-font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --orbit-font-size: 14px;
+  --orbit-line-height: 22px;
+  --orbit-control-height: 32px;
+  --orbit-control-height-sm: 24px;
+  --orbit-control-height-lg: 40px;
+  --orbit-radius: 6px;
+  --orbit-radius-sm: 4px;
+  --orbit-radius-popup: 8px;
+  --orbit-radius-dialog: 10px;
+  --orbit-control-padding-inline: 15px;
+  --orbit-control-padding-inline-sm: 7px;
+  --orbit-control-gap: 8px;
+  --orbit-control-primary: #3370ff;
+  --orbit-control-primary-hover: #5c92ff;
+  --orbit-control-primary-active: #2152d9;
+  --orbit-control-link-hover: #85b1ff;
+  --orbit-control-active-bg: rgba(0, 0, 0, 0.15);
+  --orbit-control-error: #f54a45;
+  --orbit-control-error-hover: #ff7a70;
+  --orbit-control-error-active: #cf3030;
+  --orbit-control-error-bg: #fff3f0;
+  --orbit-control-error-bg-active: #ffcac2;
+  --orbit-control-error-outline: rgba(255, 55, 5, 0.06);
+  --orbit-input-error-hover: #ffa399;
+  --orbit-input-focus-shadow: 0 0 0 2px rgba(5, 122, 255, 0.06);
+  --orbit-input-invalid-shadow: 0 0 0 2px var(--orbit-control-error-outline);
+  --orbit-badge-default-bg: #f5f5f5;
+  --orbit-badge-info-bg: #f0f7ff;
+  --orbit-badge-success: #2ea121;
+  --orbit-badge-success-bg: #d7e0d3;
+  --orbit-badge-warning: #ff8800;
+  --orbit-badge-warning-bg: #fff7e6;
+  --orbit-badge-blue: #0958d9;
+  --orbit-badge-blue-bg: #e6f4ff;
+  --orbit-control-on-primary: #ffffff;
+  --orbit-control-hover-bg: rgba(0, 0, 0, 0.04);
+  --orbit-control-disabled-text: rgba(0, 0, 0, 0.25);
+  --orbit-control-disabled-bg: rgba(0, 0, 0, 0.04);
+  --orbit-control-disabled-border: #d9d9d9;
+  --orbit-focus-color: #adceff;
+  --orbit-focus-width: 3px;
+  --orbit-focus-offset: 1px;
+  --orbit-bg-elevated: #ffffff;
+  --orbit-border-split: rgba(17, 42, 80, 0.08);
+  --orbit-shadow-popup: 0 6px 16px 0 rgba(0, 0, 0, 0.08),
+    0 3px 6px -4px rgba(0, 0, 0, 0.12), 0 9px 28px 8px rgba(0, 0, 0, 0.05);
+  --orbit-shadow-drawer-right: -6px 0 16px 0 rgba(0, 0, 0, 0.08),
+    -3px 0 6px -4px rgba(0, 0, 0, 0.12), -9px 0 28px 8px rgba(0, 0, 0, 0.05);
+  --orbit-shadow-drawer-bottom: 0 -6px 16px 0 rgba(0, 0, 0, 0.08),
+    0 -3px 6px -4px rgba(0, 0, 0, 0.12), 0 -9px 28px 8px rgba(0, 0, 0, 0.05);
+}
+
+:root[data-theme='dark'] {
+  --orbit-control-primary: #2e62dc;
+  --orbit-control-primary-hover: #5585e8;
+  --orbit-control-primary-active: #2850ad;
+  --orbit-control-link-hover: #223d7e;
+  --orbit-control-active-bg: rgba(255, 255, 255, 0.18);
+  --orbit-control-error: #cf726c;
+  --orbit-control-error-hover: #e5a19a;
+  --orbit-control-error-active: #a35c57;
+  --orbit-control-error-bg: #291b1b;
+  --orbit-control-error-bg-active: #563533;
+  --orbit-control-error-outline: rgba(38, 4, 0, 0.41);
+  --orbit-input-error-hover: #774642;
+  --orbit-input-focus-shadow: 0 0 0 2px rgba(1, 58, 182, 0.33);
+  --orbit-badge-default-bg: #3c3c3f;
+  --orbit-badge-info-bg: #14192c;
+  --orbit-badge-success: #399c50;
+  --orbit-badge-success-bg: #152119;
+  --orbit-badge-warning: #c18d35;
+  --orbit-badge-warning-bg: #271f15;
+  --orbit-badge-blue: #3c89e8;
+  --orbit-badge-blue-bg: #111a2c;
+  --orbit-control-hover-bg: rgba(255, 255, 255, 0.08);
+  --orbit-control-disabled-text: rgba(255, 255, 255, 0.25);
+  --orbit-control-disabled-bg: rgba(255, 255, 255, 0.08);
+  --orbit-control-disabled-border: #5b5b6c;
+  --orbit-focus-color: #1d305b;
+  --orbit-bg-elevated: #343437;
+  --orbit-border-split: rgba(223, 223, 226, 0.05);
+  --orbit-shadow-popup: 0 6px 16px 0 rgba(255, 255, 255, 0.016),
+    0 3px 6px -4px rgba(255, 255, 255, 0.024), 0 9px 28px 8px rgba(255, 255, 255, 0.01);
+  --orbit-shadow-drawer-right: -6px 0 16px 0 rgba(255, 255, 255, 0.016),
+    -3px 0 6px -4px rgba(255, 255, 255, 0.024), -9px 0 28px 8px rgba(255, 255, 255, 0.01);
+  --orbit-shadow-drawer-bottom: 0 -6px 16px 0 rgba(255, 255, 255, 0.016),
+    0 -3px 6px -4px rgba(255, 255, 255, 0.024), 0 -9px 28px 8px rgba(255, 255, 255, 0.01);
+}

@@ -145,6 +145,7 @@ describe('connecting a Gemini key', { timeout: 30_000 }, () => {
 
   it('says it runs on Antigravity, what agy does with the key, and nothing about not running', async () => {
     await mount('/providers/new/gemini');
+    expect(container.querySelector('h1')?.textContent).toBe('Connect Antigravity');
     expect(text()).toContain('Runs on the Antigravity CLI');
     expect(text()).toContain('models from the runtime CLI');
     expect(text()).toContain('commands the agent runs can read it');
@@ -171,7 +172,7 @@ describe('connecting a Gemini key', { timeout: 30_000 }, () => {
     expect(sent[1].path).toBe(PROVIDERS_BASE);
     // The list is agy's, read off the runner: nothing of it is sent to be parked on the row.
     expect(sent[1].body).toEqual({
-      label: 'Gemini',
+      label: 'Antigravity',
       runtime: 'antigravity',
       baseUrl: 'https://generativelanguage.googleapis.com',
       apiKey: 'AIza-test',
@@ -181,7 +182,7 @@ describe('connecting a Gemini key', { timeout: 30_000 }, () => {
     });
   });
 
-  it('keeps an edited row on agy', async () => {
+  it('keeps an edited row on agy and preserves its stored name unless renamed', async () => {
     rows = [geminiRow];
     await mount('/providers/p-gemini');
     // No new key, so nothing to probe: Save writes straight away.
@@ -191,5 +192,6 @@ describe('connecting a Gemini key', { timeout: 30_000 }, () => {
     expect(sent[0].method).toBe('PATCH');
     expect(sent[0].path).toBe(`${PROVIDERS_BASE}/p-gemini`);
     expect((sent[0].body as { runtime?: string }).runtime).toBe('antigravity');
+    expect((sent[0].body as { label?: string }).label).toBe('Gemini');
   });
 });

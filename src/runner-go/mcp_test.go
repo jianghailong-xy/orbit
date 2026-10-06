@@ -1,14 +1,19 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
 func TestMCPPermissionPromptToolCanBeDisabled(t *testing.T) {
@@ -1139,5 +1144,223 @@ func TestMCPSessionSendAndInterruptPutTheSameRequestOnTheWire(t *testing.T) {
 	}
 	if !reflect.DeepEqual(calls, want) {
 		t.Fatalf("requests =\n%#v\nwant\n%#v", calls, want)
+	}
+}
+
+// ownerWaitDouble is a control plane whose create cards stay PENDING until the test answers them.
+type ownerWaitDouble struct {
+	mu       sync.Mutex
+	cards    []map[string]interface{}
+	status   map[string]string
+	created  []http.Header
+	requests []string
+	srv      *httptest.Server
+}
+
+func newOwnerWaitDouble(t *testing.T) *ownerWaitDouble {
+	d := &ownerWaitDouble{status: map[string]string{}}
+	d.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]interface{}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		d.mu.Lock()
+		defer d.mu.Unlock()
+		d.requests = append(d.requests, r.Method+" "+r.URL.Path)
+		switch {
+		case r.Method == "POST" && strings.HasSuffix(r.URL.Path, "/approvals"):
+			id := fmt.Sprintf("card-%d", len(d.cards)+1)
+			d.cards = append(d.cards, body)
+			d.status[id] = "PENDING"
+			_, _ = fmt.Fprintf(w, `{"id":%q,"status":"PENDING"}`, id)
+		case strings.Contains(r.URL.Path, "/approvals/"):
+			_, _ = fmt.Fprintf(w, `{"status":%q}`, d.status[r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]])
+		case r.Method == "POST" && r.URL.Path == "/api/runner/tasks":
+			d.created = append(d.created, r.Header.Clone())
+			_, _ = w.Write([]byte(`{"id":"handed-off-task"}`))
+		default:
+			http.Error(w, "unexpected", http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(d.srv.Close)
+	return d
+}
+
+func (d *ownerWaitDouble) snapshot() (cards []map[string]interface{}, created []http.Header, requests []string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return append(cards, d.cards...), append(created, d.created...), append(requests, d.requests...)
+}
+
+func (d *ownerWaitDouble) decide(id, status string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.status[id] = status
+}
+
+var ownerWaitTaskArgs = map[string]interface{}{"title": "handed off", "completionCriterion": "EVIDENCE_JUDGMENT"}
+
+func resultText(res map[string]interface{}) string {
+	return res["content"].([]map[string]interface{})[0]["text"].(string)
+}
+
+// Under an engine that ends tool calls on its own deadline, a create that waits for the owner returns
+// at once and hands the wait to a runner-hosted job: the job files the card (naming itself, so the card
+// outlives the turn), writes only on a confirmation, and wakes the session with the call's own result.
+func TestMCPOwnerWaitIsHandedOffUnderAnEngineDeadline(t *testing.T) {
+	d := newOwnerWaitDouble(t)
+	// The job runs this test binary as `orbit mcp`, which reaches the double through ORBIT_HOME.
+	home, err := os.MkdirTemp("", "mcpho")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(home) })
+	config, _ := json.Marshal(RunnerConfig{ServerURL: d.srv.URL, RunnerID: "r", RunnerToken: "tok"})
+	if err := os.WriteFile(filepath.Join(home, "config.json"), config, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ORBIT_HOME", home)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var wakesMu sync.Mutex
+	wakes := map[string]bgWake{}
+	bg := newBgTailer(ctx, func(string, map[string]interface{}) {}, nil)
+	bg.wakeSessionVia(func(w bgWake) error { wakesMu.Lock(); wakes[w.JobID] = w; wakesMu.Unlock(); return nil })
+	defer bg.stopAll()
+	svc := &bgJobService{bg: bg, token: "ho-token", execDir: home, scratchDir: home, sessionID: "sess-ho"}
+	socket := filepath.Join(home, "bg.sock")
+	stop, err := startBgJobService(ctx, svc, socket, filepath.Join(home, "bg.token"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	t.Setenv(envBgSocket, socket)
+	t.Setenv(envBgToken, "ho-token")
+	s := &mcpServer{t: NewTransport(d.srv.URL, "tok"), sessionID: "sess-ho", agentID: "agent-ho", taskID: "task-ho", callTimeout: time.Minute}
+
+	for i, decision := range []string{"ALLOWED", "DENIED"} {
+		started := time.Now()
+		res := s.callTool("task_create", ownerWaitTaskArgs)
+		text := resultText(res)
+		jobID := handedOffJobID(text)
+		if res["isError"] == true || !strings.Contains(text, "Not done yet") || jobID == "" || time.Since(started) > 5*time.Second {
+			t.Fatalf("the call did not return at once with its job: %s", text)
+		}
+		var cards []map[string]interface{}
+		awaitCondition(t, 30*time.Second, "the job never filed the card", func() bool {
+			cards, _, _ = d.snapshot()
+			return len(cards) == i+1
+		})
+		if cards[i]["toolName"] != taskCreateApprovalToolName || cards[i]["backgroundJobId"] != jobID {
+			t.Fatalf("card = %+v", cards[i])
+		}
+		time.Sleep(300 * time.Millisecond)
+		if _, created, _ := d.snapshot(); len(created) != i {
+			t.Fatal("a task was written before the owner answered")
+		}
+		d.decide(fmt.Sprintf("card-%d", i+1), decision)
+		var wake bgWake
+		awaitCondition(t, 30*time.Second, "the job never woke the session", func() bool {
+			wakesMu.Lock()
+			defer wakesMu.Unlock()
+			wake = wakes[jobID]
+			return wake.JobID != ""
+		})
+		_, created, _ := d.snapshot()
+		switch decision {
+		case "ALLOWED":
+			if len(created) != 1 || created[0].Get("X-Orbit-Agent-Id") != "agent-ho" || created[0].Get("X-Orbit-Session-Id") != "sess-ho" ||
+				!strings.Contains(wake.OutputExcerpt, "handed-off-task") {
+				t.Fatalf("confirmed: created=%v wake=%q", created, wake.OutputExcerpt)
+			}
+		case "DENIED":
+			if len(created) != 1 || !strings.Contains(wake.OutputExcerpt, "the human rejected this task") {
+				t.Fatalf("declined: created=%d wake=%q", len(created), wake.OutputExcerpt)
+			}
+		}
+	}
+	if leftovers, _ := filepath.Glob(filepath.Join(os.TempDir(), "orbit-mcp-handoff-*.json")); len(leftovers) != 0 {
+		t.Fatalf("request files left behind: %v", leftovers)
+	}
+}
+
+// With nowhere to hand the wait to, the call is refused before anything is filed: a refusal the model
+// sees, and nothing the owner could still confirm into a write.
+func TestMCPOwnerWaitIsRefusedWithoutAJobService(t *testing.T) {
+	d := newOwnerWaitDouble(t)
+	t.Setenv(envBgSocket, "")
+	t.Setenv(envBgToken, "")
+	s := &mcpServer{t: NewTransport(d.srv.URL, "tok"), sessionID: "sess-ho", agentID: "agent-ho", callTimeout: time.Minute}
+	for _, name := range []string{"task_create", "task_create_batch", "project_create", "project_blocker_resolve",
+		"tasklist_propose_dag", "provider_create", "provider_update", "provider_delete"} {
+		res := s.callTool(name, map[string]interface{}{"title": "x", "tasks": []interface{}{ownerWaitTaskArgs}})
+		if text := resultText(res); res["isError"] != true || !strings.Contains(text, "nothing was filed or written") {
+			t.Fatalf("%s: %s", name, text)
+		}
+	}
+	if _, _, requests := d.snapshot(); len(requests) != 0 {
+		t.Fatalf("a refused call reached the control plane: %v", requests)
+	}
+}
+
+// Every other runtime starts `orbit mcp` without a deadline, and a create there still asks and waits
+// inside the call, exactly as before: the card is filed by this process and the write follows the yes.
+func TestMCPOwnerWaitBlocksInTheCallWithoutAnEngineDeadline(t *testing.T) {
+	t.Setenv(envMCPCallTimeout, "")
+	if got := mcpCallTimeoutFromEnv(); got != 0 {
+		t.Fatalf("no deadline set, read %s", got)
+	}
+	d := newOwnerWaitDouble(t)
+	s := &mcpServer{t: NewTransport(d.srv.URL, "tok"), sessionID: "sess-ho", agentID: "agent-ho"}
+	done := make(chan map[string]interface{})
+	go func() { done <- s.callTool("task_create", ownerWaitTaskArgs) }()
+	awaitCondition(t, 10*time.Second, "no card was filed", func() bool { cards, _, _ := d.snapshot(); return len(cards) == 1 })
+	select {
+	case res := <-done:
+		t.Fatalf("the call returned before the owner answered: %v", res)
+	case <-time.After(500 * time.Millisecond):
+	}
+	if cards, _, _ := d.snapshot(); cards[0]["backgroundJobId"] != nil {
+		t.Fatalf("the card was filed by a job: %+v", cards[0])
+	}
+	d.decide("card-1", "ALLOWED")
+	res := <-done
+	if _, created, _ := d.snapshot(); res["isError"] == true || len(created) != 1 || !strings.Contains(resultText(res), "handed-off-task") {
+		t.Fatalf("result = %v, created = %d", res, len(created))
+	}
+	// A dry-run batch asks nobody, and is not handed off even under a deadline.
+	if waitsForTheOwner("task_create_batch", map[string]interface{}{"dryRun": true}) {
+		t.Fatal("a dry run was treated as waiting for the owner")
+	}
+}
+
+// The inline waits a call may hold — session_create's wait, session_merge's waitSeconds — end within half
+// the engine's deadline, and are untouched without one.
+func TestMCPInlineWaitsEndBeforeAnEngineDeadline(t *testing.T) {
+	t.Setenv(envMCPCallTimeout, "")
+	if got := sessionWaitPolls(0); got != maxSessionWaitPolls {
+		t.Fatalf("without a deadline polls = %d", got)
+	}
+	t.Setenv(envMCPCallTimeout, "60")
+	if got := time.Duration(sessionWaitPolls(0)) * sessionWaitInterval; got > 30*time.Second || got <= 0 {
+		t.Fatalf("under a 60s deadline the session wait is %s", got)
+	}
+	var mu sync.Mutex
+	var waits []interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]interface{}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		mu.Lock()
+		waits = append(waits, body["waitSeconds"])
+		mu.Unlock()
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	for _, timeout := range []time.Duration{0, time.Minute} {
+		s := &mcpServer{t: NewTransport(srv.URL, "tok"), sessionID: "sess-ho", allowOrchestration: true, callTimeout: timeout}
+		if res := s.callTool("session_merge", map[string]interface{}{"sessionId": "child", "waitSeconds": float64(120)}); res["isError"] == true {
+			t.Fatalf("merge: %v", res)
+		}
+	}
+	if fmt.Sprint(waits) != "[120 30]" {
+		t.Fatalf("waitSeconds sent = %v, want 120 without a deadline and 30 under 60s", waits)
 	}
 }

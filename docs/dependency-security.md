@@ -45,6 +45,7 @@ The root Node.js requirement is therefore 20.19 or newer.
 | Override | Reason | Removal condition |
 | --- | --- | --- |
 | `deepmerge-ts` pinned to `^8.0.2` | Prisma 7.9.1's CLI pins `@prisma/config` to `deepmerge-ts` 7.1.5, which carries [GHSA-ggr8-5vv4-36mx](https://github.com/advisories/GHSA-ggr8-5vv4-36mx) (high; stack exhaustion when merging recursive object graphs). The package reaches the production tree through `@prisma/client`'s optional `prisma` peer, so it is not a dev-only finding. `@prisma/config` uses only `deepmerge` as c12's config merger, and 8.x keeps that export with the same semantics for plain objects. | Drop the `overrides` entry once a Prisma release depends on `deepmerge-ts` 8 or later. |
+| `@deepseek-ai/libreoffice-kit` → `fflate` pinned to `0.8.3` in `scripts/deepseek-harness-p0/package.json` | The P0 harness's `@deepseek-ai/libreoffice-kit` 0.1.5 pins vulnerable `fflate` 0.8.2 exactly; the scoped override fixes [GHSA-px8p-9vwx-vf98](https://github.com/advisories/GHSA-px8p-9vwx-vf98) while retaining the recorded DSH release. | Remove when the harness adopts an upstream `libreoffice-kit` release whose dependency resolves to patched `fflate` without the override, or when the P0 harness is retired. |
 
 ## Multer aborted-upload cleanup (2026-09-30)
 
@@ -56,6 +57,51 @@ specific disk-storage race is not reachable with the current configuration. The 
 upgrades Multer from 2.3.0 to the patched 2.4.0 and removes its unused `concat-stream` dependency tree.
 The old `multer` override (`^2.3.0`) is removed because `@nestjs/platform-express` 12.1.0 already pins
 Multer to 2.4.0; the upstream dependency now meets the override's removal condition.
+
+## braces in the documentation linter (2026-10-03)
+
+[GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) (high; stack exhaustion through deeply
+nested brace patterns) was widened on 2026-10-02 to every `braces` release through 3.0.3, with no patched version,
+and `npm audit --audit-level=high` began failing the JavaScript job. The only path to `braces` was the
+development-only documentation linter: `markdownlint-cli2` 0.23.3 → `globby` → `fast-glob` → `micromatch` →
+`braces`. Every package in that chain was already its latest release and still depended on the next one, so no
+upgrade or override could clear the advisory, and the fix npm offers downgrades `markdownlint-cli2` to 0.0.4.
+`braces` only expanded the fixed list of tracked public Markdown paths that `npm run docs:check` passes to the
+linter; it was not part of the production dependency tree.
+
+`scripts/check-docs.mjs` now calls the `markdownlint` 0.41.1 library, the engine that `markdownlint-cli2` 0.23.3
+pinned, with the `config` object from `.markdownlint-cli2.jsonc`, the same file list, and the CLI's issue format.
+`markdownlint-cli2` and the 31 lockfile entries that only it used are removed and nothing is added, so no override
+or audit exception is needed and the audit still gates development dependencies. On the documentation tree and
+on a copy with deliberate errors in four files, the old and new checkers linted the same 32 files and printed
+identical issue lines. The direct call drops the CLI features that were not in use: globs, per-directory
+configuration files, other `.markdownlint-cli2.jsonc` options or comments in that file, YAML or JSONC
+`markdownlint-configure-file` comments, and `--fix`.
+
+Removal condition: keep the direct call while GHSA-vfj7-8cjw-p6xm has no patched `braces`. Return to
+`markdownlint-cli2` only when one of those CLI features is needed and its release no longer resolves an affected
+`braces`.
+
+## fflate in the DeepSeek P0 harness (2026-10-04)
+
+[GHSA-px8p-9vwx-vf98](https://github.com/advisories/GHSA-px8p-9vwx-vf98) (CVE-2026-45820, moderate) affects
+`fflate` 0.8.0 through 0.8.2: `unzipSync()` can loop indefinitely on a malformed ZIP64 archive. The independent
+`scripts/deepseek-harness-p0/package-lock.json` contained 0.8.2 under `@deepseek-ai/libreoffice-kit` 0.1.5,
+alongside an already-patched top-level 0.8.3. Root workspace audits do not cover this separate lockfile.
+
+The affected dependency belongs to the local ACP contract experiment, outside Orbit's production workspaces.
+Its office library processes ZIP-based documents; the ACP experiment does not exercise office conversion.
+The upstream library's latest release still pins 0.8.2 exactly, so a harness-local scoped override upgrades
+only that nested copy to 0.8.3. The lockfile's version, registry URL, and integrity are updated manually;
+the fixed `@deepseek-ai/dsh` 0.2.0-rc.2 release and all other resolved packages stay the same.
+The override's removal condition is listed above. Previously committed protocol recordings retain their
+original lockfile hashes as historical evidence; fresh reproductions use the patched lockfile.
+
+Audit this independent dependency tree separately:
+
+```sh
+npm audit --prefix scripts/deepseek-harness-p0 --package-lock-only
+```
 
 ## Verification
 

@@ -80,15 +80,19 @@ public struct RunnerModelCatalog: Codable, Equatable, Sendable {
     /// them into one row per base model (`gemini-3.8-flash`) with its levels as `reasoningLevels`,
     /// and a session passes the two back as `--model` and `--effort`.
     public let antigravity: [RunnerModelInfo]?
+    /// DeepSeek Harness's ACP `configOptions`: opaque model values (`value` is never reparsed) with
+    /// their `reasoning_effort` levels, and no context window (P0 contract §4).
+    public let dsh: [RunnerModelInfo]?
 
     public init(claude: [RunnerModelInfo]? = nil, codex: [RunnerModelInfo]? = nil,
                 kimi: [RunnerModelInfo]? = nil, opencode: [RunnerModelInfo]? = nil,
-                antigravity: [RunnerModelInfo]? = nil) {
+                antigravity: [RunnerModelInfo]? = nil, dsh: [RunnerModelInfo]? = nil) {
         self.claude = claude
         self.codex = codex
         self.kimi = kimi
         self.opencode = opencode
         self.antigravity = antigravity
+        self.dsh = dsh
     }
 
     public func models(for provider: String) -> [ModelOption]? {
@@ -98,6 +102,7 @@ public struct RunnerModelCatalog: Codable, Equatable, Sendable {
         case "kimi":     rows = kimi
         case "opencode": rows = opencode
         case "antigravity": rows = antigravity
+        case "dsh":      rows = dsh
         default:         rows = claude
         }
         guard let rows, !rows.isEmpty else { return nil }
@@ -107,7 +112,7 @@ public struct RunnerModelCatalog: Codable, Equatable, Sendable {
     public func contextWindow(for id: String) -> Int? {
         // A list rather than one `(rows ?? []) + …` chain: at five runtimes that expression is past
         // what the Swift type-checker resolves in reasonable time, and it fails the build outright.
-        let runtimes: [[RunnerModelInfo]?] = [claude, codex, kimi, opencode, antigravity]
+        let runtimes: [[RunnerModelInfo]?] = [claude, codex, kimi, opencode, antigravity, dsh]
         let all = runtimes.flatMap { $0 ?? [] }
         return all.first { $0.value == id }?.contextWindow
     }
@@ -122,6 +127,7 @@ public struct RunnerModelCatalog: Codable, Equatable, Sendable {
         case "kimi": rows = kimi
         case "opencode": rows = opencode
         case "antigravity": rows = antigravity
+        case "dsh": rows = dsh
         default: rows = claude
         }
         return rows?.first { $0.value == model }
@@ -185,6 +191,33 @@ public struct RotateTokenResponse: Codable, Equatable, Sendable {
     public let token: String
 }
 
+public enum AntigravityGoogleLogin: String, Codable, Equatable, Sendable {
+    case available
+    case needsUpdate = "needs_update"
+    case unsupportedPlatform = "unsupported_platform"
+}
+
+/// Server-resolved Antigravity support, CLI readiness, and credential availability.
+public struct RunnerAntigravityState: Codable, Equatable, Sendable {
+    public let supported: Bool
+    public let installed: Bool?
+    public let version: String?
+    public let envKeyAvailable: Bool
+    public let authSource: String?
+    public let googleLogin: AntigravityGoogleLogin?
+
+    public init(supported: Bool, installed: Bool? = nil, version: String? = nil,
+                envKeyAvailable: Bool = false, authSource: String? = nil,
+                googleLogin: AntigravityGoogleLogin? = nil) {
+        self.supported = supported
+        self.installed = installed
+        self.version = version
+        self.envKeyAvailable = envKeyAvailable
+        self.authSource = authSource
+        self.googleLogin = googleLogin
+    }
+}
+
 /// One coding-engine CLI's health on a runner, reported each heartbeat (shared `RunnerEngineHealth`).
 /// `engine` stays a raw string rather than `LoginEngine`: a server that starts reporting a fourth
 /// engine must not fail the decode of the whole runner row and blank the list.
@@ -199,19 +232,54 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
     /// whose CLI keeps a login per directory (Codex, Claude). Absent from an older runner.
     public let accounts: [RunnerEngineAccount]?
     public let update: RunnerEngineUpdate?
+    public let authSource: String?
+    public let planUsage: PlanUsageSnapshot?
+    /// Fixed-version/platform admission failure (`DSH_PLATFORM_UNSUPPORTED: …`), independent of
+    /// whether a binary is present. Only DeepSeek Harness reports one today.
+    public let installationError: String?
+    /// DeepSeek Harness only: what the runner's probe established, kept apart from a key's validity.
+    public let dsh: DshRuntimeHealth?
     public var id: String { engine }
     /// Only the CLI's own "yes" counts — the third state exists precisely so an engine that
     /// wouldn't answer is never shown as signed in (web's `rowKindOf`).
     public var signedIn: Bool { auth == "yes" }
 
     public init(engine: String, installed: Bool? = nil, version: String? = nil, auth: String? = nil,
-                accounts: [RunnerEngineAccount]? = nil, update: RunnerEngineUpdate? = nil) {
+                accounts: [RunnerEngineAccount]? = nil, update: RunnerEngineUpdate? = nil,
+                authSource: String? = nil, planUsage: PlanUsageSnapshot? = nil,
+                installationError: String? = nil, dsh: DshRuntimeHealth? = nil) {
         self.engine = engine
+        self.installationError = installationError
+        self.dsh = dsh
         self.installed = installed
         self.version = version
         self.auth = auth
         self.accounts = accounts
         self.update = update
+        self.authSource = authSource
+        self.planUsage = planUsage
+    }
+}
+
+/// DeepSeek Harness's half of an engine report (shared `DshRuntimeHealth`). The machine probe has no
+/// session key, so it never says whether a key works: `requestValidation` stays `unknown` there.
+public struct DshRuntimeHealth: Codable, Equatable, Sendable {
+    public let versionCompatible: Bool
+    public let credentialPresent: Bool?
+    public let modelCatalogReadable: Bool?
+    public let requestValidation: String?
+    public let sandboxEnforcement: String?
+    /// A fixed `DSH_*` code, never upstream text.
+    public let diagnostic: String?
+
+    public init(versionCompatible: Bool, credentialPresent: Bool? = nil, modelCatalogReadable: Bool? = nil,
+                requestValidation: String? = nil, sandboxEnforcement: String? = nil, diagnostic: String? = nil) {
+        self.versionCompatible = versionCompatible
+        self.credentialPresent = credentialPresent
+        self.modelCatalogReadable = modelCatalogReadable
+        self.requestValidation = requestValidation
+        self.sandboxEnforcement = sandboxEnforcement
+        self.diagnostic = diagnostic
     }
 }
 
@@ -233,16 +301,19 @@ public struct RunnerEngineAccount: Codable, Equatable, Sendable, Identifiable {
     /// `cxa1_` and the first 8 hex digits of the account's fingerprint; absent until the runner has
     /// read one. Two accounts showing the same one are the same account.
     public let fingerprintPrefix: String?
+    /// Temporarily skipped until this time, without changing authentication or quota.
+    public let pausedUntil: String?
 
     public init(id: String, name: String? = nil, auth: String? = nil,
                 home: String? = nil, codexHome: String? = nil,
-                fingerprintPrefix: String? = nil) {
+                fingerprintPrefix: String? = nil, pausedUntil: String? = nil) {
         self.id = id
         self.name = name
         self.auth = auth
         self.home = home
         self.codexHome = codexHome
         self.fingerprintPrefix = fingerprintPrefix
+        self.pausedUntil = pausedUntil
     }
 }
 
@@ -277,6 +348,8 @@ public struct RunnerInstallState: Codable, Equatable, Sendable {
     public let command: String?
     public let message: String?
     public let mode: String?
+    /// One runner has one install relay; another engine's active install occupies it too.
+    public var inFlight: Bool { status == "pending" || status == "installing" }
 }
 
 /// Browser-facing account-removal relay. Raw engine/status strings preserve forward compatibility.
@@ -532,6 +605,21 @@ public struct PlanUsageRateLimitReset: Codable, Equatable, Sendable {
     public var isSupported: Bool { support == "SUPPORTED" }
 }
 
+/// Antigravity's remaining quota for one weekly or 5-hour bucket.
+public struct PlanUsageBucket: Codable, Equatable, Sendable {
+    public let id: String
+    public let window: String
+    public let remainingFraction: Double
+    public let resetTime: String?
+
+    public init(id: String, window: String, remainingFraction: Double, resetTime: String? = nil) {
+        self.id = id
+        self.window = window
+        self.remainingFraction = remainingFraction
+        self.resetTime = resetTime
+    }
+}
+
 /// One provider's usage snapshot. Claude fills fiveHour/sevenDay; Codex fills primary/secondary.
 public struct PlanUsageSnapshot: Codable, Equatable, Sendable {
     public let provider: String?
@@ -553,6 +641,7 @@ public struct PlanUsageSnapshot: Codable, Equatable, Sendable {
     /// The runner's other accounts of this engine, by account id, each as its own windows: this
     /// snapshot's windows are Default's (web `codexAccountSnapshot`).
     public var accounts: [String: PlanUsageSnapshot]? = nil
+    public let buckets: [PlanUsageBucket]?
 
     public init(provider: String? = nil, fiveHour: PlanUsageWindow? = nil,
                 sevenDay: PlanUsageWindow? = nil, sevenDayOpus: PlanUsageWindow? = nil,
@@ -562,7 +651,8 @@ public struct PlanUsageSnapshot: Codable, Equatable, Sendable {
                 rateLimitReachedType: String? = nil, credits: PlanUsageCredits? = nil,
                 rateLimits: [PlanUsageRateLimit]? = nil,
                 rateLimitReset: PlanUsageRateLimitReset? = nil,
-                fetchedAt: String? = nil, accounts: [String: PlanUsageSnapshot]? = nil) {
+                fetchedAt: String? = nil, accounts: [String: PlanUsageSnapshot]? = nil,
+                buckets: [PlanUsageBucket]? = nil) {
         self.provider = provider
         self.fiveHour = fiveHour
         self.sevenDay = sevenDay
@@ -579,6 +669,7 @@ public struct PlanUsageSnapshot: Codable, Equatable, Sendable {
         self.rateLimitReset = rateLimitReset
         self.fetchedAt = fetchedAt
         self.accounts = accounts
+        self.buckets = buckets
     }
 }
 
@@ -643,10 +734,11 @@ public struct PlanUsageRow: Equatable, Sendable, Identifiable {
     public let label: String
     public let groupLabel: String?
     public let window: PlanUsageWindow
+    public var remaining: Bool = false
     public var id: String { key }
-    /// Orbit displays percent consumed for every provider.
+    /// Antigravity reports remaining quota; other providers report consumed quota.
     public var percent: Int {
-        min(100, max(0, Int(window.utilization.rounded())))
+        min(100, max(0, Int((remaining ? 100 - window.utilization : window.utilization).rounded())))
     }
     /// At or past 90% used, judged on the reading rather than its rounding: 89.6 shows as 90% and
     /// is not near the limit (web's `PlanUsageDisplayRow.nearLimit`).
@@ -672,6 +764,14 @@ private func codexWindowLabel(_ window: PlanUsageWindow, secondary: Bool) -> Str
 public extension PlanUsageSnapshot {
     /// Present windows in provider order, preserving every Codex TUI rate-limit bucket.
     var rows: [PlanUsageRow] {
+        if provider == "antigravity" {
+            return (buckets ?? []).map { bucket in
+                let label = bucket.window == "weekly" ? "Weekly" : bucket.window == "5h" ? "5-hour" : bucket.window
+                return PlanUsageRow(key: bucket.id, label: label, groupLabel: bucket.id,
+                                    window: PlanUsageWindow(utilization: (1 - bucket.remainingFraction) * 100,
+                                                            resetsAt: bucket.resetTime), remaining: true)
+            }
+        }
         let codex = provider == "codex" || primary != nil || secondary != nil || rateLimits?.isEmpty == false
         if codex {
             let buckets = (rateLimits?.isEmpty == false
@@ -714,6 +814,7 @@ public extension PlanUsageSnapshot {
     /// outlives it only on a reading that has stopped refreshing.
     func currentRows(at now: Date = Date()) -> [PlanUsageRow] {
         rows.map { row in
+            if row.remaining { return row }
             guard let resets = planUsageResetDate(row.window), resets <= now else { return row }
             return PlanUsageRow(key: row.key, label: row.label, groupLabel: row.groupLabel,
                                 window: PlanUsageWindow(utilization: 0, label: row.window.label,

@@ -201,6 +201,23 @@ describe.each([
   });
 });
 
+it('folded context uses a compact summary and a direct action before showing the raw block', async () => {
+  const appended = `\n\n${COORDINATOR}`;
+  await mount([userEvent(`把这个项目协调起来${appended}`, appended)]);
+
+  const entry = bubble().querySelector('.chat-injected')!;
+  expect(entry.querySelector('.chat-injected-summary strong')?.textContent).toBe('Orbit context');
+  expect(entry.querySelector('.chat-injected-action')?.textContent).toContain('View full context');
+  expect(entry.querySelector('.chat-injected-body')).toBeNull();
+
+  await click(entry.querySelector('.chat-injected-action')!);
+
+  expect(entry.querySelector('.chat-injected-action')).toBeNull();
+  expect(entry.querySelector<HTMLButtonElement>('.chat-injected-head')?.getAttribute('aria-expanded'))
+    .toBe('true');
+  expect(entry.querySelector('.chat-injected-body')?.textContent).toBe(COORDINATOR);
+});
+
 describe('the exported transcript', () => {
   // lib/sessionExport's buildSessionHtml renders exactly this tree — ExportCtx around the app's own
   // <Transcript> — through renderToStaticMarkup, so the export has no user-bubble code of its own.

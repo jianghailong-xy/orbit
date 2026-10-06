@@ -19,22 +19,29 @@ func TestMCPIntegrationRetryIsPartOfTheBaseTools(t *testing.T) {
 			t.Fatal("integration_retry missing from the tools")
 		}
 		props := mcpToolProps(tools, "integration_retry")
-		if len(props) != 3 {
+		if len(props) != 4 {
 			t.Fatalf("integration_retry properties = %#v", props)
 		}
-		for _, want := range []string{"projectId", "taskId", "reason"} {
+		for _, want := range []string{"projectId", "taskId", "promotionId", "reason"} {
 			if _, ok := props[want]; !ok {
 				t.Fatalf("integration_retry does not take %q: %#v", want, props)
 			}
 		}
-		if got := mcpToolRequired(t, tools, "integration_retry"); strings.Join(got, ",") != "projectId,taskId,reason" {
+		// taskId and promotionId are alternatives, so neither can be required by the schema: the
+		// handler refuses a call that names both or neither.
+		if got := mcpToolRequired(t, tools, "integration_retry"); strings.Join(got, ",") != "projectId,reason" {
 			t.Fatalf("integration_retry required = %#v", got)
 		}
 	}
 	// What a model has to know before it reaches for the door: which failures it answers, that
-	// task_start is NOT the way, and that a conflict is refused here.
+	// task_start is NOT the way, that a conflict is refused here — and that one at MAIN_SYNC is
+	// resolved by absorbing the upstream into the source branch, which then lands by MERGE (§3.1
+	// M3) — that a blocked merge into main is rerun with the candidate's id and stays the owner's or
+	// Automatic's to merge, and that the items stay open, being handled, until the job reports.
 	desc := mcpToolDescription(toolDescriptors(false, false), "integration_retry")
-	for _, want := range []string{"CHECK_FAILED", "CHECK_TIMED_OUT", "ERROR", "task_start", "CONFLICT", "task_reopen"} {
+	for _, want := range []string{"CHECK_FAILED", "CHECK_TIMED_OUT", "ERROR", "task_start", "CONFLICT", "task_reopen",
+		"MAIN_SYNC", "absorb the upstream on the project line first", "its next landing lands by MERGE",
+		"promotionId", "the account owner's card, or the Automatic setting", "being handled", "superseded"} {
 		if !strings.Contains(desc, want) {
 			t.Fatalf("integration_retry's description does not mention %q: %q", want, desc)
 		}
@@ -49,7 +56,7 @@ func TestMCPIntegrationRetryPostsTheReasonAsTheCallingSession(t *testing.T) {
 		session = r.Header.Get("X-Orbit-Session-Id")
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		_, _ = w.Write([]byte(`{"taskId":"34Y7Utvsd47A14DjMzIzD","jobId":"34YQqf0aGNxJ3SuXyDxyF",` +
-			`"generation":2,"failureClass":"CHECK_FAILED","supersededItemIds":[]}`))
+			`"generation":2,"failureClass":"CHECK_FAILED","handlingItemIds":[]}`))
 	}))
 	defer srv.Close()
 
@@ -82,6 +89,52 @@ func TestMCPIntegrationRetryPostsTheReasonAsTheCallingSession(t *testing.T) {
 	if !strings.Contains(text, "if it fails, a new item reaches you") || !strings.Contains(text, `"generation": 2`) {
 		t.Fatalf("integration_retry's result does not say what happens next: %q", text)
 	}
+	if !strings.Contains(text, "now being handled: they stay open until it reports") {
+		t.Fatalf("integration_retry's result still reads as if the items were closed by asking: %q", text)
+	}
+}
+
+// The same door for the item about a merge of the project branch into main, which names no task: it
+// posts to the candidate's own route, as the calling session, with the reason and nothing else.
+func TestMCPIntegrationRetryWithAPromotionIdRerunsTheCandidatesCheck(t *testing.T) {
+	var method, path, session string
+	var body map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		session = r.Header.Get("X-Orbit-Session-Id")
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = w.Write([]byte(`{"promotionId":"34ZK1ab2Cd3Ef4Gh5Ij6Kl","jobId":"34ZK1zz9Yy8Xx7Ww6Vv5Uu",` +
+			`"generation":2,"failureClass":"CHECK_FAILED","handlingItemIds":["34ZK1qq1Pp2Oo3Nn4Mm5Ll"]}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok"), sessionID: "34Y7Myo7G89Vk0fVpelbt"}
+	res := mcp.callTool("integration_retry", map[string]interface{}{
+		"projectId":   "34Y7My8sqhKLWtmCQYv1l",
+		"promotionId": "34ZK1ab2Cd3Ef4Gh5Ij6Kl",
+		"reason":      " main's merge-check baseline was repaired; the red was the baseline's ",
+	})
+	if res["isError"] == true {
+		t.Fatalf("integration_retry returned an error: %#v", res["content"])
+	}
+	if method != http.MethodPost ||
+		path != "/api/runner/projects/34Y7My8sqhKLWtmCQYv1l/promotions/34ZK1ab2Cd3Ef4Gh5Ij6Kl/integration/retry" {
+		t.Fatalf("integration_retry with a promotionId hit %s %s", method, path)
+	}
+	if session != "34Y7Myo7G89Vk0fVpelbt" {
+		t.Fatalf("integration_retry session header = %q", session)
+	}
+	if body["reason"] != "main's merge-check baseline was repaired; the red was the baseline's" || len(body) != 1 {
+		t.Fatalf("integration_retry sent %#v", body)
+	}
+	content, _ := res["content"].([]map[string]interface{})
+	text, _ := content[0]["text"].(string)
+	for _, want := range []string{"The candidate's check is queued again", "the owner's card, or the Automatic setting",
+		"if it fails, a new item reaches you", `"handlingItemIds"`} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("integration_retry's result does not say %q: %q", want, text)
+		}
+	}
 }
 
 func TestMCPIntegrationRetryRequiresAProjectATaskAndAReason(t *testing.T) {
@@ -96,6 +149,9 @@ func TestMCPIntegrationRetryRequiresAProjectATaskAndAReason(t *testing.T) {
 		{"projectId": "proj-1", "reason": "fixed"},
 		{"projectId": "proj-1", "taskId": "task-1"},
 		{"projectId": "proj-1", "taskId": "task-1", "reason": " \n\t "},
+		// A task's landing and a candidate's check are two doors; one call names exactly one of them.
+		{"projectId": "proj-1", "taskId": "task-1", "promotionId": "promo-1", "reason": "fixed"},
+		{"projectId": "proj-1", "promotionId": "promo-1"},
 	} {
 		if res := mcp.callTool("integration_retry", args); res["isError"] != true {
 			t.Fatalf("integration_retry accepted %#v", args)

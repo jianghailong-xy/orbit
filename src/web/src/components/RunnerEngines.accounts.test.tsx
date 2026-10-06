@@ -6,6 +6,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { PlanUsage, RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
 import { RunnerEngines, summaryOf, tildePath } from './RunnerEngines';
+import { clickRunnerMenuItem } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
 /**
@@ -71,9 +72,11 @@ let host: HTMLDivElement | null = null;
 // Tells React this is a test that drives updates through act(), so it flushes them there.
 beforeAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
 });
 afterAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+  vi.unstubAllGlobals();
 });
 
 afterEach(() => {
@@ -151,17 +154,18 @@ describe('a runner with two Codex accounts', () => {
     expect(head.querySelector('.re-quota')).toBeNull();
     // It counts the accounts that could take a session now: Work, signed out, is not one.
     expect(head.querySelector('.re-meta')?.textContent).toBe('0.156.0 · 1 of 2 accounts available');
-    expect(rows(head, 'button').map(labelOf)).toEqual(['+ Account']);
+    expect(rows(head, 'button').map(labelOf)).toEqual(['Add account']);
 
     // The other engines are untouched rows, each still with its own tag.
     const engineRows = rows(page, '.re-row:not(.re-acct)');
     expect(engineRows.map((row) => row.querySelector('.re-name')?.textContent)).toEqual([
       'Claude Code',
       'Codex',
+      'Antigravity',
       'Kimi Code',
     ]);
     expect(tags(engineRows[0])).toEqual(['Signed in']);
-    expect(tags(engineRows[2])).toEqual(['Signed in']);
+    expect(tags(engineRows[3])).toEqual(['Signed in']);
   });
 
   it('names each account by what the user called it and where it lives, never by who it is', () => {
@@ -251,15 +255,15 @@ describe('a runner with two Codex accounts', () => {
   it('re-signs in Default by name, not as whatever the runner defaults to', async () => {
     const page = mount([runner({ accounts: [DEFAULT, WORK] })]);
 
-    await click(button(rows(page, '.re-acct')[0], 'Re-sign in'));
+    await clickRunnerMenuItem(rows(page, '.re-acct')[0], 'Re-sign in');
     await click(button(page, 'Sign in to Codex'));
     expect(loginPosts()).toEqual([{ engine: 'codex', account: 'default' }]);
   });
 
-  it('adds an account the moment + Account is pressed, under a name it picks, and never under none', async () => {
+  it('adds an account the moment Add account is pressed, under a name it picks, and never under none', async () => {
     const page = mount([runner({ accounts: [DEFAULT, WORK] })]);
 
-    await click(button(rows(page, '.re-grp')[0], '+ Account'));
+    await click(button(rows(page, '.re-grp')[0], 'Add account'));
     // Default and Work are the machine's first two accounts, so this one is its third.
     const input = page.querySelector<HTMLInputElement>('.re-add input')!;
     expect(input.value).toBe('Account 3');
@@ -321,7 +325,7 @@ describe('a runner with one Codex account', () => {
       expect(tags(codexRow)).toEqual(['Available']);
       expect(codexRow.querySelector('.re-meta')?.textContent).toBe('0.156.0');
       // Not the group's: it is how one account gets to two, so the Codex row holds it too.
-      expect(button(codexRow, '+ Account')).toBeTruthy();
+      expect(button(codexRow, 'Add account')).toBeTruthy();
       expect(codexRow.textContent).not.toContain('DEFAULT');
       act(() => root?.unmount());
       host?.remove();
@@ -333,7 +337,7 @@ describe('a runner with one Codex account', () => {
     const page = mount([runner({ accounts: [DEFAULT] })]);
     const codexRow = rows(page, '.re-row').find((row) => row.querySelector('.re-name')?.textContent === 'Codex')!;
 
-    await click(button(codexRow, 'Re-sign in'));
+    await clickRunnerMenuItem(codexRow, 'Re-sign in');
     await click(button(page, 'Sign in to Codex'));
     expect(loginPosts()).toEqual([{ engine: 'codex' }]);
   });

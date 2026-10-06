@@ -1,0 +1,560 @@
+[WebServer] (node:1346280) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 64 tests using 1 worker
+
+(node:1346419) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium-light-desktop] › src/web/ui-migration/overlays.browser.mjs:56:1 › dialog and drawers match current surfaces, geometry, typography and actions (6.3s)
+  ✓   2 [chromium-light-desktop] › src/web/ui-migration/overlays.browser.mjs:89:1 › dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus (1.5s)
+  ✓   3 [chromium-light-desktop] › src/web/ui-migration/overlays.browser.mjs:121:1 › nested dialog and imperative confirmation close only the top layer (1.5s)
+  ✘   4 [chromium-light-desktop] › src/web/ui-migration/overlays.browser.mjs:157:1 › actual legacy modal, Popconfirm and Select work inside Orbit dialog (18.0s)
+(node:1347295) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   5 [chromium-light-desktop] › src/web/ui-migration/overlays.browser.mjs:196:1 › Orbit dialog and nested confirmation work inside a legacy modal (2.5s)
+  ✓   6 [chromium-light-desktop] › src/web/ui-migration/overlays.browser.mjs:229:1 › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation (1.0s)
+  ✓   7 [chromium-light-desktop] › src/web/ui-migration/overlays.browser.mjs:274:1 › dismissal controls, retained form values, long content and bottom sheet remain usable (1.5s)
+  ✘   8 [chromium-light-desktop] › src/web/ui-migration/overlays.browser.mjs:312:1 › open portals inherit live theme changes and composing Escape preserves the dialog (16.1s)
+(node:1347527) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘   9 [chromium-light-phone] › src/web/ui-migration/overlays.browser.mjs:56:1 › dialog and drawers match current surfaces, geometry, typography and actions (6.4s)
+(node:1348295) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  10 [chromium-light-phone] › src/web/ui-migration/overlays.browser.mjs:89:1 › dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus (1.7s)
+  ✓  11 [chromium-light-phone] › src/web/ui-migration/overlays.browser.mjs:121:1 › nested dialog and imperative confirmation close only the top layer (1.5s)
+  ✘  12 [chromium-light-phone] › src/web/ui-migration/overlays.browser.mjs:157:1 › actual legacy modal, Popconfirm and Select work inside Orbit dialog (18.1s)
+(node:1350534) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  13 [chromium-light-phone] › src/web/ui-migration/overlays.browser.mjs:196:1 › Orbit dialog and nested confirmation work inside a legacy modal (2.6s)
+  ✓  14 [chromium-light-phone] › src/web/ui-migration/overlays.browser.mjs:229:1 › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation (1.1s)
+  ✓  15 [chromium-light-phone] › src/web/ui-migration/overlays.browser.mjs:274:1 › dismissal controls, retained form values, long content and bottom sheet remain usable (1.5s)
+  ✓  16 [chromium-light-phone] › src/web/ui-migration/overlays.browser.mjs:312:1 › open portals inherit live theme changes and composing Escape preserves the dialog (1.0s)
+(node:1353598) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  17 [chromium-dark-desktop] › src/web/ui-migration/overlays.browser.mjs:56:1 › dialog and drawers match current surfaces, geometry, typography and actions (6.2s)
+  ✓  18 [chromium-dark-desktop] › src/web/ui-migration/overlays.browser.mjs:89:1 › dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus (1.4s)
+  ✓  19 [chromium-dark-desktop] › src/web/ui-migration/overlays.browser.mjs:121:1 › nested dialog and imperative confirmation close only the top layer (1.5s)
+  ✘  20 [chromium-dark-desktop] › src/web/ui-migration/overlays.browser.mjs:157:1 › actual legacy modal, Popconfirm and Select work inside Orbit dialog (17.6s)
+(node:1356371) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  21 [chromium-dark-desktop] › src/web/ui-migration/overlays.browser.mjs:196:1 › Orbit dialog and nested confirmation work inside a legacy modal (2.4s)
+  ✓  22 [chromium-dark-desktop] › src/web/ui-migration/overlays.browser.mjs:229:1 › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation (1.0s)
+  ✓  23 [chromium-dark-desktop] › src/web/ui-migration/overlays.browser.mjs:274:1 › dismissal controls, retained form values, long content and bottom sheet remain usable (1.4s)
+  ✘  24 [chromium-dark-desktop] › src/web/ui-migration/overlays.browser.mjs:312:1 › open portals inherit live theme changes and composing Escape preserves the dialog (16.1s)
+(node:1366242) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  25 [chromium-dark-phone] › src/web/ui-migration/overlays.browser.mjs:56:1 › dialog and drawers match current surfaces, geometry, typography and actions (6.3s)
+(node:1366757) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  26 [chromium-dark-phone] › src/web/ui-migration/overlays.browser.mjs:89:1 › dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus (1.6s)
+  ✓  27 [chromium-dark-phone] › src/web/ui-migration/overlays.browser.mjs:121:1 › nested dialog and imperative confirmation close only the top layer (1.6s)
+  ✘  28 [chromium-dark-phone] › src/web/ui-migration/overlays.browser.mjs:157:1 › actual legacy modal, Popconfirm and Select work inside Orbit dialog (18.2s)
+(node:1377198) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  29 [chromium-dark-phone] › src/web/ui-migration/overlays.browser.mjs:196:1 › Orbit dialog and nested confirmation work inside a legacy modal (2.1s)
+  ✓  30 [chromium-dark-phone] › src/web/ui-migration/overlays.browser.mjs:229:1 › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation (1.1s)
+  ✓  31 [chromium-dark-phone] › src/web/ui-migration/overlays.browser.mjs:274:1 › dismissal controls, retained form values, long content and bottom sheet remain usable (1.4s)
+  ✘  32 [chromium-dark-phone] › src/web/ui-migration/overlays.browser.mjs:312:1 › open portals inherit live theme changes and composing Escape preserves the dialog (16.3s)
+(node:1378946) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  33 [webkit-light-desktop] › src/web/ui-migration/overlays.browser.mjs:56:1 › dialog and drawers match current surfaces, geometry, typography and actions (9.3s)
+(node:1381926) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  34 [webkit-light-desktop] › src/web/ui-migration/overlays.browser.mjs:89:1 › dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus (1.5s)
+  ✓  35 [webkit-light-desktop] › src/web/ui-migration/overlays.browser.mjs:121:1 › nested dialog and imperative confirmation close only the top layer (1.6s)
+  ✓  36 [webkit-light-desktop] › src/web/ui-migration/overlays.browser.mjs:157:1 › actual legacy modal, Popconfirm and Select work inside Orbit dialog (2.7s)
+  ✓  37 [webkit-light-desktop] › src/web/ui-migration/overlays.browser.mjs:196:1 › Orbit dialog and nested confirmation work inside a legacy modal (2.0s)
+  ✓  38 [webkit-light-desktop] › src/web/ui-migration/overlays.browser.mjs:229:1 › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation (977ms)
+  ✓  39 [webkit-light-desktop] › src/web/ui-migration/overlays.browser.mjs:274:1 › dismissal controls, retained form values, long content and bottom sheet remain usable (1.3s)
+  ✓  40 [webkit-light-desktop] › src/web/ui-migration/overlays.browser.mjs:312:1 › open portals inherit live theme changes and composing Escape preserves the dialog (987ms)
+(node:1383442) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  41 [webkit-light-phone] › src/web/ui-migration/overlays.browser.mjs:56:1 › dialog and drawers match current surfaces, geometry, typography and actions (5.8s)
+(node:1383681) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  42 [webkit-light-phone] › src/web/ui-migration/overlays.browser.mjs:89:1 › dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus (1.4s)
+  ✓  43 [webkit-light-phone] › src/web/ui-migration/overlays.browser.mjs:121:1 › nested dialog and imperative confirmation close only the top layer (1.4s)
+  ✓  44 [webkit-light-phone] › src/web/ui-migration/overlays.browser.mjs:157:1 › actual legacy modal, Popconfirm and Select work inside Orbit dialog (2.6s)
+  ✓  45 [webkit-light-phone] › src/web/ui-migration/overlays.browser.mjs:196:1 › Orbit dialog and nested confirmation work inside a legacy modal (2.3s)
+  ✘  46 [webkit-light-phone] › src/web/ui-migration/overlays.browser.mjs:229:1 › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation (227ms)
+
+
+  1) [chromium-light-desktop] › src/web/ui-migration/overlays.browser.mjs:157:1 › actual legacy modal, Popconfirm and Select work inside Orbit dialog 
+
+    Error: expect(locator).not.toBeVisible() failed
+
+    Locator:  getByRole('dialog', { name: 'Workspace dialog', exact: true })
+    Expected: not visible
+    Received: visible
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "not toBeVisible" getByRole('dialog', { name: 'Workspace dialog', exact: true }) with timeout 15000ms
+      - waiting for getByRole('dialog', { name: 'Workspace dialog', exact: true })
+        34 × locator resolved to <div id="_r_9_" data-open="" role="dialog" tabindex="-1" data-base-ui-focusable="" aria-labelledby="base-ui-_r_i_" aria-describedby="base-ui-_r_j_" class="orbit-overlay orbit-dialog">…</div>
+           - unexpected value "visible"
+
+
+      190 |   await expect(parent).toBeVisible();
+      191 |   await page.keyboard.press('Escape');
+    > 192 |   await expect(parent).not.toBeVisible();
+          |                            ^
+      193 |   await attach(info, 'legacy-children', { modal: true, popconfirm: true, select: true, parentPreserved: true });
+      194 | });
+      195 |
+        at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:192:28
+
+    Error Context: src/web/.overlays-results/overlays.browser.mjs-actua-b2cc4-ct-work-inside-Orbit-dialog-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.overlays-results/overlays.browser.mjs-actua-b2cc4-ct-work-inside-Orbit-dialog-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.overlays-results/overlays.browser.mjs-actua-b2cc4-ct-work-inside-Orbit-dialog-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-light-desktop] › src/web/ui-migration/overlays.browser.mjs:312:1 › open portals inherit live theme changes and composing Escape preserves the dialog 
+
+    Error: expect(locator).not.toBeVisible() failed
+
+    Locator:  getByRole('dialog', { name: 'Nested dialog', exact: true })
+    Expected: not visible
+    Received: visible
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "not toBeVisible" getByRole('dialog', { name: 'Nested dialog', exact: true }) with timeout 15000ms
+      - waiting for getByRole('dialog', { name: 'Nested dialog', exact: true })
+        34 × locator resolved to <div id="_r_k_" data-open="" role="dialog" tabindex="-1" data-nested="" data-base-ui-focusable="" aria-labelledby="base-ui-_r_q_" aria-describedby="base-ui-_r_r_" class="orbit-overlay orbit-dialog">…</div>
+           - unexpected value "visible"
+
+
+      332 |   await input.fill('Composition finished');
+      333 |   await page.keyboard.press('Escape');
+    > 334 |   await expect(nested).not.toBeVisible();
+          |                            ^
+      335 |   await expect(dialog).toBeVisible();
+      336 |   await attach(info, 'theme-and-composition', { initial, liveThemeInherited: true, composingEscapeIgnored: true });
+      337 | });
+        at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:334:28
+
+    Error Context: src/web/.overlays-results/overlays.browser.mjs-open--47c4b-Escape-preserves-the-dialog-chromium-light-desktop/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.overlays-results/overlays.browser.mjs-open--47c4b-Escape-preserves-the-dialog-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.overlays-results/overlays.browser.mjs-open--47c4b-Escape-preserves-the-dialog-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium-light-phone] › src/web/ui-migration/overlays.browser.mjs:56:1 › dialog and drawers match current surfaces, geometry, typography and actions 
+
+    Error: dialog
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+    @@ -38,7 +38,7 @@
+        "height": 173.140625,
+        "lineHeight": "22px",
+        "padding": "20px 24px",
+        "width": 374,
+        "x": 8,
+    -   "y": 108,
+    +   "y": 100,
+      }
+
+      84 |   }
+      85 |   await attach(info, 'appearance', measurements);
+    > 86 |   for (const [kind, { ant, orbit }] of Object.entries(measurements)) expect(orbit, kind).toEqual(ant);
+         |                                                                                          ^
+      87 | });
+      88 |
+      89 | test('dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus', async ({ page }, info) => {
+        at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:86:90
+
+    Error Context: src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-chromium-light-phone/error-context.md
+
+    attachment #11: trace (application/zip) ────────────────────────────────────────────────────────
+    src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-chromium-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-chromium-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [chromium-light-phone] › src/web/ui-migration/overlays.browser.mjs:157:1 › actual legacy modal, Popconfirm and Select work inside Orbit dialog 
+
+    Error: expect(locator).not.toBeVisible() failed
+
+    Locator:  getByRole('dialog', { name: 'Workspace dialog', exact: true })
+    Expected: not visible
+    Received: visible
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "not toBeVisible" getByRole('dialog', { name: 'Workspace dialog', exact: true }) with timeout 15000ms
+      - waiting for getByRole('dialog', { name: 'Workspace dialog', exact: true })
+        34 × locator resolved to <div id="_r_9_" data-open="" role="dialog" tabindex="-1" data-base-ui-focusable="" aria-labelledby="base-ui-_r_i_" aria-describedby="base-ui-_r_j_" class="orbit-overlay orbit-dialog">…</div>
+           - unexpected value "visible"
+
+
+      190 |   await expect(parent).toBeVisible();
+      191 |   await page.keyboard.press('Escape');
+    > 192 |   await expect(parent).not.toBeVisible();
+          |                            ^
+      193 |   await attach(info, 'legacy-children', { modal: true, popconfirm: true, select: true, parentPreserved: true });
+      194 | });
+      195 |
+        at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:192:28
+
+    Error Context: src/web/.overlays-results/overlays.browser.mjs-actua-b2cc4-ct-work-inside-Orbit-dialog-chromium-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.overlays-results/overlays.browser.mjs-actua-b2cc4-ct-work-inside-Orbit-dialog-chromium-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.overlays-results/overlays.browser.mjs-actua-b2cc4-ct-work-inside-Orbit-dialog-chromium-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [chromium-dark-desktop] › src/web/ui-migration/overlays.browser.mjs:157:1 › actual legacy modal, Popconfirm and Select work inside Orbit dialog 
+
+    Error: expect(locator).not.toBeVisible() failed
+
+    Locator:  getByRole('dialog', { name: 'Workspace dialog', exact: true })
+    Expected: not visible
+    Received: visible
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "not toBeVisible" getByRole('dialog', { name: 'Workspace dialog', exact: true }) with timeout 15000ms
+      - waiting for getByRole('dialog', { name: 'Workspace dialog', exact: true })
+        34 × locator resolved to <div id="_r_9_" data-open="" role="dialog" tabindex="-1" data-base-ui-focusable="" aria-labelledby="base-ui-_r_i_" aria-describedby="base-ui-_r_j_" class="orbit-overlay orbit-dialog">…</div>
+           - unexpected value "visible"
+
+
+      190 |   await expect(parent).toBeVisible();
+      191 |   await page.keyboard.press('Escape');
+    > 192 |   await expect(parent).not.toBeVisible();
+          |                            ^
+      193 |   await attach(info, 'legacy-children', { modal: true, popconfirm: true, select: true, parentPreserved: true });
+      194 | });
+      195 |
+        at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:192:28
+
+    Error Context: src/web/.overlays-results/overlays.browser.mjs-actua-b2cc4-ct-work-inside-Orbit-dialog-chromium-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.overlays-results/overlays.browser.mjs-actua-b2cc4-ct-work-inside-Orbit-dialog-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.overlays-results/overlays.browser.mjs-actua-b2cc4-ct-work-inside-Orbit-dialog-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) [chromium-dark-desktop] › src/web/ui-migration/overlays.browser.mjs:312:1 › open portals inherit live theme changes and composing Escape preserves the dialog 
+
+    Error: expect(locator).not.toBeVisible() failed
+
+    Locator:  getByRole('dialog', { name: 'Nested dialog', exact: true })
+    Expected: not visible
+    Received: visible
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "not toBeVisible" getByRole('dialog', { name: 'Nested dialog', exact: true }) with timeout 15000ms
+      - waiting for getByRole('dialog', { name: 'Nested dialog', exact: true })
+        34 × locator resolved to <div id="_r_k_" data-open="" role="dialog" tabindex="-1" data-nested="" data-base-ui-focusable="" aria-labelledby="base-ui-_r_q_" aria-describedby="base-ui-_r_r_" class="orbit-overlay orbit-dialog">…</div>
+           - unexpected value "visible"
+
+
+      332 |   await input.fill('Composition finished');
+      333 |   await page.keyboard.press('Escape');
+    > 334 |   await expect(nested).not.toBeVisible();
+          |                            ^
+      335 |   await expect(dialog).toBeVisible();
+      336 |   await attach(info, 'theme-and-composition', { initial, liveThemeInherited: true, composingEscapeIgnored: true });
+      337 | });
+        at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:334:28
+
+    Error Context: src/web/.overlays-results/overlays.browser.mjs-open--47c4b-Escape-preserves-the-dialog-chromium-dark-desktop/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.overlays-results/overlays.browser.mjs-open--47c4b-Escape-preserves-the-dialog-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.overlays-results/overlays.browser.mjs-open--47c4b-Escape-preserves-the-dialog-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  7) [chromium-dark-phone] › src/web/ui-migration/overlays.browser.mjs:56:1 › dialog and drawers match current surfaces, geometry, typography and actions 
+
+    Error: dialog
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+    @@ -38,7 +38,7 @@
+        "height": 173.140625,
+        "lineHeight": "22px",
+        "padding": "20px 24px",
+        "width": 374,
+        "x": 8,
+    -   "y": 108,
+    +   "y": 100,
+      }
+
+      84 |   }
+      85 |   await attach(info, 'appearance', measurements);
+    > 86 |   for (const [kind, { ant, orbit }] of Object.entries(measurements)) expect(orbit, kind).toEqual(ant);
+         |                                                                                          ^
+      87 | });
+      88 |
+      89 | test('dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus', async ({ page }, info) => {
+        at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:86:90
+
+    Error Context: src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-chromium-dark-phone/error-context.md
+
+    attachment #11: trace (application/zip) ────────────────────────────────────────────────────────
+    src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-chromium-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-chromium-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8) [chromium-dark-phone] › src/web/ui-migration/overlays.browser.mjs:157:1 › actual legacy modal, Popconfirm and Select work inside Orbit dialog 
+
+    Error: expect(locator).not.toBeVisible() failed
+
+    Locator:  getByRole('dialog', { name: 'Workspace dialog', exact: true })
+    Expected: not visible
+    Received: visible
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "not toBeVisible" getByRole('dialog', { name: 'Workspace dialog', exact: true }) with timeout 15000ms
+      - waiting for getByRole('dialog', { name: 'Workspace dialog', exact: true })
+        34 × locator resolved to <div id="_r_9_" data-open="" role="dialog" tabindex="-1" data-base-ui-focusable="" aria-labelledby="base-ui-_r_i_" aria-describedby="base-ui-_r_j_" class="orbit-overlay orbit-dialog">…</div>
+           - unexpected value "visible"
+
+
+      190 |   await expect(parent).toBeVisible();
+      191 |   await page.keyboard.press('Escape');
+    > 192 |   await expect(parent).not.toBeVisible();
+          |                            ^
+      193 |   await attach(info, 'legacy-children', { modal: true, popconfirm: true, select: true, parentPreserved: true });
+      194 | });
+      195 |
+        at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:192:28
+
+    Error Context: src/web/.overlays-results/overlays.browser.mjs-actua-b2cc4-ct-work-inside-Orbit-dialog-chromium-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.overlays-results/overlays.browser.mjs-actua-b2cc4-ct-work-inside-Orbit-dialog-chromium-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.overlays-results/overlays.browser.mjs-actua-b2cc4-ct-work-inside-Orbit-dialog-chromium-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  9) [chromium-dark-phone] › src/web/ui-migration/overlays.browser.mjs:312:1 › open portals inherit live theme changes and composing Escape preserves the dialog 
+
+    Error: expect(locator).not.toBeVisible() failed
+
+    Locator:  getByRole('dialog', { name: 'Nested dialog', exact: true })
+    Expected: not visible
+    Received: visible
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "not toBeVisible" getByRole('dialog', { name: 'Nested dialog', exact: true }) with timeout 15000ms
+      - waiting for getByRole('dialog', { name: 'Nested dialog', exact: true })
+        34 × locator resolved to <div id="_r_k_" data-open="" role="dialog" tabindex="-1" data-nested="" data-base-ui-focusable="" aria-labelledby="base-ui-_r_q_" aria-describedby="base-ui-_r_r_" class="orbit-overlay orbit-dialog">…</div>
+           - unexpected value "visible"
+
+
+      332 |   await input.fill('Composition finished');
+      333 |   await page.keyboard.press('Escape');
+    > 334 |   await expect(nested).not.toBeVisible();
+          |                            ^
+      335 |   await expect(dialog).toBeVisible();
+      336 |   await attach(info, 'theme-and-composition', { initial, liveThemeInherited: true, composingEscapeIgnored: true });
+      337 | });
+        at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:334:28
+
+    Error Context: src/web/.overlays-results/overlays.browser.mjs-open--47c4b-Escape-preserves-the-dialog-chromium-dark-phone/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.overlays-results/overlays.browser.mjs-open--47c4b-Escape-preserves-the-dialog-chromium-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.overlays-results/overlays.browser.mjs-open--47c4b-Escape-preserves-the-dialog-chromium-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  10) [webkit-light-desktop] › src/web/ui-migration/overlays.browser.mjs:56:1 › dialog and drawers match current surfaces, geometry, typography and actions 
+
+    Error: dialog
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+    @@ -37,8 +37,8 @@
+        "fontSize": "14px",
+        "height": 170,
+        "lineHeight": "22px",
+        "padding": "20px 24px",
+        "width": 520,
+    -   "x": 380,
+    +   "x": 376,
+        "y": 100,
+      }
+
+      84 |   }
+      85 |   await attach(info, 'appearance', measurements);
+    > 86 |   for (const [kind, { ant, orbit }] of Object.entries(measurements)) expect(orbit, kind).toEqual(ant);
+         |                                                                                          ^
+      87 | });
+      88 |
+      89 | test('dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus', async ({ page }, info) => {
+        at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:86:90
+
+    Error Context: src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-webkit-light-desktop/error-context.md
+
+    attachment #11: trace (application/zip) ────────────────────────────────────────────────────────
+    src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  11) [webkit-light-phone] › src/web/ui-migration/overlays.browser.mjs:56:1 › dialog and drawers match current surfaces, geometry, typography and actions 
+
+    Error: dialog
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 6
+    + Received  + 6
+
+    @@ -6,39 +6,39 @@
+        "controls": Array [
+          Object {
+            "height": 32,
+            "name": "Close",
+            "width": 32,
+    -       "x": 330,
+    +       "x": 322,
+            "y": 12,
+          },
+          Object {
+            "height": 35.140625,
+            "name": "",
+    -       "width": 326,
+    +       "width": 318,
+            "x": 24,
+            "y": 74,
+          },
+          Object {
+            "height": 32,
+            "name": "Cancel",
+            "width": 75.59375,
+    -       "x": 202.484375,
+    +       "x": 194.484375,
+            "y": 121.140625,
+          },
+          Object {
+            "height": 32,
+            "name": "Save",
+            "width": 63.921875,
+    -       "x": 286.078125,
+    +       "x": 278.078125,
+            "y": 121.140625,
+          },
+        ],
+        "fontFamily": "-apple-system, BlinkMacSystemFont, PingFang SC, Hiragino Sans GB, Microsoft YaHei, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+        "fontSize": "14px",
+        "height": 173.140625,
+        "lineHeight": "22px",
+        "padding": "20px 24px",
+    -   "width": 374,
+    +   "width": 366,
+        "x": 8,
+    -   "y": 108,
+    +   "y": 100,
+      }
+
+      84 |   }
+      85 |   await attach(info, 'appearance', measurements);
+    > 86 |   for (const [kind, { ant, orbit }] of Object.entries(measurements)) expect(orbit, kind).toEqual(ant);
+         |                                                                                          ^
+      87 | });
+      88 |
+      89 | test('dialog traps Tab, ignores drag release, closes on Esc or outside press and restores focus', async ({ page }, info) => {
+        at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:86:90
+
+    Error Context: src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-webkit-light-phone/error-context.md
+
+    attachment #11: trace (application/zip) ────────────────────────────────────────────────────────
+    src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.overlays-results/overlays.browser.mjs-dialo-187f3-etry-typography-and-actions-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  12) [webkit-light-phone] › src/web/ui-migration/overlays.browser.mjs:229:1 › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation 
+
+    Test was interrupted.
+
+    Error: page.goto: Test ended.
+    Call log:
+      - navigating to "http://127.0.0.1:4176/ui-migration/overlays.html", waiting until "load"
+
+
+       6 |   errors.set(page, []);
+       7 |   page.on('pageerror', (error) => errors.get(page).push(error.message));
+    >  8 |   await page.goto(fixture);
+         |              ^
+       9 |   await expect(page.getByTestId('theme')).toHaveText(info.project.use.colorScheme);
+      10 |   await page.evaluate(() => document.fonts.ready);
+      11 |   expect(await page.evaluate(() => ({ width: innerWidth, dpr: devicePixelRatio, scale: visualViewport.scale })))
+        at /root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410/src/web/ui-migration/overlays.browser.mjs:8:14
+
+    Error Context: src/web/.overlays-results/overlays.browser.mjs-async-ae35b-rmits-retry-or-cancellation-webkit-light-phone/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    src/web/.overlays-results/overlays.browser.mjs-async-ae35b-rmits-retry-or-cancellation-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace src/web/.overlays-results/overlays.browser.mjs-async-ae35b-rmits-retry-or-cancellation-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  11 failed
+    [chromium-light-desktop] › src/web/ui-migration/overlays.browser.mjs:157:1 › actual legacy modal, Popconfirm and Select work inside Orbit dialog 
+    [chromium-light-desktop] › src/web/ui-migration/overlays.browser.mjs:312:1 › open portals inherit live theme changes and composing Escape preserves the dialog 
+    [chromium-light-phone] › src/web/ui-migration/overlays.browser.mjs:56:1 › dialog and drawers match current surfaces, geometry, typography and actions 
+    [chromium-light-phone] › src/web/ui-migration/overlays.browser.mjs:157:1 › actual legacy modal, Popconfirm and Select work inside Orbit dialog 
+    [chromium-dark-desktop] › src/web/ui-migration/overlays.browser.mjs:157:1 › actual legacy modal, Popconfirm and Select work inside Orbit dialog 
+    [chromium-dark-desktop] › src/web/ui-migration/overlays.browser.mjs:312:1 › open portals inherit live theme changes and composing Escape preserves the dialog 
+    [chromium-dark-phone] › src/web/ui-migration/overlays.browser.mjs:56:1 › dialog and drawers match current surfaces, geometry, typography and actions 
+    [chromium-dark-phone] › src/web/ui-migration/overlays.browser.mjs:157:1 › actual legacy modal, Popconfirm and Select work inside Orbit dialog 
+    [chromium-dark-phone] › src/web/ui-migration/overlays.browser.mjs:312:1 › open portals inherit live theme changes and composing Escape preserves the dialog 
+    [webkit-light-desktop] › src/web/ui-migration/overlays.browser.mjs:56:1 › dialog and drawers match current surfaces, geometry, typography and actions 
+    [webkit-light-phone] › src/web/ui-migration/overlays.browser.mjs:56:1 › dialog and drawers match current surfaces, geometry, typography and actions 
+  1 interrupted
+    [webkit-light-phone] › src/web/ui-migration/overlays.browser.mjs:229:1 › async confirmation prevents duplicate submits, retains failures and permits retry or cancellation 
+  18 did not run
+  34 passed (3.7m)

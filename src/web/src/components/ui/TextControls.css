@@ -1,0 +1,143 @@
+.orbit-text-control {
+  box-sizing: border-box;
+  position: relative;
+  display: inline-block;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 4px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--orbit-radius);
+  background: var(--bg-raised);
+  color: var(--text-1);
+  font-family: var(--orbit-font-family);
+  font-size: var(--orbit-font-size);
+  font-weight: 400;
+  line-height: 1.5714285714;
+  transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
+}
+
+.orbit-input[data-size='small'] {
+  padding: 0 7px;
+  border-radius: var(--orbit-radius-sm);
+}
+
+.orbit-input[data-size='large'] {
+  padding: 7px 11px;
+  border-radius: 8px;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.orbit-text-control:hover:not([data-disabled]) {
+  border-color: var(--orbit-control-primary-hover);
+}
+
+.orbit-text-control:focus,
+.orbit-text-control:focus-within {
+  border-color: var(--orbit-control-primary);
+  outline: 0;
+  box-shadow: var(--orbit-input-focus-shadow);
+}
+
+.orbit-text-control[data-invalid] {
+  border-color: var(--orbit-control-error);
+}
+
+.orbit-text-control[data-invalid]:hover:not([data-disabled]) {
+  border-color: var(--orbit-input-error-hover);
+}
+
+.orbit-text-control[data-invalid]:focus,
+.orbit-text-control[data-invalid]:focus-within {
+  border-color: var(--orbit-control-error);
+  box-shadow: var(--orbit-input-invalid-shadow);
+}
+
+.orbit-text-control[data-disabled] {
+  color: var(--orbit-control-disabled-text);
+  background: var(--orbit-control-disabled-bg);
+  border-color: var(--orbit-control-disabled-border);
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.orbit-text-control[data-disabled][data-invalid] {
+  border-color: var(--orbit-control-error);
+}
+
+.orbit-text-control::placeholder,
+.orbit-input-field::placeholder {
+  color: var(--orbit-control-disabled-text);
+  opacity: 1;
+  user-select: none;
+}
+
+.orbit-text-control:placeholder-shown,
+.orbit-input-field:placeholder-shown {
+  text-overflow: ellipsis;
+}
+
+.orbit-input-affix {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.orbit-input-field {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.orbit-input-field:disabled {
+  cursor: not-allowed;
+}
+
+.orbit-input-prefix,
+.orbit-input-suffix {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+
+.orbit-input[data-invalid]:not([data-disabled]) .orbit-input-prefix,
+.orbit-input[data-invalid]:not([data-disabled]) .orbit-input-suffix {
+  color: var(--orbit-control-error);
+}
+
+.orbit-textarea {
+  max-width: 100%;
+  min-height: var(--orbit-control-height);
+  resize: vertical;
+  vertical-align: bottom;
+}
+
+/* Preserve the existing mobile text-field sizing. AntD affix inputs keep their
+   component font size, while unadorned inputs and textareas use this override. */
+@media (max-width: 600px) {
+  input.orbit-input,
+  .orbit-textarea {
+    font-size: 16px;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .orbit-textarea {
+    resize: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orbit-text-control {
+    transition: none;
+  }
+}

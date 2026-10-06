@@ -32,12 +32,12 @@ import { isBackgroundWakeTurn } from '../runner-api/background-job-wake';
 import { readSessionMessageCard } from './session-message';
 import {
   attachHeldReplies,
-  FAILED_DELIVERY_RECEIPT,
   hasHeldSessionReplies,
   isSessionReplyTurn,
   moveSessionRequestToTurn,
   NothingHeldToResend,
   readTurnRequestIds,
+  retryRecords,
   RETRY_CLAIM_WINDOW_MS,
   SESSION_REPLY_TURN_PREFIX,
 } from './session-request';
@@ -863,6 +863,8 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
   async resendRetryMessage(
     ownerId: string,
     id: string,
+    // The composer's pending pick, when Retry was pressed after choosing one — see RetryIdentityDto.
+    identity: { provider?: string; account?: string } = {},
   ): Promise<SessionResumeAnswer> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
@@ -887,7 +889,15 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
     return this.sessions.resume(
       ownerId,
       session.id,
-      { content: message.content, attachmentIds, clientTurnId: press.key, intent: 'NEXT_TURN' },
+      {
+        content: message.content,
+        attachmentIds,
+        clientTurnId: press.key,
+        intent: 'NEXT_TURN',
+        // What the composer had picked when Retry was pressed. The session moves onto it here, as it
+        // would have had the person sent a message instead — which is the whole point of the button.
+        ...(identity.provider ? { provider: identity.provider, account: identity.account } : {}),
+      },
       {
         ...this.resendCarrying(session.id, message, false),
         // Reached only by a NEW turn — a replay of a key already written answers with its turn before
@@ -1017,44 +1027,24 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
     prompt: string,
     numTurns: number,
   ): Promise<ResendMessage> {
-    // The user events themselves, not a tail of the whole stream: the latest one is near the
-    // end only on a short turn. One workspace turn emits hundreds of tool/system events after the
-    // message that provoked it — 400+ on the sessions that surfaced this — so a fixed window
-    // of the end misses the very message a retry exists to re-send, and the session is
-    // disarmed as "nothing to re-send" while the card, which reads the entire stream, is still
-    // promising it. A handful of events covers a run of image-only turns, which carry no text.
-    const recent = await this.prisma.runEvent.findMany({
-      where: { sessionId, type: RunEventType.USER },
-      orderBy: { seq: 'desc' },
-      take: 20,
-      select: { type: true, payload: true, turnId: true, seq: true },
-    });
-    // ...and the runner's receipts for the messages it could not give the engine at all. A Claude
-    // message the runtime refused before writing it fails with no echo (FAILED_DELIVERY_RECEIPT), and
-    // read by echoes alone it was never the latest message: the one before it was. That is what the
-    // retry re-sent — a message already answered — while the request the failed one carried stayed on
-    // it (§8 criterion 23), and what the failure card's Retry keyed on, so a re-send that failed this way
-    // was answered with itself on every press after (§8 criterion 22). A receipt stands for the turn it
-    // names, exactly as an echo does; it carries no words, so the turn's own are the ones re-sent.
-    const receipts = await this.prisma.runEvent.findMany({
-      where: { sessionId, ...FAILED_DELIVERY_RECEIPT },
-      orderBy: { seq: 'desc' },
-      take: 20,
-      select: { type: true, payload: true, turnId: true, seq: true },
-    });
-    const events = receipts.length === 0 ? recent.reverse() : [
-      ...recent,
-      ...receipts.map((receipt) => {
-        const named = (receipt.payload as { turnId?: unknown } | null)?.turnId;
-        return { ...receipt, turnId: typeof named === 'string' && UUID.test(named) ? named : receipt.turnId };
-      }),
-    ].sort((a, b) => a.seq - b.seq).slice(-20);
+    // What the runner recorded of the messages it took, read the way the drain that keeps a failed
+    // turn's request for this re-send reads it (session-request.ts `retryRecords`). The user echoes
+    // themselves, not a tail of the whole stream, which on a long turn holds none; the receipts of the
+    // messages it could not give the engine at all — a Claude message the runtime refused before writing
+    // it fails with no echo, and read by echoes alone the message before it was re-sent, an answered
+    // one, while the request the failed one carried stayed on it (§8 criteria 22 and 23); and the one it
+    // took and went away with before recording anything of it, reaped as offline (§8 criterion 27). A
+    // receipt, or the claim's stamp, stands for its turn exactly as an echo does; neither carries words,
+    // so the turn's own are the ones re-sent.
+    const events = await retryRecords(this.prisma, sessionId);
     // A turn nobody sent — a background agent or workflow reporting in — failing is not the
     // person's message failing. When theirs had already been answered there is nothing to re-send,
     // for the reason a background job's wake has none (below): stepping past it re-sends a
     // question already answered. The runtime still holds the notification that woke that turn and
-    // hands it over with the next message it is sent.
-    if (await this.failureFollowsAnsweredMessage(sessionId, events[events.length - 1])) {
+    // hands it over with the next message it is sent. (A message the runner went away with was
+    // answered by nothing, so nothing failed after its answer.)
+    const latest = events[events.length - 1];
+    if (latest?.seq != null && await this.failureFollowsAnsweredMessage(sessionId, { turnId: latest.turnId, seq: latest.seq })) {
       return { content: '', attachmentsOf: null, senderSessionId: null, turnId: null };
     }
 

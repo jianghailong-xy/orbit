@@ -18,6 +18,11 @@ export interface LoginAccount {
   /** ACTIVE, or SIGNED_OUT once OpenAI refused it. */
   state: string;
   spentUntil: Date | null;
+  /** Rate-limited until then (migration 0382): the backend answered 429 for a request on this account
+   *  and the gateway's own wait did not outlast it. Short — minutes — and not the subscription's own
+   *  reset, which is `spentUntil`. */
+  throttledUntil: Date | null;
+  pausedUntil?: Date | null;
   usage: PlanUsageSnapshot | null;
 }
 
@@ -37,28 +42,37 @@ function spentWindows(usage: PlanUsageSnapshot | null, now: Date): PlanUsageWind
 
 /**
  * Whether a session can run on `account` now: OpenAI still takes it, the usage limit the backend named is
- * not still ahead, and no window of its last reading is used up — a reading that says a window is full
- * keeps the next run off an account the backend would only refuse.
+ * not still ahead, no window of its last reading is used up — a reading that says a window is full keeps
+ * the next run off an account the backend would only refuse — and the backend is not still rate-limiting
+ * it, which is a short mark the gateway leaves when a 429 outlasted its own wait.
  */
 export function loginCanRun(account: LoginAccount, now: Date): boolean {
   return (
     account.state === 'ACTIVE' &&
+    !(account.pausedUntil && account.pausedUntil > now) &&
     !(account.spentUntil && account.spentUntil.getTime() > now.getTime()) &&
+    !(account.throttledUntil && account.throttledUntil.getTime() > now.getTime()) &&
     spentWindows(account.usage, now).length === 0
   );
 }
 
 /**
  * When `account` can take a session again: `now` while it can, else once everything holding it has
- * passed — the backend's limit and every used-up window, so the latest of them. Null when waiting brings
- * nothing back: OpenAI signed it out, which only its owner's signing in again undoes, or a used-up window
- * named no reset.
+ * passed — the backend's limit, a rate limit it is still under, and every used-up window, so the latest
+ * of them. Null when waiting brings nothing back: OpenAI signed it out, which only its owner's signing in
+ * again undoes, or a used-up window named no reset.
  */
 export function loginRunsAgainAt(account: LoginAccount, now: Date): Date | null {
   if (account.state !== 'ACTIVE') return null;
   const resets = spentWindows(account.usage, now).map((w) => Date.parse(w.resetsAt ?? ''));
   if (resets.some(Number.isNaN)) return null;
-  return new Date(Math.max(now.getTime(), account.spentUntil?.getTime() ?? 0, ...resets));
+  return new Date(Math.max(
+    now.getTime(),
+    account.spentUntil?.getTime() ?? 0,
+    account.throttledUntil?.getTime() ?? 0,
+    account.pausedUntil?.getTime() ?? 0,
+    ...resets,
+  ));
 }
 
 /**
@@ -91,7 +105,8 @@ export function loginPoolResumesAt(accounts: readonly LoginAccount[], now: Date)
  *   claim then moves it. A session on none of the pool's accounts goes to the one that comes back first,
  *   else the oldest.
  *
- * Null only when the pool holds no account.
+ * A manual pause is excluded even from that fallback: paused credentials must never receive a turn.
+ * Null when the pool holds no unpaused account.
  */
 export function chooseLoginAccount<Account extends LoginAccount>(
   accounts: readonly Account[],
@@ -102,13 +117,14 @@ export function chooseLoginAccount<Account extends LoginAccount>(
   const chosen =
     usable.find((account) => account.accountId === stickyId) ?? [...usable].sort((a, b) => byChoice(a, b, now))[0];
   if (chosen) return chosen;
-  const own = accounts.find((account) => account.accountId === stickyId);
+  const eligible = accounts.filter((account) => !(account.pausedUntil && account.pausedUntil > now));
+  const own = eligible.find((account) => account.accountId === stickyId);
   if (own) return own;
-  const back = accounts.flatMap((account) => {
+  const back = eligible.flatMap((account) => {
     const at = loginRunsAgainAt(account, now);
     return at ? [{ account, at: at.getTime() }] : [];
   });
-  return back.sort((a, b) => a.at - b.at)[0]?.account ?? accounts[0] ?? null;
+  return back.sort((a, b) => a.at - b.at)[0]?.account ?? eligible[0] ?? null;
 }
 
 /**
@@ -146,6 +162,10 @@ export function keyToLoginSwitchNotice(to: LoginAccount, byOwner = true): string
 function whyLeft(from: LoginAccount, now: Date): string {
   const name = accountName(from);
   if (from.state !== 'ACTIVE') return `${name} was signed out by OpenAI`;
+  if (from.pausedUntil && from.pausedUntil > now) return `${name} is paused`;
+  // A rate limit that outlasted the gateway's own wait is neither a spent window nor a reached limit:
+  // saying so would be a lie about why the session left it.
+  if (from.throttledUntil && from.throttledUntil.getTime() > now.getTime()) return `${name} is rate limited right now`;
   const window = windowName(spentWindows(from.usage, now)[0] ?? null);
   return window ? `the ${window} window on ${name} is spent` : `the usage limit on ${name} is reached`;
 }

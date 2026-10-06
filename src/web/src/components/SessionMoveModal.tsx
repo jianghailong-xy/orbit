@@ -47,6 +47,7 @@ export interface MoveDialogSession {
   id: string;
   title?: string | null;
   folderId?: string | null;
+  projectId?: string;
 }
 
 const providerName = (slug: string): string =>
@@ -118,6 +119,7 @@ export function SessionMoveModal({
 
   const refreshAfterMove = (): void => {
     void qc.invalidateQueries({ queryKey: ['sessions'] });
+    if (session.projectId) void qc.invalidateQueries({ queryKey: ['project-sessions', session.projectId] });
     void qc.invalidateQueries({ queryKey: ['session-counts'] });
     void qc.invalidateQueries({ queryKey: ['session', session.id], exact: true });
     void qc.invalidateQueries({ queryKey: ['session-folders'] });

@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import type { TaskRunReason } from '@orbit/shared';
+import type { ProjectManualReady, TaskRunReason } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   runStalled,
@@ -46,6 +46,8 @@ export interface ProjectReadyToRunItem {
 export interface ProjectReadyToRun {
   /** Every manually runnable task in the project, including rows beyond `items`. */
   readyCount: number;
+  /** Counted before the item limit; readiness alone does not imply automatic dispatch. */
+  manualReady: ProjectManualReady | null;
   /** Work Sessions waiting for a runner slot. */
   queuedCount: number;
   /** Work Sessions running a turn, or parked waiting for something that will wake them. */
@@ -70,6 +72,9 @@ export interface ProjectReadyToRun {
 
 interface ReadyTotals {
   readyCount: number;
+  manualReadyCount: number | null;
+  manualReadyTaskId: string | null;
+  manualReadyTitle: string | null;
   queuedCount: number;
   runningCount: number;
   pausedCount: number;
@@ -179,7 +184,8 @@ export async function readProjectReadyToRun(
            AND ${Prisma.raw(everyPrerequisiteTailDoneSql('t'))}
       ),
       ready AS (
-        SELECT t.id, t.title, t.status::text AS status
+        SELECT t.id, t.title, t.status::text AS status,
+               t.auto_run_when_ready, t.run_at
           FROM task t
           JOIN dependency_candidate candidate ON candidate.id = t.id
          WHERE t.project_id = ${projectId}::uuid
@@ -233,6 +239,13 @@ export async function readProjectReadyToRun(
       ),
       ready_size AS (
         SELECT count(*)::int AS count FROM ready
+      ),
+      manual_ready AS (
+        SELECT id, title, count(*) OVER ()::int AS count
+          FROM ready
+         WHERE status = 'OPEN' AND auto_run_when_ready = false AND run_at IS NULL
+         ORDER BY title, id
+         LIMIT 1
       ),
       paused_size AS (
         SELECT count(*)::int AS count FROM paused
@@ -304,6 +317,9 @@ export async function readProjectReadyToRun(
           FROM paused
       )
     SELECT ready_size.count AS "readyCount",
+           manual_ready.count AS "manualReadyCount",
+           manual_ready.id AS "manualReadyTaskId",
+           manual_ready.title AS "manualReadyTitle",
            active_size.queued AS "queuedCount",
            active_size.running AS "runningCount",
            paused_size.count AS "pausedCount",
@@ -332,6 +348,7 @@ export async function readProjectReadyToRun(
       CROSS JOIN paused_size
       CROSS JOIN waiting_for_landing
       CROSS JOIN unfinished_size
+      LEFT JOIN manual_ready ON true
       LEFT JOIN LATERAL (
         SELECT candidate.id AS "taskId",
                candidate.title,
@@ -426,6 +443,9 @@ export async function readProjectReadyToRun(
   const [first] = rows;
   return {
     readyCount: first?.readyCount ?? 0,
+    manualReady: first?.manualReadyCount && first.manualReadyTaskId && first.manualReadyTitle != null
+      ? { count: first.manualReadyCount, taskId: first.manualReadyTaskId, title: first.manualReadyTitle }
+      : null,
     queuedCount: first?.queuedCount ?? 0,
     runningCount: first?.runningCount ?? 0,
     pausedCount: first?.pausedCount ?? 0,

@@ -1,0 +1,12 @@
+{
+  "name": "final-overlay",
+  "cwd": "/tmp/orbit-p11-final-aa737ee0",
+  "command": "bash scripts/worktree-overlay.sh",
+  "start": "2026-10-04T00:59:11.362822+00:00",
+  "commit": "c7f61251769331f0f2909d4e4d7ee245a01241d7",
+  "tree": "e84b0811c6b2485b9c62b8c01c01f518dca97ae2",
+  "trackedBefore": "",
+  "exitCode": 0,
+  "end": "2026-10-04T00:59:17.792191+00:00",
+  "trackedAfter": ""
+}

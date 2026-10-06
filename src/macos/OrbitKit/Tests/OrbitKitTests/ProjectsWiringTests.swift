@@ -139,7 +139,67 @@ final class ProjectsWiringTests: XCTestCase {
         XCTAssertFalse(rail.contains("recentsRows"), "Recents is not in the drawer")
         XCTAssertFalse(rail.contains("taskRows"), "the task lists are not in the drawer")
         let row = code(try slice(shell, from: "private func projectRow(", to: ".drawerRow()"))
-        XCTAssertTrue(row.contains("model.openProject(project.id, origin: .drawer)"))
+        XCTAssertTrue(row.contains("open(.project(projectID: project.id))"))
+    }
+
+    /// Every drawer row is a destination (the owner's design, 2026-10-05): its highlight is
+    /// `drawerDestination` and its tap is `openDrawerDestination`, the same read — so a row that does
+    /// not draw as selected always goes somewhere (the owner's report: a workspace tapped from a
+    /// project's sessions page left that page up). A project row's destination is its sessions page.
+    func testEveryDrawerRowIsADestinationItsHighlightAndTapReadAlike() throws {
+        let shell = code(try appSource("Views/CompactShell.swift"))
+        let rows: [(String, String)] = [
+            ("private func sectionRow(", ".section(section)"),
+            ("private var projectsRow: some View {", ".section(.projects)"),
+            ("private var wikiRow: some View {", ".section(.wiki)"),
+            ("private func agentRow(", ".workspace(agentID: agent.id)"),
+            ("private func projectRow(", ".project(projectID: project.id)"),
+        ]
+        for (row, destination) in rows {
+            let body = try slice(shell, from: row, to: ".drawerRow()")
+            XCTAssertTrue(body.contains("let selected = model.drawerDestination == \(destination)"),
+                          "`\(row)` is selected while the screen is \(destination)")
+            XCTAssertTrue(body.contains("open(\(destination))"), "and its tap opens \(destination)")
+            XCTAssertFalse(body.contains("model.nav."), "`\(row)` edits no stack itself")
+        }
+        let open = try slice(shell, from: "private func open(_ destination: DrawerDestination) {", to: "\n    }")
+        XCTAssertTrue(open.contains("model.openDrawerDestination(destination, inColumn: inSidebarColumn)"))
+        XCTAssertTrue(open.contains("close()"))
+
+        let app = code(try appSource("AppModel.swift"))
+        XCTAssertTrue(app.contains("var drawerDestination: DrawerDestination { nav.drawerDestination(agentID: selectedAgentID) }"))
+        let entry = try slice(app, from: "func openDrawerDestination(_ destination: DrawerDestination, inColumn: Bool) {",
+                              to: "\n    }\n")
+        XCTAssertTrue(entry.contains("guard destination != drawerDestination else { return }"),
+                      "the selected row's tap only closes the drawer")
+        let project = try slice(app, from: "private func openProjectSessions(_ projectID: String, inColumn: Bool) {",
+                                to: "\n    }\n")
+        XCTAssertTrue(project.contains("$0.projectMembership?.role == .coordinator"), "over the coordinator's workspace")
+        XCTAssertTrue(project.contains("nav.path = [.sessionProject(address)]"), "a phone's whole stack")
+        XCTAssertTrue(project.contains("nav.enterProjectSessions(address)"), "the iPad's list column only")
+    }
+
+    /// The left edge opens the drawer exactly on a destination's own page — a section's root, a
+    /// project's sessions page — and is the system back-swipe on any page pushed over one. The strip
+    /// and the sessions page's toggle read the same fact, so they cannot disagree about the edge.
+    func testTheLeftEdgeOpensTheDrawerOnADestinationsOwnPage() throws {
+        let shell = code(try appSource("Views/CompactShell.swift"))
+        XCTAssertTrue(shell.contains("if !drawerOpen && model.atDestinationRoot {"),
+                      "the drawer-open strip is up on a destination's own page")
+        let agents = try slice(shell, from: "case .agents:", to: "case .projects:")
+        XCTAssertTrue(agents.contains(
+            "SessionProjectPage(address: address)\n                            .background { SwipeBackGestureToggle(enabled: !model.atDestinationRoot) }"),
+                      "and the system back-swipe is off on the sessions page while it is on top")
+        XCTAssertTrue(agents.contains(
+            ".background { SwipeBackGestureToggle(enabled: !model.atDestinationRoot) }\n                            .navigationBarBackButtonHidden()\n                            .drawerToggle(open: openDrawer)"),
+                      "and it leads with the drawer's hamburger, as the session list does, not a back button")
+        XCTAssertEqual(shell.components(separatedBy: "SwipeBackGestureToggle(enabled:").count - 1, 1,
+                       "no other page turns the system back-swipe off")
+        let toggle = try slice(shell, from: "private func setSwipeBacks(enabled: Bool) {", to: "\n        }")
+        XCTAssertTrue(toggle.contains("interactiveContentPopGestureRecognizer?.isEnabled = enabled"),
+                      "iOS 26's swipe-back from anywhere in the content included")
+        let app = code(try appSource("AppModel.swift"))
+        XCTAssertTrue(app.contains("var atDestinationRoot: Bool { nav.atDestinationRoot }"))
     }
 
     /// The iPad's sidebar is this same drawer, seated in the split's first column (the owner's pick,
@@ -164,53 +224,45 @@ final class ProjectsWiringTests: XCTestCase {
         let drawer = try slice(shell, from: "struct NavigationDrawer: View {", to: "private var actionBar: some View {")
         XCTAssertTrue(drawer.contains("if !inSidebarColumn {\n                HStack {"), "the column draws no header of its own")
         XCTAssertTrue(drawer.contains("if inSidebarColumn { columnBar }"), "its header rides the column's bar")
-        for row in ["private var projectsRow: some View {", "private var wikiRow: some View {"] {
-            let press = try slice(shell, from: row, to: ".drawerRow()")
-            XCTAssertTrue(press.contains("if !inSidebarColumn { model.nav.popToRoot() }"),
-                          "in the column `\(row)` only switches section")
-        }
-        let tasks = try slice(shell, from: "private func sectionRow(_ section: AppSection) -> some View {",
-                              to: ".drawerRow()")
-        XCTAssertTrue(tasks.contains("if section == .tasks && !inSidebarColumn {"),
-                      "and Tasks keeps the task the detail shows")
-    }
-
-    /// A project's page the drawer opened gives the left edge back to the drawer, as a Recents console
-    /// does (the owner's report, 2026-09-29: the swipe went back to the Projects list instead). The
-    /// edge strip is up while that page is on top, and the page turns the system back-swipe off; the
-    /// two read the same fact, so they cannot disagree about who has the edge.
-    func testADrawerOpenedProjectPageHandsTheLeftEdgeToTheDrawer() throws {
-        let shell = code(try appSource("Views/CompactShell.swift"))
-        XCTAssertTrue(shell.contains(
-            "if !drawerOpen && (isAtRoot || model.consoleFromRecents || model.projectFromDrawer) {"),
-                      "the drawer-open strip is up on that page")
-        let projects = try slice(shell, from: "case .projects:", to: "case .runners:")
-        XCTAssertTrue(projects.contains(".background { SwipeBackGestureToggle(enabled: !model.projectFromDrawer) }"),
-                      "and the system back-swipe is off there")
-        let toggle = try slice(shell, from: "private func setSwipeBacks(enabled: Bool) {", to: "\n        }")
-        XCTAssertTrue(toggle.contains("interactiveContentPopGestureRecognizer?.isEnabled = enabled"),
-                      "iOS 26's swipe-back from anywhere in the content included")
-
         let app = code(try appSource("AppModel.swift"))
-        XCTAssertTrue(app.contains("var projectFromDrawer: Bool { nav.projectFromDrawer }"))
-        let open = try slice(app, from: "func openProject(_ id: String, origin: NavOrigin = .list) {", to: "\n    }")
-        XCTAssertTrue(open.contains("nav.path = [.projectDetail(projectID: id, origin: origin)]"),
-                      "the origin rides the frame the drawer's row puts up")
+        let entry = try slice(app, from: "func openDrawerDestination(_ destination: DrawerDestination, inColumn: Bool) {",
+                              to: "\n    }\n")
+        XCTAssertTrue(entry.contains("selectedSection = section\n            guard !inColumn else { return }"),
+                      "in the column a section row only switches section, and Tasks keeps the task the detail shows")
+        XCTAssertTrue(entry.contains("} else if inColumn {\n                nav.leaveProjectSessions()"),
+                      "and a workspace row only takes the project's page off the list column")
     }
 
-    func testTheProjectPageDrawsTheWebsSectionsInTheWebsOrder() throws {
+    func testTheProjectPageLeadsWithProgressAndOpensItemsFromTheToolbar() throws {
         let view = code(try appSource("Views/ProjectsView.swift"))
         let page = try slice(view, from: "private func page(", to: ".projectPageListStyle()")
-        let order = ["openItemsSection(", "overviewSection(", "coordinatorSection(", "runSettingsSection(",
+        let order = ["openItemsAttention(", "overviewSection(", "coordinatorSection(", "runSettingsSection(",
                      "goalSection(", "graphSection(", "blockersSection(", "runQueueSection(", "criteriaSection(",
                      "instructionsSection(", "tasksSection("]
         let positions = order.map { page.range(of: $0)?.lowerBound }
         XCTAssertFalse(positions.contains(nil), "the page lost one of \(order)")
         XCTAssertEqual(positions.compactMap { $0 }, positions.compactMap { $0 }.sorted(),
-                       "the sections read in the web's order (ProjectPageSectionsCopyParityTests holds the web's)")
+                       "the owner's reminder precedes progress; the remaining sections keep their order")
+        XCTAssertFalse(page.contains("openItemsSection("), "the full inbox no longer occupies the project page")
+        let content = try slice(view, from: "private func content(", to: "private func page(")
+        XCTAssertTrue(content.contains("ToolbarItem(placement: .primaryAction) { openItemsEntry(store, document) }"))
+        let entry = try slice(view, from: "private func openItemsEntry(", to: "private func openItemsAttention(")
+        XCTAssertTrue(entry.contains("pageSheet = .openItems"))
+        XCTAssertTrue(entry.contains("summary.count > 0"), "an empty inbox has no badge")
+        let attention = try slice(view, from: "private func openItemsAttention(", to: "private func openItemsSheet(")
+        XCTAssertTrue(attention.contains("if let attention = summary?.attention"))
+        XCTAssertTrue(attention.contains("pageSheet = .openItems"))
+        XCTAssertTrue(attention.contains("start.request == nil"), "the owner's own Start… stays on the page")
+        let sheet = try slice(view, from: "private func openItemsSheet(", to: "private func openItemsSection(")
+        XCTAssertTrue(sheet.contains("openItemsSection(store, document, now: context.date)"))
+        XCTAssertTrue(sheet.contains("TimelineView(.periodic(from: .now, by: 30))"), "the sheet's countdown keeps updating")
+        XCTAssertTrue(sheet.contains(".presentationDetents([.medium, .large])"))
+        XCTAssertTrue(sheet.contains("store.openItemsUnread"), "a failed first read offers Retry instead of an empty inbox")
         let overview = try slice(view, from: "private func overviewSection(", to: "private func overviewCell(")
-        XCTAssertTrue(overview.contains("model.selectedSection = .runners"),
-                      "the stalled banner's press goes where an engine signs in")
+        XCTAssertTrue(overview.contains("openTask(manual.taskId)"),
+                      "manual work opens the named task over this project")
+        XCTAssertFalse(overview.contains("model.selectedSection = .runners"),
+                       "readiness alone cannot diagnose a runner problem")
     }
 
     /// A project nobody has started (mock board3 ②) says so in its header, and its Open items lead
@@ -225,8 +277,6 @@ final class ProjectsWiringTests: XCTestCase {
         let items = try slice(view, from: "private func openItemsSection(", to: "private func startItem(")
         XCTAssertTrue(items.contains("StartProject.pageRow(status: document.status, started: document.started,"))
         XCTAssertTrue(items.contains("if let start { startItem(start, store: store, now: now) }"))
-        XCTAssertTrue(items.contains("ProjectPage.openItemsHint(needsYou: needsYou.count + asking,"),
-                      "the request needs you and is counted; the owner's own Start… is not")
 
         let row = try slice(view, from: "private func startItem(", to: "private func reviewStart(")
         XCTAssertTrue(row.contains("case .asked(let row):"))
@@ -242,6 +292,10 @@ final class ProjectsWiringTests: XCTestCase {
         XCTAssertTrue(review.contains("openCoordinator(store, focus: nil, startCard: true)"))
         let open = try slice(view, from: "private func openCoordinator(", to: "private func replaceCoordinator(")
         XCTAssertTrue(open.contains("focus: item, focusStartCard: startCard)"))
+        XCTAssertTrue(open.contains("pageSheet = nil"), "the item panel must not cover the conversation it opens")
+        let perform = try slice(view, from: "private func perform(_ action: ProjectOpenItemAction",
+                                to: "private func openCoordinator(")
+        XCTAssertTrue(perform.contains("pageSheet = nil"), "task/session navigation and Resume also leave the panel")
         let app = code(try appSource("AppModel.swift"))
         let door = try slice(app, from: "func openProjectCoordinator(", to: "\n    }\n")
         XCTAssertTrue(door.contains(
@@ -360,5 +414,16 @@ final class ProjectsWiringTests: XCTestCase {
         let show = try XCTUnwrap(open.range(of: "show(.console(sessionID: id, origin: .list), agent: agent)"))
         XCTAssertTrue(focus.lowerBound < back.lowerBound && back.lowerBound < show.lowerBound,
                       "focus the card, go back if the conversation is right there, open it otherwise")
+    }
+
+    /// iOS 27 can abort while the concurrency runtime tears down several sibling async-let result
+    /// buffers. Project pages keep their reads concurrent with explicit task handles instead.
+    func testProjectDetailLoadAvoidsAsyncLets() throws {
+        let model = code(try appSource("ProjectsModel.swift"))
+        let load = try slice(model, from: "func load(refreshGraph:",
+                            to: "private func refreshedTaskWindow")
+        XCTAssertFalse(load.contains("async let"), "project detail reads must avoid async-let teardown")
+        XCTAssertTrue(load.contains("let documentRead = Task"),
+                      "project detail reads remain concurrent")
     }
 }

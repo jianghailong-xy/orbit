@@ -1,0 +1,382 @@
+{
+  "stats": {
+    "startTime": "2026-10-04T02:00:45.930Z",
+    "duration": 100190.69,
+    "expected": 24,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-light-desktop--fixed-control-states-match-AntD-geometry-typography-and-surfaces",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-light-desktop--fixed-control-states-match-AntD-geometry-typography-and-surfaces--computed-controls.json",
+          "sha256": "40ce8f435339e0f6871b4449e5ff3b77b6c9f2db23900aadfdccddec300849ab",
+          "bytes": 108755
+        },
+        {
+          "path": "chromium-light-desktop--fixed-control-states-match-AntD-geometry-typography-and-surfaces--controls-state-comparison.png",
+          "sha256": "94cce45e255fde753eeef447aa952d28d186acfafa326e2c7064bdee526a037d",
+          "bytes": 263911
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--hover-and-keyboard-focus-preserve-visible-control-feedback",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-light-desktop--hover-and-keyboard-focus-preserve-visible-control-feedback--hover-focus-controls.json",
+          "sha256": "12800340a830d05d9fcd751e112c15b29ef280cc23955297ccc0995b52528dee",
+          "bytes": 23252
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--keyboard-labels-loading-disabled-and-native-form-values-work",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-light-desktop--keyboard-labels-loading-disabled-and-native-form-values-work--behavior-controls.json",
+          "sha256": "8e82c4d64e33423efeeed7be4077c0cb440da99838104f1c9f62a045cbdcc46e",
+          "bytes": 365
+        },
+        {
+          "path": "chromium-light-desktop--keyboard-labels-loading-disabled-and-native-form-values-work--interactive-controls.png",
+          "sha256": "00f902931e2203eb9df0d3e9ae9212a8bab9de5a2b5d0f2cdaeb801ac1aa2a35",
+          "bytes": 54921
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--fixed-control-states-match-AntD-geometry-typography-and-surfaces",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-light-phone--fixed-control-states-match-AntD-geometry-typography-and-surfaces--computed-controls.json",
+          "sha256": "2b663835e68e8d67383cca1033609ec8876127408c891ad53063843793ec7d4e",
+          "bytes": 108919
+        },
+        {
+          "path": "chromium-light-phone--fixed-control-states-match-AntD-geometry-typography-and-surfaces--controls-state-comparison.png",
+          "sha256": "ac5f3a0212ee1e91a77ebae55ad4168cf50de31b37b55c689e7d9ab106dab64b",
+          "bytes": 316726
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--hover-and-keyboard-focus-preserve-visible-control-feedback",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-light-phone--hover-and-keyboard-focus-preserve-visible-control-feedback--hover-focus-controls.json",
+          "sha256": "52898f5f5e3c30b0aec0517d2957985f69b0d64fbcbc859bf4bdfc7e74e2f497",
+          "bytes": 23324
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--keyboard-labels-loading-disabled-and-native-form-values-work",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-light-phone--keyboard-labels-loading-disabled-and-native-form-values-work--behavior-controls.json",
+          "sha256": "8e82c4d64e33423efeeed7be4077c0cb440da99838104f1c9f62a045cbdcc46e",
+          "bytes": 365
+        },
+        {
+          "path": "chromium-light-phone--keyboard-labels-loading-disabled-and-native-form-values-work--interactive-controls.png",
+          "sha256": "792b4202117a15e9dac5b10ddc5b5086c367f254bbbe168509f780b31629e66c",
+          "bytes": 52371
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--fixed-control-states-match-AntD-geometry-typography-and-surfaces",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-dark-desktop--fixed-control-states-match-AntD-geometry-typography-and-surfaces--computed-controls.json",
+          "sha256": "13853cff1f8728ce10fdb485df1f74fbae3ab0dacc43f123191fbc2b04f82245",
+          "bytes": 108932
+        },
+        {
+          "path": "chromium-dark-desktop--fixed-control-states-match-AntD-geometry-typography-and-surfaces--controls-state-comparison.png",
+          "sha256": "712563a5a71de79aaca79e0e25de8f609cab34be9698a41472f9a1252371dd51",
+          "bytes": 270430
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--hover-and-keyboard-focus-preserve-visible-control-feedback",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-dark-desktop--hover-and-keyboard-focus-preserve-visible-control-feedback--hover-focus-controls.json",
+          "sha256": "81bf9d4affdd520e9d8c272dd47fa1c322d0bbcf3e7b910a2e34dfb58f024c27",
+          "bytes": 23334
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--keyboard-labels-loading-disabled-and-native-form-values-work",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-dark-desktop--keyboard-labels-loading-disabled-and-native-form-values-work--behavior-controls.json",
+          "sha256": "8e82c4d64e33423efeeed7be4077c0cb440da99838104f1c9f62a045cbdcc46e",
+          "bytes": 365
+        },
+        {
+          "path": "chromium-dark-desktop--keyboard-labels-loading-disabled-and-native-form-values-work--interactive-controls.png",
+          "sha256": "509891749820da6106b4979b31d18f919f371c7315ed3a2438dc0429851ab969",
+          "bytes": 56625
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--fixed-control-states-match-AntD-geometry-typography-and-surfaces",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-dark-phone--fixed-control-states-match-AntD-geometry-typography-and-surfaces--computed-controls.json",
+          "sha256": "93ef5fc2fc79ecbebd7bc612c804296a6afb1a3facb0289a2b19f2e49986243f",
+          "bytes": 109096
+        },
+        {
+          "path": "chromium-dark-phone--fixed-control-states-match-AntD-geometry-typography-and-surfaces--controls-state-comparison.png",
+          "sha256": "f38842638c8e5cc40f0bf7d9c7b6cfe7e64d50b00d6e699b32310577ca128d07",
+          "bytes": 328378
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--hover-and-keyboard-focus-preserve-visible-control-feedback",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-dark-phone--hover-and-keyboard-focus-preserve-visible-control-feedback--hover-focus-controls.json",
+          "sha256": "aee9efd3b764413c25be33114a83291a74f5f898359702a0471e52ce7296c3ed",
+          "bytes": 23406
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--keyboard-labels-loading-disabled-and-native-form-values-work",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "chromium-dark-phone--keyboard-labels-loading-disabled-and-native-form-values-work--behavior-controls.json",
+          "sha256": "8e82c4d64e33423efeeed7be4077c0cb440da99838104f1c9f62a045cbdcc46e",
+          "bytes": 365
+        },
+        {
+          "path": "chromium-dark-phone--keyboard-labels-loading-disabled-and-native-form-values-work--interactive-controls.png",
+          "sha256": "1ea4e1e423cb77c7a42939c82a5c0bb64db870941806332d0d9d696bc0bbb74f",
+          "bytes": 54824
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--fixed-control-states-match-AntD-geometry-typography-and-surfaces",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-light-desktop--fixed-control-states-match-AntD-geometry-typography-and-surfaces--computed-controls.json",
+          "sha256": "72698f15e64444f75446ee1cc318b6802759694aa5db37d0ff343fc43518dcf2",
+          "bytes": 107513
+        },
+        {
+          "path": "webkit-light-desktop--fixed-control-states-match-AntD-geometry-typography-and-surfaces--controls-state-comparison.png",
+          "sha256": "a29bc7cfda8c1f31eb024392439004b9fd0b2a6c02fc5675d10968ac19cbacc3",
+          "bytes": 311433
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--hover-and-keyboard-focus-preserve-visible-control-feedback",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-light-desktop--hover-and-keyboard-focus-preserve-visible-control-feedback--hover-focus-controls.json",
+          "sha256": "d951e73f2f416a986fc7ac022172a528ed8c0ef4843937f70977219e49d3a598",
+          "bytes": 22740
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--keyboard-labels-loading-disabled-and-native-form-values-work",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-light-desktop--keyboard-labels-loading-disabled-and-native-form-values-work--behavior-controls.json",
+          "sha256": "8e82c4d64e33423efeeed7be4077c0cb440da99838104f1c9f62a045cbdcc46e",
+          "bytes": 365
+        },
+        {
+          "path": "webkit-light-desktop--keyboard-labels-loading-disabled-and-native-form-values-work--interactive-controls.png",
+          "sha256": "4a69a9565b2dcb4b1ea2eb6738fbaf26a34c6d25aff5933c30197860e6033db2",
+          "bytes": 66172
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--fixed-control-states-match-AntD-geometry-typography-and-surfaces",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-light-phone--fixed-control-states-match-AntD-geometry-typography-and-surfaces--computed-controls.json",
+          "sha256": "b7ea7f7349ef3fc7fdbbc6af094198126330a1a5f6da016a3fb03f7ca5596d28",
+          "bytes": 107705
+        },
+        {
+          "path": "webkit-light-phone--fixed-control-states-match-AntD-geometry-typography-and-surfaces--controls-state-comparison.png",
+          "sha256": "96d260cd0f0397d66e7265ab7bbbcd7b1f84a1a2e01e005f53cc4fce731d4c36",
+          "bytes": 377366
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--hover-and-keyboard-focus-preserve-visible-control-feedback",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-light-phone--hover-and-keyboard-focus-preserve-visible-control-feedback--hover-focus-controls.json",
+          "sha256": "158e3eef41d4a70ce28120b4d86fd61098b482c466b72e10174d72ceb4e153cb",
+          "bytes": 22824
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--keyboard-labels-loading-disabled-and-native-form-values-work",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-light-phone--keyboard-labels-loading-disabled-and-native-form-values-work--behavior-controls.json",
+          "sha256": "8e82c4d64e33423efeeed7be4077c0cb440da99838104f1c9f62a045cbdcc46e",
+          "bytes": 365
+        },
+        {
+          "path": "webkit-light-phone--keyboard-labels-loading-disabled-and-native-form-values-work--interactive-controls.png",
+          "sha256": "c74d2d0777c9f952c86b9266ec25daf954f911182cfbad051b5bb27ea5ff38b3",
+          "bytes": 64940
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--fixed-control-states-match-AntD-geometry-typography-and-surfaces",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-dark-desktop--fixed-control-states-match-AntD-geometry-typography-and-surfaces--computed-controls.json",
+          "sha256": "b23382dfe4ab600caa39577f896d0cbfced271581c3f2fde82ef81852cb7a235",
+          "bytes": 107690
+        },
+        {
+          "path": "webkit-dark-desktop--fixed-control-states-match-AntD-geometry-typography-and-surfaces--controls-state-comparison.png",
+          "sha256": "05682b692ad9e6fc1d75b98b7dd3de6e127ea917a8f72db1cf8ded7a6ac933bc",
+          "bytes": 316011
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--hover-and-keyboard-focus-preserve-visible-control-feedback",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-dark-desktop--hover-and-keyboard-focus-preserve-visible-control-feedback--hover-focus-controls.json",
+          "sha256": "41c6ef236314fc0ce17cf608dbf0175814bebe00a665fc0809304d0b58a2620e",
+          "bytes": 22822
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--keyboard-labels-loading-disabled-and-native-form-values-work",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-dark-desktop--keyboard-labels-loading-disabled-and-native-form-values-work--behavior-controls.json",
+          "sha256": "8e82c4d64e33423efeeed7be4077c0cb440da99838104f1c9f62a045cbdcc46e",
+          "bytes": 365
+        },
+        {
+          "path": "webkit-dark-desktop--keyboard-labels-loading-disabled-and-native-form-values-work--interactive-controls.png",
+          "sha256": "bfdbb49ae34187d1226b86523c79e5aa9282fd1261d50b24563b2fe78fdf3a1c",
+          "bytes": 67328
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--fixed-control-states-match-AntD-geometry-typography-and-surfaces",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-dark-phone--fixed-control-states-match-AntD-geometry-typography-and-surfaces--computed-controls.json",
+          "sha256": "778623efc427a8a1388565201cff6c3507ad80194f11c974b7dd8b37b933fcb9",
+          "bytes": 107882
+        },
+        {
+          "path": "webkit-dark-phone--fixed-control-states-match-AntD-geometry-typography-and-surfaces--controls-state-comparison.png",
+          "sha256": "8feb8056f00f1fbd61065f19314d2a3b1b7aa9c1d5954748865347b957d69197",
+          "bytes": 384935
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--hover-and-keyboard-focus-preserve-visible-control-feedback",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-dark-phone--hover-and-keyboard-focus-preserve-visible-control-feedback--hover-focus-controls.json",
+          "sha256": "9977b0a18c9be3552a41e384ab45c9514631885642b729bfe29397336ba37042",
+          "bytes": 22906
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--keyboard-labels-loading-disabled-and-native-form-values-work",
+      "status": "expected",
+      "expectedStatus": "passed",
+      "artifacts": [
+        {
+          "path": "webkit-dark-phone--keyboard-labels-loading-disabled-and-native-form-values-work--behavior-controls.json",
+          "sha256": "8e82c4d64e33423efeeed7be4077c0cb440da99838104f1c9f62a045cbdcc46e",
+          "bytes": 365
+        },
+        {
+          "path": "webkit-dark-phone--keyboard-labels-loading-disabled-and-native-form-values-work--interactive-controls.png",
+          "sha256": "c03fa91c17aabc42270440d7bd6e3be0c08d8b0576e8c1feeab5ca16b8651d35",
+          "bytes": 65411
+        }
+      ]
+    }
+  ],
+  "screenshots": 16,
+  "jsonAttachments": 24
+}

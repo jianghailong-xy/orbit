@@ -592,6 +592,31 @@ test('the runner declares the exact capability the claim fence and the decision 
 
 // ── (a) project branch + Automatic + clean: merged by itself, with a receipt ─────────────────────
 
+test('a confirmed merge is queued until claimed and can be cancelled before its first phase',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'cancel-queued-merge', { line: 'PROJECT_BRANCH', automatic: false });
+      const { check } = await checkInHand(stack, w);
+      await report(stack, w, check, cleanCheck());
+      const candidate = await promotionOf(stack.db, w.projectId);
+      const confirmed = await stack.promotions.confirm({ userId: w.ownerId }, w.projectId, candidate.id, LANDED_ON_LINE);
+      assert.equal(confirmed.state, 'CONFIRMED');
+      assert.equal(confirmed.execution?.state, 'QUEUED');
+      assert.equal(confirmed.execution?.phase, null);
+      const cancelled = await stack.promotions.cancel({ userId: w.ownerId }, w.projectId, candidate.id);
+      assert.equal(cancelled.state, 'CANCELLED');
+      assert.equal(cancelled.execution, null);
+      const job = await stack.db.projectIntegrationJob.findFirstOrThrow({
+        where: { promotionId: candidate.id, kind: 'LAND_PROMOTION' },
+      });
+      assert.ok(job.cancelRequestedAt);
+      assert.equal(job.landedSha, null);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
 test('(a) a project branch with Automatic on and a clean check is merged without a card, and says so',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();

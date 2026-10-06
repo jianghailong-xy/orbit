@@ -314,6 +314,7 @@ export interface PromotionFacts {
   upstreamSyncedAt: Date | null;
   /** The re-check in flight (state B), or null when none is. */
   recheck: { upstreamMovedBy: number | null; startedAt: Date; typicalMs: number | null } | null;
+  execution?: ProjectPromotionView['execution'];
 }
 
 export function promotionView(row: PromotionRow, facts: PromotionFacts): ProjectPromotionView {
@@ -339,6 +340,7 @@ export function promotionView(row: PromotionRow, facts: PromotionFacts): Project
     askedAt: row.state === 'CHECKING' ? null : row.updatedAt,
     recheckedAt: row.recheckedAt,
     recheck: facts.recheck,
+    execution: facts.execution ?? null,
     decidedAt: row.decidedAt,
     merged: row.mergedSha && row.mergedAt
       ? {

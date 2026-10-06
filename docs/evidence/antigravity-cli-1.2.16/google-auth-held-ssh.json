@@ -1,0 +1,22 @@
+{
+  "probe": "held-ssh",
+  "agy_version": "1.2.16",
+  "argv": [
+    "<TMP>/bin/agy",
+    "--gemini_dir=<TMP>/runs/held-ssh/gemini",
+    "--log-file=/dev/null"
+  ],
+  "stdin_is_tty": false,
+  "stdout_is_tty": false,
+  "stdin_action": "held open until process exit",
+  "ssh_environment": true,
+  "dbus": "nonexistent isolated socket",
+  "duration_seconds": 20.012,
+  "forced_stop": true,
+  "exit_code": -15,
+  "stdout": "",
+  "stderr": "",
+  "files": [
+    "gemini/antigravity-cli/settings.json"
+  ]
+}

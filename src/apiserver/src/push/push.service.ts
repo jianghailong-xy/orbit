@@ -1,8 +1,9 @@
 import http2 from 'node:http2';
+import { randomUUID } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as jwt from 'jsonwebtoken';
-import { RunStatus } from '@prisma/client';
+import { RunStatus, type DeviceToken } from '@prisma/client';
 import type { LoginEngine } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { readOwnerItemSessionIds } from '../projects/owner-decision-signal';
@@ -11,6 +12,8 @@ import { agentAlert } from './agent-alert';
 import { badgeDiff, BadgeState } from './badge-diff';
 import { ownerItemAlert } from './owner-item-alert';
 import { settleAlert } from './settle-alert';
+import { FcmTransport } from './fcm-transport';
+import { fcmData } from './fcm-payload';
 
 const APNS_HOST_PROD = 'api.push.apple.com';
 const APNS_HOST_SANDBOX = 'api.sandbox.push.apple.com';
@@ -27,12 +30,13 @@ const ENGINE_LABELS: Record<LoginEngine, string> = {
   claude: 'Claude Code',
   codex: 'Codex',
   kimi: 'Kimi Code',
+  antigravity: 'Antigravity',
 };
 
 /** What became of an agent's own `notify` call — the answer handed straight back to the agent. */
 export interface AgentNotifyResult {
   delivered: boolean;
-  /** Devices APNs accepted it for. Present only when delivered. */
+  /** Devices the configured transports accepted it for. Present only when delivered. */
   devices?: number;
   /** The message was longer than a notification carries and was cut. */
   truncated?: boolean;
@@ -40,13 +44,7 @@ export interface AgentNotifyResult {
   reason?: string;
 }
 
-/**
- * Sends "needs your reply" pushes to a user's registered iOS devices via APNs, using token-based
- * auth: a short-lived ES256 JWT signed with the team's .p8 key (cached ~50 min; APNs allows reuse
- * up to 1h). Best-effort — a push failure never affects the approval flow. Disabled (no-op) unless
- * APNS_KEY / APNS_KEY_ID / APNS_TEAM_ID are configured, so the server runs fine before the
- * credential is set and pushes light up the moment it is.
- */
+/** Shared reminder eligibility and reconciliation, with independent APNs and FCM transports. */
 @Injectable()
 export class PushService {
   private readonly log = new Logger(PushService.name);
@@ -54,6 +52,7 @@ export class PushService {
   private readonly teamId?: string;
   private readonly bundleId: string;
   private readonly p8?: string;
+  private readonly fcm: FcmTransport;
   private cached?: { token: string; iat: number };
   // Per-owner "needs you" state last pushed to that user's devices, so a reconcile pushes only on a
   // real change and can tell iOS which sessions' banners to clear. In-memory/per-replica; pushes are
@@ -74,13 +73,26 @@ export class PushService {
     this.bundleId = config.get<string>('APNS_BUNDLE_ID') ?? 'io.orbitd.app';
     const b64 = config.get<string>('APNS_KEY'); // base64 of the AuthKey_XXXX.p8
     this.p8 = b64 ? Buffer.from(b64, 'base64').toString('utf8') : undefined;
-    if (!this.enabled) {
-      this.log.warn('APNs not configured (APNS_KEY/APNS_KEY_ID/APNS_TEAM_ID) — pushes disabled');
-    }
+    this.fcm = new FcmTransport(config);
+    if (!this.apnsEnabled) this.log.warn('APNs not configured — iOS pushes disabled');
+    if (!this.fcm.enabled) this.log.warn('FCM not configured — Android pushes disabled');
+  }
+
+  private get apnsEnabled(): boolean {
+    return Boolean(this.keyId && this.teamId && this.p8);
   }
 
   private get enabled(): boolean {
-    return Boolean(this.keyId && this.teamId && this.p8);
+    return this.apnsEnabled || this.fcm.enabled;
+  }
+
+  private targets(ownerId: string): Promise<DeviceToken[]> {
+    return this.prisma.deviceToken.findMany({ where: { userId: ownerId, OR: [
+      ...(this.apnsEnabled ? [{ platform: 'ios', bundleId: this.bundleId,
+        environment: { in: ['production', 'sandbox'] } }] : []),
+      ...(this.fcm.enabled ? [{ platform: 'android', bundleId: this.fcm.packageName,
+        environment: 'production' }] : []),
+    ] } });
   }
 
   /**
@@ -110,7 +122,7 @@ export class PushService {
       // Completion can race this fire-and-forget path after the approval is created. Requiring the
       // target to remain in the authoritative set prevents a stale alert from being delivered.
       if (!ids.includes(sessionId)) return;
-      const tokens = await this.prisma.deviceToken.findMany({ where: { userId: session.ownerId } });
+      const tokens = await this.targets(session.ownerId);
       if (tokens.length === 0) return;
       const alreadyFlagged = this.badgeState.get(session.ownerId)?.sessions.has(sessionId) ?? false;
       this.badgeState.set(session.ownerId, { badge: ids.length, sessions: new Set(ids) });
@@ -123,8 +135,6 @@ export class PushService {
       if (alreadyFlagged) return;
       const badge = ids.length;
 
-      const auth = this.authToken();
-      if (!auth) return;
       const body = JSON.stringify({
         aps: {
           alert: { title: session.title || 'Orbit', body: `Needs your reply · ${toolName}` },
@@ -137,7 +147,7 @@ export class PushService {
         kind: 'approval',
       });
 
-      await this.deliver(tokens, body, 'alert', '10', auth);
+      await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
       this.log.warn(`push notify failed: ${(err as Error).message}`);
     }
@@ -164,10 +174,8 @@ export class PushService {
         select: { name: true, displayName: true, ownerId: true },
       });
       if (!runner) return;
-      const tokens = await this.prisma.deviceToken.findMany({ where: { userId: runner.ownerId } });
+      const tokens = await this.targets(runner.ownerId);
       if (tokens.length === 0) return;
-      const auth = this.authToken();
-      if (!auth) return;
       const body = JSON.stringify({
         aps: {
           alert: {
@@ -185,7 +193,7 @@ export class PushService {
         kind: 'engine-signed-out',
       });
 
-      await this.deliver(tokens, body, 'alert', '10', auth);
+      await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
       this.log.warn(`engine sign-out notify failed: ${(err as Error).message}`);
     }
@@ -229,10 +237,8 @@ export class PushService {
       if (!alert) return;
       const prefs = (session.owner?.preferences ?? {}) as { notifySessionFinished?: boolean };
       if (prefs.notifySessionFinished === false) return;
-      const tokens = await this.prisma.deviceToken.findMany({ where: { userId: session.ownerId } });
+      const tokens = await this.targets(session.ownerId);
       if (tokens.length === 0) return;
-      const auth = this.authToken();
-      if (!auth) return;
 
       const body = JSON.stringify({
         aps: {
@@ -251,7 +257,7 @@ export class PushService {
       // Collapse on the session: the two triggers can both fire for one settlement (a runner
       // finalize the reaper also force-finalizes), and APNs replaces a same-id banner instead
       // of stacking a second one. Cheaper and more robust than remembering what we've sent.
-      await this.deliver(tokens, body, 'alert', '10', auth, `settled-${sessionId}`);
+      await this.deliver(tokens, body, 'alert', '10', `settled-${sessionId}`);
     } catch (err) {
       this.log.warn(`settle notify failed: ${(err as Error).message}`);
     }
@@ -319,12 +325,10 @@ export class PushService {
         return { delivered: false, reason: `rate limited — try again in ${wait}s` };
       }
 
-      const tokens = await this.prisma.deviceToken.findMany({ where: { userId: input.ownerId } });
+      const tokens = await this.targets(input.ownerId);
       if (tokens.length === 0) {
         return { delivered: false, reason: 'no devices are registered for this account' };
       }
-      const auth = this.authToken();
-      if (!auth) return { delivered: false, reason: 'push is not configured on this server' };
 
       const body = JSON.stringify({
         aps: {
@@ -346,7 +350,7 @@ export class PushService {
       // Recorded before the round-trip: an APNs call that is slow or fails still consumed this
       // session's turn to interrupt, and retrying it in a tight loop is exactly what the limit is for.
       this.lastAgentNotify.set(key, now);
-      const devices = await this.deliver(tokens, body, 'alert', '10', auth);
+      const devices = await this.deliver(tokens, body, 'alert', '10');
       if (devices === 0) return { delivered: false, reason: 'no device accepted the notification' };
       return { delivered: true, devices, ...(alert.truncated ? { truncated: true } : {}) };
     } catch (err) {
@@ -409,10 +413,8 @@ export class PushService {
         promotion: await this.promotionFor(item.promotionId),
       });
       if (!alert) return;
-      const tokens = await this.prisma.deviceToken.findMany({ where: { userId: item.ownerId } });
+      const tokens = await this.targets(item.ownerId);
       if (tokens.length === 0) return;
-      const auth = this.authToken();
-      if (!auth) return;
 
       const body = JSON.stringify({
         aps: {
@@ -442,7 +444,7 @@ export class PushService {
       // Collapse on the item: an item can be pushed twice — handed to the owner and then escalated
       // again, or re-announced by a replica that raced — and APNs replaces the delivered banner
       // instead of stacking a second one about the same waiting thing.
-      await this.deliver(tokens, body, 'alert', '10', auth, `owner-item-${itemId}`);
+      await this.deliver(tokens, body, 'alert', '10', `owner-item-${itemId}`);
     } catch (err) {
       this.log.warn(`owner item notify failed: ${(err as Error).message}`);
     }
@@ -490,10 +492,8 @@ export class PushService {
       });
       if (!record || record.kind !== 'PROBLEMS') return;
       const count = ((record.body ?? {}) as { problems?: unknown[] }).problems?.length ?? 0;
-      const tokens = await this.prisma.deviceToken.findMany({ where: { userId: record.ownerId } });
+      const tokens = await this.targets(record.ownerId);
       if (tokens.length === 0) return;
-      const auth = this.authToken();
-      if (!auth) return;
       const body = JSON.stringify({
         aps: {
           alert: {
@@ -508,7 +508,7 @@ export class PushService {
         taskID: record.taskId,
         recordID: recordId,
       });
-      await this.deliver(tokens, body, 'alert', '10', auth, `confirmation-problems-${recordId}`);
+      await this.deliver(tokens, body, 'alert', '10', `confirmation-problems-${recordId}`);
     } catch (err) {
       this.log.warn(`confirmation problems notify failed: ${(err as Error).message}`);
     }
@@ -531,10 +531,8 @@ export class PushService {
   }): Promise<void> {
     if (!this.enabled) return;
     try {
-      const tokens = await this.prisma.deviceToken.findMany({ where: { userId: input.ownerId } });
+      const tokens = await this.targets(input.ownerId);
       if (tokens.length === 0) return;
-      const auth = this.authToken();
-      if (!auth) return;
       const body = JSON.stringify({
         aps: {
           alert: { title: 'Watch matched', body: input.reason },
@@ -545,7 +543,7 @@ export class PushService {
         generation: input.generation,
         kind: 'watch-matched',
       });
-      await this.deliver(tokens, body, 'alert', '10', auth, `watch-${input.watchId}-${input.generation}`);
+      await this.deliver(tokens, body, 'alert', '10', `watch-${input.watchId}-${input.generation}`);
     } catch (err) {
       this.log.warn(`watch notify failed: ${(err as Error).message}`);
     }
@@ -569,10 +567,8 @@ export class PushService {
   }): Promise<void> {
     if (!this.enabled) return;
     try {
-      const tokens = await this.prisma.deviceToken.findMany({ where: { userId: input.ownerId } });
+      const tokens = await this.targets(input.ownerId);
       if (tokens.length === 0) return;
-      const auth = this.authToken();
-      if (!auth) return;
       const body = JSON.stringify({
         aps: {
           alert: {
@@ -586,7 +582,7 @@ export class PushService {
         wikiSpaceID: input.spaceId,
         kind: 'wiki-review-mode-manual',
       });
-      await this.deliver(tokens, body, 'alert', '10', auth);
+      await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
       this.log.warn(`wiki review-mode notify failed: ${(err as Error).message}`);
     }
@@ -610,10 +606,8 @@ export class PushService {
   }): Promise<void> {
     if (!this.enabled) return;
     try {
-      const tokens = await this.prisma.deviceToken.findMany({ where: { userId: input.ownerId } });
+      const tokens = await this.targets(input.ownerId);
       if (tokens.length === 0) return;
-      const auth = this.authToken();
-      if (!auth) return;
       const body = JSON.stringify({
         aps: {
           alert: {
@@ -627,7 +621,7 @@ export class PushService {
         wikiSpaceID: input.spaceId,
         kind: 'wiki-review-mode-tiered',
       });
-      await this.deliver(tokens, body, 'alert', '10', auth);
+      await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
       this.log.warn(`wiki verification notify failed: ${(err as Error).message}`);
     }
@@ -650,10 +644,8 @@ export class PushService {
   }): Promise<void> {
     if (!this.enabled) return;
     try {
-      const tokens = await this.prisma.deviceToken.findMany({ where: { userId: input.ownerId } });
+      const tokens = await this.targets(input.ownerId);
       if (tokens.length === 0) return;
-      const auth = this.authToken();
-      if (!auth) return;
       const said = (input.lastError ?? '').split('\n', 1)[0]!.trim();
       const body = JSON.stringify({
         aps: {
@@ -668,7 +660,7 @@ export class PushService {
         wikiSpaceID: input.spaceId,
         kind: 'wiki-maintenance-failing',
       });
-      await this.deliver(tokens, body, 'alert', '10', auth);
+      await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
       this.log.warn(`wiki maintenance notify failed: ${(err as Error).message}`);
     }
@@ -740,48 +732,59 @@ export class PushService {
   /** Silent (content-available) push: updates the icon badge with no banner/sound, and carries
    *  `clearSessions` so a backgrounded app can remove the now-stale delivered approval banners. */
   private async syncBadge(ownerId: string, badge: number, clearSessions: string[]): Promise<void> {
-    const tokens = await this.prisma.deviceToken.findMany({ where: { userId: ownerId } });
+    const tokens = await this.targets(ownerId);
     if (tokens.length === 0) return;
-    const auth = this.authToken();
-    if (!auth) return;
     const body = JSON.stringify({
       aps: { 'content-available': 1, badge },
       ...(clearSessions.length ? { clearSessions } : {}),
     });
-    await this.deliver(tokens, body, 'background', '5', auth);
+    await this.deliver(tokens, body, 'background', '5');
   }
 
-  /** Fan a prepared payload out to a set of device tokens, pruning any APNs reports as dead.
-   *  `collapseId`, when given, makes a repeat of the same alert replace the delivered one.
-   *  Returns how many devices APNs accepted it for — ignored by the fire-and-forget callers,
-   *  and what `notifyAgentMessage` reports back to the agent that asked for the push. */
+  /** Route only eligible registrations; stale failures cannot prune a newer token/account binding. */
   private async deliver(
-    tokens: { token: string; environment: string }[],
+    tokens: DeviceToken[],
     body: string,
     pushType: 'alert' | 'background',
     priority: '10' | '5',
-    auth: string,
     collapseId?: string,
   ): Promise<number> {
-    const results = await Promise.all(
-      tokens.map(async (t) => {
+    const data = fcmData(body, pushType, randomUUID(), new Date().toISOString(), collapseId);
+    const results = await Promise.all(tokens.map(async (t) => {
+      const where = { id: t.id, token: t.token, userId: t.userId, updatedAt: t.updatedAt,
+        platform: t.platform, bundleId: t.bundleId, environment: t.environment };
+      const isCurrent = async () => Boolean(await this.prisma.deviceToken.findFirst({ where, select: { id: true } }));
+      try {
+        if (t.platform === 'android' && this.fcm.enabled && t.bundleId === this.fcm.packageName
+          && t.environment === 'production') {
+          const res = await this.fcm.send(t.token, { ...data, registrationKey: t.id }, isCurrent);
+          if (res.invalidToken) await this.prisma.deviceToken.deleteMany({ where });
+          else if (!res.accepted) this.log.warn(`FCM ${res.reason}`);
+          return res.accepted;
+        }
+        if (t.platform !== 'ios' || !this.apnsEnabled || t.bundleId !== this.bundleId
+          || !['sandbox', 'production'].includes(t.environment)) return false;
+        const auth = this.authToken();
+        if (!auth || !await isCurrent()) return false;
         const host = t.environment === 'sandbox' ? APNS_HOST_SANDBOX : APNS_HOST_PROD;
         const res = await this.send(host, t.token, body, auth, pushType, priority, collapseId);
         if (res.status === 410 || res.reason === 'BadDeviceToken' || res.reason === 'Unregistered') {
-          // APNs says this token is dead — drop it so we stop pushing to it.
-          await this.prisma.deviceToken.deleteMany({ where: { token: t.token } }).catch(() => {});
+          await this.prisma.deviceToken.deleteMany({ where });
         } else if (res.status >= 400) {
-          this.log.warn(`APNs ${res.status} ${res.reason ?? ''} for ${t.token.slice(0, 8)}…`);
+          this.log.warn(`APNs ${res.status} ${res.reason ?? ''}`);
         }
         return res.status >= 200 && res.status < 300;
-      }),
-    );
+      } catch {
+        this.log.warn(`Push transport failed for ${t.platform}`);
+        return false;
+      }
+    }));
     return results.filter(Boolean).length;
   }
 
   /** Cached provider JWT (ES256, kid=keyId, iss=teamId). Refreshed well before APNs's 1h limit. */
   private authToken(): string | null {
-    if (!this.enabled) return null;
+    if (!this.apnsEnabled) return null;
     const now = Math.floor(Date.now() / 1000);
     if (this.cached && now - this.cached.iat < 3000) return this.cached.token;
     const token = jwt.sign({ iss: this.teamId, iat: now }, this.p8 as string, {

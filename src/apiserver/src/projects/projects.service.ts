@@ -30,6 +30,7 @@ import {
 import { countLiveApprovals } from '../sessions/abandoned-approvals';
 import { isSessionGenerating } from '../common/session-generating';
 import { SingleFlight } from '../common/single-flight';
+import { modelRoutingEnabled } from '../common/model-routing-switch';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { MergeReceiptRow, mergeReceiptRow } from '../sessions/merge-receipt';
@@ -445,10 +446,10 @@ const PROJECT_LIST_SELECT = {
 /**
  * A row of `GET /projects/sidebar`, as opposed to a project document.
  *
- * The rail draws four things of a project — it is working, it waits on the reader, how recently it
- * moved, and its title — and this is the select behind them. `goal`, `updatedAt` and the
- * coordination bindings are absent on purpose: nothing on the rail reads them, and the whole point
- * of this endpoint is that a 15-second poll does not carry what a page view carries.
+ * The rail draws activity, attention, title and task progress. This select supplies the project
+ * fields; `readProjectSidebarRollups` reads progress from the maintained status tally. `goal`,
+ * `updatedAt` and coordination bindings are absent on purpose: nothing on the rail reads them,
+ * and a 15-second poll does not carry what a page view carries.
  */
 const SIDEBAR_PROJECT_SELECT = {
   id: true,
@@ -2237,6 +2238,11 @@ export class ProjectsService {
         project.title,
         project.id,
         project.coordinatorEnabled,
+        // Read on its own rather than with the project, whose payload is returned as it is.
+        modelRoutingEnabled(await this.prisma.user.findUnique({
+          where: { id: ownerId },
+          select: { preferences: true },
+        })),
       ),
       // Keep the transition first in the serialized tool result. Project payloads can contain long
       // acceptance definitions, and the role change is what the currently-running turn must see.
@@ -2595,17 +2601,20 @@ export class ProjectsService {
   /**
    * The open projects the web sidebar's Projects group draws, and only what it draws them from.
    *
-   * `list`'s Open read is the same rows plus seven task lanes, the integration line and the whole
+   * `list`'s Open read is the same rows plus seven task lanes and the whole
    * attention summary, and the rail polls this every 15 seconds from every open tab. Classifying
    * every task of every project for a dot that reads one lane is what made a browser tab the
    * single largest consumer of this database (2026-09-29: ~5,400 calls/day, ~1.1s of PostgreSQL
    * execution each, ~100 minutes/day), so the rail got its own read: the same `running` count and
-   * the same `lastActivityAt`, from `readProjectSidebarRollups`.
+   * the same `lastActivityAt`, plus progress from the maintained task-status tally, through
+   * `readProjectSidebarRollups`.
    *
    * The fields it keeps are the ones `SidebarProject` declares — `buckets` carries `running` alone,
    * and `attention` is the same whole summary the index sends (its `ownerItems` and
    * `startRequest` are what the row's amber count reads). Absent fields are absent for a reason:
    * depth here is paid for twice a minute by every open tab.
+   * Integration activity comes from a page-wide filtered count, so landing and merging keep the
+   * dot active after their task sessions finish, without counting stopped exceptions as work.
    *
    * `buckets.running` is the index's own number, not a second reading of IN_PROGRESS — see the
    * reader, which reaches it with the same `projectTaskWorkStateSql` the index uses. A rail that
@@ -2624,19 +2633,25 @@ export class ProjectsService {
       select: SIDEBAR_PROJECT_SELECT,
     });
     if (projects.length === 0) return [];
-    const [rollups, attention] = await Promise.all([
+    const [rollups, attention, integration] = await Promise.all([
       readProjectSidebarRollups(this.prisma, ownerId),
       // The same reader the index folds, narrowed to the projects this read returns, so the rail
       // and the page cannot disagree about what waits on the reader.
       readProjectListAttention(this.prisma, ownerId, ProjectStatus.OPEN),
+      readProjectIntegrationLines(this.prisma, projects.map((project) => project.id)),
     ]);
     return projects.map(({ coordinatorSession, ...project }) => ({
       ...project,
       // A project with no tasks has no group in the aggregate, and reports nothing in flight and
       // no activity rather than making the client read two shapes.
-      ...(rollups.get(project.id) ?? { buckets: { running: 0 }, lastActivityAt: null }),
+      ...(rollups.get(project.id) ?? {
+        taskCounts: { done: 0, failed: 0, total: 0 },
+        buckets: { running: 0 },
+        lastActivityAt: null,
+      }),
       attention: attention.get(project.id) ?? emptyProjectListAttention(),
       coordinatorActivity: coordinatorActivityOf(coordinatorSession),
+      integration: integration.get(project.id) ?? null,
     }));
   }
 
@@ -2876,6 +2891,7 @@ export class ProjectsService {
           openItemId: null,
           jobId: null,
           checksRunningForMs: null,
+          landTask: null,
         },
         childCount: _count.children,
         // Never spread-with-fallback into nothing: a row that somehow missed the graph pass still
@@ -4008,8 +4024,10 @@ export class ProjectsService {
       select: {
         id: true,
         title: true,
-        // Which of the two instruction texts the opening says (`coordinator-opening.ts`).
+        // Which of the two instruction texts the opening says (`coordinator-opening.ts`), and
+        // whether it asks for a tier: the owner's smart model selection, the switch delivery reads.
         coordinatorEnabled: true,
+        owner: { select: { preferences: true } },
         coordinatorSessionId: true,
         coordinatorWorkspaceId: true,
         // Both halves of the fold `deriveSessionLifecycleState` takes, rather than a second reading
@@ -4083,7 +4101,12 @@ export class ProjectsService {
         {
           workspaceId: runIn,
           title: coordinatorSessionTitle(project.title),
-          prompt: buildCoordinatorOpening(project.title, project.id, project.coordinatorEnabled),
+          prompt: buildCoordinatorOpening(
+            project.title,
+            project.id,
+            project.coordinatorEnabled,
+            modelRoutingEnabled(project.owner),
+          ),
         },
         { source: 'user', titleManagedByProject: true },
       );

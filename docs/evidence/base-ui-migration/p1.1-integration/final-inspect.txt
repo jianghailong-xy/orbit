@@ -1,0 +1,30 @@
+node:child_process:982
+    throw err;
+    ^
+
+<ref *1> Error: spawnSync git EPERM
+    at Object.spawnSync (node:internal/child_process:1175:20)
+    at spawnSync (node:child_process:929:24)
+    at execFileSync (node:child_process:972:15)
+    at Object.<anonymous> (/root/.orbit/worktrees/aa737ee0-40f5-5381-8a38-f4ce4a64335e/docs/evidence/base-ui-migration/p1.1-integration/inspect-candidate.cjs:8:31)
+    at Module._compile (node:internal/modules/cjs/loader:1956:14)
+    at Object..js (node:internal/modules/cjs/loader:2096:10)
+    at Module.load (node:internal/modules/cjs/loader:1678:32)
+    at Module._load (node:internal/modules/cjs/loader:1470:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5) {
+  errno: -1,
+  code: 'EPERM',
+  syscall: 'spawnSync git',
+  path: 'git',
+  spawnargs: [ 'rev-parse', 'HEAD' ],
+  error: [Circular *1],
+  status: 0,
+  signal: null,
+  output: [ null, 'c7f61251769331f0f2909d4e4d7ee245a01241d7\n', '' ],
+  pid: 22,
+  stdout: 'c7f61251769331f0f2909d4e4d7ee245a01241d7\n',
+  stderr: ''
+}
+
+Node.js v26.10.0

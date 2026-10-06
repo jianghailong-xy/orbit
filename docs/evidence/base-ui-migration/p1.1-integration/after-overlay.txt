@@ -1,0 +1,7 @@
+worktree-overlay: incompatible dependencies in /root/orbit: node_modules/vitest/node_modules/@esbuild/linux-x64 is not installed
+==> installing this worktree's lockfile in isolated node_modules
+npm warn deprecated whatwg-encoding@3.1.1: Use @exodus/bytes instead for a more spec-conformant and faster implementation
+
+added 780 packages in 4s
+worktree-overlay: incompatible dependencies in /tmp/orbit-p11-after-aa737ee0: node_modules/vitest/node_modules/@esbuild/linux-x64 is not installed
+worktree-overlay: isolated npm ci did not satisfy this tree's lockfile

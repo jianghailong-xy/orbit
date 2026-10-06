@@ -1,10 +1,11 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, Popconfirm, Tag } from 'antd';
-import { DeleteOutlined, EditOutlined, LoginOutlined } from '@ant-design/icons';
+import { Button, Dropdown, Popconfirm, Tag, type MenuProps } from 'antd';
+import { DeleteOutlined, DownloadOutlined, EditOutlined, EllipsisOutlined, LoadingOutlined, LoginOutlined, PauseOutlined, PlayCircleOutlined, PlusOutlined, WarningOutlined } from '@ant-design/icons';
 import {
   accountToStartOn,
+  type InstallEngine,
   type LoginEngine,
   type PlanUsageSnapshot,
   type RunnerAccountRemoveState,
@@ -13,6 +14,8 @@ import {
   type RunnerInstallState,
 } from '@orbit/shared';
 import { api } from '../api';
+import { accountIsPaused, usePauseClock } from '../lib/accountPause';
+import { AccountPauseActions, AccountPauseStatus, type AccountPauseControls } from './AccountPause';
 import { routeId, encodeId } from '../lib/idCodec';
 import {
   accountDir,
@@ -30,14 +33,12 @@ import {
 import { formatResetTime } from '../lib/providerPools';
 import { runnersQuery } from '../lib/queries';
 import { ago, engineVersionNumber, updateNoteOf } from '../lib/runnerEngines';
-import { ENGINE_PRESET } from '../lib/sessionProviderChoices';
+import { ENGINE_PRESET, ENGINE_SLUGS } from '../lib/sessionProviderChoices';
 import { useToast } from '../lib/toast';
 import { ProviderTile } from './ProviderGallery';
-import { ENGINE_NAME, RunnerSignIn } from './RunnerSignIn';
+import { ENGINE_NAME, GoogleSignInTerms, RunnerSignIn } from './RunnerSignIn';
 import type { Runner } from './TasksSidePanel';
 
-// Every engine a runner can sign into, in display order. Derived from ENGINE_NAME — a
-// `Record<LoginEngine, …>` — so adding a fourth engine can't silently skip this page.
 const ENGINES = Object.keys(ENGINE_NAME) as LoginEngine[];
 
 // Which runner cards the user opened. Cards start folded — three engines per machine adds up
@@ -68,7 +69,7 @@ type RowKind =
 export function rowKindOf(
   health: RunnerEngineHealth | undefined,
   install: RunnerInstallState | null | undefined,
-  engine: LoginEngine,
+  engine: InstallEngine,
 ): RowKind {
   if (install?.engine === engine) {
     if (install.status === 'pending' || install.status === 'installing') return 'installing';
@@ -171,6 +172,14 @@ export function tildePath(path: string): string {
   return path.replace(/^(?:\/root|\/home\/[^/]+|\/Users\/[^/]+)(?=\/|$)/, '~');
 }
 
+/** Whether this account is on its way out: asked to be removed, and still listed until the re-probe
+ *  that follows the machine's "done" drops it, a beat later. */
+function beingRemoved(runner: Runner, engine: LoginEngine, account: string): boolean {
+  const removal = runner.accountRemove;
+  return removal?.engine === engine && removal.account === account &&
+    (removal.status === 'pending' || removal.status === 'done');
+}
+
 /** The accounts a Codex row lists under itself: every one, once there is more than one — and only
  *  while the probe speaks for the engine, since an install under way is about the binary all of
  *  them share. None otherwise, which leaves the row exactly what it was before accounts. */
@@ -240,16 +249,6 @@ function available(kind: RowKind, quota: Quota): boolean {
   return kind === 'in' && (bindingPlanUsageRow(quota.windows)?.window.utilization ?? 0) < 100;
 }
 
-function StatusTag({ status }: { status: { color: string; label: string } }) {
-  return (
-    <div className="re-status">
-      <Tag color={status.color} title={status.label}>
-        {status.label}
-      </Tag>
-    </div>
-  );
-}
-
 /** The quota column: each window with how much of it is used and when it resets, or why there is
  *  nothing to show. */
 function QuotaCell({ kind, quota }: { kind: RowKind; quota: Quota }) {
@@ -262,7 +261,7 @@ function QuotaCell({ kind, quota }: { kind: RowKind; quota: Quota }) {
               {row.groupLabel && <div className="re-quota-head">{row.groupLabel}</div>}
               <div className="re-quota-head">
                 <b>{row.label}</b>
-                <span>{row.percent}%</span>
+                <span>{row.percent}%{row.remaining ? ' remaining' : ''}</span>
               </div>
               <div className={`runner-util ${row.nearLimit ? 'full' : ''}`}>
                 <span className="runner-util-fill" style={{ width: `${row.percent}%` }} />
@@ -283,22 +282,39 @@ function QuotaCell({ kind, quota }: { kind: RowKind; quota: Quota }) {
   );
 }
 
-/** Re-sign in, as a mark: a login that is in rarely needs it, and a word on every row read as
- *  something each of them needed doing. It is the last thing on its row, as Sign in is on a row that
- *  needs one, so the way back into every login on a card is one column down its right edge. */
-function ResignIn({ disabled, onClick }: { disabled?: boolean; onClick: () => void }) {
-  return (
-    <Button
-      size="small"
-      type="text"
-      className="re-icon"
-      icon={<LoginOutlined />}
-      aria-label="Re-sign in"
-      title="Re-sign in"
-      disabled={disabled}
-      onClick={onClick}
-    />
-  );
+/** Routine account maintenance stays in one menu. The pause dialog lives outside the dropdown
+ *  so closing the menu does not unmount the operation it just opened. */
+function RunnerAccountMenu({ onRename, onSignIn, onRemove, offline, removing, pause }: {
+  onRename?: () => void;
+  onSignIn?: () => void;
+  onRemove?: () => void;
+  offline: boolean;
+  removing?: boolean;
+  pause?: { name: string; until?: string | null; endpoint: string };
+}) {
+  const menu = (controls?: AccountPauseControls) => {
+    const items: MenuProps['items'] = [
+      ...(onRename ? [{ key: 'rename', icon: <EditOutlined aria-hidden />, label: 'Rename', onClick: onRename }] : []),
+      ...(onSignIn ? [{ key: 'login', icon: <LoginOutlined aria-hidden />, label: 'Re-sign in', disabled: offline, onClick: onSignIn }] : []),
+      ...(controls ? controls.paused ? [
+        { key: 'resume', icon: <PlayCircleOutlined aria-hidden />, label: 'Resume now', disabled: controls.pending, onClick: controls.resume },
+        { key: 'duration', icon: <PauseOutlined aria-hidden />, label: 'Change pause duration…', disabled: controls.pending, onClick: controls.choose },
+      ] : [
+        { key: 'pause', icon: <PauseOutlined aria-hidden />, label: 'Pause account…', disabled: controls.pending, onClick: controls.choose },
+      ] : []),
+      ...(onRemove ? [
+        { type: 'divider' as const },
+        { key: 'remove', icon: <DeleteOutlined aria-hidden />, label: 'Remove account', danger: true, disabled: offline || removing, onClick: onRemove },
+      ] : []),
+    ];
+    if (items.length === 0) return null;
+    return (
+      <Dropdown trigger={['click']} placement="bottomRight" menu={{ items }} classNames={{ root: 're-account-menu' }}>
+        <Button size="small" type="text" className="re-action re-more" icon={<EllipsisOutlined />} aria-label="More actions" title="More actions" />
+      </Dropdown>
+    );
+  };
+  return pause ? <AccountPauseActions {...pause}>{menu}</AccountPauseActions> : menu();
 }
 
 /** One engine on one runner: what it is, what state it's in, what it costs, and the way out. */
@@ -325,6 +341,12 @@ function EngineRow({
   const message = useToast();
   const qc = useQueryClient();
   const kind = rowKindOf(health, runner.install, engine);
+  const antigravity = engine === 'antigravity' ? runner.antigravity : undefined;
+  const googleLogin = engine === 'antigravity' ? (antigravity?.googleLogin ?? 'needs_update') : undefined;
+  const envKey = engine === 'antigravity' && kind === 'in' && health?.authSource !== 'google';
+  const loginHint = googleLogin === 'unsupported_platform'
+    ? 'Google sign-in is not supported on macOS runners yet. Use a Gemini API key.'
+    : googleLogin === 'needs_update' ? 'Update this runner to sign in with Google.' : null;
   const offline = !runner.online;
   const row = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -343,18 +365,21 @@ function EngineRow({
   });
 
   // Only one runtime's quota is this engine's; the others belong to the other rows.
-  const now = Date.now();
-  const snapshot = planUsageSnapshotForProvider(runner.planUsage, engine);
+  const single = engineKeepsAccounts(engine) && health?.accounts?.length === 1 ? health.accounts[0] : undefined;
+  const now = usePauseClock(single?.pausedUntil);
+  const snapshot = engine === 'antigravity' ? (health?.authSource === 'google' ? health.planUsage ?? null : null) : planUsageSnapshotForProvider(runner.planUsage, engine);
   const quota = quotaOf(kind, snapshot, !!runner.online, now);
   // More than one Codex account: this row heads their group, and each account is a row of its own
   // below it (AccountRow), with its own state.
   const grouped = accounts.length > 0;
-  // What the head says for its group: how many of its accounts could take a session now.
-  const ready = accounts.filter((account) => {
+  // What the head says for its group: how many of its accounts could take a session now, out of
+  // those staying — one being removed is counted as gone already.
+  const kept = accounts.filter((account) => !beingRemoved(runner, engine, account.id));
+  const ready = kept.filter((account) => {
     const own = accountKindOf(account);
-    return available(own, quotaOf(own, accountPlanUsage(runner.planUsage, engine, account.id), !!runner.online, now));
+    return !accountIsPaused(account.pausedUntil, now) && available(own, quotaOf(own, accountPlanUsage(runner.planUsage, engine, account.id), !!runner.online, now));
   }).length;
-  // "+ Account" is how a machine gets from one account to two, so it is not the group's to hold:
+  // "Add account" is how a machine gets from one account to two, so it is not the group's to hold:
   // the Codex row offers it whenever the probe speaks for the engine, whether it heads a group yet
   // or not.
   const addsAccounts =
@@ -366,30 +391,36 @@ function EngineRow({
   const warn = note?.tone === 'warn' && !offline;
 
   const action = () => {
+    if (antigravity?.supported === false) return null;
+    if (engine === 'antigravity' && kind !== 'missing' && kind !== 'installing' && kind !== 'install-failed') {
+      if (googleLogin !== 'available') return null;
+      if (kind === 'in' && !envKey) return null;
+      return <Button size="small" type="primary" disabled={offline} onClick={() => onSignIn(signIn === engine ? null : engine)}>Sign in with Google</Button>;
+    }
     if (offline) {
-      return kind === 'in' ? <ResignIn disabled onClick={() => {}} /> : <Button size="small" disabled>Sign in</Button>;
+      return kind === 'in' ? null : <Button size="small" className="re-action" disabled>Sign in</Button>;
     }
     switch (kind) {
       case 'missing':
         return (
-          <Button size="small" type="primary" loading={install.isPending} onClick={() => install.mutate()}>
+          <Button size="small" className="re-action re-install" icon={<DownloadOutlined aria-hidden />} loading={install.isPending} onClick={() => install.mutate()}>
             Install
           </Button>
         );
       case 'installing':
         return (
-          <Button size="small" type="text" onClick={() => dismissInstall.mutate()}>
+          <Button size="small" type="text" className="re-action" onClick={() => dismissInstall.mutate()}>
             Cancel
           </Button>
         );
       case 'install-failed':
         return (
-          <Button size="small" loading={install.isPending} onClick={() => install.mutate()}>
+          <Button size="small" className="re-action" loading={install.isPending} onClick={() => install.mutate()}>
             Retry
           </Button>
         );
       case 'in':
-        return <ResignIn onClick={() => onSignIn(signIn === engine ? null : engine)} />;
+        return null;
       // Signed out, wouldn't say, or just installed. An install the probe hasn't caught up with yet
       // gets Sign in too: a CLI that was just installed has no sign-in, so that is what comes next,
       // and the runner only reports an install done once the binary is on its PATH — waiting for the
@@ -399,6 +430,7 @@ function EngineRow({
           <Button
             size="small"
             type="primary"
+            className="re-action"
             onClick={() => onSignIn(signIn === engine ? null : engine)}
           >
             Sign in
@@ -408,9 +440,9 @@ function EngineRow({
   };
 
   return (
-    <div className={`re-row${grouped ? ' re-grp' : ''}${focused ? ' focused' : ''}`} ref={row}>
+    <div className={`re-row${grouped ? ' re-grp' : ''}${focused ? ' focused' : ''}${accountIsPaused(single?.pausedUntil, now) ? ' account-paused' : ''}`} ref={row} data-engine={engine}>
       <div className="re-id">
-        <ProviderTile slug={ENGINE_PRESET[engine]} label={ENGINE_NAME[engine]} size={28} />
+        <ProviderTile slug={ENGINE_PRESET[engine] ?? engine} label={ENGINE_NAME[engine]} size={28} />
         <div style={{ minWidth: 0 }}>
           <div className="re-name">{ENGINE_NAME[engine]}</div>
           <div className="re-meta">
@@ -418,11 +450,11 @@ function EngineRow({
               <>
                 {versionOf(engine, health)} ·{' '}
                 <b>
-                  {ready} of {accounts.length} accounts available
+                  {ready} of {kept.length} accounts available
                 </b>
               </>
             ) : (
-              metaFor(kind, engine, health)
+              <>{metaFor(kind, engine, health)}{engine === 'antigravity' && health?.authSource === 'google' && kind === 'in' ? ' · Google account' : ''}</>
             )}
             {/* Whether this CLI is being kept current, next to what it currently is — the two
                 halves of the same question, and useless apart. */}
@@ -443,23 +475,38 @@ function EngineRow({
           for them, and its line runs the width of the row instead. */}
       {!grouped && (
         <>
-          <StatusTag status={statusOf(kind, quota, now)} />
-          <QuotaCell kind={kind} quota={quota} />
+          <AccountPauseStatus until={single?.pausedUntil} now={now} detail={kind === 'in' ? 'Signed in' : undefined} status={antigravity?.supported === false ? { color: 'orange', label: 'Update runner' } : statusOf(kind, quota, now)} />
+          {envKey ? <div className="re-quota re-meta">env key · runs on your Gemini key</div> : <QuotaCell kind={kind} quota={quota} />}
         </>
       )}
       <div className="re-act">
         {addsAccounts && (
           <Button
             size="small"
+            className="re-action re-add-account"
+            icon={<PlusOutlined aria-hidden />}
             disabled={offline}
             onClick={() => onSignIn(signIn === addAccountPanel(engine) ? null : addAccountPanel(engine))}
           >
-            + Account
+            Add account
           </Button>
         )}
         {/* A group's sign-ins are its accounts', each on its own row. */}
         {!grouped && action()}
+        {!grouped && (
+          <RunnerAccountMenu
+            offline={offline}
+            onSignIn={kind === 'in' && (engine !== 'antigravity' || (googleLogin === 'available' && !envKey)) ? () => onSignIn(signIn === engine ? null : engine) : undefined}
+            pause={single && (kind === 'in' || accountIsPaused(single.pausedUntil, now)) ? {
+              name: accountNameOf(single), until: single.pausedUntil,
+              endpoint: `/runners/${runner.id}/accounts/${engine}/${single.id}/pause`,
+            } : undefined}
+          />
+        )}
       </div>
+
+      {loginHint && <div className="re-panel-hint re-login-note">{loginHint}</div>}
+      {googleLogin === 'available' && signIn !== engine && <div className="re-login-note"><GoogleSignInTerms /></div>}
 
       {/* The relay panels. Each one is the row's own news, so it opens under the row it belongs
           to rather than as a page-level banner. */}
@@ -512,7 +559,7 @@ function EngineRow({
           </div>
         </div>
       )}
-      {signIn === engine && (
+      {signIn === engine && (!googleLogin || googleLogin === 'available') && (
         <div className="re-panel">
           <RunnerSignIn runnerId={runner.id} engine={engine} />
         </div>
@@ -533,7 +580,7 @@ function EngineRow({
 
 /**
  * An account's name on its row, and the way to change it — Default's too, which the machine never
- * names. The pencil after it, or a double-click on it, swaps it for the session title's own editor
+ * names. Rename in its menu, or a double-click on it, swaps it for the session title's own editor
  * (WorkspaceView): everything selected, Enter or a click elsewhere saves, Escape drops the draft, and
  * an empty or unchanged one changes nothing. Only a label, kept in Orbit (RunnersService.renameAccount):
  * nothing on the machine changes, so it works with the runner offline.
@@ -543,16 +590,19 @@ function AccountName({
   engine,
   account,
   next,
+  editing,
+  setEditing,
 }: {
   runner: Runner;
   engine: LoginEngine;
   account: RunnerEngineAccount;
   next?: boolean;
+  editing: boolean;
+  setEditing: (editing: boolean) => void;
 }) {
   const message = useToast();
   const qc = useQueryClient();
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = useState(accountNameOf(account));
   // Escape blurs the input too; this tells that blur not to save.
   const cancelled = useRef(false);
   // The input hugs its text, measured off an unseen twin, as the session title's does.
@@ -572,6 +622,9 @@ function AccountName({
     onError: (e: Error) => message.error("Couldn't rename the account", e.message),
   });
   const shown = rename.isPending ? (rename.variables ?? accountNameOf(account)) : accountNameOf(account);
+  useEffect(() => {
+    if (!editing) setDraft(shown);
+  }, [editing, shown]);
   // Default named something else says what it still is: the login this machine's own environment
   // selects, which a terminal shares — and which signing in there changes.
   const renamedDefault = account.id === 'default' && shown !== 'Default';
@@ -635,9 +688,6 @@ function AccountName({
           NEXT
         </span>
       )}
-      <button type="button" className="re-rename" aria-label="Rename" title="Rename" onClick={start}>
-        <EditOutlined />
-      </button>
     </div>
   );
 }
@@ -676,13 +726,15 @@ function AccountRow({
   const message = useToast();
   const qc = useQueryClient();
   const kind = accountKindOf(account);
+  const [editing, setEditing] = useState(false);
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
   const isDefault = account.id === 'default';
   const panel = accountPanel(engine, account.id);
   // What became of the last removal asked for here, if it was this account's of this engine's: the
   // button says it is under way, and a machine that refused says why.
   const removal = runner.accountRemove;
   const mine = removal?.engine === engine && removal.account === account.id ? removal : null;
-  const removing = mine?.status === 'pending';
+  const removing = beingRemoved(runner, engine, account.id);
   const refused = mine?.status === 'failed' ? mine.message : null;
   const remove = useMutation({
     mutationFn: () =>
@@ -700,14 +752,17 @@ function AccountRow({
   });
   // Each account's quota is its own: the runner reads every account in that account's CODEX_HOME,
   // and an account it has not read shows none rather than borrowing another's limit.
-  const now = Date.now();
+  const now = usePauseClock(account.pausedUntil);
   const snapshot = accountPlanUsage(runner.planUsage, engine, account.id);
   const quota = quotaOf(kind, snapshot, !!runner.online, now);
   const toggle = () => onSignIn(signIn === panel ? null : panel);
   // Removing deletes the slot's sign-in from the machine, and only signing in again brings it back:
   // asked first, wherever it is offered.
-  const confirmRemove = (trigger: ReactNode) => (
+  const confirmRemove = (trigger: ReactNode, open?: boolean) => (
     <Popconfirm
+      open={open}
+      trigger={open === undefined ? ['click'] : []}
+      onOpenChange={open === undefined ? undefined : setConfirmingRemove}
       title={`Remove ${accountNameOf(account)}?`}
       description={
         `Its sign-in is deleted from ${runner.displayName || runner.name}. ` +
@@ -715,18 +770,31 @@ function AccountRow({
       }
       okText="Remove"
       okButtonProps={{ danger: true }}
-      onConfirm={() => remove.mutate()}
+      onConfirm={() => { remove.mutate(); setConfirmingRemove(false); }}
     >
       {trigger}
     </Popconfirm>
   );
+  const menu = (
+    <RunnerAccountMenu
+      offline={!runner.online}
+      removing={removing}
+      onRename={() => setEditing(true)}
+      onSignIn={kind === 'in' ? toggle : undefined}
+      onRemove={isDefault ? undefined : () => setConfirmingRemove(true)}
+      pause={kind === 'in' || accountIsPaused(account.pausedUntil, now) ? {
+        name: accountNameOf(account), until: account.pausedUntil,
+        endpoint: `/runners/${runner.id}/accounts/${engine}/${account.id}/pause`,
+      } : undefined}
+    />
+  );
 
   return (
-    <div className={`re-row re-acct${lastOfGroup ? ' re-acct-end' : ''}`}>
+    <div className={`re-row re-acct${lastOfGroup ? ' re-acct-end' : ''}${accountIsPaused(account.pausedUntil, now) ? ' account-paused' : ''}${removing ? ' account-removing' : ''}`}>
       <div className="re-id">
         <span className="re-rail" aria-hidden="true" />
         <div className="re-id-main" style={{ minWidth: 0 }}>
-          <AccountName runner={runner} engine={engine} account={account} next={next} />
+          <AccountName runner={runner} engine={engine} account={account} next={next} editing={editing} setEditing={setEditing} />
           {/* Where the account lives and which one it is — never who: the account's email and id
               stay on the machine, and the fingerprint is a prefix of a non-reversible one. */}
           <div className="re-meta" title={accountDir(account)}>
@@ -735,36 +803,23 @@ function AccountRow({
           </div>
         </div>
       </div>
-      <StatusTag status={statusOf(kind, quota, now)} />
+      {removing ? (
+        <div className="re-status">
+          <Tag color="processing" icon={<LoadingOutlined />}>Removing…</Tag>
+        </div>
+      ) : (
+        <AccountPauseStatus until={account.pausedUntil} now={now} detail={kind === 'in' ? 'Signed in' : undefined} status={statusOf(kind, quota, now)} />
+      )}
       <QuotaCell kind={kind} quota={quota} />
       <div className="re-act">
-        {/* Default has nothing to remove: it is the CODEX_HOME the machine's own environment
-            selects, the one `codex` typed in a terminal shares. Every other account is a slot this
-            runner added, and this is the way back off the machine — the one thing the page could
-            not do before, which left whoever signed one in twice with a directory to delete by
-            hand. A grey mark until pointed at, like the account pools' sign-out: red on a row that
-            is fine reads as something wrong with it. */}
-        {!isDefault &&
-          confirmRemove(
-            <Button
-              size="small"
-              type="text"
-              danger
-              className="re-icon re-remove"
-              icon={<DeleteOutlined />}
-              aria-label="Remove"
-              title="Remove"
-              disabled={!runner.online || removing}
-              loading={removing}
-            />,
-          )}
-        {kind === 'in' ? (
-          <ResignIn disabled={!runner.online} onClick={toggle} />
-        ) : (
-          <Button size="small" type={runner.online ? 'primary' : 'default'} disabled={!runner.online} onClick={toggle}>
+        {kind !== 'in' && (
+          <Button size="small" className="re-action" type={runner.online ? 'primary' : 'default'} disabled={!runner.online || removing} onClick={toggle}>
             Sign in
           </Button>
         )}
+        {/* Default is the machine's own login and cannot be removed. The confirmation for an
+            added account stays anchored to More after its menu closes. */}
+        {isDefault ? menu : confirmRemove(<span className="re-menu-anchor">{menu}</span>, confirmingRemove)}
       </div>
       {/* The same account, signed in twice. Two rows of quota for one account read as two quotas,
           so the repeat is named on the row that made it — with the one way out right there: this
@@ -802,7 +857,7 @@ function AccountRow({
 }
 
 /**
- * "+ Account": the same sign-in flow as every other here, started the moment the panel opens, under
+ * "Add account": the same sign-in flow as every other here, started the moment the panel opens, under
  * a name the page picks (defaultAccountName). The runner gives the account a config directory of its
  * own, so Default — and the CLI in a terminal — is untouched.
  *
@@ -812,7 +867,7 @@ function AccountRow({
  * leaves the account the name it was added under, for its row's rename to change.
  *
  * Once that account is signed in, reported and named, the panel folds itself away: what it added is
- * that account's own row, and the row's pencil is where its name changes from then on.
+ * that account's own row, and the row's menu is where its name changes from then on.
  */
 function AddEngineAccount({
   engine,
@@ -918,7 +973,8 @@ export function summaryOf(runner: Runner): string {
   // Only the engines this card actually renders. A runner reports every CLI on the machine,
   // OpenCode included, but a summary that counted those would put a problem on a folded card
   // that unfolding never reveals — the row it refers to isn't on this page.
-  const shown = runner.engines.filter((e) => ENGINES.some((engine) => engine === e.engine));
+  const engines = ENGINES.filter((engine) => engine !== 'antigravity' || runner.antigravity?.googleLogin === 'available');
+  const shown = runner.engines.filter((e) => engines.includes(e.engine as LoginEngine));
   // An engine nothing has updated in a week is exactly the kind of quiet drift folding a card
   // would otherwise bury — it outranks the sign-in count, which is the good news.
   const stale = shown.filter((e) => e.installed && updateNoteOf(e.update)?.tone === 'warn').length;
@@ -926,7 +982,7 @@ export function summaryOf(runner: Runner): string {
     return stale === 1 ? '1 engine not updating' : `${stale} engines not updating`;
   }
   const ready = shown.filter(signedIn).length;
-  return ready === ENGINES.length ? 'All signed in' : `${ready} of ${ENGINES.length} signed in`;
+  return ready === engines.length ? 'All signed in' : `${ready} of ${engines.length} signed in`;
 }
 
 function RunnerEngineCard({
@@ -939,10 +995,15 @@ function RunnerEngineCard({
   collapsed: boolean;
   onToggle: () => void;
   /** The engine a deep link named for this runner, if this is the runner it named. */
-  focusEngine?: LoginEngine | null;
+  focusEngine?: InstallEngine | null;
 }) {
   const [signIn, setSignIn] = useState<string | null>(null);
   const engines = runner.engines ?? null;
+  const name = runner.displayName || runner.name;
+  const meta = [runner.hostname !== name && runner.hostname, runner.version && `v${runner.version}`]
+    .filter(Boolean)
+    .join(' · ');
+  const failed = runner.install?.status === 'failed' && runner.install.engine !== 'antigravity';
 
   return (
     <div className={`re-card re-runner-card${runner.online ? '' : ' offline'}${collapsed ? ' collapsed' : ''}`}>
@@ -953,33 +1014,51 @@ function RunnerEngineCard({
           className="re-toggle"
           type="button"
           aria-expanded={!collapsed}
+          aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${name}`}
           onClick={onToggle}
         >
-          <span className={`re-chev${collapsed ? '' : ' open'}`} aria-hidden="true">
-            ▸
-          </span>
           <span className={`re-dot${runner.online ? ' on' : ''}`} />
-          <span className="re-runner">{runner.displayName || runner.name}</span>
-          <span className="re-runner-meta">
-            {[runner.hostname, runner.version && `runner ${runner.version}`]
-              .filter(Boolean)
-              .join(' · ')}
+          <span className="re-runner-copy">
+            <span className="re-runner">{name}</span>
+            {meta && <span className="re-runner-meta">{meta}</span>}
           </span>
-          {collapsed && <span className="re-summary">{summaryOf(runner)}</span>}
+          <span className={`re-chev${collapsed ? '' : ' open'}`} aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <path
+                d="m9 5 7 7-7 7"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </span>
         </button>
-        <span className="re-head-sp" />
-        {!runner.online && <Tag>Offline</Tag>}
+        {(!runner.online || collapsed) && (
+          <div className="re-runner-status">
+            {!runner.online && <Tag>Offline</Tag>}
+            {collapsed && (
+              <span className={`re-summary${failed ? ' warn' : ''}`}>
+                {failed && <WarningOutlined aria-hidden />}{summaryOf(runner)}
+              </span>
+            )}
+          </div>
+        )}
         {/* Updating the engine CLIs is not here, on purpose. It takes no engine — it does every
             CLI on the machine — so its object is the runner, and this is a page about identity
             where everything else is scoped to one (runner, engine) pair. It lives behind this
             link, next to the machine's own version and slots. */}
-        <Link className="re-manage" to={`/runners/${encodeId(runner.id)}`}>
-          Manage runner →
+        <Link className="re-manage" aria-label={`Manage ${name}`} to={`/runners/${encodeId(runner.id)}`}>
+          Manage →
         </Link>
       </div>
       {collapsed ? null : engines ? (
-        ENGINES.map((engine) => {
-          const health = engines.find((e) => e.engine === engine);
+        ENGINE_SLUGS.map((engine) => {
+          const reported = engines.find((e) => e.engine === engine);
+          const state = engine === 'antigravity' ? runner.antigravity : undefined;
+          const health = state && state.installed != null
+            ? { ...reported, engine, installed: state.installed, version: state.version ?? reported?.version, auth: reported?.auth ?? (state.envKeyAvailable ? 'yes' : 'unknown'), authSource: state.authSource ?? reported?.authSource } as RunnerEngineHealth
+            : reported;
           const accounts = accountRowsOf(engine, health, runner.install);
           // Read across the whole group, since a repeat is a fact about two of its rows.
           const repeats = duplicateAccounts(accounts);
@@ -1019,10 +1098,13 @@ function RunnerEngineCard({
       ) : (
         // Never three rows of "Unknown": this runner hasn't told us anything, which is a
         // different fact from "nothing is installed" and has a different fix.
-        <div className="re-unreported">
-          This runner hasn&apos;t reported its engines yet. Update it to the latest version — an
-          older runner can&apos;t be signed in or installed from here.
-        </div>
+        <>
+          <div className="re-unreported">
+            This runner hasn&apos;t reported its engines yet. Update it to the latest version — an
+            older runner can&apos;t be signed in or installed from here.
+          </div>
+          <div className="re-row" data-engine="antigravity"><div className="re-id"><ProviderTile slug="antigravity" label="Antigravity" size={28} /><div className="re-name">Antigravity</div></div><Tag>Update runner</Tag><div className="re-login-note">Update this runner to sign in with Google.</div></div>
+        </>
       )}
     </div>
   );
@@ -1055,7 +1137,7 @@ export function RunnerEngines() {
   const [params] = useSearchParams();
   const focusRunner = routeId(params.get('runner'));
   const engineParam = params.get('engine');
-  const focusEngine = ENGINES.find((e) => e === engineParam) ?? null;
+  const focusEngine: InstallEngine | null = engineParam === 'antigravity' ? 'antigravity' : ENGINES.find((e) => e === engineParam) ?? null;
   useEffect(() => {
     if (!focusRunner) return;
     setExpanded((prev) => (prev.includes(focusRunner) ? prev : write([...prev, focusRunner])));
@@ -1078,7 +1160,12 @@ export function RunnerEngines() {
           // Same for an account removal: the machine answers on its next check-in, and the page
           // has to be there to take the answer — a refusal is news the person who pressed it has
           // to see, and the row it is about leaves once the probe catches up.
-          r.accountRemove?.status === 'pending',
+          r.accountRemove?.status === 'pending' ||
+          // ...and a removal the machine reported done before the beat carrying its re-probe: the
+          // row stays until the runner stops reporting the account.
+          (r.accountRemove?.status === 'done' && !!r.online &&
+            !!r.engines?.some((e) => e.engine === r.accountRemove?.engine &&
+              e.accounts?.some((a) => a.id === r.accountRemove?.account))),
       )
         ? 4000
         : false,
@@ -1101,10 +1188,7 @@ export function RunnerEngines() {
       <div className="re-sec-head">
         <h3>On your runners</h3>
         <span className="re-sec-sub">
-          Signed in on the machine itself — a session spends that subscription, nothing to paste.
-          {/* Said once, here, because it is the answer to a question every row raises and none
-              of them can answer alone: a version number can't tell you it's the current one. */}
-          {list.length > 0 && ' Orbit keeps these CLIs updated every 30 min.'}
+          Use subscriptions signed in on your machines.
         </span>
         {list.length > 0 && (
           <span className="re-sec-count">

@@ -5,10 +5,13 @@ import {
   type ProjectIntegrationSettings as SharedProjectIntegrationSettings,
   type ProjectIntegrationView as SharedProjectIntegrationView,
   type ProjectListIntegration,
+  type IntegrationJobKind,
+  type IntegrationJobPhase,
 } from '@orbit/shared';
 
 import type { PrismaService } from '../prisma/prisma.service';
 import { branchName } from './project-criterion-landing';
+import { readProjectLandTaskViews } from './project-task-integration';
 
 /**
  * A code project's integration line: the branch the platform lands its finished tasks on
@@ -136,19 +139,56 @@ export function readProjectCodebase(
 export async function readProjectIntegrationLines(
   prisma: Pick<PrismaService, 'projectCodebase'>,
   projectIds: readonly string[],
-): Promise<Map<string, ProjectListIntegration>> {
+): Promise<Map<string, ProjectListIntegration<Date>>> {
   if (projectIds.length === 0) return new Map();
   const rows = await prisma.projectCodebase.findMany({
     where: { projectId: { in: [...projectIds] }, slot: 'primary' },
-    select: { ...LINE_COLUMNS, projectId: true },
+    select: {
+      ...LINE_COLUMNS,
+      projectId: true,
+      _count: { select: { integrationJobs: { where: { state: { in: ['QUEUED', 'RUNNING'] } } } } },
+      integrationJobs: {
+        where: { state: { in: ['QUEUED', 'RUNNING'] } },
+        select: {
+          id: true, state: true, kind: true, phase: true, createdAt: true, claimedAt: true, heartbeatAt: true,
+          task: { select: { title: true } },
+        },
+      },
+    },
   });
-  const lines = new Map<string, ProjectListIntegration>();
+  const lines = new Map<string, ProjectListIntegration<Date>>();
   for (const row of rows) {
     const line = decidedLine(row);
     if (!line) continue;
-    lines.set(row.projectId, { line, ref: branchName(row.integrationRef) });
+    const lead = oldestInFlight(row.integrationJobs ?? []);
+    lines.set(row.projectId, {
+      line,
+      ref: branchName(row.integrationRef),
+      activeJobCount: row._count.integrationJobs,
+      ...(lead ? {
+        inFlight: {
+          taskTitle: lead.task?.title ?? null,
+          kind: lead.kind as IntegrationJobKind,
+          phase: lead.phase as IntegrationJobPhase | null,
+          state: lead.state === 'RUNNING' ? 'RUNNING' : 'QUEUED',
+          startedAt: lead.claimedAt ?? lead.createdAt,
+          heartbeatAt: lead.heartbeatAt,
+        },
+      } : {}),
+    });
   }
   return lines;
+}
+
+/** `readProjectIntegrationView`'s ORDER BY over a project's active jobs, in memory: running first,
+ *  then the oldest by claim-or-enqueue, `id` breaking a tie. */
+function oldestInFlight<J extends { id: string; state: string; createdAt: Date; claimedAt: Date | null }>(
+  jobs: readonly J[],
+): J | null {
+  const startedAt = (job: J) => (job.claimedAt ?? job.createdAt).getTime();
+  return [...jobs].sort((a, b) =>
+    Number(b.state === 'RUNNING') - Number(a.state === 'RUNNING')
+    || startedAt(a) - startedAt(b) || a.id.localeCompare(b.id))[0] ?? null;
 }
 
 /** How long this project's exception items wait on its coordinator before they are the owner's. */
@@ -207,7 +247,7 @@ export function projectIntegrationView(
 /**
  * The settings, plus what the integration queue has done with them (§1.6).
  *
- * Two statements on top of the binding the caller already read, and they are the reason this is its
+ * The queue facts are read on top of the binding the caller already read, which is why this is its
  * own endpoint rather than four more fields on the project document: `project-get-query-count`
  * holds that document to a budget, and the row that reads this polls.
  *
@@ -226,12 +266,21 @@ export async function readProjectIntegrationView(
            (count(*) FILTER (WHERE "state" = 'QUEUED'))::int AS "queued"
       FROM "project_integration_job"
      WHERE "project_id" = ${projectId}::uuid`);
-  // The newest FINISHED landing attempt, which is what "the tip" means: how far ahead it left the
-  // line, and whether the check that ran on it passed. A job still running describes no tip yet.
+  // The last finished attempt's checks may have failed on a tree that never landed. Keep its
+  // verdict separate from the last successful landing's measured distance from upstream.
   const [newest] = await prisma.$queryRaw<Array<{
-    state: string; aheadOfUpstream: number | null;
+    checks: unknown; aheadOfUpstream: number | null;
   }>>(Prisma.sql`
-    SELECT "state", "ahead_of_upstream" AS "aheadOfUpstream"
+    SELECT "checks",
+           (SELECT landed."ahead_of_upstream"
+              FROM "project_integration_job" landed
+             WHERE landed."project_id" = ${projectId}::uuid
+               AND landed."kind" = 'LAND_TASK'
+               AND landed."state" IN ('LANDED', 'ALREADY_LANDED')
+               AND landed."finished_at" IS NOT NULL
+               AND landed."ahead_of_upstream" IS NOT NULL
+             ORDER BY landed."finished_at" DESC, landed."id" DESC
+             LIMIT 1) AS "aheadOfUpstream"
       FROM "project_integration_job"
      WHERE "project_id" = ${projectId}::uuid
        AND "kind" = 'LAND_TASK'
@@ -246,26 +295,32 @@ export async function readProjectIntegrationView(
        AND "main_sync_sha" IS NOT NULL
      ORDER BY "finished_at" DESC, "id" DESC
      LIMIT 1`);
-  // The oldest job in flight, which is the one the two counts above are waiting on and the one the
-  // Work overview card's live line names. Not filtered by kind, deliberately: it is the same rows
-  // the counts count, so the line and the numbers can never be about different sets of jobs.
+  // Running work takes precedence over queued work: an older queued job must not hide the work
+  // the runner is doing. Within either state, name the oldest job. Kind and phase distinguish a
+  // promotion check from a landing, and checks from the git steps around them.
   //
   // Its clock starts at the claim for a running job and at the enqueue for a queued one — a QUEUED
   // job has never been claimed, so the two spellings are one COALESCE and no job reports the age of
   // the wrong wait. `id` breaks a tie between two jobs created in the same millisecond; uuid v7
   // sorts by time.
   const [oldest] = await prisma.$queryRaw<Array<{
-    state: string; taskTitle: string | null; startedAt: Date;
+    state: string; kind: IntegrationJobKind; phase: IntegrationJobPhase | null;
+    taskTitle: string | null; startedAt: Date; heartbeatAt: Date | null;
   }>>(Prisma.sql`
-    SELECT j."state",
+    SELECT j."state", j."kind", j."phase",
            t."title" AS "taskTitle",
-           COALESCE(j."claimed_at", j."created_at") AS "startedAt"
+           COALESCE(j."claimed_at", j."created_at") AS "startedAt",
+           j."heartbeat_at" AS "heartbeatAt"
       FROM "project_integration_job" j
       LEFT JOIN "task" t ON t."id" = j."task_id"
      WHERE j."project_id" = ${projectId}::uuid
        AND j."state" IN ('RUNNING', 'QUEUED')
-     ORDER BY COALESCE(j."claimed_at", j."created_at") ASC, j."id" ASC
+     ORDER BY (j."state" = 'RUNNING') DESC,
+              COALESCE(j."claimed_at", j."created_at") ASC, j."id" ASC
      LIMIT 1`);
+  // Each current LAND_TASK through the task read model, so this page and the task's own describe
+  // one landing in the same words (§2.7a).
+  const landTasks = await readProjectLandTaskViews(prisma, projectId);
 
   const ahead = newest?.aheadOfUpstream ?? null;
   return {
@@ -276,24 +331,34 @@ export async function readProjectIntegrationView(
     lastUpstreamSyncAbsentReason: synced ? null : 'NEVER_SYNCED',
     integratingCount: counts?.integrating ?? 0,
     queuedCount: counts?.queued ?? 0,
-    mergeCheckOnTip: mergeCheckOnTip(newest?.state ?? null),
+    mergeCheckOnTip: lastLandingCheck(newest?.checks),
+    landTasks,
     inFlight: oldest
       ? {
         taskTitle: oldest.taskTitle,
+        kind: oldest.kind,
+        phase: oldest.phase,
         state: oldest.state === 'RUNNING' ? 'RUNNING' : 'QUEUED',
         startedAt: oldest.startedAt,
+        heartbeatAt: oldest.heartbeatAt,
       }
       : null,
   };
 }
 
-/** What the newest finished landing says about the line's tip (§1.6). Anything that did not run
- *  its checks to a verdict — a conflict, an error, a cancellation — leaves the tip UNKNOWN rather
- *  than failing: nothing was tested, so nothing failed. */
-function mergeCheckOnTip(state: string | null): 'PASSING' | 'FAILING' | 'UNKNOWN' {
-  if (state === 'LANDED' || state === 'ALREADY_LANDED') return 'PASSING';
-  if (state === 'CHECK_FAILED') return 'FAILING';
-  return 'UNKNOWN';
+/** The last attempt's check evidence, not the success of its push or the state of the current tip.
+ *  Empty checks (including already-landed jobs) provide no passing verdict. */
+export function lastLandingCheck(checks: unknown): 'PASSING' | 'FAILING' | 'UNKNOWN' {
+  if (!Array.isArray(checks) || checks.length === 0) return 'UNKNOWN';
+  let complete = true;
+  for (const check of checks) {
+    if (!check || typeof check !== 'object') { complete = false; continue; }
+    if (check.timedOut === true) return 'FAILING';
+    if (typeof check.expectedExitCode !== 'number' || typeof check.exitCode !== 'number'
+      || check.timedOut !== false) { complete = false; continue; }
+    if (check.exitCode !== check.expectedExitCode) return 'FAILING';
+  }
+  return complete ? 'PASSING' : 'UNKNOWN';
 }
 
 /** What a request may set (L5). Each field is written only when sent; null clears the merge check. */
@@ -514,19 +579,19 @@ async function codeTaskWork(
  * the one reading of it, for the first integration and for a start that was given no line.
  */
 export async function projectDefaultLine(
-  db: Pick<Prisma.TransactionClient, 'task' | 'taskDependency'>,
+  db: Pick<Prisma.TransactionClient, 'taskDependency'>,
   projectId: string,
 ): Promise<IntegrationLine> {
-  const codeTasks = await db.task.findMany({
-    where: { projectId, codeless: false, status: { not: TaskStatus.CANCELLED } },
+  // Filter both endpoints through their project rows instead of materializing all task IDs into
+  // two `IN` lists. Large projects can exceed PostgreSQL's bind-parameter limit that way.
+  const edge = await db.taskDependency.findFirst({
+    where: {
+      task: { projectId, codeless: false, status: { not: TaskStatus.CANCELLED } },
+      dependsOnTask: { projectId, codeless: false, status: { not: TaskStatus.CANCELLED } },
+    },
     select: { id: true },
   });
-  const ids = codeTasks.map((task) => task.id);
-  const edges = await db.taskDependency.findMany({
-    where: { taskId: { in: ids }, dependsOnTaskId: { in: ids } },
-    select: { taskId: true, dependsOnTaskId: true },
-  });
-  return defaultIntegrationLine(codeTasks, edges);
+  return edge ? 'PROJECT_BRANCH' : 'MAIN';
 }
 
 /** The line half of a start's settings — what `startProjectLine` is asked for and answers with. */
@@ -646,7 +711,9 @@ export type FirstIntegration =
       integrationRef: string;
       upstreamRef: string;
       source: IntegrationRefSource;
-      startedAt: Date;
+      /** Whether THIS call wrote `integration_started_at` (L3 step 3), rather than finding the line
+       *  already started by an earlier transaction. */
+      startedNow: boolean;
     }
   | { started: false; refusal: 'INTEGRATION_REPOSITORY_UNKNOWN' };
 
@@ -660,7 +727,8 @@ export type FirstIntegration =
  * and never again.
  *
  * What L3 also asks of this transaction — queueing the project's other finished code tasks onto
- * the line that just started — is the caller's: it owns the integration queue.
+ * the line that just started — is the caller's: it owns the integration queue. `startedNow` is how
+ * it knows it is that transaction.
  */
 export async function startOnFirstIntegration(
   tx: Prisma.TransactionClient,
@@ -674,7 +742,8 @@ export async function startOnFirstIntegration(
     row = await bind(tx, { ownerId: first.ownerId, projectId: first.projectId, canonicalRepoUrl: repository });
   }
 
-  if (!row.integrationStartedAt) {
+  const startedNow = !row.integrationStartedAt;
+  if (startedNow) {
     let integrationRef = row.integrationRef;
     if (row.integrationRefSource !== 'EXPLICIT') {
       integrationRef = await projectDefaultLine(tx, first.projectId) === 'PROJECT_BRANCH'
@@ -694,6 +763,6 @@ export async function startOnFirstIntegration(
     integrationRef: row.integrationRef,
     upstreamRef: row.upstreamRef,
     source: row.integrationRefSource as IntegrationRefSource,
-    startedAt: row.integrationStartedAt!,
+    startedNow,
   };
 }

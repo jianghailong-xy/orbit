@@ -1,0 +1,132 @@
+[
+  {
+    "command": [
+      "node",
+      "--check",
+      "src/web/ui-migration/breakpoints.browser.mjs"
+    ],
+    "exitCode": 0,
+    "sha256": "e4c19462c331c8f72fb1687d3c702a273324c363ba5c6ec1181405960df3991c",
+    "output": ""
+  },
+  {
+    "command": [
+      "node",
+      "--check",
+      "src/web/ui-migration/collect-evidence.mjs"
+    ],
+    "exitCode": 0,
+    "sha256": "7c4d718be9ac6ff1d54f8cc47bf947c6c0440a7f4503e039a490ead131c7fdbb",
+    "output": ""
+  },
+  {
+    "command": [
+      "node",
+      "--check",
+      "src/web/ui-migration/environment.mjs"
+    ],
+    "exitCode": 0,
+    "sha256": "ab94a200de48797f8a834d245ce1296c68f232685211d1034c60c8418ecc916f",
+    "output": ""
+  },
+  {
+    "command": [
+      "node",
+      "--check",
+      "src/web/ui-migration/fixtures.mjs"
+    ],
+    "exitCode": 0,
+    "sha256": "d951bcaeb8f6f634e4e327a255826c09b1bd84b074d4e136a395b1d7f3eb7476",
+    "output": ""
+  },
+  {
+    "command": [
+      "node",
+      "--check",
+      "src/web/ui-migration/harness.mjs"
+    ],
+    "exitCode": 0,
+    "sha256": "145bc5b9014890d531e9d9f757a91bcad7f3ceeb4ecacdfc8fee7935e5f406c1",
+    "output": ""
+  },
+  {
+    "command": [
+      "node",
+      "--check",
+      "src/web/ui-migration/known-failures.browser.mjs"
+    ],
+    "exitCode": 0,
+    "sha256": "e53b8de0150876ba5dbf47ac077f309b6cb1aa581b91deeba22bb6b5c58d7b70",
+    "output": ""
+  },
+  {
+    "command": [
+      "node",
+      "--check",
+      "src/web/ui-migration/page-scenarios.mjs"
+    ],
+    "exitCode": 0,
+    "sha256": "eeb67d77e337b5b282ea950aaf85056935b1b9282817a7ac69c07a7711b30a39",
+    "output": ""
+  },
+  {
+    "command": [
+      "node",
+      "--check",
+      "src/web/ui-migration/pages.browser.mjs"
+    ],
+    "exitCode": 0,
+    "sha256": "5e197e317a423c611735e5414fdb9ddc0643c640ed56784c0dbe4d558eaa0407",
+    "output": ""
+  },
+  {
+    "command": [
+      "node",
+      "--check",
+      "src/web/ui-migration/performance.browser.mjs"
+    ],
+    "exitCode": 0,
+    "sha256": "ffaf8a81a90c8f34831f6bbb28cf9cc6cdf590a5b02d0ab5795ed481e73f40f7",
+    "output": ""
+  },
+  {
+    "command": [
+      "node",
+      "--check",
+      "src/web/ui-migration/playwright.config.mjs"
+    ],
+    "exitCode": 0,
+    "sha256": "b9ef76a458e6a4b80f85cf9a64b43541787af20b9c07499ee6cb72fab330b8b2",
+    "output": ""
+  },
+  {
+    "command": [
+      "node",
+      "--check",
+      "src/web/ui-migration/session-fixtures.mjs"
+    ],
+    "exitCode": 0,
+    "sha256": "43663d63aae496d71302118a3078b48308438d0856c5b7a889b046b4dcde675c",
+    "output": ""
+  },
+  {
+    "command": [
+      "node",
+      "--check",
+      "src/web/ui-migration/session-scenarios.mjs"
+    ],
+    "exitCode": 0,
+    "sha256": "447a629d6b900371671b76edec612e0443b99a95697f399ec38d6c55cfc31e5a",
+    "output": ""
+  },
+  {
+    "command": [
+      "node",
+      "--check",
+      "src/web/ui-migration/states.browser.mjs"
+    ],
+    "exitCode": 0,
+    "sha256": "f2d2e184fc12742f024b6fc54ef97932c26d466d6da47e7bd6030ea6fedbdb52",
+    "output": ""
+  }
+]

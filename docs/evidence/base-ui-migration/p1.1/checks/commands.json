@@ -1,0 +1,53 @@
+{
+  "baselineCommit": "6bbf3ecc3dc2f72193ecb58e6cfb0540753bafce",
+  "runtime": {
+    "node": "v26.10.0",
+    "npm": "11.19.1"
+  },
+  "checks": [
+    {
+      "command": "npm ci --ignore-scripts --no-audit --no-fund --fetch-retries=0 --fetch-timeout=15000",
+      "exitCode": 0,
+      "log": "checks/npm-ci.txt"
+    },
+    {
+      "command": "npm run build -w @orbit/web",
+      "exitCode": 0,
+      "log": "checks/web-build.txt"
+    },
+    {
+      "command": "npm run test -w @orbit/web",
+      "exitCode": 0,
+      "log": "checks/web-test.txt",
+      "files": 291,
+      "tests": 3553
+    },
+    {
+      "command": "npm test -w @orbit/web -- src/lib/theme.test.tsx src/components/ui/boundary.test.ts",
+      "exitCode": 0,
+      "log": "checks/focused-tests.txt",
+      "files": 2,
+      "tests": 6
+    },
+    {
+      "command": "node node_modules/typescript/bin/tsc -p src/web/ui-migration/foundation.tsconfig.json --noEmit",
+      "exitCode": 0,
+      "log": "checks/test-typecheck.txt"
+    },
+    {
+      "command": "npm run test:ui-migration -w @orbit/web",
+      "exitCode": 0,
+      "log": "checks/p0-browser-regression.txt",
+      "summary": "p0-regression/summary.json"
+    },
+    {
+      "command": "npm run test:ui-foundation -w @orbit/web",
+      "exitCode": 0,
+      "log": "checks/foundation-browser.txt",
+      "summary": "foundation-run/summary.json",
+      "passed": 48,
+      "skipped": 0,
+      "unexpected": 0
+    }
+  ]
+}

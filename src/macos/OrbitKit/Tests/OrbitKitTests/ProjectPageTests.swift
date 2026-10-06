@@ -35,8 +35,9 @@ final class ProjectPageTests: XCTestCase {
                                        doneNotIntegrated: 0, waitingForLanding: 1)
         let branch = ProjectPage.overviewCells(b, taskCount: 35, line: .projectBranch)
         XCTAssertEqual(branch.map(\.label),
-                       ["Running", "Ready", "Waiting", "Integrating", "On project branch", "On main", "Failed"])
-        XCTAssertEqual(branch.first { $0.key == "blocked" }?.footnote, "for a prerequisite to land")
+                       ["Running", "Ready", "Waiting", "Pending landing", "On project branch", "On main", "Failed"])
+        XCTAssertEqual(branch.first { $0.key == "blocked" }?.footnote, "1 waiting for a prerequisite to land")
+        XCTAssertEqual(branch.first { $0.key == "integrating" }?.footnote, "no landing receipt yet")
         // A project landing straight into main has no branch to strand work on.
         XCTAssertFalse(ProjectPage.overviewCells(b, taskCount: 35, line: .main)
                         .contains { $0.key == "onIntegrationLine" })
@@ -146,6 +147,41 @@ final class ProjectPageTests: XCTestCase {
                            sessionId: sessionId, fuseEpisodeId: fuse, actions: actions)
     }
 
+    func testOpenItemsSummaryKeepsCoordinatorItemsQuietUntilTheServerReassignsThem() throws {
+        let coordinator = item(.integrationCheckFailed, assignee: .coordinator, waited: 3_600,
+                               escalateIn: -60)
+        let quiet = try XCTUnwrap(ProjectPage.openItemsSummary(
+            status: .open, started: true, items: .init(withCoordinator: [coordinator])))
+        XCTAssertEqual(quiet.count, 1)
+        XCTAssertEqual(quiet.needsYou, 0)
+        XCTAssertNil(quiet.attention, "a local countdown reaching zero does not reassign an item")
+        XCTAssertEqual(quiet.subtitle, "No action needed from you · 1 with the coordinator")
+
+        let owner = item(.integrationCheckFailed, assignee: .owner, waited: 3_600)
+        let escalated = try XCTUnwrap(ProjectPage.openItemsSummary(
+            status: .open, started: true, items: .init(needsYou: [owner])))
+        XCTAssertEqual(escalated.count, 1)
+        XCTAssertEqual(escalated.attention, "1 item needs you")
+        XCTAssertEqual(escalated.subtitle, "1 item needs you")
+
+        let pause = item(.fusePaused, assignee: .owner, waited: 60, actions: [.resume], fuse: "f1")
+        let mixed = try XCTUnwrap(ProjectPage.openItemsSummary(
+            status: .open, started: true,
+            items: .init(needsYou: [owner, pause], withCoordinator: [coordinator])))
+        XCTAssertEqual(mixed.count, 3)
+        XCTAssertEqual(mixed.attention, "2 items need you", "the existing Resume action remains discoverable")
+        XCTAssertEqual(mixed.subtitle, "2 items need you · 1 with the coordinator")
+    }
+
+    func testOpenItemsSummaryDoesNotTurnAnUnreadInboxIntoAnEmptyOne() throws {
+        XCTAssertNil(ProjectPage.openItemsSummary(status: .open, started: true, items: nil))
+        let empty = try XCTUnwrap(ProjectPage.openItemsSummary(
+            status: .open, started: true, items: .init()))
+        XCTAssertEqual(empty.count, 0)
+        XCTAssertNil(empty.attention)
+        XCTAssertEqual(empty.subtitle, "No open items")
+    }
+
     func testWaitingLabelCountsDownToTheOwner() {
         XCTAssertEqual(ProjectPage.waitingLabel(item(.integrationConflict, assignee: .coordinator,
                                                      waited: 18 * 60, escalateIn: 102 * 60), now: Self.now),
@@ -190,13 +226,13 @@ final class ProjectPageTests: XCTestCase {
                                             commitsAheadOfUpstream: 7, lastUpstreamSyncAt: iso(720),
                                             integratingCount: 1, queuedCount: 1, mergeCheckOnTip: "PASSING")
         XCTAssertEqual(ProjectPage.integrationFacts(branch, now: Self.now), [
-            "project/bg-jobs", "7 commits ahead of main", "synced with main 12m ago",
-            "Integrating 1 · Queued 1", "Merge check ✓ passing on the branch tip",
+            "project/bg-jobs", "7 commits ahead of main at last measurement", "synced with main 12m ago",
+            "Running jobs 1 · Queued 1", "Last landing check ✓ passing",
         ])
         let main = ProjectIntegrationView(line: .main, upstreamRef: "main", commitsAheadOfUpstream: 3,
                                           mergeCheckOnTip: "UNKNOWN")
         XCTAssertEqual(ProjectPage.integrationFacts(main, now: Self.now),
-                       ["main", "Integrating 0 · Queued 0", "Merge check not run yet"])
+                       ["main", "Running jobs 0 · Queued 0", "Last landing check not checked"])
         XCTAssertNil(ProjectPage.integrationFacts(ProjectIntegrationView(), now: Self.now))
     }
 
@@ -207,9 +243,9 @@ final class ProjectPageTests: XCTestCase {
         let view = ProjectIntegrationView(
             integratingCount: 1, queuedCount: 0,
             inFlight: .init(taskTitle: "T2 wiki 契约、迁移与共享类型", state: "RUNNING",
-                            startedAt: iso(80)))
+                            startedAt: iso(80), kind: "LAND_TASK", phase: "CHECK"))
         XCTAssertEqual(ProjectPage.landingLine(view, now: Self.now), ProjectPage.LandingLine(
-            what: "T2 wiki 契约、迁移与共享类型", running: true, state: "checking", clock: "1m 20s"))
+            what: "T2 wiki 契约、迁移与共享类型", running: true, state: "checking", clock: "1m 20s", word: "Landing"))
     }
 
     func testTheLandingLineIsQueuedAndStillWhileTheJobWaitsItsTurn() {
@@ -217,7 +253,7 @@ final class ProjectPageTests: XCTestCase {
             integratingCount: 0, queuedCount: 1,
             inFlight: .init(taskTitle: "T1", state: "QUEUED", startedAt: iso(40)))
         XCTAssertEqual(ProjectPage.landingLine(view, now: Self.now), ProjectPage.LandingLine(
-            what: "T1", running: false, state: "queued", clock: "0m 40s"))
+            what: "T1", running: false, state: "queued", clock: "0m 40s", clockLabel: "Queued for"))
     }
 
     /// The oldest job's state and clock, but the COUNT in the name slot: a title would have said
@@ -227,6 +263,38 @@ final class ProjectPageTests: XCTestCase {
             integratingCount: 2, queuedCount: 1,
             inFlight: .init(taskTitle: "T1", state: "RUNNING", startedAt: iso(80)))
         XCTAssertEqual(ProjectPage.landingLine(view, now: Self.now)?.what, "3 jobs")
+    }
+
+    func testLandingRefreshFailureFreezesTheClockAndStopsClaimingActivity() {
+        let view = ProjectIntegrationView(integratingCount: 1, inFlight: .init(
+            state: "RUNNING", startedAt: iso(80), kind: "LAND_TASK", phase: "CHECK"))
+        let later = Self.now.addingTimeInterval(60)
+        let line = ProjectPage.landingLine(view, now: later, updatedAt: Self.now, refreshFailed: true)
+        XCTAssertEqual(line?.state, "Update unavailable")
+        XCTAssertEqual(line?.running, false)
+        XCTAssertEqual(line?.clock, "1m 20s")
+        XCTAssertEqual(line?.updated, "Updated 1m ago")
+        XCTAssertEqual(ProjectPage.landingLine(view, now: Self.now.addingTimeInterval(91),
+                                              updatedAt: Self.now)?.running, false)
+        XCTAssertEqual(ProjectPage.landingLine(view, now: later, updatedAt: later)?.running, true)
+    }
+
+    func testLandingHeartbeatCanBeStaleEvenWhenTheAPIReadSucceeds() {
+        let view = ProjectIntegrationView(integratingCount: 1, inFlight: .init(
+            state: "RUNNING", startedAt: iso(720), kind: "LAND_TASK", phase: "CHECK", heartbeatAt: iso(660)))
+        let line = ProjectPage.landingLine(view, now: Self.now, updatedAt: Self.now)
+        XCTAssertEqual(line?.running, false)
+        XCTAssertEqual(line?.state, "Update unavailable")
+        XCTAssertEqual(line?.clock, "1m 0s")
+        XCTAssertEqual(line?.updated, "Updated 11m ago")
+    }
+
+    func testManualAndPausedReadyWorkUseTheirActualStartConditions() {
+        let buckets = ProjectPanoramaBuckets(ready: 1)
+        XCTAssertEqual(ProjectPage.overviewCells(buckets, taskCount: 1, line: nil, manualReadyCount: 1)
+            .first { $0.key == "ready" }?.footnote, "can start manually")
+        XCTAssertEqual(ProjectPage.overviewCells(buckets, taskCount: 1, line: nil, paused: true, manualReadyCount: 1)
+            .first { $0.key == "ready" }?.footnote, "project is paused")
     }
 
     /// Nothing in flight is the row's absence, and so is a project whose server never described a
@@ -245,7 +313,23 @@ final class ProjectPageTests: XCTestCase {
             integratingCount: 1, queuedCount: 0,
             inFlight: .init(taskTitle: nil, state: "RUNNING", startedAt: "not a date"))
         XCTAssertEqual(ProjectPage.landingLine(view, now: Self.now), ProjectPage.LandingLine(
-            what: nil, running: true, state: "checking", clock: "0m 0s"))
+            what: nil, running: true, state: "running", clock: "0m 0s"))
+    }
+
+    func testMergeJobsDescribeTheirKindAndActualPhase() {
+        for (kind, word) in ProjectPage.integrationJobWords {
+            for (phase, state) in ProjectPage.integrationPhaseWords {
+                let view = ProjectIntegrationView(inFlight: .init(
+                    state: "RUNNING", startedAt: iso(80), kind: kind, phase: phase))
+                XCTAssertEqual(ProjectPage.landingLine(view, now: Self.now)?.word, word)
+                XCTAssertEqual(ProjectPage.landingLine(view, now: Self.now)?.state, state)
+            }
+        }
+        let queued = ProjectIntegrationView(inFlight: .init(
+            state: "QUEUED", startedAt: iso(80), kind: "LAND_PROMOTION", phase: "CHECK"))
+        XCTAssertEqual(ProjectPage.landingLine(queued, now: Self.now)?.word, "Merge to main")
+        XCTAssertEqual(ProjectPage.landingLine(queued, now: Self.now)?.state, "queued")
+        XCTAssertFalse(ProjectPage.landingLine(queued, now: Self.now)!.running)
     }
 
     /// Minutes AND seconds, at every length: this is not `RelativeTime.span`, which rounds to the
@@ -262,6 +346,17 @@ final class ProjectPageTests: XCTestCase {
     }
 
     // MARK: Tasks
+
+    func testUnfinishedWorkKeepsItsWorkLaneDespiteAnEarlierLanding() {
+        for (state, key) in [("READY", "ready"), ("FAILED", "failed"), ("CANCELLED", "settled"),
+                             ("AWAITING_VERIFICATION", "awaiting-verification")] {
+            for integration in ["QUEUED", "CHECK_FAILED", "ON_UPSTREAM"] {
+                let row = ProjectTaskRow(id: "reopened", title: "Work", workState: state,
+                                          integration: .init(state: integration))
+                XCTAssertEqual(ProjectPage.taskGroups([row]).map(\.key), [key])
+            }
+        }
+    }
 
     func testTaskBandsFollowTheWebsOrder() {
         let rows = [
@@ -281,7 +376,7 @@ final class ProjectPageTests: XCTestCase {
         XCTAssertEqual(groups.map(\.key), ["running", "integrating", "ready", "waiting-for-landing",
                                            "level-1", "level-2", "landed", "settled"])
         XCTAssertEqual(groups.map(\.heading), [
-            "Running", "Integrating · checks run on the combined tree", "Ready · can start now",
+            "Running", "Pending landing", "Ready · can start now",
             "Waiting · for a prerequisite to land", "Blocked · topology level 1", "Blocked · topology level 2",
             "Landed", "Done / Cancelled",
         ])
@@ -313,7 +408,7 @@ final class ProjectPageTests: XCTestCase {
         XCTAssertNil(tag("SOMETHING_NEW", nil))
         XCTAssertEqual(ProjectPage.integrationTag(
             ProjectTaskRow(id: "t", title: "t", integration: .init(state: "RUNNING", checksRunningForMs: 180_000)),
-            ref: nil, upstreamRef: nil)?.text, "Integrating · checks 3m")
+            ref: nil, upstreamRef: nil)?.text, "Integrating · checking")
         XCTAssertEqual(ProjectPage.integrationTag(
             ProjectTaskRow(id: "t", title: "t", dependencyState: "BLOCKED", landingWaitCount: 1),
             ref: nil, upstreamRef: nil)?.text, "Waits for 1 task to land")

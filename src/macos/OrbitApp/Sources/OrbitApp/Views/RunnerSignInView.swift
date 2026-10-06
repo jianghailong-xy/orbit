@@ -1,6 +1,17 @@
 import SwiftUI
 import OrbitKit
 
+struct GoogleSignInTermsView: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(EngineAuth.googleTermsWarning)
+            Link("Google terms", destination: EngineAuth.googleTermsURL)
+        }
+        .font(.orbitLabel)
+        .foregroundStyle(Color.secondary)
+    }
+}
+
 // Signing an engine CLI back in on the runner's own machine, from here. Two views:
 //
 //   • RunnerSignInView — the relay itself (start → open the page → paste the code / enter the
@@ -148,6 +159,7 @@ struct RunnerSignInView: View {
     @ViewBuilder
     private func idle(_ model: RunnerSignInModel) -> some View {
         VStack(alignment: .leading, spacing: 6) {
+            if engine == .antigravity { GoogleSignInTermsView() }
             if model.status == .failed, let m = model.relayMessage {
                 Text(m).font(.orbitLabel).foregroundStyle(.orange)
             }
@@ -158,7 +170,7 @@ struct RunnerSignInView: View {
                      ? "Starting…"
                      : model.status == .failed
                        ? "Try signing in to \(engine.displayName) again"
-                       : "Sign in to \(engine.displayName)")
+                       : engine == .antigravity ? "Sign in with Google" : "Sign in to \(engine.displayName)")
             }
             .buttonStyle(.borderedProminent)
             .disabled(model.busy || !nameReady)
@@ -242,17 +254,25 @@ private struct PasteBackForm: View {
 ///
 /// The remedy depends on where the credentials live (see `EngineAuth.remedy`): a built-in engine
 /// signs in on the runner itself, OpenCode's provider-specific login can only be run on that
-/// machine, Antigravity's key is a variable in its environment, and any other slug is a configured
+/// machine, Antigravity connects Gemini in Providers, and any other slug is a configured
 /// API key — which these clients can't edit, so the card says where it lives instead of offering a
 /// button that goes nowhere.
 struct AuthErrorCardView: View {
     let console: ConsoleModel
     let message: String
 
-    private var remedy: EngineAuth.Remedy { EngineAuth.remedy(forProvider: console.provider) }
+    private var remedy: EngineAuth.Remedy { EngineAuth.remedy(forProvider: console.provider, googleLogin: console.runnerAntigravity?.googleLogin) }
     private var retryText: String { console.lastUserMessageText }
 
     var body: some View {
+        if console.provider == "antigravity" || (console.executesAntigravity && EngineAuth.antigravityRepair(message) == .needsKey) {
+            AntigravityRepairCardView(console: console, repair: .needsKey)
+        } else {
+            ordinaryCard
+        }
+    }
+
+    private var ordinaryCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             Label(title, systemImage: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange).font(.orbitProse.bold())
@@ -271,8 +291,8 @@ struct AuthErrorCardView: View {
             return "Sign-in expired on “\(name)”"
         case .runCommand:
             return "Sign-in expired"
-        case .environmentKey:
-            return "Gemini API key rejected"
+        case .connectGemini:
+            return EngineAuth.antigravityTitle(.needsKey, runnerName: console.runnerName)
         case .apiKey:
             return "Provider authentication failed"
         }
@@ -294,9 +314,8 @@ struct AuthErrorCardView: View {
         case .runCommand(let command):
             Text("Run \(Text(command).font(.orbitMono)) on that machine and choose the provider there — OpenCode's sign-in is provider-specific, so it can't be driven from here.")
                 .font(.orbitLabel).foregroundStyle(.secondary)
-        case .environmentKey(let variable):
-            Text("Antigravity runs on the Gemini API key in its environment. Set \(Text(variable).font(.orbitMono)) in this workspace's environment variables, or on the runner, then send your message again.")
-                .font(.orbitLabel).foregroundStyle(.secondary)
+        case .connectGemini:
+            EmptyView()
         case .apiKey(let slug):
             Text("The API key for \(Text(slug).font(.orbitMono)) was rejected. Update it in Providers on the Orbit web app, then send your message again.")
                 .font(.orbitLabel).foregroundStyle(.secondary)
@@ -323,5 +342,122 @@ struct AuthErrorCardView: View {
 
     private func retry() async {
         await console.retryLastMessage()
+    }
+}
+
+
+/// Antigravity's key, CLI install, and runner-version repairs, shared by transcript and queue state.
+struct AntigravityRepairCardView: View {
+    let console: ConsoleModel
+    let repair: EngineAuth.AntigravityRepair
+    @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(EngineAuth.antigravityTitle(repair, runnerName: console.runnerName),
+                  systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange).font(.orbitProse.bold())
+            Text(EngineAuth.antigravityBody(repair, runnerName: console.runnerName,
+                                           runnerVersion: console.runnerVersion))
+                .font(.orbitLabel).foregroundStyle(.secondary)
+            if repair == .needsKey, console.provider == "antigravity" {
+                if console.runnerAntigravity?.googleLogin == .available, let runnerID = console.runnerID {
+                    RunnerSignInView(runnerID: runnerID, engine: .antigravity,
+                                     onDone: { await console.retryLastMessage() })
+                } else if let hint = EngineAuth.antigravityLoginHint(console.runnerAntigravity?.googleLogin) {
+                    Text(hint).font(.orbitLabel).foregroundStyle(.secondary)
+                }
+            }
+            HStack {
+                if repair == .needsKey {
+                    Button("Connect Gemini") { Task { openURL(await console.connectGeminiURL()) } }
+                        .buttonStyle(.borderedProminent)
+                    Button("Switch to Gemini") {
+                        if let choice = console.geminiSwitchChoice {
+                            Task { await console.selectProvider(choice.slug) }
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(console.geminiSwitchChoice == nil)
+                } else {
+                    if repair == .notInstalled {
+                        Button("Install") { Task { await console.installAntigravity() } }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(!console.canInstallAntigravity)
+                    }
+                    Button("Open in Providers") {
+                        if let url = console.antigravityProvidersURL { openURL(url) }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(console.antigravityProvidersURL == nil)
+                }
+            }
+            .font(.orbitLabel)
+        }
+        .padding(10)
+        .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        .task { await console.refreshAntigravityRepairContext() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await console.refreshAntigravityRepairContext() } }
+        }
+        // Follow this runner's one install relay only while the repair card remains visible.
+        .task(id: console.runnerInstall?.inFlight == true) {
+            while console.runnerInstall?.inFlight == true {
+                do { try await Task.sleep(nanoseconds: 2_000_000_000) }
+                catch { return }
+                guard !Task.isCancelled else { return }
+                await console.refreshAntigravityRunner()
+            }
+        }
+    }
+}
+
+/// A DeepSeek Harness session that could not run, as the remedy rather than the runner's sentence
+/// (web's `DshRepairCard`). Its credential is a configured key, never a sign-in on the runner, so a
+/// key problem is fixed on that key's page in Providers; everything else is about the machine.
+struct DshRepairCardView: View {
+    let console: ConsoleModel
+    let repair: DshRuntime.Repair
+    @Environment(\.openURL) private var openURL
+
+    private var title: String {
+        let machine = console.runnerName.flatMap { $0.isEmpty ? nil : "“\($0)”" }
+        switch repair {
+        case .notInstalled:
+            return machine.map { "DeepSeek Harness isn't installed on \($0)" } ?? repair.title
+        case .unsupportedPlatform:
+            return machine.map { "DeepSeek Harness can't run on \($0)" } ?? repair.title
+        default:
+            return repair.title
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(title, systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange).font(.orbitProse.bold())
+            Text(repair.detail)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+            HStack {
+                if repair.isKeyProblem {
+                    Button("Update the API key") { Task { openURL(await console.dshKeyURL()) } }
+                        .buttonStyle(.borderedProminent)
+                    if !console.retryMessageText.isEmpty {
+                        Button("Retry — re-send my last message") { Task { await console.retryLastMessage() } }
+                            .buttonStyle(.bordered)
+                            .disabled(console.sending || console.retryInFlight)
+                    }
+                } else if repair == .notInstalled {
+                    Button("Install") { Task { await console.installDsh() } }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!console.canInstallDsh)
+                }
+            }
+            .font(.orbitLabel)
+        }
+        .padding(10)
+        .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        .accessibilityIdentifier("dsh-repair-\(repair.rawValue)")
     }
 }

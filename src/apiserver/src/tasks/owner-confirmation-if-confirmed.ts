@@ -179,7 +179,7 @@ async function readBranch(
       receipts,
       branches: landingBranchesFor(codebase),
       branchMerged: session.branchMerged,
-      judgedAgainst: mergeTargetOf(session, session.workspace?.defaultMergeTarget),
+      judgedAgainst: mergeTargetOf(session, session.workspace?.defaultMergeTarget, codebase?.integrationRef),
     }),
   };
 }

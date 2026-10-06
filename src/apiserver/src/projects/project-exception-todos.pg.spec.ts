@@ -605,6 +605,19 @@ async function claimedLanding(
   w: World,
   label: string,
 ): Promise<{ task: Attempt; job: IntegrationJobCommand }> {
+  const a = await queuedLanding(stack, w, label);
+  const claimed = await stack.jobs.dispatch({
+    runnerId: w.runnerId,
+    leaseOwner: `lease-${label}`,
+    draining: false,
+    capabilities: [INTEGRATION_JOB_CLAIM],
+  });
+  assert.equal(claimed.length, 1, `the DONE queued no landing — ${await jobsOf(stack.db, w.projectId)}`);
+  return { task: a, job: claimed[0]! };
+}
+
+/** `claimedLanding` up to the heartbeat: the task DONE, its session finished, its landing queued. */
+async function queuedLanding(stack: Stack, w: World, label: string): Promise<Attempt> {
   const a = await attempt(stack, w, label, {
     acceptance: { command: 'exit 0', expectedExitCode: 0 },
     branch: `orbit/${label}`,
@@ -638,15 +651,7 @@ async function claimedLanding(
       worktreeDirty: false,
     },
   });
-
-  const claimed = await stack.jobs.dispatch({
-    runnerId: w.runnerId,
-    leaseOwner: `lease-${label}`,
-    draining: false,
-    capabilities: [INTEGRATION_JOB_CLAIM],
-  });
-  assert.equal(claimed.length, 1, `the DONE queued no landing — ${await jobsOf(stack.db, w.projectId)}`);
-  return { task: a, job: claimed[0]! };
+  return a;
 }
 
 /** The result a runner posts for a job that did not land, over the route it posts it on. */
@@ -1006,6 +1011,9 @@ test('the evidence judgment settles the task, and answers the failure item an ea
       const w = await world(stack, 'judgment-settles', 'PARKED');
       const a = await strandedAttempt(stack, w, 'judgment-settles', 'EVIDENCE_JUDGMENT');
       const criterionKey = await statedCriterion(stack, w, JUDGED_CRITERION);
+      // Declared through the edit door: declaring the criterion, not being filed under the project,
+      // is what holds the task to the wording its evidence quotes below.
+      await stack.tasks.update(w.ownerId, a.taskId, { criterionKey });
       await stack.db.toolCall.create({
         data: {
           sessionId: a.sessionId,
@@ -1488,6 +1496,72 @@ test('a landing answers the conflict item an earlier generation of the same task
       assert.equal(after?.resolution, 'LANDED', 'the fact that answered it is the landing, not a retry');
       assert.equal(after?.resolvedBy, 'PLATFORM');
       assert.equal((await jobRow(stack.db, claimed!.jobId)).state, 'LANDED');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('a MAIN_SYNC conflict holds the line\'s other landings, but not the next landing of the task it stopped',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      // §3.1 M2 and M3. The absorb of the upstream conflicted, so every other landing on the line
+      // would meet the same paths: they wait. The conflicted task's own next landing does not: its
+      // branch changed, and a branch that now contains both tips is how the conflict is resolved.
+      // Before this, that landing waited on the item it was there to answer.
+      const w = await integratingWorld(stack, 'main-sync-held', 'PARKED');
+      const { task, job } = await claimedLanding(stack, w, 'main-sync-held');
+      await reportFailure(stack, w, job, {
+        state: 'CONFLICT',
+        phase: 'MAIN_SYNC',
+        sourceSha: 'a'.repeat(40),
+        targetShaBefore: 'c'.repeat(40),
+        conflicts: ['src/apiserver/src/tasks/task-judgment-data-preserved.spec.ts'],
+      });
+      const item = await onlyItemFor(stack.db, w, task.taskId, 'the absorb conflicted');
+      assert.equal(item.state, 'OPEN');
+
+      // The other task finishes after the line's starting beat, as it would in real time: within that
+      // beat its DONE back-queues every finished task of the project (L3 step 4), this one included.
+      await stack.db.projectCodebase.updateMany({
+        where: { projectId: w.projectId },
+        data: { integrationStartedAt: new Date(Date.now() - 60_000) },
+      });
+      const other = await queuedLanding(stack, w, 'main-sync-held-other');
+      const heartbeat = (lease: string) => stack.jobs.dispatch({
+        runnerId: w.runnerId,
+        leaseOwner: lease,
+        draining: false,
+        capabilities: [INTEGRATION_JOB_CLAIM],
+      });
+      assert.deepEqual(await heartbeat('lease-held'), [], 'another task\'s landing waits while the absorb is unresolved');
+
+      await stack.tasks.update(w.ownerId, task.taskId, { status: DeclaredTaskStatus.IN_PROGRESS });
+      await rework(stack, w, task, 'main-sync-held');
+      const claimed = await heartbeat('lease-rework');
+      const landingOf = async (jobId: string) => (await stack.db.projectIntegrationJob.findUniqueOrThrow({
+        where: { id: jobId },
+        select: { taskId: true, generation: true },
+      }));
+      assert.deepEqual(
+        await Promise.all(claimed.map((row) => landingOf(row.jobId))),
+        [{ taskId: task.taskId, generation: 2 }],
+        `the conflicted task's next landing is claimed, and only it — ${await jobsOf(stack.db, w.projectId)}`,
+      );
+
+      // It lands, by J-S4 MERGE on the runner, and the landing answers the item.
+      assert.equal((await reportLanding(stack, w, claimed[0]!)).accepted, true);
+      const [after] = (await items(stack.db, w.projectId)).filter((row) => row.id === item.id);
+      assert.equal(after?.state, 'RESOLVED');
+      assert.equal(after?.resolution, 'LANDED');
+
+      // The line moves on its own from there: the other task's landing is claimed.
+      const next = await heartbeat('lease-after');
+      const nextTasks = await Promise.all(next.map((row) => landingOf(row.jobId)));
+      assert.ok(
+        nextTasks.some((row) => row.taskId === other.taskId),
+        `the other task's landing is still held — ${await jobsOf(stack.db, w.projectId)}`,
+      );
     } finally {
       await stack.db.$disconnect();
     }
@@ -2374,6 +2448,57 @@ test('the owner closes what is theirs, and the two kinds that have a press of th
       const kept = await itemNow(stack, promoted, card.id);
       assert.equal(kept.state, 'OPEN', 'the card is still in front of the owner, undecided');
       assert.equal(kept.resolutionNote, null);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+/**
+ * An exception that became the owner's is one of the things a project is not recorded done over
+ * (`project_request_done`, `project-done-request.ts`): the coordinator's request names it among its
+ * refusals and files nothing. While the coordinator still carries it, it is the coordinator's work
+ * and not an owner item; once the owner has closed it, it holds nothing back.
+ */
+test('an exception that escalated to the owner holds the coordinator\'s request to record the project done',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'done-held', 'PARKED');
+      const a = await attempt(stack, w, 'done-held', { taskStatus: TaskStatus.IN_PROGRESS });
+      await failTurn(stack, w, a);
+      const ownerItems = async () => {
+        const thrown = await stack.openItems.requestDone(w.ownerId, w.projectId, w.coordinatorSessionId!, {
+          judgment: 'Everything that can be done is done.',
+          gaps: [],
+        }).then(() => null, (error: unknown) => error);
+        assert.ok(thrown instanceof HttpException, 'a project with a failed task cannot be asked done');
+        assert.equal(thrown.getStatus(), 409);
+        const body = thrown.getResponse() as {
+          code: string;
+          written: number;
+          findings: Array<{ code: string; items: Array<{ itemId: string; kind: string }> }>;
+        };
+        assert.equal(body.code, 'DONE_REQUEST_NOT_READY');
+        assert.equal(body.written, 0);
+        return body.findings.find((finding) => finding.code === 'DONE_OWNER_ITEMS_OPEN')?.items ?? [];
+      };
+
+      // With the coordinator, the failure is its work: not an item waiting on the owner.
+      const opened = await onlyItemFor(stack.db, w, a.taskId, 'the failure opened one item');
+      assert.equal(opened.assignee, 'COORDINATOR');
+      assert.deepEqual(await ownerItems(), []);
+
+      // The clock hands it to the owner, and the request names it.
+      const owned = await escalate(stack, w, a);
+      assert.deepEqual(await ownerItems(), [{ itemId: owned.id, kind: 'TASK_FAILED', title: owned.title }]);
+
+      // The owner closes it: it waits on nobody, and holds nothing back.
+      await door(stack)(w, owned.id, { kind: 'OWNER' }, '看过了：环境问题，这条不再需要处理');
+      assert.deepEqual(await ownerItems(), []);
+      const filed = await stack.db.projectOpenItem.count({
+        where: { projectId: w.projectId, kind: 'DONE_REQUEST' },
+      });
+      assert.equal(filed, 0, 'and none of the refused requests was filed');
     } finally {
       await stack.db.$disconnect();
     }

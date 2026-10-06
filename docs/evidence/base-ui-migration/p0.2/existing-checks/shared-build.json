@@ -1,0 +1,8 @@
+{
+  "command": "npm run build -w @orbit/shared",
+  "startedAt": "2026-10-03T19:21:27.728610+00:00",
+  "finishedAt": "2026-10-03T19:21:27.864944+00:00",
+  "durationSeconds": 0.136,
+  "exitCode": 0,
+  "log": "shared-build.log"
+}

@@ -63,6 +63,8 @@ func modelContextWindow(runtime, model string) int {
 		models = catalog.OpenCode
 	case providerAntigravity:
 		models = catalog.Antigravity
+	case providerDsh:
+		models = catalog.Dsh
 	default:
 		models = catalog.Claude
 	}

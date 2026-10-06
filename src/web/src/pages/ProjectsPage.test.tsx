@@ -26,6 +26,7 @@ import {
   projectFilterFromStatusParam,
   projectOpenViewFromParam,
   projectTaskWorkStateOf,
+  projectTaskGroups,
   projectsEmptyKind,
   projectsPath,
   projectsQueryKey,
@@ -179,9 +180,10 @@ const headerKeys = (projectUuid: string) => {
     // page already holds, so it adds exactly this one entry.
     ['project', id, 'promotion'],
     ['project', id, 'panorama'],
+    // Shared by the overview's manual-start summary and the Run queue; still one cache entry.
+    ['project', id, 'panorama', 'ready', 5],
     ['project', id, 'coordinator', 'status'],
     ['project', id, 'panorama', 'blocking', 5],
-    ['project', id, 'panorama', 'ready', 5],
   ];
 };
 
@@ -1018,6 +1020,25 @@ describe('ProjectsPage — Open work views', () => {
     expect(matchesOpenProjectView(open({ ready: 1 }), 'READY')).toBe(true);
     expect(matchesOpenProjectView(open({ blocked: 4 }), 'READY')).toBe(false);
     expect(matchesOpenProjectView({ ...open({ running: 1 }), status: 'DONE' }, 'RUNNING')).toBe(false);
+  });
+
+  it('includes a landing or project merge in Running while keeping Ready exclusive', () => {
+    const row = {
+      ...open({ done: 2, ready: 1 }),
+      integration: { line: 'PROJECT_BRANCH' as const, ref: 'project/x', activeJobCount: 1 },
+    };
+    expect(matchesOpenProjectView(row, 'RUNNING')).toBe(true);
+    expect(matchesOpenProjectView(row, 'READY')).toBe(false);
+    expect(matchesOpenProjectView({ ...row, status: 'DONE' }, 'RUNNING')).toBe(false);
+  });
+
+  it('includes a working coordinator even when no task session runs', () => {
+    const row = {
+      ...open({ ready: 1 }),
+      coordinatorActivity: { working: true, lastTurnAt: null },
+    };
+    expect(matchesOpenProjectView(row, 'RUNNING')).toBe(true);
+    expect(matchesOpenProjectView(row, 'READY')).toBe(false);
   });
 });
 
@@ -1984,7 +2005,7 @@ describe('ProjectsPage — badges', () => {
 
     expect(rowFor(rows, 'Inbox Redesign')).toMatchObject({
       section: 'attention',
-      chip: '12/12 settled · still open',
+      chip: '12/12 tasks settled · project still open',
       tone: 'brand',
     });
   });
@@ -2026,7 +2047,7 @@ describe('ProjectsPage — badges', () => {
     expect(rows.filter((r) => r.chip).map((r) => [r.title, r.chip])).toEqual([
       ['Zombie Run', 'Running · no activity 3d'],
       ['Stalled Quiet', 'Ready · no activity 2d'],
-      ['Needs Closing', '7/7 settled · still open'],
+      ['Needs Closing', '7/7 tasks settled · project still open'],
     ]);
   });
 
@@ -2218,8 +2239,8 @@ describe('ProjectDetailPage — integration', () => {
     // flight, and whether the branch tip is green — the five facts of §7.2 V3, in that order, as
     // one sentence rather than five independent `toContain`s that a scrambled row would pass.
     expect(out).toContain(
-      'project/bg-jobs · 7 commits ahead of main · synced with main 12m ago'
-      + ' · Integrating 1 · Queued 1 · Merge check ✓ passing on the branch tip',
+      'project/bg-jobs · 7 commits ahead of main at last measurement · synced with main 12m ago'
+      + ' · Running jobs 1 · Queued 1 · Last landing check ✓ passing',
     );
     // The settings that decide the line are How it runs' now, not a disclosure behind this row:
     // one place per question.
@@ -2246,7 +2267,7 @@ describe('ProjectDetailPage — integration', () => {
     );
     const out = text(renderDetail(qc, encodeId(P1)));
 
-    expect(out).toContain('main · Integrating 1 · Queued 1 · Merge check ✓ passing');
+    expect(out).toContain('main · Running jobs 1 · Queued 1 · Last landing check ✓ passing');
     expect(out).not.toContain('Integration settings');
     // A project that lands straight into main is neither ahead of main nor syncing from it, so
     // the two facts that only mean something on a branch are not printed as zeroes.
@@ -2281,8 +2302,9 @@ describe('ProjectDetailPage — integration', () => {
     const { html } = withIntegration((qc) => qc.setQueryData(['project', encodeId(P1), 'panorama'], panorama()));
     const out = html();
 
-    expect(out).toContain('Integrating');
-    expect(out).toContain('checks running on the combined tree');
+    expect(out).toContain('Running jobs');
+    expect(out).toContain('Pending landing');
+    expect(out).toContain('no landing receipt yet');
     expect(out).toContain('On project branch');
     expect(out).toContain('not on main yet');
     expect(out).toContain('On main');
@@ -2341,8 +2363,8 @@ describe('ProjectDetailPage — integration', () => {
     );
     const out = html();
 
-    expect(out).toContain('Integrating · checks run on the combined tree');
-    expect(out).toContain('Integrating · checks 3m');
+    expect(out).toContain('Pending landing');
+    expect(out).toContain('Integrating · checking');
     expect(out).toContain('Checks failed · coordinator');
     expect(out).toContain('Waiting · for a prerequisite to land');
     expect(out).toContain('Waits for 1 task to land');
@@ -2365,6 +2387,18 @@ describe('ProjectDetailPage — integration', () => {
       }),
     );
     expect(html()).toContain('Waits for 2 tasks to land');
+  });
+
+  it.each([
+    ['OPEN', 'READY', 'ready'],
+    ['FAILED', 'FAILED', 'failed'],
+    ['CANCELLED', 'CANCELLED', 'settled'],
+    ['OPEN', 'AWAITING_VERIFICATION', 'awaiting-verification'],
+  ] as const)('keeps %s / %s work in its work lane despite a previous landing', (status, workState, key) => {
+    for (const state of ['QUEUED', 'CHECK_FAILED', 'ON_UPSTREAM'] as const) {
+      const row = task({ id: 'reopened', status, workState, integration: taskIntegration({ state }) });
+      expect(projectTaskGroups([row]).map((group) => group.key)).toEqual([key]);
+    }
   });
 
   it('describes criterion landing as project branch or main', () => {

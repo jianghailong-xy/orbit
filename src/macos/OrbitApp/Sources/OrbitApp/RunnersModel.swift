@@ -102,6 +102,12 @@ final class RunnersModel {
         await press { _ = try await self.api.startEngineUpdate(id) }
     }
 
+    /// Install the pinned DeepSeek Harness CLI on the machine (the same install relay as Antigravity's).
+    @discardableResult
+    func installDsh(_ id: String) async -> String? {
+        await press { _ = try await self.api.installDsh(id) }
+    }
+
     /// The machine re-reads its CLIs' model lists; the new ones arrive on a later check-in.
     @discardableResult
     func refreshModels(_ id: String) async -> String? {
@@ -119,6 +125,13 @@ final class RunnersModel {
     @discardableResult
     func renameAccount(_ id: String, engine: LoginEngine, account: String, name: String) async -> String? {
         await press { _ = try await self.api.renameRunnerAccount(id, engine: engine, account: account, name: name) }
+    }
+
+    func pauseAccount(_ id: String, engine: LoginEngine, account: String, durationMinutes: Int?) async -> String? {
+        await press {
+            try await self.api.pauseRunnerAccount(id, engine: engine, account: account,
+                                                  durationMinutes: durationMinutes)
+        }
     }
 
     /// One account off the machine. A refusal the machine makes itself (a session is running on it)

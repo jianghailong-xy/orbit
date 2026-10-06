@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConflictException } from '@nestjs/common';
-import type { RunnerEngineHealth } from '@orbit/shared';
+import { ENGINE_SIGNED_OUT, type EngineSignedOutRefusal, type RunnerEngineHealth } from '@orbit/shared';
+import { ANTIGRAVITY_GOOGLE_LOGIN_V1 } from '../common/antigravity-readiness';
 import { SessionsService } from './sessions.service';
-import { signedOutEngineRefusal } from './engine-signin-preflight';
+import { isEngineSignedOut, signedOutEngineRefusal } from './engine-signin-preflight';
 
 /**
  * A runtime that is signed out fails every session started against it, one or two seconds after
@@ -17,7 +18,7 @@ const SIGNED_OUT: RunnerEngineHealth[] = [
   { engine: 'codex', installed: true, version: '0.9.1', auth: 'yes' },
 ];
 
-function makeService(engines: unknown, runnerOverrides: Record<string, unknown> = {}) {
+function makeService(engines: unknown, runnerOverrides: Record<string, unknown> = {}, configuredRuntime?: string) {
   const creates: Array<Record<string, unknown>> = [];
   const prisma = {
     // create() reads the owner's account-level permission default when the caller names none.
@@ -45,7 +46,7 @@ function makeService(engines: unknown, runnerOverrides: Record<string, unknown> 
         ...runnerOverrides,
       }),
     },
-    modelProvider: { findFirst: async () => null },
+    modelProvider: { findFirst: async () => configuredRuntime ? { runtime: configuredRuntime } : null },
     session: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
         creates.push(data);
@@ -167,16 +168,147 @@ test('a session that brings its own credentials ignores the local sign-in', () =
     }),
     null,
   );
-  // Antigravity runs on a Gemini API key from its own environment: there is no sign-in on the
-  // machine to be out of, whatever the runner's probe says, so a missing key fails at spawn instead.
+  // A Gemini provider brings the encrypted key it dispatches on, regardless of the runner's env.
   assert.equal(
     signedOutEngineRefusal({
       runtime: 'antigravity',
-      bringsOwnCredentials: false,
+      bringsOwnCredentials: true,
       runner: { ...runner, engines: [{ engine: 'antigravity', installed: true, auth: 'no' }] },
     }),
     null,
   );
+});
+
+/** A Linux runner that relays Antigravity's Google sign-in (src/runner-go/login.go). */
+const GOOGLE_CAPABLE = { capabilities: ['provider:antigravity', ANTIGRAVITY_GOOGLE_LOGIN_V1, 'os:linux'] };
+
+test('built-in Antigravity starts on a runner signed in with Google, or one with a Gemini env key', async () => {
+  for (const health of [
+    { auth: 'yes', authSource: 'google' },
+    { auth: 'yes', authSource: 'env_key' },
+    // A runner from before Google sign-in names no source: its yes is the env key.
+    { auth: 'yes' },
+  ]) {
+    const fixture = makeService([{ engine: 'antigravity', installed: true, ...health }], GOOGLE_CAPABLE);
+    await fixture.service.create('owner-1', { ...PROMPT, provider: 'antigravity' });
+    assert.equal(fixture.creates.length, 1, JSON.stringify(health));
+    assert.equal(fixture.creates[0].provider, 'antigravity');
+  }
+});
+
+test('with neither, built-in Antigravity is refused with the Google sign-in that clears it', async () => {
+  const fixture = makeService([{ engine: 'antigravity', installed: true, auth: 'no' }], { displayName: 'HPC', ...GOOGLE_CAPABLE });
+  await assert.rejects(
+    fixture.service.create('owner-1', { ...PROMPT, provider: 'antigravity' }),
+    (error: unknown) => {
+      assert.ok(isEngineSignedOut(error), 'the availability refusal, recognisable by type');
+      // Not only an API key any more: the runner's own Google sign-in comes first.
+      assert.match(error.message, /Antigravity has no Google sign-in or Gemini API key on runner "HPC"/);
+      assert.match(error.message, /Sign in with Google from the Providers page/);
+      assert.match(error.message, /connect Gemini in Providers \(\/providers\/new\/gemini\)/);
+      // The action a client turns into a button: POST /runners/:runnerId/login with `signIn`.
+      assert.deepEqual(error.getResponse(), {
+        code: ENGINE_SIGNED_OUT,
+        message: error.message,
+        engine: 'antigravity',
+        runnerId: 'runner-1',
+        signIn: { engine: 'antigravity' },
+      });
+      return true;
+    },
+  );
+  assert.deepEqual(fixture.creates, [], 'no session row, and so no worktree on the runner');
+});
+
+test('a Google sign-in that lapsed is named as one, with the same sign-in to clear it', async () => {
+  const fixture = makeService(
+    [{ engine: 'antigravity', installed: true, auth: 'no', authSource: 'google' }],
+    { displayName: 'HPC', ...GOOGLE_CAPABLE },
+  );
+  await assert.rejects(fixture.service.create('owner-1', { ...PROMPT, provider: 'antigravity' }), (error: unknown) => {
+    assert.ok(isEngineSignedOut(error));
+    assert.match(error.message, /Antigravity's Google account is signed out on runner "HPC"/);
+    assert.deepEqual((error.getResponse() as EngineSignedOutRefusal).signIn, { engine: 'antigravity' });
+    return true;
+  });
+});
+
+test('a runner that cannot relay the Google sign-in is refused without one, naming the Gemini key', async () => {
+  const fixture = makeService([{ engine: 'antigravity', installed: true, auth: 'no' }], {
+    displayName: 'HPC',
+    capabilities: ['provider:antigravity'],
+  });
+  await assert.rejects(fixture.service.create('owner-1', { ...PROMPT, provider: 'antigravity' }), (error: unknown) => {
+    assert.ok(isEngineSignedOut(error));
+    assert.match(error.message, /needs a newer Orbit runner there/);
+    assert.match(error.message, /connect Gemini in Providers \(\/providers\/new\/gemini\)/);
+    const body = error.getResponse() as EngineSignedOutRefusal;
+    assert.equal(body.code, ENGINE_SIGNED_OUT);
+    assert.equal(body.signIn, undefined, 'no button for a sign-in this runner cannot do');
+    return true;
+  });
+});
+
+test('a macOS runner is refused without the Google sign-in it does not support yet', async () => {
+  const fixture = makeService([{ engine: 'antigravity', installed: true, auth: 'no' }], {
+    displayName: 'MacBook',
+    capabilities: ['provider:antigravity', ANTIGRAVITY_GOOGLE_LOGIN_V1, 'os:darwin'],
+  });
+  await assert.rejects(fixture.service.create('owner-1', { ...PROMPT, provider: 'antigravity' }), (error: unknown) => {
+    assert.ok(isEngineSignedOut(error));
+    assert.match(error.message, /Antigravity has no Google sign-in or Gemini API key on runner "MacBook"/);
+    assert.match(error.message, /works on Linux runners only for now/);
+    assert.match(error.message, /connect Gemini in Providers \(\/providers\/new\/gemini\)/);
+    assert.equal((error.getResponse() as EngineSignedOutRefusal).signIn, undefined);
+    return true;
+  });
+  assert.deepEqual(fixture.creates, []);
+});
+
+test('the other engines refuse as they did, now naming the engine and runner as fields too', async () => {
+  const fixture = makeService(SIGNED_OUT);
+  await assert.rejects(fixture.service.create('owner-1', PROMPT), (error: unknown) => {
+    assert.ok(isEngineSignedOut(error));
+    assert.deepEqual(error.getResponse(), {
+      code: ENGINE_SIGNED_OUT,
+      message: error.message,
+      engine: 'claude',
+      runnerId: 'runner-1',
+    });
+    return true;
+  });
+});
+
+test('a configured Gemini provider creates a session when the runner has no Gemini env key', async () => {
+  const fixture = makeService([{ engine: 'antigravity', installed: true, auth: 'no' }], {}, 'antigravity');
+  await fixture.service.create('owner-1', { ...PROMPT, provider: 'gemini' });
+  assert.equal(fixture.creates.length, 1);
+  assert.equal(fixture.creates[0].provider, 'gemini');
+  assert.equal(fixture.creates[0].providerBuiltin, false);
+});
+
+test('Antigravity credential preflight only refuses a definite no on an online runner', () => {
+  const runner = { name: 'build-box', status: 'ONLINE', lastHeartbeatAt: new Date(), engines: [{ engine: 'antigravity', installed: true, auth: 'no' }] };
+  const check = (overrides: Record<string, unknown> = {}, workspaceEnv?: unknown) => signedOutEngineRefusal({
+    runtime: 'antigravity', bringsOwnCredentials: false, runner: { ...runner, ...overrides }, workspaceEnv,
+  });
+  assert.ok(check());
+  assert.ok(check({}, { GEMINI_API_KEY: '   ' }));
+  assert.equal(check({}, { GEMINI_API_KEY: 'test-workspace-key' }), null);
+  assert.equal(check({ engines: [{ engine: 'antigravity', installed: true, auth: 'yes' }] }), null);
+  assert.equal(check({ engines: [{ engine: 'antigravity', installed: true, auth: 'yes', authSource: 'google' }] }), null);
+  assert.equal(check({ engines: [{ engine: 'antigravity', installed: true, auth: 'yes', authSource: 'env_key' }] }), null);
+  assert.ok(check({ engines: [{ engine: 'antigravity', installed: true, auth: 'no', authSource: 'google' }] }));
+  assert.equal(
+    check({ engines: [{ engine: 'antigravity', installed: true, auth: 'no', authSource: 'google' }] }, { GEMINI_API_KEY: 'test-workspace-key' }),
+    null,
+    'a workspace key is a credential of the session own, whatever the runner has',
+  );
+  assert.equal(check({ engines: [{ engine: 'antigravity', installed: true, auth: 'unknown' }] }), null);
+  assert.equal(check({ engines: null }), null);
+  assert.equal(check({ status: 'OFFLINE' }), null);
+  assert.equal(check({ lastHeartbeatAt: new Date(Date.now() - 10 * 60_000) }), null);
+  assert.ok(check({ engines: [{ engine: 'antigravity', installed: false, auth: 'no' }] }), 'an explicit missing key is actionable even before install');
 });
 
 test('kimi needs both halves of its environment provider to skip the check', () => {

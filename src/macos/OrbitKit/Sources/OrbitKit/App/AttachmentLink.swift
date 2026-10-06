@@ -69,7 +69,8 @@ public enum AttachmentLink {
         let ext = path.split(separator: ".").last.map(String.init)?.lowercased() ?? ""
         return [
             "bmp", "c", "cc", "cpp", "csv", "css", "doc", "docx", "gif", "go", "h", "heic", "heif",
-            "hpp", "html", "java", "jpeg", "jpg", "js", "json", "jsx", "kt", "md", "mjs", "pdf",
+            "hpp", "html", "java", "jpeg", "jpg", "js", "json", "jsx", "kt", "markdown", "md", "mdown",
+            "mkd", "mkdn", "mjs", "pdf",
             "png", "ppt", "pptx", "py", "rs", "sh", "sql", "svg", "swift", "tif", "tiff", "ts", "tsx",
             "txt", "vue", "webp", "xls", "xlsx", "xml", "yaml", "yml", "zip",
         ].contains(ext)

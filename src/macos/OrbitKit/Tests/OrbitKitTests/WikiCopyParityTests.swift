@@ -376,6 +376,26 @@ final class WikiCopyParityTests: XCTestCase {
         assertSays(drawer, "<Section title={WIKI_SECTION_ANCHORS} count={data.anchors?.length ?? 0}>", in: Self.drawer)
     }
 
+    /// Failure titles name the same action at both ends, leaving server reasons beneath them.
+    func testFailedWritesNameTheActionInTheWebsWords() throws {
+        let pages: [(String, [String])] = [
+            (Self.drawer, [WikiCopy.entrySaveFailed, WikiCopy.entrySupersedeFailed, WikiCopy.entryRetireFailed]),
+            ("src/web/src/components/WikiEntryMarks.tsx", [WikiCopy.entryConfirmFailed]),
+            ("src/web/src/components/WikiRunPage.tsx", [WikiCopy.runRevertFailed, WikiCopy.entryRejectFailed]),
+            ("src/web/src/components/WikiSettingsPage.tsx", [WikiCopy.settingsSaveFailed]),
+            ("src/web/src/components/WikiPlanPage.tsx", [WikiCopy.planDraftFailed, WikiCopy.planRedraftFailed,
+                                                       WikiCopy.planConfirmFailed, WikiCopy.changeAcceptFailed,
+                                                       WikiCopy.changeEditFailed, WikiCopy.changeRejectFailed]),
+        ]
+        for (path, titles) in pages {
+            let web = try source(path)
+            for title in titles {
+                assertSays(web, "\"\(title)\"", in: path)
+                XCTAssertTrue(title.hasPrefix("Couldn't "))
+            }
+        }
+    }
+
     /// Edit, then the ⋯ menu — Supersede…, Retire… (the destructive one), Copy link — and the three
     /// forms they open, each in the drawer's own words.
     func testTheEntrysActionsAndForms() throws {

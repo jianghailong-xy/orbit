@@ -1,0 +1,17 @@
+{
+  "command": "NO_COLOR=1 npm run test -w @orbit/web",
+  "startedAt": "2026-10-03T19:42:49.390563+00:00",
+  "finishedAt": "2026-10-03T19:45:51.097801+00:00",
+  "durationSeconds": 181.707,
+  "exitCode": 0,
+  "log": "final-web-test.txt",
+  "purpose": "Verify newly added ui-migration/*.browser.mjs remain outside Vitest discovery, with the original 287 files and 3527 tests unchanged.",
+  "tests": {
+    "filesPassed": 287,
+    "filesTotal": 287,
+    "testsPassed": 3527,
+    "testsTotal": 3527
+  },
+  "discoveryUnchanged": true,
+  "logSha256": "3b89fafea15f2d357874d51c2d97d5efb35371a59e83be89276aeb2221a16cf7"
+}

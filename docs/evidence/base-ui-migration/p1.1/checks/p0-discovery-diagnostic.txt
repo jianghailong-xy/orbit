@@ -1,0 +1,298 @@
+
+> @orbit/web@0.1.0 pretest:ui-migration
+> npm run build -w @orbit/shared && npm run build
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 build
+> tsc -b && vite build
+
+vite v8.3.1 building client environment for production...
+transforming...
+✓ 4071 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                     6.08 kB │ gzip:   2.58 kB
+dist/assets/Transcript-DdKuH37F.css                 1.06 kB │ gzip:   0.44 kB
+dist/assets/TaskDependencyGraph-DLioOiRN.css       15.41 kB │ gzip:   2.56 kB
+dist/assets/index-4508RnN3.css                    357.90 kB │ gzip:  59.35 kB
+dist/assets/rolldown-runtime-hePW80VL.js            0.71 kB │ gzip:   0.42 kB
+dist/assets/ProjectTaskPanel-CG5GBEaX.js            1.06 kB │ gzip:   0.61 kB
+dist/assets/projectTaskRoute-CSicv1Wh.js            5.49 kB │ gzip:   2.39 kB
+dist/assets/ProjectDependencyGraph-B386kAPf.js     14.28 kB │ gzip:   5.23 kB
+dist/assets/projectDependencyGraph-DdLb_0Bs.js    163.57 kB │ gzip:  55.35 kB
+dist/assets/TaskDependencyGraph-DA6nb3oR.js       190.12 kB │ gzip:  61.39 kB
+dist/assets/taskDependencyGraph-CraDAEzb.js       536.66 kB │ gzip: 176.35 kB
+dist/assets/Transcript-BKZCIVZL.js                749.69 kB │ gzip: 230.03 kB
+dist/assets/sessionExport-Cm4GGvOv.js             788.65 kB │ gzip: 191.46 kB
+dist/assets/index-BQ_Zw9X6.js                   1,694.96 kB │ gzip: 506.93 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 782ms
+
+> @orbit/web@0.1.0 test:ui-migration
+> playwright test --config ui-migration/playwright.config.mjs
+
+[WebServer] (node:3956221) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 152 tests using 1 worker
+
+(node:3956303) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓    1 [chromium-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (8.3s)
+  ✘    2 [chromium-light-desktop] › ui-migration/foundation-theme.browser.mjs:57:3 › production boot and hydration preserve cached system (15.0s)
+(node:3956839) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘    3 [chromium-light-desktop] › ui-migration/foundation-theme.browser.mjs:57:3 › production boot and hydration preserve cached light (15.0s)
+(node:3957216) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘    4 [chromium-light-desktop] › ui-migration/foundation-theme.browser.mjs:57:3 › production boot and hydration preserve cached dark (15.0s)
+(node:3958400) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘    5 [chromium-light-desktop] › ui-migration/foundation-theme.browser.mjs:83:1 › account adoption, preference writes and live system changes share the foundation theme (15.0s)
+(node:3959018) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] 4:26:24 AM [vite] http proxy error: /api/auth/setup-status
+[WebServer] AggregateError [ECONNREFUSED]: 
+[WebServer]     at internalConnectMultiple (node:net:1492:18)
+[WebServer]     at afterConnectMultiple (node:net:2161:7)
+[WebServer] 4:26:25 AM [vite] http proxy error: /api/auth/setup-status
+[WebServer] AggregateError [ECONNREFUSED]: 
+[WebServer]     at internalConnectMultiple (node:net:1492:18)
+[WebServer]     at afterConnectMultiple (node:net:2161:7)
+  ✘    6 [chromium-light-desktop] › ui-migration/foundation.browser.mjs:14:1 › foundation states match current AntD and the frozen P0 palette (15.3s)
+(node:3959355) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] 4:26:40 AM [vite] http proxy error: /api/auth/setup-status
+[WebServer] AggregateError [ECONNREFUSED]: 
+[WebServer]     at internalConnectMultiple (node:net:1492:18)
+[WebServer]     at afterConnectMultiple (node:net:2161:7)
+[WebServer] 4:26:41 AM [vite] http proxy error: /api/auth/setup-status
+[WebServer] AggregateError [ECONNREFUSED]: 
+[WebServer]     at internalConnectMultiple (node:net:1492:18)
+[WebServer]     at afterConnectMultiple (node:net:2161:7)
+  ✘    7 [chromium-light-desktop] › ui-migration/foundation.browser.mjs:64:1 › body and nested portals inherit theme and preserve focus ownership (13.6s)
+
+
+  1) [chromium-light-desktop] › ui-migration/foundation-theme.browser.mjs:57:3 › production boot and hydration preserve cached system 
+
+    Error: The production app entry is held before execution
+
+    The production app entry is held before execution
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+    Call Log:
+    - Timeout 15000ms exceeded while waiting on the predicate
+
+      29 |   });
+      30 |   await page.goto('/settings', { waitUntil: 'commit' });
+    > 31 |   await expect.poll(() => held, { message: 'The production app entry is held before execution' }).toBe(true);
+         |                                                                                                   ^
+      32 |   return release;
+      33 | }
+      34 |
+        at holdAppEntry (/root/.orbit/worktrees/08eca834-d488-5ec2-9de0-175fca98a701/src/web/ui-migration/foundation-theme.browser.mjs:31:99)
+        at /root/.orbit/worktrees/08eca834-d488-5ec2-9de0-175fca98a701/src/web/ui-migration/foundation-theme.browser.mjs:63:21
+
+    Error Context: .ui-migration-results/foundation-theme.browser.m-4779d-tion-preserve-cached-system-chromium-light-desktop/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/foundation-theme.browser.m-4779d-tion-preserve-cached-system-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/foundation-theme.browser.m-4779d-tion-preserve-cached-system-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-light-desktop] › ui-migration/foundation-theme.browser.mjs:57:3 › production boot and hydration preserve cached light 
+
+    Error: The production app entry is held before execution
+
+    The production app entry is held before execution
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+    Call Log:
+    - Timeout 15000ms exceeded while waiting on the predicate
+
+      29 |   });
+      30 |   await page.goto('/settings', { waitUntil: 'commit' });
+    > 31 |   await expect.poll(() => held, { message: 'The production app entry is held before execution' }).toBe(true);
+         |                                                                                                   ^
+      32 |   return release;
+      33 | }
+      34 |
+        at holdAppEntry (/root/.orbit/worktrees/08eca834-d488-5ec2-9de0-175fca98a701/src/web/ui-migration/foundation-theme.browser.mjs:31:99)
+        at /root/.orbit/worktrees/08eca834-d488-5ec2-9de0-175fca98a701/src/web/ui-migration/foundation-theme.browser.mjs:63:21
+
+    Error Context: .ui-migration-results/foundation-theme.browser.m-6c615-ation-preserve-cached-light-chromium-light-desktop/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/foundation-theme.browser.m-6c615-ation-preserve-cached-light-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/foundation-theme.browser.m-6c615-ation-preserve-cached-light-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium-light-desktop] › ui-migration/foundation-theme.browser.mjs:57:3 › production boot and hydration preserve cached dark 
+
+    Error: The production app entry is held before execution
+
+    The production app entry is held before execution
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+    Call Log:
+    - Timeout 15000ms exceeded while waiting on the predicate
+
+      29 |   });
+      30 |   await page.goto('/settings', { waitUntil: 'commit' });
+    > 31 |   await expect.poll(() => held, { message: 'The production app entry is held before execution' }).toBe(true);
+         |                                                                                                   ^
+      32 |   return release;
+      33 | }
+      34 |
+        at holdAppEntry (/root/.orbit/worktrees/08eca834-d488-5ec2-9de0-175fca98a701/src/web/ui-migration/foundation-theme.browser.mjs:31:99)
+        at /root/.orbit/worktrees/08eca834-d488-5ec2-9de0-175fca98a701/src/web/ui-migration/foundation-theme.browser.mjs:63:21
+
+    Error Context: .ui-migration-results/foundation-theme.browser.m-a35f2-ration-preserve-cached-dark-chromium-light-desktop/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/foundation-theme.browser.m-a35f2-ration-preserve-cached-dark-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/foundation-theme.browser.m-a35f2-ration-preserve-cached-dark-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [chromium-light-desktop] › ui-migration/foundation-theme.browser.mjs:83:1 › account adoption, preference writes and live system changes share the foundation theme 
+
+    Error: The production app entry is held before execution
+
+    The production app entry is held before execution
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+    Call Log:
+    - Timeout 15000ms exceeded while waiting on the predicate
+
+      29 |   });
+      30 |   await page.goto('/settings', { waitUntil: 'commit' });
+    > 31 |   await expect.poll(() => held, { message: 'The production app entry is held before execution' }).toBe(true);
+         |                                                                                                   ^
+      32 |   return release;
+      33 | }
+      34 |
+        at holdAppEntry (/root/.orbit/worktrees/08eca834-d488-5ec2-9de0-175fca98a701/src/web/ui-migration/foundation-theme.browser.mjs:31:99)
+        at /root/.orbit/worktrees/08eca834-d488-5ec2-9de0-175fca98a701/src/web/ui-migration/foundation-theme.browser.mjs:90:19
+
+    Error Context: .ui-migration-results/foundation-theme.browser.m-a3ec2--share-the-foundation-theme-chromium-light-desktop/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/foundation-theme.browser.m-a3ec2--share-the-foundation-theme-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/foundation-theme.browser.m-a3ec2--share-the-foundation-theme-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [chromium-light-desktop] › ui-migration/foundation.browser.mjs:14:1 › foundation states match current AntD and the frozen P0 palette 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator: getByRole('status')
+    Expected: "Theme: system / light"
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toHaveText" getByRole('status') with timeout 15000ms
+      - waiting for getByRole('status')
+
+
+      30 |   page.on('pageerror', (error) => errors.push(error.message));
+      31 |   await page.goto(fixture);
+    > 32 |   await expect(page.getByRole('status')).toHaveText(`Theme: system / ${theme}`);
+         |                                          ^
+      33 |   await page.evaluate(() => document.fonts.ready);
+      34 |   const orbit = page.getByRole('region', { name: 'Orbit foundation', exact: true });
+      35 |   const ant = page.getByRole('region', { name: 'AntD reference', exact: true });
+        at /root/.orbit/worktrees/08eca834-d488-5ec2-9de0-175fca98a701/src/web/ui-migration/foundation.browser.mjs:32:42
+
+    Error Context: .ui-migration-results/foundation.browser.mjs-fou-c43d6-D-and-the-frozen-P0-palette-chromium-light-desktop/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/foundation.browser.mjs-fou-c43d6-D-and-the-frozen-P0-palette-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/foundation.browser.mjs-fou-c43d6-D-and-the-frozen-P0-palette-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) [chromium-light-desktop] › ui-migration/foundation.browser.mjs:64:1 › body and nested portals inherit theme and preserve focus ownership 
+
+    Test was interrupted.
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator: getByRole('status')
+    Expected: "Theme: system / light"
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toHaveText" getByRole('status') with timeout 15000ms
+      - waiting for getByRole('status')
+      - Test ended.
+
+
+      78 |   await page.goto(fixture);
+      79 |   const theme = info.project.use.colorScheme;
+    > 80 |   await expect(page.getByRole('status')).toHaveText(`Theme: system / ${theme}`);
+         |                                          ^
+      81 |   const trigger = page.getByRole('button', { name: 'Open Orbit dialog', exact: true });
+      82 |   await trigger.click();
+      83 |   const dialog = page.getByRole('dialog', { name: 'Orbit dialog', exact: true });
+        at /root/.orbit/worktrees/08eca834-d488-5ec2-9de0-175fca98a701/src/web/ui-migration/foundation.browser.mjs:80:42
+
+    Error Context: .ui-migration-results/foundation.browser.mjs-bod-99d35-nd-preserve-focus-ownership-chromium-light-desktop/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/foundation.browser.mjs-bod-99d35-nd-preserve-focus-ownership-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/foundation.browser.mjs-bod-99d35-nd-preserve-focus-ownership-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5 failed
+    [chromium-light-desktop] › ui-migration/foundation-theme.browser.mjs:57:3 › production boot and hydration preserve cached system 
+    [chromium-light-desktop] › ui-migration/foundation-theme.browser.mjs:57:3 › production boot and hydration preserve cached light 
+    [chromium-light-desktop] › ui-migration/foundation-theme.browser.mjs:57:3 › production boot and hydration preserve cached dark 
+    [chromium-light-desktop] › ui-migration/foundation-theme.browser.mjs:83:1 › account adoption, preference writes and live system changes share the foundation theme 
+    [chromium-light-desktop] › ui-migration/foundation.browser.mjs:14:1 › foundation states match current AntD and the frozen P0 palette 
+  1 interrupted
+    [chromium-light-desktop] › ui-migration/foundation.browser.mjs:64:1 › body and nested portals inherit theme and preserve focus ownership 
+  145 did not run
+  1 passed (1.7m)

@@ -109,6 +109,7 @@ import Markdown from 'react-markdown';
 import { orbitLinkRemarkPlugin } from '../lib/orbitLink';
 import { OrbitLinkCardsCtx, orbitLinkCardComponents } from './OrbitLinkCard';
 import { remarkHardBreaks } from '../lib/remarkHardBreaks';
+import { dshRepair, type DshRepair } from '../lib/dshRuntime';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github.css';
@@ -181,6 +182,18 @@ export interface AuthErrorHelp {
   runnerName?: string;
   /** Runner id, which unlocks signing in from the browser instead of on that machine. */
   runnerId?: string;
+  runtime?: string;
+  googleLogin?: 'available' | 'needs_update' | 'unsupported_platform';
+  runnerVersion?: string | null;
+  onConnectGemini?: () => void;
+  onSwitchToGemini?: () => void;
+  onOpenProviders?: () => void;
+  onInstall?: () => void;
+  installDisabled?: boolean;
+  /** DeepSeek Harness: open this session's own key (its provider's edit page). */
+  onEditDshKey?: () => void;
+  /** DeepSeek Harness: install the pinned CLI on this session's runner. */
+  onInstallDsh?: () => void;
   /** Re-send the last user message, once the user has signed back in. */
   onRetry?: () => void;
   /** A re-send is already in flight, so the button offers none: one failure, one attempt. */
@@ -192,6 +205,116 @@ export interface AuthErrorHelp {
   onUseApiKey?: () => void;
 }
 export const AuthErrorCtx = createContext<AuthErrorHelp | null>(null);
+
+export type AntigravityRepair = 'needsKey' | 'updateRunner' | 'notInstalled';
+
+/**
+ * A DeepSeek Harness session that could not run, as the remedy rather than the runner's sentence.
+ * Its credential is a configured key, never a sign-in on the runner, so every key problem is fixed
+ * on that provider's own page; everything else is about the machine (dshRepair says which).
+ */
+export function DshRepairCard({ repair, help, seq }: { repair: DshRepair; help: AuthErrorHelp; seq?: number }) {
+  const machine = help.runnerName || 'this runner';
+  const keyProblem = repair === 'needsKey' || repair === 'invalidKey';
+  return (
+    <div className="chat-authfix" data-seq={seq} data-dsh-repair={repair}>
+      <div className="chat-authfix-head">
+        <WarningFilled className="chat-authfix-icon" />
+        <div className="chat-authfix-title">
+          {repair === 'needsKey'
+            ? 'DeepSeek Harness needs an API key'
+            : repair === 'invalidKey'
+              ? 'DeepSeek rejected this API key'
+              : repair === 'updateRunner'
+                ? 'Waiting for a newer runner'
+                : repair === 'notInstalled'
+                  ? `DeepSeek Harness isn't installed on ${machine}`
+                  : `DeepSeek Harness can't run on ${machine}`}
+        </div>
+      </div>
+      <div className="chat-authfix-desc">
+        {repair === 'needsKey'
+          ? 'This session has no DeepSeek Harness key to run on. Add or re-enable the key in Providers, then send your message again.'
+          : repair === 'invalidKey'
+            ? 'Update the key in Providers, then send your message again. Connecting a key does not check it — the first request does.'
+            : repair === 'updateRunner'
+              ? `${machine} runs Orbit runner ${help.runnerVersion || 'an unknown version'}, which predates DeepSeek Harness. The runner updates itself when no session is running on it.`
+              : repair === 'notInstalled'
+                ? 'Install it from Providers, then send your message again.'
+                : 'DeepSeek Harness 0.2.0-rc.2 runs on Linux x64 runners with Node 26 only. Move this work to a runner that can.'}
+      </div>
+      <div className="chat-authfix-actions">
+        {keyProblem && help.onEditDshKey && (
+          <button className="chat-authfix-go" type="button" onClick={help.onEditDshKey}>
+            Update the API key
+          </button>
+        )}
+        {repair === 'notInstalled' && help.onInstallDsh && (
+          <button className="chat-authfix-go" type="button" onClick={help.onInstallDsh} disabled={help.installDisabled}>
+            Install
+          </button>
+        )}
+        {keyProblem && help.onRetry && (
+          <button className="chat-authfix-retry" type="button" onClick={help.onRetry} disabled={help.retryDisabled}>
+            Retry — re-send my last message
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function antigravityRepair(message: string): AntigravityRepair | null {
+  if (message.startsWith('Failed to authenticate: Antigravity runs on an API key (GEMINI_API_KEY), and neither this session nor the runner has one')) return 'needsKey';
+  if (message === 'Antigravity requires a newer Orbit runner; update this runner first') return 'updateRunner';
+  if (/Antigravity(?: CLI)? isn't installed|Antigravity CLI \("agy"\) not found/.test(message)) return 'notInstalled';
+  return null;
+}
+
+export function AntigravityRepairCard({ repair, help, seq }: {
+  repair: AntigravityRepair;
+  help: AuthErrorHelp;
+  seq?: number;
+}) {
+  const machine = help.runnerName || 'this runner';
+  return (
+    <div className="chat-authfix" data-seq={seq}>
+      <div className="chat-authfix-head">
+        <WarningFilled className="chat-authfix-icon" />
+        <div className="chat-authfix-title">
+          {repair === 'needsKey' ? 'Antigravity needs authentication'
+            : repair === 'updateRunner' ? 'Waiting for a newer runner'
+              : `Antigravity CLI isn't installed on ${machine}`}
+        </div>
+      </div>
+      <div className="chat-authfix-desc">
+        {repair === 'needsKey'
+          ? 'Sign in with Google on this runner, or connect a Gemini API key in Providers.'
+          : repair === 'updateRunner'
+            ? `${machine} runs Orbit runner ${help.runnerVersion || 'an unknown version'}; Antigravity needs 0.1.209 or newer. The runner updates itself when no session is running on it, and this session starts then.`
+            : 'Install it from Providers, then send your message again.'}
+      </div>
+      {repair === 'needsKey' && help.provider === 'antigravity' && (
+        help.googleLogin === 'available' && help.runnerId
+          ? <RunnerSignIn runnerId={help.runnerId} engine="antigravity" onDone={help.onRetry} />
+          : <div className="chat-authfix-desc">{help.googleLogin === 'unsupported_platform' ? 'Google sign-in is not supported on macOS runners yet. Use a Gemini API key.' : 'Update this runner to sign in with Google.'}</div>
+      )}
+      <div className="chat-authfix-actions">
+        {repair === 'needsKey' ? (
+          <>
+            {help.onConnectGemini && <button className="chat-authfix-go" type="button" onClick={help.onConnectGemini}>Connect Gemini</button>}
+            <button className="chat-authfix-retry" type="button" onClick={help.onSwitchToGemini} disabled={!help.onSwitchToGemini}>Switch to Gemini</button>
+          </>
+        ) : (
+          <>
+            {repair === 'notInstalled' && help.onInstall && <button className="chat-authfix-go" type="button" onClick={help.onInstall} disabled={help.installDisabled}>Install</button>}
+            {help.onOpenProviders && <button className="chat-authfix-retry" type="button" onClick={help.onOpenProviders}>Open in Providers</button>}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 
 /**
  * Put an undelivered message back into the composer, so a message the engine never received can
@@ -1409,6 +1532,7 @@ function StandaloneResult({ node }: { node: ResultNode }) {
 // to the card that contains it.
 function NodeView({ node, live }: { node: Node; live?: boolean }) {
   const exporting = useContext(ExportCtx);
+  const authHelp = useContext(AuthErrorCtx);
   switch (node.kind) {
     case 'user': {
       // Another Orbit session's message (`session_send` / `project_send`): somebody's words, but not
@@ -1613,6 +1737,12 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
       );
     }
     case 'error': {
+      const dsh = authHelp?.runtime === 'dsh' ? dshRepair(node.message) : null;
+      if (dsh && authHelp) return <DshRepairCard repair={dsh} help={authHelp} seq={node.seq} />;
+      const repair = antigravityRepair(node.message);
+      if (repair && authHelp && (authHelp.runtime ?? authHelp.provider) === 'antigravity') {
+        return <AntigravityRepairCard repair={repair} help={authHelp} seq={node.seq} />;
+      }
       const failure = parseToolFailureSummary(node.message);
       if (failure) return <ToolFailureCard node={node} summary={failure} />;
       // An engine's own log line is its running commentary — often advice that ends in "…in the
@@ -1718,10 +1848,9 @@ const LOCAL_LOGIN = new Set(['claude', 'codex', 'kimi', 'opencode', 'antigravity
  * Of those, the ones Orbit can sign in from here. OpenCode is deliberately absent: its login
  * picks an underlying provider interactively, which the browser relay's DTO cannot express, so
  * the runner refuses such a request outright (loginFlowFor in login.go). Its card names the
- * command to run instead of offering a button that cannot work. Antigravity has no sign-in at
- * all: agy runs on the Gemini API key in its environment, so its card names that variable.
+ * command to run instead of offering a button that cannot work.
  */
-const RELAY_LOGIN = new Set(['claude', 'codex', 'kimi']);
+const RELAY_LOGIN = new Set(['claude', 'codex', 'kimi', 'antigravity']);
 
 /**
  * A sign-in failure, rendered as a remedy rather than an error line. The runtime reports it as
@@ -1743,6 +1872,9 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
   const provider = help?.provider;
   const local = !!provider && LOCAL_LOGIN.has(provider);
   const relayable = !!provider && RELAY_LOGIN.has(provider);
+  if (help && (provider === 'antigravity' || (help.runtime === 'antigravity' && antigravityRepair(message) === 'needsKey'))) {
+    return <AntigravityRepairCard repair="needsKey" help={help} seq={seq} />;
+  }
   return (
     <div className="chat-authfix" data-seq={seq}>
       <div className="chat-authfix-head">
@@ -1750,9 +1882,7 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
         <div className="chat-authfix-title">
           {!help
             ? 'Authentication failed'
-            : help.provider === 'antigravity'
-              ? 'Gemini API key rejected'
-              : local
+            : local
                 ? `Sign-in expired${help.runnerName ? ` on “${help.runnerName}”` : ''}`
                 : 'Provider authentication failed'}
         </div>
@@ -1768,12 +1898,6 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
               onUseApiKey={help.onUseApiKey}
             />
           )
-        ) : provider === 'antigravity' ? (
-          <div className="chat-authfix-desc">
-            Antigravity runs on the Gemini API key in its environment. Set{' '}
-            <code>GEMINI_API_KEY</code> in this workspace's environment variables, or on the runner,
-            then send your message again.
-          </div>
         ) : (
           <div className="chat-authfix-desc">
             Run <code>opencode auth login</code> on that machine and choose the provider there —
@@ -2918,18 +3042,31 @@ function ControlPlaneNote({ kind, text }: { kind: string; text: string }) {
   const tasks = useMemo(() => parseReferencedTasks(jobs ? jobs.rest : text), [text, jobs]);
   const wiki = useMemo(() => parseWikiContext(tasks ? tasks.rest : jobs ? jobs.rest : text), [text, jobs, tasks]);
   const rest = wiki ? wiki.rest : tasks ? tasks.rest : jobs ? jobs.rest : text;
+  const baseLabel = `⊕ Orbit attached: ${kind}`;
+  const label = `${baseLabel}${tasks ? ` · ${summarizeReferencedTasks(tasks.tasks)}` : ''}${jobs ? ` · ${summarizeBackgroundJobs(jobs)}` : ''}`;
   return (
-    <div className="chat-injected">
+    <div className={`chat-injected${open ? ' is-open' : ''}`}>
       <button
         type="button"
         className="chat-injected-head"
+        data-display-kind={kind}
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
       >
-        {`⊕ Orbit attached: ${kind}`}
-        {tasks && ` · ${summarizeReferencedTasks(tasks.tasks)}`}
-        {jobs && ` · ${summarizeBackgroundJobs(jobs)}`}
+        {label}
       </button>
+      {!open && (
+        <div className="chat-injected-overview">
+          <div className="chat-injected-summary">
+            <strong>Orbit context</strong>
+            <span>Attached to this message</span>
+          </div>
+          <p>Context is kept out of your message and available when you need the full details.</p>
+          <button type="button" className="chat-injected-action" onClick={() => setOpen(true)}>
+            View full context <RightOutlined />
+          </button>
+        </div>
+      )}
       {open &&
         (tasks || jobs || wiki ? (
           <>
@@ -3150,8 +3287,9 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
             <ToolResult seq={node.seq} content={resultContent} isError compact markdown={isSubWorkspace} />
           )}
           {node.name === 'Workflow' && (
-            <TaskProgressDetail
-              id={node.id}
+            <WorkflowProgressDetail
+              node={node}
+              live={live}
               // Before a runner that reports progress, a workflow's receipt is still all there is.
               // An agent's ack is internal metadata; its own transcript below says what it did.
               fallback={
@@ -3161,8 +3299,13 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
               }
             />
           )}
-          {body && <div className="chat-tool-body">{body}</div>}
-          {node.children.length > 0 && (
+          {body && (node.name === 'Workflow' ? (
+            <details className="chat-workflow-source" open={exp ? true : undefined}>
+              <summary>Workflow source</summary>
+              <div className="chat-tool-body">{body}</div>
+            </details>
+          ) : <div className="chat-tool-body">{body}</div>)}
+          {node.name !== 'Workflow' && node.children.length > 0 && (
             <div className="chat-subagent">
               <NodeList nodes={node.children} live={live} />
             </div>
@@ -3334,6 +3477,41 @@ function TaskBadgeAndStatus({ node, live, meta }: { node: ToolNode; live?: boole
 function TaskProgressDetail({ id, fallback }: { id: string; fallback?: ReactNode }) {
   const progress = useContext(TaskLookupCtx).progress(id);
   return progress ? <TaskProgressBlock progress={progress} /> : <>{fallback}</>;
+}
+
+function WorkflowProgressDetail({ node, live, fallback }: { node: ToolNode; live?: boolean; fallback?: ReactNode }) {
+  const progress = useContext(TaskLookupCtx).progress(node.id);
+  const exp = useContext(ExportCtx);
+  const agents = new Map(node.children.filter((child): child is ToolNode => child.kind === 'tool').map((child) => [child.id, child]));
+  const linked = new Set(progress?.agents.map((agent) => agent.transcriptKey).filter(Boolean));
+  const remaining = node.children.filter((child) => child.kind !== 'tool' || !linked.has(child.id));
+  return (
+    <>
+      {progress ? (
+        <TaskProgressBlock
+          progress={progress}
+          defaultOpen={!!exp}
+          renderAgent={(agent) => {
+            const child = agent.transcriptKey ? agents.get(agent.transcriptKey) : undefined;
+            return child ? <WorkflowAgentTranscript node={child} live={live} /> : null;
+          }}
+        />
+      ) : fallback}
+      {remaining.length > 0 && <div className="chat-subagent"><NodeList nodes={remaining} live={live} /></div>}
+    </>
+  );
+}
+
+function WorkflowAgentTranscript({ node, live }: { node: ToolNode; live?: boolean }) {
+  const fullResult = useFullPayload(node.result?.seq ?? 0, node.result?.truncated, !!node.result);
+  return (
+    <>
+      <NodeList nodes={node.children} live={live} />
+      {node.result && (
+        <ToolResult seq={node.seq} content={fullResult ? fullResult.content : node.result.content} isError={node.result.isError} compact markdown />
+      )}
+    </>
+  );
 }
 
 function ToolStatus({ node, live }: { node: ToolNode; live?: boolean }) {

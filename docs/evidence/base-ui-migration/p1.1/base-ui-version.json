@@ -1,0 +1,50 @@
+{
+  "version": "1.8.0",
+  "dist-tags": {
+    "latest": "1.8.0"
+  },
+  "peerDependencies": {
+    "react": "^17 || ^18 || ^19",
+    "date-fns": "^4.0.0",
+    "react-dom": "^17 || ^18 || ^19",
+    "@date-fns/tz": "^1.2.0",
+    "@types/react": "^17 || ^18 || ^19"
+  },
+  "peerDependenciesMeta": {
+    "date-fns": {
+      "optional": true
+    },
+    "@date-fns/tz": {
+      "optional": true
+    },
+    "@types/react": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "dist": {
+    "shasum": "b13699aec1e7891dc8859dbddbba0016e894dcf3",
+    "tarball": "https://registry.npmjs.org/@base-ui/react/-/react-1.8.0.tgz",
+    "fileCount": 3269,
+    "integrity": "sha512-P0/1sxo6SBVZOklKMIedvTWqw2s2IQzi9x5bIVsXu980cuSOD4NeuRSs+/L7LZQfDkZP/uRZyGPyfFl/B1oH+Q==",
+    "signatures": [
+      {
+        "sig": "MEUCIGb1SQ3AiBicQERVseJMbCUo0eHlh9yDEnnZ7bcHJ0EfAiEAtiJGcJMFjNUCOA1Wkj1KQtHcJ/IAtzBu5lyUR+qXh08=",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      },
+      {
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+        "sig": "MEYCIQCtsWKihHa/cjP7yaBhLe/EEXIAkOGAcfVUomLb1YM9TQIhAM40Pm/MmYbdfdFhC0ofIoRl0ierpuebY7i3GaSUTsnN"
+      }
+    ],
+    "attestations": {
+      "url": "https://registry.npmjs.org/-/npm/v1/attestations/@base-ui%2freact@1.8.0",
+      "provenance": {
+        "predicateType": "https://slsa.dev/provenance/v1"
+      }
+    },
+    "unpackedSize": 9628362
+  }
+}

@@ -259,6 +259,17 @@ body {
   max-width: none;
   align-items: center;
 }
+.toast-slot {
+  width: fit-content;
+  max-width: 100%;
+  animation: orbit-toast-enter 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.toast-slot:has(.toast--card) {
+  width: 100%;
+}
+.toast-slot--leaving .toast {
+  pointer-events: none;
+}
 .toast {
   box-sizing: border-box;
   display: flex;
@@ -273,7 +284,6 @@ body {
   font-size: 14px;
   line-height: 20px;
   text-align: start;
-  animation: orbit-toast-enter 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 :root[data-theme='dark'] .toast {
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4);
@@ -519,8 +529,20 @@ button.toast--pill:focus-visible {
     transform: none;
   }
 }
-.toast-viewport--narrow .toast {
+.toast-viewport--narrow .toast-slot {
   animation-name: orbit-toast-drop;
+}
+.toast-viewport .toast-slot--leaving {
+  animation: orbit-toast-exit 250ms ease-in forwards;
+}
+
+@keyframes orbit-toast-exit {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translate3d(0, -12px, 0); }
+}
+@keyframes orbit-toast-fade {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 
 @media (pointer: coarse) {
@@ -530,8 +552,11 @@ button.toast--pill:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .toast {
+  .toast-viewport .toast-slot {
     animation: none;
+  }
+  .toast-viewport .toast-slot--leaving {
+    animation: orbit-toast-fade 250ms ease-in forwards;
   }
 }
 
@@ -3322,6 +3347,9 @@ button.toast--pill:focus-visible {
 .session-section-head:first-child {
   padding-top: 2px;
 }
+.session-col-list > section:not(:first-child) > .session-section-head {
+  padding-top: 12px;
+}
 /* The Pinned heading folds its rows away, as Notes' Pinned does: the whole heading is the button,
    and the chevron at its end points down while the rows show, right once they are folded. */
 .session-section-fold {
@@ -3495,9 +3523,11 @@ html[data-theme='dark'] .session-tag-chip {
 }
 .session-row.active {
   background: var(--brand-tint);
+  --session-menu-surface: var(--brand-tint);
 }
 .session-row.active:hover {
   background: var(--brand-tint-hover);
+  --session-menu-surface: var(--brand-tint-hover);
 }
 .workspace-draft {
   display: flex;
@@ -4677,6 +4707,7 @@ html[data-theme='dark'] .session-tag-chip {
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.16);
 }
 .session-row {
+  --session-menu-surface: var(--bg-base);
   position: relative;
   display: flex;
   align-items: center;
@@ -4719,78 +4750,101 @@ html[data-theme='dark'] .session-tag-chip {
 .session-swipe-actions.trailing {
   right: 0;
 }
+/* A swipe button as iOS 26 draws it (`CircleSwipeRow`): a coloured circle over its title, not a
+   full-height coloured rectangle. The circle carries the action colour; the title sits under it in
+   the secondary colour. The iOS row draws a 47pt circle over a 13pt title in a 75pt row; the web
+   row is 64px, so the circle is 44px and the title's line box (16px) leaves its descenders room. */
 .session-swipe-action {
   flex: 1 1 0;
   min-width: 0;
   overflow: hidden;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 4px;
   padding: 0;
   border: 0;
-  color: #fff;
-  font-size: 20px;
+  background: transparent;
   cursor: pointer;
   transition: flex-grow 0.15s ease;
+}
+.session-swipe-action .session-swipe-glyph {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 18px;
+}
+.session-swipe-action .session-swipe-title {
+  font-size: 13px;
+  line-height: 16px;
+  color: var(--text-2);
+  white-space: nowrap;
 }
 .session-swipe-action[aria-disabled='true'] {
   opacity: 0.45;
 }
-/* Past the full-swipe mark the first action fills the gap, its icon riding beside the row. */
+/* Past the full-swipe mark the first action fills the gap, its circle riding beside the row. */
 .session-swipe-actions.armed .session-swipe-action:first-child {
-  justify-content: flex-end;
+  align-items: flex-end;
   padding-right: 26px;
 }
 .session-swipe-actions.armed .session-swipe-action:not(:first-child) {
   flex-grow: 0;
 }
 /* The iOS system colours the native swipe buttons use. */
-.session-swipe-action.complete {
+.session-swipe-action.complete .session-swipe-glyph {
   background: #34c759;
 }
-.session-swipe-action.restore {
+.session-swipe-action.restore .session-swipe-glyph {
   background: #007aff;
 }
-.session-swipe-action.pin {
+.session-swipe-action.pin .session-swipe-glyph {
   background: #5856d6;
 }
-.session-swipe-action.delete,
-.session-swipe-action.purge {
+.session-swipe-action.delete .session-swipe-glyph,
+.session-swipe-action.purge .session-swipe-glyph {
   background: #ff3b30;
 }
-:root[data-theme='dark'] .session-swipe-action.complete {
+:root[data-theme='dark'] .session-swipe-action.complete .session-swipe-glyph {
   background: #30d158;
 }
-:root[data-theme='dark'] .session-swipe-action.restore {
+:root[data-theme='dark'] .session-swipe-action.restore .session-swipe-glyph {
   background: #0a84ff;
 }
-:root[data-theme='dark'] .session-swipe-action.pin {
+:root[data-theme='dark'] .session-swipe-action.pin .session-swipe-glyph {
   background: #5e5ce6;
 }
-:root[data-theme='dark'] .session-swipe-action.delete,
-:root[data-theme='dark'] .session-swipe-action.purge {
+:root[data-theme='dark'] .session-swipe-action.delete .session-swipe-glyph,
+:root[data-theme='dark'] .session-swipe-action.purge .session-swipe-glyph {
   background: #ff453a;
 }
 /* Share and Move sit inside Delete, in the colours the iOS row gives them (blue, indigo). */
-.session-swipe-action.share {
+.session-swipe-action.share .session-swipe-glyph {
   background: #007aff;
 }
-.session-swipe-action.move {
+.session-swipe-action.move .session-swipe-glyph {
   background: #5856d6;
 }
-:root[data-theme='dark'] .session-swipe-action.share {
+:root[data-theme='dark'] .session-swipe-action.share .session-swipe-glyph {
   background: #0a84ff;
 }
-:root[data-theme='dark'] .session-swipe-action.move {
+:root[data-theme='dark'] .session-swipe-action.move .session-swipe-glyph {
   background: #5e5ce6;
 }
 @media (hover: hover) {
   .session-row:hover {
     background: var(--bg-hover);
+    --session-menu-surface: var(--bg-hover);
   }
 }
 .session-row.menu-open:not(.active) {
   background: var(--bg-hover);
+  --session-menu-surface: var(--bg-hover);
 }
 @media (min-width: 961px) {
   .session-row {
@@ -4832,11 +4886,84 @@ html[data-theme='dark'] .session-tag-chip {
   font-size: 12.5px;
   color: var(--text-4);
 }
-.session-pin-indicator {
+.session-project-icon {
+  position: relative;
+  color: var(--brand);
+  font-size: 16px;
+}
+.session-project-status {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--brand);
+  box-shadow: 0 0 0 2px var(--session-menu-surface);
+}
+.session-project-status.needs-you {
+  background: var(--warning);
+}
+.session-project-status.jobs {
+  animation: status-glyph-breathe 2.4s ease-in-out infinite;
+}
+.session-project-progress {
   display: inline-flex;
+  align-items: center;
+  gap: 4px;
   flex: none;
+  height: 18px;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
   color: var(--text-3);
+  font-size: 10px;
+  line-height: 1;
+  background: transparent;
+  font-family: inherit;
+}
+.session-project-progress.done {
+  color: var(--success);
+  border-color: var(--success-border);
+  background: var(--success-bg);
+}
+.session-project-page-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
   font-size: 12px;
+  color: var(--text-3);
+}
+.session-project-page-progress a {
+  margin-left: auto;
+  font-size: 16px;
+  color: var(--text-3);
+}
+.session-project-page-progress a:hover {
+  color: var(--brand);
+}
+.session-project-page-header .session-kebab {
+  border: 0;
+  background: transparent;
+}
+.session-project-progress-bar {
+  display: flex;
+  width: 32px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--text-4);
+}
+.session-project-progress-bar .done {
+  background: var(--success);
+}
+.session-project-progress-bar .running {
+  background: var(--brand);
+}
+.session-project-progress-bar .failed {
+  background: var(--error);
 }
 /* A public link opens this session (the list row's `shared`): a globe beside the time. */
 .session-shared {
@@ -4906,12 +5033,25 @@ html[data-theme='dark'] .session-tag-chip {
 .session-preview.tone-review {
   color: var(--text-3);
 }
-/* A permanent action slot keeps text and hit targets stable as the pointer moves. */
+/* Float above full-width text without changing its layout when actions appear. */
 .session-right {
+  position: absolute;
+  top: 0;
+  right: 8px;
+  bottom: 0;
+  z-index: 1;
   display: flex;
-  flex: none;
   align-items: center;
   width: 32px;
+}
+.session-right::before {
+  content: '';
+  position: absolute;
+  inset: 0 -8px 0 -28px;
+  /* Composite translucent dark-mode tints onto an opaque surface before fading. */
+  background: linear-gradient(var(--session-menu-surface), var(--session-menu-surface)), var(--bg-base);
+  mask-image: linear-gradient(to right, transparent, #000 42%);
+  pointer-events: none;
 }
 /* Touch phones use swipes; narrow desktop windows still need the menu for mouse/keyboard. */
 @media (max-width: 960px) and (hover: none) and (pointer: coarse) {
@@ -4953,15 +5093,27 @@ html[data-theme='dark'] .session-tag-chip {
   height: 32px;
   padding: 0;
   border: 0;
-  background: transparent;
+  background: var(--bg-hover-strong);
+  color: var(--text-1);
   font: inherit;
   font-size: 16px;
   cursor: pointer;
 }
-.session-actions > .session-kebab:hover,
-.session-row.menu-open .session-actions > .session-kebab {
-  background: var(--bg-hover-strong);
-  color: var(--text-1);
+/* Hide the button and its fade together, while keeping keyboard access. */
+@media (hover: hover) and (pointer: fine) {
+  .session-right {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .session-row:hover .session-right,
+  .session-row:focus-within .session-right,
+  .session-row.menu-open .session-right {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+.session-row.active .session-actions > .session-kebab {
+  background: color-mix(in srgb, var(--brand) 10%, var(--session-menu-surface));
 }
 .session-actions > .session-kebab:focus-visible {
   outline: 2px solid var(--brand);
@@ -4978,10 +5130,6 @@ html[data-theme='dark'] .session-tag-chip {
 }
 .session-row-menu .session-menu-label kbd {
   flex: none;
-  padding: 1px 5px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--bg-sunken);
   color: var(--text-3);
   font: inherit;
   font-size: 12px;
@@ -7015,25 +7163,91 @@ button.chat-jump-start:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* What delivery appended to a person's message, named on one line under their words instead of
-   dumped into them (ControlPlaneNote). Muted and small: it is provenance, not content — the eye
-   should skip it unless the reply mentions something the message did not, and then it opens to
-   exactly what the model read. */
+/* What delivery appended to a person's message (ControlPlaneNote). The folded state is a compact
+   card: the message keeps its own words, while the Orbit context gets a clear status and one
+   deliberate entry point. The raw block remains the opened state for traceability. */
 .chat-injected {
   margin-top: 6px;
-  padding-top: 5px;
-  border-top: 1px dashed var(--border-subtle);
-  color: var(--text-3);
-  font-size: 11.5px;
+  overflow: hidden;
+  border: 1px solid var(--brand-border);
+  border-radius: 14px;
+  background: var(--brand-tint);
+  color: var(--text-1);
+  font-size: 12px;
 }
 .chat-injected-head {
-  padding: 0;
+  position: relative;
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  padding: 11px 12px 9px 38px;
   border: 0;
-  background: none;
-  color: inherit;
+  border-bottom: 1px solid var(--brand-border);
+  background: transparent;
+  color: transparent;
   font: inherit;
+  font-size: 0;
   text-align: left;
   cursor: pointer;
+}
+.chat-injected-head::before {
+  content: '⊕  Orbit context';
+  display: block;
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 17px;
+}
+.chat-injected-head::after {
+  content: 'Attached · ' attr(data-display-kind);
+  display: block;
+  color: var(--text-3);
+  font-size: 10.5px;
+  line-height: 14px;
+}
+.chat-injected-overview {
+  padding: 11px 12px 12px;
+}
+.chat-injected-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.chat-injected-summary strong {
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 600;
+}
+.chat-injected-summary span {
+  color: var(--text-3);
+  font-size: 11px;
+}
+.chat-injected-overview p {
+  margin: 7px 0 10px;
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.chat-injected-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 31px;
+  padding: 0 9px;
+  border: 1px solid var(--brand-border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  color: var(--brand-strong);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.chat-injected-action .anticon {
+  font-size: 10px;
+}
+.chat-injected.is-open > .chat-injected-head {
+  background: var(--bg-raised);
 }
 /* Drop the focus ring on mouse click; keep it for keyboard navigation. */
 .chat-injected-head:focus {
@@ -7045,8 +7259,15 @@ button.chat-jump-start:hover {
   outline-offset: 2px;
 }
 .chat-injected-body {
-  margin: 4px 0 0;
+  max-height: 320px;
+  margin: 0;
+  padding: 10px 12px;
+  overflow: auto;
+  border-top: 1px solid var(--brand-border);
+  background: var(--bg-raised);
   color: var(--text-2);
+  font-size: 11px;
+  line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -8000,6 +8221,11 @@ button.chat-jump-start:hover {
 .chat-authfix-desc {
   margin: 8px 0 0;
   color: var(--text-2);
+}
+.chat-authfix-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 /* Browser-driven runner sign-in, inside the sign-in card. */
 /* No panel of its own: the card is already the container, and buttons are self-delimiting —
@@ -10000,6 +10226,175 @@ button.chat-jump-start:hover {
   font-size: 11.5px;
   line-height: 1.5;
   color: var(--text-3);
+}
+
+/* ── Owner project completion card (DONE_REQUEST / owner done gate) ─────────────── */
+.project-done-card {
+  overflow: hidden;
+}
+.project-done-card .project-settlement-heading {
+  font-weight: 650;
+}
+.project-done-section-title {
+  margin: 12px 0 6px;
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: .035em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.project-done-call {
+  margin: 8px 0 2px;
+  padding: 9px 11px;
+  border: 1px solid var(--brand-border);
+  border-radius: 8px;
+  background: var(--brand-tint);
+  color: var(--text-1);
+  line-height: 1.6;
+}
+.project-done-call .project-done-section-title { margin-top: 0; }
+.project-done-call p { margin: 0; font-size: 13px; }
+.project-done-tally {
+  margin: 7px 0 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+.project-done-gaps { margin-top: 8px; }
+.project-done-when { margin-top: 2px; }
+.project-done-criteria-list {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.project-done-criteria-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  padding: 7px 10px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.project-done-criteria-list li:first-child { border-top: 0; }
+.project-done-criterion-state {
+  grid-column: 2;
+  color: var(--text-3);
+  font-size: 11px;
+}
+.project-done-gap-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--brand-border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+.project-done-gap {
+  display: flex;
+  gap: 10px;
+  padding: 9px 11px;
+  border-top: 1px solid var(--border-subtle);
+  align-items: flex-start;
+}
+.project-done-gap:first-child { border-top: 0; }
+.project-done-gap-number {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--text-1);
+  color: var(--bg-raised);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 22px;
+  text-align: center;
+}
+.project-done-gap-body { min-width: 0; }
+.project-done-gap-title { font-size: 13px; line-height: 1.45; color: var(--text-1); }
+.project-done-gap-why,
+.project-done-gap-checked {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.project-done-gap-checked { color: var(--success); }
+.project-done-gap-checked b { font-weight: 650; }
+.project-done-show-all {
+  margin: 7px 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.project-done-show-all:hover { text-decoration: underline; }
+.project-done-orbit-checked {
+  margin: 12px 0 0;
+  padding: 8px 10px;
+  border-radius: 7px;
+  background: var(--success-bg);
+  color: var(--success);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.project-done-orbit-checked > span { font-weight: 700; }
+.project-done-explanation {
+  margin: 10px 0 0;
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.project-done-not-yet { margin-top: 12px; }
+.project-done-not-yet .ant-input { font: inherit; font-size: 13px; }
+.project-done-not-yet > p {
+  margin: 6px 0 0;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.project-done-not-yet-actions { display: flex; gap: 8px; margin-top: 9px; }
+.project-done-receipt-line { margin: 9px 0 0; font-size: 14px; font-weight: 600; color: var(--text-1); }
+.project-done-accepted { margin-top: 8px; font-size: 12.5px; }
+.project-done-accepted summary { color: var(--brand); cursor: pointer; }
+.project-done-accepted .project-done-gaps { margin-top: 8px; }
+.project-done-empty { margin: 7px 0 0; color: var(--text-2); font-size: 12.5px; }
+.project-done-dialog .ant-modal-content { padding: 0; overflow: hidden; }
+.project-done-dialog .project-done-card { border: 0; border-radius: 0; margin: 0; }
+.project-done-dialog .project-done-card .approval-head { border-radius: 0; }
+.project-done-provenance,
+.project-row-done-provenance { color: var(--text-2); font-size: 12px; }
+
+/* Why-not-done grouping: reason labels are text, not colour-only state. */
+.project-why-group { margin-top: 12px; }
+.project-why-group-head { display: flex; align-items: baseline; gap: 8px; color: var(--text-3); font-size: 11.5px; font-weight: 650; letter-spacing: .035em; text-transform: uppercase; }
+.project-why-who { margin-left: auto; font-size: 12px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--text-2); }
+.project-why-who:first-letter { color: var(--success); }
+.project-why-list { margin: 5px 0 0; padding: 0; list-style: none; border: 1px solid var(--brand-border); border-radius: 8px; overflow: hidden; }
+.project-why-item { display: flex; gap: 10px; padding: 9px 11px; border-top: 1px solid var(--border-subtle); }
+.project-why-item:first-child { border-top: 0; }
+.project-why-item-title { font-size: 13px; color: var(--text-1); }
+.project-why-item-state { margin-top: 2px; font-size: 12px; color: var(--text-2); }
+.project-why-item-detail { margin-top: 3px; font-size: 12px; line-height: 1.5; color: var(--text-2); }
+.project-why-status { font-size: 12.5px; color: var(--text-2); }
+.project-open-item-state.is-ready-to-close { display: inline-block; margin-bottom: 3px; border-color: var(--warning-border); background: var(--warning-bg); color: var(--warning); }
+.project-open-item-done-own .project-open-item-dot { background: var(--text-4); }
+.project-open-item-done-own .project-open-item-start { color: var(--text-3); }
+
+@media (max-width: 640px) {
+  .project-done-card .approval-actions { align-items: stretch; }
+  .project-done-card .approval-actions .card-action { width: 100%; }
+  .project-done-not-yet-actions { flex-direction: column; }
+  .project-done-not-yet-actions .card-action { width: 100%; }
+  .project-why-who { margin-left: 0; }
+  .project-why-group-head { flex-wrap: wrap; }
 }
 
 /* Free-text answer field: lets the user type their own answer to a question. */
@@ -13547,6 +13942,18 @@ button.chat-jump-start:hover {
 /* ============================================================================
    Provider onboarding — logo gallery + guided add flow (ProvidersPage).
    ========================================================================== */
+.prov-page-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px 12px;
+}
+.prov-page-sub {
+  flex-basis: 100%;
+  color: var(--text-3);
+  font-size: 12px;
+}
 .provider-gallery {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -13782,17 +14189,21 @@ button.chat-jump-start:hover {
 }
 .re-sec-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 10px;
   margin-bottom: 10px;
 }
 .re-sec-head h3 {
+  flex: none;
   margin: 0;
   font-size: 14px;
   font-weight: 650;
   color: var(--text-1);
 }
 .re-sec-sub {
+  order: 1;
+  flex-basis: 100%;
   font-size: 12px;
   color: var(--text-3);
 }
@@ -13815,17 +14226,19 @@ button.chat-jump-start:hover {
 .re-card + .re-card {
   margin-top: 10px;
 }
-/* An offline runner's rows describe its last check-in, not its present state: everything in them but
-   an account's rename mark, which asks nothing of the machine — a name is kept in Orbit — and so stays
-   as live as it is. Faded part by part, since nothing inside a faded element can be less faded. */
+/* An offline runner's rows describe its last check-in, not its present state. Server-side account
+   actions remain available in More; operations that need the machine are disabled in its menu. */
 .re-card.offline {
   background: var(--bg-subtle);
 }
 .re-card.offline .re-row > :not(.re-id),
 .re-card.offline .re-id > :not(.re-id-main),
 .re-card.offline .re-id-main > :not(.re-name):not(.re-name-input),
-.re-card.offline .re-name > :not(.re-rename) {
+.re-card.offline .re-name > * {
   opacity: 0.62;
+}
+.re-card.offline .re-row > .re-act:has(.re-more) {
+  opacity: 1;
 }
 .re-head {
   display: flex;
@@ -13842,8 +14255,7 @@ button.chat-jump-start:hover {
 .re-card.offline .re-head {
   background: var(--fill-muted);
 }
-/* Everything that isn't the Manage link folds the card; it's the whole left half of the header,
-   so the hit target matches what reads as "this runner". */
+/* Identity has its own toggle so the adjacent Manage link stays independent. */
 .re-toggle {
   display: flex;
   align-items: center;
@@ -13902,6 +14314,117 @@ button.chat-jump-start:hover {
   white-space: nowrap;
 }
 
+/* Identity expands the runner; its status and Manage link stay separate. */
+.re-runner-card .re-head {
+  gap: 0;
+  padding: 0;
+}
+.re-runner-card.offline .re-head {
+  background: var(--bg-subtle);
+}
+.re-runner-card .re-toggle {
+  flex: 1;
+  align-self: stretch;
+  gap: 10px;
+  min-height: 64px;
+  padding: 10px 14px;
+  border-radius: 11px 0 0 11px;
+}
+.re-runner-card .re-toggle:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -3px;
+}
+.re-runner-card .re-chev {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 24px;
+  color: var(--text-2);
+  transition: color 0.15s, transform 0.15s;
+}
+.re-runner-card .re-chev.open,
+.re-runner-card .re-toggle:hover .re-chev {
+  color: var(--brand);
+}
+.re-runner-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.re-runner-copy .re-runner,
+.re-runner-copy .re-runner-meta {
+  overflow-wrap: anywhere;
+}
+.re-runner-copy .re-runner {
+  font-size: 15px;
+}
+.re-runner-copy .re-runner-meta {
+  font-size: 12px;
+}
+.re-runner-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.re-runner-status > .ant-tag {
+  margin: 0;
+}
+.re-runner-status .re-summary {
+  border-left: 0;
+  padding-left: 0;
+  font-size: 12px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.re-runner-status .re-summary.warn {
+  color: var(--warning);
+}
+.re-runner-status .re-summary .anticon {
+  margin-right: 5px;
+}
+.re-runner-card .re-manage {
+  display: flex;
+  flex: none;
+  align-items: center;
+  min-height: 44px;
+  margin: 0 14px 0 8px;
+}
+.re-runner-card .re-manage:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+@container re-card (max-width: 600px) {
+  .re-runner-card .re-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 8px;
+    padding: 0 14px;
+  }
+  .re-runner-card .re-toggle {
+    grid-column: 1 / -1;
+    align-items: flex-start;
+    min-height: 54px;
+    padding: 10px 0 0;
+    border-radius: 11px;
+  }
+  .re-runner-card .re-toggle > .re-dot {
+    margin-top: 8px;
+  }
+  .re-runner-status {
+    margin-left: 17px;
+  }
+  .re-runner-card .re-manage {
+    grid-column: 2;
+    margin: 0;
+  }
+}
+
 .re-row {
   display: grid;
   /* The last column is sized for two small buttons side by side: `+ Account` beside `Re-sign in` on
@@ -13956,8 +14479,7 @@ button.chat-jump-start:hover {
    login with when it resets, under a status that says whether the login can run now — the account
    pools' login rows, which share these classes and keep the layout above. The status is sized for
    the longest thing it says, "Spent · resets Mon 19:00"; the last column holds the widest pair of
-   actions, `+ Account` beside `Sign in` on a one-account row that is signed out, Re-sign in and
-   Remove being marks narrower than either. On a narrow card the quota's bar gives way before the
+   actions, Add account beside More on a one-account row. On a narrow card the quota's bar gives way before the
    name does: the name keeps 137px, an engine's name on one line clear of the status beside it. */
 .re-runner-card .re-row {
   grid-template-columns: minmax(137px, 1fr) 168px minmax(128px, 190px) 160px;
@@ -13987,22 +14509,32 @@ button.chat-jump-start:hover {
   }
 }
 @media (max-width: 700px) {
-  /* Name, status and the way back in on the first line, and the quota a line of its own under the
-     name, bars and resets kept — the account pools' rows on a phone. A long status gives way with an
-     ellipsis before the name does; what it would have said is in the resets under it. */
+  /* Keep the name and its actions together. Status and quota get their own lines so Add account
+     and Sign in can both remain visible without squeezing the account's state. Reserve room for
+     the engine name and let the action column shrink so its buttons can wrap on a small phone. */
   .re-runner-card .re-row {
-    grid-template-columns: minmax(96px, 1fr) minmax(0, max-content) max-content;
+    grid-template-columns: minmax(112px, 1fr) minmax(0, max-content);
     gap: 8px 10px;
   }
   .re-runner-card .re-row > .re-act {
     grid-row: 1;
-    grid-column: 3;
+    grid-column: 2;
   }
-  .re-runner-card .re-quota {
-    display: block;
+  .re-runner-card .re-row > .re-status,
+  .re-runner-card .re-row > .ant-tag {
     grid-row: 2;
     grid-column: 1 / -1;
     margin-left: 38px;
+    justify-self: start;
+  }
+  .re-runner-card .re-quota {
+    display: block;
+    grid-row: 3;
+    grid-column: 1 / -1;
+    margin-left: 38px;
+  }
+  .re-runner-card .re-acct .re-name {
+    overflow-wrap: anywhere;
   }
 }
 .re-id {
@@ -14087,10 +14619,83 @@ button.chat-jump-start:hover {
      one child is a no-op. */
   gap: 8px;
 }
-/* Re-sign in and Remove are marks, grey at rest. Remove turns red only under the pointer, like the
-   account pools' sign-out mark: red on a row that is fine reads as something wrong with it. */
-.re-act .re-icon.ant-btn:not(:disabled) {
+.re-runner-card .re-act {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 30px;
+}
+.re-action.ant-btn {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 28px;
+  gap: 6px;
+}
+.re-action.ant-btn-default:not(:disabled) {
+  color: var(--text-2);
+  border-color: var(--border);
+  background: var(--bg-raised);
+  box-shadow: 0 1px 1px rgba(31, 35, 41, .025);
+}
+.re-action .anticon {
+  font-size: 13px;
+}
+.re-action.re-add-account,
+.re-action.re-install {
+  min-width: 112px;
+}
+.re-action.re-add-account:not(:disabled) {
+  color: var(--brand);
+  border-color: color-mix(in srgb, var(--brand) 15%, var(--bg-raised));
+  background: color-mix(in srgb, var(--brand) 5.5%, var(--bg-raised));
+}
+.re-action.re-add-account:not(:disabled):hover {
+  background: var(--brand-tint);
+  border-color: var(--brand-border);
+}
+.re-action.re-more {
+  width: 30px;
+  min-width: 30px;
+  padding: 0;
   color: var(--text-3);
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+.re-action.re-more:hover,
+.re-action.re-more.ant-dropdown-open {
+  color: var(--text-2);
+  background: var(--fill-muted);
+}
+.re-action.re-more .anticon {
+  font-size: 17px;
+}
+.re-menu-anchor {
+  display: inline-flex;
+}
+.re-account-menu .ant-dropdown-menu {
+  min-width: 176px;
+  padding: 5px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  box-shadow: 0 8px 28px rgba(31, 35, 41, .11), 0 2px 5px rgba(31, 35, 41, .04);
+}
+.re-account-menu .ant-dropdown-menu .ant-dropdown-menu-item {
+  min-height: 33px;
+  padding: 5px 9px;
+  font-size: 12px;
+  gap: 8px;
+  border-radius: 5px;
+}
+.re-account-menu .ant-dropdown-menu .ant-dropdown-menu-item-icon {
+  color: var(--text-3);
+  font-size: 13px;
+}
+.re-account-menu .ant-dropdown-menu .ant-dropdown-menu-item-danger .ant-dropdown-menu-item-icon {
+  color: inherit;
 }
 /* Codex with more than one account: the engine's row heads a group, and each account is a row
    under it. The head keeps what the engine owns — binary, version, updates — and says how many. */
@@ -14151,27 +14756,6 @@ button.chat-jump-start:hover {
   font-weight: 600;
   line-height: 16px;
   vertical-align: 1px;
-}
-/* An account's rename mark, after its name and its marks: grey at rest like the row's other marks. */
-.re-rename {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  margin-left: 3px;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  background: none;
-  color: var(--text-3);
-  font-size: 12px;
-  vertical-align: -4px;
-  cursor: pointer;
-}
-.re-rename:hover {
-  color: var(--text-1);
-  background: var(--fill-muted);
 }
 /* The name being renamed: the session title's underlined input (.workspace-name-input), at the
    name's own size, its width set from the unseen twin below so the underline hugs the text. */
@@ -15637,6 +16221,18 @@ button.chat-jump-start:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.np-label-detail {
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-3);
+}
+.prov-runtime {
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-3);
+}
 /* Each row previews the model it would switch to, so the consequence is visible before the click. */
 .np-row-model {
   margin-left: auto;
@@ -15665,62 +16261,9 @@ button.chat-jump-start:hover {
   color: var(--text-3);
   font-size: 12px;
 }
-/* An account pool: its vendor's mark, with how many accounts it holds in the corner. */
-.np-mark-wrap {
-  position: relative;
-  flex: none;
-  display: inline-flex;
-}
-.np-pool-badge {
-  position: absolute;
-  top: -4px;
-  right: -5px;
-  min-width: 1.6em;
-  padding: 0 0.35em;
-  border-radius: 999px;
-  border: 1.5px solid var(--bg-raised);
-  background: var(--text-1);
-  color: var(--bg-raised);
-  font-weight: 700;
-  line-height: 1.45;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-/* "Pin a specific account": the accounts a pool runs on, one click further away than the pool. */
-.np-pin-toggle {
-  color: var(--text-3);
-}
-.np-pin-chev {
-  display: inline-block;
-  width: 20px;
-  text-align: center;
-  font-size: 10px;
-  transition: transform 0.15s;
-}
-.np-pin-chev.open {
-  transform: rotate(90deg);
-}
-.np-pinned {
-  padding-left: 14px;
-}
-/* An engine's own accounts on this runner, under its row: which one this session spends. The tick
-   takes the mark's column, so the account names line up with the engine's. */
-.np-account-tick {
-  flex: none;
-  width: 20px;
-  text-align: center;
-  font-size: 11px;
-  color: var(--brand);
-}
-.np-account.picked {
-  color: var(--text-1);
-}
-.np-account .np-row-model.near-limit {
-  color: var(--warning);
-}
-/* Account names are often emails, so the list makes room for one beside its quota. */
-.np-list.with-accounts {
-  width: 280px;
+.np-list.with-details {
+  width: 360px;
+  max-width: calc(100vw - 32px);
 }
 /* The composer's account pill: which of a pool's accounts this session is spending. */
 .composer-account {
@@ -15797,6 +16340,66 @@ button.chat-jump-start:hover {
 .project-integration-facts b {
   color: var(--text-1);
   font-weight: 600;
+}
+/* The current landings under the line (§2.7a): one compact block per task, in the task page's words. */
+.project-land-task {
+  border-top: 1px solid var(--border-subtle);
+  padding: 8px 10px;
+}
+.project-land-task-title {
+  display: inline-block;
+  margin-bottom: 4px;
+  font-weight: 600;
+  font-size: 12.5px;
+  color: var(--text-1);
+}
+.project-land-task-title:hover {
+  color: var(--brand);
+}
+/* A task's newest landing attempt: the task's status and the landing's apart, the reason, the facts. */
+.land-task-status {
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.land-task-status-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.land-task-task-state {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.land-task-generation,
+.land-task-step {
+  color: var(--text-3);
+}
+.land-task-reason {
+  margin-top: 5px;
+  color: var(--text-1);
+}
+.land-task-receipt {
+  margin-top: 5px;
+  color: var(--text-3);
+}
+.land-task-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 6px 0 0;
+}
+.land-task-facts > div {
+  display: flex;
+  gap: 5px;
+  min-width: 0;
+}
+.land-task-facts dt {
+  color: var(--text-3);
+}
+.land-task-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 /* A project nobody has started: one sentence beside the mark, wrapping under itself on a phone. */
 .project-integration-undecided {
@@ -16206,18 +16809,26 @@ button.chat-jump-start:hover {
    the page reads as stopped. Full width above the cells, with the same hairline under it that
    separates the cells from each other.
 
-   The ring is the Integrating cell's own mark, and it wears that cell's brand blue while the
-   combined-tree checks run. QUEUED is the third label's grey instead: nothing is being computed, the
-   job is waiting its turn, and a row that spun through that would be reporting work that is not
-   happening. The words `checking` and `queued` say both states without colour or motion — which is
-   what lets the two decorative channels be dropped under `prefers-reduced-motion` below. */
+   The ring uses brand blue while a fresh read reports a running job. Queued jobs and unavailable
+   updates remain grey and still. The state words carry the meaning without colour or motion,
+   including under `prefers-reduced-motion` below. */
 .project-landing {
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 13.5px;
+}
+.project-landing-heading {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--border-subtle);
-  font-size: 13.5px;
+}
+.project-landing-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-3);
 }
 .project-landing-ring {
   display: inline-flex;
@@ -16236,14 +16847,14 @@ button.chat-jump-start:hover {
 .project-landing-running .project-landing-word {
   color: var(--brand);
 }
-/* The row's flexible middle: the task's title, or "N jobs". It truncates rather than wrapping —
-   one row, always the same height — and it is what keeps the state and the clock right-aligned. */
+/* The task has its own line so the phase and elapsed clock stay readable on a phone. */
 .project-landing-what {
-  flex: 1;
-  min-width: 0;
+  margin-top: 8px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
   color: var(--text-1);
 }
 .project-landing-state,
@@ -16260,6 +16871,26 @@ button.chat-jump-start:hover {
 .project-landing-running .project-landing-clock {
   color: var(--brand);
 }
+.project-landing-state {
+  margin-left: auto;
+}
+.project-manual-task {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  margin-top: 10px;
+  color: var(--text-2);
+}
+.project-manual-open {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--bg-hover-strong);
+  font-weight: 600;
+}
 @keyframes project-landing-spin {
   to {
     transform: rotate(360deg);
@@ -16272,6 +16903,14 @@ button.chat-jump-start:hover {
 }
 .project-work-overview > header {
   flex-wrap: wrap;
+}
+.project-overview-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@media (max-width: 640px) {
+  .project-overview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 @media (max-width: 920px) {
   .project-command-center {
@@ -19231,6 +19870,51 @@ button.project-open-item-action:disabled {
 .project-open-item-heading {
   min-width: 0;
 }
+/* An item whose handling by the coordinator has ended (§4.7 H5): the same card, quieter — nothing on
+   it is waiting for anybody. */
+.project-open-item-card.is-settled {
+  border-color: var(--border-subtle);
+  background: var(--bg-raised);
+}
+.project-open-item-card.is-settled .approval-head {
+  background: var(--bg-subtle);
+  border-bottom-color: var(--border-subtle);
+  color: var(--text-2);
+}
+/* Where the coordinator's handling stands (§4.7): blue while its rerun runs — the colour the project
+   list's "Coordinator · handling" chip uses — green once it was handled, grey once a new item took
+   its place. */
+.project-open-item-state {
+  flex: none;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  color: var(--text-2);
+}
+.project-open-item-state.is-handling {
+  border-color: var(--brand-border);
+  background: var(--brand-tint);
+  color: var(--brand);
+}
+.project-open-item-state.is-handled {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success);
+}
+.project-open-item-state.is-superseded {
+  color: var(--text-3);
+}
+.project-open-item-line.is-handling .project-open-item-state {
+  display: inline-block;
+  margin-right: 2px;
+  line-height: 16px;
+}
+.project-open-item-handling {
+  margin-top: 6px;
+}
 /* The provenance mark in its third colour: nothing is wrong and nobody is being asked to decide —
    Orbit is reporting a fact. Same box, so the three marks read as one family. */
 .criteria-provenance.prov-neutral {
@@ -19282,6 +19966,29 @@ button.project-open-item-action:disabled {
 }
 .project-open-item-actions:empty {
   display: none;
+}
+/* "Chat about this" (lib/coordinatorChat): its own row under the doors, because it is not one of
+   them — a message to the coordinator conversation — with the reason said beside it when the
+   server refuses it. */
+.project-open-item-chat {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.project-open-item-chat-refusal,
+.project-promotion-chat-refusal {
+  font-size: 12px;
+  color: var(--text-3);
+}
+/* The merge card's presses sit on one unwrapped row; a refused chat's reason takes a line of its own
+   under them rather than squeezing every label there onto two. */
+.card-actions.project-promotion-actions.has-chat-refusal {
+  flex-wrap: wrap;
+}
+.project-promotion-chat-refusal {
+  flex-basis: 100%;
 }
 .project-open-item-error {
   flex-basis: 100%;
@@ -20019,6 +20726,53 @@ button.project-open-item-action:disabled {
   .wk-layout .wk-cols { grid-template-columns: minmax(0, 1fr); }
 }
 
+/* ── the desktop Wiki fills the main region (mock 29) ──────────────────────────────────────────
+   Every Wiki page drops the 1040px cap: the head, the search and the status row run the whole width,
+   and the directory sticks beside the page and scrolls on its own, so its length no longer sets the
+   page's height. A reading page (a document, an article, Browse, the A–Z index, the plan) keeps a
+   reading width and stands centred in the room right of the directory; Review keeps its own 1040px,
+   centred. The home is a dashboard, not an article, and takes the whole width. Its cards re-flow by the main column's own width: once it
+   has room, the two columns open into one grid — Review and Plan side by side on top, Principles,
+   Recent decisions and Recently changed across under them, Agents used the wiki as the right rail
+   from top to bottom; wider still, the decisions and the changes sit side by side. The DOM keeps its
+   two columns (the phone's order and iOS's are read from it): `display: contents` lets the grid
+   place their cards. */
+@media (min-width: 961px) {
+  .wk-page { max-width: none; }
+  .wk-page--reading > .wk-layout > .wk-main > * { max-width: 880px; margin-inline: auto; }
+  .wk-layout > .wk-dir-col { position: sticky; top: 0; max-height: calc(var(--app-vh, 100vh) - 48px); overflow-y: auto;
+                             overscroll-behavior: contain; margin-left: -8px; scrollbar-width: thin; }
+  .wk-layout > .wk-dir-col > .wk-toc { margin-left: 0; }
+  .wk-layout.home > .wk-main { container: wk-home / inline-size; }
+  @container wk-home (min-width: 760px) {
+    .wk-layout .wk-cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) clamp(290px, 26%, 380px);
+                          grid-template-rows: auto auto auto auto 1fr; gap: 16px; }
+    .wk-cols > .wk-col { display: contents; }
+    .wk-cols .wk-card { grid-column: 1 / span 2; }
+    .wk-cols .wk-review-card { grid-column: 1; grid-row: 1; align-self: stretch; border-color: var(--warning-border);
+                               background: color-mix(in srgb, var(--warning-bg) 45%, var(--bg-raised)); }
+    .wk-cols .wk-plan-card { grid-column: 2; grid-row: 1; align-self: stretch; }
+    .wk-cols:not(:has(.wk-plan-card)) .wk-review-card { grid-column: 1 / span 2; }
+    /* Agents used the wiki: the right column's last card. */
+    .wk-cols > .wk-col:last-child > .wk-card:last-child { grid-column: 3; grid-row: 1 / -1; }
+    /* Recently changed: a run per line — who, what it applied, its links, when. */
+    .wk-cols .wk-tl li.wk-tl-run { padding: 9px 0; border-top: 1px solid var(--border-subtle); }
+    .wk-cols .wk-tl li.wk-tl-run:first-child { border-top: 0; }
+    .wk-cols .wk-tl li.wk-tl-run::before { display: none; }
+    .wk-tl-run > div { display: grid; grid-template-columns: max-content minmax(0, 1fr) auto auto; align-items: baseline; column-gap: 16px; }
+    .wk-tl-run .wk-tl-h { display: contents; }
+    .wk-tl-run .wk-tl-h b { grid-column: 1; grid-row: 1; }
+    .wk-tl-run .wk-tl-h .when { grid-column: 4; grid-row: 1; margin: 0; }
+    .wk-tl-run .wk-tl-t, .wk-tl-run .wk-tl-n { grid-column: 2; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .wk-tl-run .wk-tl-t { grid-row: 1; }
+    .wk-tl-run .wk-tl-acts { grid-column: 3; grid-row: 1; margin: 0; white-space: nowrap; }
+  }
+  @container wk-home (min-width: 1400px) {
+    /* Recent decisions (the main column's second card) beside Recently changed (the right column's last but one). */
+    .wk-cols > .wk-col:first-child > .wk-card:nth-child(2), .wk-cols > .wk-col:last-child > .wk-card:nth-last-child(2) { grid-column: auto; grid-row: 3; }
+  }
+}
+
 /* ── narrower than the app's desktop layout (960px, `MOBILE_QUERY`): the phone mocks 12, 14, 16 ────
    One column in the phone's order: the head, the status line, the search, then the Review bar,
    Principles, Recent decisions, Recently changed and Agents used the wiki — the right rail's Review
@@ -20542,6 +21296,32 @@ a.wkctx-title:hover { text-decoration: underline; }
   padding: 2px 0;
   font-size: 12px;
 }
+button.agent-progress-agent {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+button.agent-progress-agent:hover {
+  background: var(--bg-hover);
+}
+.agent-progress-caret {
+  flex: none;
+  font-size: 10px;
+  color: var(--text-3);
+}
+.agent-progress-transcript {
+  margin: 4px 0 8px 8px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border-subtle);
+}
+.chat-workflow-source > summary {
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--text-3);
+  cursor: pointer;
+}
 .agent-progress-label {
   flex: none;
   max-width: 45%;
@@ -20627,3 +21407,75 @@ a.wkctx-title:hover { text-decoration: underline; }
 .wt-recovery-repair-hint { margin: 5px 0 0 !important; font-size: 11px; }
 .wt-recovery-repair-error { color: var(--error) !important; }
 @media (max-width: 680px) { .wt-recovery-histories { grid-template-columns: 1fr; } }
+
+/* Timed pauses keep identity and quota visible while showing when the account returns. */
+.re-row.account-paused {
+  background: color-mix(in srgb, var(--warning, #d89614) 7%, transparent);
+}
+/* An account on its way out: the row stays readable but steps back until the runner drops it. */
+.re-row.account-removing .re-id,
+.re-row.account-removing .re-quota {
+  opacity: 0.45;
+}
+.account-pause-remaining {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.re-act:has(.account-pause-actions) {
+  flex-wrap: wrap;
+}
+.account-pause-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.account-pause-name {
+  margin: 14px 0 10px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.account-pause-copy {
+  color: var(--text-2);
+  line-height: 1.65;
+}
+.account-pause-scope {
+  padding: 10px 12px;
+  margin: 12px 0;
+  background: color-mix(in srgb, var(--warning, #d89614) 10%, transparent);
+  border-radius: 8px;
+  font-size: 13px;
+}
+.account-pause-durations {
+  display: flex;
+  margin: 20px 0 16px;
+}
+.account-pause-durations .ant-radio-button-wrapper {
+  flex: 1;
+  text-align: center;
+}
+.account-pause-custom {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.account-pause-custom > span,
+.account-pause-preview {
+  font-size: 12px;
+  color: var(--text-3);
+}
+@media (max-width: 700px) {
+  .re-row:has(.account-pause-actions) > .re-act {
+    grid-column: 1 / -1;
+    grid-row: auto;
+    justify-content: flex-start;
+    margin-left: 38px;
+  }
+}
+
+.re-login-note {
+  grid-column: 1 / -1;
+  min-width: 0;
+}

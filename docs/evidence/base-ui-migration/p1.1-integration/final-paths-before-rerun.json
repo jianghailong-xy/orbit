@@ -1,0 +1,12 @@
+{
+  "name": "final-paths-before-rerun",
+  "cwd": "/tmp/orbit-p11-final-aa737ee0",
+  "command": "node /root/.orbit/worktrees/aa737ee0-40f5-5381-8a38-f4ce4a64335e/docs/evidence/base-ui-migration/p1.1-integration/inspect-candidate.cjs /tmp/orbit-p11-final-aa737ee0",
+  "start": "2026-10-04T01:00:52.553418+00:00",
+  "commit": "c7f61251769331f0f2909d4e4d7ee245a01241d7",
+  "tree": "e84b0811c6b2485b9c62b8c01c01f518dca97ae2",
+  "trackedBefore": "",
+  "exitCode": 0,
+  "end": "2026-10-04T01:00:52.592189+00:00",
+  "trackedAfter": ""
+}

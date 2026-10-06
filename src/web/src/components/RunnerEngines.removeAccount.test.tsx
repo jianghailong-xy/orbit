@@ -6,6 +6,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
 import { RunnerEngines } from './RunnerEngines';
+import { clickRunnerMenuItem, openRunnerMenu, runnerMenuItem } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
 /**
@@ -120,14 +121,6 @@ function mount(runners: Runner[]) {
 }
 
 const rows = (el: ParentNode, selector: string) => [...el.querySelectorAll<HTMLElement>(selector)];
-/** A button's words, or the name of a mark that has none (Re-sign in, Remove). */
-const labelOf = (b: Element) => b.textContent?.trim() || b.getAttribute('aria-label');
-const labels = (el: ParentNode) => rows(el, 'button').map(labelOf);
-const button = (el: ParentNode, label: string) => {
-  const found = rows(el, 'button').find((b) => labelOf(b) === label);
-  if (!found) throw new Error(`no "${label}" button in ${el.textContent}`);
-  return found as HTMLButtonElement;
-};
 const click = async (el: HTMLElement) => {
   await act(async () => {
     el.click();
@@ -157,22 +150,22 @@ const removals = () =>
   apiMock.mock.calls.filter(([path, options]) => (options?.method ?? 'GET') === 'DELETE' && String(path).includes('/accounts/'));
 
 describe('removing one Codex account from a runner', () => {
-  it('offers Remove on the accounts the runner added, and never on Default', () => {
+  it('offers Remove account in added accounts’ menus, and never on Default', async () => {
     const page = mount([runner([DEFAULT, WORK, PERSONAL])]);
     const [defaultRow, workRow, personalRow] = accountsOf(page);
 
-    expect(labels(defaultRow)).not.toContain('Remove');
-    expect(labels(workRow)).toContain('Remove');
-    expect(labels(personalRow)).toContain('Remove');
+    expect((await openRunnerMenu(defaultRow)).textContent).not.toContain('Remove account');
+    expect(await runnerMenuItem(workRow, 'Remove account')).toBeTruthy();
+    expect(await runnerMenuItem(personalRow, 'Remove account')).toBeTruthy();
   });
 
-  it('still draws the removed account its own row, sign-in and quota until the machine says it is gone', () => {
+  it('still draws the removed account its own row, sign-in and quota until the machine says it is gone', async () => {
     const page = mount([runner([DEFAULT, WORK])]);
     const [, workRow] = accountsOf(page);
 
     expect(workRow.querySelector('.re-name')?.textContent).toBe('Work');
     expect(workRow.querySelector('.re-meta')?.textContent).toContain('~/.orbit/codex-accounts/3fa91c2e');
-    expect(button(workRow, 'Re-sign in')).toBeTruthy();
+    expect(await runnerMenuItem(workRow, 'Re-sign in')).toBeTruthy();
   });
 
   it('asks the control plane to remove the account the row is for, and no other', async () => {
@@ -180,7 +173,7 @@ describe('removing one Codex account from a runner', () => {
     const [, , personalRow] = accountsOf(page);
 
     // It asks first — the slot's sign-in goes from the machine — and sends nothing until answered.
-    await click(button(personalRow, 'Remove'));
+    await clickRunnerMenuItem(personalRow, 'Remove account');
     const ok = await confirmation();
     expect(removals()).toEqual([]);
     await click(ok);
@@ -190,11 +183,11 @@ describe('removing one Codex account from a runner', () => {
     ]);
   });
 
-  it('is offered nowhere on a machine that is offline, which cannot carry it out', () => {
+  it('is disabled on a machine that is offline, which cannot carry it out', async () => {
     const page = mount([runner([DEFAULT, WORK], { online: false })]);
     const [, workRow] = accountsOf(page);
 
-    expect(button(workRow, 'Remove').disabled).toBe(true);
+    expect((await runnerMenuItem(workRow, 'Remove account')).getAttribute('aria-disabled')).toBe('true');
   });
 });
 
@@ -270,7 +263,7 @@ describe('a removal the machine would not do', () => {
     expect(personalRow.querySelector('.re-panel.bad')).toBeNull();
   });
 
-  it('shows the account as going while the machine has yet to answer', () => {
+  it('shows the account as going while the machine has yet to answer', async () => {
     const page = mount([
       runner([DEFAULT, WORK], {
         accountRemove: { engine: 'codex', account: WORK.id, status: 'pending', message: null },
@@ -278,7 +271,40 @@ describe('a removal the machine would not do', () => {
     ]);
     const [, workRow] = accountsOf(page);
 
-    expect(button(workRow, 'Remove').disabled).toBe(true);
+    expect((await runnerMenuItem(workRow, 'Remove account')).getAttribute('aria-disabled')).toBe('true');
     expect(workRow.querySelector('.re-panel.bad')).toBeNull();
+  });
+});
+
+describe('an account on its way out', () => {
+  // Between the press and the beat that drops the row — the machine may already have said done —
+  // the row says Removing… instead of its sign-in, and the group's head stops counting it.
+  it.each(['pending', 'done'] as const)('reads Removing… and leaves the head’s count while %s', async (status) => {
+    const page = mount([
+      runner([DEFAULT, WORK, PERSONAL], {
+        accountRemove: { engine: 'codex', account: PERSONAL.id, status, message: null },
+      }),
+    ]);
+    const [, workRow, personalRow] = accountsOf(page);
+
+    expect(personalRow.classList.contains('account-removing')).toBe(true);
+    expect(personalRow.querySelector('.re-status')?.textContent).toBe('Removing…');
+    expect((await runnerMenuItem(personalRow, 'Remove account')).getAttribute('aria-disabled')).toBe('true');
+    expect(workRow.classList.contains('account-removing')).toBe(false);
+    expect(workRow.querySelector('.re-status')?.textContent).not.toContain('Removing');
+    expect(page.querySelector('[data-engine="codex"] .re-meta')?.textContent).toContain('of 2 accounts available');
+  });
+
+  it('is back to itself when the machine refused', () => {
+    const page = mount([
+      runner([DEFAULT, WORK], {
+        accountRemove: { engine: 'codex', account: WORK.id, status: 'failed', message: 'a session is running on it' },
+      }),
+    ]);
+    const [, workRow] = accountsOf(page);
+
+    expect(workRow.classList.contains('account-removing')).toBe(false);
+    expect(workRow.querySelector('.re-status')?.textContent).not.toContain('Removing');
+    expect(page.querySelector('[data-engine="codex"] .re-meta')?.textContent).toContain('of 2 accounts available');
   });
 });

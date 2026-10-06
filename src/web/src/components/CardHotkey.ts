@@ -9,8 +9,8 @@ import { useEffect, useRef, useState, type RefObject } from 'react';
  * allow and the project settlement card's delegation keep their ⌘/Ctrl chord, and the two cards
  * whose primary press is hard to take back — `Merge to main` and `Approve & re-seal` — take the
  * chord for it instead of the bare key. The same predicate leaves every key to a focused field with
- * text and the bare key to a focused button, whose own Enter is the same press. An empty field has
- * no typing to protect, so the card can still answer.
+ * text and the bare key to a focused element whose own Enter activates it. An empty field has no
+ * typing to protect, so the card can still answer.
  *
  * WHICH CARD HOLDS THEM
  * ---------------------
@@ -55,12 +55,23 @@ function announce(): void {
   for (const listener of [...listeners]) listener();
 }
 
+/** Opening a review form suspends every background card, including when the form has no hotkey. */
+export function refreshCardKeys(): void {
+  announce();
+}
+
+function reviewDialog(): Element | null {
+  return document.querySelector('.review-card-content[data-review-open="true"]');
+}
+
 /** The claim the keys belong to: the asking card drawn highest on the page. */
 function holder(): symbol | null {
+  const dialog = reviewDialog();
   let top: symbol | null = null;
   let topAt: Element | null = null;
   for (const [claim, anchor] of askers) {
     const at = anchor?.current ?? null;
+    if (dialog && (!at || !dialog.contains(at))) continue;
     const above =
       at !== null &&
       (topAt === null || (at.compareDocumentPosition(topAt) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0);
@@ -71,6 +82,21 @@ function holder(): symbol | null {
   }
   return top;
 }
+
+/** The roles whose focused element answers the bare key with an action of its own, the way a native
+ *  `BUTTON` does — a nav row drawn as `role="link"`, a transcript row's head drawn as
+ *  `role="button"`, a menu item. The bare key is that element's, not the card's: a press that
+ *  answered both would run two actions, one of them a write. The chord is no element's own press and
+ *  stays the card's, exactly as it does over a button. The set is the roles that activate on Enter,
+ *  NOT every role that can hold focus — an empty field's Enter must still reach the card, and a role
+ *  with no Enter of its own must not swallow it. */
+const ENTER_ACTIVATES_ROLE = new Set([
+  'button',
+  'link',
+  'menuitem',
+  'menuitemcheckbox',
+  'menuitemradio',
+]);
 
 /** Whether a key event is a card's answer, in the spelling the caller asked for. */
 function isCardAnswer(e: KeyboardEvent, requireMod: boolean): boolean {
@@ -87,7 +113,18 @@ function isCardAnswer(e: KeyboardEvent, requireMod: boolean): boolean {
       : (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') &&
         (el as HTMLInputElement | HTMLTextAreaElement).value !== '');
   const isButton = el instanceof HTMLElement && el.tagName === 'BUTTON';
-  return !(isFieldWithText || (!requireMod && isButton));
+  // A focused link is a button's case: bare Enter activates the link itself — the card answering
+  // that press would take it away from the link and put it on a question nobody asked there. The
+  // chord stays the card's over a link, exactly as it does over a button, because it is no link's
+  // own press. `href` is what makes an anchor focusable and activatable in a browser.
+  const isLink = el instanceof HTMLElement && el.tagName === 'A' && el.hasAttribute('href');
+  // An element whose `role` promises Enter is a button's case, spelled as ARIA instead of a tag:
+  // the bare key activates the element itself, not the card — the card answering that press would
+  // put it on a question nobody asked there. Only the bare key, though: the chord stays the card's
+  // over a role element exactly as it does over a button, because it is no element's own press.
+  const role = el instanceof HTMLElement ? (el.getAttribute('role') ?? '').trim().toLowerCase() : '';
+  const isSelfActivatingRole = ENTER_ACTIVATES_ROLE.has(role);
+  return !(isFieldWithText || (!requireMod && (isButton || isLink || isSelfActivatingRole)));
 }
 
 /**
@@ -133,20 +170,26 @@ export function useCardKeyClaim(asking: boolean, anchor?: RefObject<Element | nu
  * `active` is whether this card holds the keys — `useCardKeyClaim`'s answer, which the caller gets
  * once for the card, because a card claiming twice is never the only asker.
  */
-export function useApproveHotkey(active: boolean, onTrigger: () => void, opts?: { requireMod?: boolean }): void {
+export function useApproveHotkey(active: boolean, onTrigger: () => void, opts?: {
+  requireMod?: boolean;
+  anchor?: RefObject<Element | null>;
+}): void {
   const requireMod = opts?.requireMod ?? true;
+  const anchor = opts?.anchor;
   const fn = useRef(onTrigger);
   fn.current = onTrigger;
   useEffect(() => {
     if (!active) return;
     const onKey = (e: KeyboardEvent): void => {
+      const dialog = reviewDialog();
+      if (dialog && (!anchor?.current || !dialog.contains(anchor.current))) return;
       if (!isCardAnswer(e, requireMod)) return;
       e.preventDefault();
       fn.current();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [active, requireMod]);
+  }, [active, requireMod, anchor]);
 }
 
 /**
@@ -165,6 +208,6 @@ export function useDecisionCardKeys({
   anchor?: RefObject<Element | null>;
 }): boolean {
   const owns = useCardKeyClaim(confirmEnabled, anchor);
-  useApproveHotkey(owns, onConfirm, { requireMod: false });
+  useApproveHotkey(owns, onConfirm, { requireMod: false, anchor });
   return owns;
 }

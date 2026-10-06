@@ -7,12 +7,13 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
-import type { PromotionTask } from '@orbit/shared';
+import type { IntegrationJobPhase, PromotionTask } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import {
   IntegrationCheckResult,
+  LandingRetryRequest,
   LandingWorkSessionFacts,
   PROMOTION_AUTOMATIC_LAND,
   integrationSerialKey,
@@ -390,9 +391,10 @@ export class ProjectPromotionService {
    * merge differently, and the card the owner pressed has to be the card they get back.
    */
   private async view(row: PromotionRow): Promise<ProjectPromotionView> {
-    const [tasks, upstreamSyncedAt] = await Promise.all([
+    const [tasks, upstreamSyncedAt, execution] = await Promise.all([
       this.tasksOf(row),
       this.lastUpstreamSync(row.projectId),
+      this.mergeExecution(row),
     ]);
     // Only a re-check in flight is measured, which keeps the poll of a card nobody is acting on to
     // the two reads above.
@@ -403,7 +405,23 @@ export class ProjectPromotionService {
         typicalMs: medianMs(await this.recentCheckDurations(row.projectId)),
       }
       : null;
-    return promotionView(row, { tasks, upstreamSyncedAt, recheck });
+    return promotionView(row, { tasks, upstreamSyncedAt, recheck, execution });
+  }
+
+  private async mergeExecution(row: PromotionRow): Promise<ProjectPromotionView['execution']> {
+    if (!row.landJobId || (row.state !== 'CONFIRMED' && row.state !== 'RECHECKING')) return null;
+    const job = await this.prisma.projectIntegrationJob.findFirst({
+      where: {
+        id: row.landJobId, projectId: row.projectId, promotionId: row.id,
+        kind: 'LAND_PROMOTION', state: { in: ['QUEUED', 'RUNNING'] },
+      },
+      select: { state: true, phase: true, startedAt: true, createdAt: true },
+    });
+    return job ? {
+      state: job.state as 'QUEUED' | 'RUNNING',
+      phase: job.phase as IntegrationJobPhase | null,
+      startedAt: job.state === 'RUNNING' ? job.startedAt ?? job.createdAt : job.createdAt,
+    } : null;
   }
 
   /** What this merge would carry, in the order the row lists it, with the titles the card shows. */
@@ -575,7 +593,10 @@ async function applyCancel(tx: Prisma.TransactionClient, row: PromotionRow): Pro
   }
   if (row.landJobId) {
     const asked = await tx.projectIntegrationJob.updateMany({
-      where: { id: row.landJobId, state: { in: ['QUEUED', 'RUNNING'] }, phase: { not: 'PUSH' } },
+      where: {
+        id: row.landJobId, state: { in: ['QUEUED', 'RUNNING'] },
+        OR: [{ phase: null }, { phase: { not: 'PUSH' } }],
+      },
       data: { cancelRequestedAt: new Date() },
     });
     if (asked.count === 0) {
@@ -1123,6 +1144,51 @@ async function blockPromotion(
     },
   });
   return { promotionId, state: 'BLOCKED', receiptIds: [], openApproval: null };
+}
+
+/**
+ * §4.7 H1: a blocked candidate's check queued again because its project's coordinator asked for it,
+ * with a reason, through `integration_retry` — inside that door's transaction, under the candidate's
+ * row lock it already holds.
+ *
+ * The candidate goes back to CHECKING with the next CHECK_PROMOTION generation, which carries what it
+ * reruns, why and who asked (the retry columns 0344 put on a job, admitted for a check by 0368).
+ * Nothing about what is being checked changes: the same frozen source on the same upstream, so a check
+ * that passes leaves the candidate READY for the owner's card, or confirmed by the Automatic setting's
+ * own rule (M-T11), exactly as its first check would have. `decided_at` is cleared because the
+ * candidate is asking again; a check that fails again blocks it at a new moment.
+ *
+ * Null when nothing can be queued: the candidate is no longer BLOCKED, or its repository is gone.
+ */
+export async function requeuePromotionCheck(
+  tx: Prisma.TransactionClient,
+  input: { promotionId: string; retry: LandingRetryRequest },
+): Promise<{ jobId: string; generation: number } | null> {
+  const promotion = await tx.projectPromotion.findUnique({
+    where: { id: input.promotionId },
+    select: PROMOTION_COLUMNS,
+  });
+  if (!promotion || promotion.state !== 'BLOCKED') return null;
+  const codebase = await tx.projectCodebase.findUnique({
+    where: { id: promotion.codebaseId },
+    select: { canonicalRepoUrl: true },
+  });
+  if (!codebase) return null;
+  const jobId = await queuePromotionJob(tx, {
+    kind: 'CHECK_PROMOTION',
+    promotion,
+    canonicalRepoUrl: codebase.canonicalRepoUrl,
+    retry: input.retry,
+  });
+  await tx.projectPromotion.update({
+    where: { id: promotion.id },
+    data: { state: 'CHECKING' satisfies PromotionState, checkJobId: jobId, decidedAt: null },
+  });
+  const queued = await tx.projectIntegrationJob.findUniqueOrThrow({
+    where: { id: jobId },
+    select: { generation: true },
+  });
+  return { jobId, generation: queued.generation };
 }
 
 /**

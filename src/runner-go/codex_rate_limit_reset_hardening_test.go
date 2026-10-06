@@ -117,7 +117,7 @@ func TestCodexResetConsumeCallsOnlyWhileItsClaimIsDelivered(t *testing.T) {
 			"CONSUME_RETRYING/PROVIDER_ERROR -> APPLIED CONSUMING RETRY_CONSUME (held)",
 			codexResetReadRequests, "deliver CONSUME/1",
 			codexResetReadRequests, consume, "CONSUME_OUTCOME/reset -> APPLIED REFRESHING REFRESH",
-			codexResetReadRequests, "REFRESHED -> APPLIED SUCCEEDED STOP",
+			codexResetReadRequests, "deliver REFRESH/1", "REFRESHED -> APPLIED SUCCEEDED STOP",
 		))
 		if awaited.Load() != 1 {
 			t.Fatalf("the step waited for a delivery %d times, want once", awaited.Load())

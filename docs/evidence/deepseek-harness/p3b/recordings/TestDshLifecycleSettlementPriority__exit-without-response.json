@@ -1,0 +1,114 @@
+{
+  "controlPlaneTurns": [
+    {
+      "completions": [
+        {
+          "error": "dsh ACP transport closed: EOF",
+          "result": "",
+          "runtimeSessionId": "lc-engine-session-1",
+          "status": "FAILED",
+          "subtype": "error"
+        }
+      ],
+      "deliveries": 1,
+      "kind": "message",
+      "status": "FAILED",
+      "turnId": "t1"
+    }
+  ],
+  "engineRequests": [
+    {
+      "id": "orbit-dsh-1",
+      "method": "initialize",
+      "pid": 3439926
+    },
+    {
+      "id": "orbit-dsh-2",
+      "method": "session/new",
+      "pid": 3439926
+    },
+    {
+      "fields": {
+        "keySuffix": "0001",
+        "method": "session/new",
+        "permissionMode": "workspace-write",
+        "profileSealed": true
+      },
+      "note": "open",
+      "pid": 3439926
+    },
+    {
+      "id": "orbit-dsh-3",
+      "method": "session/prompt",
+      "pid": 3439926
+    }
+  ],
+  "engineSessionLogs": {
+    "lc-engine-session-1": {
+      "cwd": "/tmp/orbit-dsh-p3b-kWhHCj/TestDshLifecycleSettlementPriorityexit-without-response2579441244/001/work",
+      "history": [
+        "m1 [crash]"
+      ]
+    }
+  },
+  "orbitTranscript": [
+    {
+      "subtype": "launch",
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "subtype": "init",
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "text": "m1 [crash]",
+      "turn": "t1",
+      "type": "user"
+    },
+    {
+      "status": "in_progress",
+      "toolCallId": "lc-tool-3439926-1",
+      "turn": "t1",
+      "type": "tool_use"
+    },
+    {
+      "isError": true,
+      "status": "failed",
+      "toolCallId": "lc-tool-3439926-1",
+      "turn": "t1",
+      "type": "tool_result"
+    },
+    {
+      "message": "dsh ACP transport closed: EOF",
+      "turn": "t1",
+      "type": "error"
+    },
+    {
+      "subtype": "error",
+      "turn": "t1",
+      "type": "turn_end"
+    },
+    {
+      "subtype": "process_exited",
+      "turn": "",
+      "type": "system"
+    }
+  ],
+  "runnerTurnLedger": {
+    "runtimeSessionId": "lc-engine-session-1",
+    "turns": {
+      "t1": {
+        "state": "settled",
+        "status": "FAILED",
+        "subtype": "error",
+        "error": "dsh ACP transport closed: EOF"
+      }
+    }
+  },
+  "scenario": "TestDshLifecycleSettlementPriority/exit-without-response",
+  "sideEffects": [
+    "m1"
+  ]
+}

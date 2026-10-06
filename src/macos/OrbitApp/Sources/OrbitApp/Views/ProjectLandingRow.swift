@@ -13,20 +13,26 @@ struct ProjectLandingRow: View {
 
     var body: some View {
         let ink = line.running ? Color.accentColor : Color.secondary
-        HStack(spacing: 8) {
-            LandingRing(running: line.running)
-            Text(ProjectPage.landingWord).font(.orbitLabel.weight(.semibold)).foregroundStyle(ink)
-            // Always drawn, even empty: it is the row's flexible middle, and the one that keeps the
-            // state and the clock against the trailing edge whether or not the job has a name.
-            Text(line.what ?? "")
-                .font(.orbitLabel)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Text(line.state).font(.orbitLabel).foregroundStyle(.secondary)
-            Text(line.clock)
-                .font(.orbitLabel.weight(.semibold))
-                .monospacedDigit()
-                .foregroundStyle(ink)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                LandingRing(running: line.running)
+                Text(line.word).font(.orbitLabel.weight(.semibold)).foregroundStyle(ink)
+                Spacer(minLength: 8)
+                Text(line.state).font(.orbitMeta).foregroundStyle(.secondary)
+            }
+            if let what = line.what {
+                Text(what).font(.orbitLabel).lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            HStack {
+                HStack(spacing: 4) {
+                    Text(line.clockLabel).foregroundStyle(.secondary)
+                    Text(line.clock).fontWeight(.semibold).monospacedDigit().foregroundStyle(ink)
+                }
+                Spacer(minLength: 8)
+                if let updated = line.updated { Text(updated).foregroundStyle(.secondary) }
+            }
+            .font(.orbitMeta)
         }
         .padding(.vertical, 4)
     }
@@ -63,6 +69,7 @@ private struct LandingRing: View {
             .animation(running && !reduceMotion
                        ? .linear(duration: 1.6).repeatForever(autoreverses: false) : nil,
                        value: spun)
-            .onAppear { spun = true }
+            .onAppear { spun = running }
+            .onChange(of: running) { spun = $0 }
     }
 }

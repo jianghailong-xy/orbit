@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ApprovalInfo } from '../api';
 import { ApprovalPanel } from './ApprovalPanel';
 import { CARD_ACTIONS_CLASS, CARD_ACTION_CLASS } from './CardAction';
@@ -162,3 +162,6 @@ describe('both cards get their actions from one component', () => {
     expect(actions(decisionCard()).some((button) => !/\sdisabled(?:=|\s|>)/.test(button))).toBe(true);
   });
 });
+
+// The card's content/decision contract is tested inline; real dialogs are covered in ReviewCard.test.tsx.
+vi.mock('./ReviewCard', () => import('../test/inlineReviewCard'));

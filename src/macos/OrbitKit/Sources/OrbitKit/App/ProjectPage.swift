@@ -1,7 +1,7 @@
 import Foundation
 
 /// What one project's page says, card by card — ported from the web's project page so both clients
-/// draw the same project the same way: `ProjectPanoramaHeader.tsx` (Work overview),
+/// describe the same project facts: `ProjectPanoramaHeader.tsx` (Work overview),
 /// `ProjectAcceptanceCard.tsx` (criteria), `ProjectCoordinatorCard.tsx` (the coordinator's pill),
 /// `ProjectProgressStatus.tsx` (Open items), `ProjectIntegrationLine.tsx` (the line row) and
 /// `ProjectsPage.tsx`'s task bands and tags.
@@ -36,27 +36,30 @@ public enum ProjectPage {
     /// start when the owner starts the project and not before, so "can start now" would be the one
     /// untrue thing about them.
     public static let readyUntilStarted = "starts when you start"
+    public static let readyWhilePaused = "project is paused"
 
     /// The cells the card draws, in reading order. A project that integrates splits Done into
-    /// Integrating / On project branch / On main (the branch lane dropped on a `MAIN` line), and draws
+    /// Pending landing / On project branch / On main (the branch lane dropped on a `MAIN` line), and draws
     /// the lanes outside that sum only when they are non-zero; one that does not draws the seven
     /// lanes, Done carrying its share of the whole. `started` is whether anybody has started the
     /// project; only `false` changes anything — Ready's footnote.
     public static func overviewCells(_ b: ProjectPanoramaBuckets, taskCount: Int,
-                                     line: IntegrationLine?, started: Bool? = nil) -> [OverviewCell] {
-        let readyFootnote = started == false ? readyUntilStarted : "can start now"
+                                     line: IntegrationLine?, started: Bool? = nil,
+                                     paused: Bool = false, manualReadyCount: Int = 0) -> [OverviewCell] {
+        let readyFootnote = started == false ? readyUntilStarted : paused ? readyWhilePaused
+            : b.ready > 0 && manualReadyCount == b.ready ? "can start manually" : "can start now"
         if reportsIntegrationLanes(b) {
             var lanes: [OverviewCell] = [
                 OverviewCell(key: "running", label: "Running", value: b.running,
-                             footnote: "active sessions", glyph: .disc),
+                             footnote: "task work in progress", glyph: .disc),
                 OverviewCell(key: "ready", label: "Ready", value: b.ready,
                              footnote: readyFootnote, glyph: .triangle),
                 OverviewCell(key: "blocked", label: "Waiting", value: b.blocked,
                              footnote: (b.waitingForLanding ?? 0) > 0
-                                ? "for a prerequisite to land" : "waiting on dependencies",
+                                ? "\(b.waitingForLanding ?? 0) waiting for a prerequisite to land" : "waiting on dependencies",
                              glyph: .square),
-                OverviewCell(key: "integrating", label: "Integrating", value: b.integrating ?? 0,
-                             footnote: "checks running on the combined tree", glyph: .spinner),
+                OverviewCell(key: "integrating", label: "Pending landing", value: b.integrating ?? 0,
+                             footnote: "no landing receipt yet", glyph: .hourglass),
             ]
             if line != .main {
                 lanes.append(OverviewCell(key: "onIntegrationLine", label: "On project branch",
@@ -83,7 +86,7 @@ public enum ProjectPage {
             : "no tasks yet"
         return [
             OverviewCell(key: "running", label: "Running", value: b.running,
-                         footnote: "active sessions", glyph: .disc),
+                         footnote: "task work in progress", glyph: .disc),
             OverviewCell(key: "ready", label: "Ready", value: b.ready,
                          footnote: readyFootnote, glyph: .triangle),
             OverviewCell(key: "blocked", label: "Waiting", value: b.blocked,
@@ -115,29 +118,41 @@ public enum ProjectPage {
     /// whose footnote is a term of art. The owner read exactly that page on 2026-09-25 and concluded
     /// the project had stopped.
     public struct LandingLine: Equatable, Sendable {
+        public let word: String
         /// The task being landed, "N jobs" when more than one is in flight, or nil when the job
         /// names no single task (a promotion, a merge check) — the row then draws its word and
         /// state alone.
         public let what: String?
-        /// Whether the combined-tree checks are running, as opposed to the job still waiting its
+        /// Whether the job is running, as opposed to still waiting its
         /// turn. What the ring's spin and the two brand-blue words are drawn from; the `state` word
         /// is what carries the same fact to a reader who cannot use motion.
         public let running: Bool
-        /// "checking" or "queued".
+        /// The reported job phase, or "queued".
         public let state: String
         /// "1m 20s". See `landingClock`.
         public let clock: String
+        public let clockLabel: String
+        public let updated: String?
 
-        public init(what: String?, running: Bool, state: String, clock: String) {
+        public init(what: String?, running: Bool, state: String, clock: String, word: String = "Integration",
+                    clockLabel: String = "Elapsed", updated: String? = nil) {
+            self.word = word
             self.what = what
             self.running = running
             self.state = state
             self.clock = clock
+            self.clockLabel = clockLabel
+            self.updated = updated
         }
     }
 
-    /// The row's first word, and the whole of what the line is about.
-    public static let landingWord = "Landing"
+    public static let integrationJobWords = [
+        "LAND_TASK": "Landing", "CHECK_PROMOTION": "Merge check", "LAND_PROMOTION": "Merge to main",
+    ]
+    public static let integrationPhaseWords = [
+        "FETCH": "fetching", "MAIN_SYNC": "syncing main", "REBASE": "rebasing", "MERGE": "merging",
+        "CHECK": "checking", "VERIFY": "verifying", "PUSH": "pushing",
+    ]
 
     /// "1m 20s" — the landing clock, minutes and seconds ALWAYS, at every length.
     ///
@@ -161,17 +176,29 @@ public enum ProjectPage {
     /// The name slot takes the job's task, or the COUNT when there is more than one: "Landing 2
     /// jobs" says what a single task's title would have pretended to — that this is the oldest of
     /// several, not the only thing the queue is doing.
-    public static func landingLine(_ view: ProjectIntegrationView, now: Date = Date()) -> LandingLine? {
+    public static func landingLine(_ view: ProjectIntegrationView, now: Date = Date(),
+                                   updatedAt: Date? = nil, refreshFailed: Bool = false) -> LandingLine? {
         guard let inFlight = view.inFlight else { return nil }
         let running = inFlight.state == "RUNNING"
         let jobs = view.integratingCount + view.queuedCount
+        let heartbeatAt = inFlight.heartbeatAt.flatMap(RelativeTime.parse)
+        let heartbeatStale = running && heartbeatAt.map { now.timeIntervalSince($0) > 600 } == true
+        let readStale = updatedAt.map { now.timeIntervalSince($0) > 90 } == true
+        let unavailable = refreshFailed || readStale || heartbeatStale
+        let lastUpdate = running ? (heartbeatAt ?? updatedAt) : updatedAt
+        let elapsedAt = unavailable ? min(now, lastUpdate ?? now) : now
+        let age = lastUpdate.map { Int(max(0, now.timeIntervalSince($0)) / 60) }
         // An instant this clock cannot read is no elapsed time rather than a wrong one: the row
         // stays up and counts from zero, which is the one thing it can still say truthfully.
-        let elapsed = RelativeTime.parse(inFlight.startedAt).map { now.timeIntervalSince($0) } ?? 0
+        let elapsed = RelativeTime.parse(inFlight.startedAt).map { elapsedAt.timeIntervalSince($0) } ?? 0
         return LandingLine(what: jobs > 1 ? "\(jobs) jobs" : inFlight.taskTitle,
-                           running: running,
-                           state: running ? "checking" : "queued",
-                           clock: landingClock(elapsed))
+                           running: running && !unavailable,
+                           state: unavailable ? "Update unavailable"
+                               : running ? (integrationPhaseWords[inFlight.phase ?? ""] ?? "running") : "queued",
+                           clock: landingClock(elapsed),
+                           word: integrationJobWords[inFlight.kind ?? ""] ?? "Integration",
+                           clockLabel: running ? "Elapsed" : "Queued for",
+                           updated: age.map { $0 == 0 ? "Updated just now" : "Updated \($0)m ago" })
     }
 
     // MARK: - Acceptance criteria
@@ -365,9 +392,32 @@ public enum ProjectPage {
     public static let needsYouGroup = "Needs you"
     public static let withCoordinatorGroup = "With the coordinator"
 
-    /// "1 need you · 2 with the coordinator · oldest first".
-    public static func openItemsHint(needsYou: Int, withCoordinator: Int) -> String {
-        "\(needsYou) need you · \(withCoordinator) with the coordinator · oldest first"
+    /// The toolbar counts every open item; only the owner's share raises a reminder on the page.
+    public struct OpenItemsSummary: Equatable, Sendable {
+        public let needsYou: Int
+        public let withCoordinator: Int
+        public var count: Int { needsYou + withCoordinator }
+
+        public var attention: String? {
+            guard needsYou > 0 else { return nil }
+            return needsYou == 1 ? "1 item needs you" : "\(needsYou) items need you"
+        }
+
+        public var subtitle: String {
+            if count == 0 { return "No open items" }
+            let owner = attention ?? "No action needed from you"
+            return withCoordinator > 0 ? "\(owner) · \(withCoordinator) with the coordinator" : owner
+        }
+    }
+
+    /// A missing read is not an empty inbox. A start request counts only while the page can answer
+    /// it; the owner's own Start… is an action, not something anybody is waiting on.
+    public static func openItemsSummary(status: ProjectStatus, started: Bool?,
+                                        items: ProjectOpenItemsView?) -> OpenItemsSummary? {
+        guard let items else { return nil }
+        let start = StartProject.pageRow(status: status, started: started, openItems: items)
+        return OpenItemsSummary(needsYou: items.needsYou.count + (start?.request == nil ? 0 : 1),
+                                withCoordinator: items.withCoordinator.count)
     }
 
     /// "You" / "Coordinator".
@@ -435,26 +485,26 @@ public enum ProjectPage {
     // MARK: - Integration line
 
     /// The line row's facts, in order: "⎇ project/x", "7 commits ahead of main", "synced with main
-    /// 12m ago", "Integrating 1 · Queued 0", "Merge check ✓ passing on the branch tip". Nil when no
+    /// 12m ago", "Running jobs 1 · Queued 0", "Last landing check ✓ passing". Nil when no
     /// line has been decided.
     public static func integrationFacts(_ view: ProjectIntegrationView, now: Date) -> [String]? {
         guard let line = view.line, line != .unknown else { return nil }
         let branchLine = line == .projectBranch
         var facts: [String] = [branchLine ? (view.ref ?? "project branch") : (view.upstreamRef ?? "main")]
         if branchLine, let ahead = view.commitsAheadOfUpstream {
-            facts.append("\(ahead) commit\(ahead == 1 ? "" : "s") ahead of main")
+            facts.append("\(ahead) commit\(ahead == 1 ? "" : "s") ahead of main at last measurement")
         }
         if branchLine, let synced = view.lastUpstreamSyncAt, let ago = RelativeTime.ago(synced, now: now) {
             facts.append("synced with main \(ago)")
         }
-        facts.append("Integrating \(view.integratingCount) · Queued \(view.queuedCount)")
+        facts.append("Running jobs \(view.integratingCount) · Queued \(view.queuedCount)")
         let tip: String
         switch view.mergeCheckOnTip {
         case "PASSING": tip = "✓ passing"
         case "FAILING": tip = "✕ failing"
-        default: tip = "not run yet"
+        default: tip = "not checked"
         }
-        facts.append("Merge check \(tip)\(branchLine ? " on the branch tip" : "")")
+        facts.append("Last landing check \(tip)")
         return facts
     }
 
@@ -487,6 +537,7 @@ public enum ProjectPage {
     public enum IntegrationStage: Sendable { case integrating, landed }
 
     public static func integrationStage(_ t: ProjectTaskRow) -> IntegrationStage? {
+        guard workState(t) == "DONE" else { return nil }
         guard let state = t.integration?.state else { return nil }
         if integratingStates.contains(state) { return .integrating }
         return landedStates.contains(state) ? .landed : nil
@@ -543,8 +594,8 @@ public enum ProjectPage {
         case "QUEUED":
             return Tag(text: "Queued for integration", tone: .neutral)
         case "RUNNING":
-            guard let ms = integration.checksRunningForMs else { return Tag(text: "Integrating", tone: .brand) }
-            return Tag(text: "Integrating · checks \(RelativeTime.span(ms / 1000))", tone: .brand)
+            guard integration.checksRunningForMs != nil else { return Tag(text: "Integrating", tone: .brand) }
+            return Tag(text: "Integrating · checking", tone: .brand)
         case "CONFLICT": return Tag(text: "Conflict · \(who)", tone: .danger)
         case "CHECK_FAILED": return Tag(text: "Checks failed · \(who)", tone: .danger)
         case "ERROR": return Tag(text: "Integration error · \(who)", tone: .danger)
@@ -593,7 +644,7 @@ public enum ProjectPage {
             if !tasks.isEmpty { groups.append(TaskGroup(key: key, heading: heading, tasks: tasks, settled: settled)) }
         }
         add("running", "Running", running)
-        add("integrating", "Integrating · checks run on the combined tree", integrating)
+        add("integrating", "Pending landing", integrating)
         add("ready", "Ready · can start now", ready)
         add("awaiting-verification", "Awaiting verification · subject work must not be started", awaiting)
         add("failed", "Failed · coordinated continuation", failed)

@@ -1,11 +1,11 @@
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { PROVIDER_PRESETS, type ProviderBrand, type RunnerEngineHealth } from '@orbit/shared';
+import { PROVIDER_PRESETS, type RunnerEngineHealth } from '@orbit/shared';
 import { api } from '../api';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
 import { runnersQuery } from '../lib/queries';
-import { ENGINE_PRESET, runtimeSummary } from '../lib/sessionProviderChoices';
+import { brandForProvider, ENGINE_PRESET, providerDisplayLabel, runtimeSummary } from '../lib/sessionProviderChoices';
 
 /** Just the part of a runner this gallery reads: which engines it is signed into, and its name. */
 interface SignedInRunner {
@@ -14,16 +14,7 @@ interface SignedInRunner {
   engines?: RunnerEngineHealth[] | null;
 }
 
-// The brand for a provider: presets ship one; a custom provider falls back to a neutral monogram
-// derived from its label.
-export function brandFor(slug: string, label: string): ProviderBrand {
-  const preset = PROVIDER_PRESETS.find((p) => p.slug === slug);
-  if (preset) return preset.brand;
-  return { mono: (label.trim()[0] ?? '?').toUpperCase(), from: '#9aa0a8', to: '#6b7178' };
-}
-
-// The square logo tile: the vendor's brand glyph (white) over its brand gradient — falling back to
-// a monogram when no glyph is known, or a dashed neutral "+" tile for "Custom".
+// Match the iOS provider tile: a white glyph over the brand gradient, or a monogram when unknown.
 export function ProviderTile({
   slug,
   label,
@@ -54,8 +45,8 @@ export function ProviderTile({
       </div>
     );
   }
-  const brand = brandFor(slug, label);
-  const glyph = PROVIDER_GLYPHS[slug];
+  const { brand, glyphKey } = brandForProvider(slug, label, slug);
+  const glyph = PROVIDER_GLYPHS[glyphKey ?? slug];
   return (
     <div
       className="provider-tile"
@@ -64,6 +55,7 @@ export function ProviderTile({
         height: size,
         borderRadius: radius,
         background: `linear-gradient(135deg, ${brand.from}, ${brand.to})`,
+        border: glyphKey === 'antigravity' ? '1px solid rgba(255,255,255,0.16)' : undefined,
       }}
     >
       {glyph ? (
@@ -129,7 +121,7 @@ export function ProviderGallery() {
             {/* The check rides on the logo's corner rather than the row, so marking a card costs
                 no width — these names already fill it. */}
             <span className="pc-logo">
-              <ProviderTile slug={p.slug} label={p.label} />
+              <ProviderTile slug={p.slug} label={providerDisplayLabel(p.label, p.slug)} />
               {count > 0 && (
                 <span className="pc-check" aria-hidden="true">
                   ✓
@@ -137,12 +129,12 @@ export function ProviderGallery() {
               )}
             </span>
             <div style={{ minWidth: 0 }}>
-              <div className="pc-name">{p.label}</div>
+              <div className="pc-name">{providerDisplayLabel(p.label, p.slug)}</div>
               <div className={`pc-sub${!count && signedInOn.has(p.slug) ? ' pc-local' : ''}`}>
                 {count === 0
                   ? (signedInOn.get(p.slug)
                       ? `Already signed in on ${signedInOn.get(p.slug)}`
-                      : runtimeSummary(p.runtime))
+                      : runtimeSummary(p.runtime, p.slug))
                   : count === 1
                     ? 'Connected'
                     : `Connected · ${count} keys`}

@@ -1,0 +1,30 @@
+
+> @orbit/web@0.1.0 pretest:ui-foundation
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-foundation
+> playwright test --config ui-migration/foundation.config.mjs --project=chromium-light-desktop --grep foundation states|production boot|account adoption
+
+[WebServer] (node:3953743) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 5 tests using 1 worker
+
+(node:3953902) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] 4:23:59 AM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓  1 [chromium-light-desktop] › ui-migration/foundation-theme.browser.mjs:57:3 › production boot and hydration preserve cached system (1.8s)
+[WebServer] 4:24:01 AM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓  2 [chromium-light-desktop] › ui-migration/foundation-theme.browser.mjs:57:3 › production boot and hydration preserve cached light (1.6s)
+[WebServer] 4:24:02 AM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓  3 [chromium-light-desktop] › ui-migration/foundation-theme.browser.mjs:57:3 › production boot and hydration preserve cached dark (1.6s)
+[WebServer] 4:24:04 AM [vite] (client) [console.error] Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+  ✓  4 [chromium-light-desktop] › ui-migration/foundation-theme.browser.mjs:83:1 › account adoption, preference writes and live system changes share the foundation theme (2.4s)
+  ✓  5 [chromium-light-desktop] › ui-migration/foundation.browser.mjs:14:1 › foundation states match current AntD and the frozen P0 palette (966ms)
+
+  5 passed (9.5s)
