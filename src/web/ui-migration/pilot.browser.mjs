@@ -20,6 +20,35 @@ const option = (page, name) => page.getByRole('option', { name, exact: typeof na
 // container under its role=dialog wrapper, the Orbit dialog on the role=dialog element itself.
 const DIALOG_SURFACE = '.ant-modal-container, .orbit-overlay';
 
+/** Compose `preedits`, confirm with Enter while composing, then commit `commit` (as P3.1's composer-input). */
+async function imeCompose(page, field, testInfo, preedits, commit) {
+  if (testInfo.project.use.browserName === 'chromium') {
+    // Chromium: real IME composition through DevTools; the browser marks the confirming Enter.
+    const cdp = await page.context().newCDPSession(page);
+    for (const text of preedits) await cdp.send('Input.imeSetComposition', { text, selectionStart: text.length, selectionEnd: text.length });
+    await cdp.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 });
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 });
+    await cdp.send('Input.insertText', { text: commit });
+    await cdp.detach();
+    return;
+  }
+  // WebKit has no IME automation: replay an IME's events. Text goes in through trusted insertText;
+  // the composition markers and the confirming Enter (keyCode 229) are synthetic.
+  const start = await field.evaluate((element) => element.selectionStart);
+  await field.dispatchEvent('compositionstart', { data: '' });
+  let previous = '';
+  for (const text of preedits) {
+    await field.evaluate((element, [from, length]) => element.setSelectionRange(from, from + length), [start, previous.length]);
+    await field.dispatchEvent('compositionupdate', { data: text });
+    await page.keyboard.insertText(text);
+    previous = text;
+  }
+  await field.dispatchEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 229, isComposing: true, bubbles: true, cancelable: true });
+  await field.evaluate((element, [from, length]) => element.setSelectionRange(from, from + length), [start, previous.length]);
+  await page.keyboard.insertText(commit);
+  await field.dispatchEvent('compositionend', { data: commit });
+}
+
 /** Where focus is, what is open and which pilot requests were sent: one trace row per step. */
 async function observe(page, pilot, step) {
   const state = await page.evaluate(() => {
@@ -183,6 +212,20 @@ test.describe('task detail pilot', () => {
     await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Enter' : 'Control+Enter');
     await expect(compose.getByRole('textbox')).toHaveValue('');
     trace.push(await observe(page, pilot, 'comment sent'));
+
+    // Chinese through the input method: the confirming Enter belongs to the IME and adds no line, the
+    // mention menu then takes Enter again, and the comment goes out as typed.
+    const field = compose.getByRole('textbox');
+    await field.click();
+    await imeCompose(page, field, testInfo, ['zhong', '中'], '中文');
+    await expect(field).toHaveValue('中文');
+    await page.keyboard.type(' @Orb');
+    await expect(compose.locator('.tdp-mention-menu')).toBeVisible();
+    await page.keyboard.press('Enter');
+    await expect(field).toHaveValue('中文 @Orbit baseline ');
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Enter' : 'Control+Enter');
+    await expect(field).toHaveValue('');
+    trace.push(await observe(page, pilot, 'chinese comment sent'));
     await testInfo.attach('trace', { body: JSON.stringify(trace, null, 2), contentType: 'application/json' });
   });
 
