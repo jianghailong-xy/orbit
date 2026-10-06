@@ -981,6 +981,11 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
     await ask(alice, 'POST', 'providers/pools/:id/members', { id: scratchId }, { providerId: pub(work) }, 201);
     await ask(alice, 'POST', 'providers/pools/:id/members', { id: scratchId }, { providerId: pub(meteredRow) }, 400);
     await ask(bob, 'POST', 'providers/pools/:id/members', { id: scratchId }, { providerId: pub(theirs) }, 404);
+    // A member paused and resumed by her (migration 0374); another owner finds no pool to pause it in.
+    const scratchMember = { id: scratchId, memberId: pub(work) };
+    await ask(alice, 'POST', 'providers/pools/:id/members/:memberId/pause', scratchMember, { durationMinutes: 60 }, 201);
+    await ask(alice, 'POST', 'providers/pools/:id/members/:memberId/pause', scratchMember, { durationMinutes: null }, 201);
+    await ask(bob, 'POST', 'providers/pools/:id/members/:memberId/pause', scratchMember, { durationMinutes: 60 }, 404);
     await ask(alice, 'DELETE', 'providers/pools/:id/members/:providerId', { id: scratchId, providerId: pub(work) }, undefined, 200);
     await ask(alice, 'DELETE', 'providers/pools/:id', { id: scratchId }, undefined, 200);
     // A pool of hers on Codex, which runs on one ChatGPT login this server holds and signs in itself
@@ -1254,6 +1259,12 @@ exec sleep 300
       await ask(bearer, 'PATCH', 'providers/shared-pools/:id/keys/:keyId', key, { label: `${label}, renamed` }, 200);
       await ask(bearer, 'PUT', 'providers/shared-pools/:id/keys/:keyId/secret', key, { apiKey: openaiKey() }, 200);
       await ask(bearer, 'DELETE', 'providers/shared-pools/:id/keys/:keyId', key, undefined, 200);
+      // Her running account paused and resumed (migration 0374), addressed by its `…AB12` as her page names
+      // it: hers to pause, as the one who signed it in and the pool's admin; the person, who signed none of
+      // hers in, is refused.
+      const running = { ...at, memberId: encodeURIComponent(`login:…${accounts[0].accountId.slice(-4)}`) };
+      await ask(bearer, 'POST', 'providers/pools/:id/members/:memberId/pause', running, { durationMinutes: 60 }, by(403, 201));
+      await ask(bearer, 'POST', 'providers/pools/:id/members/:memberId/pause', running, { durationMinutes: null }, by(403, 201));
 
       // Last, what takes something out of her pool: an account — an admin's alone, so the person, who
       // signed none of hers in, is refused rather than not found (migration 0371) — the person, and the
