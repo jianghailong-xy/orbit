@@ -21,35 +21,56 @@ import AppKit
 /// Where a press on the home page goes.
 struct WikiHomeActions {
     var openEntry: (String) -> Void = { _ in }
-    var openReview: () -> Void = {}
     var pickSpace: (String) -> Void = { _ in }
     var search: (String) async -> [WikiSearchHit] = { _ in [] }
-    /// The space's Wiki settings, from the gear in the bar (mock 12 ①).
+    /// The space's Wiki settings: the gear in the bar (mock 12 ①), Manage spaces, and a new space's Set up
+    /// maintenance (mock 31 ⑥).
     var openSettings: () -> Void = {}
-    /// One run's page, from its row in Recently changed (mock 12 ②).
-    var openRun: (String) -> Void = { _ in }
-    /// The Contents sheet — the category directory — from the list button in the bar (mock 12 ③).
+    /// The Contents sheet — the directory — from the list button in the bar (mock 30 ③).
     var openContents: () -> Void = {}
-    /// A session, by id: the status line's View run opens the run that failed (mock 12 ④).
-    var openSession: (String) -> Void = { _ in }
     /// Activity, from the bar's history mark (design §12.3.2).
     var openActivity: () -> Void = {}
-    /// The plan's banner (mock 26 ③): into the plan page, or — held for want of a setting — Maintenance.
-    var openPlan: (WikiPlanLogic.Banner.To) -> Void = { _ in }
+    /// A document's page (mock 24), from its row, or from a folded row's titles.
+    var openDoc: (String) -> Void = { _ in }
+    /// A topic's article, before a plan is confirmed.
+    var openArticle: (String) -> Void = { _ in }
+    /// Browse by category and the A–Z index, at the foot (mock 31 ①).
+    var openBrowse: () -> Void = {}
+    var openIndex: () -> Void = {}
+    /// The home's first read again, after it failed.
+    var retry: () -> Void = {}
 }
 
-/// One space's home: the large title with the space beside it, the status line, the search under
-/// them, the amber banner that leads to Review, then Principles, Recent decisions, Recently changed
-/// and Agents used the wiki. The topics are the Contents sheet the bar's list button opens, and what
-/// waits on the owner is counted on the bar's Activity button.
+/// One space's home (design §12.3.1, mocks 30 ③, 31 ① ③ ⑥ ⑦): the large title with the space beside it, the
+/// line that says what the space holds, the search, the principles when there are any, then the documents —
+/// each category a group of cards on the grouped background, each written document its number, title and two
+/// lines of lead, what is not written yet folded into one row — and Browse by category · A–Z index at the
+/// foot. Its bands are `WikiLogic.HomeBand`'s, in their order. How the wiki is kept is Activity's, behind the
+/// bar's history mark with what waits on the owner on it.
+///
+/// WHAT IS KNOWN IS DRAWN AT ONCE: the head is the spaces list the drawer has already read; the line and the
+/// documents are grey bars (`.redacted`) until the home's own first read is in.
+///
+/// BESIDE THE DIRECTORY — the iPad's and the Mac's middle column (mock 32) — the page has no head: the title
+/// and the space head that column, which also holds Browse and the A–Z index, and the bar needs no Contents.
 struct WikiHomePage: View {
-    let content: WikiHomeContent
-    var now: Date = Date()
-    var actions = WikiHomeActions()
+    /// The space on screen and every space: the head, from the spaces list.
+    let space: WikiSpace
+    let spaces: [WikiSpace]
+    /// The space's principles, oldest recorded first (`WikiLogic.principles`).
+    var principles: [WikiEntry] = []
+    /// The line under the head (`WikiLogic.homeLine`): nil, a grey bar, while the first read is out.
+    var line: String? = nil
+    var documents: WikiLogic.HomeDocuments = .loading
+    /// When the reader last looked (`WikiSeenLog`): what the principles' blue dots mark; nil marks none.
+    var seen: Double? = nil
+    /// The first read failed: said where the documents would be, with Retry.
+    var failed = false
     /// What waits on the owner across every space — the drawer's number — on the bar's Activity button.
     var waiting = 0
-    /// What the plan has to say (owner's call 2026-09-29): the phone's second banner, under Review's.
-    var planBanner: WikiPlanLogic.Banner? = nil
+    /// Drawn beside the directory column: no head, no Contents in the bar, no foot.
+    var besideContents = false
+    var actions = WikiHomeActions()
 
     @State private var query = ""
     @State private var hits: [WikiSearchHit] = []
@@ -57,37 +78,54 @@ struct WikiHomePage: View {
     /// The page's own header carries the title; the bar takes it once the header scrolls away, which
     /// is the system's large title collapsing into the bar.
     @State private var headerOnScreen = true
+    /// Every principle, past the first three (`All N ›`).
+    @State private var allPrinciples = false
+    /// The categories whose documents not written yet are listed, their folded row opened.
+    @State private var unfolded: Set<String> = []
 
     private var searching: Bool { !query.trimmingCharacters(in: .whitespaces).isEmpty }
+
+    /// The bands that ride under the head on the page's own background, the way the web's frame draws them
+    /// over the home: the line and the search. The rest are the home's cards.
+    private static let underHead: Set<WikiLogic.HomeBand> = [.state, .search]
 
     var body: some View {
         List {
             Section {
-                header
-                    .onAppear { headerOnScreen = true }
-                    .onDisappear { headerOnScreen = false }
-            }
-            .listRowSeparator(.hidden)
-            ForEach(WikiLogic.HomeBand.allCases, id: \.self) { band in
-                if band == .search || !searching {
+                if !besideContents {
+                    header
+                        .onAppear { headerOnScreen = true }
+                        .onDisappear { headerOnScreen = false }
+                        .wikiHomeOnBackground()
+                }
+                ForEach(WikiLogic.HomeBand.allCases.filter { Self.underHead.contains($0) }, id: \.self) { band in
                     self.band(band)
                 }
             }
-            if searching { results }
+            if searching {
+                results
+            } else {
+                ForEach(WikiLogic.HomeBand.allCases.filter { !Self.underHead.contains($0) }, id: \.self) { band in
+                    self.band(band)
+                }
+            }
         }
-        .listStyle(.plain)
-        .navigationTitle(headerOnScreen ? "" : WikiCopy.title)
+        .wikiHomeListStyle()
+        .navigationTitle(besideContents || headerOnScreen ? "" : WikiCopy.title)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {
             // The bar's actions, in the web head's order — Contents, Activity, Settings; icons all
-            // (design §12.3.1). Activity wears the drawer's orange number: what waits on the owner.
+            // (design §12.3.1). Activity wears the drawer's orange number: what waits on the owner. Beside the
+            // directory column there is no Contents to open.
             ToolbarItemGroup(placement: .primaryAction) {
-                Button(action: actions.openContents) {
-                    Image(systemName: "list.bullet")
+                if !besideContents {
+                    Button(action: actions.openContents) {
+                        Image(systemName: "list.bullet")
+                    }
+                    .accessibilityLabel(WikiArticleCopy.contents)
                 }
-                .accessibilityLabel(WikiArticleCopy.contents)
                 Button(action: actions.openActivity) {
                     WikiActivityGlyph(waiting: waiting)
                 }
@@ -117,88 +155,16 @@ struct WikiHomePage: View {
 
     // MARK: header
 
-    /// Title and space on one row (the web's page head), and the status line under them.
+    /// The title and the space on one row — the web's page head.
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .center, spacing: 10) {
-                Text(WikiCopy.title)
-                    .font(.largeTitle.bold())
-                    .accessibilityAddTraits(.isHeader)
-                Spacer(minLength: 8)
-                spacePicker
-            }
-            Text(wikiStatusText(content.statusParts(now: now)))
-                .font(.orbitLabel)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .environment(\.openURL, OpenURLAction { url in
-                    switch url {
-                    case wikiStatusSettingsURL:
-                        actions.openSettings()
-                    case wikiStatusRunURL:
-                        if let session = content.health?.maintenance.lastRun?.sessionId { actions.openSession(session) }
-                    default:
-                        return .systemAction
-                    }
-                    return .handled
-                })
+        HStack(alignment: .center, spacing: 10) {
+            Text(WikiCopy.title)
+                .font(.largeTitle.bold())
+                .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 8)
+            WikiSpacePicker(space: space, spaces: spaces, pick: actions.pickSpace, manage: actions.openSettings)
         }
         .padding(.top, 4)
-    }
-
-    /// The space beside the title, by the name a reader knows it by (design §12.3.4, mock 31 ④). With one
-    /// space it is a grey label and no control: no chevron, no menu. With several, a menu of every space,
-    /// the current one ticked — a toggle per space, whose tick a menu draws in its own column, its name the
-    /// title and the repository and documents the line under it — what waits in each in the row's icon
-    /// cell, and Manage spaces at the foot, into Wiki settings.
-    @ViewBuilder private var spacePicker: some View {
-        let names = WikiSpaceLogic.names(content.spaces)
-        let name = names[content.space.id] ?? content.space.title ?? content.space.slug
-        if content.spaces.count < 2 {
-            Text(name)
-                .font(.orbitLabel)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color.primary.opacity(0.07), in: Capsule())
-                .accessibilityLabel(WikiCopy.spacePickerHint)
-                .accessibilityValue(name)
-        } else {
-            Menu {
-                ForEach(WikiSpaceLogic.menuRows(content.spaces, names: names)) { row in
-                    Toggle(isOn: Binding(get: { row.id == content.space.id },
-                                         set: { if $0 { actions.pickSpace(row.slug) } })) {
-                        // The name with its icon cell, then the line under it: a menu takes the Text
-                        // after the Label as the row's subtitle (inside the Label it drops it).
-                        Label {
-                            Text(row.name)
-                        } icon: {
-                            if wikiMenuIconsDrawAmber, let symbol = row.waitingSymbol { wikiAmberSymbol(symbol) }
-                        }
-                        Text(row.subtitle(sayWaiting: !wikiMenuIconsDrawAmber))
-                    }
-                }
-                Divider()
-                Button(action: actions.openSettings) {
-                    Label(WikiCopy.manageSpaces, systemImage: "gearshape")
-                }
-            } label: {
-                HStack(spacing: 4) {
-                    Text(name)
-                        .font(.orbitLabel.weight(.semibold))
-                        .lineLimit(1)
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.orbitMeta.weight(.semibold))
-                }
-                .foregroundStyle(Color.primary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color.primary.opacity(0.07), in: Capsule())
-            }
-            .accessibilityLabel(WikiCopy.spacePickerHint)
-            .accessibilityValue(name)
-        }
     }
 
     // MARK: the bands
@@ -206,72 +172,33 @@ struct WikiHomePage: View {
     @ViewBuilder
     private func band(_ band: WikiLogic.HomeBand) -> some View {
         switch band {
+        case .state:
+            stateLine
+                .wikiHomeOnBackground()
         case .search:
             searchField
-                .listRowSeparator(.hidden)
-        case .reviewBanner:
-            if content.proposals > 0 {
-                reviewBanner
-                    .listRowInsets(EdgeInsets())
-                    .listRowSeparator(.hidden)
-            }
-            // The plan's banner is the second, under Review's (mock 26 ①); its changes are handled on the
-            // plan page, never in Review.
-            if let planBanner {
-                WikiPlanBannerRow(banner: planBanner) { actions.openPlan(planBanner.to) }
-                    .listRowInsets(EdgeInsets())
-                    .listRowSeparator(.hidden)
-            }
+                .wikiHomeOnBackground()
         case .principles:
-            Section {
-                rows.bandHeader(WikiCopy.principles, count: content.principles.count,
-                                badge: content.principlesAllOwner ? WikiCopy.trustLabel(.owner) : nil)
-                if content.principles.isEmpty {
-                    rows.empty(WikiCopy.noPrinciples)
-                } else {
-                    ForEach(content.principles) { entry in
-                        entryRow(entry, detail: entry.summary, time: entry.validFrom)
-                    }
-                }
-            }
-        case .recentDecisions:
-            Section {
-                rows.bandHeader(WikiCopy.recentDecisions, count: content.recentDecisions.count)
-                if content.recentDecisions.isEmpty {
-                    rows.empty(WikiCopy.noDecisions)
-                } else {
-                    ForEach(content.recentDecisions) { entry in rows.decisionRow(entry) }
-                }
-            }
-        case .recentlyChanged:
-            Section {
-                rows.bandHeader(WikiCopy.recentlyChanged)
-                if content.recentlyChanged.isEmpty {
-                    rows.empty(WikiCopy.noChanges)
-                } else {
-                    // One run is one row: every item names the changeset it came in (`wikiRecentRows`).
-                    ForEach(content.recentRows) { row in
-                        switch row {
-                        case .op(let item):
-                            rows.changeRow(item)
-                        case .run(let changesetId, let origin, let at, let items):
-                            rows.runRow(changesetId, origin: origin, at: at, changes: items.count)
-                        }
-                    }
-                }
-            }
-        case .agentsUsed:
-            Section {
-                rows.bandHeader(WikiCopy.agentsUsed, hint: WikiCopy.agentsUsedHint)
-                rows.usage
-            }
+            if !principles.isEmpty { principlesBand }
+        case .documents:
+            documentsBand
+        case .more:
+            if documents.listed && !besideContents { more }
         }
     }
 
-    /// The management bands' rows, which Activity draws too.
-    private var rows: WikiBandRows {
-        WikiBandRows(content: content, now: now,
-                     actions: WikiBandActions(openEntry: actions.openEntry, openRun: actions.openRun))
+    /// What the space holds (`35 documents · 5 written`), or a grey bar in its place while the first read is out.
+    @ViewBuilder private var stateLine: some View {
+        if let line {
+            Text(line)
+                .font(.orbitSubtext)
+                .foregroundStyle(.secondary)
+        } else {
+            Text(WikiDocCopy.docsWritten(total: 35, written: 5))
+                .font(.orbitSubtext)
+                .redacted(reason: .placeholder)
+                .accessibilityHidden(true)
+        }
     }
 
     /// The search under the title — the web phone's search line, and the owner's call for iOS
@@ -303,59 +230,279 @@ struct WikiHomePage: View {
         .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
-    /// The proposals waiting, in the needs-you bar's shape: an amber wash, the amber dot, the words
-    /// in the label colour and a chevron — the whole bar one press into Review. The number is the
-    /// drawer row's and Review's own.
-    private var reviewBanner: some View {
-        Button(action: actions.openReview) {
-            HStack(spacing: 9) {
-                Circle().fill(.orange).frame(width: 7, height: 7)
-                Text(WikiCopy.proposalsToReview(content.proposals))
-                    .font(.orbitControl)
-                    .foregroundStyle(Color.primary)
-                    .lineLimit(1)
-                Spacer(minLength: 8)
-                Image(systemName: "chevron.forward")
-                    .font(.orbitMeta)
-                    .foregroundStyle(.tertiary)
+    /// The principles (mock 31 ③): the owner's, the first three a title a row with its day, then `All N ›`.
+    private var principlesBand: some View {
+        Section {
+            ForEach(allPrinciples ? principles : Array(principles.prefix(WikiLogic.principlesShown))) { entry in
+                WikiDocRow(mark: .pin, title: entry.displayTitle,
+                           fresh: seen.map { WikiSeenLog.isNew(entry.validFrom, seen: $0) } ?? false,
+                           end: WikiLogic.shortDay(entry.validFrom) ?? "") {
+                    actions.openEntry(entry.id)
+                }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(wikiAmberWash)
-            .contentShape(Rectangle())
+        } header: {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(WikiCopy.principles)
+                    .font(.orbitSubtext.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text("\(principles.count)")
+                    .font(.orbitSubtext.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                WikiBadge(text: WikiCopy.trustLabel(.owner), tone: .owner)
+                Spacer(minLength: 8)
+                if !allPrinciples && principles.count > WikiLogic.principlesShown {
+                    Button(WikiCopy.allPrinciples(principles.count)) { allPrinciples = true }
+                        .font(.orbitSubtext)
+                        .buttonStyle(.borderless)
+                }
+            }
+            .textCase(nil)
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(WikiCopy.proposalsToReview(content.proposals))
     }
 
-    // MARK: rows
-
-    /// A row that opens an entry: its title and when, then one line under it.
-    private func entryRow(_ entry: WikiEntry, detail: String?, time: String?) -> some View {
-        Button { actions.openEntry(entry.id) } label: {
-            WikiRowLabel(title: entry.displayTitle, time: time.flatMap { RelativeTime.format($0, now: now) },
-                         detail: detail, struck: entry.isEnded)
+    /// The documents by category (mock 30 ③), the topic articles before a plan, a new space's card (mock 31 ⑥),
+    /// or grey bars while the first read is out (mock 31 ⑦).
+    @ViewBuilder private var documentsBand: some View {
+        switch documents {
+        case .loading:
+            if failed { failure } else { skeleton }
+        case .categories(let categories):
+            ForEach(categories) { category in self.category(category) }
+        case .topics(let groups):
+            ForEach(groups) { group in topics(group) }
+        case .newSpace:
+            Section {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(WikiDocCopy.noDocumentsNote)
+                        .font(.orbitSubtext)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button(WikiPlanCopy.setUp, action: actions.openSettings)
+                        .font(.orbitSubtext.weight(.semibold))
+                        .buttonStyle(.borderless)
+                }
+                .padding(.vertical, 4)
+            }
+        case .nothing:
+            EmptyView()
         }
-        .buttonStyle(.plain)
+    }
+
+    /// One category: its written documents with their leads, then one row for the rest — `+3 not written yet`,
+    /// or `3 documents · Not written yet` when none is — which opens to their titles in grey (mock 26 ②).
+    private func category(_ category: WikiDocLogic.HomeCategory) -> some View {
+        let open = unfolded.contains(category.key)
+        return Section {
+            ForEach(category.written) { doc in
+                WikiDocRow(mark: .number(doc.number), title: doc.title, line: doc.lead, lead: true, fresh: doc.fresh) {
+                    actions.openDoc(doc.slug)
+                }
+            }
+            if let folded = WikiDocLogic.notWrittenRow(category) {
+                WikiDocFoldedRow(text: folded, open: open) { fold(category.key) }
+                if open {
+                    ForEach(category.notWritten) { doc in
+                        WikiDocRow(mark: .number(doc.number), title: doc.title, line: WikiDocCopy.notWrittenShort, muted: true) {
+                            actions.openDoc(doc.slug)
+                        }
+                    }
+                }
+            }
+        } header: {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("\(category.number)")
+                    .font(.orbitSubtext.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                Text(category.title)
+                    .font(.orbitSubtext.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .textCase(nil)
+        }
+    }
+
+    /// A folded row pressed: its titles listed, or folded away again.
+    private func fold(_ key: String) {
+        if unfolded.contains(key) {
+            unfolded.remove(key)
+        } else {
+            unfolded.insert(key)
+        }
+    }
+
+    /// Before a plan is confirmed: a category of the directory, each topic's article a title a row.
+    private func topics(_ group: WikiArticleLogic.DirectoryGroup) -> some View {
+        Section {
+            ForEach(group.topics) { topic in
+                WikiDocRow(mark: nil, title: topic.title) { actions.openArticle(topic.slug) }
+            }
+        } header: {
+            Text(group.title)
+                .font(.orbitSubtext.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .textCase(nil)
+        }
+    }
+
+    /// The documents' first read (mock 31 ⑦): a category's bar, then four documents' — number, title, two lines.
+    private static let skeletonRows = [
+        ("Product and capabilities", "Orbit is a self-hosted control room for coding agents that run on machines of your own."),
+        ("System architecture and data flow", "The server keeps the intent and the history; registered runners run the agents."),
+        ("Task lifecycle and its dependencies", "A task is a durable unit of queued work a runner claims and reports back on."),
+        ("Session runs and recovery", "A session is a resumable conversation of many turns on one runner and one runtime."),
+    ]
+
+    private var skeleton: some View {
+        Section {
+            ForEach(Self.skeletonRows.indices, id: \.self) { index in
+                WikiDocRow(mark: .number("0.0"), title: Self.skeletonRows[index].0, line: Self.skeletonRows[index].1,
+                           lead: true, end: "") {}
+            }
+        } header: {
+            Text("0  Product overview")
+                .font(.orbitSubtext.weight(.semibold))
+                .textCase(nil)
+        }
+        .redacted(reason: .placeholder)
+        .disabled(true)
+        .accessibilityHidden(true)
+    }
+
+    /// The first read failed, and nothing of it is in hand.
+    private var failure: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("The wiki couldn't be loaded")
+                    .font(.orbitSubtext.weight(.semibold))
+                Text("Check the connection, then try again.")
+                    .font(.orbitLabel)
+                    .foregroundStyle(.secondary)
+                Button("Retry", action: actions.retry)
+                    .buttonStyle(.borderless)
+            }
+            .padding(.vertical, 4)
+        }
+    }
+
+    /// The ways to everything else (mock 31 ①): Browse by category · A–Z index.
+    private var more: some View {
+        Section {
+            HStack(spacing: 18) {
+                Button(action: actions.openBrowse) {
+                    Label(WikiArticleCopy.browse, systemImage: "square.grid.2x2")
+                }
+                Button(action: actions.openIndex) {
+                    Label(WikiArticleCopy.azIndex, systemImage: "textformat.abc")
+                }
+                Spacer(minLength: 0)
+            }
+            .font(.orbitSubtext)
+            .buttonStyle(.borderless)
+            .wikiHomeOnBackground()
+        }
     }
 
     // MARK: search
 
     @ViewBuilder private var results: some View {
-        if hits.isEmpty && searched == query && !query.isEmpty {
-            ContentUnavailableView.search(text: query)
-                .listRowSeparator(.hidden)
-        } else {
-            ForEach(hits) { hit in
-                Button { actions.openEntry(hit.id) } label: {
-                    WikiRowLabel(title: hit.title ?? hit.id,
-                                 detail: [hit.kind.map(WikiCopy.kindLabel) ?? "", hit.summary ?? ""]
-                                    .filter { !$0.isEmpty }.joined(separator: " · "))
+        Section {
+            if hits.isEmpty && searched == query && !query.isEmpty {
+                ContentUnavailableView.search(text: query)
+                    .listRowSeparator(.hidden)
+            } else {
+                ForEach(hits) { hit in
+                    Button { actions.openEntry(hit.id) } label: {
+                        WikiRowLabel(title: hit.title ?? hit.id,
+                                     detail: [hit.kind.map(WikiCopy.kindLabel) ?? "", hit.summary ?? ""]
+                                        .filter { !$0.isEmpty }.joined(separator: " · "))
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
         }
+    }
+}
+
+/// The space beside the title, by the name a reader knows it by (design §12.3.4, mock 31 ④) — the home's head
+/// on a phone, the directory column's beside it. With one space it is a grey label and no control: no chevron,
+/// no menu. With several, a menu of every space, the current one ticked — a toggle per space, whose tick a menu
+/// draws in its own column, its name the title and the repository and documents the line under it — what waits
+/// in each in the row's icon cell, and Manage spaces at the foot, into Wiki settings.
+struct WikiSpacePicker: View {
+    let space: WikiSpace
+    let spaces: [WikiSpace]
+    var pick: (String) -> Void = { _ in }
+    var manage: () -> Void = {}
+
+    var body: some View {
+        let names = WikiSpaceLogic.names(spaces)
+        let name = names[space.id] ?? space.title ?? space.slug
+        if spaces.count < 2 {
+            Text(name)
+                .font(.orbitLabel)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color.primary.opacity(0.07), in: Capsule())
+                .accessibilityLabel(WikiCopy.spacePickerHint)
+                .accessibilityValue(name)
+        } else {
+            Menu {
+                ForEach(WikiSpaceLogic.menuRows(spaces, names: names)) { row in
+                    Toggle(isOn: Binding(get: { row.id == space.id },
+                                         set: { if $0 { pick(row.slug) } })) {
+                        // The name with its icon cell, then the line under it: a menu takes the Text
+                        // after the Label as the row's subtitle (inside the Label it drops it).
+                        Label {
+                            Text(row.name)
+                        } icon: {
+                            if wikiMenuIconsDrawAmber, let symbol = row.waitingSymbol { wikiAmberSymbol(symbol) }
+                        }
+                        Text(row.subtitle(sayWaiting: !wikiMenuIconsDrawAmber))
+                    }
+                }
+                Divider()
+                Button(action: manage) {
+                    Label(WikiCopy.manageSpaces, systemImage: "gearshape")
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(name)
+                        .font(.orbitLabel.weight(.semibold))
+                        .lineLimit(1)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.orbitMeta.weight(.semibold))
+                }
+                .foregroundStyle(Color.primary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color.primary.opacity(0.07), in: Capsule())
+            }
+            .accessibilityLabel(WikiCopy.spacePickerHint)
+            .accessibilityValue(name)
+        }
+    }
+}
+
+private extension View {
+    /// A row of the home that stands on the page's background rather than in a card: the head, the line, the
+    /// search and the foot.
+    func wikiHomeOnBackground() -> some View {
+        self.listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+    }
+
+    /// The categories as groups of cards on the grouped background (mock 30 ③) on iOS, close together; the
+    /// platform's inset list on macOS.
+    @ViewBuilder func wikiHomeListStyle() -> some View {
+        #if os(iOS)
+        self.listStyle(.insetGrouped)
+            .listSectionSpacing(.compact)
+        #else
+        self.listStyle(.inset)
+        #endif
     }
 }
 

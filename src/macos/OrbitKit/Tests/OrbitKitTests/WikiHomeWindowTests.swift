@@ -42,15 +42,15 @@ private final class WikiWindowRequests: @unchecked Sendable {
     }
 }
 
-/// The home in a space whose principles and decisions are all OLDER than its 200 newest entries — the
-/// orbit space's shape, eleven thousand entries deep — read through `APIClient` from a fake `/api` whose
-/// entries read answers the way `WikiService.listEntries` does: filtered by `kind` and `status`, newest
-/// record first, between 1 and 200 of them (50 when no limit is asked).
+/// The home's principles and Activity's decisions in a space whose principles and decisions are all OLDER
+/// than its 200 newest entries — the orbit space's shape, eleven thousand entries deep — read through
+/// `APIClient` from a fake `/api` whose entries read answers the way `WikiService.listEntries` does: filtered
+/// by `kind` and `status`, newest record first, between 1 and 200 of them (50 when no limit is asked).
 ///
 /// Out of the 200 newest entries of every kind the home used to pick both bands, so this space drew no
-/// principle and no decision. Each band now reads its own kind, exactly as `WikiModel.loadHome` asks for
-/// it (`WikiWiringTests` holds the model to these two reads), and the web's `WikiHome.window.test.tsx`
-/// drives the same space through its page.
+/// principle and no decision. Each band now reads its own kind, exactly as `WikiModel.loadHome` (the
+/// principles) and `WikiModel.loadActivity` (the decisions) ask for it — `WikiWiringTests` holds the model to
+/// these two reads — and the web's `WikiHome.window.test.tsx` drives the same space through its pages.
 final class WikiHomeWindowTests: XCTestCase {
     private static let spaceID = "34UAq0rbitSpaceOrbit01"
 
@@ -109,9 +109,9 @@ final class WikiHomeWindowTests: XCTestCase {
                          session: URLSession(configuration: configuration))
     }
 
-    private func content(window: [WikiEntry], principles: [WikiEntry], decisions: [WikiEntry]) -> WikiHomeContent {
+    private func activity(window: [WikiEntry], decisions: [WikiEntry]) -> WikiHomeContent {
         WikiHomeContent(space: WikiSpace(id: Self.spaceID, slug: "orbit"), spaces: [], entries: window,
-                        principles: principles, decisions: decisions, timeline: [], proposals: 0)
+                        decisions: decisions, timeline: [])
     }
 
     func testTheNewest200EntriesOfThisSpaceHoldNoPrincipleAndNoDecision() async throws {
@@ -123,42 +123,40 @@ final class WikiHomeWindowTests: XCTestCase {
         XCTAssertEqual(log.all, ["GET /api/wiki/spaces/\(Self.spaceID)/entries?limit=200"])
     }
 
-    /// Every principle, of any status, oldest recorded first; the four newest decisions, newest first.
-    func testTheHomeStillShowsEveryPrincipleAndTheNewestDecisions() async throws {
+    /// Every principle on the home, of any status, oldest recorded first; the four newest decisions on
+    /// Activity, newest first.
+    func testTheHomeStillShowsEveryPrincipleAndActivityTheNewestDecisions() async throws {
         let log = WikiWindowRequests()
         let api = client(serving: Self.principles + Self.decisions + Self.newer, log: log)
         let window = try await api.wikiEntries(spaceID: Self.spaceID)
         let principles = try await api.wikiEntries(spaceID: Self.spaceID, kind: .principle,
-                                                   limit: WikiHomeContent.principlesRead)
+                                                   limit: WikiLogic.principlesRead)
         let decisions = try await api.wikiEntries(spaceID: Self.spaceID, kind: .decision,
                                                   limit: WikiHomeContent.recentDecisionCount)
-        let home = content(window: window, principles: principles, decisions: decisions)
-        XCTAssertEqual(home.principles.map(\.title), ["A clock never starts agent work", "Delete means forget",
-                                                      "Completion is adjudicated, not claimed"])
-        XCTAssertEqual(home.recentDecisions.map(\.title), ["Decision 6", "Decision 5", "Decision 4", "Decision 3"])
+        XCTAssertEqual(WikiLogic.principles(principles).map(\.title), ["A clock never starts agent work", "Delete means forget",
+                                                                       "Completion is adjudicated, not claimed"])
+        XCTAssertEqual(activity(window: window, decisions: decisions).recentDecisions.map(\.title),
+                       ["Decision 6", "Decision 5", "Decision 4", "Decision 3"])
         XCTAssertEqual(log.all, [
             "GET /api/wiki/spaces/\(Self.spaceID)/entries?limit=200",
             "GET /api/wiki/spaces/\(Self.spaceID)/entries?kind=principle&limit=200",
             "GET /api/wiki/spaces/\(Self.spaceID)/entries?kind=decision&limit=4",
         ])
         // Picked out of the window, as the home used to, the same space had nothing to show.
-        let windowOnly = content(window: window, principles: window, decisions: window)
-        XCTAssertTrue(windowOnly.principles.isEmpty)
-        XCTAssertTrue(windowOnly.recentDecisions.isEmpty)
+        XCTAssertTrue(WikiLogic.principles(window).isEmpty)
+        XCTAssertTrue(activity(window: window, decisions: window).recentDecisions.isEmpty)
     }
 
-    /// A space with entries and decisions but no principle: the band says so of the principles alone,
-    /// never that the space holds nothing.
-    func testAnEmptyPrinciplesBandSpeaksOnlyForThePrinciples() async throws {
+    /// A space with entries and decisions but no principle: the home has no principle to list, so it draws no
+    /// band and says nothing of them (design §12.3.1) — while Activity still lists its decisions.
+    func testASpaceWithNoPrincipleHasNoPrinciplesToList() async throws {
         let log = WikiWindowRequests()
         let api = client(serving: Self.decisions + Self.newer, log: log)
         let principles = try await api.wikiEntries(spaceID: Self.spaceID, kind: .principle,
-                                                   limit: WikiHomeContent.principlesRead)
+                                                   limit: WikiLogic.principlesRead)
         let decisions = try await api.wikiEntries(spaceID: Self.spaceID, kind: .decision,
                                                   limit: WikiHomeContent.recentDecisionCount)
-        let home = content(window: [], principles: principles, decisions: decisions)
-        XCTAssertTrue(home.principles.isEmpty)
-        XCTAssertEqual(home.recentDecisions.count, 4)
-        XCTAssertEqual(WikiCopy.noPrinciples, "No principle has been recorded yet.")
+        XCTAssertTrue(WikiLogic.principles(principles).isEmpty)
+        XCTAssertEqual(activity(window: [], decisions: decisions).recentDecisions.count, 4)
     }
 }

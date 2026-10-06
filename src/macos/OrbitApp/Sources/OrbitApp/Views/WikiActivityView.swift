@@ -177,12 +177,12 @@ struct WikiActivityView: View {
     var body: some View {
         if let wiki = model.wiki {
             TimelineView(.periodic(from: .now, by: 60)) { context in
-                if let home = wiki.home, let space = wiki.currentSpace {
-                    WikiActivityPage(content: home, spaceName: name(of: space, in: wiki),
+                if let content = wiki.activity, let space = wiki.currentSpace {
+                    WikiActivityPage(content: content, spaceName: name(of: space, in: wiki),
                                      banners: banners(wiki, space: space, now: context.date),
                                      seen: seen, now: context.date, actions: actions(wiki))
                 } else {
-                    WikiHomePlaceholder(wiki: wiki)
+                    WikiHomePlaceholder(wiki: wiki, state: wiki.activityState) { await wiki.loadActivity() }
                 }
             }
             .task(id: wiki.currentSpace?.slug) {
@@ -190,13 +190,13 @@ struct WikiActivityView: View {
                     seen = wiki.seenBefore(slug)
                     wiki.moveSeen(slug)
                 }
-                if wiki.home == nil || wiki.home?.space.id != wiki.currentSpace?.id { await wiki.loadHome() }
+                if wiki.activity == nil || wiki.activity?.space.id != wiki.currentSpace?.id { await wiki.loadActivity() }
                 await wiki.loadPlan()
                 await wiki.loadDocsDirectory()
                 await wiki.loadOtherPlans()
             }
             .refreshable {
-                await wiki.loadHome()
+                await wiki.loadActivity()
                 await wiki.loadPlan()
                 await wiki.loadOtherPlans()
             }
@@ -240,7 +240,7 @@ struct WikiActivityView: View {
         case .plan(let slug), .settings(let slug):
             if wiki.currentSpace?.slug != slug {
                 wiki.selectedSlug = slug
-                Task { await wiki.loadHome() }
+                Task { await wiki.loadActivity() }
             }
             if case .settings = to { model.push(.wikiSettings) } else { model.push(.wikiPlan(version: nil)) }
         }
