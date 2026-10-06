@@ -22,10 +22,13 @@ STUDIES = {
     'baseline-select-d': 'unchanged tree, select-down-space, select-down-space-from-null, select-space-down-enter: 20 burst + 20 paced each',
     'baseline-select-e': 'unchanged tree, select-enter-down-enter, select-down-7-enter, select-down-n-enter: 20 burst + 20 paced each',
     'baseline-rerun': 'unchanged tree, the baseline samples whose page never mounted (environmental), run again',
+    # Taken on the delivered tree (the branch after merging the project tip with P3.1): Menu, Select, Floating,
+    # Base UI, AntD, the lockfile and the choices fixture and config are byte-identical to the tree above.
+    'baseline-menu-up': 'delivered tree, menu-up-enter, menu-up-up-enter, menu-up-down-enter: 20 burst + 20 paced per target and sequence',
 }
-# The judged data set: the studies of one tree taken together (a rerun replaces nothing; it only adds samples).
+# The judged data set: the studies taken together (a rerun replaces nothing; it only adds samples).
 DATASETS = {'baseline': ['baseline-menu', 'baseline-select-a', 'baseline-select-b', 'baseline-select-c',
-                         'baseline-select-d', 'baseline-select-e', 'baseline-rerun']}
+                         'baseline-select-d', 'baseline-select-e', 'baseline-rerun', 'baseline-menu-up']}
 ANTD = {'menu': 'antd-menu', 'select': 'antd-sample'}
 ORBIT = {'menu': ['orbit-menu', 'orbit-menu-sample'], 'select': ['orbit-field', 'orbit-sample']}
 CONTROLS = {'menu-enter', 'select-down', 'select-down-enter', 'select-down-enter-from-7'}

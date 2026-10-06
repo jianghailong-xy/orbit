@@ -37,6 +37,10 @@ const SEQUENCES = [
   { name: 'menu-enter-down-enter', keys: ['Enter', 'ArrowDown', 'Enter'], targets: MENUS },
   { name: 'menu-enter-up-enter', keys: ['Enter', 'ArrowUp', 'Enter'], targets: MENUS },
   { name: 'menu-enter-enter', keys: ['Enter', 'Enter'], targets: MENUS },
+  // Added after the first baseline: ↑ as the opener (Base UI opens on the last item), the other Menu ↑ case.
+  { name: 'menu-up-enter', keys: ['ArrowUp', 'Enter'], targets: MENUS },
+  { name: 'menu-up-up-enter', keys: ['ArrowUp', 'ArrowUp', 'Enter'], targets: MENUS },
+  { name: 'menu-up-down-enter', keys: ['ArrowUp', 'ArrowDown', 'Enter'], targets: MENUS },
   // Reference beyond the task's keys: the old Dropdown's own way into its menu (Tab focuses it).
   { name: 'menu-enter-tab-down-enter', keys: ['Enter', 'Tab', 'ArrowDown', 'Enter'], targets: MENUS },
   { name: 'select-down', from: 'Never', keys: ['ArrowDown'], targets: SELECTS },
