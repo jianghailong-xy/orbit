@@ -61,9 +61,7 @@ private struct RunnerEngineContent: View {
         let offline = RunnerPageFormat.isOffline(runner, now: now)
         Form {
             head(health, now: now)
-            if engine == "antigravity" {
-                antigravitySection(health, offline: offline, now: now)
-            } else if engine == "dsh" {
+            if engine == "dsh" {
                 dshSection(offline: offline)
             } else if let health, health.installed == true, let login = RunnerPageFormat.loginEngine(engine) {
                 accountsSection(health, login: login, offline: offline, now: now)
@@ -131,38 +129,6 @@ private struct RunnerEngineContent: View {
         }
     }
 
-    @ViewBuilder private func antigravitySection(_ health: RunnerEngineHealth?, offline: Bool, now: Date) -> some View {
-        Section {
-            if health?.auth == "yes" {
-                Text(health?.authSource == "google" ? "Google account" : "env key · runs on your Gemini key")
-            }
-            if let status = health.flatMap({ RunnerPageFormat.engineStatus($0, runner: runner) }), health?.auth != "yes" {
-                Text(status.text).foregroundStyle(RunnerInk.status(status.tone))
-            }
-            ForEach(RunnerPageFormat.engineWindows(runner, engine: engine)) { row in
-                RunnerWindowRow(row: row, resets: RunnerPageFormat.resetsLine(row, now: now))
-            }
-            if let hint = EngineAuth.antigravityLoginHint(runner.antigravity?.googleLogin) {
-                Text(hint).font(.orbitLabel).foregroundStyle(Color.secondary)
-            } else if RunnerPageFormat.antigravityCanSignIn(runner) {
-                if signingIn != nil {
-                    RunnerSignInView(runnerID: runner.id, engine: .antigravity)
-                    Button("Close") { closeSignIn() }
-                } else {
-                    Button(health?.auth == "yes" && health?.authSource == "google" ? "Re-sign in · change Google account" : "Sign in with Google") {
-                        signingIn = CodexAccounts.defaultID
-                    }
-                    .disabled(offline)
-                    GoogleSignInTermsView()
-                }
-            }
-        } header: {
-            RunnerSectionHeader("Sign-In")
-        } footer: {
-            if offline { Text(RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER) }
-        }
-    }
-
     /// The engine, its version and whether it is kept current.
     @ViewBuilder private func head(_ health: RunnerEngineHealth?, now: Date) -> some View {
         Section {
@@ -188,7 +154,11 @@ private struct RunnerEngineContent: View {
         }
     }
 
-    /// Every login the engine has on that machine, each with its own state and quota.
+    /// Every login the engine has on that machine, each with its own state and quota. Antigravity's are
+    /// Google sign-ins, drawn the same way: the runner's own is Default, and Add Account signs another
+    /// one in where the runner can keep it apart (`RunnerPageFormat.canAddAccount`) — a macOS runner, or
+    /// one too old to sign in with Google at all, says so instead. Every Google sign-in on the page
+    /// starts above the section's footer, so Google's terms are said there, once.
     @ViewBuilder private func accountsSection(_ health: RunnerEngineHealth, login: LoginEngine, offline: Bool,
                                               now: Date) -> some View {
         Section {
@@ -215,13 +185,24 @@ private struct RunnerEngineContent: View {
                         }
                     }
             }
-            if RunnerPageFormat.keepsAccounts(engine) {
+            if RunnerPageFormat.canAddAccount(runner, engine: engine) {
                 addAccountRow(health, login: login, offline: offline)
+            } else if let hint = RunnerPageFormat.signInHint(runner, engine: engine) {
+                Text(hint)
+                    .font(.orbitLabel)
+                    .foregroundStyle(Color.secondary)
             }
         } header: {
             RunnerSectionHeader(RunnerPageFormat.keepsAccounts(engine) ? "Accounts" : "Sign-In")
         } footer: {
-            if offline {
+            if engine == "antigravity" && RunnerPageFormat.antigravityCanSignIn(runner) {
+                VStack(alignment: .leading, spacing: 8) {
+                    GoogleSignInTermsView()
+                    if offline {
+                        Text(RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER)
+                    }
+                }
+            } else if offline {
                 Text(RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER)
             }
         }
@@ -255,6 +236,7 @@ private struct RunnerEngineContent: View {
     @ViewBuilder private func accountRow(_ line: RunnerPageFormat.AccountLine, login: LoginEngine, offline: Bool,
                                          now: Date, canPause: Bool) -> some View {
         let windows = RunnerPageFormat.accountWindows(runner, engine: engine, account: line.id)
+        let alone = (runner.engines?.first(where: { $0.engine == engine })?.accounts?.count ?? 0) < 2
         let status = RunnerPageFormat.authStatus(line.auth)
         let removal = RunnerPageFormat.removal(runner.accountRemove, engine: engine, account: line.id)
         VStack(alignment: .leading, spacing: 10) {
@@ -282,6 +264,10 @@ private struct RunnerEngineContent: View {
                         RunnerWindowRow(row: row, resets: RunnerPageFormat.resetsLine(row, now: now))
                     }
                 }
+            } else if line.envKey {
+                Text("env key · runs on your Gemini key")
+                    .font(.orbitLabel)
+                    .foregroundStyle(Color.secondary)
             } else if line.auth == "yes", RunnerPageFormat.reportsQuota(engine) {
                 Text(RunnerPageCopy.RUNNER_ENGINE_NO_QUOTA)
                     .font(.orbitLabel)
@@ -304,8 +290,11 @@ private struct RunnerEngineContent: View {
                                      signInDisabled: offline || removal?.pending == true) { minutes in
                     await runners.pauseAccount(runner.id, engine: login, account: line.id, durationMinutes: minutes)
                 }
-            } else {
-                Button(line.auth == "yes" ? "Sign In Again" : RunnerPageCopy.RUNNER_SIGN_IN) {
+            } else if RunnerPageFormat.canSignIn(runner, engine: engine) && (!line.envKey || alone) {
+                // A Default that runs on the machine's Gemini key is not signed in to Google. Alone it
+                // offers that sign-in, as it always has — on a runner too old to add accounts it is the
+                // only way in; beside Google accounts Add Account is where another joins (as on web).
+                Button(line.envKey ? "Sign in with Google" : line.auth == "yes" ? "Sign In Again" : RunnerPageCopy.RUNNER_SIGN_IN) {
                     signingIn = line.id
                 }
                 .buttonStyle(.bordered)
