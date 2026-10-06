@@ -9188,9 +9188,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const projectAfter =
         dto.projectId === undefined ? before.projectId : (dto.projectId ?? null);
       const successorId = supersededByTaskIdAfter;
+      // The writer's own tasks only: another account's is not found, rather than refused in words
+      // that say it exists and whose it is.
       const successor = successorId
         ? await this.prisma.task.findFirst({
-            where: { id: successorId },
+            where: { id: successorId, ownerId },
             select: { id: true, ownerId: true, projectId: true },
           })
         : null;
