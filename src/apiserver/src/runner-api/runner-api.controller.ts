@@ -130,12 +130,6 @@ import {
   ActivateTurnLeasesResponse,
   fastModeAvailable,
   type CodexRateLimitResetResultRequest,
-  type ConfirmationReturnCard,
-  type ConfirmationReviewRequestCard,
-  type OpenItemDeliveryCard,
-  type ProjectStartedCard,
-  type SessionMessageCard,
-  type TaskStartCard,
   type RunnerModelCatalog,
 } from '@orbit/shared';
 import { lastProviderByWorkspace, withProviderSeed } from '../workspaces/workspace-provider';
@@ -190,12 +184,9 @@ import { currentWikiRollout, wikiClaimFields } from '../wiki/wiki-rollout';
 import { wikiMaintenanceRunOf, withWikiMaintenanceRun } from '../wiki/wiki-maintenance-session';
 import {
   type TaskFailure,
-  openItemIdOfTurn,
-  readOpenItemDeliveryCard,
   recordTaskFailure,
   returnQueuedTurns,
 } from '../projects/project-open-item';
-import { projectStartOfTurn, readProjectStartedCard } from '../projects/project-started';
 import { enqueueForDoneTask } from '../projects/project-integration-job';
 import { ProjectFuseService } from '../projects/project-fuse.service';
 import { ProjectPromotionService } from '../projects/project-promotion.service';
@@ -243,7 +234,7 @@ import {
 } from './scheduled-wakeup';
 import { nextAutoRetryAt } from '../sessions/auto-retry.service';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
-import { appendSessionMessageContext, readSessionMessageCard } from '../sessions/session-message';
+import { appendSessionMessageContext } from '../sessions/session-message';
 import { SessionRequestService } from '../sessions/session-request.service';
 import {
   appendSessionRepliesContext,
@@ -251,10 +242,9 @@ import {
   closeUnreadSteerRequests,
   holdTurnRepliesForRetry,
   readRequestForBlock,
-  readSessionReplyCards,
-  readTurnRequestIds,
   settleUnrunSessionRequests,
 } from '../sessions/session-request';
+import { readTurnCards } from '../sessions/turn-cards';
 import {
   recordOwnerConfirmationRequest,
   runStoppedWorking,
@@ -269,8 +259,6 @@ import {
 import {
   appendConfirmationReturnContext,
   appendOwnerConfirmationReviewContext,
-  readConfirmationReturnCard,
-  readConfirmationReviewRequestCard,
 } from '../tasks/owner-confirmation-review-turn';
 import { appendEvidenceReviewContext } from '../tasks/evidence-review';
 import { OwnerConfirmationReviewService } from '../tasks/owner-confirmation-review.service';
@@ -285,7 +273,6 @@ import {
   withSessionReplies,
   withTaskStart,
 } from './control-plane-note';
-import { readTaskStartCard } from '../tasks/task-start-card';
 import { accountPoolRuntime, isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
 import { runtimeInitSessionId } from './runtime-init';
 import { bgLaunchConfirmed, bgLaunchKind } from './bg-launch-receipt';
@@ -5291,7 +5278,7 @@ export class RunnerApiController {
           engineStartedAt: true,
           enginePhase: true,
           // Which task this run executes and which door created it — read only when a user turn in
-          // this batch is the one that delivers the task's brief (`readTaskStartCard` below).
+          // this batch is the one that delivers the task's brief (`readTurnCards` below).
           taskId: true,
           runSource: true,
           // The line an account-pool member switch owes the transcript, taken below by the first
@@ -5350,106 +5337,30 @@ export class RunnerApiController {
           })
         : [];
       const authoredUserText = new Map(userTurns.map((turn) => [turn.id, turn.content]));
-      // The turns the control plane opened for an exception item, and the card each was drawn from
-      // (project-open-item.ts `readOpenItemDeliveryCard`). Which turns those are is the turn's own
-      // key — `open-item:v1:` is the prefix `openItemTurnId` mints — so this reads the item's
-      // columns and the task's merge receipts for exactly the deliveries that have a card, and
-      // reads nothing at all for a batch of ordinary messages.
-      const deliveryCards = new Map<string, OpenItemDeliveryCard>();
-      for (const turn of userTurns) {
-        const itemId = openItemIdOfTurn(turn.clientTurnId);
-        if (!itemId) continue;
-        const card = await readOpenItemDeliveryCard(tx, itemId);
-        if (card) deliveryCards.set(turn.id, card);
-      }
-      // The turn that hands a task's run its brief, and the task it was built from — drawn as a card
-      // rather than as the owner's own message (tasks/task-start-card.ts). Read only for a task
-      // run's opening or resume turn, so ordinary messages cost nothing here either.
-      const taskStartCards = new Map<string, TaskStartCard>();
-      for (const turn of userTurns) {
-        const card = await readTaskStartCard(
-          tx,
-          { id: sessionId, taskId: session.taskId, runSource: session.runSource },
-          turn,
-        );
-        if (card) taskStartCards.set(turn.id, card);
-      }
-      // The turns another Orbit session sent (`session_send` / `project_send`), and who sent each —
-      // drawn as "from [that session]" rather than as the owner's own message (session-message.ts,
-      // contract §2.3). Read off the turn's sender column, so a batch of the owner's messages reads
-      // nothing here.
-      //
-      // A message that asked for a reply names its request on the card (session-request.ts), and a
-      // client reads the request's state from there: the card is stored once and the state moves.
-      const sessionMessageCards = new Map<string, SessionMessageCard>();
-      const signed = userTurns.filter((turn) => turn.senderSessionId);
-      const requestOfTurn = await readTurnRequestIds(tx, sessionId, signed.map((turn) => turn.id));
-      for (const turn of signed) {
-        const card = await readSessionMessageCard(
-          tx, session.ownerId, turn.senderSessionId!, requestOfTurn.get(turn.id),
-        );
-        if (card) sessionMessageCards.set(turn.id, card);
-      }
-      // The outcomes of this session's own requests that a turn handed back to it — drawn as reply
-      // cards rather than as the owner's words, because the turn carries nobody's (contract §4.2).
-      const replyCards = await readSessionReplyCards(
-        tx, sessionId, userTurns.map((turn) => turn.clientTurnId),
+      // The cards those turns are drawn as rather than as the owner's own message — an exception
+      // item's delivery, a task run's brief, a project's start, a confirmation review or its return,
+      // another session's message, the outcomes of this session's requests — read by the function
+      // the queue reads them with (sessions/turn-cards.ts), so a card a queued turn was drawn as is
+      // the card its echo is stored with. A batch of ordinary messages costs one indexed read.
+      const turnCards = await readTurnCards(
+        tx,
+        { id: sessionId, ownerId: session.ownerId, taskId: session.taskId, runSource: session.runSource },
+        userTurns,
       );
-      // And the turns telling a coordinator its project was started, by the same kind of key
-      // (`project-started:v1:`, project-started.ts) — read for those turns and no others.
-      const startedCards = new Map<string, ProjectStartedCard>();
-      for (const turn of userTurns) {
-        const start = projectStartOfTurn(turn.clientTurnId);
-        if (!start) continue;
-        const card = await readProjectStartedCard(tx, session.ownerId, start);
-        if (card) startedCards.set(turn.id, card);
-      }
-      // A confirmation request handed to its reviewer, and a reviewer's return handed to the run
-      // (docs/owner-confirmation-review-contract.md D7, B3): each drawn as its own card rather than as
-      // the owner's message, by the turn's own key — read for those turns and no others.
-      const reviewRequestCards = new Map<string, ConfirmationReviewRequestCard>();
-      const returnCards = new Map<string, ConfirmationReturnCard>();
-      for (const turn of userTurns) {
-        const requested = await readConfirmationReviewRequestCard(tx, turn.clientTurnId);
-        if (requested) reviewRequestCards.set(turn.id, requested);
-        const returned = await readConfirmationReturnCard(tx, turn.clientTurnId);
-        if (returned) returnCards.set(turn.id, returned);
-      }
       for (const e of durable) {
         if (e.type !== RunEventType.USER) continue;
         e.payload = withControlPlaneNote(
           e.payload,
           e.turnId ? authoredUserText.get(e.turnId) : undefined,
         );
-        e.payload = withOpenItemDelivery(
-          e.payload,
-          (e.turnId ? deliveryCards.get(e.turnId) : undefined) ?? null,
-        );
-        e.payload = withTaskStart(
-          e.payload,
-          (e.turnId ? taskStartCards.get(e.turnId) : undefined) ?? null,
-        );
-        e.payload = withProjectStarted(
-          e.payload,
-          (e.turnId ? startedCards.get(e.turnId) : undefined) ?? null,
-        );
-        e.payload = withConfirmationReviewRequest(
-          e.payload,
-          (e.turnId ? reviewRequestCards.get(e.turnId) : undefined) ?? null,
-        );
-        e.payload = withConfirmationReturn(
-          e.payload,
-          (e.turnId ? returnCards.get(e.turnId) : undefined) ?? null,
-        );
-        e.payload = withSessionMessage(
-          e.payload,
-          (e.turnId ? sessionMessageCards.get(e.turnId) : undefined) ?? null,
-        );
-        const echoed = e.turnId ? userTurns.find((turn) => turn.id === e.turnId) : undefined;
-        e.payload = withSessionReplies(
-          e.payload,
-          (echoed ? replyCards.get(echoed.clientTurnId) : undefined) ?? null,
-        );
+        const cards = e.turnId ? turnCards.get(e.turnId) : undefined;
+        e.payload = withOpenItemDelivery(e.payload, cards?.openItemDelivery ?? null);
+        e.payload = withTaskStart(e.payload, cards?.taskStart ?? null);
+        e.payload = withProjectStarted(e.payload, cards?.projectStarted ?? null);
+        e.payload = withConfirmationReviewRequest(e.payload, cards?.confirmationReviewRequest ?? null);
+        e.payload = withConfirmationReturn(e.payload, cards?.confirmationReturn ?? null);
+        e.payload = withSessionMessage(e.payload, cards?.sessionMessage ?? null);
+        e.payload = withSessionReplies(e.payload, cards?.sessionReplies ?? null);
       }
       // A move between account-pool members is said on the first engine start after it — the first
       // event from a process holding the new member's key. It rides on the runner's own event
