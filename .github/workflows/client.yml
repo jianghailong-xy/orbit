@@ -1,3 +1,8 @@
+# TEMPORARY (probe branch probe/i1-wiki-activity, never merged). client.yml's four jobs exactly as they are, run
+# on a push to this branch (only `on:` and the two Mac jobs' `if:` differ), plus `shots` — the iPhone
+# app against .wiki-probe/stub.py, the Wiki's numbers read off the screen and photographed (task I1),
+# with the iOS probe build's and the macOS OrbitApp build's logs kept — and `report`, which pushes the
+# shots, notes, logs and every job's result to probe/i1-wiki-activity-results, readable from a clone.
 # CI for both native client shells (src/macos + src/ios). They share OrbitKit and the OrbitApp
 # SwiftUI sources (the iOS app reuses them in place — Structure B), so changes to either shell
 # compile both platforms here:
@@ -18,23 +23,7 @@ name: Client CI (macOS + iOS)
 
 on:
   push:
-    branches: ["**"]        # branches only — tags are handled by release.yml
-    paths:
-      - "src/macos/**"
-      - "src/ios/**"
-      - ".github/workflows/client.yml"
-      # The nav guard's rules live outside this file, so it is listed on its own — otherwise a
-      # broken edit to it would only be discovered by the next navigation change.
-      - "scripts/ci/nav-push-gate.sh"
-  pull_request:
-    paths:
-      - "src/macos/**"
-      - "src/ios/**"
-      - ".github/workflows/client.yml"
-      - "scripts/ci/nav-push-gate.sh"
-  # Manual trigger to compile a branch on the Mac runners without opening a throwaway PR, e.g.
-  # `gh workflow run client.yml --ref <branch>`.
-  workflow_dispatch:
+    branches: ["probe/i1-wiki-activity"]
 
 concurrency:
   group: client-${{ github.ref }}
@@ -79,7 +68,7 @@ jobs:
   macos:
     name: macOS (build + test)
     # macOS runners bill at 10× — only on PRs or an explicit dispatch, not every branch push.
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
@@ -105,7 +94,7 @@ jobs:
   ios:
     name: iOS (generate + build)
     # macOS runners bill at 10× — only on PRs or an explicit dispatch, not every branch push.
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
@@ -132,3 +121,88 @@ jobs:
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
             build
+
+  shots:
+    name: Wiki shots (iPhone) and the macOS build's log
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version && sw_vers
+      - name: Build, read and photograph
+        id: capture
+        continue-on-error: true
+        run: |
+          bash .wiki-probe/run.sh 2>&1 | tee run-output.log
+          exit "${PIPESTATUS[0]}"
+      - name: Build OrbitApp for macOS, keeping its log
+        id: macbuild
+        continue-on-error: true
+        working-directory: src/macos/OrbitApp
+        run: |
+          swift build > ../../../macos-build.log 2>&1
+      - name: Keep the logs beside the shots
+        if: always()
+        run: |
+          mkdir -p .wiki-probe/shots
+          cp run-output.log .wiki-probe/shots/run-output.log 2>/dev/null || true
+          if [ -f .wiki-probe/build-ios.log ]; then
+            grep -E "error:|warning: .*Wiki|Test Case|Executed|\*\* TEST|\*\* BUILD|XCTAssert|failed" .wiki-probe/build-ios.log | head -400 > .wiki-probe/shots/summary-build-ios.txt || true
+            tail -300 .wiki-probe/build-ios.log > .wiki-probe/shots/tail-build-ios.txt || true
+          fi
+          if [ -f macos-build.log ]; then
+            grep -E "error:|warning: .*Wiki" macos-build.log | head -200 > .wiki-probe/shots/summary-build-macos.txt || true
+            tail -120 macos-build.log > .wiki-probe/shots/tail-build-macos.txt || true
+          fi
+          {
+            echo "capture=${{ steps.capture.outcome }}"
+            echo "macbuild=${{ steps.macbuild.outcome }}"
+          } > .wiki-probe/shots/outcomes.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wiki-shots
+          path: .wiki-probe/shots
+
+  report:
+    name: Push the results where a clone can read them
+    needs: [font-tokens, nav-push, macos, ios, shots]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+      - name: Push to probe/i1-wiki-activity-results
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p out
+          cd out
+          {
+            echo "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "sha: ${{ github.sha }}"
+            echo "font-tokens: ${{ needs.font-tokens.result }}"
+            echo "nav-push: ${{ needs.nav-push.result }}"
+            echo "macos: ${{ needs.macos.result }}"
+            echo "ios: ${{ needs.ios.result }}"
+            echo "shots: ${{ needs.shots.result }}"
+          } > RESULTS.txt
+          cat RESULTS.txt
+          git init -q
+          git config user.name "orbit-probe"
+          git config user.email "probe@orbit.invalid"
+          git checkout -q -b results
+          git add -A
+          git commit -q -m "probe results for ${{ github.sha }} (run ${{ github.run_id }})"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" \
+            results:refs/heads/probe/i1-wiki-activity-results
