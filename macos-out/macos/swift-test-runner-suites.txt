@@ -1,0 +1,63 @@
+[361/425] Compiling OrbitKitTests FailureReasonTests.swift
+[380/448] Compiling OrbitKitTests Phase4LogicTests.swift
+[446/494] Compiling OrbitKitTests RunnerDownloadTests.swift
+Test Suite 'FailureReasonTests' started at 2026-10-06 06:12:22.781.
+Test Case '-[OrbitKitTests.FailureReasonTests testADroppedConnectionIsOneSentenceAndNotAnNSErrorDump]' started.
+Test Case '-[OrbitKitTests.FailureReasonTests testADroppedConnectionIsOneSentenceAndNotAnNSErrorDump]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.FailureReasonTests testARefusalIsSaidInTheServersOwnWords]' started.
+Test Case '-[OrbitKitTests.FailureReasonTests testARefusalIsSaidInTheServersOwnWords]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.FailureReasonTests testNoBannerInterpolatesTheRawError]' started.
+Test Case '-[OrbitKitTests.FailureReasonTests testNoBannerInterpolatesTheRawError]' passed (0.029 seconds).
+Test Suite 'FailureReasonTests' passed at 2026-10-06 06:12:22.810.
+Test Suite 'Phase4LogicTests' started at 2026-10-06 06:12:28.994.
+Test Case '-[OrbitKitTests.Phase4LogicTests testDeviceResponsesDecode]' started.
+Test Case '-[OrbitKitTests.Phase4LogicTests testDeviceResponsesDecode]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.Phase4LogicTests testLaunchctlCommands]' started.
+Test Case '-[OrbitKitTests.Phase4LogicTests testLaunchctlCommands]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.Phase4LogicTests testLaunchdPlistContents]' started.
+Test Case '-[OrbitKitTests.Phase4LogicTests testLaunchdPlistContents]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.Phase4LogicTests testLoginPathAssembly]' started.
+Test Case '-[OrbitKitTests.Phase4LogicTests testLoginPathAssembly]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.Phase4LogicTests testLogTail]' started.
+Test Case '-[OrbitKitTests.Phase4LogicTests testLogTail]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.Phase4LogicTests testParseLaunchctlList]' started.
+Test Case '-[OrbitKitTests.Phase4LogicTests testParseLaunchctlList]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.Phase4LogicTests testReadConfigFromDisk]' started.
+Test Case '-[OrbitKitTests.Phase4LogicTests testReadConfigFromDisk]' passed (0.002 seconds).
+Test Case '-[OrbitKitTests.Phase4LogicTests testRunnerBinPath]' started.
+Test Case '-[OrbitKitTests.Phase4LogicTests testRunnerBinPath]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.Phase4LogicTests testRunnerPathsResolution]' started.
+Test Case '-[OrbitKitTests.Phase4LogicTests testRunnerPathsResolution]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.Phase4LogicTests testRunnerStatusLine]' started.
+Test Case '-[OrbitKitTests.Phase4LogicTests testRunnerStatusLine]' passed (0.000 seconds).
+Test Suite 'Phase4LogicTests' passed at 2026-10-06 06:12:29.001.
+Test Suite 'RunnerDownloadTests' started at 2026-10-06 06:12:35.368.
+Test Case '-[OrbitKitTests.RunnerDownloadTests testADownloadThatMatchesItsDigestVerifies]' started.
+Test Case '-[OrbitKitTests.RunnerDownloadTests testADownloadThatMatchesItsDigestVerifies]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.RunnerDownloadTests testAManifestWithNothingToCheckAgainstIsRefused]' started.
+Test Case '-[OrbitKitTests.RunnerDownloadTests testAManifestWithNothingToCheckAgainstIsRefused]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.RunnerDownloadTests testAMissingFileIsNamedWithItsStatus]' started.
+Test Case '-[OrbitKitTests.RunnerDownloadTests testAMissingFileIsNamedWithItsStatus]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.RunnerDownloadTests testAnArchiveGzipCannotReadLeavesTheOldBinary]' started.
+Test Case '-[OrbitKitTests.RunnerDownloadTests testAnArchiveGzipCannotReadLeavesTheOldBinary]' passed (0.087 seconds).
+Test Case '-[OrbitKitTests.RunnerDownloadTests testATamperedDownloadIsRefused]' started.
+Test Case '-[OrbitKitTests.RunnerDownloadTests testATamperedDownloadIsRefused]' passed (0.002 seconds).
+Test Case '-[OrbitKitTests.RunnerDownloadTests testEachMacCPUFetchesItsOwnBuild]' started.
+Test Case '-[OrbitKitTests.RunnerDownloadTests testEachMacCPUFetchesItsOwnBuild]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.RunnerDownloadTests testEveryRefusalSaysWhatFailedAndWhere]' started.
+Test Case '-[OrbitKitTests.RunnerDownloadTests testEveryRefusalSaysWhatFailedAndWhere]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.RunnerDownloadTests testNothingToCheckAgainstMeansNothingIsDownloaded]' started.
+Test Case '-[OrbitKitTests.RunnerDownloadTests testNothingToCheckAgainstMeansNothingIsDownloaded]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.RunnerDownloadTests testOneChangedByteFailsVerification]' started.
+Test Case '-[OrbitKitTests.RunnerDownloadTests testOneChangedByteFailsVerification]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.RunnerDownloadTests testSHA256IsTheStandardOne]' started.
+Test Case '-[OrbitKitTests.RunnerDownloadTests testSHA256IsTheStandardOne]' passed (0.717 seconds).
+Test Case '-[OrbitKitTests.RunnerDownloadTests testTheDigestIsTheOneForThisMacsPlatform]' started.
+Test Case '-[OrbitKitTests.RunnerDownloadTests testTheDigestIsTheOneForThisMacsPlatform]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.RunnerDownloadTests testTheManifestIsReadThenItsAssetDownloadedAndVerified]' started.
+Test Case '-[OrbitKitTests.RunnerDownloadTests testTheManifestIsReadThenItsAssetDownloadedAndVerified]' passed (0.003 seconds).
+Test Case '-[OrbitKitTests.RunnerDownloadTests testUnpackMakesTheBinDirectoryOnAFreshMac]' started.
+Test Case '-[OrbitKitTests.RunnerDownloadTests testUnpackMakesTheBinDirectoryOnAFreshMac]' passed (0.092 seconds).
+Test Case '-[OrbitKitTests.RunnerDownloadTests testUnpackPutsAnExecutableBinaryInPlaceOfTheOldOne]' started.
+Test Case '-[OrbitKitTests.RunnerDownloadTests testUnpackPutsAnExecutableBinaryInPlaceOfTheOldOne]' passed (0.150 seconds).
+Test Suite 'RunnerDownloadTests' passed at 2026-10-06 06:12:36.428.

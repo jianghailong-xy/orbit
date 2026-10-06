@@ -1,0 +1,53 @@
+## build-dmg.sh: lines mentioning a runner build
+(none)
+## build-dmg.sh steps that ran
+▶ swift build -c release (arm64)
+▶ assemble Orbit.app
+▶ embed Sparkle.framework
+▶ codesign (-)
+▶ create DMG (drag-to-Applications layout)
+▶ zip app payload (Sparkle update channel)
+✓ App:  /Users/runner/work/orbit/orbit/src/macos/scripts/../build/Orbit.app
+✓ DMG:  /Users/runner/work/orbit/orbit/src/macos/scripts/../build/Orbit-v0.0.0-arm64.dmg
+✓ ZIP:  /Users/runner/work/orbit/orbit/src/macos/scripts/../build/Orbit-v0.0.0-arm64.zip
+## src/macos/build/Orbit.app/Contents/Resources
+total 1112
+drwxr-xr-x  3 runner  staff      96 Oct  6 06:16 .
+drwxr-xr-x  7 runner  staff     224 Oct  6 06:17 ..
+-rw-r--r--  1 runner  staff  566814 Oct  6 06:16 AppIcon.icns
+## files named orbit anywhere in the app
+  (end)
+## Mach-O files in the app
+src/macos/build/Orbit.app/Contents/MacOS/Orbit: Mach-O 64-bit executable arm64
+src/macos/build/Orbit.app/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate: Mach-O universal binary with 2 architectures: [x86_64:Mach-O 64-bit executable x86_64] [arm64:Mach-O 64-bit executable arm64]
+src/macos/build/Orbit.app/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate (for architecture x86_64):	Mach-O 64-bit executable x86_64
+src/macos/build/Orbit.app/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate (for architecture arm64):	Mach-O 64-bit executable arm64
+src/macos/build/Orbit.app/Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app/Contents/MacOS/Updater: Mach-O universal binary with 2 architectures: [x86_64:Mach-O 64-bit executable x86_64] [arm64:Mach-O 64-bit executable arm64]
+src/macos/build/Orbit.app/Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app/Contents/MacOS/Updater (for architecture x86_64):	Mach-O 64-bit executable x86_64
+src/macos/build/Orbit.app/Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app/Contents/MacOS/Updater (for architecture arm64):	Mach-O 64-bit executable arm64
+src/macos/build/Orbit.app/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Downloader.xpc/Contents/MacOS/Downloader: Mach-O universal binary with 2 architectures: [x86_64:Mach-O 64-bit executable x86_64] [arm64:Mach-O 64-bit executable arm64]
+src/macos/build/Orbit.app/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Downloader.xpc/Contents/MacOS/Downloader (for architecture x86_64):	Mach-O 64-bit executable x86_64
+src/macos/build/Orbit.app/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Downloader.xpc/Contents/MacOS/Downloader (for architecture arm64):	Mach-O 64-bit executable arm64
+src/macos/build/Orbit.app/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Installer.xpc/Contents/MacOS/Installer: Mach-O universal binary with 2 architectures: [x86_64:Mach-O 64-bit executable x86_64] [arm64:Mach-O 64-bit executable arm64]
+src/macos/build/Orbit.app/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Installer.xpc/Contents/MacOS/Installer (for architecture x86_64):	Mach-O 64-bit executable x86_64
+src/macos/build/Orbit.app/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Installer.xpc/Contents/MacOS/Installer (for architecture arm64):	Mach-O 64-bit executable arm64
+src/macos/build/Orbit.app/Contents/Frameworks/Sparkle.framework/Versions/B/Sparkle: Mach-O universal binary with 2 architectures: [x86_64:Mach-O 64-bit dynamically linked shared library x86_64] [arm64:Mach-O 64-bit dynamically linked shared library arm64]
+src/macos/build/Orbit.app/Contents/Frameworks/Sparkle.framework/Versions/B/Sparkle (for architecture x86_64):	Mach-O 64-bit dynamically linked shared library x86_64
+src/macos/build/Orbit.app/Contents/Frameworks/Sparkle.framework/Versions/B/Sparkle (for architecture arm64):	Mach-O 64-bit dynamically linked shared library arm64
+## DMG src/macos/build/Orbit-v0.0.0-arm64.dmg
+/tmp/orbit-dmg:
+total 32
+drwxr-xr-x  6 runner  staff    272 Oct  6 06:17 .
+drwxrwxrwt  5 root    wheel    160 Oct  6 06:17 ..
+drwxr-xr-x  3 runner  staff    102 Oct  6 06:17 .background
+-rw-r--r--@ 1 runner  staff  10244 Oct  6 06:17 .DS_Store
+lrwxr-xr-x  1 runner  staff     13 Oct  6 06:17 Applications -> /Applications
+drwxr-xr-x  3 runner  staff    102 Oct  6 06:16 Orbit.app
+
+/tmp/orbit-dmg/Orbit.app/Contents/Resources:
+total 1112
+drwxr-xr-x  3 runner  staff     102 Oct  6 06:16 .
+drwxr-xr-x  7 runner  staff     238 Oct  6 06:17 ..
+-rw-r--r--  1 runner  staff  566814 Oct  6 06:16 AppIcon.icns
+## files named orbit anywhere in the DMG's app
+  (end)
