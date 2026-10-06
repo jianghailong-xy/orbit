@@ -17,6 +17,8 @@ import { AdminSignInController } from './admin-sign-in.controller';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { GoogleAuthController } from './google-auth.controller';
+import { GoogleLoginService } from './google-login.service';
+import { GoogleOAuthClient } from './google-oauth.client';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { googleRedirectUri, SignInProvidersService } from './sign-in-providers.service';
 
@@ -83,6 +85,9 @@ function row(over: Row = {}): Row {
   controllers: [AuthController, GoogleAuthController, AdminSignInController],
   providers: [
     SignInProvidersService,
+    GoogleLoginService,
+    // No case here gets as far as Google; one that did would fail rather than reach the network.
+    { provide: GoogleOAuthClient, useValue: new GoogleOAuthClient(async () => assert.fail('a Google endpoint was called')) },
     JwtAuthGuard,
     AdminRoleGuard,
     Reflector,
@@ -216,9 +221,11 @@ test('on: /auth/methods offers Google, and sign-up only under OPEN; /start no lo
   stored = row({ signupPolicy: 'OPEN' });
   assert.deepEqual((await call('GET', '/api/auth/methods')).json, { password: true, google: true, googleSignup: true });
 
-  // The flow itself is not in this build: a configured /start says so rather than pretend.
+  // On, /start goes on to the flow (google-sign-in-flow.http.spec.ts): one without a challenge is
+  // refused for the challenge, not sent back GOOGLE_NOT_CONFIGURED.
   const start = await call('GET', '/api/auth/google/start?client=web');
-  assert.equal(start.status, 501, start.text);
+  assert.equal(start.status, 400, start.text);
+  assert.match(start.text, /code_challenge/);
   assert.equal(start.location, null);
 });
 

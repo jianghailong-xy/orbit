@@ -104,6 +104,12 @@ export class SignInProvidersService {
     return settingsOf(row);
   }
 
+  /** The client ID a Google sign-in starts with; null while Google sign-in is off. The secret is not read. */
+  async googleClientId(): Promise<string | null> {
+    const row = await this.google();
+    return googleIsOn(row) ? row.clientId : null;
+  }
+
   /** The client the Google routes sign in with, its secret decrypted; null while Google sign-in is off. */
   async googleClient(): Promise<{ clientId: string; clientSecret: string; signupPolicy: SignupPolicy } | null> {
     const row = await this.google();

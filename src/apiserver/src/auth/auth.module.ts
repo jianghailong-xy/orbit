@@ -8,6 +8,8 @@ import { AdminSignInController } from './admin-sign-in.controller';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { GoogleAuthController } from './google-auth.controller';
+import { GoogleLoginService } from './google-login.service';
+import { GoogleOAuthClient } from './google-oauth.client';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { PatDeviceLoginController } from './pat-device-login.controller';
 import { PatDeviceLoginService } from './pat-device-login.service';
@@ -52,6 +54,9 @@ import { SignInProvidersService } from './sign-in-providers.service';
     PatDeviceLoginService,
     PatRequestAudit,
     SignInProvidersService,
+    GoogleLoginService,
+    // Google's endpoints over the global fetch; the specs hand GoogleLoginService a fake in its place.
+    { provide: GoogleOAuthClient, useFactory: () => new GoogleOAuthClient() },
     // For AdminSignInController's @UseGuards; it depends only on the global PrismaService, and
     // UsersModule does not export it (ProvidersModule provides its own the same way).
     AdminRoleGuard,

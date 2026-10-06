@@ -25,6 +25,17 @@ export class AuthService {
     if (!user || !verifyPassword(password, user.passwordHash)) {
       throw new UnauthorizedException('invalid credentials');
     }
+    return this.completeLogin(user);
+  }
+
+  /**
+   * The one exit every sign-in leaves by — the password, the first-run bootstrap and a Google ticket
+   * (docs/google-sign-in-design.md §9.2) — so they answer alike: the access token, the refresh token
+   * and the user, whichever way the person signed in. What has to follow a sign-in, such as the managed
+   * runner's provisioning intent (docs/managed-runner-design.md), goes here, after the tokens are
+   * issued. A refresh is not a sign-in and does not come through here.
+   */
+  async completeLogin(user: { id: string; email: string; name: string }) {
     return this.tokenFor(user.id, user.email, user.name);
   }
 
@@ -58,7 +69,7 @@ export class AuthService {
         role: 'ADMIN',
       },
     });
-    return this.tokenFor(user.id, user.email, user.name);
+    return this.completeLogin(user);
   }
 
   /**

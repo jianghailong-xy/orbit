@@ -1956,7 +1956,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // acceptance or DONE fence object is named, and no row is written. Written as 0387 and
       // renumbered before landing, unchanged otherwise, when main's 0387_antigravity_account took
       // that number first.
-      '0390_sign_in_provider'],
+      '0390_sign_in_provider',
+      // Signing in with Google (0391): two new tables. user_identity, with its primary key, two
+      // CHECKs, two unique indexes and a foreign key to `user` (ON DELETE CASCADE); and
+      // oauth_login_flow, with its primary key, four CHECKs, two unique indexes, two indexes and a
+      // foreign key to `user` (ON DELETE CASCADE). No function or trigger. No existing table, column,
+      // constraint, function, trigger or type is altered or dropped; no task, project, acceptance or
+      // DONE fence object is named, and no row is written.
+      '0391_google_login_flow'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
