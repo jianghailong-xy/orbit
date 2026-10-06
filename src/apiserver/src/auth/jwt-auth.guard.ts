@@ -8,10 +8,21 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
+import { PUBLIC_ID_FIELDS, toUuid } from '@orbit/shared';
 import type { AuthUser } from '../common/current-user.decorator';
 import { visitorAddress } from '../shared/public-surface.guard';
 import { ALLOW_QUERY_TOKEN } from './allow-query-token.decorator';
-import { PAT_PREFIX, PatService } from './pat.service';
+import {
+  type PatWorkspaceConfinable,
+  type PatWorkspaceObject,
+  patDeclaration,
+  patForbiddenBody,
+} from './pat-scope.decorator';
+import { PAT_PREFIX, type PatGrant, PatService } from './pat.service';
+
+/** How deep a request is searched for the ids it names. Past it, what it names is unknown and refused. */
+const MAX_ID_DEPTH = 32;
+const TOO_DEEP = '(nested too deep to read)';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -66,12 +77,9 @@ export class JwtAuthGuard implements CanActivate {
         },
       };
       req.user = user;
-      // Fail-closed (§6.2): a token reaches a route only once the route declares the scope it needs
-      // (@PatScope) — and no route declares one yet, so no route is open to a token.
-      throw new ForbiddenException({
-        code: 'PAT_SCOPE_MISSING',
-        message: 'This route declares no access token scope, so a personal access token cannot call it',
-      });
+      const workspaceConfinable = this.admitToken(context, grant.scopes);
+      if (grant.workspaceIds.length > 0) await this.confine(req, workspaceConfinable, grant);
+      return true;
     }
 
     try {
@@ -82,5 +90,130 @@ export class JwtAuthGuard implements CanActivate {
     } catch {
       throw new UnauthorizedException('invalid token');
     }
+  }
+
+  /**
+   * Whether this route is open to a verified token (§6.2), from what the route declares: a refusal
+   * (@PatForbidden) is a 403 whatever the token holds; a scope (@PatScope) must be one it was granted;
+   * and a route that declares neither is a 403 as well — fail-closed, so a route added without a
+   * decision is closed to tokens rather than open to them. Answers what the route declares for a token
+   * confined to workspaces.
+   */
+  private admitToken(context: ExecutionContext, scopes: string[]): PatWorkspaceConfinable | undefined {
+    const declared = patDeclaration(this.reflector, context.getHandler(), context.getClass());
+    if (declared.kind === 'FORBIDDEN') throw new ForbiddenException(patForbiddenBody(declared.reason));
+    if (declared.kind === 'UNDECLARED') {
+      throw new ForbiddenException({
+        code: 'PAT_ROUTE_UNDECLARED',
+        message: 'This route declares no access token scope, so a personal access token cannot call it',
+      });
+    }
+    if (!scopes.includes(declared.scope)) {
+      throw new ForbiddenException({
+        code: 'PAT_SCOPE_MISSING',
+        scope: declared.scope,
+        message: `This access token was not granted the ${declared.scope} scope this route needs`,
+      });
+    }
+    return declared.workspaceConfinable;
+  }
+
+  /**
+   * Whether a token confined to workspaces reaches what this request names (§6.3 v1), once its scope
+   * has admitted it to the route. A route that cannot be told by workspace refuses it outright, and a
+   * list is narrowed by its handler. Otherwise every task, session and workspace the request names —
+   * in its path, and by id anywhere in its body or query — must sit in one of the token's workspaces,
+   * and a request naming anything else by id is refused, since nothing vouches for it. Something the
+   * user does not have is no more inside those workspaces than something outside them: both are this
+   * 403, so a confined token learns nothing about what exists elsewhere.
+   */
+  private async confine(
+    req: { params?: Record<string, unknown>; body?: unknown; query?: unknown },
+    confinable: PatWorkspaceConfinable | undefined,
+    grant: PatGrant,
+  ): Promise<void> {
+    if (confinable === 'LIST') return;
+    // A declaration that names nothing (only the census keeps one from being written) judges nothing.
+    if (!confinable || (!confinable.params && !confinable.requires)) {
+      throw new ForbiddenException({
+        code: 'PAT_ROUTE_NOT_WORKSPACE_CONFINABLE',
+        message:
+          'This access token is confined to workspaces, and this route cannot be confined to one; '
+          + 'call it with a token that is not confined to workspaces',
+      });
+    }
+    const named: Array<{ field: string; kind: PatWorkspaceObject; value: unknown }> = Object.entries(
+      confinable.params ?? {},
+    ).map(([param, kind]) => ({ field: `:${param}`, kind, value: req.params?.[param] }));
+    const outside = new Set<string>();
+    const judged = (field: string) => confinable.body !== undefined && Object.hasOwn(confinable.body, field);
+    const isId = (field: string) => PUBLIC_ID_FIELDS.has(field) || judged(field);
+    for (const [field, value] of [...idFields(req.body, isId), ...idFields(req.query, isId)]) {
+      if (judged(field)) named.push({ field, kind: confinable.body![field], value });
+      else outside.add(field);
+    }
+    for (const path of confinable.requires ?? []) if (lacks(req.body, path)) outside.add(path);
+
+    const asked: Record<'task' | 'session', Array<{ field: string; id: string }>> = { task: [], session: [] };
+    for (const { field, kind, value } of named) {
+      for (const item of Array.isArray(value) ? value : [value]) {
+        if (item === null && kind !== 'workspace') continue;
+        const id = asUuid(item);
+        if (!id) outside.add(field);
+        else if (kind !== 'workspace') asked[kind].push({ field, id });
+        else if (!grant.workspaceIds.includes(id)) outside.add(field);
+      }
+    }
+    for (const kind of ['task', 'session'] as const) {
+      if (outside.size > 0 || asked[kind].length === 0) continue;
+      const sits = await this.pats!.workspacesOf(grant.userId, kind, [...new Set(asked[kind].map((a) => a.id))]);
+      for (const { field, id } of asked[kind]) {
+        const workspaceId = sits.get(id);
+        if (!workspaceId || !grant.workspaceIds.includes(workspaceId)) outside.add(field);
+      }
+    }
+    if (outside.size > 0) {
+      const fields = [...outside];
+      throw new ForbiddenException({
+        code: 'PAT_WORKSPACE_OUT_OF_SCOPE',
+        fields,
+        message:
+          `This access token is confined to its workspaces, and ${fields.join(', ')} `
+          + `${fields.length === 1 ? 'names' : 'name'} something outside them`,
+      });
+    }
+  }
+}
+
+/** Every field of a request body or query that names something by id (`isId`), at any depth. */
+function idFields(value: unknown, isId: (field: string) => boolean, depth = 0): Array<[string, unknown]> {
+  if (!value || typeof value !== 'object') return [];
+  if (depth > MAX_ID_DEPTH) return [[TOO_DEEP, value]];
+  if (Array.isArray(value)) return value.flatMap((item) => idFields(item, isId, depth + 1));
+  return Object.entries(value).flatMap(([key, child]): Array<[string, unknown]> =>
+    isId(key) ? [[key, child]] : idFields(child, isId, depth + 1));
+}
+
+/** Whether `body` lacks the field at `path`: `a.b` only when the body has `a`. Null is lacking. */
+function lacks(body: unknown, path: string): boolean {
+  const keys = path.split('.');
+  const field = keys.pop()!;
+  let node = body as Record<string, unknown> | null | undefined;
+  for (const key of keys) {
+    const next = node?.[key];
+    if (next === undefined || next === null) return false;
+    node = next as Record<string, unknown>;
+  }
+  const value = typeof node === 'object' ? node?.[field] : undefined;
+  return value === undefined || value === null;
+}
+
+/** The uuid a public id or uuid names, or undefined for anything that is neither. */
+function asUuid(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  try {
+    return toUuid(value);
+  } catch {
+    return undefined;
   }
 }

@@ -173,6 +173,26 @@ export class PatService {
     };
   }
 
+  /**
+   * The workspace each of these tasks (the one it is assigned to) or sessions sits in, null for none.
+   * Only the user's own: an id they do not have is absent. JwtAuthGuard asks it of every task and
+   * session a token confined to workspaces names (§6.3).
+   */
+  async workspacesOf(ownerId: string, kind: 'task' | 'session', ids: readonly string[]): Promise<Map<string, string | null>> {
+    if (kind === 'task') {
+      const tasks = await this.prisma.task.findMany({
+        where: { id: { in: [...ids] }, ownerId },
+        select: { id: true, assigneeId: true },
+      });
+      return new Map(tasks.map((task) => [task.id, task.assigneeId]));
+    }
+    const sessions = await this.prisma.session.findMany({
+      where: { id: { in: [...ids] }, ownerId },
+      select: { id: true, workspaceId: true },
+    });
+    return new Map(sessions.map((session) => [session.id, session.workspaceId]));
+  }
+
   /** Revoke at once. Idempotent: revoking a revoked token answers it as it already is. */
   async revoke(ownerId: string, id: string, reason: PatRevokedReason = 'USER') {
     await this.prisma.personalAccessToken.updateMany({

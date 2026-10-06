@@ -1,0 +1,12 @@
+[WebServer] (node:2316015) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 3 tests using 1 worker
+
+(node:2316089) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [webkit-light-phone] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:94:3 › notification card stays fixed through Dialog entry, nested layers and exit (2.9s)
+  ✓  2 [webkit-light-phone] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:94:3 › notification card stays fixed through Drawer entry, nested layers and exit (2.8s)
+  ✓  3 [webkit-light-phone] › ../../../../tmp/orbit-p23-reference/src/web/ui-migration/reference-lifecycle.browser.mjs:94:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit (2.7s)
+
+  3 passed (9.5s)

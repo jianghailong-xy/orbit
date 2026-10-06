@@ -1,0 +1,113 @@
+{
+  "merge": "e1eb1d3796a6086f413a6dd57bee228c2fa59c85",
+  "recordedChecks": [
+    {
+      "file": "docs/evidence/base-ui-migration/p2.2/checks/r3-build-and-test.json",
+      "exitCode": 0,
+      "trackedSourceHashesVerified": 95
+    },
+    {
+      "file": "docs/evidence/base-ui-migration/p2.2/checks/r3-choices-entry.json",
+      "exitCode": 1,
+      "trackedSourceHashesVerified": 95
+    },
+    {
+      "file": "docs/evidence/base-ui-migration/p2.2/checks/r3-choices-scroll-repeat.json",
+      "exitCode": 0,
+      "trackedSourceHashesVerified": 95
+    },
+    {
+      "file": "docs/evidence/base-ui-migration/p2.2/checks/r3-dependencies.json",
+      "exitCode": 0,
+      "trackedSourceHashesVerified": 95
+    },
+    {
+      "file": "docs/evidence/base-ui-migration/p2.2/checks/r3-fixture-types.json",
+      "exitCode": 0,
+      "trackedSourceHashesVerified": 95
+    },
+    {
+      "file": "docs/evidence/base-ui-migration/p2.2/checks/r3-list-choices.json",
+      "exitCode": 0,
+      "trackedSourceHashesVerified": 95
+    },
+    {
+      "file": "docs/evidence/base-ui-migration/p2.2/checks/r3-list-p0.json",
+      "exitCode": 0,
+      "trackedSourceHashesVerified": 95
+    },
+    {
+      "file": "docs/evidence/base-ui-migration/p2.2/checks/r3-list-toasts.json",
+      "exitCode": 0,
+      "trackedSourceHashesVerified": 95
+    },
+    {
+      "file": "docs/evidence/base-ui-migration/p2.2/checks/r3-merge-audit.json",
+      "exitCode": 0,
+      "trackedSourceHashesVerified": 95
+    },
+    {
+      "file": "docs/evidence/base-ui-migration/p2.2/checks/r3-production-entry.json",
+      "exitCode": 0,
+      "trackedSourceHashesVerified": 95
+    },
+    {
+      "file": "docs/evidence/base-ui-migration/p2.2/checks/r3-toasts-entry.json",
+      "exitCode": 0,
+      "trackedSourceHashesVerified": 95
+    }
+  ],
+  "browserRuns": [
+    {
+      "directory": "choices-entry-first",
+      "stats": {
+        "startTime": "2026-10-04T11:11:03.299Z",
+        "duration": 63095.206999999995,
+        "expected": 31,
+        "skipped": 0,
+        "unexpected": 1,
+        "flaky": 0
+      },
+      "tests": 32
+    },
+    {
+      "directory": "choices-scroll-repeat",
+      "stats": {
+        "startTime": "2026-10-04T11:12:58.921Z",
+        "duration": 8621.674,
+        "expected": 5,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "tests": 5
+    },
+    {
+      "directory": "toasts-entry",
+      "stats": {
+        "startTime": "2026-10-04T11:13:53.288Z",
+        "duration": 28386.219999999998,
+        "expected": 24,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "tests": 24
+    },
+    {
+      "directory": "production-entry",
+      "stats": {
+        "startTime": "2026-10-04T11:15:05.615Z",
+        "duration": 20669.623,
+        "expected": 8,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "tests": 8
+    }
+  ],
+  "verifiedAttachments": 163,
+  "allEnvironmentFilesMatchP0": true,
+  "unexpectedSourceHashChanges": []
+}

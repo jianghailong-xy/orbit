@@ -155,9 +155,10 @@ export class WorkspacesService {
     };
   }
 
-  async list(ownerId: string) {
+  /** `only`: the workspaces a token confined to them may see (`workspaceConfinement`). */
+  async list(ownerId: string, only?: readonly string[]) {
     const workspaces = await this.prisma.workspace.findMany({
-      where: { ownerId, deletedAt: null },
+      where: { ownerId, deletedAt: null, ...(only ? { id: { in: [...only] } } : {}) },
       // Custom drag order first; never-reordered workspaces (position NULL) sort last by
       // creation time, so newly added workspaces append below the arranged ones.
       orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],

@@ -175,6 +175,29 @@ public enum LaunchdPlist {
         </plist>
         """
     }
+
+    /// The LaunchAgent an older app left, rewritten so its runner updates itself. Apps that bundled
+    /// the runner set ORBIT_NO_SELFUPDATE and copied their own runner over `~/.orbit/bin/orbit`
+    /// whenever the versions differed; an app with no runner to copy would leave it on its version
+    /// for good. `installed` is the plist on disk, nil when no service is installed. Returns
+    /// `make`'s plist with the installed one's label, binary, ORBIT_HOME, HOME, PATH and log, or
+    /// nil when there's nothing to rewrite: no service, a plist without ORBIT_NO_SELFUPDATE (already
+    /// rewritten, or the CLI's — it never sets it), or one that doesn't read as a plist with those
+    /// values.
+    public static func migrated(from installed: String?) -> String? {
+        guard let installed,
+              let plist = try? PropertyListSerialization.propertyList(from: Data(installed.utf8), format: nil)
+                as? [String: Any],
+              let env = plist["EnvironmentVariables"] as? [String: String],
+              env["ORBIT_NO_SELFUPDATE"] != nil,
+              let label = plist["Label"] as? String,
+              let program = (plist["ProgramArguments"] as? [String])?.first,
+              let orbitHome = env["ORBIT_HOME"], let home = env["HOME"], let path = env["PATH"],
+              let logPath = plist["StandardOutPath"] as? String
+        else { return nil }
+        return make(label: label, programPath: program, orbitHome: orbitHome,
+                    home: home, path: path, logPath: logPath)
+    }
 }
 
 /// Assembles the PATH baked into the launchd service. A Finder-launched app's PATH is the bare

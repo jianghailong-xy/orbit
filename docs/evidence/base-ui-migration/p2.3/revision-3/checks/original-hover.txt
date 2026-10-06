@@ -1,0 +1,71 @@
+[WebServer] (node:3378393) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 16 tests using 1 worker
+
+(node:3378580) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium-light-desktop] › ../../../../tmp/orbit-p23-r3-reference/src/web/ui-migration/reference-hover.browser.mjs:40:1 › native stationary arrival pauses beyond six seconds and moving away resumes dismissal (14.7s)
+  ✓   2 [chromium-light-desktop] › ../../../../tmp/orbit-p23-r3-reference/src/web/ui-migration/reference-hover.browser.mjs:89:1 › layout moving a result under and away from a stationary pointer pauses and resumes dwell (1.1s)
+(node:3382055) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   3 [chromium-light-phone] › ../../../../tmp/orbit-p23-r3-reference/src/web/ui-migration/reference-hover.browser.mjs:40:1 › native stationary arrival pauses beyond six seconds and moving away resumes dismissal (13.9s)
+  ✓   4 [chromium-light-phone] › ../../../../tmp/orbit-p23-r3-reference/src/web/ui-migration/reference-hover.browser.mjs:89:1 › layout moving a result under and away from a stationary pointer pauses and resumes dwell (944ms)
+(node:3387121) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   5 [chromium-dark-desktop] › ../../../../tmp/orbit-p23-r3-reference/src/web/ui-migration/reference-hover.browser.mjs:40:1 › native stationary arrival pauses beyond six seconds and moving away resumes dismissal (13.7s)
+  ✓   6 [chromium-dark-desktop] › ../../../../tmp/orbit-p23-r3-reference/src/web/ui-migration/reference-hover.browser.mjs:89:1 › layout moving a result under and away from a stationary pointer pauses and resumes dwell (921ms)
+(node:3388445) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   7 [chromium-dark-phone] › ../../../../tmp/orbit-p23-r3-reference/src/web/ui-migration/reference-hover.browser.mjs:40:1 › native stationary arrival pauses beyond six seconds and moving away resumes dismissal (13.6s)
+  ✘   8 [chromium-dark-phone] › ../../../../tmp/orbit-p23-r3-reference/src/web/ui-migration/reference-hover.browser.mjs:89:1 › layout moving a result under and away from a stationary pointer pauses and resumes dwell (17.2s)
+(node:3403165) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   9 [webkit-light-desktop] › ../../../../tmp/orbit-p23-r3-reference/src/web/ui-migration/reference-hover.browser.mjs:40:1 › native stationary arrival pauses beyond six seconds and moving away resumes dismissal (15.2s)
+  ✓  10 [webkit-light-desktop] › ../../../../tmp/orbit-p23-r3-reference/src/web/ui-migration/reference-hover.browser.mjs:89:1 › layout moving a result under and away from a stationary pointer pauses and resumes dwell (1.4s)
+(node:3406793) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  11 [webkit-light-phone] › ../../../../tmp/orbit-p23-r3-reference/src/web/ui-migration/reference-hover.browser.mjs:40:1 › native stationary arrival pauses beyond six seconds and moving away resumes dismissal (14.1s)
+  ✓  12 [webkit-light-phone] › ../../../../tmp/orbit-p23-r3-reference/src/web/ui-migration/reference-hover.browser.mjs:89:1 › layout moving a result under and away from a stationary pointer pauses and resumes dwell (1.5s)
+(node:3418261) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  13 [webkit-dark-desktop] › ../../../../tmp/orbit-p23-r3-reference/src/web/ui-migration/reference-hover.browser.mjs:40:1 › native stationary arrival pauses beyond six seconds and moving away resumes dismissal (14.2s)
+  ✓  14 [webkit-dark-desktop] › ../../../../tmp/orbit-p23-r3-reference/src/web/ui-migration/reference-hover.browser.mjs:89:1 › layout moving a result under and away from a stationary pointer pauses and resumes dwell (2.2s)
+(node:3421456) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  15 [webkit-dark-phone] › ../../../../tmp/orbit-p23-r3-reference/src/web/ui-migration/reference-hover.browser.mjs:40:1 › native stationary arrival pauses beyond six seconds and moving away resumes dismissal (14.1s)
+  ✓  16 [webkit-dark-phone] › ../../../../tmp/orbit-p23-r3-reference/src/web/ui-migration/reference-hover.browser.mjs:89:1 › layout moving a result under and away from a stationary pointer pauses and resumes dwell (1.7s)
+
+
+  1) [chromium-dark-phone] › ../../../../tmp/orbit-p23-r3-reference/src/web/ui-migration/reference-hover.browser.mjs:89:1 › layout moving a result under and away from a stationary pointer pauses and resumes dwell 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+    Call Log:
+    - Timeout 15000ms exceeded while waiting on the predicate
+
+      104 |   await page.keyboard.press('Enter');
+      105 |   await page.clock.runFor(50);
+    > 106 |   await expect.poll(() => page.evaluate(() => window.hoverEvents.some((e) => e.type === 'mouseover' && !e.inResult))).toBe(true);
+          |                                                                                                                       ^
+      107 |   const left = await page.evaluate(() => window.hoverEvents);
+      108 |   expect(left.filter((e) => e.type === 'mousemove')).toEqual([]);
+      109 |   const releaseAt = left.find((e) => e.type === 'mouseover' && !e.inResult).at;
+        at /tmp/orbit-p23-r3-reference/src/web/ui-migration/reference-hover.browser.mjs:106:119
+
+    Error Context: ../../../../tmp/orbit-p23-r3-reference/src/web/.hover-results/reference-hover.browser.mj-0ebfd-er-pauses-and-resumes-dwell-chromium-dark-phone/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../tmp/orbit-p23-r3-reference/src/web/.hover-results/reference-hover.browser.mj-0ebfd-er-pauses-and-resumes-dwell-chromium-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../tmp/orbit-p23-r3-reference/src/web/.hover-results/reference-hover.browser.mj-0ebfd-er-pauses-and-resumes-dwell-chromium-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [chromium-dark-phone] › ../../../../tmp/orbit-p23-r3-reference/src/web/ui-migration/reference-hover.browser.mjs:89:1 › layout moving a result under and away from a stationary pointer pauses and resumes dwell 
+  15 passed (2.4m)

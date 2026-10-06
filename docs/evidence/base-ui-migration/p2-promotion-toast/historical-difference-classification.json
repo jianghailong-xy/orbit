@@ -1,0 +1,356 @@
+{
+  "wholeImagePairs": 296,
+  "identical": 281,
+  "different": 15,
+  "categories": {
+    "outside notification: fixture or confirmation control state": 7,
+    "main desktop stack order": 8
+  },
+  "items": [
+    {
+      "file": "webkit-light-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-failure-notification.png",
+      "sizes": [
+        [
+          390,
+          844
+        ],
+        [
+          390,
+          844
+        ]
+      ],
+      "changedPixels": 2016,
+      "bounds": [
+        294,
+        224,
+        358,
+        256
+      ],
+      "category": "outside notification: fixture or confirmation control state",
+      "before": "../p2.3/revision-3/toasts-run/webkit-light-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-failure-notification.png",
+      "after": "latest-toasts-run/webkit-light-phone--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-failure-notification.png"
+    },
+    {
+      "file": "chromium-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 51763,
+      "bounds": [
+        879,
+        271,
+        1280,
+        459
+      ],
+      "category": "main desktop stack order",
+      "before": "../p2.3/revision-3/toasts-run/chromium-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+      "after": "latest-toasts-run/chromium-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png"
+    },
+    {
+      "file": "chromium-dark-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-pending.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 12,
+      "bounds": [
+        654,
+        188,
+        657,
+        216
+      ],
+      "category": "outside notification: fixture or confirmation control state",
+      "before": "../p2.3/revision-3/toasts-run/chromium-dark-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-pending.png",
+      "after": "latest-toasts-run/chromium-dark-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-pending.png"
+    },
+    {
+      "file": "chromium-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 45347,
+      "bounds": [
+        884,
+        276,
+        1280,
+        454
+      ],
+      "category": "main desktop stack order",
+      "before": "../p2.3/revision-3/toasts-run/chromium-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+      "after": "latest-toasts-run/chromium-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png"
+    },
+    {
+      "file": "webkit-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 47345,
+      "bounds": [
+        874,
+        138,
+        1272,
+        320
+      ],
+      "category": "main desktop stack order",
+      "before": "../p2.3/revision-3/toasts-run/webkit-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+      "after": "latest-toasts-run/webkit-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png"
+    },
+    {
+      "file": "chromium-light-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+      "sizes": [
+        [
+          390,
+          844
+        ],
+        [
+          390,
+          844
+        ]
+      ],
+      "changedPixels": 93,
+      "bounds": [
+        24,
+        320,
+        298,
+        392
+      ],
+      "category": "outside notification: fixture or confirmation control state",
+      "before": "../p2.3/revision-3/toasts-run/chromium-light-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+      "after": "latest-toasts-run/chromium-light-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png"
+    },
+    {
+      "file": "chromium-light-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--legacy-confirmed.png",
+      "sizes": [
+        [
+          390,
+          844
+        ],
+        [
+          390,
+          844
+        ]
+      ],
+      "changedPixels": 765,
+      "bounds": [
+        32,
+        512,
+        142,
+        544
+      ],
+      "category": "outside notification: fixture or confirmation control state",
+      "before": "../p2.3/revision-3/toasts-run/chromium-light-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--legacy-confirmed.png",
+      "after": "latest-toasts-run/chromium-light-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--legacy-confirmed.png"
+    },
+    {
+      "file": "webkit-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 47077,
+      "bounds": [
+        877,
+        138,
+        1272,
+        317
+      ],
+      "category": "main desktop stack order",
+      "before": "../p2.3/revision-3/toasts-run/webkit-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+      "after": "latest-toasts-run/webkit-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png"
+    },
+    {
+      "file": "chromium-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 52993,
+      "bounds": [
+        879,
+        135,
+        1280,
+        323
+      ],
+      "category": "main desktop stack order",
+      "before": "../p2.3/revision-3/toasts-run/chromium-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+      "after": "latest-toasts-run/chromium-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png"
+    },
+    {
+      "file": "chromium-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 44621,
+      "bounds": [
+        884,
+        140,
+        1280,
+        318
+      ],
+      "category": "main desktop stack order",
+      "before": "../p2.3/revision-3/toasts-run/chromium-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+      "after": "latest-toasts-run/chromium-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png"
+    },
+    {
+      "file": "chromium-dark-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+      "sizes": [
+        [
+          390,
+          844
+        ],
+        [
+          390,
+          844
+        ]
+      ],
+      "changedPixels": 60,
+      "bounds": [
+        24,
+        320,
+        241,
+        392
+      ],
+      "category": "outside notification: fixture or confirmation control state",
+      "before": "../p2.3/revision-3/toasts-run/chromium-dark-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+      "after": "latest-toasts-run/chromium-dark-phone--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png"
+    },
+    {
+      "file": "webkit-dark-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--legacy-confirmed.png",
+      "sizes": [
+        [
+          390,
+          844
+        ],
+        [
+          390,
+          844
+        ]
+      ],
+      "changedPixels": 865,
+      "bounds": [
+        24,
+        486,
+        142,
+        518
+      ],
+      "category": "outside notification: fixture or confirmation control state",
+      "before": "../p2.3/revision-3/toasts-run/webkit-dark-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--legacy-confirmed.png",
+      "after": "latest-toasts-run/webkit-dark-phone--legacy-AntApp-confirmation-still-works-with-the-same-notification-service--legacy-confirmed.png"
+    },
+    {
+      "file": "webkit-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 45031,
+      "bounds": [
+        874,
+        274,
+        1272,
+        453
+      ],
+      "category": "main desktop stack order",
+      "before": "../p2.3/revision-3/toasts-run/webkit-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+      "after": "latest-toasts-run/webkit-dark-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png"
+    },
+    {
+      "file": "webkit-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 48027,
+      "bounds": [
+        874,
+        274,
+        1272,
+        456
+      ],
+      "category": "main desktop stack order",
+      "before": "../p2.3/revision-3/toasts-run/webkit-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png",
+      "after": "latest-toasts-run/webkit-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--expanded-pinned-stack.png"
+    },
+    {
+      "file": "webkit-dark-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-failure-notification.png",
+      "sizes": [
+        [
+          1280,
+          900
+        ],
+        [
+          1280,
+          900
+        ]
+      ],
+      "changedPixels": 2014,
+      "bounds": [
+        760,
+        216,
+        824,
+        248
+      ],
+      "category": "outside notification: fixture or confirmation control state",
+      "before": "../p2.3/revision-3/toasts-run/webkit-dark-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-failure-notification.png",
+      "after": "latest-toasts-run/webkit-dark-desktop--async-confirmation-keeps-pending-locks-accessible-failure-feedback-and-successful-retry--confirm-failure-notification.png"
+    }
+  ]
+}

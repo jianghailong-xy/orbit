@@ -1,0 +1,47 @@
+[WebServer] (node:575211) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 24 tests using 1 worker
+
+(node:575296) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium-light-desktop] › docs/evidence/base-ui-migration/p2.2/revision-5/scroll-controls.browser.mjs:5:55 › close lifecycle control: lifecycle (980ms)
+  ✓   2 [chromium-light-desktop] › docs/evidence/base-ui-migration/p2.2/revision-5/scroll-controls.browser.mjs:5:55 › close lifecycle control: late (219ms)
+  ✓   3 [chromium-light-desktop] › docs/evidence/base-ui-migration/p2.2/revision-5/scroll-controls.browser.mjs:5:55 › close lifecycle control: retained (419ms)
+(node:575474) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   4 [chromium-light-phone] › docs/evidence/base-ui-migration/p2.2/revision-5/scroll-controls.browser.mjs:5:55 › close lifecycle control: lifecycle (947ms)
+  ✓   5 [chromium-light-phone] › docs/evidence/base-ui-migration/p2.2/revision-5/scroll-controls.browser.mjs:5:55 › close lifecycle control: late (216ms)
+  ✓   6 [chromium-light-phone] › docs/evidence/base-ui-migration/p2.2/revision-5/scroll-controls.browser.mjs:5:55 › close lifecycle control: retained (422ms)
+(node:575631) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   7 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-5/scroll-controls.browser.mjs:5:55 › close lifecycle control: lifecycle (955ms)
+  ✓   8 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-5/scroll-controls.browser.mjs:5:55 › close lifecycle control: late (220ms)
+  ✓   9 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-5/scroll-controls.browser.mjs:5:55 › close lifecycle control: retained (425ms)
+(node:575808) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  10 [chromium-dark-phone] › docs/evidence/base-ui-migration/p2.2/revision-5/scroll-controls.browser.mjs:5:55 › close lifecycle control: lifecycle (970ms)
+  ✓  11 [chromium-dark-phone] › docs/evidence/base-ui-migration/p2.2/revision-5/scroll-controls.browser.mjs:5:55 › close lifecycle control: late (223ms)
+  ✓  12 [chromium-dark-phone] › docs/evidence/base-ui-migration/p2.2/revision-5/scroll-controls.browser.mjs:5:55 › close lifecycle control: retained (419ms)
+(node:576036) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  13 [webkit-light-desktop] › docs/evidence/base-ui-migration/p2.2/revision-5/scroll-controls.browser.mjs:5:55 › close lifecycle control: lifecycle (1.0s)
+  ✓  14 [webkit-light-desktop] › docs/evidence/base-ui-migration/p2.2/revision-5/scroll-controls.browser.mjs:5:55 › close lifecycle control: late (298ms)
+  ✓  15 [webkit-light-desktop] › docs/evidence/base-ui-migration/p2.2/revision-5/scroll-controls.browser.mjs:5:55 › close lifecycle control: retained (524ms)
+(node:576379) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  16 [webkit-light-phone] › docs/evidence/base-ui-migration/p2.2/revision-5/scroll-controls.browser.mjs:5:55 › close lifecycle control: lifecycle (994ms)
+  ✓  17 [webkit-light-phone] › docs/evidence/base-ui-migration/p2.2/revision-5/scroll-controls.browser.mjs:5:55 › close lifecycle control: late (311ms)
+  ✓  18 [webkit-light-phone] › docs/evidence/base-ui-migration/p2.2/revision-5/scroll-controls.browser.mjs:5:55 › close lifecycle control: retained (515ms)
+(node:576744) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  19 [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-5/scroll-controls.browser.mjs:5:55 › close lifecycle control: lifecycle (1.0s)
+  ✓  20 [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-5/scroll-controls.browser.mjs:5:55 › close lifecycle control: late (314ms)
+  ✓  21 [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-5/scroll-controls.browser.mjs:5:55 › close lifecycle control: retained (542ms)
+(node:577087) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  22 [webkit-dark-phone] › docs/evidence/base-ui-migration/p2.2/revision-5/scroll-controls.browser.mjs:5:55 › close lifecycle control: lifecycle (1.0s)
+  ✓  23 [webkit-dark-phone] › docs/evidence/base-ui-migration/p2.2/revision-5/scroll-controls.browser.mjs:5:55 › close lifecycle control: late (316ms)
+  ✓  24 [webkit-dark-phone] › docs/evidence/base-ui-migration/p2.2/revision-5/scroll-controls.browser.mjs:5:55 › close lifecycle control: retained (517ms)
+
+  24 passed (16.9s)

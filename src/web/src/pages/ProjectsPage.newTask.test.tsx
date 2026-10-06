@@ -221,6 +221,8 @@ function Probe() {
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  // Layout is covered in real browsers; jsdom has no ResizeObserver.
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
   apiMock.mockReset();
   landedOn = '';
   // antd's Modal/Select siblings subscribe to breakpoints on mount and jsdom ships no matchMedia.

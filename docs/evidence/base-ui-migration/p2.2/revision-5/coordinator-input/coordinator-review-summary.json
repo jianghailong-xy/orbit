@@ -1,0 +1,115 @@
+{
+  "taskId": "34Za394q2ZEgr7TKprjkF",
+  "evidenceRevision": "4",
+  "delivery": "801d41ac9b9ec33671a00190e6f3c77cee22ab94",
+  "testedCommit": "2bd040fe3bc642cdb53460539146e25eb4e8aad2",
+  "webTree": "a4758a381226a78b7a4d494a07e7fcf44f12e662",
+  "scopeAudit": "609 runtime files, 12586 historical evidence files and dependency/config inputs unchanged; 507 indexed artifact hashes and 448 attachment hashes verified",
+  "discovery": "520 identical project/file/title identities",
+  "browserChecks": [
+    {
+      "name": "shared-build",
+      "argv": [
+        "npm",
+        "run",
+        "build",
+        "-w",
+        "@orbit/shared"
+      ],
+      "exitCode": 0,
+      "seconds": 0.228
+    },
+    {
+      "name": "list-choices",
+      "argv": [
+        "node",
+        "../../node_modules/@playwright/test/cli.js",
+        "test",
+        "--config",
+        "ui-migration/choices.config.mjs",
+        "--list"
+      ],
+      "exitCode": 0,
+      "seconds": 1.151
+    },
+    {
+      "name": "choices-entry",
+      "argv": [
+        "node",
+        "../../node_modules/@playwright/test/cli.js",
+        "test",
+        "--config",
+        "ui-migration/choices.config.mjs",
+        "--grep",
+        "Dialog owns choices|Dialog keeps composition|Dialog Popover Select exits"
+      ],
+      "exitCode": 1,
+      "seconds": 84.298,
+      "stats": {
+        "startTime": "2026-10-04T12:09:40.540Z",
+        "duration": 83687.589,
+        "expected": 31,
+        "skipped": 0,
+        "unexpected": 1,
+        "flaky": 0
+      }
+    },
+    {
+      "name": "choices-reduced-repeat",
+      "argv": [
+        "node",
+        "../../node_modules/@playwright/test/cli.js",
+        "test",
+        "--config",
+        "ui-migration/choices.config.mjs",
+        "--grep",
+        "reduce Dialog Popover Select exits restore one layer at a time",
+        "--repeat-each",
+        "5"
+      ],
+      "exitCode": 0,
+      "seconds": 78.457,
+      "stats": {
+        "startTime": "2026-10-04T12:11:04.624Z",
+        "duration": 78103.074,
+        "expected": 40,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      }
+    },
+    {
+      "name": "negative-controls",
+      "argv": [
+        "node",
+        "../../node_modules/@playwright/test/cli.js",
+        "test",
+        "--config",
+        "/tmp/orbit-p22-r4-coordinator-review-c1iqk9rf/docs/evidence/base-ui-migration/p2.2/revision-4/scroll-negative-control-standard.config.mjs"
+      ],
+      "exitCode": 0,
+      "seconds": 9.74,
+      "stats": {
+        "startTime": "2026-10-04T12:12:23.100Z",
+        "duration": 9411.124000000002,
+        "expected": 16,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      }
+    }
+  ],
+  "failure": {
+    "project": "chromium-light-desktop",
+    "case": "no-preference Dialog Popover Select exits restore one layer at a time",
+    "assertion": "choices-lifecycle.browser.mjs:99 unlock <=100ms",
+    "measuredUnlockMs": 105.7000000178814,
+    "firstReadMs": 335.40000000596046,
+    "firstAndFinalReadLocked": false,
+    "scrollNotAttemptedForFailedCase": true
+  },
+  "interpretation": "Asynchronous unlock is independently corroborated, including 3 reduced-motion first-read-locked samples that then passed. The newly introduced 100ms total deadline failed once during normal motion. The project criterion does not itself require 100ms; this is an unresolved test readiness/budget issue, not evidence of a persistent production scroll lock. Do not raise the constant to the observed value or erase the failed run. Establish a bounded wait aligned with the actual close lifecycle, retain total elapsed observations and negative controls, and rerun affected normal/reduced cases.",
+  "reuse": "r3 independent 295-file/3661-test full build/test and four type checks remain applicable to unchanged runtime/config; prior visual evidence and limitations preserved.",
+  "temporaryModifications": "Only local server port 4177 ->14394, isolated node_modules/shared outputs. No repository source modifications.",
+  "independentRetryOrSkip": false
+}

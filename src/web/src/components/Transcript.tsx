@@ -460,6 +460,9 @@ type TextNode = {
   // got is the only thing that reports it, and the states above are shown for it alone. On
   // the event itself so a reload still knows which bubble that was.
   steer?: boolean;
+  // A `!cmd` still on the queue (`queuedTurnEvent`): drawn verbatim as the command it will run, since
+  // Markdown would mangle its shell syntax. No echo carries it — the runner runs one as a Bash card.
+  shell?: boolean;
   // What the control plane recorded, when it stored this `user` event, as appended at delivery
   // (`controlPlaneNote`). Already taken out of `text`; drawn under it, in the same bubble.
   note?: string;
@@ -1028,6 +1031,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
             attachmentRefs: refs,
             delivery: typeof p.delivery === 'string' ? p.delivery : undefined,
             steer: p.steer === true,
+            shell: p.shell === true,
           };
           if (taskStart) {
             taskStartByParent.set(parentKey(parent), { text, card: taskStart });
@@ -1526,15 +1530,44 @@ function StandaloneResult({ node }: { node: ResultNode }) {
   return <ToolResult seq={node.seq} content={full ? full.content : node.content} isError={node.isError} />;
 }
 
+/**
+ * A turn still waiting on the queue, drawn from the event its echo will be (`queuedTurnEvent`,
+ * lib/acceptedUserTurn) by the dispatch that will draw the echo: the card or bubble the transcript
+ * draws once a runner takes the turn, so taking it changes nothing but the queue's line. `queued` is
+ * that line (WorkspaceView's `QueuedTurnMeta`): how the turn stands and the way out of it.
+ */
+export function QueuedUserTurn({
+  event,
+  turnImages,
+  queued,
+}: {
+  event: RunEvent;
+  turnImages?: Record<string, TurnImage[]>;
+  queued: ReactNode;
+}) {
+  // A row with nothing to draw yet — a file-only message before the snapshot names its file — still
+  // has its line, and the way out with it.
+  const node = useMemo<Node>(
+    () => buildNodes([event], turnImages)[0] ?? { kind: 'user', seq: event.seq, text: '' },
+    [event, turnImages],
+  );
+  return <NodeView node={node} queued={queued} />;
+}
+
 // `data-seq` marks where each event's card starts, so ⌘F can scroll to a hit the server found by
 // seq. Only these top-level roots carry it: a lookup takes the last stamp at or before the target,
 // which resolves anything folded inside one (a tool_result, a grouped run, a sub-workspace's events)
 // to the card that contains it.
-function NodeView({ node, live }: { node: Node; live?: boolean }) {
+//
+// `queued` is the queue's own line for a turn still waiting to be delivered (QueuedUserTurn): the
+// turn is drawn by this same dispatch, with that line in the slot each card keeps for it.
+function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?: ReactNode }) {
   const exporting = useContext(ExportCtx);
   const authHelp = useContext(AuthErrorCtx);
   switch (node.kind) {
     case 'user': {
+      // A turn still on the queue is no event yet: nothing for ⌘F to land on, so nothing is stamped.
+      const seq = queued ? undefined : node.seq;
       // Another Orbit session's message (`session_send` / `project_send`): somebody's words, but not
       // the reader's, so not the reader's bubble. Who sent it is what the control plane recorded
       // beside the echo (lib/sessionMessage), so it is asked first — before anything is read out of
@@ -1544,27 +1577,36 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
           <SessionMessageCard
             card={node.sessionMessage}
             text={node.text}
-            seq={node.seq}
+            seq={seq}
             ts={node.ts}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
             attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
+            queued={queued}
           />
         );
       }
       // The outcomes of this session's requests, handed back (lib/sessionRequest): a reply turn
       // carries nobody's words, and a message of the owner's may carry outcomes that were held for
       // it — then the owner's words are their bubble, first, and the outcomes follow as cards. What
-      // else delivery appended folds into the cards, as it does everywhere.
+      // else delivery appended folds into the cards, as it does everywhere. Still queued, the queue's
+      // line goes under the cards — or under the owner's words, the message it is about, when they
+      // are there.
       if (node.sessionReplies) {
         const rest = withoutReplyBlocks(node.note);
+        const words = node.text.trim() !== '';
         return (
           <>
-            {node.text.trim() !== '' && <UserBubble node={{ ...node, note: undefined }} />}
+            {words && <UserBubble node={{ ...node, note: undefined }} queued={queued} />}
             <SessionReplyCards
               cards={node.sessionReplies}
-              seq={node.seq}
+              seq={seq}
               ts={node.ts}
-              attached={rest !== '' && <ControlPlaneNote kind={describeNote(rest)} text={rest} />}
+              attached={
+                <>
+                  {rest !== '' && <ControlPlaneNote kind={describeNote(rest)} text={rest} />}
+                  {!words && queued}
+                </>
+              }
             />
           </>
         );
@@ -1576,10 +1618,11 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
           <WatchWakeCard
             wake={wake}
             text={node.text}
-            seq={node.seq}
+            seq={seq}
             ts={node.ts}
             linkable={!exporting}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+            queued={queued}
           />
         );
       }
@@ -1594,9 +1637,10 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
           <OpenItemDeliveryCard
             card={node.itemCard}
             text={node.text}
-            seq={node.seq}
+            seq={seq}
             ts={node.ts}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+            queued={queued}
           />
         );
       }
@@ -1608,11 +1652,12 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
           <TaskStartCard
             card={node.taskStart}
             text={node.text}
-            seq={node.seq}
+            seq={seq}
             ts={node.ts}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
             attachments={<TurnAttachments node={node} />}
             attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
+            queued={queued}
           />
         );
       }
@@ -1623,9 +1668,10 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
           <ProjectStartedCard
             card={node.startedCard}
             text={node.text}
-            seq={node.seq}
+            seq={seq}
             ts={node.ts}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+            queued={queued}
           />
         );
       }
@@ -1638,18 +1684,20 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
         return node.reviewRequest ? (
           <ReviewRequestedCard
             card={node.reviewRequest}
-            seq={node.seq}
+            seq={seq}
             ts={node.ts}
             undelivered={undelivered}
             attached={attached}
+            queued={queued}
           />
         ) : (
           <SentBackByReviewerCard
             card={node.reviewReturn!}
-            seq={node.seq}
+            seq={seq}
             ts={node.ts}
             undelivered={undelivered}
             attached={attached}
+            queued={queued}
           />
         );
       }
@@ -1673,10 +1721,11 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
           <>
             <BackgroundWakeCard
               wake={background}
-              seq={node.seq}
+              seq={seq}
               ts={node.ts}
               undelivered={undelivered}
               steer={node.steer && !undelivered ? steerDeliveryState(node.delivery).label : undefined}
+              queued={queued}
               attached={
                 background.rest !== '' && (
                   <ControlPlaneNote kind={describeNote(background.rest)} text={background.rest} />
@@ -1687,7 +1736,7 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
           </>
         );
       }
-      return <UserBubble node={node} />;
+      return <UserBubble node={node} queued={queued} />;
     }
     case 'assistant':
       return <AssistantBubble text={node.text} seq={node.seq} />;
@@ -2235,7 +2284,11 @@ export const USER_BUBBLE_TRUNCATE = 6000;
 // time) fades in on hover, like Claude; it's absolutely positioned so it never adds height,
 // and lives inside the hover wrap so the pointer can travel down onto it without dismissing
 // it (CSS :hover hits ancestors).
-function UserBubble({ node }: { node: TextNode }) {
+//
+// Still on the queue (`queued`, the queue's own line), the bubble is the same one, dimmed and dashed,
+// with that line at its foot — so a message does not change shape when the runner picks it up — and
+// no seq, being no event yet. A queued `!cmd` shows the command verbatim.
+function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
   const exp = useContext(ExportCtx);
   const putBack = useContext(UndeliveredCtx);
   const [copied, setCopied] = useState(false);
@@ -2261,15 +2314,23 @@ function UserBubble({ node }: { node: TextNode }) {
   };
   return (
     <div className="chat-user-wrap">
-      <div className="chat-msg chat-user" data-seq={node.seq}>
+      <div
+        className={queued ? 'chat-msg chat-user chat-queued' : 'chat-msg chat-user'}
+        data-seq={queued ? undefined : node.seq}
+      >
         <TurnAttachments node={node} />
-        {shownText && <MD breaks>{shownText}</MD>}
+        {node.shell ? (
+          <code className="chat-queued-cmd">!{shownText}</code>
+        ) : (
+          shownText && <MD breaks>{shownText}</MD>
+        )}
         {attached && (
           // Named, not hidden: without this the agent answers about a quota outage nobody
           // appears to have raised. Folded under the words, so what the model read is one click
           // away without putting it in the middle of someone's sentence.
           <ControlPlaneNote kind={attached.kind} text={attached.text} />
         )}
+        {queued}
       </div>
       {node.delivery === 'failed' || node.delivery === 'unconfirmed' ? (
         // The one thing a bubble must never do is stand there looking sent when the engine

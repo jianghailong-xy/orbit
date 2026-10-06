@@ -18,7 +18,7 @@ const REPORT: RunnerSelfUpdate = {
   lastUpdatedTo: '0.1.217',
 };
 
-// Migration 0384 against a real PostgreSQL: what a heartbeat reports lands in runner.self_update,
+// Migration 0385 against a real PostgreSQL: what a heartbeat reports lands in runner.self_update,
 // the list and the detail return it (null for a runner that does not report one), and Update Runner
 // Now is the owner's alone, stamped in runner.self_update_requested_at and handed to one heartbeat.
 test('runner self-update state persists, is listed and detailed, and Update Runner Now reaches the runner', { skip: !url, timeout: 120_000 }, async (t) => {

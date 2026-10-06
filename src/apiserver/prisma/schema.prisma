@@ -2136,11 +2136,17 @@ model Attachment {
 
 // Lightweight activity feed (no FKs, append-only).
 model Activity {
-  id        String   @id @default(uuid(7)) @db.Uuid
-  actorId   String?  @map("actor_id") @db.Uuid
-  type      String
-  payload   Json?
-  createdAt DateTime @default(now()) @map("created_at")
+  id             String   @id @default(uuid(7)) @db.Uuid
+  actorId        String?  @map("actor_id") @db.Uuid
+  type           String
+  payload        Json?
+  /// The door the write came in through (docs/personal-access-token-design.md §6.4): `LOGIN` |
+  /// `PAT`. NULL on a row no user credential wrote.
+  credentialKind String?  @map("credential_kind")
+  /// The personal access token's id when `credentialKind` is `PAT`, and only then
+  /// (activity_credential_chk, 0384). No FK, like actorId: the record outlives the token.
+  credentialId   String?  @map("credential_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at")
 
   @@map("activity")
 }

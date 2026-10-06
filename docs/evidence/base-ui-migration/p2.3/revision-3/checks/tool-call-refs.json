@@ -1,0 +1,107 @@
+[
+  {
+    "ref": "exec-d711f007-dd9e-4426-b64f-07a4d6d52d84",
+    "label": "before-repair",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r3-check.py before-repair node docs/evidence/base-ui-migration/p2.3/revision-3/before-repair/coordinator-stationary-arrival.mjs"
+  },
+  {
+    "ref": "exec-e59ca95e-4eba-4046-928c-08cd72b0d595",
+    "label": "after-repair",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r3-check.py after-repair node docs/evidence/base-ui-migration/p2.3/revision-3/after-repair/coordinator-stationary-arrival.mjs"
+  },
+  {
+    "ref": "exec-02f59929-15c0-406c-809e-c14c829a951d",
+    "label": "hover-behavior",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r3-check.py hover-behavior npm run test:ui-toasts -w @orbit/web -- --grep 'stationary arrival|layout moving' --project chromium-light-desktop --project webkit-light-desktop --project webkit-light-phone"
+  },
+  {
+    "ref": "exec-d2b5590f-7754-4579-b7bd-b6f8c9ba266a",
+    "label": "implementation-commit",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "git add src/web/src/components/ToastViewport.tsx src/web/src/components/ui/README.md src/web/ui-migration/toasts-hover.browser.mjs\ngit commit -m 'fix(web): retain toast dwell under stationary pointers'"
+  },
+  {
+    "ref": "exec-130e2ef4-f627-42bc-8391-a2c0fd800683",
+    "label": "fixture-types",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r3-check.py fixture-types node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts.tsconfig.json --noEmit"
+  },
+  {
+    "ref": "exec-b3c0b5a0-99c8-4c54-a6ec-6c0622379460",
+    "label": "modified-test-types",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r3-check.py modified-test-types node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts-tests.tsconfig.json --noEmit"
+  },
+  {
+    "ref": "exec-e690459a-6f7c-4505-be90-2b37bf507a1c",
+    "label": "force-typecheck",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r3-check.py force-typecheck node node_modules/typescript/bin/tsc -b src/web --force"
+  },
+  {
+    "ref": "exec-9bc5d917-933b-4226-9310-74ba304acd1f",
+    "label": "original-hover",
+    "status": "failed",
+    "exitCode": 1,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r3-check.py original-hover node node_modules/@playwright/test/cli.js test --config /tmp/orbit-p23-r3-reference/src/web/ui-migration/reference-hover.config.mjs --grep 'native stationary arrival|layout moving'"
+  },
+  {
+    "ref": "exec-0b439d47-2e79-4a61-9527-dc208162e087",
+    "label": "committed-production",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r3-check.py committed-production npm run test:ui-migration -w @orbit/web -- feedback-production.browser.mjs"
+  },
+  {
+    "ref": "exec-feafcf11-92d6-4468-91a7-0c92dc66f3ed",
+    "label": "committed-full-web",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r3-check.py committed-full-web npm test -w @orbit/web"
+  },
+  {
+    "ref": "exec-77237e71-3e04-4811-9d64-a3e360e2a03d",
+    "label": "notification-unit",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r3-check.py notification-unit npm test -w @orbit/web -- src/lib/toast.test.tsx src/lib/toastFeed.test.ts src/lib/theme.test.tsx src/components/ui/boundary.test.ts src/pages/ProjectsPage.newTask.test.tsx"
+  },
+  {
+    "ref": "exec-39f4dcd2-ce1b-4380-8402-d53f78097811",
+    "label": "original-hover-repeat",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r3-check.py original-hover-repeat node node_modules/@playwright/test/cli.js test --config /tmp/orbit-p23-r3-reference/src/web/ui-migration/reference-hover.config.mjs --grep 'native stationary arrival|layout moving'"
+  },
+  {
+    "ref": "exec-64c21fa9-89d6-4314-a35a-c6f185dc0c14",
+    "label": "committed-overlays",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r3-check.py committed-overlays npm run test:ui-overlays -w @orbit/web"
+  },
+  {
+    "ref": "exec-5f2759d6-a9c3-4c00-a75b-f8e7072f9d34",
+    "label": "committed-notifications",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r3-check.py committed-notifications npm run test:ui-toasts -w @orbit/web"
+  },
+  {
+    "ref": "exec-a03be8f9-8fd0-4325-ab83-fa4d1eb9534b",
+    "label": "artifact-audit",
+    "status": "completed",
+    "exitCode": 0,
+    "command": "NO_COLOR=1 python3 /tmp/orbit-p23-r3-check.py artifact-audit python3 docs/evidence/base-ui-migration/p2.3/revision-3/audit.py"
+  }
+]

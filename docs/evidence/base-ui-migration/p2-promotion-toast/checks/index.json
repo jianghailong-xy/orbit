@@ -1,0 +1,268 @@
+[
+  {
+    "metadata": "checks/animation-phase-repair.json",
+    "output": "checks/animation-phase-repair.txt",
+    "sourceStart": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+    "sourceEnd": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+    "exitCode": 1
+  },
+  {
+    "metadata": "checks/animation-resume-repair.json",
+    "output": "checks/animation-resume-repair.txt",
+    "sourceStart": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+    "sourceEnd": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+    "exitCode": 1
+  },
+  {
+    "metadata": "checks/artifact-audit.json",
+    "output": "checks/artifact-audit.txt",
+    "sourceStart": "7dc04c28535cfc4fce8fe786ed7c084f5619549b",
+    "sourceEnd": "7dc04c28535cfc4fce8fe786ed7c084f5619549b",
+    "exitCode": 1
+  },
+  {
+    "metadata": "checks/committed-build-and-test.json",
+    "output": "checks/committed-build-and-test.txt",
+    "sourceStart": "7dc04c28535cfc4fce8fe786ed7c084f5619549b",
+    "sourceEnd": "7dc04c28535cfc4fce8fe786ed7c084f5619549b",
+    "exitCode": 0
+  },
+  {
+    "metadata": "checks/committed-notifications.json",
+    "output": "checks/committed-notifications.txt",
+    "sourceStart": "7dc04c28535cfc4fce8fe786ed7c084f5619549b",
+    "sourceEnd": "7dc04c28535cfc4fce8fe786ed7c084f5619549b",
+    "exitCode": 1
+  },
+  {
+    "metadata": "checks/committed-types.json",
+    "output": "checks/committed-types.txt",
+    "sourceStart": "7dc04c28535cfc4fce8fe786ed7c084f5619549b",
+    "sourceEnd": "7dc04c28535cfc4fce8fe786ed7c084f5619549b",
+    "exitCode": 0
+  },
+  {
+    "metadata": "checks/compositing-reference.json",
+    "output": "checks/compositing-reference.txt",
+    "sourceStart": "2a4159ab8c7c5411bfdb5152f6b0ade7b0d2edc0",
+    "sourceEnd": "2a4159ab8c7c5411bfdb5152f6b0ade7b0d2edc0",
+    "exitCode": 0
+  },
+  {
+    "metadata": "checks/delivery-artifact-audit.json",
+    "output": "checks/delivery-artifact-audit.txt",
+    "sourceStart": "d6d32fe69a8e331b199f08022979d95d0fc1eb94",
+    "sourceEnd": "d6d32fe69a8e331b199f08022979d95d0fc1eb94",
+    "exitCode": 0
+  },
+  {
+    "metadata": "checks/delivery-build-and-test.json",
+    "output": "checks/delivery-build-and-test.txt",
+    "sourceStart": "d6d32fe69a8e331b199f08022979d95d0fc1eb94",
+    "sourceEnd": "d6d32fe69a8e331b199f08022979d95d0fc1eb94",
+    "exitCode": 0
+  },
+  {
+    "metadata": "checks/delivery-notifications.json",
+    "output": "checks/delivery-notifications.txt",
+    "sourceStart": "d6d32fe69a8e331b199f08022979d95d0fc1eb94",
+    "sourceEnd": "d6d32fe69a8e331b199f08022979d95d0fc1eb94",
+    "exitCode": 0
+  },
+  {
+    "metadata": "checks/delivery-types.json",
+    "output": "checks/delivery-types.txt",
+    "sourceStart": "d6d32fe69a8e331b199f08022979d95d0fc1eb94",
+    "sourceEnd": "d6d32fe69a8e331b199f08022979d95d0fc1eb94",
+    "exitCode": 0
+  },
+  {
+    "metadata": "checks/exit-host-diagnostic.json",
+    "output": "checks/exit-host-diagnostic.txt",
+    "sourceStart": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+    "sourceEnd": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+    "exitCode": 1
+  },
+  {
+    "metadata": "checks/exit-style-diagnostic.json",
+    "output": "checks/exit-style-diagnostic.txt",
+    "sourceStart": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+    "sourceEnd": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+    "exitCode": 1
+  },
+  {
+    "metadata": "checks/final-artifact-audit.json",
+    "output": "checks/final-artifact-audit.txt",
+    "sourceStart": "2a4159ab8c7c5411bfdb5152f6b0ade7b0d2edc0",
+    "sourceEnd": "2a4159ab8c7c5411bfdb5152f6b0ade7b0d2edc0",
+    "exitCode": 0
+  },
+  {
+    "metadata": "checks/final-build-and-test.json",
+    "output": "checks/final-build-and-test.txt",
+    "sourceStart": "2a4159ab8c7c5411bfdb5152f6b0ade7b0d2edc0",
+    "sourceEnd": "2a4159ab8c7c5411bfdb5152f6b0ade7b0d2edc0",
+    "exitCode": 0
+  },
+  {
+    "metadata": "checks/final-notifications.json",
+    "output": "checks/final-notifications.txt",
+    "sourceStart": "2a4159ab8c7c5411bfdb5152f6b0ade7b0d2edc0",
+    "sourceEnd": "2a4159ab8c7c5411bfdb5152f6b0ade7b0d2edc0",
+    "exitCode": 0
+  },
+  {
+    "metadata": "checks/final-types.json",
+    "output": "checks/final-types.txt",
+    "sourceStart": "2a4159ab8c7c5411bfdb5152f6b0ade7b0d2edc0",
+    "sourceEnd": "2a4159ab8c7c5411bfdb5152f6b0ade7b0d2edc0",
+    "exitCode": 0
+  },
+  {
+    "metadata": "checks/fixture-types.json",
+    "output": "checks/fixture-types.txt",
+    "sourceStart": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+    "sourceEnd": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+    "exitCode": 0
+  },
+  {
+    "metadata": "checks/hover-release-unit.json",
+    "output": "checks/hover-release-unit.txt",
+    "sourceStart": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+    "sourceEnd": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+    "exitCode": 0
+  },
+  {
+    "metadata": "checks/latest-build-and-test.json",
+    "output": "checks/latest-build-and-test.txt",
+    "sourceStart": "f232f057c3fba1695e112786b8136de62a6b4a0d",
+    "sourceEnd": "f232f057c3fba1695e112786b8136de62a6b4a0d",
+    "exitCode": 0
+  },
+  {
+    "metadata": "checks/latest-notifications.json",
+    "output": "checks/latest-notifications.txt",
+    "sourceStart": "f232f057c3fba1695e112786b8136de62a6b4a0d",
+    "sourceEnd": "f232f057c3fba1695e112786b8136de62a6b4a0d",
+    "exitCode": 0
+  },
+  {
+    "metadata": "checks/latest-overlay.json",
+    "output": "checks/latest-overlay.txt",
+    "sourceStart": "f232f057c3fba1695e112786b8136de62a6b4a0d",
+    "sourceEnd": "f232f057c3fba1695e112786b8136de62a6b4a0d",
+    "exitCode": 0
+  },
+  {
+    "metadata": "checks/latest-types.json",
+    "output": "checks/latest-types.txt",
+    "sourceStart": "f232f057c3fba1695e112786b8136de62a6b4a0d",
+    "sourceEnd": "f232f057c3fba1695e112786b8136de62a6b4a0d",
+    "exitCode": 0
+  },
+  {
+    "metadata": "checks/main-reference.json",
+    "output": "checks/main-reference.txt",
+    "sourceStart": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+    "sourceEnd": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+    "exitCode": 0
+  },
+  {
+    "metadata": "checks/main-stack-reference.json",
+    "output": "checks/main-stack-reference.txt",
+    "sourceStart": "7dc04c28535cfc4fce8fe786ed7c084f5619549b",
+    "sourceEnd": "7dc04c28535cfc4fce8fe786ed7c084f5619549b",
+    "exitCode": 0
+  },
+  {
+    "metadata": "checks/mechanical-hover-unit.json",
+    "output": "checks/mechanical-hover-unit.txt",
+    "sourceStart": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+    "sourceEnd": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+    "exitCode": 1
+  },
+  {
+    "metadata": "checks/mechanical-native.json",
+    "output": "checks/mechanical-native.txt",
+    "sourceStart": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+    "sourceEnd": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+    "exitCode": 1
+  },
+  {
+    "metadata": "checks/mechanical-toast-unit.json",
+    "output": "checks/mechanical-toast-unit.txt",
+    "sourceStart": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+    "sourceEnd": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+    "exitCode": 0
+  },
+  {
+    "metadata": "checks/project-reference.json",
+    "output": "checks/project-reference.txt",
+    "sourceStart": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+    "sourceEnd": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+    "exitCode": 0
+  },
+  {
+    "metadata": "checks/project-stack-reference.json",
+    "output": "checks/project-stack-reference.txt",
+    "sourceStart": "7dc04c28535cfc4fce8fe786ed7c084f5619549b",
+    "sourceEnd": "7dc04c28535cfc4fce8fe786ed7c084f5619549b",
+    "exitCode": 0
+  },
+  {
+    "metadata": "checks/settled-final-stack.json",
+    "output": "checks/settled-final-stack.txt",
+    "sourceStart": "2a4159ab8c7c5411bfdb5152f6b0ade7b0d2edc0",
+    "sourceEnd": "2a4159ab8c7c5411bfdb5152f6b0ade7b0d2edc0",
+    "exitCode": 0
+  },
+  {
+    "metadata": "checks/settled-main-stack.json",
+    "output": "checks/settled-main-stack.txt",
+    "sourceStart": "2a4159ab8c7c5411bfdb5152f6b0ade7b0d2edc0",
+    "sourceEnd": "2a4159ab8c7c5411bfdb5152f6b0ade7b0d2edc0",
+    "exitCode": 0
+  },
+  {
+    "metadata": "checks/settled-project-stack.json",
+    "output": "checks/settled-project-stack.txt",
+    "sourceStart": "2a4159ab8c7c5411bfdb5152f6b0ade7b0d2edc0",
+    "sourceEnd": "2a4159ab8c7c5411bfdb5152f6b0ade7b0d2edc0",
+    "exitCode": 0
+  },
+  {
+    "metadata": "checks/toast-test-types.json",
+    "output": "checks/toast-test-types.txt",
+    "sourceStart": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+    "sourceEnd": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+    "exitCode": 0
+  },
+  {
+    "metadata": "checks/two-browser-smoke.json",
+    "output": "checks/two-browser-smoke.txt",
+    "sourceStart": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+    "sourceEnd": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+    "exitCode": 0
+  },
+  {
+    "metadata": "checks/verified-mechanical-final-test.json",
+    "output": "checks/verified-mechanical-final-test.txt",
+    "sourceStart": "2a4159ab8c7c5411bfdb5152f6b0ade7b0d2edc0",
+    "sourceEnd": "2a4159ab8c7c5411bfdb5152f6b0ade7b0d2edc0",
+    "exitCode": 1
+  },
+  {
+    "metadata": "checks/verified-mechanical-regression.json",
+    "output": "checks/verified-mechanical-regression.txt",
+    "sourceStart": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+    "sourceEnd": "7dc04c28535cfc4fce8fe786ed7c084f5619549b",
+    "exitCode": 1
+  },
+  {
+    "metadata": "checks/visible-owner-combination.json",
+    "output": "checks/visible-owner-combination.txt",
+    "sourceStart": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+    "sourceEnd": "18e75cfe14d0a0858c9a46e514535439c9cdf9d8",
+    "exitCode": 1
+  }
+]

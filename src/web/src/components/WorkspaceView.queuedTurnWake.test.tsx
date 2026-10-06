@@ -255,7 +255,10 @@ describe('a wake a watch queued, in the queued tail', { timeout: 60_000 }, () =>
     expect(card.classList.contains('is-queued'), 'drawn as still queued').toBe(true);
     expect(card.querySelector('.watch-wake-title')?.textContent?.trim()).toBe('Watch triggered');
     expect(card.querySelectorAll('.watch-wake-changed li')).toHaveLength(2);
-    expect(card.querySelector('.watch-wake-meta')?.textContent).toBe('Queued by a watch, not typed by you · generation 1');
+    // The delivered card's own line (Transcript.watchWake.test.tsx), down to when it was queued.
+    expect(card.querySelector('.watch-wake-meta')?.textContent).toMatch(
+      /^Queued by a watch, not typed by you · generation 1 · /,
+    );
     expect(card.hasAttribute('data-seq'), 'a queued wake is no event for ⌘F to land on').toBe(false);
 
     // What the agent will read is kept whole, one closed disclosure away.

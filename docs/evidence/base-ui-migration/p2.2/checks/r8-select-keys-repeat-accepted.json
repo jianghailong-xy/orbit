@@ -1,0 +1,14 @@
+{
+  "command": "cd /var/tmp/p22-r8-accepted && node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2.2/revision-8/select-keys-repeat.config.mjs --project chromium-dark-desktop",
+  "runner": "mcp__orbit__bg_run",
+  "bgJobId": "bgj_e3a6b73936d9",
+  "cwd": "/var/tmp/p22-r8-accepted",
+  "commit": "45bb56928225bbe6d00800180ebcc73f26250fd4",
+  "webTree": "0d82a97ba0283350710a1da88b0d7ba4e5034116",
+  "started": "2026-10-06T06:20:44Z",
+  "outputLastWritten": "2026-10-06T06:23:49.078785+00:00",
+  "exitCode": 1,
+  "outputSha256": "9b68eb61e577fb73c76506603cbc441ae5a971a83343426d01d3619e60b17229",
+  "outputBytes": 24177,
+  "note": "119 passed / 1 failed: orbit-sample 29 never mounted (15 module requests net::ERR_NETWORK_CHANGED); orbit-sample lost the selection once in the 39 recorded samples."
+}

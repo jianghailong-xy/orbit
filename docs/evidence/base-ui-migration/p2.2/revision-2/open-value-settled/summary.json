@@ -1,0 +1,612 @@
+{
+  "stats": {
+    "startTime": "2026-10-04T09:50:59.849Z",
+    "duration": 52582.057,
+    "expected": 24,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-light-desktop--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2297
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape--antd-expiry-open-value.png",
+          "sha256": "afaeb5e4bf110207eec7157339142a824e42faf7b2973de5ab287f690dc83edb"
+        },
+        {
+          "file": "chromium-light-desktop--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape--orbit-expiry-open-value.png",
+          "sha256": "57792d138c6049caa462e30bce5eba79d929112ec6c35cfe28a0ddaf162295d6"
+        },
+        {
+          "file": "chromium-light-desktop--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape--open-value.json",
+          "sha256": "f39b96abd4cf1d5a0d878bbc9f4857aac3b10552d60161c3e17d3ad1aa5eff46"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--account-dims-the-current-value-while-open-and-restores-it-on-Escape",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2075
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--account-dims-the-current-value-while-open-and-restores-it-on-Escape--antd-account-open-value.png",
+          "sha256": "672c87661c4a906f3ae8f76be7b9f76e43754091d70a65296d49db5e839d89f6"
+        },
+        {
+          "file": "chromium-light-desktop--account-dims-the-current-value-while-open-and-restores-it-on-Escape--orbit-account-open-value.png",
+          "sha256": "2f3cb0e7a081776849e7aae3619565c4bb73895facc00b54fbb7d219d3f66ab4"
+        },
+        {
+          "file": "chromium-light-desktop--account-dims-the-current-value-while-open-and-restores-it-on-Escape--open-value.json",
+          "sha256": "fc5f2b245a0c5c98f3fbef3f39b9db54b48c5896b27eed0b32cc490f26b736bc"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-desktop--search-dims-the-current-value-while-open-and-restores-it-on-Escape",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2199
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--search-dims-the-current-value-while-open-and-restores-it-on-Escape--antd-search-open-value.png",
+          "sha256": "9187d451c5590a5199a1ee1592432a07086454281c57be7c1f7cfc9ab9887c61"
+        },
+        {
+          "file": "chromium-light-desktop--search-dims-the-current-value-while-open-and-restores-it-on-Escape--orbit-search-open-value.png",
+          "sha256": "5538ad8953eabd3588b5ca02011700802360884eb3143af8342bfb061a3ef182"
+        },
+        {
+          "file": "chromium-light-desktop--search-dims-the-current-value-while-open-and-restores-it-on-Escape--open-value.json",
+          "sha256": "f39b96abd4cf1d5a0d878bbc9f4857aac3b10552d60161c3e17d3ad1aa5eff46"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2626
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape--antd-expiry-open-value.png",
+          "sha256": "98667cb62c646a3000e1630b941ecc5a531e08d0016651b0301f335f7d186116"
+        },
+        {
+          "file": "chromium-light-phone--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape--orbit-expiry-open-value.png",
+          "sha256": "d1f61b266f02d6833f03e1fe62b04d0e09f8d1a82b6624a60477b9c56b82f999"
+        },
+        {
+          "file": "chromium-light-phone--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape--open-value.json",
+          "sha256": "f39b96abd4cf1d5a0d878bbc9f4857aac3b10552d60161c3e17d3ad1aa5eff46"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--account-dims-the-current-value-while-open-and-restores-it-on-Escape",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2370
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--account-dims-the-current-value-while-open-and-restores-it-on-Escape--antd-account-open-value.png",
+          "sha256": "18b62519c4fc7dbd0a0b085039d16f864c3b49ceb9b73615cc788a6bc631bd29"
+        },
+        {
+          "file": "chromium-light-phone--account-dims-the-current-value-while-open-and-restores-it-on-Escape--orbit-account-open-value.png",
+          "sha256": "66a19a26d8410de34ba8f7d163677160e879dbe19f797f6a28878e85a6db0e1d"
+        },
+        {
+          "file": "chromium-light-phone--account-dims-the-current-value-while-open-and-restores-it-on-Escape--open-value.json",
+          "sha256": "fc5f2b245a0c5c98f3fbef3f39b9db54b48c5896b27eed0b32cc490f26b736bc"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--search-dims-the-current-value-while-open-and-restores-it-on-Escape",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2568
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--search-dims-the-current-value-while-open-and-restores-it-on-Escape--antd-search-open-value.png",
+          "sha256": "3ab27de33aadf220ecb87d3176e0c23cd4d2f1721956282c03143690f09edbc1"
+        },
+        {
+          "file": "chromium-light-phone--search-dims-the-current-value-while-open-and-restores-it-on-Escape--orbit-search-open-value.png",
+          "sha256": "ef30f0c81051540fb2125a9f2c2936192433149cad3d0a1954cc811eda8d4c45"
+        },
+        {
+          "file": "chromium-light-phone--search-dims-the-current-value-while-open-and-restores-it-on-Escape--open-value.json",
+          "sha256": "f39b96abd4cf1d5a0d878bbc9f4857aac3b10552d60161c3e17d3ad1aa5eff46"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2147
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape--antd-expiry-open-value.png",
+          "sha256": "74cd880a2ff81bdc29566792c087aea13b35e31e30a6735950ba62e2d5874adb"
+        },
+        {
+          "file": "chromium-dark-desktop--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape--orbit-expiry-open-value.png",
+          "sha256": "315a08e399999ed5eb80f226c0fe5ecf997ce61e862a5f8ce435554eaeb53a55"
+        },
+        {
+          "file": "chromium-dark-desktop--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape--open-value.json",
+          "sha256": "a376c5a5fecce2c71896ef4b360576c58eb3ab4f5ae4ed3eca39fb5c1169c166"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--account-dims-the-current-value-while-open-and-restores-it-on-Escape",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2235
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--account-dims-the-current-value-while-open-and-restores-it-on-Escape--antd-account-open-value.png",
+          "sha256": "13e508d7e96b42a075e892c3692e23ddf82d75b5278886fc831e4f5665e8ebf6"
+        },
+        {
+          "file": "chromium-dark-desktop--account-dims-the-current-value-while-open-and-restores-it-on-Escape--orbit-account-open-value.png",
+          "sha256": "90c1786a0bd17fff6c42c472e55180d8452eb7bf402692464355af781ffad004"
+        },
+        {
+          "file": "chromium-dark-desktop--account-dims-the-current-value-while-open-and-restores-it-on-Escape--open-value.json",
+          "sha256": "771516a0093a6a3463d94d154ae39113dac4cc0346a59599ee12a145e70c0e9d"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--search-dims-the-current-value-while-open-and-restores-it-on-Escape",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2058
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--search-dims-the-current-value-while-open-and-restores-it-on-Escape--antd-search-open-value.png",
+          "sha256": "71d754d58bfabff0ff74b53b76daae5540f521f9af30f8cd2c44d3e0cea48857"
+        },
+        {
+          "file": "chromium-dark-desktop--search-dims-the-current-value-while-open-and-restores-it-on-Escape--orbit-search-open-value.png",
+          "sha256": "d8b2a1dc0a7e3f514f9701d956b546d591874aec4e989fd4f53eb3647ead88ec"
+        },
+        {
+          "file": "chromium-dark-desktop--search-dims-the-current-value-while-open-and-restores-it-on-Escape--open-value.json",
+          "sha256": "a376c5a5fecce2c71896ef4b360576c58eb3ab4f5ae4ed3eca39fb5c1169c166"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2177
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape--antd-expiry-open-value.png",
+          "sha256": "1d6c871483dc93495bd9f5bb44ebb048862e3daf3a3ad2b50bbdaf597a56c47f"
+        },
+        {
+          "file": "chromium-dark-phone--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape--orbit-expiry-open-value.png",
+          "sha256": "c6fcc8b1eb99e929339caa06fc944aef1802a47dd0709d16e8ca5094be86a12f"
+        },
+        {
+          "file": "chromium-dark-phone--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape--open-value.json",
+          "sha256": "a376c5a5fecce2c71896ef4b360576c58eb3ab4f5ae4ed3eca39fb5c1169c166"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--account-dims-the-current-value-while-open-and-restores-it-on-Escape",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2088
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--account-dims-the-current-value-while-open-and-restores-it-on-Escape--antd-account-open-value.png",
+          "sha256": "7185140e375295a310af081f2ecbc544d698a9b69355435cb0983f2fe4c8d328"
+        },
+        {
+          "file": "chromium-dark-phone--account-dims-the-current-value-while-open-and-restores-it-on-Escape--orbit-account-open-value.png",
+          "sha256": "19307fd7214b8ee7a35696b766efc5b1db87dc08f8a8b1493e59fed2d586c20e"
+        },
+        {
+          "file": "chromium-dark-phone--account-dims-the-current-value-while-open-and-restores-it-on-Escape--open-value.json",
+          "sha256": "771516a0093a6a3463d94d154ae39113dac4cc0346a59599ee12a145e70c0e9d"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--search-dims-the-current-value-while-open-and-restores-it-on-Escape",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2133
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--search-dims-the-current-value-while-open-and-restores-it-on-Escape--antd-search-open-value.png",
+          "sha256": "4d491252b6d002a678aac5690f8c5597da8665f5a6b5d0185b8242f971235afe"
+        },
+        {
+          "file": "chromium-dark-phone--search-dims-the-current-value-while-open-and-restores-it-on-Escape--orbit-search-open-value.png",
+          "sha256": "45ef56679f4747b902061e1c792e4db15a6321b9033e45bd689fa5c1bff575a0"
+        },
+        {
+          "file": "chromium-dark-phone--search-dims-the-current-value-while-open-and-restores-it-on-Escape--open-value.json",
+          "sha256": "a376c5a5fecce2c71896ef4b360576c58eb3ab4f5ae4ed3eca39fb5c1169c166"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2138
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape--antd-expiry-open-value.png",
+          "sha256": "2bb5161b4df211062cb84b85b7401b1c2cf8df28525d6d3f0270228239cb8cdc"
+        },
+        {
+          "file": "webkit-light-desktop--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape--orbit-expiry-open-value.png",
+          "sha256": "4f6ece31f692a1766660d4a8311dc477a474e1b634c6d963cb0b77b9088df7d7"
+        },
+        {
+          "file": "webkit-light-desktop--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape--open-value.json",
+          "sha256": "f39b96abd4cf1d5a0d878bbc9f4857aac3b10552d60161c3e17d3ad1aa5eff46"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--account-dims-the-current-value-while-open-and-restores-it-on-Escape",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1951
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--account-dims-the-current-value-while-open-and-restores-it-on-Escape--antd-account-open-value.png",
+          "sha256": "1f83fd642360363370badbc33d8478399a9f5f4077526b39860ee8edb0b389e5"
+        },
+        {
+          "file": "webkit-light-desktop--account-dims-the-current-value-while-open-and-restores-it-on-Escape--orbit-account-open-value.png",
+          "sha256": "52ff55e988e7b3d6a5895f2e7b18049e67c5b0c70a184bed1c3460fde92edb82"
+        },
+        {
+          "file": "webkit-light-desktop--account-dims-the-current-value-while-open-and-restores-it-on-Escape--open-value.json",
+          "sha256": "fc5f2b245a0c5c98f3fbef3f39b9db54b48c5896b27eed0b32cc490f26b736bc"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--search-dims-the-current-value-while-open-and-restores-it-on-Escape",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1891
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--search-dims-the-current-value-while-open-and-restores-it-on-Escape--antd-search-open-value.png",
+          "sha256": "587d06b8d4f5f5b68363e6f546c70e799536b1c7c625a773deeffc45d541fdbf"
+        },
+        {
+          "file": "webkit-light-desktop--search-dims-the-current-value-while-open-and-restores-it-on-Escape--orbit-search-open-value.png",
+          "sha256": "587d06b8d4f5f5b68363e6f546c70e799536b1c7c625a773deeffc45d541fdbf"
+        },
+        {
+          "file": "webkit-light-desktop--search-dims-the-current-value-while-open-and-restores-it-on-Escape--open-value.json",
+          "sha256": "f39b96abd4cf1d5a0d878bbc9f4857aac3b10552d60161c3e17d3ad1aa5eff46"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1835
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape--antd-expiry-open-value.png",
+          "sha256": "e77fc21c5b457b067bd9d98920afe0b98db10d02bb6325f6c7f06c755d78bd51"
+        },
+        {
+          "file": "webkit-light-phone--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape--orbit-expiry-open-value.png",
+          "sha256": "12f8c1c2e7d14f0a373f62b9c23c67d4d0aa9afa7371ee76ad1118790304a099"
+        },
+        {
+          "file": "webkit-light-phone--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape--open-value.json",
+          "sha256": "f39b96abd4cf1d5a0d878bbc9f4857aac3b10552d60161c3e17d3ad1aa5eff46"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--account-dims-the-current-value-while-open-and-restores-it-on-Escape",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2234
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--account-dims-the-current-value-while-open-and-restores-it-on-Escape--antd-account-open-value.png",
+          "sha256": "d848997ce6223468c4de3210e8feea4835623575ae119fddfd617c257aaeb021"
+        },
+        {
+          "file": "webkit-light-phone--account-dims-the-current-value-while-open-and-restores-it-on-Escape--orbit-account-open-value.png",
+          "sha256": "abe20444a90b1ade73a94be8feafa61f5b061ba1437253b1bfe561fe6758a228"
+        },
+        {
+          "file": "webkit-light-phone--account-dims-the-current-value-while-open-and-restores-it-on-Escape--open-value.json",
+          "sha256": "fc5f2b245a0c5c98f3fbef3f39b9db54b48c5896b27eed0b32cc490f26b736bc"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--search-dims-the-current-value-while-open-and-restores-it-on-Escape",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1665
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--search-dims-the-current-value-while-open-and-restores-it-on-Escape--antd-search-open-value.png",
+          "sha256": "4900555d65b441e0fd5559d43b698cfa716f28d2d7733d10759fb463178253ee"
+        },
+        {
+          "file": "webkit-light-phone--search-dims-the-current-value-while-open-and-restores-it-on-Escape--orbit-search-open-value.png",
+          "sha256": "4900555d65b441e0fd5559d43b698cfa716f28d2d7733d10759fb463178253ee"
+        },
+        {
+          "file": "webkit-light-phone--search-dims-the-current-value-while-open-and-restores-it-on-Escape--open-value.json",
+          "sha256": "f39b96abd4cf1d5a0d878bbc9f4857aac3b10552d60161c3e17d3ad1aa5eff46"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1870
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape--antd-expiry-open-value.png",
+          "sha256": "5a4ecabedd5483a9f63de864aaf96050c410b427ef0956c4e7259b8226899a20"
+        },
+        {
+          "file": "webkit-dark-desktop--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape--orbit-expiry-open-value.png",
+          "sha256": "1acb6db49c3bc036a5d692afd1aaaabbd1a6014629589e8e11d9b24c7d89787a"
+        },
+        {
+          "file": "webkit-dark-desktop--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape--open-value.json",
+          "sha256": "a376c5a5fecce2c71896ef4b360576c58eb3ab4f5ae4ed3eca39fb5c1169c166"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--account-dims-the-current-value-while-open-and-restores-it-on-Escape",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1833
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--account-dims-the-current-value-while-open-and-restores-it-on-Escape--antd-account-open-value.png",
+          "sha256": "0b7a13aee2cf9300a585e473bad7da76a56c54351b65a4195ff2278bd52db9bb"
+        },
+        {
+          "file": "webkit-dark-desktop--account-dims-the-current-value-while-open-and-restores-it-on-Escape--orbit-account-open-value.png",
+          "sha256": "bc1b67295cab79dd106bf958bd9d5f0ef713a72518a182bc4a2785153157660b"
+        },
+        {
+          "file": "webkit-dark-desktop--account-dims-the-current-value-while-open-and-restores-it-on-Escape--open-value.json",
+          "sha256": "771516a0093a6a3463d94d154ae39113dac4cc0346a59599ee12a145e70c0e9d"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--search-dims-the-current-value-while-open-and-restores-it-on-Escape",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1780
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--search-dims-the-current-value-while-open-and-restores-it-on-Escape--antd-search-open-value.png",
+          "sha256": "dbf4901789fc204c0fe9ba67d306906094577b49571ea592fac48cda551ba887"
+        },
+        {
+          "file": "webkit-dark-desktop--search-dims-the-current-value-while-open-and-restores-it-on-Escape--orbit-search-open-value.png",
+          "sha256": "ecef1c54c17abca089c9805e598c06b1a66b4ad002cf10e5a99bdd8765e297b3"
+        },
+        {
+          "file": "webkit-dark-desktop--search-dims-the-current-value-while-open-and-restores-it-on-Escape--open-value.json",
+          "sha256": "a376c5a5fecce2c71896ef4b360576c58eb3ab4f5ae4ed3eca39fb5c1169c166"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1821
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape--antd-expiry-open-value.png",
+          "sha256": "07d3cb310b1b14f972ca4d3a493f9448c89de6951b0ea397e2ec1e737b80bb8d"
+        },
+        {
+          "file": "webkit-dark-phone--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape--orbit-expiry-open-value.png",
+          "sha256": "058d66c8828d7e46f79f7ee45839b87455dacec4940736ec53e3bfdf764cbfe2"
+        },
+        {
+          "file": "webkit-dark-phone--expiry-dims-the-current-value-while-open-and-restores-it-on-Escape--open-value.json",
+          "sha256": "a376c5a5fecce2c71896ef4b360576c58eb3ab4f5ae4ed3eca39fb5c1169c166"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--account-dims-the-current-value-while-open-and-restores-it-on-Escape",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1756
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--account-dims-the-current-value-while-open-and-restores-it-on-Escape--antd-account-open-value.png",
+          "sha256": "5cfc00127579302188d238c289ff0237c088d1c8afeaf674f0f198292eb6b7e3"
+        },
+        {
+          "file": "webkit-dark-phone--account-dims-the-current-value-while-open-and-restores-it-on-Escape--orbit-account-open-value.png",
+          "sha256": "d0df6fc4d14a86294cbe366174c5be638bdd01b9e257bd1bb0583d804c0dd75e"
+        },
+        {
+          "file": "webkit-dark-phone--account-dims-the-current-value-while-open-and-restores-it-on-Escape--open-value.json",
+          "sha256": "771516a0093a6a3463d94d154ae39113dac4cc0346a59599ee12a145e70c0e9d"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--search-dims-the-current-value-while-open-and-restores-it-on-Escape",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1743
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--search-dims-the-current-value-while-open-and-restores-it-on-Escape--antd-search-open-value.png",
+          "sha256": "d23dcbd7b07cdce003f8fae2c5ac0677a7ff75ccc92c3245080e25fd9334b2ec"
+        },
+        {
+          "file": "webkit-dark-phone--search-dims-the-current-value-while-open-and-restores-it-on-Escape--orbit-search-open-value.png",
+          "sha256": "288573fef2e199b97f48b21b22144a8cc8b3c4a474526ff9d4db7a74d0b55635"
+        },
+        {
+          "file": "webkit-dark-phone--search-dims-the-current-value-while-open-and-restores-it-on-Escape--open-value.json",
+          "sha256": "a376c5a5fecce2c71896ef4b360576c58eb3ab4f5ae4ed3eca39fb5c1169c166"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,79 @@
+[WebServer] (node:374995) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 4 tests using 1 worker
+
+(node:375074) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 [chromium-light-desktop] › ../../../../tmp/promotion-toast-mechanical-reference/src/web/ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (2.2s)
+(node:375181) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  2 [chromium-light-desktop] › ../../../../tmp/promotion-toast-mechanical-reference/src/web/ui-migration/toasts-promotion.browser.mjs:71:1 › clear retains the last shape for exactly 250ms but immediately blocks focus and actions (969ms)
+(node:375352) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  3 [webkit-dark-phone] › ../../../../tmp/promotion-toast-mechanical-reference/src/web/ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion (1.7s)
+(node:375564) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  4 [webkit-dark-phone] › ../../../../tmp/promotion-toast-mechanical-reference/src/web/ui-migration/toasts-promotion.browser.mjs:71:1 › clear retains the last shape for exactly 250ms but immediately blocks focus and actions (860ms)
+
+
+  1) [chromium-light-desktop] › ../../../../tmp/promotion-toast-mechanical-reference/src/web/ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion 
+
+    Error: entry delay must not skip the new exit
+
+    expect(received).toBeGreaterThan(expected)
+
+    Expected: > 0.6
+    Received:   0.109166
+
+      57 |     expect(connected.length).toBeGreaterThan(3);
+      58 |     expect(connected[0].t).toBeLessThan(80);
+    > 59 |     expect(connected[0].opacity, 'entry delay must not skip the new exit').toBeGreaterThan(0.6);
+         |                                                                            ^
+      60 |     expect(connected.every((s) => s.inert && s.hidden === 'true' && s.sameCard)).toBe(true);
+      61 |     expect(connected.every((s) => s.animation === (motion === 'reduce' ? 'orbit-toast-fade' : 'orbit-toast-exit'))).toBe(true);
+      62 |     expect(new Set(connected.map((s) => s.owner)).size).toBe(2);
+        at /tmp/promotion-toast-mechanical-reference/src/web/ui-migration/toasts-promotion.browser.mjs:59:76
+
+    Error Context: ../../../../tmp/promotion-toast-mechanical-reference/src/web/.toasts-results/toasts-promotion.browser.m-cbd2c-s-with-no-preference-motion-chromium-light-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../tmp/promotion-toast-mechanical-reference/src/web/.toasts-results/toasts-promotion.browser.m-cbd2c-s-with-no-preference-motion-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../tmp/promotion-toast-mechanical-reference/src/web/.toasts-results/toasts-promotion.browser.m-cbd2c-s-with-no-preference-motion-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [webkit-dark-phone] › ../../../../tmp/promotion-toast-mechanical-reference/src/web/ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion 
+
+    Error: entry delay must not skip the new exit
+
+    expect(received).toBeGreaterThan(expected)
+
+    Expected: > 0.6
+    Received:   0.226984
+
+      57 |     expect(connected.length).toBeGreaterThan(3);
+      58 |     expect(connected[0].t).toBeLessThan(80);
+    > 59 |     expect(connected[0].opacity, 'entry delay must not skip the new exit').toBeGreaterThan(0.6);
+         |                                                                            ^
+      60 |     expect(connected.every((s) => s.inert && s.hidden === 'true' && s.sameCard)).toBe(true);
+      61 |     expect(connected.every((s) => s.animation === (motion === 'reduce' ? 'orbit-toast-fade' : 'orbit-toast-exit'))).toBe(true);
+      62 |     expect(new Set(connected.map((s) => s.owner)).size).toBe(2);
+        at /tmp/promotion-toast-mechanical-reference/src/web/ui-migration/toasts-promotion.browser.mjs:59:76
+
+    Error Context: ../../../../tmp/promotion-toast-mechanical-reference/src/web/.toasts-results/toasts-promotion.browser.m-cbd2c-s-with-no-preference-motion-webkit-dark-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../tmp/promotion-toast-mechanical-reference/src/web/.toasts-results/toasts-promotion.browser.m-cbd2c-s-with-no-preference-motion-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../tmp/promotion-toast-mechanical-reference/src/web/.toasts-results/toasts-promotion.browser.m-cbd2c-s-with-no-preference-motion-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2 failed
+    [chromium-light-desktop] › ../../../../tmp/promotion-toast-mechanical-reference/src/web/ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion 
+    [webkit-dark-phone] › ../../../../tmp/promotion-toast-mechanical-reference/src/web/ui-migration/toasts-promotion.browser.mjs:18:3 › exit keeps its own native progress through modal transfers with no-preference motion 
+  2 passed (7.8s)
