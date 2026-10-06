@@ -130,6 +130,14 @@ export function patDeclaration(reflector: Reflector, handler: Function, controll
   return { kind: 'UNDECLARED' };
 }
 
+/**
+ * The 403 that refuses a token something it may not do: everything JwtAuthGuard refuses a verified
+ * token, and a field only the owner sets (`refuseOwnerFieldsToToken`). A class of its own so the
+ * request audit can tell a token reaching past its grant from every other 403 a route answers, and
+ * record it as `pat.request.denied` with its code (§6.4). Its body is the one the caller is shown.
+ */
+export class PatRefusal extends ForbiddenException {}
+
 /** The 403 a forbidden route answers a token with. */
 export function patForbiddenBody(reason: PatForbiddenReason) {
   return {
@@ -154,7 +162,7 @@ export function refuseOwnerFieldsToToken(credential: AuthCredential | undefined,
   const sent = Object.keys(fields).filter((field) => fields[field] !== undefined);
   if (sent.length === 0) return;
   const one = sent.length === 1;
-  throw new ForbiddenException({
+  throw new PatRefusal({
     ...patForbiddenBody('OWNER_INTERACTIVE'),
     message: `${sent.join(', ')} ${one ? 'is' : 'are'} the account owner's own decision, made signed in to Orbit; `
       + `an access token cannot set ${one ? 'it' : 'them'}, and nothing this request carried was written`,
