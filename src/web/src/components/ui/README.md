@@ -22,6 +22,9 @@
 | `Switch` | 必填 checked、onCheckedChange(boolean)，size="small/middle"、disabled、loading；使用 aria-label 或 aria-labelledby 命名，支持 name/value/form 和原生 input ref。 |
 | `Badge` | 原生 span 状态标签（替代 Tag），tone="default/info/success/warning/error/blue"、icon、children。使用可读文字表达状态。 |
 | `Spinner` | 原生 span，size="small/middle"（14/20px），role=status、默认 aria-label="Loading"；嵌入已有加载状态时可设 aria-hidden，避免重复播报。 |
+| `Avatar` | 原生 span 的圆形首字头像：`size`（px，默认 32）与文字 children，颜色/字号由调用方 style 给出。1px 透明边框、内容居中、行高为字号的 1.5714 倍。只覆盖当前在用的文字头像，不含图片与加载失败回退。 |
+| `Alert` | role=alert 的状态块：`type="error"`（目前唯一在用的语气）、`title`、`description`。带说明时 20px/24px 内边距、8px 圆角、24px 图标、16px 标题。 |
+| `Segmented` | radiogroup 分段切换：受控 `value`/`onValueChange`、`options`（value/label/disabled）、aria-label。只有任务面板在用的紧凑尺寸（2px 轨道、20px 项、7px 文字内边距）。切换时选中块从旧项滑到新项（0.3s），减少动态效果时直接切换；方向键在项间移动并选中，选中项是唯一的 Tab 停留点。 |
 
 Button、Checkbox、Radio、Switch 的交互封装 Base UI；文本输入与标签/加载图形使用原生语义。Checkbox/Radio/Switch 的值由业务持有，公共 API 不提供 defaultChecked/defaultValue；需要 reset 的表单由父级重置受控值。Checkbox/Radio 的 className/style 指向标签，其他 DOM 属性指向可聚焦控件，input ref 的 focus 由 Base UI 转交可访问控件。不要读取隐藏 input 或第三方 DOM 结构。
 
@@ -43,6 +46,8 @@ Button、Checkbox、Radio、Switch 的交互封装 Base UI；文本输入与标�
 - 默认聚焦弹层容器，避免手机打开时自动弹出软键盘；initialFocus 可指定原生 ref。默认返回先前焦点；从菜单、触摸入口或会卸载的节点打开时，传 `returnFocus` 指向稳定的触发按钮。不能通过读取第三方 DOM 找触发器。
 - 默认关闭后卸载正文；`keepMounted` 适用于需保留未提交表单值的场景，关闭时隐藏且退出可访问树。业务页面迁移时明确选择其现有生命周期。
 - ConfirmDialog：`onConfirm` 返回 Promise 时自动 pending，成功调用 `onClose(true)`；取消/Esc 调用 `onClose(false)`；遮罩不关闭。默认聚焦 Cancel。提交期间按钮/取消/Esc均被锁住，同一事件轮内的重复提交也会被阻止。throw/reject 会保留弹窗，以 role=alert 显示错误并恢复重试/取消；业务已经有 toast 时仍由业务保留。必须返回 mutateAsync/请求 Promise，不能用返回 void 的 mutate 冒充可等待提交。
+
+`Popconfirm` 是锚定的小确认浮层（替代旧 Popconfirm，与模态 ConfirmDialog 并存）：`trigger` 为触发按钮；没有按钮时（如分享弹窗从菜单项发起的“关闭链接”）传 `anchor` 并受控 `open/onOpenChange`。`title`、`description`、`confirmText`/`cancelText`、`danger`、`confirmLoading`。`onConfirm` 返回 Promise 时确认键 loading，resolve 后关闭、reject 时保持打开；返回其它值时立即关闭（与旧组件的 onConfirm 约定相同）。定位、箭头、阴影与 Popover 相同，打开时聚焦浮层，Esc/外部点击关闭，`returnFocus` 指定关闭后的焦点；内容保留旧样式：警告图标、粗体标题、4px 间隔的说明、右对齐 8px 间距的小号按钮。
 
 命令式入口是局部 `useConfirm()`，返回 `[confirm, holder]`。holder 放在调用处的上下文和所属 Dialog/Drawer 内，不新增全站 Provider、静态单例或 AntD modal API 仿制。confirm(options) 返回 Promise<boolean>；同一个 hook 的重复调用复用当前确认及 Promise，不排队叠加窗口；宿主卸载时未完成的确认结果为 false，已经发出的业务请求不会被组件取消。若请求需要取消，由业务自行持有 AbortController。
 
@@ -91,6 +96,8 @@ useOverlayChild 按受控 open 登记旧子层，Esc 先交给最上层旧弹层
 
 `main.tsx` 按 `antd/dist/reset.css` → `index.css` → `ui/foundation.css` 加载。`foundation.css` 只声明变量，不引入 reset、全局 button/input 样式、CSS layer 或新的 stacking context；控件样式限定自己的 `.orbit-*` 类或 CSS module。图标继续使用 `@ant-design/icons`。
 
+行高：Dialog/Drawer 外壳与 Checkbox/Radio/Switch 标签使用无单位的 1.5714（14px 时即 22px），其中字号不同的说明文字按自身字号计算行高，与被替换组件相同。业务样式（index.css）覆盖 Orbit 组件类时，要用组件类限定提高优先级（如 `.share-layer-check.orbit-choice`），因为组件样式在 index.css 之后加载。
+
 颜色优先直接用现有 `--bg-base/raised`、`--text-1/2/3`、`--border`、`--brand` 和状态变量。新增 `--orbit-*` 仅补足控件真实角色；**品牌色与主控件填充不是同一值**：暗色 `--brand=#5b8cff`，主控件实测为 `#2e62dc`，hover 为 `#5585e8`。禁用色和焦点轮廓也来自计算样式，不能从 seed 推测。
 
 `--orbit-border-split` 保留旧 Drawer 的半透明分隔线计算值：light 为 `rgba(17, 42, 80, 0.08)`，dark 为 `rgba(223, 223, 226, 0.05)`。标题底边和 footer 顶边均为1px solid；透明色在 elevated 表面上的合成结果也纳入真实截图对照。
@@ -111,6 +118,12 @@ P2.2 提供 `Menu`、`Popover`、`Tooltip`、`Select`、`Combobox` 和 `MultiSel
 - `Popover` 用 `trigger/title/children`；无标题传 null。默认点击打开，可设 `openOnHover`；`initialFocus/returnFocus` 遵循弹层约定。内容内可直接放 Select/Combobox，Esc 逐层关闭。`Tooltip` 用 `children/content`，保留触发器原有 aria-describedby；disabled 原生按钮需用可聚焦 span 包裹，让提示可由键盘获得。
 - `Select` 与 `Combobox` 共用字符串 `value | null`、`options` 和 `onValueChange`。空字符串是有效选择（账号 Automatic）；null 表示未选择/显式清除。options 为 `{value,label,disabled?}` 或 `{label,options}` 分组；label 为搜索/无障碍文本，复杂展示使用 `renderOption/renderValue`。支持 small/middle、outlined/borderless、disabled/loading、placeholder/clearable、emptyContent、showArrow 和 matchTriggerWidth。
 - 需要文本检索时使用 `Combobox`；默认按 label 忽略大小写匹配。修改查询和 Esc 不清掉已选值；显式清除才回调 null。远端搜索设置 `filter={false}` 与 `onSearch`，由业务处理请求/过期响应；`value={null}` 可用于选择后重置的动作入口。已选标签通过 aria-describedby 暴露给辅助技术。ref 分别指向 Select 按钮和 Combobox 输入框，name 支持原生表单值。
+
+P3.2 试点据真实页面补齐：Select 家族根类名为 `.orbit-select`（原 `.orbit-choice` 与 Checkbox/Radio 的标签类同名，两份样式同时加载时互相套用边框与内边距）；loading 时在箭头位置显示旋转弧形图标，可搜索的 Combobox 打开时显示放大镜，与被替换的选择器一致；Combobox 的占位文字画在输入框旁（按文字宽度裁切），输入框在 ≤960px 提为 16px 时占位仍保持字段字号；Select 只在值真正改变时回调 `onValueChange`，重选当前项只关闭列表。
+
+Combobox 的值、占位与搜索输入框放在同一个行盒 `.orbit-combobox-field` 中（与被替换选择器的 content 盒相同）：行高来自隐藏的不换行空格，同时给控件提供文字基线；输入框由 inset 撑满而非百分比高度（后者使输入文字低1px）；打开且有值时整个行盒（含业务的悬停底色）一起淡化到 .25。未选值时打开即高亮第一项，Enter 选它（旧选择器的 defaultActiveFirstOption）。
+
+浮层位置按被替换的 rc-trigger 计算：其每个 inset 向下取整（顶/左边缘 floor(锚点边+间距)，以底/右边缘定位的——在锚点上方/左侧或与锚点末端对齐——取对应 ceil），Floating UI 则四舍五入，小数部分≥.5 时会差1px，`useWholePixelOffsets` 用 Base UI 公开的 sideOffset/alignOffset 函数补齐。Menu、Select、Combobox、MultiSelect 的列表另用 `useDropdownPlacement`：与触发器起/止边对齐，超出视口时若另一边能显示更多则改对另一边，不沿触发器平移，并收窄到对齐一侧的剩余宽度（`--orbit-dropdown-room`）；`align="center"` 的菜单仍用 Base UI 平移。Popconfirm 与旧确认浮层一样贴视口边缘（无避让留白），最宽 100vw。浮层箭头仍由 Floating UI 按取整后的位置居中，与旧组件差 <0.6px。
 
 `MultiSelect` 使用字符串数组 value/onValueChange；搜索选项后保持列表打开，支持逐项移除、全清、分组和 maxTagCount。`mode="tags"`、`open={false}`、`searchValue/onSearch`、`tokenSeparators={[',', ' ']}` 对应现有邮件输入：Enter 或失焦提交尾项，输入法组合期间不提交，值去重；格式校验和分享请求仍由业务负责。Backspace 删除数组末项，即使它在折叠计数内。
 

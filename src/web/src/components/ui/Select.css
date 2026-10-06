@@ -1,34 +1,37 @@
-.orbit-choice {
+.orbit-select {
   position: relative; display: inline-flex; align-items: center; box-sizing: border-box;
   height: var(--orbit-control-height); padding: 4px 11px; color: var(--text-1); background: var(--bg-raised); border: 1px solid var(--border);
   border-radius: var(--orbit-radius); font-family: var(--orbit-font-family); font-size: 14px; line-height: 22px;
   transition: border-color .2s, box-shadow .2s;
 }
-.orbit-choice:hover { border-color: var(--orbit-control-primary-hover); }
-.orbit-choice:focus-within, .orbit-choice[data-open] { border-color: var(--orbit-control-primary); box-shadow: var(--orbit-input-focus-shadow); }
+.orbit-select:hover { border-color: var(--orbit-control-primary-hover); }
+.orbit-select:focus-within, .orbit-select[data-open] { border-color: var(--orbit-control-primary); box-shadow: var(--orbit-input-focus-shadow); }
 .orbit-select-trigger { display: flex; align-items: center; gap: 8px; width: 100%; height: 100%; padding: 0; background: transparent; border: 0; border-radius: inherit; color: inherit; font: inherit; text-align: start; cursor: pointer; outline: none; }
 .orbit-choice-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.orbit-choice:not([data-empty]) .orbit-select-trigger[aria-expanded='true'] .orbit-choice-value { opacity: .25; }
-.orbit-choice[data-empty] .orbit-choice-value, .orbit-combobox-input::placeholder { color: var(--orbit-control-disabled-text); }
+.orbit-select:not([data-empty]) .orbit-select-trigger[aria-expanded='true'] .orbit-choice-value { opacity: .25; }
+.orbit-select[data-empty] .orbit-choice-value, .orbit-combobox-input::placeholder { color: var(--orbit-control-disabled-text); }
 .orbit-choice-arrow, .orbit-combobox-toggle { flex: none; font-size: 12px; color: var(--orbit-control-disabled-text); }
 .orbit-choice-clear { position: absolute; right: 11px; top: 50%; transform: translateY(-50%); display: inline-flex; padding: 0; border: 0; border-radius: 50%; background: var(--bg-raised); color: var(--orbit-control-disabled-text); font-size: 12px; cursor: pointer; opacity: 0; }
-.orbit-choice:hover .orbit-choice-clear, .orbit-choice-clear:focus-visible { opacity: 1; }
-.orbit-choice:has(.orbit-choice-clear):hover :is(.orbit-choice-arrow, .orbit-combobox-toggle),
-.orbit-choice:has(.orbit-choice-clear:focus-visible) :is(.orbit-choice-arrow, .orbit-combobox-toggle) { visibility: hidden; }
+.orbit-select:hover .orbit-choice-clear, .orbit-choice-clear:focus-visible { opacity: 1; }
+.orbit-select:has(.orbit-choice-clear):hover :is(.orbit-choice-arrow, .orbit-combobox-toggle),
+.orbit-select:has(.orbit-choice-clear:focus-visible) :is(.orbit-choice-arrow, .orbit-combobox-toggle) { visibility: hidden; }
 @media (hover: none) {
   .orbit-choice-clear { opacity: 1; }
-  .orbit-choice:has(.orbit-choice-clear) :is(.orbit-choice-arrow, .orbit-combobox-toggle) { visibility: hidden; }
+  .orbit-select:has(.orbit-choice-clear) :is(.orbit-choice-arrow, .orbit-combobox-toggle) { visibility: hidden; }
 }
 .orbit-choice-clear:hover { color: var(--text-2); }
 .orbit-choice-clear:focus-visible { outline: 2px solid var(--orbit-focus-color); outline-offset: 2px; }
-.orbit-choice[data-size='small'] { height: 24px; padding: 0 7px; border-radius: 4px; }
-.orbit-choice[data-size='small'] .orbit-choice-clear { right: 7px; }
-.orbit-choice[data-variant='borderless'] { background: transparent; border-color: transparent; box-shadow: none; }
-.orbit-choice[data-disabled] { background: var(--orbit-control-disabled-bg); color: var(--orbit-control-disabled-text); cursor: not-allowed; border-color: var(--orbit-control-disabled-border); box-shadow: none; }
-.orbit-choice[data-disabled] .orbit-select-trigger { cursor: not-allowed; }
-.orbit-choice[data-disabled][data-variant='borderless'] { background: transparent; border-color: transparent; }
-.orbit-choice-positioner[data-match-width='true'] { width: var(--anchor-width); }
-.orbit-choice-positioner { min-width: var(--anchor-width); max-width: var(--available-width); }
+.orbit-select[data-size='small'] { height: 24px; padding: 0 7px; border-radius: 4px; }
+.orbit-select[data-size='small'] .orbit-choice-clear { right: 7px; }
+.orbit-select[data-variant='borderless'] { background: transparent; border-color: transparent; box-shadow: none; }
+/* The replaced borderless select showed focus, and its open list, as a 1px outline inside its box. */
+.orbit-select[data-variant='borderless']:not([data-disabled]):is(:focus-within, [data-open]) { outline: 1px solid var(--orbit-control-primary); outline-offset: -1px; transition: outline-offset 0s, outline 0s; }
+.orbit-select[data-disabled] { background: var(--orbit-control-disabled-bg); color: var(--orbit-control-disabled-text); cursor: not-allowed; border-color: var(--orbit-control-disabled-border); box-shadow: none; }
+.orbit-select[data-disabled] .orbit-select-trigger { cursor: not-allowed; }
+.orbit-select[data-disabled][data-variant='borderless'] { background: transparent; border-color: transparent; }
+/* The exact field width (Base UI snaps --anchor-width to whole pixels), as the replaced list used. */
+.orbit-choice-positioner[data-match-width='true'] { width: var(--orbit-choice-anchor-width, var(--anchor-width)); }
+.orbit-choice-positioner { min-width: var(--orbit-choice-anchor-width, var(--anchor-width)); max-width: var(--orbit-dropdown-room, var(--available-width)); }
 .orbit-select-popup { padding: 4px; }
 .orbit-select-list { max-height: min(256px, var(--available-height)); overflow-y: auto; overscroll-behavior: contain; outline: none; }
 .orbit-select-option { padding: 5px 12px; min-height: 32px; border-radius: 4px; cursor: pointer; outline: none; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -47,13 +50,22 @@
 .orbit-select-empty-image { height: 35px; margin-bottom: 8px; }
 .orbit-select-empty-image svg { height: 100%; max-width: 100%; margin: auto; }
 .orbit-combobox { padding-inline: 11px; gap: 8px; }
-.orbit-combobox-input { width: 100%; min-width: 0; height: 100%; padding: 0; border: 0; outline: none; background: transparent; color: inherit; font: inherit; line-height: 1.5714285714285714; }
-.orbit-combobox-value { position: absolute; left: 11px; right: 30px; pointer-events: none; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.orbit-combobox[data-open] .orbit-combobox-value { opacity: .25; }
+/* The replaced select's content box: the value or placeholder in flow (an unsized control fits its
+   text), a hidden no-break space keeping one line and the text baseline when both are absent, and the
+   search input laid over that line. */
+.orbit-combobox-field { position: relative; display: flex; flex: 1; min-width: 0; overflow: hidden; }
+.orbit-combobox-field::before { content: '\a0'; width: 0; overflow: hidden; }
+/* Stretched by its insets, as the replaced input was: a percentage height draws the typed text a pixel off. */
+.orbit-combobox-input { position: absolute; inset: 0; width: 100%; min-width: 0; padding: 0; border: 0; outline: none; background: transparent; color: inherit; font: inherit; line-height: 1.5714285714285714; }
+.orbit-combobox-value { flex: auto; min-width: 0; pointer-events: none; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* Open, a chosen value fades with its whole line box; the placeholder and typed text do not. */
+.orbit-combobox-field[data-search] > .orbit-combobox-value { visibility: hidden; }
+.orbit-combobox[data-open] .orbit-combobox-field:not([data-search]):has(> .orbit-combobox-value:not(.orbit-combobox-placeholder)) { opacity: .25; }
+/* Sized to its text, as the replaced placeholder block was: its last glyph is clipped where the text ends. */
+.orbit-combobox-placeholder { flex: 0 1 auto; color: var(--orbit-control-disabled-text); }
 .orbit-combobox-toggle { display: inline-flex; padding: 0; border: 0; background: none; cursor: pointer; }
 .orbit-combobox[data-size='small'] { padding-inline: 7px; }
-.orbit-combobox[data-size='small'] .orbit-combobox-value { left: 7px; }
-@media (max-width: 600px) { .orbit-combobox-input { font-size: 16px; } }
+@media (max-width: 960px) { .orbit-combobox-input { font-size: 16px; } }
 .orbit-multi { height: auto; min-height: 32px; padding: 1px 11px 1px 3px; gap: 6px; }
 .orbit-multi[data-size='small'] { height: auto; min-height: 24px; padding: 1px 7px 1px 3px; }
 .orbit-multi-chips { position: relative; display: flex; flex: 1; flex-wrap: wrap; align-items: center; min-width: 0; line-height: 1; }
@@ -68,7 +80,7 @@
 .orbit-multi .orbit-combobox-input { position: absolute; inset: 0; font: inherit; line-height: 28px; min-width: 0; }
 .orbit-multi[data-size='small'] .orbit-multi-input-wrap { height: 20px; }
 .orbit-multi[data-size='small'] .orbit-combobox-input { line-height: 20px; }
-@media (max-width: 600px) { .orbit-multi .orbit-combobox-input, .orbit-multi-measure { font-size: 16px; } }
+@media (max-width: 960px) { .orbit-multi .orbit-combobox-input, .orbit-multi-measure { font-size: 16px; } }
 .orbit-multi-placeholder { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: var(--orbit-control-disabled-text); pointer-events: none; white-space: nowrap; }
 .orbit-multi-option { position: relative; }
 .orbit-multi-option .orbit-select-option-label { padding-right: 20px; }
