@@ -466,6 +466,11 @@ public enum ProjectDone {
     public static let needsCallDetail =
         "Orbit saw no merge for it. The coordinator checked main has it and asked you to record the "
         + "project done."
+    /// `WHY_NOT_DONE_NOT_MET_YET` — an unmet criterion's state: its work has not happened, so its
+    /// landing lane (no receipt, no code) says nothing yet.
+    public static let notMetYet = "Not met yet"
+    /// `WHY_NOT_DONE_NOT_MET_DETAIL`.
+    public static let notMetDetail = "Its work has not met this criterion yet."
 
     // Status, rows and the project page.
 
@@ -631,12 +636,19 @@ public enum ProjectDone {
         "\(showAll) \(count)"
     }
 
-    /// The card's meta line: which project, and who asked when — or that nobody did. `askedAgo` is
-    /// the platform's own clock words for the request (`RelativeTime.format`), nil for a card no
-    /// coordinator asked for.
-    public static func meta(projectTitle: String, askedAgo: String?) -> String {
-        guard let askedAgo else { return "\(projectTitle) · \(noRequestMeta)" }
-        return "\(projectTitle) · \(askedByCoordinator) · \(askedAgo)"
+    /// How long the coordinator's request has waited, from its own `waitingSince`: "waiting 25m"
+    /// (`doneRequestWaiting`, in `formatSpan`'s words — `RelativeTime.span`). Nil for an instant
+    /// this build cannot read.
+    public static func requestWaiting(_ waitingSince: String?, now: Date = Date()) -> String? {
+        guard let waitingSince, let at = RelativeTime.parse(waitingSince) else { return nil }
+        return "waiting \(RelativeTime.span(now.timeIntervalSince(at)))"
+    }
+
+    /// The card's meta line: which project, and who asked and how long it has waited — or that
+    /// nobody asked: "Aurora · asked by the coordinator · waiting 25m".
+    public static func meta(projectTitle: String, asked: Bool, waiting: String?) -> String {
+        guard asked else { return "\(projectTitle) · \(noRequestMeta)" }
+        return ([projectTitle, askedByCoordinator] + [waiting].compactMap { $0 }).joined(separator: " · ")
     }
 
     /// What the record press says: anyway while some criterion is not met.
@@ -836,8 +848,9 @@ public enum ProjectDone {
         /// Nothing: not this project's coordinator, a read that has not answered, or a server whose
         /// projection carries no counts.
         case none
-        /// "Why is this project not done?" — an OPEN, started project the projection does not call
-        /// done, and nobody has asked to record it.
+        /// "Why is this project not done?" — an OPEN, started project with criteria to be done
+        /// against, that the projection does not call done and nobody has asked to record
+        /// (`asksWhyNotDone`).
         case notDone
         /// "Is this project done?" — asked by the request named (nil when the owner is reminded
         /// without one) — or, once it is recorded, its receipt.
@@ -851,7 +864,8 @@ public enum ProjectDone {
         if request != nil || waitingKind == .recordAsDone || recorded(subject, record: record) {
             return .done(requestID: request?.itemId)
         }
-        guard subject.status == "OPEN", started == true else { return .none }
+        guard subject.status == "OPEN", started == true,
+              !(subject.derivedDone?.criteria ?? []).isEmpty else { return .none }
         return .notDone
     }
 
@@ -908,9 +922,22 @@ public enum ProjectDone {
         public var saysCoordinatorIsOnIt: Bool { !waiting.isEmpty && coordinatorOnIt }
     }
 
-    /// The Needs your call group's aside: "the coordinator asked · 4m ago".
-    public static func askedAside(_ askedAgo: String) -> String {
-        "\(coordinatorAsked.lowercased()) · \(askedAgo)"
+    /// The Needs your call group's aside: "the coordinator asked · waiting 25m".
+    public static func askedAside(waiting: String?) -> String {
+        ([coordinatorAsked.lowercased()] + [waiting].compactMap { $0 }).joined(separator: " · ")
+    }
+
+    /// One Why-not-done row's state: the landing reason of a met criterion, and "Not met yet" for
+    /// one whose work has not met it — not its landing lane, which for unfinished work describes
+    /// nothing that happened (no receipt, no code to land).
+    public static func rowState(_ criterion: ProjectDoneCriterion) -> String {
+        criterion.satisfied ? landingReasonLabel(criterion.landingReason) : notMetYet
+    }
+
+    /// …and its detail, by the group it is in.
+    public static func rowDetail(_ criterion: ProjectDoneCriterion, waitingOnWork: Bool) -> String {
+        guard criterion.satisfied else { return notMetDetail }
+        return waitingOnWork ? waitingDetail : needsCallDetail
     }
 
     /// The settled card's badge: who recorded it.

@@ -69,11 +69,11 @@ struct ProjectDoneCard: View {
     private var counts: ProjectDoneCounts? { subject.counts }
     private var gaps: [AcceptedGap] { ProjectDone.gaps(subject, request: request) }
 
-    /// How long ago the coordinator asked, in this platform's own clock words; nil for a card nobody
-    /// asked for.
-    private var askedAgo: String? {
+    /// How long the coordinator's request has waited ("waiting 25m"); nil for a card nobody asked
+    /// for, or a request whose instant this build cannot read.
+    private var waiting: String? {
         guard request != nil else { return nil }
-        return askedAt.flatMap { RelativeTime.format($0) } ?? "just now"
+        return ProjectDone.requestWaiting(askedAt)
     }
 
     private var question: some View {
@@ -96,7 +96,7 @@ struct ProjectDoneCard: View {
 
     @ViewBuilder
     private var content: some View {
-        Text(ProjectDone.meta(projectTitle: subject.title, askedAgo: askedAgo))
+        Text(ProjectDone.meta(projectTitle: subject.title, asked: request != nil, waiting: waiting))
             .font(.orbitLabel).foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
         if let request {
@@ -377,7 +377,7 @@ struct ProjectNotDoneCard: View {
                 }
                 if !why.needsCall.isEmpty {
                     group(ProjectDone.needsYourCall, why.needsCall, waiting: false,
-                          aside: askedAt.map { ProjectDone.askedAside(RelativeTime.format($0) ?? "just now") })
+                          aside: askedAt.map { ProjectDone.askedAside(waiting: ProjectDone.requestWaiting($0)) })
                 }
                 tally
                 actions(why)
@@ -417,9 +417,9 @@ struct ProjectNotDoneCard: View {
                             Text(item?.text ?? criterion.definitionId)
                                 .font(.orbitSubtext.weight(.semibold))
                                 .fixedSize(horizontal: false, vertical: true)
-                            Text(ProjectDone.landingReasonLabel(criterion.landingReason))
+                            Text(ProjectDone.rowState(criterion))
                                 .font(.orbitLabel).foregroundStyle(.secondary)
-                            Text(waiting ? ProjectDone.waitingDetail : ProjectDone.needsCallDetail)
+                            Text(ProjectDone.rowDetail(criterion, waitingOnWork: waiting))
                                 .font(.orbitLabel).foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }

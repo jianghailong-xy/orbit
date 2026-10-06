@@ -285,6 +285,53 @@ final class ProjectDoneTests: XCTestCase {
         XCTAssertTrue(ProjectDone.WhyNotDone(subject: subject, withCoordinator: 0, requested: false).coordinatorOnIt)
     }
 
+    /// An unmet criterion's row says its work has not met it — not its landing lane, which for work
+    /// still to do describes nothing that happened: "Merged outside Orbit" for a task whose branch
+    /// has no receipt yet, "No code to land" for one that has written nothing (web
+    /// `WHY_NOT_DONE_NOT_MET_YET`, the web fix of 2026-10-05). A met criterion keeps its lane.
+    func testAnUnmetCriterionSaysNotMetYetInsteadOfItsLandingLane() {
+        let unmet = ProjectDoneCriterion(definitionId: "c6", satisfied: false, landing: "UNKNOWN",
+                                         landingReason: .noReceipt)
+        let codeless = ProjectDoneCriterion(definitionId: "c7", satisfied: false, landing: "UNKNOWN",
+                                            landingReason: .codeless)
+        let merged = ProjectDoneCriterion(definitionId: "c4", satisfied: true, landing: "UNKNOWN",
+                                          landingReason: .noReceipt)
+        let branch = ProjectDoneCriterion(definitionId: "c3", satisfied: true, landing: "ON_INTEGRATION_LINE",
+                                          landingReason: .onProjectBranch)
+        XCTAssertEqual(ProjectDone.rowState(unmet), "Not met yet")
+        XCTAssertEqual(ProjectDone.rowState(codeless), "Not met yet")
+        XCTAssertEqual(ProjectDone.rowDetail(unmet, waitingOnWork: true), "Its work has not met this criterion yet.")
+        XCTAssertEqual(ProjectDone.rowState(merged), "Merged outside Orbit")
+        XCTAssertEqual(ProjectDone.rowDetail(merged, waitingOnWork: false), ProjectDone.needsCallDetail)
+        XCTAssertEqual(ProjectDone.rowState(branch), "On the project branch")
+        XCTAssertEqual(ProjectDone.rowDetail(branch, waitingOnWork: true), ProjectDone.waitingDetail)
+    }
+
+    /// The request's age, in `formatSpan`'s words beside "waiting" — the browser's
+    /// `doneRequestWaiting` — and nothing at all for an instant that cannot be read.
+    func testTheRequestSaysHowLongItHasWaited() {
+        let now = RelativeTime.parse("2026-10-05T21:00:00.000Z")!
+        XCTAssertEqual(ProjectDone.requestWaiting("2026-10-05T20:35:00.000Z", now: now), "waiting 25m")
+        XCTAssertEqual(ProjectDone.requestWaiting("2026-10-05T17:40:00.000Z", now: now), "waiting 3h 20m")
+        XCTAssertEqual(ProjectDone.requestWaiting("2026-10-05T20:59:50.000Z", now: now), "waiting 10s")
+        XCTAssertEqual(ProjectDone.requestWaiting("2026-10-05T21:00:30.000Z", now: now), "waiting 1s",
+                       "a request a little ahead of this clock has waited no time, as formatSpan says it")
+        XCTAssertNil(ProjectDone.requestWaiting("not a time", now: now))
+        XCTAssertNil(ProjectDone.requestWaiting(nil, now: now))
+    }
+
+    /// The conversation asks why a project is not done only of one with criteria to be done against
+    /// (the browser's `asksWhyNotDone`): a started project that states none has nothing to explain.
+    func testAProjectWithNoCriteriaIsNotAskedWhyItIsNotDone() {
+        let none = ProjectDoneSubject(title: "t", status: "OPEN", derivedDone: ProjectDerivedDone(
+            done: false, withheld: ["NO_CRITERIA_STATED"], criteria: [],
+            counts: ProjectDoneCounts(criteria: 0, met: 0, landed: 0, onMain: 0, byReason: [:])))
+        XCTAssertEqual(ProjectDone.slot(subject: none, request: nil, waitingKind: nil, record: nil, started: true),
+                       .none)
+        XCTAssertEqual(ProjectDone.slot(subject: closeout(), request: nil, waitingKind: nil, record: nil,
+                                        started: true), .notDone)
+    }
+
     func testUnmetCodelessWorkStaysWaitingOnWork() {
         // The browser's case: CODELESS is an outcome only once its criterion is met.
         let subject = closeout(criteria: [ProjectDoneCriterion(definitionId: "c2", satisfied: false,

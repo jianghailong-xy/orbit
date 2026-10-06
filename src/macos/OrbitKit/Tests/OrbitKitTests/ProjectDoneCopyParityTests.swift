@@ -294,9 +294,11 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         XCTAssertTrue(card.contains("{project.title} · {doneRequest ? `${PROJECT_DONE_COPY.askedByCoordinator} · "),
                       "the asked meta line drifted")
         XCTAssertTrue(card.contains(": PROJECT_DONE_COPY.noRequestMeta}"), "the unasked meta line drifted")
-        XCTAssertEqual(ProjectDone.meta(projectTitle: "Aurora", askedAgo: "4m ago"),
-                       "Aurora · asked by the coordinator · 4m ago")
-        XCTAssertEqual(ProjectDone.meta(projectTitle: "Aurora", askedAgo: nil),
+        XCTAssertEqual(ProjectDone.meta(projectTitle: "Aurora", asked: true, waiting: "waiting 4m"),
+                       "Aurora · asked by the coordinator · waiting 4m")
+        XCTAssertEqual(ProjectDone.meta(projectTitle: "Aurora", asked: true, waiting: nil),
+                       "Aurora · asked by the coordinator")
+        XCTAssertEqual(ProjectDone.meta(projectTitle: "Aurora", asked: false, waiting: "waiting 4m"),
                        "Aurora · record as done anyway")
         // Not yet… is offered only on a card the coordinator asked for, and Send stays dark empty.
         XCTAssertTrue(card.contains("{doneRequest ? (\n            <button"), "Not yet… is not tied to a request")
@@ -358,7 +360,8 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         ] {
             XCTAssertTrue(card.contains(part), "the Why-not-done card drifted: no \(part.debugDescription)")
         }
-        XCTAssertEqual(ProjectDone.askedAside("4m ago"), "the coordinator asked · 4m ago")
+        XCTAssertEqual(ProjectDone.askedAside(waiting: "waiting 4m"), "the coordinator asked · waiting 4m")
+        XCTAssertEqual(ProjectDone.askedAside(waiting: nil), "the coordinator asked")
         XCTAssertEqual(ProjectDone.settledBadge(.owner), ProjectDone.recordedByYou)
         XCTAssertEqual(ProjectDone.settledBadge(.derived), ProjectDone.recordedByOrbit)
     }

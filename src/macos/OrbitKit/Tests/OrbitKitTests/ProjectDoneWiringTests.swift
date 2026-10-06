@@ -164,7 +164,8 @@ final class ProjectDoneWiringTests: XCTestCase {
                                     to: "struct ProjectDoneGapList: View {"))
         XCTAssertTrue(done.contains("if ProjectDone.recorded(subject, record: record) {"))
         XCTAssertTrue(done.contains("ApprovalReviewLayout(title: ProjectDone.heading,"))
-        for call in ["ProjectDone.meta(projectTitle: subject.title, askedAgo: askedAgo)",
+        for call in ["ProjectDone.meta(projectTitle: subject.title, asked: request != nil, waiting: waiting)",
+                     "return ProjectDone.requestWaiting(askedAt)",
                      "Text(request.judgment)", "ProjectDone.doneWhenHead(count)",
                      "Text(ProjectDone.cardTally(counts))", "ProjectDoneGapList(subject: subject, gaps: gaps)",
                      "ProjectDone.orbitCheckedLine(counts: counts, confirmedAt: confirmedAt,",
@@ -188,8 +189,9 @@ final class ProjectDoneWiringTests: XCTestCase {
                      "title: ProjectDone.whyHeading", "group(ProjectDone.waitingOnWork, why.waiting, waiting: true,",
                      "group(ProjectDone.needsYourCall, why.needsCall, waiting: false,",
                      "Text(ProjectDone.whyNotDoneTally(subject.counts))",
-                     "ProjectDone.landingReasonLabel(criterion.landingReason)",
-                     "waiting ? ProjectDone.waitingDetail : ProjectDone.needsCallDetail",
+                     "Text(ProjectDone.rowState(criterion))",
+                     "Text(ProjectDone.rowDetail(criterion, waitingOnWork: waiting))",
+                     "ProjectDone.askedAside(waiting: ProjectDone.requestWaiting($0))",
                      "Text(ProjectDone.reviewDoneRequest)", "Text(ProjectDone.askCoordinator)",
                      "if why.saysCoordinatorIsOnIt {", "badge: ProjectDone.settledBadge(subject.doneBy))"] {
             XCTAssertTrue(why.contains(call), "the Why-not-done card no longer draws \(call)")
