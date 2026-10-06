@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -600,8 +602,10 @@ func TestUserBinSelfUpdateReplacesTheCopyInOrbitBin(t *testing.T) {
 	}))
 	defer srv.Close()
 
+	sum := sha256.Sum256(gz.Bytes())
+	manifest := Manifest{Version: "9.9.9", Assets: map[string]ManifestAsset{platformKey(): {SHA256: hex.EncodeToString(sum[:])}}}
 	var log strings.Builder
-	if !downloadAndSwap(srv.URL, platformKey(), Manifest{Version: "9.9.9"}, func(s string) { log.WriteString(s) }) {
+	if !downloadAndSwap(srv.URL, platformKey(), manifest, func(s string) { log.WriteString(s) }) {
 		t.Fatalf("downloadAndSwap failed: %s", log.String())
 	}
 	if got, _ := os.ReadFile(real); !bytes.Equal(got, release) {
