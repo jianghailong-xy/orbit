@@ -1063,9 +1063,9 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
 export const TENANT_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> = {
   'POST /tasks/:id/execute body triggerId':
     'an idempotency key the caller makes up for one press, not a thing it names: it keys only the caller\'s own '
-    + 'run receipt, (owner_id, action_kind, request_token) — tasks.service.ts:12235',
+    + 'run receipt, (owner_id, action_kind, request_token) — tasks.service.ts:12772',
   'POST /tasks/batch-execute body triggerId':
-    'the same press key, for a bulk Run: the caller\'s own receipt, keyed by owner — tasks.service.ts:12235',
+    'the same press key, for a bulk Run: the caller\'s own receipt, keyed by owner — tasks.service.ts:12772',
   'POST /push/register body installationId':
     'a phone\'s own installation id, which only that phone holds and no read hands out; a registration moves '
     + 'with the phone on purpose when it signs in as somebody else (push.controller.ts:32), the device token alike',

@@ -128,7 +128,7 @@ function upload(server: Apiserver, method: string, path: string, bearer: string,
           } catch {
             json = null;
           }
-          resolve({ status: res.statusCode ?? 0, json, text });
+          resolve({ status: res.statusCode ?? 0, json, text, headers: res.headers });
         });
       },
     );
