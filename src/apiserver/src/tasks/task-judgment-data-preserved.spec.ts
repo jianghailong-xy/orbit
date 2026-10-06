@@ -1935,6 +1935,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // trigger freezing the new column. 0155's guard is not replaced; no task, project,
       // acceptance or DONE fence object is named, and no row is written or backfilled.
       '0386_project_handoff_move_request',
+      // Antigravity accounts (0387): one nullable TEXT with no default on `workspace`
+      // (`antigravity_account`, 0309's `claude_account` exactly), and on `session` one nullable TEXT
+      // with no default (`antigravity_account`) and one BOOLEAN NOT NULL DEFAULT false
+      // (`antigravity_account_pinned`) — 0336's pair exactly, catalog-only as a constant default is —
+      // with no index, no CHECK and no foreign key, and nothing else. `task`, `project` and
+      // `project_acceptance_criterion_definition` are not named, no `project_acceptance_*` object nor
+      // any of the six preserved triggers/functions is, and no function, trigger, enum or type is
+      // created — so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: nothing
+      // is backfilled.
+      '0387_antigravity_account',
       // `orbit login` through the browser (0388): one new table, pat_device_login, with its own
       // CHECKs, indexes and one foreign key to `user` (ON DELETE CASCADE). No existing table,
       // column, constraint, function, trigger or type is altered or dropped; no task, project,
