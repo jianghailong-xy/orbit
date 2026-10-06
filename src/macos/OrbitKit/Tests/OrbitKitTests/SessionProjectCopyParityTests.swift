@@ -47,6 +47,10 @@ final class SessionProjectCopyParityTests: XCTestCase {
             ("unpin", SessionProjectCopy.unpin),
             ("move", SessionProjectCopy.move),
             ("coordinatorSection", SessionProjectCopy.coordinatorSection),
+            ("pageSubtitleLoading", SessionProjectCopy.pageSubtitleLoading),
+            ("startReview", SessionProjectCopy.startReview),
+            ("startNotAsked", SessionProjectCopy.startNotAsked),
+            ("startHint", SessionProjectCopy.startHint),
         ]
         for (key, copy) in constants {
             XCTAssertTrue(web.contains("\(key): '\(copy)',"),
@@ -77,11 +81,28 @@ final class SessionProjectCopyParityTests: XCTestCase {
                 .replacingOccurrences(of: "23", with: "${done}")
                 .replacingOccurrences(of: "47", with: "${total}")
                 .replacingOccurrences(of: "61", with: "${running}")),
+            ("startAsked: (ago: string)",
+             SessionProjectCopy.startAsked("AGO").replacingOccurrences(of: "AGO", with: "${ago}")),
         ]
         for (signature, copy) in templates {
             XCTAssertTrue(web.contains("\(signature) => `\(copy)`,"),
                           "\(signature): the web's template drifted from \(copy.debugDescription)")
         }
+    }
+
+    /// The start row's two sentences that branch, held to the web's spelling of each branch.
+    func testTheNotStartedLineAndTheSuggestionAreTheWebsOwn() throws {
+        let web = try web()
+        XCTAssertTrue(web.contains("pageNotStarted: (tasks: number) => `Not started · ${tasks} ${tasks === 1 ? 'task' : 'tasks'}`,"))
+        XCTAssertEqual(SessionProjectCopy.pageNotStarted(tasks: 1), "Not started · 1 task")
+        XCTAssertEqual(SessionProjectCopy.pageNotStarted(tasks: 5), "Not started · 5 tasks")
+        XCTAssertTrue(web.contains("`${settings.line === 'MAIN' ? 'Directly into main' : 'Project branch'} · Automatic ${settings.automatic ? 'on' : 'off'} · ${settings.maxConcurrentTasks} at a time`,"))
+        XCTAssertEqual(SessionProjectCopy.startSuggestion(
+            ProjectStartSettings(line: .projectBranch, automatic: true, maxConcurrentTasks: 2)),
+            "Project branch · Automatic on · 2 at a time")
+        XCTAssertEqual(SessionProjectCopy.startSuggestion(
+            ProjectStartSettings(line: .main, automatic: false, maxConcurrentTasks: 1)),
+            "Directly into main · Automatic off · 1 at a time")
     }
 
     func testAllFiveCoordinatorLeadPhrasesAreTheWebsOwn() throws {

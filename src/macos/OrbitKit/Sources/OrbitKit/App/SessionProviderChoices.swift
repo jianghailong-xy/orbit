@@ -116,12 +116,6 @@ public struct EngineChoice: Equatable, Sendable, Identifiable {
     /// there is no better one to pick — and where it is fixed.
     public var unavailable: String? { provider.unavailable }
     public var fixEngine: String? { provider.fixEngine }
-    /// The small label beside the engine's name: how its own sign-in signs in (Antigravity's "env
-    /// key"), and nothing for a provider of it — which provider is the composer's Provider menu's to
-    /// say (web `engineProviderDetail`).
-    public var providerDetail: String? {
-        provider.slug == slug ? provider.labelDetail : nil
-    }
 }
 
 public enum SessionProviderChoices {

@@ -2039,8 +2039,8 @@ private enum ProjectPageSheet: String, Identifiable {
 /// (D2): the same card the conversation draws (`StartProjectCard`), set by the default rule
 /// (`StartProject.defaultSettings`) and pressed at the same door with no request to answer. It says
 /// nothing any coordinator said: no "asked by", no suggestion, no ready check, no Chat. Web's
-/// `ProjectStartDialog`.
-private struct OwnerStartProjectSheet: View {
+/// `ProjectStartDialog`. The project's sessions page opens it too, from its start row.
+struct OwnerStartProjectSheet: View {
     let store: ProjectDetailModel
     /// Where the card's "View tasks ›" goes: the page's own task list, under the sheet.
     let onViewTasks: () -> Void

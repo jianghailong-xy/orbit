@@ -451,13 +451,16 @@ const PROJECT_LIST_SELECT = {
  * The rail draws activity, attention, title and task progress. This select supplies the project
  * fields; `readProjectSidebarRollups` reads progress from the maintained status tally. `goal`,
  * `updatedAt` and coordination bindings are absent on purpose: nothing on the rail reads them,
- * and a 15-second poll does not carry what a page view carries.
+ * and a 15-second poll does not carry what a page view carries. `startedAt` is the one column the
+ * project sessions page reads off this row: null is a project nobody has started, which that page
+ * offers to start under its progress strip.
  */
 const SIDEBAR_PROJECT_SELECT = {
   id: true,
   title: true,
   status: true,
   createdAt: true,
+  startedAt: true,
   coordinatorSession: { select: COORDINATOR_ACTIVITY_SELECT },
 } satisfies Prisma.ProjectSelect;
 

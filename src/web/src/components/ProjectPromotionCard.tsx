@@ -213,6 +213,13 @@ function criteriaTally(project: PromotionProjectView | null): { met: number; tot
   return { met: items.filter((item) => item.satisfied === true).length, total: items.length };
 }
 
+/** "3 of 6 met on this branch — merging does not close the project", or null before the document
+ *  was read: the line the sessions page's merge card carries (OrbitKit `PromotionCards.criteriaLine`). */
+export function promotionCriteriaLine(project: PromotionProjectView | null): string | null {
+  const tally = criteriaTally(project);
+  return tally ? `${tally.met} of ${tally.total} met on this branch — ${CRITERIA_TAIL}` : null;
+}
+
 /** The criteria whose work this merge puts on the upstream — the ones the receipt says now read
  *  "on main". Empty when the document was not read, and then the receipt says nothing about them. */
 function landingCriteria(project: PromotionProjectView | null): number[] {
@@ -313,9 +320,7 @@ function ReadyRows({
           <span className="promotion-ok">no conflicts</span>
         )}
       </Row>
-      {tally ? (
-        <Row k="Criteria">{`${tally.met} of ${tally.total} met on this branch — ${CRITERIA_TAIL}`}</Row>
-      ) : null}
+      {tally ? <Row k="Criteria">{promotionCriteriaLine(project)}</Row> : null}
       {blockers.length > 0 ? (
         <Row k="Blockers">
           <span className="promotion-warn">{`${plural(blockers.length, 'blocker')} open on the tasks this brings in`}</span>

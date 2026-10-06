@@ -1,0 +1,306 @@
+{
+  "config": {
+    "argv": [
+      "/usr/local/bin/node",
+      "/tmp/p31-swap/node_modules/.bin/playwright",
+      "test",
+      "--config",
+      "ui-migration/p0-reference.config.mjs",
+      "--update-snapshots=none",
+      "pages.browser.mjs",
+      "-g",
+      "settings",
+      "--project=chromium-light-desktop"
+    ],
+    "configFile": "/tmp/p31-swap/src/web/ui-migration/p0-reference.config.mjs",
+    "rootDir": "/tmp/p31-swap/src/web/ui-migration",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": "/tmp/p31-swap/src/web/ui-migration/environment.mjs",
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/tmp/p31-swap-vs-ref-2",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-light-desktop",
+        "name": "chromium-light-desktop",
+        "testDir": "/tmp/p31-swap/src/web/ui-migration",
+        "testIgnore": [
+          "foundation*.browser.mjs",
+          "controls*.browser.mjs",
+          "overlays*.browser.mjs",
+          "choices*.browser.mjs",
+          "toasts*.browser.mjs",
+          "composer*.browser.mjs"
+        ],
+        "testMatch": [
+          "*.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/tmp/p31-swap-vs-ref-2",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-light-phone",
+        "name": "chromium-light-phone",
+        "testDir": "/tmp/p31-swap/src/web/ui-migration",
+        "testIgnore": [
+          "foundation*.browser.mjs",
+          "controls*.browser.mjs",
+          "overlays*.browser.mjs",
+          "choices*.browser.mjs",
+          "toasts*.browser.mjs",
+          "composer*.browser.mjs"
+        ],
+        "testMatch": [
+          "*.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/tmp/p31-swap-vs-ref-2",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-dark-desktop",
+        "name": "chromium-dark-desktop",
+        "testDir": "/tmp/p31-swap/src/web/ui-migration",
+        "testIgnore": [
+          "foundation*.browser.mjs",
+          "controls*.browser.mjs",
+          "overlays*.browser.mjs",
+          "choices*.browser.mjs",
+          "toasts*.browser.mjs",
+          "composer*.browser.mjs"
+        ],
+        "testMatch": [
+          "*.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/tmp/p31-swap-vs-ref-2",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-dark-phone",
+        "name": "chromium-dark-phone",
+        "testDir": "/tmp/p31-swap/src/web/ui-migration",
+        "testIgnore": [
+          "foundation*.browser.mjs",
+          "controls*.browser.mjs",
+          "overlays*.browser.mjs",
+          "choices*.browser.mjs",
+          "toasts*.browser.mjs",
+          "composer*.browser.mjs"
+        ],
+        "testMatch": [
+          "*.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/tmp/p31-swap-vs-ref-2",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "webkit-light-desktop",
+        "name": "webkit-light-desktop",
+        "testDir": "/tmp/p31-swap/src/web/ui-migration",
+        "testIgnore": [
+          "foundation*.browser.mjs",
+          "controls*.browser.mjs",
+          "overlays*.browser.mjs",
+          "choices*.browser.mjs",
+          "toasts*.browser.mjs",
+          "composer*.browser.mjs"
+        ],
+        "testMatch": [
+          "*.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/tmp/p31-swap-vs-ref-2",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "webkit-light-phone",
+        "name": "webkit-light-phone",
+        "testDir": "/tmp/p31-swap/src/web/ui-migration",
+        "testIgnore": [
+          "foundation*.browser.mjs",
+          "controls*.browser.mjs",
+          "overlays*.browser.mjs",
+          "choices*.browser.mjs",
+          "toasts*.browser.mjs",
+          "composer*.browser.mjs"
+        ],
+        "testMatch": [
+          "*.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/tmp/p31-swap-vs-ref-2",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "webkit-dark-desktop",
+        "name": "webkit-dark-desktop",
+        "testDir": "/tmp/p31-swap/src/web/ui-migration",
+        "testIgnore": [
+          "foundation*.browser.mjs",
+          "controls*.browser.mjs",
+          "overlays*.browser.mjs",
+          "choices*.browser.mjs",
+          "toasts*.browser.mjs",
+          "composer*.browser.mjs"
+        ],
+        "testMatch": [
+          "*.browser.mjs"
+        ],
+        "timeout": 90000
+      },
+      {
+        "outputDir": "/tmp/p31-swap-vs-ref-2",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "webkit-dark-phone",
+        "name": "webkit-dark-phone",
+        "testDir": "/tmp/p31-swap/src/web/ui-migration",
+        "testIgnore": [
+          "foundation*.browser.mjs",
+          "controls*.browser.mjs",
+          "overlays*.browser.mjs",
+          "choices*.browser.mjs",
+          "toasts*.browser.mjs",
+          "composer*.browser.mjs"
+        ],
+        "testMatch": [
+          "*.browser.mjs"
+        ],
+        "timeout": 90000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "/tmp/p31-swap-vs-ref-2/report.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "none",
+    "updateSourceMethod": "patch",
+    "version": "1.63.0",
+    "workers": 1,
+    "webServer": {
+      "command": "npm run preview -- --host 127.0.0.1 --port 4173 --strictPort",
+      "cwd": "/tmp/p31-swap/src/web/",
+      "url": "http://127.0.0.1:4173",
+      "reuseExistingServer": false,
+      "timeout": 30000
+    }
+  },
+  "suites": [
+    {
+      "title": "pages.browser.mjs",
+      "file": "pages.browser.mjs",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "settings",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-light-desktop",
+              "projectName": "chromium-light-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 763,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-06T08:38:23.351Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "computed-styles-and-timings",
+                      "contentType": "application/json",
+                      "path": "/tmp/p31-swap-vs-ref-2/pages.browser.mjs-settings-chromium-light-desktop/attachments/computed-styles-and-timings-07e368d0556d865946b8c74327ef717fe233b405.json"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6fad8abc2ede1d71a0ca-c3789c5ae3056d1840d8",
+          "file": "pages.browser.mjs",
+          "line": 6,
+          "column": 3
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-10-06T08:38:22.624Z",
+    "duration": 1567.656,
+    "expected": 1,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

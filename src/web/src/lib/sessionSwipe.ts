@@ -24,13 +24,19 @@ const FULL_SWIPE_FRACTION = 0.6;
  * Delete from left to right (docs/session-folders-move-design.md §2); Trash has neither, since a
  * trashed session can't be shared or filed.
  */
-export function sessionSwipeActions(view: SessionListView): Record<SwipeSide, SwipeAction[]> {
+export function sessionSwipeActions(view: SessionListView, movable = true): Record<SwipeSide, SwipeAction[]> {
   if (view === 'trash') return { leading: ['restore'], trailing: ['purge'] };
   return {
     leading: [view === 'completed' ? 'restore' : 'complete', 'pin'],
-    trailing: ['delete', 'move', 'share'],
+    trailing: movable ? ['delete', 'move', 'share'] : ['delete', 'share'],
   };
 }
+
+/** Whether a session can be moved on its own: a project's members go where its coordinator goes, so
+ *  only the coordinator — or a session in no project — offers Move, in the menu and on the swipe
+ *  alike (OrbitKit `SessionRowActions.moveAction`). */
+export const sessionMovable = (session: { projectMembership?: { role: string } | null; [key: string]: unknown }): boolean =>
+  !session.projectMembership || session.projectMembership.role === 'COORDINATOR';
 
 /** One edge's actions in the order they sit on screen, left to right: the leading edge's outermost
  *  is at the row's left end, the trailing edge's at its right end. */
@@ -49,8 +55,8 @@ export interface SwipeGeometry extends SwipeWidths {
   maxOffset: number;
 }
 
-export function swipeWidths(view: SessionListView): SwipeWidths {
-  const { leading, trailing } = sessionSwipeActions(view);
+export function swipeWidths(view: SessionListView, movable = true): SwipeWidths {
+  const { leading, trailing } = sessionSwipeActions(view, movable);
   return {
     leadingWidth: leading.length * SWIPE_ACTION_WIDTH,
     trailingWidth: trailing.length * SWIPE_ACTION_WIDTH,
@@ -62,8 +68,9 @@ export function swipeGeometry(
   view: SessionListView,
   rowWidth: number,
   canFullSwipe: boolean,
+  movable = true,
 ): SwipeGeometry {
-  const widths = swipeWidths(view);
+  const widths = swipeWidths(view, movable);
   return {
     ...widths,
     fullSwipeAt: canFullSwipe ? rowWidth * FULL_SWIPE_FRACTION : null,

@@ -32,6 +32,7 @@ import {
   START_PROJECT_TITLE,
   START_ROW_NOT_ASKED,
   START_ROW_OWN,
+  startPageRow,
   startRequestSummary,
 } from '../lib/projectStart';
 import { PROJECT_DONE_COPY } from '../lib/projectDone';
@@ -1813,7 +1814,8 @@ export function ProjectOpenItems({
   // The pause is drawn as a card above the groups and counted in neither: it is not something
   // waiting on a person the way the rows are, it is the reason some of them are waiting.
   const paused = (items.data?.needsYou ?? []).filter((row) => row.kind === 'FUSE_PAUSED');
-  const startRequest = started === false ? (items.data?.startRequest ?? null) : null;
+  const start = startPageRow(started, items.data);
+  const startRequest = start?.kind === 'asked' ? start.row : null;
   const doneRequest = items.data?.doneRequest ?? null;
   const needsYou = [
     ...(startRequest ? [startRequest] : []),
@@ -1821,10 +1823,7 @@ export function ProjectOpenItems({
     ...(items.data?.needsYou ?? []).filter((row) => row.kind !== 'FUSE_PAUSED' && row.kind !== 'DONE_REQUEST'),
   ];
   const withCoordinator = items.data?.withCoordinator ?? [];
-  // Only once the read has answered: a request still on its way is not a project nobody asked for.
-  const ownStart = started === false && items.data !== undefined && !startRequest && onStartProject
-    ? onStartProject
-    : null;
+  const ownStart = start?.kind === 'own' && onStartProject ? onStartProject : null;
   const ownDone = items.data !== undefined && !doneRequest && onRecordDone ? onRecordDone : null;
   if (
     !projectId

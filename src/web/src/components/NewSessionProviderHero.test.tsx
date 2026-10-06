@@ -61,9 +61,11 @@ function markup(
 }
 
 describe('NewSessionProviderHero', () => {
-  it('preserves the hidden Antigravity current choice and explains its environment credential', () => {
+  it('names Antigravity alone, however it signs in — that is the Provider menu’s to say', () => {
     const html = markup('antigravity');
-    expect(html).toContain('env key');
+    expect(html).toContain('aria-label="Engine: Antigravity"');
+    expect(html).not.toContain('env key');
+    expect(html).not.toContain('Google account');
     expect(html).toContain('Gemini 3.8 Flash');
     expect(html).not.toContain('Managed by the provider');
   });

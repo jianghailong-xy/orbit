@@ -2214,6 +2214,9 @@ final class AppModel {
     /// The merge into main for the project whose sessions page is showing: the card under its
     /// progress card and the merges on its timeline (owner decision 2026-10-06).
     private(set) var projectSessionsMerge: ProjectMergeModel?
+    /// The open items of the project whose sessions page is showing, read only while nobody has
+    /// started it: what the progress card's start row is drawn from (`StartProject.pageRow`).
+    private(set) var projectSessionsOpenItems: ProjectOpenItemsView?
 
     var projectSessionsColumn: SessionProjectAddress? { nav.projectSessionsColumn }
 
@@ -2286,6 +2289,7 @@ final class AppModel {
             projectSessionsIntegration = nil
             projectSessionsIntegrationReadAt = nil
             projectSessionsIntegrationReadFailed = false
+            projectSessionsOpenItems = nil
         }
         projectSessionsLoading = true
         defer { if projectSessionsAddress == address { projectSessionsLoading = false } }
@@ -2332,6 +2336,23 @@ final class AppModel {
             projectSessionsMerge = ProjectMergeModel(projectID: address.projectID, api: api)
         }
         await projectSessionsMerge?.load(force: force)
+    }
+
+    /// One poll of what the page's start row needs (docs/mocks/project-start-sessions-page): the
+    /// project's open items — the coordinator's request to start among them — while the sidebar row
+    /// says nobody has started it. A started project, or one the row does not say about, reads
+    /// nothing more than before; a read that fails keeps the last answer rather than drawing none.
+    func loadProjectStart(_ address: SessionProjectAddress) async {
+        guard let api else { return }
+        let key = PublicID.storageKey(address.projectID)
+        let row = projects?.sidebarProjects.first { PublicID.storageKey($0.id) == key }
+        guard row?.status == .open, row?.started == false else {
+            projectSessionsOpenItems = nil
+            return
+        }
+        let items = try? await api.projectOpenItems(projectID: address.projectID)
+        guard projectSessionsAddress == address, !Task.isCancelled, let items else { return }
+        projectSessionsOpenItems = items
     }
 
     /// A member may belong to another Workspace. Carry its record into the console's cache, which

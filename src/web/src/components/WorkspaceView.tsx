@@ -1,5 +1,6 @@
 import { type MergeRecoveryAction, type ProjectPromotionView, type ProjectSidebarTaskCounts } from '@orbit/shared';
 import {
+  AppstoreOutlined,
   ArrowDownOutlined,
   ArrowLeftOutlined,
   ArrowUpOutlined,
@@ -17,6 +18,7 @@ import {
   EditOutlined,
   EllipsisOutlined,
   EyeOutlined,
+  ExclamationCircleOutlined,
   ExportOutlined,
   FolderOutlined,
   GlobalOutlined,
@@ -90,6 +92,7 @@ import {
   dragOffset,
   isFullSwipe,
   restingOffset,
+  sessionMovable,
   sessionSwipeActions,
   settleSwipe,
   swipeActionsOnScreen,
@@ -120,6 +123,7 @@ import {
   PROJECT_SESSION_REFRESH_MS,
   pendingCriteriaDecisionsQuery,
   pendingDecisionsQuery,
+  projectIntegrationQuery,
   projectMergedPromotionsQuery,
   projectOpenItemsQuery,
   projectPromotionQuery,
@@ -210,6 +214,7 @@ import { SessionCreatedTasksStrip } from './SessionCreatedTasksStrip';
 import { SessionWatchBadges, SessionWatchStrip } from './WatchRelations';
 import { OrbitLinkCardsProvider } from './OrbitLinkCard';
 import {
+  ago,
   sessionWatching,
   watchingCountWord,
   watchingSessions,
@@ -311,7 +316,9 @@ import {
   promotionRecordMoment,
 } from './ProjectPromotionCard';
 import { ProjectMergeStrip, ProjectMergeTimelineRow } from './ProjectMergeStrip';
-import { projectTimelineSections } from '../lib/projectMerge';
+import { isMergeJob, projectTimelineSections } from '../lib/projectMerge';
+import { LandingRow, landingLine } from './ProjectPanoramaHeader';
+import { ProjectStartDialog } from './StartProjectCard';
 import {
   CHAT_FACTS_AS_ARMED,
   CHAT_SUBJECT_GONE,
@@ -346,8 +353,12 @@ import {
 import {
   READY_TO_START,
   START_PROJECT_INTENT,
+  START_ROW_OWN,
   confirmedChangesProjectKey,
+  projectStarted,
+  startPageRow,
   type SettlementQuestion,
+  type StartPageRow,
 } from '../lib/projectStart';
 import { PROJECT_DONE_COPY } from '../lib/projectDone';
 import { SessionProjectSettlementCard } from './ProjectSettlementCard';
@@ -782,6 +793,8 @@ const SESSION_VIEWS: { value: SessionView; label: string }[] = [
 // page is asked for — roughly a couple of rows, so the list is already widened by the time
 // the user reaches the bottom.
 const SESSION_LOAD_MORE_PX = 240;
+/** How long a finger rests on a phone's session row before its menu opens, as iOS's context menu. */
+const LONG_PRESS_MS = 500;
 
 // Drag-resizable width of the left session column, persisted across reloads.
 const SESSION_COL_KEY = 'orbit.sessionColWidth';
@@ -1154,6 +1167,77 @@ function SessionProjectProgressBar({ counts, runningCount }: { counts: ProjectSi
       <span className="running" style={{ width: width(running) }} />
       <span className="failed" style={{ width: width(failed) }} />
     </span>
+  );
+}
+
+/** The start, under the progress line of a project nobody has started (docs/mocks/
+ *  project-start-sessions-page; iOS `SessionProjectPage.startLine`): the coordinator's request —
+ *  Ready to start, since when, what it suggests, Review and start — or, with none, the owner's own
+ *  Start…, quiet. Either opens the start card over the page, and only that card's Start the project
+ *  starts anything. Not counted as needing the reader, as a start request is counted nowhere. */
+function SessionProjectStartRow({ start, projectId }: { start: StartPageRow; projectId: string }) {
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const asked = start.kind === 'asked' ? start.row : null;
+  const settings = asked?.startRequest?.settings ?? null;
+  return (
+    <div className="session-project-start">
+      {asked ? (
+        <div className="session-project-start-ask">
+          <div className="session-project-start-line">
+            <span className="session-project-start-dot is-asked" aria-hidden="true" />
+            <span className="session-project-start-title">{READY_TO_START}</span>
+            <span className="session-project-start-ago">
+              {SESSION_PROJECT_COPY.startAsked(ago(asked.waitingSince, Date.now()))}
+            </span>
+          </div>
+          {settings ? (
+            <div className="session-project-start-suggestion">{SESSION_PROJECT_COPY.startSuggestion(settings)}</div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="session-project-start-line">
+          <span className="session-project-start-dot" aria-hidden="true" />
+          <span>{SESSION_PROJECT_COPY.startNotAsked}</span>
+        </div>
+      )}
+      <button type="button" className={`session-project-start-press${asked ? ' is-primary' : ''}`}
+        title={SESSION_PROJECT_COPY.startHint} onClick={() => setOpen(true)}>
+        {asked ? SESSION_PROJECT_COPY.startReview : START_ROW_OWN}
+      </button>
+      <ProjectStartDialog projectId={projectId} asked={asked !== null} open={open} onClose={() => setOpen(false)}
+        onViewTasks={() => {
+          setOpen(false);
+          navigate(`/projects/${encodeId(projectId)}`);
+        }} />
+    </div>
+  );
+}
+
+/** The landing line inside the progress card while a task lands on the project branch (iOS
+ *  `SessionProjectPage.landingLine`): the project page's own row, ticking once a second, and a press
+ *  that opens the project page. A merge job's line is the merge card's (`ProjectMergeStrip`). Its own
+ *  component, so the second hand redraws this line and not the console around it. */
+function SessionProjectLanding({ projectId, onOpen }: { projectId: string; onOpen: () => void }) {
+  const integration = useQuery(projectIntegrationQuery(projectId));
+  const view = integration.data && typeof integration.data === 'object' ? integration.data : null;
+  const live = view?.inFlight != null && !isMergeJob(view.inFlight);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!live) return undefined;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 1_000);
+    return () => clearInterval(timer);
+  }, [live]);
+  const line = live && view
+    ? landingLine(view, now, { updatedAt: integration.dataUpdatedAt, failed: integration.isError })
+    : null;
+  if (!line) return null;
+  return (
+    <button type="button" className="session-project-page-landing" onClick={onOpen}>
+      <LandingRow line={line} />
+      <RightOutlined className="session-project-page-landing-chev" aria-hidden />
+    </button>
   );
 }
 
@@ -1923,6 +2007,18 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     geometry: SwipeGeometry;
   } | null>(null);
   const swipeClickGuard = useRef(false); // eat the click that trails a horizontal swipe
+  // A press held on a phone's session row opens that row's menu where the finger is, as iOS's
+  // context menu does — the row's ⋯ is not drawn on a touch phone. Any move past the swipe's
+  // deadzone cancels it, so a drag never opens it.
+  const [pressMenu, setPressMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const pressTimer = useRef<number | undefined>(undefined);
+  // Set when a held press opened the menu, so the release cancels the click it would send — that
+  // click would close the menu it just opened, or open the row.
+  const pressHeld = useRef(false);
+  const cancelPress = (): void => {
+    window.clearTimeout(pressTimer.current);
+    pressTimer.current = undefined;
+  };
   const [shareOpen, setShareOpen] = useState(false); // share dialog for the open session
   // A row's Share action opens the share dialog for that row rather than for the open session.
   const [shareRowId, setShareRowId] = useState<string | null>(null);
@@ -2112,9 +2208,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     swipeClickGuard.current = false;
     const id = projectId ?? session.id;
     const from = swipeOpen && swipeOpen.id === id ? swipeOpen.side : null;
+    const rect = e.currentTarget.getBoundingClientRect();
     const geometry = projectId
       ? { leadingWidth: SWIPE_ACTION_WIDTH, trailingWidth: SWIPE_ACTION_WIDTH, fullSwipeAt: null, maxOffset: SWIPE_ACTION_WIDTH + 20 }
-      : swipeGeometry(sessionRowView(session), e.currentTarget.getBoundingClientRect().width, canFullSwipe);
+      : swipeGeometry(sessionRowView(session), rect.width, canFullSwipe, sessionMovable(session));
     swipeRef.current = {
       session,
       id,
@@ -2125,6 +2222,20 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       from,
       geometry,
     };
+    cancelPress();
+    if (projectId) return;
+    const at = { id, x: t.clientX - rect.left, y: t.clientY - rect.top };
+    pressTimer.current = window.setTimeout(() => {
+      pressTimer.current = undefined;
+      const held = swipeRef.current;
+      if (!held || held.id !== id || held.axis !== '') return;
+      swipeRef.current = null; // the finger now holds a menu, not a swipe
+      swipeClickGuard.current = true; // and a click its release still sends must not open the row
+      pressHeld.current = true;
+      setSwipeOpen(null);
+      setMenuOpenId(null);
+      setPressMenu(at);
+    }, LONG_PRESS_MS);
   };
   const onRowTouchMove = (e: ReactTouchEvent): void => {
     const st = swipeRef.current;
@@ -2136,6 +2247,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     // list's own scroll and never drags the row.
     if (st.axis === '') {
       if (Math.abs(mx) < 8 && Math.abs(my) < 8) return;
+      cancelPress();
       st.axis = Math.abs(mx) > Math.abs(my) ? 'h' : 'v';
       if (st.axis === 'h') {
         setSwipeOpen((cur) => (cur && cur.id !== st.id ? null : cur)); // starting a swipe shuts any other open row
@@ -2145,7 +2257,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     st.offset = dragOffset(st.from, mx, st.geometry); // synchronous truth for the touchend decision
     setSwipeDrag({ id: st.id, dx: st.offset, armed: isFullSwipe(st.offset, st.geometry) });
   };
-  const onRowTouchEnd = (): void => {
+  const onRowTouchEnd = (e?: ReactTouchEvent): void => {
+    cancelPress();
+    if (pressHeld.current) {
+      pressHeld.current = false;
+      e?.preventDefault();
+    }
     const st = swipeRef.current;
     swipeRef.current = null;
     if (!st || st.axis !== 'h') {
@@ -2163,6 +2280,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // An OS-interrupted gesture (system swipe, incoming call) fires touchcancel, not touchend —
   // drop the drag and let the row settle back to its committed open/closed state.
   const onRowTouchCancel = (): void => {
+    cancelPress();
+    pressHeld.current = false;
     swipeRef.current = null;
     setSwipeDrag(null);
   };
@@ -2876,6 +2995,21 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   } : undefined);
   const pageProjectTitle = pageProject?.title ?? pageProjectDetailsQ.data?.title ?? projectMembers[0]?.projectMembership?.projectTitle ?? pageMenuCoordinator?.projectMembership?.projectTitle ?? 'Project';
   const pageRunningCount = projectMembers.filter((s) => statusGlyphMotion(s) === 'spinner').length;
+  const pageStatus = pageProject?.status ?? pageProjectDetailsQ.data?.status ?? projectMembers[0]?.projectMembership?.projectStatus;
+  const pageSessionsError = (projectSessionsQ.error ?? completedProjectSessionsQ.error) as Error | null;
+  // A project nobody has started (docs/mocks/project-start-sessions-page): its progress line says so,
+  // and the start's row sits under it — by the project page's own rule (`startPageRow`), read off the
+  // sidebar's `startedAt` and the open items, which are read only while that holds.
+  const pageStarted = pageProject ? projectStarted(pageProject) : null;
+  const pageNotStarted = pageProject?.status === 'OPEN' && pageStarted === false;
+  const pageOpenItemsQ = useQuery({
+    ...projectOpenItemsQuery(openProjectId ?? ''),
+    enabled: !!openProjectId && pageNotStarted,
+    refetchInterval: controlLive ? 20_000 : 4000,
+  });
+  const pageStart = pageNotStarted
+    ? startPageRow(pageStarted, pageOpenItemsQ.isError ? undefined : pageOpenItemsQ.data)
+    : null;
   // The folder page the list is on: `?folder=<id>` on whichever route the console is at, so it
   // survives a reload and Back leaves it. Only a folder of this workspace, and only where the list
   // shows folders at all.
@@ -8542,19 +8676,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             </button>
             <span className="session-folder-titles">
               <span className="session-folder-title">{pageProjectTitle}</span>
-              <span className="session-folder-workspace">{SESSION_PROJECT_COPY.pageSubtitle(projectMembers.length)}</span>
+              <span className="session-folder-workspace">
+                {loadingSessions && projectMembers.length === 0
+                  ? SESSION_PROJECT_COPY.pageSubtitleLoading
+                  : SESSION_PROJECT_COPY.pageSubtitle(projectMembers.length)}
+              </span>
             </span>
-            <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: [
-              { key: 'project', label: SESSION_PROJECT_COPY.openProject,
-                onClick: () => navigate(`/projects/${encodeId(openProjectId)}`) },
-              { key: 'coordinator', label: SESSION_PROJECT_COPY.openCoordinator, disabled: !pageMenuCoordinator,
-                onClick: () => pageMenuCoordinator && navigateWithPaneSlide('push', () =>
-                  navigate(sessionPath(pageMenuCoordinator.id), { state: stampFromList() })) },
-            ] }}>
-              <button type="button" className="session-kebab session-folder-head-more" aria-label="Project actions">
-                <MoreOutlined />
-              </button>
-            </Dropdown>
+            {/* The page's one action, as iOS's toolbar has it: the project's own page. The
+                coordinator is the first row below, so it needs no entry of its own up here. */}
+            <button type="button" className="session-kebab session-folder-head-more session-project-page-open"
+              aria-label={SESSION_PROJECT_COPY.openProject} title={SESSION_PROJECT_COPY.openProject}
+              onClick={() => navigate(`/projects/${encodeId(openProjectId)}`)}>
+              <AppstoreOutlined />
+            </button>
           </div>
         ) : openFolder ? (
           // A folder's page: back to the workspace's list, the folder (and the workspace it is in),
@@ -8616,24 +8750,6 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         {openFolder && folderEdit?.id === openFolder.id && folderEdit.error && (
           <div className="session-folder-error">{folderEdit.error}</div>
         )}
-        {openProjectId && (
-          <div className="session-project-page-progress">
-            {pageTaskCounts && (
-              <>
-                <SessionProjectProgressBar counts={pageTaskCounts} runningCount={pageRunningCount} />
-                <span>{SESSION_PROJECT_COPY.pageProgress(pageTaskCounts.done, pageTaskCounts.total, pageRunningCount)}</span>
-              </>
-            )}
-            <a href={`/projects/${encodeId(openProjectId)}`} aria-label={SESSION_PROJECT_COPY.openProject}
-              onClick={(e) => { e.preventDefault(); navigate(`/projects/${encodeId(openProjectId)}`); }}>↗</a>
-          </div>
-        )}
-        {/* The merge into main: its card lives here, under the progress strip (owner decision
-            2026-10-06), and the coordinator's conversation keeps a line about it. */}
-        {openProjectId && (
-          <ProjectMergeStrip key={`merge:${openProjectId}`} projectId={openProjectId}
-            coordinatorSessionId={pageCoordinator?.id ?? null} />
-        )}
         {!openProjectId && <div className={`session-new ${composing ? 'active' : ''}`} onClick={goNew}>
           <PlusOutlined />
           <span>New session</span>
@@ -8663,9 +8779,56 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           ref={listRef}
           onScroll={onSessionListScroll}
         >
+          {/* The project's progress card and its merge into main lead the list and scroll with it, as
+              on iOS (docs/mocks/project-sessions-page-web); the coordinator's conversation keeps
+              a line about the merge. */}
+          {openProjectId && (
+            <div className="session-project-page-card">
+              <div className="session-project-page-progress">
+                {pageTaskCounts ? (
+                  <>
+                    <SessionProjectProgressBar counts={pageTaskCounts} runningCount={pageRunningCount} />
+                    <span>
+                      {pageNotStarted
+                        ? SESSION_PROJECT_COPY.pageNotStarted(pageTaskCounts.total)
+                        : SESSION_PROJECT_COPY.pageProgress(pageTaskCounts.done, pageTaskCounts.total, pageRunningCount)}
+                    </span>
+                  </>
+                ) : pageStatus ? <span>{SESSION_PROJECT_COPY.pageStatus(pageStatus)}</span> : null}
+              </div>
+              {pageStart ? <SessionProjectStartRow start={pageStart} projectId={openProjectId} /> : null}
+              <SessionProjectLanding projectId={openProjectId}
+                onOpen={() => navigate(`/projects/${encodeId(openProjectId)}`)} />
+            </div>
+          )}
+          {openProjectId && (
+            <ProjectMergeStrip key={`merge:${openProjectId}`} projectId={openProjectId}
+              onOpenCoordinator={pageCoordinator ? () => navigateWithPaneSlide('push', () =>
+                navigate(sessionPath(pageCoordinator.id), { state: stampFromList() })) : null} />
+          )}
           {openProjectId
-            ? projectMembers.length === 0 && !loadingSessions &&
-              <div className="chat-note">{projectSessionsQ.isError || completedProjectSessionsQ.isError ? 'Couldn’t load project sessions.' : 'No sessions in this project.'}</div>
+            ? projectMembers.length === 0 && !loadingSessions && (
+              <div className="session-project-empty">
+                {pageSessionsError ? (
+                  <>
+                    <ExclamationCircleOutlined className="session-project-empty-icon" />
+                    <b>{SESSION_PROJECT_COPY.pageUnread}</b>
+                    <span>{pageSessionsError.message}</span>
+                    <button type="button" className="session-project-empty-retry" onClick={() => {
+                      void projectSessionsQ.refetch();
+                      void completedProjectSessionsQ.refetch();
+                    }}>
+                      {SESSION_PROJECT_COPY.retry}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <MessageOutlined className="session-project-empty-icon" />
+                    <b>{SESSION_PROJECT_COPY.pageEmpty}</b>
+                  </>
+                )}
+              </div>
+            )
             : openFolder
             ? listedSessions.length === 0 &&
               !loadingSessions && <div className="chat-note">No sessions in this folder.</div>
@@ -8774,8 +8937,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 }
                 const actionSession = selectedSession?.id === s.id ? selectedSession : s;
                 const memberView = sessionRowView(actionSession);
-                const swipeActions = sessionSwipeActions(memberView);
-                const swipeSizes = swipeWidths(memberView);
+                const movable = sessionMovable(s);
+                const swipeActions = sessionSwipeActions(memberView, movable);
+                const swipeSizes = swipeWidths(memberView, movable);
                 const canCompleteRow = sessionCapabilityOf(actionSession, 'canComplete', true);
                 const canRestoreRow = sessionCapabilityOf(actionSession, 'canRestore', true);
                 // Open and Completed rows open their transcript; only
@@ -8828,7 +8992,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                       ...swipeActions.leading.map(menuItem),
                       { type: 'divider' },
                       menuItem('share'),
-                      ...(!s.projectMembership || s.projectMembership.role === 'COORDINATOR' ? [menuItem('move')] : []),
+                      ...(movable ? [menuItem('move')] : []),
                       { type: 'divider' },
                       menuItem('delete'),
                     ];
@@ -8856,6 +9020,25 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                     onTouchEnd={onRowTouchEnd}
                     onTouchCancel={onRowTouchCancel}
                   >
+                    {isMobile && pressMenu?.id === s.id && (
+                      <Dropdown
+                        open
+                        trigger={['click']}
+                        placement="bottomLeft"
+                        classNames={{ root: 'session-row-menu' }}
+                        onOpenChange={(open) => { if (!open) setPressMenu(null); }}
+                        menu={{
+                          items: menuItems,
+                          onClick: ({ key, domEvent }) => {
+                            domEvent.stopPropagation();
+                            setPressMenu(null);
+                            runSwipeAction(key as SwipeAction, s);
+                          },
+                        }}
+                      >
+                        <span className="session-press-anchor" style={{ left: pressMenu.x, top: pressMenu.y }} />
+                      </Dropdown>
+                    )}
                     {isMobile &&
                       (['leading', 'trailing'] as const).map((side) => (
                         <div
