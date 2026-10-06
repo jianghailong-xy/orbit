@@ -296,6 +296,15 @@ export class ProjectPromotionService {
   }
 
   /**
+   * The two reads answer only the caller's own project: another account's — or none — is not found,
+   * as every other read of a project answers it, rather than an empty answer that reads as one.
+   */
+  private async assertOwnProject(userId: string, projectId: string): Promise<void> {
+    const own = await this.prisma.project.findFirst({ where: { id: projectId, ownerId: userId }, select: { id: true } });
+    if (!own) throw new NotFoundException('project not found');
+  }
+
+  /**
    * The shape every owner door has: refuse anyone who is not the account owner before a row is read,
    * then do the decision under a retry, then answer with the row as it now stands.
    */
@@ -326,6 +335,7 @@ export class ProjectPromotionService {
 
   /** The candidate this project's card is drawn from, or null when there is nothing on offer (§3.6). */
   async readCurrent(userId: string, projectId: string): Promise<ProjectPromotionView | null> {
+    await this.assertOwnProject(userId, projectId);
     const row = await this.prisma.projectPromotion.findFirst({
       where: { projectId, ownerId: userId },
       orderBy: { createdAt: 'desc' },
@@ -352,6 +362,7 @@ export class ProjectPromotionService {
    * twenty is the recent history of any conversation somebody is still reading.
    */
   async readMerged(userId: string, projectId: string): Promise<ProjectPromotionView[]> {
+    await this.assertOwnProject(userId, projectId);
     const rows = await this.prisma.projectPromotion.findMany({
       where: {
         projectId,
