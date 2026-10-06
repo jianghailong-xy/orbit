@@ -43,7 +43,8 @@ final class ProjectDoneTests: XCTestCase {
         XCTAssertEqual(ProjectDone.cardTally(counts), "2 met · 1 landed on main · 1 nothing to land")
         XCTAssertEqual(ProjectDone.receiptTally(counts, acceptedGaps: 1),
                        "2 criteria met · 1 landed on main · 1 nothing to land · 1 gaps accepted")
-        XCTAssertEqual(ProjectDone.whyNotDoneTally(counts), "2 criteria · 2 met · 1 on main · 1 nothing to land")
+        // Its parts add up to the criteria: no "2 met" counted a second time beside where they are.
+        XCTAssertEqual(ProjectDone.whyNotDoneTally(closeout().derivedDone), "2 criteria · 1 on main · 1 nothing to land")
         XCTAssertEqual(ProjectDone.tally(nil), "", "a read without counts says nothing rather than zeros")
     }
 
@@ -51,8 +52,19 @@ final class ProjectDoneTests: XCTestCase {
         let counts = ProjectDoneCounts(criteria: 7, met: 4, landed: 3, onMain: 3,
                                        byReason: [.inFlight: 1, .noReceipt: 1, .codeless: 2])
         XCTAssertEqual(ProjectDone.cardTally(counts), "4 met · 3 landed on main · 2 nothing to land")
-        XCTAssertEqual(ProjectDone.whyNotDoneTally(counts),
-                       "7 criteria · 4 met · 3 on main · 1 in flight · 1 merged outside Orbit · 2 no code to land")
+        // The Why-not-done tally names it for a met criterion; an unmet one is not met, whatever its
+        // landing lane says — the same seven criteria, counted by their own answers.
+        let derived = ProjectDerivedDone(criteria: [
+            ProjectDoneCriterion(definitionId: "c1", satisfied: true),
+            ProjectDoneCriterion(definitionId: "c2", satisfied: true),
+            ProjectDoneCriterion(definitionId: "c3", satisfied: true, landingReason: .inFlight),
+            ProjectDoneCriterion(definitionId: "c4", satisfied: true, landingReason: .codeless),
+            ProjectDoneCriterion(definitionId: "c5", satisfied: false),
+            ProjectDoneCriterion(definitionId: "c6", satisfied: false, landingReason: .noReceipt),
+            ProjectDoneCriterion(definitionId: "c7", satisfied: false, landingReason: .codeless),
+        ])
+        XCTAssertEqual(ProjectDone.whyNotDoneTally(derived),
+                       "7 criteria · 2 on main · 1 in flight · 1 no code to land · 3 not met")
     }
 
     // MARK: the owner card

@@ -3791,14 +3791,18 @@ final class ConsoleModel {
     ///
     /// Each card is re-derived from the reads on every render, so a request the coordinator filed
     /// again is the same card with the new request in it. A read that has not answered changes
-    /// nothing on screen.
+    /// nothing on screen; one that answered and asks nothing takes the closing card down, as the
+    /// browser draws none — "Why is this project not done?" is up only while the project looks
+    /// finished, and the owner's card only while it is asked or recorded.
     private func adoptDoneSlot() {
         let live = ProjectDone.live(openItems: openItems, status: projectDone?.status)
         doneRequestRow = live
         switch ProjectDone.slot(subject: projectDone, request: live, waitingKind: sessionWaitingKind,
                                 record: doneRecord, started: projectStarted) {
         case .none:
-            break
+            if projectDone != nil {
+                decisionCards.removeAll { $0.kind == .projectDone || $0.kind == .projectNotDone }
+            }
         case .notDone:
             decisionCards.removeAll { $0.kind == .projectDone }
             deliver(.projectNotDone)

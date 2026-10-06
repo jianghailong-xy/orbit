@@ -387,7 +387,7 @@ struct ProjectNotDoneCard: View {
     }
 
     private var tally: some View {
-        Text(ProjectDone.whyNotDoneTally(subject.counts))
+        Text(ProjectDone.whyNotDoneTally(subject.derivedDone))
             .font(.orbitLabel).foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
