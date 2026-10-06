@@ -1,0 +1,67 @@
+# TEMPORARY evidence probe (see ../README.md), task ⑥: the real iOS app — src/ios's own target, source for
+# source, re-declared here so nothing of the delivery branch is touched — with gen.py's ATS-off
+# Info.plist so it can reach ../stub.py on the host's loopback, and a UI test that walks it.
+name: DoneProbe
+options:
+  bundleIdPrefix: io.orbitd
+  deploymentTarget:
+    iOS: "17.0"
+packages:
+  OrbitKit:
+    path: ../../src/macos/OrbitKit
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.2"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    DEVELOPMENT_TEAM: ""
+targets:
+  OrbitProbe:
+    type: application
+    platform: iOS
+    sources:
+      - path: ../../src/ios/Sources
+      - path: ../../src/ios/Support/Assets.xcassets
+      - path: ../../src/macos/OrbitApp/Sources/OrbitApp
+        name: Shared
+        excludes:
+          - "OrbitApp.swift"
+          - "HotKeyManager.swift"
+          - "UpdaterModel.swift"
+          - "RunnerControl.swift"
+          - "Views/RunnerControlPane.swift"
+          - "Views/MenuBarContent.swift"
+    dependencies:
+      - package: OrbitKit
+        product: OrbitKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.orbitd.doneprobe
+        PRODUCT_NAME: OrbitProbe
+        INFOPLIST_FILE: Generated/Info-probe.plist
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+  OrbitProbeUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [RealUITests]
+    dependencies:
+      - target: OrbitProbe
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.orbitd.doneprobe.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: OrbitProbe
+schemes:
+  OrbitProbe:
+    build:
+      targets:
+        OrbitProbe: all
+        OrbitProbeUITests: [test]
+    test:
+      targets:
+        - OrbitProbeUITests
