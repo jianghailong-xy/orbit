@@ -939,10 +939,11 @@ export class WikiService {
   }
 
   /**
-   * The owner's spaces, each with the pending-op count the sidebar shows (design §12.1) and what the
-   * contract's `space.list` adds to a row: the things of its plan that wait on the owner (`planWaiting`),
-   * the live workspaces bound to it (`workspaceIds`), and its confirmed plan's documents, written of how
-   * many — the directory's `docs`, null while it has no confirmed plan.
+   * The owner's spaces, each with what the contract's `space.list` adds to a row: the ops waiting in
+   * Review (`pendingOps`) and the things of its plan that wait on the owner (`planWaiting`) — the two the
+   * drawer's and the sidebar's number adds up over the spaces (design §12.3.3) — the live workspaces bound
+   * to it (`workspaceIds`), and its confirmed plan's documents, written of how many — the directory's
+   * `docs`, null while it has no confirmed plan.
    */
   async listSpaces(ownerId: string): Promise<Array<Record<string, unknown>>> {
     const spaces = await this.prisma.wikiSpace.findMany({

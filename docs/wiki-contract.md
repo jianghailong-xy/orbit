@@ -154,14 +154,16 @@ pg spec 用执行计划钉住了这一点。它声明为 IMMUTABLE（里面的 `
   - `maintenance`、`embedding` 留给阶段 2。
 - **列表**（`space.list`）：`GET /api/wiki/spaces` 按 slug 列出 owner 的全部 space，每行是单个 space 的读，外加四个字段（单个
   space 的读不带它们；老服务器没有后三个，客户端读作没有）：
-  - `pendingOps`：这个 space 变更集里等 owner 决定的 op 数（Review 的数）。plan 的修改建议不是 op，不算在里面；
+  - `pendingOps`：这个 space 变更集里等 owner 决定的 op 数（Review 的数）。plan 的修改建议不是 op，不算在里面。所有 space
+    的 `pendingOps` 之和，就是 Activity 页第一条横幅和 Review 页头的数；
   - `planWaiting`：这个 space 的 plan 里等 owner 的件数，各算一件：在途的起草、修订或生成作业（plan 读给出的那个作业）被挡住——
     服务端挂起（`plan.jobs.held`），或已建任务还没开跑而维护 workspace 的 runner 不在线；起草或修订失败、之后没有存过新版本；
     等确认的草稿；每条待处理的修改建议。只是在进行中的（排队、起草中、写文档中）和失败的生成不算。runner 是维护 workspace 所在的
     那台，在线与否用 runners 列表的同一条规则（`isRunnerOnline`）；没设维护 workspace、它已删除或没有 runner，就是不知道，
     不知道不算不在线。口径与 web `wikiPlanPending`、OrbitKit `WikiPlanLogic.pending` 相同，三方都钉在
     `src/shared/src/wiki-docs.fixture.json` 的 `plan.states`（每个用例的 `pending`）上，服务端是 `wiki-plan-waiting.spec.ts`。
-    所有 space 的 `pendingOps + planWaiting` 之和，就是抽屉、Wiki 页头 Activity 按钮、Activity 横幅和 Review 页头的那个数；
+    所有 space 的 `pendingOps + planWaiting` 之和，就是抽屉、web 侧栏和 Wiki 页头 Activity 角标的那个「等你」数，等于
+    Activity 页琥珀横幅之和；
   - `workspaceIds`：绑在这个 space 上、没被删的 workspace，按绑定的先后，和 user 门上所有 id 一样是 public id；
   - `docs`：`{ written, total }`，已确认 plan 的篇数与已写篇数，算法同目录（§22.7）；没有已确认的 plan 时为 null。
 

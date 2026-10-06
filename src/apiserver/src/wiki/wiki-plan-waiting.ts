@@ -5,10 +5,10 @@ import { wikiPlanJobRowOfSpace, wikiPlanJobStateOf } from './wiki-plan-job';
 
 /**
  * How many things of a space's plan wait on its owner (contract `space.list.planWaiting`): what the
- * drawer, the Wiki's Activity button, the Activity banner and Review's head add to the proposals waiting
- * in Review. Counted here, once, exactly as the clients count it beside Plan — web `wikiPlanPending`
- * (lib/wikiPlan.ts), OrbitKit `WikiPlanLogic.pending` — and held to the vectors they are held to: every
- * case of `src/shared/src/wiki-docs.fixture.json` `plan.states` that says `pending`
+ * drawer, the web sidebar and the Wiki's Activity badge add to the proposals waiting in Review — the sum
+ * of the Activity page's amber banners. Counted here, once, exactly as the clients count it beside Plan —
+ * web `wikiPlanPending` (lib/wikiPlan.ts), OrbitKit `WikiPlanLogic.pending` — and held to the vectors they
+ * are held to: every case of `src/shared/src/wiki-docs.fixture.json` `plan.states` that says `pending`
  * (wiki-plan-waiting.spec.ts).
  *
  * One each for: the draft, revision or build on its way that is held — by the server, or not started

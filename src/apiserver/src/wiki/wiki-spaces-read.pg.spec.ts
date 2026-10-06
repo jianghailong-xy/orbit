@@ -444,7 +444,7 @@ test('each space carries what of its plan waits on the owner, the workspaces bou
 
   const fullRow = listed.get(full)!;
   assert.equal(fullRow.planWaiting, 4, 'full: the draft to confirm, two proposals and the revision that failed');
-  assert.equal(fullRow.pendingOps, 1, 'the changeset op is the sidebar\'s, and the plan\'s proposals are not');
+  assert.equal(fullRow.pendingOps, 1, 'the changeset op is Review\'s, and the plan\'s proposals are not');
   assert.deepEqual(fullRow.docs, { written: 1, total: 3 }, 'one of the confirmed plan\'s three documents written');
   assert.deepEqual(fullRow.workspaceIds, [b62(wsFull)]);
   const directory = await call(h, { bearer: owner.bearer }, 'GET', `/wiki/spaces/${full}/docs`);
@@ -459,6 +459,13 @@ test('each space carries what of its plan waits on the owner, the workspaces bou
   for (const [spaceId, runnerOnline] of [[bare, null], [quiet, null], [full, false], [offline, false]] as const) {
     assert.equal(listed.get(spaceId)!.planWaiting, await fromPlanRead(h, owner, spaceId, runnerOnline), `the plan read of ${spaceId}`);
   }
+
+  // What the clients add up from the rows (criterion 4): the number waiting on the owner — the drawer's, the
+  // web sidebar's and the Activity badge's, the Activity page's amber banners together — is every space's
+  // pendingOps and planWaiting; the Activity page's first banner and Review's head count the proposals alone.
+  const all = [...listed.values()];
+  assert.equal(all.reduce((n, row) => n + row.pendingOps + row.planWaiting, 0), 7, 'waiting on the owner: 1 + 0 + (1 + 4) + 1');
+  assert.equal(all.reduce((n, row) => n + row.pendingOps, 0), 1, 'proposals to review: the one changeset op');
 
   const strangers = await rows(h, stranger);
   assert.deepEqual([...strangers.keys()], [theirs]);
