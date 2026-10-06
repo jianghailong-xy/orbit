@@ -144,7 +144,9 @@ Base UI 1.8.0 的 Menu 与 Select 都是非 virtual 列表导航：键盘打开�
 | 前一任务的 burst 探针 `p2-select-keys/select-keys-burst.browser.mjs`（文件未改） | **276/276**，与基线树上的结果逐项相同：Orbit Select 已修好的 ↓↓⏎、↓↑⏎、↓⏎（从 null）burst 全部正确，且全部交给列表（字段 3×20、样例 2×20）；旧 AntD、Combobox、MultiSelect 全对；Orbit Menu ↓↓⏎ 仍为 20/20 不执行 | [regression-select-keys-burst-delivered](regression-select-keys-burst-delivered/summary.json)，汇总见 [keyboard-window-summary.json](keyboard-window-summary.json) 的 `regression-select-keys-burst-delivered` |
 | choices 原入口（Dialog/旧 Modal 内选择器、逐层 Esc、Tab、主题、IME 合成、外部点击、子菜单 Esc、键盘清除、正常/减少动效下 Dialog→Popover→Select 逐层退出），八环境 | **32/32**，与基线树相同 | [regression-choices-entry-delivered](regression-choices-entry-delivered/summary.json) |
 | choices 测试清单 `--list` | 520 个测试 / 4 个文件，从「Listing tests:」起与基线树的 `checks/list-choices.txt` 和 `p2-select-keys/checks/list-choices.txt` 逐字节相同（sha256 `869171286b2f…`）：没有增删或改名 | [checks/list-choices-delivered.txt](checks/list-choices-delivered.txt) |
-| 完整 choices 矩阵 `npm run test:ui-choices -w @orbit/web` | FULL_DELIVERED | [regression-choices-full-delivered](regression-choices-full-delivered/summary.json) |
+| 完整 choices 矩阵 `npm run test:ui-choices -w @orbit/web`，第一次 | 517/520，主机负载约 22–38（用时 30.6 分钟）。三个失败都在 `choices-motion.browser.mjs:104`，都是 90 秒超时。chromium-light-phone「normal top … search」页面没有挂载：trace 中 13 个模块请求以 `net::ERR_NETWORK_CHANGED` 中止，发生在点击之前。webkit-light-desktop「normal flipped … search」和 webkit-dark-phone「normal flipped … attachment」没有网络错误，卡在 Orbit 一侧的入场采样（`:70`，经 `:114`）：32 次观察里弹层都已显示、带入场动画名、opacity 1，`document.getAnimations()` 却一直为空，即 200ms 的入场在观察器第一次采样之前已经结束，等待「至少记录到一个 CSSAnimation」永远不成立。P2.2 第 2 版记录过同一现象（WebKit 手机自动翻转的搜索列表，只靠帧观察取不到入场动画），观察器因此另加了 animationstart 监听；这次在高负载下两者都没赶上。这三个用例在基线树的两次完整运行中都通过 | [regression-choices-full-delivered](regression-choices-full-delivered/summary.json)，[trace 归类](regression-choices-full-delivered-traces.json)；Orbit 一侧的观察记录在同目录的 `*--motion-diagnostic.json` |
+| 上述三个失败用例，各自在原环境单独重复 10 次（用例、超时、重试未改） | REPEATS_DELIVERED | REPEATS_LINKS |
+| 完整 choices 矩阵，第二次 | FULL2_DELIVERED | [regression-choices-full-delivered-second](regression-choices-full-delivered-second/summary.json) |
 | overlays 矩阵 `npm run test:ui-overlays -w @orbit/web`（Dialog/Drawer 外观、Tab 循环、Esc/外部关闭与焦点归还、嵌套层、新旧弹层双向共存、异步确认、主题继承、合成中 Esc、动效与滚动恢复），八环境 | OVERLAYS_DELIVERED | [regression-overlays-delivered](regression-overlays-delivered/summary.json) |
 | choices / overlays / toasts / toasts-tests 四套 fixture 类型检查 | 通过（退出码 0，无输出） | [checks/fixture-types-delivered.json](checks/fixture-types-delivered.json) |
 | 相关单测（`theme.test.tsx`、`boundary.test.ts`、`ShareModal.test.tsx`、`WorkspaceView.composerMenu.test.tsx`，即 P2.2 的单测集合；最后一个文件 P3.1 改过） | 4 个文件 / 22 个测试通过；boundary 确认 Base UI 仍只在 Orbit 组件内、公共组件不依赖 AntD | [checks/unit-tests-delivered.json](checks/unit-tests-delivered.json) |
@@ -190,6 +192,7 @@ Base UI 1.8.0 的 Menu 与 Select 都是非 virtual 列表导航：键盘打开�
 | [baseline-select-a](baseline-select-a/summary.json) … [-e](baseline-select-e/summary.json) | 基线树 | 选择基线五段，共 1480 个测试 |
 | [baseline-rerun](baseline-rerun/summary.json) | 基线树 | 13 个页面未挂载样本的补跑 |
 | [baseline-menu-up](baseline-menu-up/summary.json) | 交付树 | ↑ 打开的菜单基线，360 个测试 |
+| [baseline-menu-up-rerun](baseline-menu-up-rerun/summary.json) | 交付树 | 1 个页面未挂载样本的补跑 |
 | [regression-select-keys-burst](regression-select-keys-burst/summary.json)、[-delivered](regression-select-keys-burst-delivered/summary.json) | 基线树、交付树 | 前一任务 burst 探针的重跑 |
 | [regression-choices-entry](regression-choices-entry/summary.json)、[-delivered](regression-choices-entry-delivered/summary.json) | 基线树、交付树 | choices 原入口，八环境 |
 | [regression-choices-full-first](regression-choices-full-first/summary.json)、[-second](regression-choices-full-second/summary.json) | 基线树 | 完整 choices 矩阵的两次运行 |
