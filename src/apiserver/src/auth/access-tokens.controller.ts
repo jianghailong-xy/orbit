@@ -54,9 +54,10 @@ export class AccessTokensController {
 }
 
 /**
- * The token reading itself (§6.5): who it acts as and what it was granted, for `orbit whoami` and
- * `orbit login --with-token` — `GET /users/me` is the account's and refuses a token. Every token
- * reaches it, whatever its scopes and workspaces (@PatSelf, the one route that is so). A login is
+ * The token acting on itself (§6.5): reading who it acts as and what it was granted, for `orbit
+ * whoami` and `orbit login --with-token` — `GET /users/me` is the account's and refuses a token —
+ * and revoking itself, for `orbit logout`, which `/access-tokens*` refuses it. Every token reaches
+ * both, whatever its scopes and workspaces (@PatSelf, the two routes that are so). A login is
  * answered 400: it is not a token, and `GET /users/me` describes it.
  */
 @UseGuards(JwtAuthGuard)
@@ -67,17 +68,32 @@ export class PatSelfController {
   @Get('self')
   @PatSelf()
   async self(@CurrentUser() user: AuthUser) {
-    const credential = user.credential;
-    if (credential?.kind !== 'PAT') {
-      throw new BadRequestException({
-        code: 'NOT_A_PERSONAL_ACCESS_TOKEN',
-        message:
-          'This request was made signed in to Orbit, not with a personal access token; '
-          + 'GET /api/pat/self describes the token a request is made with',
-      });
-    }
-    const token = await this.pats.self(user.userId, credential.tokenId);
+    const token = await this.pats.self(user.userId, tokenIdOf(user));
     if (!token) throw new UnauthorizedException('invalid token');
     return { userId: user.userId, email: user.email, token };
   }
+
+  /**
+   * Revoke the token this request is made with, and no other — recorded USER, as revoking it in the
+   * settings page is. Idempotent as that revoke is; the token is 401 from its next request on.
+   */
+  @Delete('self')
+  @PatSelf()
+  revokeSelf(@CurrentUser() user: AuthUser) {
+    return this.pats.revoke(user.userId, tokenIdOf(user), 'USER');
+  }
+}
+
+/** The id of the personal access token a request was made with; 400 for a request signed in to Orbit. */
+function tokenIdOf(user: AuthUser): string {
+  const credential = user.credential;
+  if (credential?.kind !== 'PAT') {
+    throw new BadRequestException({
+      code: 'NOT_A_PERSONAL_ACCESS_TOKEN',
+      message:
+        'This request was made signed in to Orbit, not with a personal access token; '
+        + '/api/pat/self reads or revokes the token a request is made with',
+    });
+  }
+  return credential.tokenId;
 }

@@ -153,7 +153,7 @@ final class SessionFolderPageWiringTests: XCTestCase {
         let management = try slice(page, from: "private struct SessionFolderManagement: ViewModifier {", to: "\n}\n")
         XCTAssertTrue(management.contains(".alert(SessionFolderCopy.renameTitle, isPresented: renamingPresented)"))
         XCTAssertTrue(management.contains("TextField(SessionFolderCopy.namePlaceholder, text: $draft)"))
-        XCTAssertTrue(management.contains(".confirmationDialog(deleteTitle, isPresented: deletingPresented, titleVisibility: .visible)"))
+        XCTAssertTrue(management.contains(".orbitConfirmation(deleteTitle, isPresented: deletingPresented)"))
         XCTAssertTrue(management.contains("Text(SessionFolderCopy.deleteMessage)"))
         XCTAssertTrue(management.contains("Button(SessionFolderCopy.deleteConfirm, role: .destructive) { delete() }"))
         XCTAssertTrue(management.contains("await app.renameSessionFolder(folder.id, to: name)"))

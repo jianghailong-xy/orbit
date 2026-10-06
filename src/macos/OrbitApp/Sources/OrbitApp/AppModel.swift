@@ -93,7 +93,7 @@ final class AppModel {
     /// Latches the one-shot default-landing resolution so it runs only after the first successful
     /// agent-list load, and never overrides a later user/deep-link choice.
     private var didResolveDefaultLanding = false
-    /// The workspace a cold launch landed on from its snapshot (`restoreLaunchSnapshot`) before the
+    /// The workspace a cold launch landed on from its snapshot (`adoptLaunchSnapshot`) before the
     /// workspace fetch answered. While it is still the one selected nobody has chosen anything, so
     /// `resolveDefaultLanding` decides afresh once the fetch succeeds.
     private var provisionalLandingAgentID: String?
@@ -341,11 +341,17 @@ final class AppModel {
     private static let runnerSnapshotRefreshInterval: TimeInterval = 15
     #endif
     private var lastSnapshot: [Session]?
-    /// True from a cold launch's restore (`restoreLaunchSnapshot`) until the first fetched Open
+    /// True from a cold launch's restore (`adoptLaunchSnapshot`) until the first fetched Open
     /// snapshot lands. The list in hand until then is the previous run's, or built on it by an
     /// in-place update, and a diff against it would announce everything that changed while the app
     /// was gone — so it never becomes `lastSnapshot`, and that first fetch only primes.
     private var openListFromLaunchSnapshot = false
+    /// Whether a server-answered Open list has landed since the last sign-out — the race guard for
+    /// the launch restore, which reads its file off the main thread and must never put the previous
+    /// run's rows over this run's fetch. Distinct from `openListFromLaunchSnapshot`, which says what
+    /// the list in hand IS: this one is latched, so a list that later turns out to be a snapshot's
+    /// cannot un-answer it.
+    private var openListAnswered = false
     /// Sessions known to be leaving Open because somebody FILED them (completed / trashed), rather
     /// than because a run finished. Filing drops the row from Open, which the snapshot diff would
     /// otherwise read as the run finishing and announce with a "Session finished" banner — reporting
@@ -459,6 +465,9 @@ final class AppModel {
     /// What the next cold launch draws first (`persistLaunchSnapshot` / `restoreLaunchSnapshot`),
     /// scoped to this instance.
     @ObservationIgnored private var launchSnapshots: LaunchSnapshotStore?
+    /// The launch restore's read of that file, off the main thread — held so a switch of instance
+    /// cancels it rather than letting the old instance's snapshot land on the new one's app.
+    @ObservationIgnored private var launchSnapshotRestore: Task<Void, Never>?
     #if os(macOS)
     /// The local runner this Mac may host. Shared between the menu-bar tray (status + quick
     /// Start/Stop) and the runner-manager window (log + enroll). Created per instance. macOS-only:
@@ -468,6 +477,8 @@ final class AppModel {
     #endif
 
     private func configure(_ url: URL) {
+        launchSnapshotRestore?.cancel()
+        launchSnapshotRestore = nil
         controlRefreshGeneration &+= 1
         controlRefreshTask?.cancel()
         controlRefreshTask = nil
@@ -786,6 +797,7 @@ final class AppModel {
         resetNavigation()
         lastSnapshot = nil
         openListFromLaunchSnapshot = false
+        openListAnswered = false
         openListIsReaderBase = false
         eventWrittenRows = []
         menuSummary = .empty
@@ -1416,6 +1428,7 @@ final class AppModel {
     /// `notify: false` is for a snapshot whose transitions the caller already accounted for (a local
     /// purge), where the diff would otherwise post a bogus "finished" alert.
     private func applySessionSnapshot(_ list: [Session], notify: Bool = true) {
+        openListAnswered = true   // a server-answered list is in hand; see `openListAnswered`
         openListReader?.invalidate()   // see `openListReader`; a fetch marks it adopted once this is done
         openListIsReaderBase = false
         // Notify on snapshot-to-snapshot transitions (skip the first load, which only primes). Skip
@@ -1558,6 +1571,7 @@ final class AppModel {
     /// `list` is `sessions` in another order (`fetchOpenSessions` has already applied every row that
     /// differs). Nothing transitions, so nothing is announced; only what is read in list order moves.
     private func adoptOpenOrder(_ list: [Session]) {
+        openListAnswered = true   // server-ordered rows; see `openListAnswered`
         sessions = list
         lastSnapshot = list
         var derived = OpenListDerived(needsYou: needsYouSessions, agentNeedsYou: agentNeedsYou,
@@ -2894,30 +2908,63 @@ final class AppModel {
         provisionalLandingAgentID = nil
     }
 
+    /// Read what the previous run left (`persistLaunchSnapshot`) and adopt it — off the main thread,
+    /// so the first frame is not held behind reading and decoding the whole Open list. Called from
+    /// `init`, where the old synchronous `load()` used to run before the first frame; the read now
+    /// runs beside the launch and `adoptLaunchSnapshot` applies it as it arrives.
+    private func restoreLaunchSnapshot() {
+        guard let store = launchSnapshots else { return }
+        launchSnapshotRestore?.cancel()
+        launchSnapshotRestore = Task { [weak self] in
+            let snapshot = await store.loadOffMain()
+            guard !Task.isCancelled, let self, let snapshot else { return }
+            self.adoptLaunchSnapshot(snapshot)
+        }
+    }
+
     /// Draw a cold launch from what the previous run left (`persistLaunchSnapshot`): the account, the
     /// workspace list and the Open sessions, landed on the workspace you were in — so the first frame
     /// is that workspace's session list rather than a spinner. Nothing here is treated as an answer:
     /// the launch's own fetches replace every list as they land, and the landing made here is only
     /// provisional (see `resolveDefaultLanding`). Nothing is announced off this list either: see
     /// `openListFromLaunchSnapshot`.
-    private func restoreLaunchSnapshot() {
-        guard let snapshot = launchSnapshots?.load(), let agents else { return }
-        let landing = snapshot.landingAgentID(
-            lastAgentID: UserDefaults.standard.string(forKey: Self.lastAgentKey))
-        user = snapshot.user
-        // Points the landing's list at its Open rows, which `adoptOpenList` then fills.
-        agents.adoptLaunchSnapshot(snapshot, showing: landing)
-        openListFromLaunchSnapshot = true
-        adoptOpenList(snapshot.openSessions)
-        guard let landing else { return }
-        provisionalLandingAgentID = landing
-        selectedAgentID = landing
+    ///
+    /// This runs when the snapshot's file finishes decoding rather than in `init`, so a fetch may
+    /// already have answered — and that answer is newer than a file written as the previous run left
+    /// the foreground. `fillIn` is what keeps the two apart: what the launch already has is not
+    /// adopted, so the previous run's rows can never land on top of this run's.
+    private func adoptLaunchSnapshot(_ snapshot: LaunchSnapshot) {
+        guard signedIn, let agents else { return }
+        let fillIn = snapshot.fillIn(accountAnswered: user != nil,
+                                     workspacesAnswered: agents.loadState.hasLoaded,
+                                     openListAnswered: openListAnswered)
+        guard !fillIn.isEmpty else { return }
+        if let account = fillIn.user { user = account }
+        if let workspaces = fillIn.workspaces {
+            let landing = snapshot.landingAgentID(
+                lastAgentID: UserDefaults.standard.string(forKey: Self.lastAgentKey))
+            // Points the landing's list at its Open rows, which `adoptOpenList` then fills.
+            agents.adoptLaunchSnapshot(workspaces, showing: landing)
+            if let landing {
+                provisionalLandingAgentID = landing
+                selectedAgentID = landing
+            }
+        }
+        if let openSessions = fillIn.openSessions {
+            openListFromLaunchSnapshot = true
+            adoptOpenList(openSessions)
+        }
     }
 
     /// Write what the next cold launch draws first. Called as the app leaves the foreground — the
     /// last moment it is sure of the CPU — and synchronous for the same reason
     /// `ConsoleRegistry.persistAll` is. Only once this run's workspace fetch has answered: a run that
     /// never reached the server leaves the previous snapshot as it was.
+    ///
+    /// Deliberately still synchronous, unlike the read (`restoreLaunchSnapshot`): the encode is of
+    /// the same size, but it is paid on the way out of the foreground — where a write that is still
+    /// in flight when iOS suspends is a write that never happened — and never on the launch path the
+    /// first frame waits behind.
     func persistLaunchSnapshot() {
         guard signedIn, let agents, agents.loadState.hasLoaded, let launchSnapshots else { return }
         launchSnapshots.save(LaunchSnapshot(user: user, agents: agents.items,

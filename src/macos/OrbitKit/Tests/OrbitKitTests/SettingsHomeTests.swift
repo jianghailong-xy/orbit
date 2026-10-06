@@ -117,8 +117,9 @@ final class SettingsHomeTests: XCTestCase {
     // MARK: - Copy that is composed
 
     func testTheComposedLinesReadAsTheWebsDo() {
-        XCTAssertEqual(SettingsCopy.signOutTitle(instance: "orbitd.io"), "Sign out of orbitd.io?")
-        XCTAssertEqual(SettingsCopy.signOutTitle(instance: nil), "Sign out?")
+        // Names neither the server nor the account: the question is asked over the screen that
+        // already shows both.
+        XCTAssertEqual(SettingsCopy.signOutTitle, "Sign out?")
         XCTAssertEqual(SettingsCopy.deviceHeader("iPhone"), "This iPhone")
     }
 

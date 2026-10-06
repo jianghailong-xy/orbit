@@ -88,14 +88,25 @@ credential in `~/.orbit/config.json`; that file is private and must not be poste
 
 | Variable | Required / default | Purpose | Secret? | Apply change |
 | --- | --- | --- | --- | --- |
-| `ORBIT_SERVER_URL` | Context-dependent; registration persists `serverUrl` | CLI/session control-plane URL. Prefer the generated installer or `orbit register --server` when enrolling a machine. | No; redact private origin | Re-enroll for a deployment change; restart affected local processes |
 | `ORBIT_RUNNER_TOKEN` | Issued by registration; no public default | Long-lived machine credential; also available to authorized CLI/session contexts. Never invent or share it. | Yes | Re-register when revoked; registration restarts the installed service |
 | `ANTHROPIC_API_KEY` | Optional; unset uses local login | Usage-billed Claude Code authentication on the runner. | Yes | Update the service's private environment and restart it |
 | `CLAUDE_CODE_OAUTH_TOKEN` | Optional; unset uses local login | Non-interactive subscription authentication from the runtime's token setup flow. | Yes | Update the service's private environment and restart it |
-| `ORBIT_HOME` | Optional; `~/.orbit` | Runner configuration and run scratch directory. A shell and service must use the same home. | Directory contains credentials | Update the service configuration and restart it |
+| `ORBIT_HOME` | Optional; `~/.orbit` | Runner configuration and run scratch directory, and the CLI's saved login (`user.json`). A shell and service must use the same home. | Directory contains credentials | Update the service configuration and restart it |
 | `ORBIT_NO_SELFUPDATE` | Optional; unset | Disables runner self-updates. | No | Restart runner with the setting |
 | `ORBIT_NO_ENGINE_UPDATE` | Optional; unset | Disables periodic coding-runtime updates. | No | Restart runner with the setting |
 
 An export in an interactive shell does not update an already-running systemd/launchd service. Use
 `orbit doctor` to inspect the selected runtime and service PATH; see
 [runner troubleshooting](runner-troubleshooting.md) and [CLI automation](runner-cli.md).
+
+## CLI acting as a person
+
+The `orbit` CLI can act as a user with a personal access token, on any machine and with or without a runner.
+`orbit login --with-token` saves the token and its server in `$ORBIT_HOME/user.json` (mode `0600`), apart from
+the runner's `config.json`; the runner service never reads it. These variables take its place where a saved
+login is impractical, such as CI. See [personal access tokens](runner-cli.md#personal-access-tokens).
+
+| Variable | Required / default | Purpose | Secret? | Apply change |
+| --- | --- | --- | --- | --- |
+| `ORBIT_USER_TOKEN` | Optional; unset uses the saved login | A personal access token (Settings → Access tokens) the CLI acts as, in place of `user.json`. Ignored inside an Orbit session and never passed to agent processes. | Yes | Next CLI command |
+| `ORBIT_SERVER_URL` | Optional; the runner's server, else the server the binary was built for | The server `ORBIT_USER_TOKEN` belongs to, and the default for `orbit login --server`. A saved login always uses its own server. | No; redact private origin | Next CLI command |

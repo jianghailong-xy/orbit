@@ -108,7 +108,7 @@ export class JwtAuthGuard implements CanActivate {
   /**
    * Whether this route is open to a verified token (§6.2), from what the route declares: a refusal
    * (@PatForbidden) is a 403 whatever the token holds; a scope (@PatScope) must be one it was granted;
-   * the token reading itself (@PatSelf) is open to every token, needing no scope and no workspace;
+   * the token acting on itself (@PatSelf) is open to every token, needing no scope and no workspace;
    * and a route that declares none of them is a 403 as well — fail-closed, so a route added without
    * a decision is closed to tokens rather than open to them. Answers the declaration that admitted
    * the token, a scope's with what it declares for a token confined to workspaces.
