@@ -792,6 +792,7 @@ final class AppModel {
         projectSessions = []
         projectSessionsAddress = nil
         projectSessionsError = nil
+        projectCompletedSessions = [:]
         #endif
         sessionDetails.removeAll()
         resetNavigation()
@@ -2224,7 +2225,15 @@ final class AppModel {
     private(set) var projectSessionsIntegration: ProjectIntegrationView?
     private(set) var projectSessionsIntegrationReadAt: Date?
     private(set) var projectSessionsIntegrationReadFailed = false
-    private var projectSessionsAddress: SessionProjectAddress?
+    /// The page the state above is for. The page reads it so that nothing held for another address,
+    /// and nothing before its own load has begun, is drawn as its own.
+    private(set) var projectSessionsAddress: SessionProjectAddress?
+    /// Each project's Completed members as its page last read them: what a poll takes them from,
+    /// and what the page opens on when it comes back to the project. The Open members are always
+    /// the app's own Open list's.
+    private var projectCompletedSessions: [String: [Session]] = [:]
+    /// When this page's members were last read; nil until a read has answered for it.
+    private var projectSessionsReadAt: Date?
     /// The merge into main for the project whose sessions page is showing: the card under its
     /// progress card and the merges on its timeline (owner decision 2026-10-06).
     private(set) var projectSessionsMerge: ProjectMergeModel?
@@ -2294,11 +2303,18 @@ final class AppModel {
     }
 
     /// Project membership spans Workspaces; this request deliberately has no runner/agent filter.
+    /// A new address opens on what the app already holds of the project — its Open members from
+    /// the app's Open list, a workspace list's rows, the Completed ones its page last read — rather
+    /// than on none, and the read replaces them when it answers.
     func loadProjectSessions(_ address: SessionProjectAddress) async {
         guard let api else { return }
+        let key = PublicID.storageKey(address.projectID)
         if projectSessionsAddress != address {
             projectSessionsAddress = address
-            projectSessions = []
+            projectSessions = SessionProjectMembers.members(
+                of: address.projectID,
+                in: sessions + (agents?.allSessions ?? []) + (projectCompletedSessions[key] ?? []))
+            projectSessionsReadAt = nil
             projectSessionsError = nil
             projectSessionsIntegration = nil
             projectSessionsIntegrationReadAt = nil
@@ -2307,8 +2323,6 @@ final class AppModel {
         }
         projectSessionsLoading = true
         defer { if projectSessionsAddress == address { projectSessionsLoading = false } }
-        let integrationRead = Task { try await api.projectIntegration(address.projectID) }
-        defer { integrationRead.cancel() }
         do {
             let openRead = Task { try await api.listSessions(view: .open, projectId: address.projectID) }
             let completedRead = Task { try await api.listSessions(view: .completed, projectId: address.projectID) }
@@ -2319,18 +2333,54 @@ final class AppModel {
             let rows = try await openRead.value + completedRead.value
             guard projectSessionsAddress == address, !Task.isCancelled else { return }
             // An older server may ignore projectId. It must never put unrelated sessions here.
-            var seen = Set<String>()
-            projectSessions = rows.filter {
-                $0.projectMembership?.projectId == address.projectID &&
-                    $0.effectiveLifecycleState != .trash && seen.insert($0.id).inserted
-            }.sorted { ($0.lastTurnAt ?? $0.createdAt ?? "") > ($1.lastTurnAt ?? $1.createdAt ?? "") }
+            projectSessions = SessionProjectMembers.members(of: address.projectID, in: rows)
+            projectCompletedSessions[key] = projectSessions.filter { $0.effectiveLifecycleState != .open }
+            projectSessionsReadAt = Date()
             projectSessionsError = nil
             for row in projectSessions { sessionDetails.store(row) }
         } catch {
             guard projectSessionsAddress == address, !Task.isCancelled else { return }
             projectSessionsError = APIClient.failureReason(error)
         }
-        let integration = try? await integrationRead.value
+    }
+
+    /// One poll of the page's members that asks again for neither list unless something moved. The
+    /// Open members are the app's own Open list's, kept current by its poll and the control stream;
+    /// the Completed ones are read again only when an Open member has left that list — how a
+    /// session joins them from here — or `SessionProjectMembers.completedRefresh` after the last
+    /// read. Until a read has answered for this page, or before the server has answered the app's
+    /// Open list (`openListAnswered`), a poll is the full read.
+    func pollProjectSessions(_ address: SessionProjectAddress) async {
+        guard let api, projectSessionsAddress == address else { return }
+        guard projectSessionsError == nil, let readAt = projectSessionsReadAt, openListAnswered else {
+            return await loadProjectSessions(address)
+        }
+        let key = PublicID.storageKey(address.projectID)
+        let poll = SessionProjectMembers.poll(shown: projectSessions, projectID: address.projectID,
+                                              openList: sessions, completed: projectCompletedSessions[key] ?? [])
+        if poll.members != projectSessions { projectSessions = poll.members }
+        guard poll.moved || Date().timeIntervalSince(readAt) >= SessionProjectMembers.completedRefresh else { return }
+        do {
+            let rows = try await api.listSessions(view: .completed, projectId: address.projectID)
+            guard projectSessionsAddress == address, !Task.isCancelled else { return }
+            let completed = SessionProjectMembers.members(of: address.projectID, in: rows)
+            projectCompletedSessions[key] = completed
+            projectSessionsReadAt = Date()
+            let members = SessionProjectMembers.members(of: address.projectID, in: sessions + completed)
+            if members != projectSessions { projectSessions = members }
+            for row in completed { sessionDetails.store(row) }
+        } catch {
+            guard projectSessionsAddress == address, !Task.isCancelled else { return }
+            projectSessionsError = APIClient.failureReason(error)
+        }
+    }
+
+    /// One poll of the landing line's read, beside the members' reads rather than behind them: it
+    /// is the live line, and the member lists are the slowest reads the page makes. A read that
+    /// fails keeps the last answer and says it is stale.
+    func loadProjectIntegration(_ address: SessionProjectAddress) async {
+        guard let api else { return }
+        let integration = try? await api.projectIntegration(address.projectID)
         guard projectSessionsAddress == address, !Task.isCancelled else { return }
         if let integration {
             projectSessionsIntegration = integration
