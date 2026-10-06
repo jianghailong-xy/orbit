@@ -192,13 +192,13 @@ final class ProjectsWiringTests: XCTestCase {
         let agents = try slice(shell, from: "case .agents:", to: "case .projects:")
         XCTAssertTrue(agents.contains(
             "case .sessionProject(let address, asDestination: false): SessionProjectPage(address: address)\n"
-            + "                        case .sessionProject(let address, asDestination: true): SessionProjectPage(address: address)\n"),
+            + "                            case .sessionProject(let address, asDestination: true): SessionProjectPage(address: address)\n"),
                       "a list row's sessions page keeps the system back button and back-swipe")
         XCTAssertTrue(agents.contains(
-            "SessionProjectPage(address: address)\n                            .background { SwipeBackGestureToggle(enabled: !model.atDestinationRoot) }"),
+            "SessionProjectPage(address: address)\n                                .background { SwipeBackGestureToggle(enabled: !model.atDestinationRoot) }"),
                       "and the system back-swipe is off on the sessions page while it is on top")
         XCTAssertTrue(agents.contains(
-            ".background { SwipeBackGestureToggle(enabled: !model.atDestinationRoot) }\n                            .navigationBarBackButtonHidden()\n                            .drawerToggle(open: openDrawer)"),
+            ".background { SwipeBackGestureToggle(enabled: !model.atDestinationRoot) }\n                                .navigationBarBackButtonHidden()\n                                .drawerToggle(open: openDrawer)"),
                       "and it leads with the drawer's hamburger, as the session list does, not a back button")
         XCTAssertEqual(shell.components(separatedBy: "SwipeBackGestureToggle(enabled:").count - 1, 1,
                        "no other page turns the system back-swipe off")
