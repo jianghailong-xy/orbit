@@ -1,0 +1,80 @@
+74 |     }
+75 | }
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[363/410] Compiling OrbitApp RunnerEnginePage.swift
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:73:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+71 |                        value: spun)
+72 |             .onAppear { spun = running }
+73 |             .onChange(of: running) { spun = $0 }
+   |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+74 |     }
+75 | }
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[364/410] Compiling OrbitApp RunnerNamePage.swift
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:73:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+71 |                        value: spun)
+72 |             .onAppear { spun = running }
+73 |             .onChange(of: running) { spun = $0 }
+   |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+74 |     }
+75 | }
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[365/410] Compiling OrbitApp RunnerPageParts.swift
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:73:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+71 |                        value: spun)
+72 |             .onAppear { spun = running }
+73 |             .onChange(of: running) { spun = $0 }
+   |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+74 |     }
+75 | }
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[366/410] Compiling OrbitApp RunnerSignInView.swift
+[367/410] Compiling OrbitApp SessionCoordinatorBadge.swift
+[368/410] Compiling OrbitApp SessionFolderPage.swift
+[369/410] Compiling OrbitApp SessionListSearch.swift
+[370/410] Compiling OrbitApp SessionMessageCardView.swift
+[371/410] Compiling OrbitApp SessionMoveSheet.swift
+[372/410] Compiling OrbitApp SessionMoveTargetPage.swift
+[373/410] Compiling OrbitApp SessionProjectListSupport.swift
+[374/410] Compiling OrbitApp SessionProjectPage.swift
+[375/410] Compiling OrbitApp SessionRenameAlert.swift
+[376/410] Compiling OrbitApp SessionReplyCardView.swift
+[377/410] Compiling OrbitApp SessionRowActions.swift
+[378/410] Compiling OrbitApp SessionSearchView.swift
+[379/410] Compiling OrbitApp SessionTagViews.swift
+[380/410] Compiling OrbitApp SettingsAdminView.swift
+[381/410] Compiling OrbitApp SettingsSheet.swift
+[382/410] Compiling OrbitApp ShareSheet.swift
+[383/410] Compiling OrbitApp SkillsRunnersView.swift
+[384/410] Compiling OrbitApp TaskDetailParts.swift
+[385/410] Compiling OrbitApp TaskListParts.swift
+[386/410] Compiling OrbitApp TaskRunHandoffCard.swift
+[387/410] Compiling OrbitApp TaskStartCardView.swift
+[388/410] Compiling OrbitApp TasksView.swift
+[389/410] Compiling OrbitApp ToastHost.swift
+[390/410] Compiling OrbitApp TopInsetClearOfRefresh.swift
+[391/410] Compiling OrbitApp Typography.swift
+[392/410] Compiling OrbitApp WatchViews.swift
+[393/410] Compiling OrbitApp WatchWakeCardView.swift
+[394/410] Compiling OrbitApp WatchingCard.swift
+[395/410] Compiling OrbitApp WikiArticleView.swift
+[396/410] Compiling OrbitApp WikiDocScreens.swift
+[397/410] Compiling OrbitApp WikiDocView.swift
+[398/410] Compiling OrbitApp WikiPlanView.swift
+[399/410] Compiling OrbitApp WikiRunView.swift
+[400/410] Compiling OrbitApp WikiScreens.swift
+[401/410] Compiling OrbitApp WikiSettingsView.swift
+[402/410] Compiling OrbitApp WikiView.swift
+[403/410] Compiling OrbitApp WorktreeBar.swift
+[404/410] Compiling OrbitApp WorktreeFilePreview.swift
+[405/410] Compiling OrbitApp WatchesModel.swift
+[406/410] Compiling OrbitApp WikiModel.swift
+[407/410] Compiling OrbitApp WorktreeModel.swift
+[407/410] Write Objects.LinkFileList
+[408/410] Linking OrbitApp
+[409/410] Applying OrbitApp
+Build complete! (121.70s)
