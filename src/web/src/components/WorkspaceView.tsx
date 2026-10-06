@@ -206,23 +206,15 @@ import {
 import { BackgroundShellsTray } from './BackgroundShellsTray';
 import { SessionCreatedTasksStrip } from './SessionCreatedTasksStrip';
 import { SessionWatchBadges, SessionWatchStrip } from './WatchRelations';
-import { WatchWakeCard } from './WatchWakeCard';
-import { BackgroundWakeCard } from './BackgroundWakeCard';
-import { OpenItemDeliveryCard } from './OpenItemDeliveryCard';
 import { OrbitLinkCardsProvider } from './OrbitLinkCard';
-import { ProjectStartedCard } from './ProjectStartedCard';
-import { SessionMessageCard } from './SessionMessageCard';
-import { SessionReplyCards } from './SessionReplyCard';
 import {
-  parseWatchWake,
   sessionWatching,
   watchingCountWord,
   watchingSessions,
   watchingWord,
   type SessionWatching,
 } from '../lib/watches';
-import { parseBackgroundWake } from '../lib/backgroundWake';
-import { returnsToComposer } from '../lib/queuedTurnRestore';
+import { isQueuedWatchWake, returnsToComposer } from '../lib/queuedTurnRestore';
 import type { BgShell } from '../lib/backgroundShells';
 import { deriveBackgroundShells, mergeBackgroundShells } from '../lib/backgroundShells';
 import {
@@ -277,11 +269,12 @@ import {
   unpinSession,
   updateSessionConfig,
   switchSessionAccount,
+  type TurnCards,
   uploadAttachment,
 } from '../api';
 import { DshRepairCard } from './Transcript';
 import { approvalRememberOffered, DSH_RUNNER_CAPABILITY, dshRepair } from '../lib/dshRuntime';
-import { AntigravityRepairCard, antigravityRepair, AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, LiveToolOutputsCtx, MD, SessionNavCtx, StreamingDraftsCtx, TaskActivityCtx, type TaskActivity, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
+import { AntigravityRepairCard, antigravityRepair, AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, EventFullCtx, LiveToolOutputsCtx, QueuedUserTurn, SessionNavCtx, StreamingDraftsCtx, TaskActivityCtx, type TaskActivity, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalPanel';
 import {
@@ -373,7 +366,6 @@ import {
 } from './OwnerConfirmationCard';
 import { OwnerConfirmationReopen } from './OwnerConfirmationReopen';
 import { UNDER_REVIEW, underReviewLine } from './OwnerConfirmationReview';
-import { ReviewRequestedCard, SentBackByReviewerCard } from './ConfirmationReviewTurnCards';
 import { ComposerMirror } from './ComposerMirror';
 import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
 import { ShareModal } from './ShareModal';
@@ -381,12 +373,6 @@ import type { Runner } from './TasksSidePanel';
 import { accountsOf } from './AccountSelect';
 import { PlanUsageIndicator } from './PlanUsageIndicator';
 import type {
-  ConfirmationReturnCard,
-  ConfirmationReviewRequestCard,
-  OpenItemDeliveryCard as OpenItemDelivery,
-  ProjectStartedCard as ProjectStarted,
-  SessionMessageCard as SessionMessage,
-  SessionReplyCard as SessionReply,
   SessionTurnIntent,
   SessionTurnPlacement,
   WatchView,
@@ -438,10 +424,12 @@ import {
   acceptedUserTurnLanded,
   clearAcceptedUserTurnsForSession,
   clearAcceptedUserTurnsForTurn,
+  queuedTurnEvent,
   queuedTurnsOutsideTranscript,
   reconcileAcceptedUserTurnSnapshot,
   reconcileQueuedTurnSnapshot,
   transcriptEventsWithDurableDeliveryReceipts,
+  turnCardsOf,
   type AcceptedUserTurn,
 } from '../lib/acceptedUserTurn';
 import { turnPlacementOf } from '../lib/turnPlacement';
@@ -505,7 +493,11 @@ interface RunEvent {
 // until the current turn finishes. Tracked locally so the composer can show it and
 // offer to withdraw it before the runner picks it up. A `!cmd` shell turn queues the
 // same way, so it gets a bubble too — rendered as the command it will run.
-export interface QueuedTurn {
+//
+// The cards it is drawn as (`TurnCards`) are the ones the active snapshot carried, exactly as the
+// accepted-turn placeholder holds them: the queued tail draws the card the transcript will, rather
+// than a bubble it replaces when the runner takes the turn.
+export interface QueuedTurn extends TurnCards {
   turnId: string;
   content: string;
   shell?: boolean;
@@ -521,22 +513,6 @@ export interface QueuedTurn {
   attachments?: { id: string; mimeType: string }[];
   /** When the server queued it — the receipt's own timestamp, as an accepted turn's `acceptedAt`. */
   createdAt?: string;
-  /** An exception item's delivery carries the item's own fields beside its words, exactly as the
-   *  accepted-turn placeholder does (`AcceptedUserTurn.openItemDelivery`): the queued tail draws the
-   *  card the transcript will, rather than a bubble it replaces when the runner takes the turn. */
-  openItemDelivery?: OpenItemDelivery;
-  /** The same for the message telling a coordinator its project was started (`ProjectStartedCard`). */
-  projectStarted?: ProjectStarted;
-  /** And for a confirmation review's two turns: the request a reviewer is handed, and the reviewer's
-   *  return handed to the run (`ActiveSessionTurn.confirmationReviewRequest` / `confirmationReturn`). */
-  confirmationReviewRequest?: ConfirmationReviewRequestCard;
-  confirmationReturn?: ConfirmationReturnCard;
-  /** Another Orbit session's message, and who sent it (`ActiveSessionTurn.sessionMessage`): drawn as
-   *  the "From [that session]" card its echo will be, and never handed back to the reader's composer. */
-  sessionMessage?: SessionMessage;
-  /** The outcomes a reply turn hands back (`ActiveSessionTurn.sessionReplies`): drawn as the reply
-   *  cards its echo will be, rather than as the blocks it is delivered with in the reader's bubble. */
-  sessionReplies?: SessionReply[];
   /** The control plane wrote this turn itself, so nobody typed it (`ActiveSessionTurn.authoredByOrbit`). */
   authoredByOrbit?: true;
 }
@@ -3673,6 +3649,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     () => queuedTurnsOutsideTranscript(scopedQueuedTurns, transcriptEvents),
     [scopedQueuedTurns, transcriptEvents],
   );
+  // The event each of those rows is drawn from (`queuedTurnEvent`): the one its echo will be.
+  const queuedTailEvents = useMemo(
+    () => visibleQueuedTurns.map((turn) => ({ turn, event: queuedTurnEvent(turn) })),
+    [visibleQueuedTurns],
+  );
   // The render-time filter above removes duplication in the same frame the SSE event lands. Trim
   // the acknowledged copy afterwards so landed turns do not accumulate in memory.
   useEffect(() => {
@@ -3861,13 +3842,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 id: attachment.id,
                 mime: attachment.mimeType || 'application/octet-stream',
               })),
-              // The card the snapshot carried for an exception item's delivery, so the placeholder
-              // this row paints is the card the runner's echo will replace it with.
-              ...(row.openItemDelivery ? { openItemDelivery: row.openItemDelivery } : {}),
-              ...(row.projectStarted ? { projectStarted: row.projectStarted } : {}),
-              // …and another session's message, drawn "From [that session]" rather than as the
-              // reader's own bubble while its echo is on the way.
-              ...(row.sessionMessage ? { sessionMessage: row.sessionMessage } : {}),
+              // Every card the snapshot carried, so the placeholder this row paints is the card the
+              // runner's echo will replace it with.
+              ...turnCardsOf(row),
             }))
             .filter(
               (turn) => !acceptedUserTurnLanded(turn, selectedId, accRef.current),
@@ -9628,199 +9605,36 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   rememberable={approvalRememberOffered(runtimeForProvider(shownProvider, configuredProviders))}
                 />
               ))}
-              {!selectedTrashed && visibleQueuedTurns.map((q) => {
-                // Another Orbit session's message is asked about FIRST, off the card the snapshot
-                // carried, before anything is read out of its words — which are the sending agent's to
-                // choose, and could take the shape of a wake below (the transcript's own order,
-                // NodeView).
-                const fromSession = q.sessionMessage ?? null;
-                // A wake a watch queued is the card the transcript draws once a runner takes it
-                // (NodeView), so it keeps that shape when it lands and its JSON stays folded. How
-                // its delivery stands is the queue's line to say, as for every queued row.
-                const wake = fromSession ? null : parseWatchWake(q.content);
-                // A wake the control plane queued for a background job's news, or for a wakeup coming
-                // due, is nobody's message either: it gets the line the transcript draws once a
-                // runner takes it. Withdrawing it is an ordinary cancel — nothing re-sends it.
-                const background = fromSession || wake ? null : parseBackgroundWake(q.content);
-                return fromSession ? (
-                  // Drawn "From [that session]" while it waits, as the transcript draws it once a
-                  // runner takes it. Cancel withdraws it and hands nothing back to the composer — the
-                  // words are the sending session's (`returnsToComposer`) — and there is no Put back
-                  // for the same reason.
-                  <SessionMessageCard
+              {!selectedTrashed && queuedTailEvents.map(({ turn: q, event }) => {
+                // Each row is drawn from the event its echo will be, by the transcript's own dispatch
+                // (QueuedUserTurn): the card the transcript draws once a runner takes it, or the bubble
+                // the reader typed — so taking the turn changes nothing about how it reads. What is the
+                // queue's own is said here, in the slot each card keeps for it: how the turn stands,
+                // and the way out of it.
+                //
+                // A wake a watch queued is withdrawn rather than cancelled, because nothing sends it
+                // again; and only words the reader typed are put back in the composer
+                // (`returnsToComposer`), as Cancel and Stop hand back only those.
+                const wake = isQueuedWatchWake(q);
+                return (
+                  <QueuedUserTurn
                     key={q.turnId}
-                    card={fromSession}
-                    text={q.content}
-                    ts={q.createdAt}
+                    event={event}
+                    turnImages={turnImages}
                     queued={
                       <QueuedTurnMeta
                         placement={q.placement}
                         delivery={q.delivery}
                         deliveryCode={q.deliveryCode}
                         deliveryReason={q.deliveryReason}
-                        onCancel={() => cancelQueued(q.turnId)}
+                        wake={wake}
+                        onCancel={() => (wake ? withdrawWake(q.turnId) : cancelQueued(q.turnId))}
+                        onPutBack={
+                          restoreUndelivered && returnsToComposer(q) ? () => takeBackUndelivered(q) : undefined
+                        }
                       />
                     }
                   />
-                ) : wake ? (
-                  <WatchWakeCard
-                    key={q.turnId}
-                    wake={wake}
-                    text={q.content}
-                    linkable
-                    undelivered={false}
-                    queued={
-                      <QueuedTurnMeta
-                        placement={q.placement}
-                        delivery={q.delivery}
-                        deliveryCode={q.deliveryCode}
-                        deliveryReason={q.deliveryReason}
-                        wake
-                        onCancel={() => withdrawWake(q.turnId)}
-                      />
-                    }
-                  />
-                ) : background ? (
-                  <BackgroundWakeCard
-                    key={q.turnId}
-                    wake={background}
-                    queued={
-                      <QueuedTurnMeta
-                        placement={q.placement}
-                        delivery={q.delivery}
-                        deliveryCode={q.deliveryCode}
-                        deliveryReason={q.deliveryReason}
-                        onCancel={() => cancelQueued(q.turnId)}
-                      />
-                    }
-                  />
-                ) : q.openItemDelivery ? (
-                  // An exception item's delivery is nobody's message on the queue either, and for a
-                  // stronger reason than the two wakes above: nobody typed it at all. It gets the
-                  // card the transcript draws once a runner takes it, with the queue's line at its
-                  // foot — so taking the turn changes nothing about how the delivery reads. Read off
-                  // the payload the active snapshot carried, never out of the text's shape.
-                  <OpenItemDeliveryCard
-                    key={q.turnId}
-                    card={q.openItemDelivery}
-                    text={q.content}
-                    ts={q.createdAt}
-                    queued={
-                      <QueuedTurnMeta
-                        placement={q.placement}
-                        delivery={q.delivery}
-                        deliveryCode={q.deliveryCode}
-                        deliveryReason={q.deliveryReason}
-                        onCancel={() => cancelQueued(q.turnId)}
-                        onPutBack={restoreUndelivered ? () => takeBackUndelivered(q) : undefined}
-                      />
-                    }
-                  />
-                ) : q.confirmationReviewRequest || q.confirmationReturn ? (
-                  // A confirmation review's turns are Orbit's on the queue too: the card the
-                  // transcript draws once a runner takes them, with the queue's line at its foot.
-                  q.confirmationReviewRequest ? (
-                    <ReviewRequestedCard
-                      key={q.turnId}
-                      card={q.confirmationReviewRequest}
-                      ts={q.createdAt}
-                      queued={
-                        <QueuedTurnMeta
-                          placement={q.placement}
-                          delivery={q.delivery}
-                          deliveryCode={q.deliveryCode}
-                          deliveryReason={q.deliveryReason}
-                          onCancel={() => cancelQueued(q.turnId)}
-                        />
-                      }
-                    />
-                  ) : (
-                    <SentBackByReviewerCard
-                      key={q.turnId}
-                      card={q.confirmationReturn!}
-                      ts={q.createdAt}
-                      queued={
-                        <QueuedTurnMeta
-                          placement={q.placement}
-                          delivery={q.delivery}
-                          deliveryCode={q.deliveryCode}
-                          deliveryReason={q.deliveryReason}
-                          onCancel={() => cancelQueued(q.turnId)}
-                        />
-                      }
-                    />
-                  )
-                ) : q.sessionReplies ? (
-                  // The outcomes of this session's requests, handed back: nobody typed the turn, so
-                  // it gets the reply cards the transcript draws once a runner takes it.
-                  <SessionReplyCards
-                    key={q.turnId}
-                    cards={q.sessionReplies}
-                    ts={q.createdAt}
-                    attached={
-                      <QueuedTurnMeta
-                        placement={q.placement}
-                        delivery={q.delivery}
-                        deliveryCode={q.deliveryCode}
-                        deliveryReason={q.deliveryReason}
-                        onCancel={() => cancelQueued(q.turnId)}
-                      />
-                    }
-                  />
-                ) : q.projectStarted ? (
-                  // The message telling the coordinator its project was started, as the card the
-                  // transcript draws once a runner takes it — the same reason as the delivery above.
-                  <ProjectStartedCard
-                    key={q.turnId}
-                    card={q.projectStarted}
-                    text={q.content}
-                    ts={q.createdAt}
-                    queued={
-                      <QueuedTurnMeta
-                        placement={q.placement}
-                        delivery={q.delivery}
-                        deliveryCode={q.deliveryCode}
-                        deliveryReason={q.deliveryReason}
-                        onCancel={() => cancelQueued(q.turnId)}
-                        onPutBack={restoreUndelivered ? () => takeBackUndelivered(q) : undefined}
-                      />
-                    }
-                  />
-                ) : (
-                  <div className="chat-msg chat-user chat-queued" key={q.turnId}>
-                    {turnImages[q.turnId]?.length ? (
-                      // Fresh local previews (object URLs) — instant, before a reload drops them.
-                      <div className="chat-images">
-                        {turnImages[q.turnId].map((im, i) => (
-                          <ChatImage key={i} src={im.url} />
-                        ))}
-                      </div>
-                    ) : q.attachments?.length ? (
-                      // After a reload the local previews are gone; fetch the refs the queued-turn
-                      // list carries from the server, so an image-only turn stays visible.
-                      <div className="chat-images">
-                        {q.attachments.map((a) => (
-                          <AttachmentImage key={a.id} id={a.id} />
-                        ))}
-                      </div>
-                    ) : null}
-                    {/* Same Markdown render as the settled bubble it becomes (see UserBubble), so a
-                        message doesn't change shape when the runner picks it up. A queued `!cmd`
-                        shows the command verbatim — markdown would mangle its shell syntax. */}
-                    {q.shell ? (
-                      <code className="chat-queued-cmd">!{q.content}</code>
-                    ) : (
-                      q.content && <MD breaks>{q.content}</MD>
-                    )}
-                    <QueuedTurnMeta
-                      placement={q.placement}
-                      delivery={q.delivery}
-                      deliveryCode={q.deliveryCode}
-                      deliveryReason={q.deliveryReason}
-                      onCancel={() => cancelQueued(q.turnId)}
-                      onPutBack={restoreUndelivered ? () => takeBackUndelivered(q) : undefined}
-                    />
-                  </div>
                 );
               })}
               {placeholder === 'waiting' && <div className="chat-note">Waiting for the workspace…</div>}
