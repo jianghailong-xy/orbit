@@ -422,7 +422,7 @@ struct AgentPanes: View {
                     Section {
                         ForEach(section.sessions) { sessionRow($0) }
                     } header: {
-                        tagSectionHeader(section.tag)
+                        sectionHeaderBand { tagSectionHeader(section.tag) }
                     }
                 }
             } else {
@@ -475,13 +475,13 @@ struct AgentPanes: View {
                                 ForEach(section.sessions) { listRow($0, projects: projectRows) }
                             }
                         } header: {
-                            pinnedSectionHeader(section.title)
+                            sectionHeaderBand { pinnedSectionHeader(section.title) }
                         }
                     } else {
                         Section {
                             ForEach(section.sessions) { listRow($0, projects: projectRows) }
                         } header: {
-                            Text(section.title).textCase(nil)
+                            sectionHeaderBand { Text(section.title).textCase(nil) }
                         }
                     }
                 }
@@ -962,10 +962,12 @@ struct AgentPanes: View {
             // Doubles as the short-query notice the palette keeps in its footer: below the
             // server's content threshold only names are matched, which is worth saying before
             // "no matches" reads as "this doesn't exist".
-            Text(contentSearched
-                 ? "All sessions"
-                 : "Matching names only — type more to search message text.")
-                .textCase(nil)
+            sectionHeaderBand {
+                Text(contentSearched
+                     ? "All sessions"
+                     : "Matching names only — type more to search message text.")
+                    .textCase(nil)
+            }
         }
     }
 
@@ -1073,6 +1075,34 @@ struct AgentPanes: View {
         .buttonStyle(.plain)
         .accessibilityAddTraits(.isHeader)
         .accessibilityHint(pinnedCollapsed ? "Shows the pinned sessions" : "Hides the pinned sessions")
+    }
+
+    /// A section header's band: its title drawn over the list's own surface, so that the header
+    /// *pins* with something behind it. SwiftUI's plain list floats a section's header over the rows
+    /// as they scroll under it but paints nothing behind a custom header — so a row on its way up
+    /// read straight through "Yesterday" / "2–7 days ago", its title overlapping the header's glyph
+    /// for glyph (every appearance, light and dark).
+    ///
+    /// The list's own header insets sit *outside* the header's view, so a bare `.background` on the
+    /// title would cover its line and leave the strips above and below it see-through. The surface
+    /// is therefore grown past the title's own frame by the insets that surround it — measured off
+    /// the header this replaces on the simulator (iOS 26.5: the title sits 33pt below the band's
+    /// top, which ends 9pt below the title's line). Nothing here is layout: a background lays out
+    /// nothing, so the header keeps the system's own metrics, the band stays the height it was (a
+    /// header that added its own padding instead measured 2pt short per section), and the Pinned
+    /// header's tap target — the button, not this — is exactly the size it was.
+    ///
+    /// The fill is `systemBackground`, what the list itself draws in each appearance — the same fill
+    /// the rows and their chips sit on (see `TagChipColor`). A row sliding under a pinned header now
+    /// disappears behind it instead of reading through it.
+    private func sectionHeaderBand<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        content()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                Color(uiColor: .systemBackground)
+                    .padding(.top, -33)
+                    .padding(.bottom, -9)
+            }
     }
     #endif
 }
