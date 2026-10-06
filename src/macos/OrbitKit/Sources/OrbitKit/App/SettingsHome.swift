@@ -7,7 +7,7 @@ import CoreGraphics   // CGSize/CGRect's Swift members on Apple platforms; Found
 /// (`NavNode.settingsPage`). The runners list is the one page that predates these and keeps its own
 /// frame (`NavNode.settingsRunners`).
 public enum SettingsPage: String, Hashable, Sendable, CaseIterable {
-    case providers, notifications, sharedLinks, changePassword, admin
+    case providers, notifications, sharedLinks, accessTokens, changePassword, admin
 
     /// The page's navigation title — the same words as the row that opens it.
     public var title: String {
@@ -15,6 +15,7 @@ public enum SettingsPage: String, Hashable, Sendable, CaseIterable {
         case .providers:      return SettingsHome.title(.providers)
         case .notifications:  return SettingsHome.title(.notifications)
         case .sharedLinks:    return SettingsHome.title(.sharedLinks)
+        case .accessTokens:   return SettingsHome.title(.accessTokens)
         case .changePassword: return SettingsHome.title(.changePassword)
         case .admin:          return SettingsHome.title(.admin)
         }
@@ -29,7 +30,7 @@ public enum SettingsPage: String, Hashable, Sendable, CaseIterable {
 /// The rows are the web's Settings and Profile pages, regrouped for a phone: Session defaults and
 /// Session orchestration under Sessions, the Runners and Providers pages under Machines & models,
 /// Notifications and Appearance under Preferences, Profile's email and password under Account with
-/// Shared links beside them. The words are the web's wherever it has one.
+/// Shared links and Access tokens beside them. The words are the web's wherever it has one.
 public enum SettingsHome {
     public enum Group: String, CaseIterable, Sendable {
         case sessions, machines, preferences, account
@@ -39,7 +40,7 @@ public enum SettingsHome {
         case defaultPermission, orchestration, modelRouting
         case runners, providers
         case notifications, appearance
-        case email, instance, sharedLinks, changePassword, admin
+        case email, instance, sharedLinks, accessTokens, changePassword, admin
     }
 
     public static func header(_ group: Group) -> String {
@@ -58,7 +59,7 @@ public enum SettingsHome {
         case .machines:    return [.runners, .providers]
         case .preferences: return [.notifications, .appearance]
         case .account:
-            let rows: [Row] = [.email, .instance, .sharedLinks, .changePassword]
+            let rows: [Row] = [.email, .instance, .sharedLinks, .accessTokens, .changePassword]
             return isAdmin ? rows + [.admin] : rows
         }
     }
@@ -75,6 +76,7 @@ public enum SettingsHome {
         case .email:             return "Email"
         case .instance:          return "Instance"
         case .sharedLinks:       return "Shared links"
+        case .accessTokens:      return AccessTokensList.title
         case .changePassword:    return "Change password"
         case .admin:             return AppSection.admin.title
         }
@@ -93,6 +95,7 @@ public enum SettingsHome {
         case .email:             return "envelope"
         case .instance:          return "globe"
         case .sharedLinks:       return "link"
+        case .accessTokens:      return "key.horizontal"
         case .changePassword:    return "lock.rotation"
         case .admin:             return AppSection.admin.systemImage
         }
@@ -106,6 +109,7 @@ public enum SettingsHome {
         case .providers:      return .providers
         case .notifications:  return .notifications
         case .sharedLinks:    return .sharedLinks
+        case .accessTokens:   return .accessTokens
         case .changePassword: return .changePassword
         case .admin:          return .admin
         case .runners, .defaultPermission, .orchestration, .modelRouting, .appearance, .email, .instance:
@@ -124,6 +128,11 @@ public enum SettingsHome {
 
     /// "25 active" — the links that open for anyone who has them.
     public static func sharedLinksValue(active: Int) -> String {
+        active > 0 ? "\(active) active" : "None"
+    }
+
+    /// "3 active" — the tokens that still work.
+    public static func accessTokensValue(active: Int) -> String {
         active > 0 ? "\(active) active" : "None"
     }
 

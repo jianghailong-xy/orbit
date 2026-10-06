@@ -306,6 +306,14 @@ export function App() {
               }
             />
             <Route
+              path="wiki/:space/activity"
+              element={
+                <DocView>
+                  <WikiPage route="activity" />
+                </DocView>
+              }
+            />
+            <Route
               path="wiki/:space/t/:topic"
               element={
                 <DocView>

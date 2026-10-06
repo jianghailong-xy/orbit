@@ -251,8 +251,14 @@ final class NavigationEntrancesWiringTests: XCTestCase {
         // console on a phone opens its card's task over itself (the Agents stack), so which stack
         // that is changes with the section; without it, coming back to a Tasks page left while the
         // console's task held the slot is that page refused its load, a spinner.
+        //
+        // The Wiki's line is argued for too, and it moves no frame either: coming into the Wiki from
+        // another section, it tells the Wiki which workspace the reader was in — read off the stack being
+        // left, which only this moment still knows — so the Wiki opens that workspace's space (wiki
+        // design §12.3.4), as the web's sidebar keeps the same for its tab.
         let known = ["get { nav.section }",
                      "set {",
+                     "if newValue == .wiki && nav.section != .wiki { wiki?.open(fromWorkspace: workspaceInView) }",
                      "nav.section = newValue",
                      "tasks?.setSectionActive(newValue == .tasks)",
                      "syncTaskDetailStore()"]

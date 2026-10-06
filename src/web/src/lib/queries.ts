@@ -541,13 +541,19 @@ export const openProjectsQuery = () =>
   });
 
 /** The project document also supplies title and task counts when a finished project is
- *  absent from the Open-only sidebar. Shares the detail page's existing cache entry. */
+ *  absent from the Open-only sidebar, and the workspace its coordinator runs in, which the Wiki opens
+ *  the space of (design §12.3.4). Shares the detail page's existing cache entry. */
 export const projectDetailsQuery = (projectId: string) =>
   queryOptions({
     queryKey: ['project', projectId] as const,
-    queryFn: () => api<{ id: string; title: string; status?: string; tasksByStatus?: Record<string, number> }>(
-      `/projects/${encodeURIComponent(projectId)}`,
-    ),
+    queryFn: () =>
+      api<{
+        id: string;
+        title: string;
+        status?: string;
+        tasksByStatus?: Record<string, number>;
+        coordinatorWorkspaceId?: string | null;
+      }>(`/projects/${encodeURIComponent(projectId)}`),
   });
 
 /**
@@ -989,7 +995,7 @@ export const wikiSpacesQuery = () =>
   });
 
 /**
- * One space, with the rolling usage window the home page's right rail reads.
+ * One space, with the rolling usage window Activity's Agents used the wiki reads.
  *
  * `include=usage` costs four aggregates over `wiki_exposure` that no other reader of the space
  * document pays for, which is why it is asked for here and nowhere else.
@@ -1016,7 +1022,7 @@ export const wikiHealthQuery = (spaceId: string | null) =>
     staleTime: 30_000,
   });
 
-/** A space's entries, newest record first. The home page and the topic grid are both drawn from it. */
+/** A space's newest entries of every kind, newest record first: what Activity and the status line read. */
 export const wikiEntriesQuery = (spaceId: string | null) =>
   queryOptions({
     queryKey: ['wiki', 'space', spaceId, 'entries'] as const,
@@ -1026,7 +1032,7 @@ export const wikiEntriesQuery = (spaceId: string | null) =>
 
 /**
  * A space's entries of one kind, newest record first, at most `limit` (the server stops at 200) — the
- * home's Principles and its Recent decisions.
+ * home's Principles and Activity's Recent decisions.
  *
  * READ BY KIND, NOT PICKED OUT OF `wikiEntriesQuery`: that read is the 200 newest entries of every kind,
  * and a space holds thousands, so a principle recorded before the 200th newest entry was not in it and
@@ -1094,7 +1100,7 @@ export const wikiArticleIndexQuery = (spaceId: string | null) =>
     enabled: spaceId !== null,
   });
 
-/** What changed in this space lately — the home page's timeline. */
+/** What changed in this space lately — Activity's Recently changed. */
 export const wikiTimelineQuery = (spaceId: string | null) =>
   queryOptions({
     queryKey: ['wiki', 'space', spaceId, 'timeline'] as const,
@@ -1165,8 +1171,8 @@ export const wikiReviewQuery = (spaceId?: string | null) =>
 
 /**
  * A space's documents, by the plan its owner confirmed (contract `docs.reads.directory`): categories →
- * documents → sections, each saying whether it is written yet. `plan: null` while no plan is confirmed —
- * the directory then lists the topic articles instead (`wikiReadsByDocs`).
+ * documents → sections, each saying whether it is written yet, and a written document's lead. `plan: null`
+ * while no plan is confirmed — the directory and the home then list the topic articles instead (`wikiReadsByDocs`).
  */
 export const wikiDocsQuery = (spaceId: string | null) =>
   queryOptions({

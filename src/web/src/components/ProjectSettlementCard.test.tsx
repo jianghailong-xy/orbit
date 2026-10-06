@@ -62,8 +62,8 @@ function criterion(
   };
 }
 
-/** A project whose criteria are all met and landed, and whose set nobody has confirmed: one
- *  clause withheld, and it is the clause that has a door. */
+/** A started project whose criteria are all met and landed, and whose set nobody has confirmed:
+ *  one clause withheld, and it is the clause that has a door. */
 function projectOf(over: Partial<SettlementProjectDocument> = {}): SettlementProjectDocument {
   const criteria = [
     criterion({ definitionId: 'c1' }),
@@ -73,6 +73,7 @@ function projectOf(over: Partial<SettlementProjectDocument> = {}): SettlementPro
   return {
     title: TITLE,
     status: 'OPEN',
+    startedAt: '2026-09-10T08:00:00.000Z',
     acceptanceCriteriaItems: [
       { id: 'c1', ordinal: 1, text: 'condition one holds' },
       { id: 'c2', ordinal: 2, text: 'condition two holds' },
@@ -102,6 +103,7 @@ function unlanded(over: Partial<SettlementProjectDocument> = {}): SettlementProj
   return {
     title: TITLE,
     status: 'OPEN',
+    startedAt: '2026-09-10T08:00:00.000Z',
     acceptanceCriteriaItems: criteria.map((row, index) => ({
       id: row.definitionId,
       ordinal: index + 1,
@@ -225,6 +227,10 @@ describe('whether a project is held on the question', () => {
       },
     })],
     ['a task running under it', projectOf({ tasksByStatus: { DONE: 4, IN_PROGRESS: 1 } })],
+    // Asked of a project somebody started, as the unified read is (`asksWhyNotDone`): an unstarted
+    // one is the start card's, and a read that does not say is not a yes.
+    ['a project nobody has started', projectOf({ startedAt: null })],
+    ['a read that does not say whether it started', projectOf({ startedAt: undefined })],
     ['no criteria at all', projectOf({
       derivedDone: { status: 'OPEN', done: false, withheld: ['NO_CRITERIA_STATED'], criteria: [], confirmation: 'CONFIRMED' },
     })],

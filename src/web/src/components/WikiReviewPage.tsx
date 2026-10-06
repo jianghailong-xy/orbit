@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   AimOutlined,
+  ArrowLeftOutlined,
   CheckOutlined,
   DownOutlined,
   GlobalOutlined,
@@ -146,8 +147,11 @@ export function WikiReviewPage({ spaceSlug }: { spaceSlug: string | null }) {
 
   return (
     <div className="rv-page">
-      <div className="wk-crumb">
-        <Link to={spaceSlug ? `/wiki/${spaceSlug}` : '/wiki'}>{WIKI_TITLE}</Link>
+      <div className="wk-crumb wk-crumb--back">
+        <Link to={spaceSlug ? `/wiki/${spaceSlug}` : '/wiki'}>
+          <ArrowLeftOutlined className="back" />
+          {WIKI_TITLE}
+        </Link>
         <RightOutlined className="ic" />
         <span>{WIKI_REVIEW_TITLE}</span>
       </div>

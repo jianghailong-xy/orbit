@@ -336,6 +336,8 @@ export class ProjectsController {
    * same row: it is a stable read-back rather than a second decision, so clicking approve twice
    * cannot extend an authorization's own deadline. Denying is final for that crossing; if you change
    * your mind, file the work yourself, which is an ordinary write under your own authority (R1).
+   * Approving a request to MOVE a task moves it, as this person's act, and answers with the request
+   * spent on it (APPLIED) — or refuses with nothing written when the move can no longer be made.
    */
   @PatForbidden('OWNER_INTERACTIVE')
   @Post(':id/handoffs/:handoffId/decision')
@@ -373,7 +375,9 @@ export class ProjectsController {
         crossingKey: answer.row.crossingKey,
       });
     }
-    return this.handoffs.decide(user.userId, user.userId, handoffId, dto.decision, new Date());
+    return this.handoffs.decide(
+      user.userId, user.userId, handoffId, dto.decision, new Date(), user.credential,
+    );
   }
 
   /**
