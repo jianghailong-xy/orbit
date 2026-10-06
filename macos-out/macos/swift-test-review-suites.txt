@@ -1,0 +1,8 @@
+Test Suite 'AgentDefaultsTests' started at 2026-10-06 03:39:34.031.
+Test Suite 'AgentDefaultsTests' passed at 2026-10-06 03:39:34.062.
+Test Suite 'DshRuntimeTests' started at 2026-10-06 03:39:35.976.
+Test Suite 'DshRuntimeTests' passed at 2026-10-06 03:39:36.034.
+Test Suite 'GeminiEntryParityTests' started at 2026-10-06 03:39:36.602.
+Test Suite 'GeminiEntryParityTests' passed at 2026-10-06 03:39:36.656.
+Test Suite 'SessionProviderChoicesTests' started at 2026-10-06 03:39:52.335.
+Test Suite 'SessionProviderChoicesTests' passed at 2026-10-06 03:39:52.356.
