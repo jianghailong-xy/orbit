@@ -3528,7 +3528,7 @@ final class ConsoleModel {
             projectDone = document.doneSubject
             // A read asked for after a press here, and still not DONE: the project was reopened, so
             // the press's own record no longer makes the card a receipt (`ProjectDone.recorded`).
-            if document.status != .done, let at = doneRecordAt, documentAskedAt > at {
+            if document.status != "DONE", let at = doneRecordAt, documentAskedAt > at {
                 doneRecord = nil
                 doneRecordAt = nil
             }

@@ -83,7 +83,7 @@ final class ProjectDoneWiringTests: XCTestCase {
         // A read asked for after a press here that still says the project is not DONE retires the
         // press's record: the project was reopened, and the card asks again (`ProjectDone.recorded`).
         XCTAssertTrue(refresh.contains("let documentAskedAt = Date() if let document = try? await api.projectCriteria(projectID: projectID) {"))
-        XCTAssertTrue(refresh.contains("if document.status != .done, let at = doneRecordAt, documentAskedAt > at { doneRecord = nil doneRecordAt = nil }"),
+        XCTAssertTrue(refresh.contains("if document.status != \"DONE\", let at = doneRecordAt, documentAskedAt > at { doneRecord = nil doneRecordAt = nil }"),
                       "a reopened project keeps no receipt from an earlier press")
         XCTAssertTrue(console.contains("sessionWaitingKind = session.waitingKind"),
                       "Record as done… on the row puts the card up without a request")
