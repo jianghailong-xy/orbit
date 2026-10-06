@@ -830,6 +830,11 @@ final class AppModel {
                             icon: "bell.badge.fill", awaitsApproval: true)
         }
         #endif
+        #if os(macOS)
+        // A Mac an older app enrolled runs a LaunchAgent that keeps its runner from updating
+        // itself; rewrite it once, at launch.
+        Task { await runnerControl?.migrateLaunchAgent() }
+        #endif
     }
 
     /// Keep Open fresh. The control-plane stream (below) is the primary source of *latency* — a
