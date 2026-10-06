@@ -139,6 +139,9 @@ Besides the version and the runner-write contract, it carries one entry per plat
 - Anything that installs a runner from `/dl` checks the digest, and on a mismatch installs nothing and keeps the
   current binary. The runner's self-update and `orbit upgrade` do this. A manifest without `assets` comes from a
   control plane older than the field: the runner then installs as before, unverified, and logs a warning.
+- The macOS app bundles no runner. Enrolling a Mac downloads `orbit-darwin-<arm64|x64>.gz` from the signed-in
+  server's `/dl` and installs it to `~/.orbit/bin/orbit` only if it matches its digest. A manifest without one
+  installs nothing there, since an enrollment has no current binary to fall back on: update the server first.
 - The digest ties a download to the manifest that announces it. It is not a signature: whoever can rewrite
   `version.json` can rewrite the digests too.
 
