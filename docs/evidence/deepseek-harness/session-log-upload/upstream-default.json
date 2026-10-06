@@ -1,0 +1,680 @@
+{
+  "bashToolSawApiKey": false,
+  "deliveryAcceptedMarksInDshHome": 6,
+  "eventFieldPaths": {
+    "agent/inbox/spliced": [
+      ".data.inserted[].content[].text: string",
+      ".data.inserted[].content[].type: string",
+      ".data.inserted[].id: string",
+      ".data.inserted[].role: string",
+      ".data.inserted[].source.kind: string",
+      ".data.inserted[]: empty",
+      ".data.removedCount: number",
+      ".data.start: number",
+      ".data.target: string",
+      ".seq: number",
+      ".time: number",
+      ".type: string"
+    ],
+    "approval/policy": [
+      ".data.policy: string",
+      ".seq: number",
+      ".time: number",
+      ".type: string"
+    ],
+    "assistant/message": [
+      ".data.message.content[].arguments: string",
+      ".data.message.content[].id: string",
+      ".data.message.content[].name: string",
+      ".data.message.content[].text: string",
+      ".data.message.content[].type: string",
+      ".data.message.id: string",
+      ".data.message.role: string",
+      ".data.message.source.kind: string",
+      ".data.message.source.model: string",
+      ".data.message.source.provider: string",
+      ".data.message.source.replayState.blocks[].type: string",
+      ".data.message.source.replayState.response.kind: string",
+      ".data.message.source.replayState.response.model: string",
+      ".data.message.source.replayState.response.version: number",
+      ".data.step: number",
+      ".data.stream[].args[]: string",
+      ".data.stream[].chunk.block.arguments: string",
+      ".data.stream[].chunk.block.id: string",
+      ".data.stream[].chunk.block.name: string",
+      ".data.stream[].chunk.block.text: string",
+      ".data.stream[].chunk.block.type: string",
+      ".data.stream[].chunk.blockType: string",
+      ".data.stream[].chunk.index: number",
+      ".data.stream[].chunk.reason.kind: string",
+      ".data.stream[].chunk.replayState.blocks[].type: string",
+      ".data.stream[].chunk.replayState.response.kind: string",
+      ".data.stream[].chunk.replayState.response.model: string",
+      ".data.stream[].chunk.replayState.response.version: number",
+      ".data.stream[].chunk.type: string",
+      ".data.stream[].chunk.usage.inputTokens: number",
+      ".data.stream[].chunk.usage.outputTokens: number",
+      ".data.stream[].chunk.usage.totalTokens: number",
+      ".data.stream[].dt[]: empty",
+      ".data.stream[].id: string",
+      ".data.stream[].index: number",
+      ".data.stream[].name: string",
+      ".data.stream[].texts[]: string",
+      ".data.stream[].time0: number",
+      ".data.stream[].time: number",
+      ".data.stream[].type: string",
+      ".data.turn: number",
+      ".data.usage.inputTokens: number",
+      ".data.usage.outputTokens: number",
+      ".data.usage.totalTokens: number",
+      ".seq: number",
+      ".surfaceOp: string",
+      ".time: number",
+      ".type: string"
+    ],
+    "permission/preset": [
+      ".data.preset: string",
+      ".seq: number",
+      ".time: number",
+      ".type: string"
+    ],
+    "request/context": [
+      ".data.contextWindow: number",
+      ".data.model: string",
+      ".data.provider: string",
+      ".seq: number",
+      ".time: number",
+      ".type: string"
+    ],
+    "request/header": [
+      ".data.header.adapterDefaults.maxTokens: boolean",
+      ".data.header.config.maxTokens: number",
+      ".data.header.config.model: string",
+      ".data.header.config.provider: string",
+      ".data.header.config.reasoningEffort: string",
+      ".data.header.tools[].description: string",
+      ".data.header.tools[].name: string",
+      ".data.header.tools[].parameters: schema",
+      ".data.reason: string",
+      ".seq: number",
+      ".time: number",
+      ".type: string"
+    ],
+    "sandbox/mode": [
+      ".data.mode: string",
+      ".seq: number",
+      ".time: number",
+      ".type: string"
+    ],
+    "session-log-deepseek/delivery-accepted": [
+      ".data.sessionFormatVersion: number",
+      ".data.sessionId: string",
+      ".data.throughSeq: number",
+      ".seq: number",
+      ".time: number",
+      ".type: string"
+    ],
+    "session/title": [
+      ".data.messageSeqs[]: number",
+      ".data.source.kind: string",
+      ".data.title: string",
+      ".seq: number",
+      ".time: number",
+      ".type: string"
+    ],
+    "step/end": [
+      ".data.step: number",
+      ".data.turn: number",
+      ".seq: number",
+      ".time: number",
+      ".type: string"
+    ],
+    "step/start": [
+      ".data.step: number",
+      ".data.turn: number",
+      ".seq: number",
+      ".time: number",
+      ".type: string"
+    ],
+    "system/message": [
+      ".data.message.content[].text: string",
+      ".data.message.content[].type: string",
+      ".data.message.id: string",
+      ".data.message.role: string",
+      ".data.message.source.kind: string",
+      ".data.step: number",
+      ".data.turn: number",
+      ".seq: number",
+      ".surfaceOp: string",
+      ".time: number",
+      ".type: string"
+    ],
+    "tool/call": [
+      ".data.arguments: string",
+      ".data.callId: string",
+      ".data.name: string",
+      ".data.step: number",
+      ".data.turn: number",
+      ".seq: number",
+      ".time: number",
+      ".type: string"
+    ],
+    "tool/result": [
+      ".data.message.content[].text: string",
+      ".data.message.content[].type: string",
+      ".data.message.id: string",
+      ".data.message.isError: boolean",
+      ".data.message.role: string",
+      ".data.message.source.callId: string",
+      ".data.message.source.kind: string",
+      ".data.message.toolCallId: string",
+      ".data.meta.diffs[]: empty",
+      ".data.meta.lines[].number: number",
+      ".data.meta.lines[].text: string",
+      ".data.meta.offset: number",
+      ".data.meta.operation: string",
+      ".data.meta.path: string",
+      ".data.meta.totalLines: number",
+      ".data.step: number",
+      ".data.turn: number",
+      ".seq: number",
+      ".sourceEventSeqs[]: number",
+      ".surfaceOp: string",
+      ".time: number",
+      ".type: string"
+    ],
+    "turn/end": [
+      ".data.reason.kind: string",
+      ".data.turn: number",
+      ".seq: number",
+      ".time: number",
+      ".type: string"
+    ],
+    "turn/start": [
+      ".data.turn: number",
+      ".seq: number",
+      ".time: number",
+      ".type: string"
+    ],
+    "user/message": [
+      ".data.content[].text: string",
+      ".data.content[].type: string",
+      ".data.id: string",
+      ".data.role: string",
+      ".data.source.form: string",
+      ".data.source.kind: string",
+      ".data.source.sections[].name: string",
+      ".data.source.sections[].text: string",
+      ".seq: number",
+      ".surfaceOp: string",
+      ".time: number",
+      ".type: string"
+    ]
+  },
+  "eventTypes": {
+    "agent/inbox/spliced": 6,
+    "approval/policy": 1,
+    "assistant/message": 5,
+    "permission/preset": 1,
+    "request/context": 1,
+    "request/header": 1,
+    "sandbox/mode": 1,
+    "session-log-deepseek/delivery-accepted": 5,
+    "session/title": 1,
+    "step/end": 5,
+    "step/start": 6,
+    "system/message": 1,
+    "tool/call": 3,
+    "tool/result": 3,
+    "turn/end": 2,
+    "turn/start": 3,
+    "user/message": 4
+  },
+  "markerFoundIn": {
+    "apiKey": [],
+    "assistantText": [
+      "dsh_session_log",
+      "modelInput.messages"
+    ],
+    "bashOutput": [
+      "dsh_session_log",
+      "modelInput.messages"
+    ],
+    "dshHomePath": [
+      "dsh_session_log",
+      "modelInput.messages"
+    ],
+    "fileContentRead": [
+      "dsh_session_log",
+      "modelInput.messages"
+    ],
+    "fileContentWritten": [
+      "dsh_session_log",
+      "modelInput.messages"
+    ],
+    "orbitSystemPrompt": [
+      "dsh_session_log",
+      "modelInput.system"
+    ],
+    "runnerAmbientSecret": [],
+    "runnerHome": [
+      "dsh_session_log",
+      "modelInput.messages"
+    ],
+    "userMessage": [
+      "dsh_session_log",
+      "modelInput.messages"
+    ],
+    "workspacePath": [
+      "dsh_session_log",
+      "modelInput.messages",
+      "modelInput.system"
+    ]
+  },
+  "modelRequests": 6,
+  "pluginPackages": [
+    "@deepseek-ai/cordis-plugin-timer@1.1.6",
+    "@deepseek-ai/dsh-acp-app@0.2.0-rc.2",
+    "@deepseek-ai/dsh-acp@0.2.0-rc.2",
+    "@deepseek-ai/dsh-agent-default-model@0.2.0-rc.2",
+    "@deepseek-ai/dsh-agent-instructions@0.2.0-rc.2",
+    "@deepseek-ai/dsh-agent-loop@0.2.0-rc.2",
+    "@deepseek-ai/dsh-agent@0.2.0-rc.2",
+    "@deepseek-ai/dsh-api-gateway@0.2.0-rc.2",
+    "@deepseek-ai/dsh-attachment-local@0.2.0-rc.2",
+    "@deepseek-ai/dsh-authorization@0.2.0-rc.2",
+    "@deepseek-ai/dsh-bash-sandbox@0.2.0-rc.2",
+    "@deepseek-ai/dsh-command-compact@0.2.0-rc.2",
+    "@deepseek-ai/dsh-command-feedback@0.2.0-rc.2",
+    "@deepseek-ai/dsh-command-goal@0.2.0-rc.2",
+    "@deepseek-ai/dsh-commands@0.2.0-rc.2",
+    "@deepseek-ai/dsh-compaction-basic@0.2.0-rc.2",
+    "@deepseek-ai/dsh-compaction-image-offload@0.2.0-rc.2",
+    "@deepseek-ai/dsh-compaction-tool-result-pruner@0.2.0-rc.2",
+    "@deepseek-ai/dsh-config-editor@0.2.0-rc.2",
+    "@deepseek-ai/dsh-credentials-local@0.2.0-rc.2",
+    "@deepseek-ai/dsh-deepseek-account-platform@0.2.0-rc.2",
+    "@deepseek-ai/dsh-deepseek-llm-api-extensions@0.2.0-rc.2",
+    "@deepseek-ai/dsh-fs-observation-policy@0.2.0-rc.2",
+    "@deepseek-ai/dsh-fs-sandbox@0.2.0-rc.2",
+    "@deepseek-ai/dsh-goal-round-driver@0.2.0-rc.2",
+    "@deepseek-ai/dsh-goal@0.2.0-rc.2",
+    "@deepseek-ai/dsh-jobs-local@0.2.0-rc.2",
+    "@deepseek-ai/dsh-llm-deepseek-account@0.2.0-rc.2",
+    "@deepseek-ai/dsh-llm-deepseek-api-key@0.2.0-rc.2",
+    "@deepseek-ai/dsh-llm-pi-ai@0.2.0-rc.2",
+    "@deepseek-ai/dsh-llm-retry@0.2.0-rc.2",
+    "@deepseek-ai/dsh-llm@0.2.0-rc.2",
+    "@deepseek-ai/dsh-mcp-resources@0.2.0-rc.2",
+    "@deepseek-ai/dsh-otel@0.2.0-rc.2",
+    "@deepseek-ai/dsh-permission-presets@0.2.0-rc.2",
+    "@deepseek-ai/dsh-plan-mode@0.2.0-rc.2",
+    "@deepseek-ai/dsh-plugin-manager@0.2.0-rc.2",
+    "@deepseek-ai/dsh-plugin-package-inventory-deepseek@0.2.0-rc.2",
+    "@deepseek-ai/dsh-ptc-runtime-node@0.2.0-rc.2",
+    "@deepseek-ai/dsh-repeat-tool-reminder@0.2.0-rc.2",
+    "@deepseek-ai/dsh-sandbox-local@0.2.0-rc.2",
+    "@deepseek-ai/dsh-sandbox-policy@0.2.0-rc.2",
+    "@deepseek-ai/dsh-session-checkpoint-policy@0.2.0-rc.2",
+    "@deepseek-ai/dsh-session-log-deepseek@0.2.0-rc.2",
+    "@deepseek-ai/dsh-session-persistence-jsonl@0.2.0-rc.2",
+    "@deepseek-ai/dsh-session-projection-cache@0.2.0-rc.2",
+    "@deepseek-ai/dsh-session-projection@0.2.0-rc.2",
+    "@deepseek-ai/dsh-session-query-sqlite@0.2.0-rc.2",
+    "@deepseek-ai/dsh-session-title@0.2.0-rc.2",
+    "@deepseek-ai/dsh-session@0.2.0-rc.2",
+    "@deepseek-ai/dsh-settings@0.2.0-rc.2",
+    "@deepseek-ai/dsh-shell-env@0.2.0-rc.2",
+    "@deepseek-ai/dsh-skill-filesystem@0.2.0-rc.2",
+    "@deepseek-ai/dsh-skill@0.2.0-rc.2",
+    "@deepseek-ai/dsh-spill-local@0.2.0-rc.2",
+    "@deepseek-ai/dsh-spill-policy@0.2.0-rc.2",
+    "@deepseek-ai/dsh-storage-domain@0.2.0-rc.2",
+    "@deepseek-ai/dsh-storage-json@0.2.0-rc.2",
+    "@deepseek-ai/dsh-storage@0.2.0-rc.2",
+    "@deepseek-ai/dsh-subagent-fork-in-process@0.2.0-rc.2",
+    "@deepseek-ai/dsh-subagent-spawn-in-process@0.2.0-rc.2",
+    "@deepseek-ai/dsh-subagent@0.2.0-rc.2",
+    "@deepseek-ai/dsh-subprocess-local@0.2.0-rc.2",
+    "@deepseek-ai/dsh-system-prompt@0.2.0-rc.2",
+    "@deepseek-ai/dsh-token-meter@0.2.0-rc.2",
+    "@deepseek-ai/dsh-tool-bash@0.2.0-rc.2",
+    "@deepseek-ai/dsh-tool-call-timeout-policy@0.2.0-rc.2",
+    "@deepseek-ai/dsh-tool-fs-search@0.2.0-rc.2",
+    "@deepseek-ai/dsh-tool-fs@0.2.0-rc.2",
+    "@deepseek-ai/dsh-tool-goal@0.2.0-rc.2",
+    "@deepseek-ai/dsh-tool-jobs@0.2.0-rc.2",
+    "@deepseek-ai/dsh-tool-skill@0.2.0-rc.2",
+    "@deepseek-ai/dsh-tool-todo@0.2.0-rc.2",
+    "@deepseek-ai/dsh-tool-web@0.2.0-rc.2",
+    "@deepseek-ai/dsh-tools@0.2.0-rc.2",
+    "@deepseek-ai/dsh-typert-loader@0.2.0-rc.2",
+    "@deepseek-ai/dsh-typert-registry@0.2.0-rc.2",
+    "@deepseek-ai/dsh-user-approval@0.2.0-rc.2",
+    "@deepseek-ai/dsh-user-questions@0.2.0-rc.2",
+    "@deepseek-ai/dsh-web-fetch-http@0.2.0-rc.2",
+    "@deepseek-ai/dsh-web-search-deepseek@0.2.0-rc.2",
+    "@deepseek-ai/dsh-web@0.2.0-rc.2",
+    "@deepseek-ai/dsh-workflow-ptc@0.2.0-rc.2",
+    "orbit-dsh-append-system-prompt@1.0.0"
+  ],
+  "requests": [
+    {
+      "dsh_plugin_packages": {
+        "keys": [
+          "packages",
+          "version"
+        ],
+        "packages": 84,
+        "version": 1
+      },
+      "dsh_session_log": {
+        "afterSeq": -1,
+        "bytes": 188003,
+        "eventTypes": {
+          "agent/inbox/spliced": 2,
+          "approval/policy": 1,
+          "permission/preset": 1,
+          "request/context": 1,
+          "request/header": 1,
+          "sandbox/mode": 1,
+          "session/title": 1,
+          "step/start": 1,
+          "system/message": 1,
+          "turn/start": 1,
+          "user/message": 2
+        },
+        "events": 13,
+        "keys": [
+          "afterSeq",
+          "events",
+          "session",
+          "sessionFormatVersion",
+          "throughSeq",
+          "version"
+        ],
+        "throughSeq": 12,
+        "version": 1
+      },
+      "harnessHeaders": [
+        "x-deepseek-harness-session-id",
+        "x-deepseek-harness-user-id"
+      ],
+      "index": 0,
+      "topLevelKeys": [
+        "dsh_plugin_packages",
+        "dsh_session_log",
+        "max_tokens",
+        "messages",
+        "model",
+        "output_config",
+        "stream",
+        "system",
+        "thinking",
+        "tools"
+      ]
+    },
+    {
+      "dsh_plugin_packages": {
+        "keys": [
+          "packages",
+          "version"
+        ],
+        "packages": 84,
+        "version": 1
+      },
+      "dsh_session_log": {
+        "afterSeq": 12,
+        "bytes": 2634,
+        "eventTypes": {
+          "agent/inbox/spliced": 2,
+          "assistant/message": 1,
+          "session-log-deepseek/delivery-accepted": 1,
+          "step/end": 1,
+          "step/start": 1,
+          "turn/end": 1,
+          "turn/start": 1,
+          "user/message": 1
+        },
+        "events": 9,
+        "keys": [
+          "afterSeq",
+          "events",
+          "session",
+          "sessionFormatVersion",
+          "throughSeq",
+          "version"
+        ],
+        "throughSeq": 21,
+        "version": 1
+      },
+      "harnessHeaders": [
+        "x-deepseek-harness-session-id",
+        "x-deepseek-harness-user-id"
+      ],
+      "index": 1,
+      "topLevelKeys": [
+        "dsh_plugin_packages",
+        "dsh_session_log",
+        "max_tokens",
+        "messages",
+        "model",
+        "output_config",
+        "stream",
+        "system",
+        "thinking",
+        "tools"
+      ]
+    },
+    {
+      "dsh_plugin_packages": {
+        "keys": [
+          "packages",
+          "version"
+        ],
+        "packages": 84,
+        "version": 1
+      },
+      "dsh_session_log": {
+        "afterSeq": 21,
+        "bytes": 3403,
+        "eventTypes": {
+          "assistant/message": 1,
+          "session-log-deepseek/delivery-accepted": 1,
+          "step/end": 1,
+          "step/start": 1,
+          "tool/call": 1,
+          "tool/result": 1
+        },
+        "events": 6,
+        "keys": [
+          "afterSeq",
+          "events",
+          "session",
+          "sessionFormatVersion",
+          "throughSeq",
+          "version"
+        ],
+        "throughSeq": 27,
+        "version": 1
+      },
+      "harnessHeaders": [
+        "x-deepseek-harness-session-id",
+        "x-deepseek-harness-user-id"
+      ],
+      "index": 2,
+      "topLevelKeys": [
+        "dsh_plugin_packages",
+        "dsh_session_log",
+        "max_tokens",
+        "messages",
+        "model",
+        "output_config",
+        "stream",
+        "system",
+        "thinking",
+        "tools"
+      ]
+    },
+    {
+      "dsh_plugin_packages": {
+        "keys": [
+          "packages",
+          "version"
+        ],
+        "packages": 84,
+        "version": 1
+      },
+      "dsh_session_log": {
+        "afterSeq": 27,
+        "bytes": 3358,
+        "eventTypes": {
+          "assistant/message": 1,
+          "session-log-deepseek/delivery-accepted": 1,
+          "step/end": 1,
+          "step/start": 1,
+          "tool/call": 1,
+          "tool/result": 1
+        },
+        "events": 6,
+        "keys": [
+          "afterSeq",
+          "events",
+          "session",
+          "sessionFormatVersion",
+          "throughSeq",
+          "version"
+        ],
+        "throughSeq": 33,
+        "version": 1
+      },
+      "harnessHeaders": [
+        "x-deepseek-harness-session-id",
+        "x-deepseek-harness-user-id"
+      ],
+      "index": 3,
+      "topLevelKeys": [
+        "dsh_plugin_packages",
+        "dsh_session_log",
+        "max_tokens",
+        "messages",
+        "model",
+        "output_config",
+        "stream",
+        "system",
+        "thinking",
+        "tools"
+      ]
+    },
+    {
+      "dsh_plugin_packages": {
+        "keys": [
+          "packages",
+          "version"
+        ],
+        "packages": 84,
+        "version": 1
+      },
+      "dsh_session_log": {
+        "afterSeq": 33,
+        "bytes": 2573,
+        "eventTypes": {
+          "agent/inbox/spliced": 2,
+          "assistant/message": 1,
+          "session-log-deepseek/delivery-accepted": 1,
+          "step/end": 1,
+          "step/start": 1,
+          "turn/end": 1,
+          "turn/start": 1,
+          "user/message": 1
+        },
+        "events": 9,
+        "keys": [
+          "afterSeq",
+          "events",
+          "session",
+          "sessionFormatVersion",
+          "throughSeq",
+          "version"
+        ],
+        "throughSeq": 42,
+        "version": 1
+      },
+      "harnessHeaders": [
+        "x-deepseek-harness-session-id",
+        "x-deepseek-harness-user-id"
+      ],
+      "index": 4,
+      "topLevelKeys": [
+        "dsh_plugin_packages",
+        "dsh_session_log",
+        "max_tokens",
+        "messages",
+        "model",
+        "output_config",
+        "stream",
+        "system",
+        "thinking",
+        "tools"
+      ]
+    },
+    {
+      "dsh_plugin_packages": {
+        "keys": [
+          "packages",
+          "version"
+        ],
+        "packages": 84,
+        "version": 1
+      },
+      "dsh_session_log": {
+        "afterSeq": 42,
+        "bytes": 3669,
+        "eventTypes": {
+          "assistant/message": 1,
+          "session-log-deepseek/delivery-accepted": 1,
+          "step/end": 1,
+          "step/start": 1,
+          "tool/call": 1,
+          "tool/result": 1
+        },
+        "events": 6,
+        "keys": [
+          "afterSeq",
+          "events",
+          "session",
+          "sessionFormatVersion",
+          "throughSeq",
+          "version"
+        ],
+        "throughSeq": 48,
+        "version": 1
+      },
+      "harnessHeaders": [
+        "x-deepseek-harness-session-id",
+        "x-deepseek-harness-user-id"
+      ],
+      "index": 5,
+      "topLevelKeys": [
+        "dsh_plugin_packages",
+        "dsh_session_log",
+        "max_tokens",
+        "messages",
+        "model",
+        "output_config",
+        "stream",
+        "system",
+        "thinking",
+        "tools"
+      ]
+    }
+  ],
+  "requestsCarryingUploadFields": 6,
+  "sessionHeaderPaths": [
+    ".session.createdAt: number",
+    ".session.cwd: string",
+    ".session.id: string",
+    ".session.version: number"
+  ],
+  "variant": "upstream-default"
+}
