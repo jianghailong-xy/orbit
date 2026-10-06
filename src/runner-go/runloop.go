@@ -58,13 +58,18 @@ type selfUpdateChecker func(context.Context, string) (string, bool)
 // waitForRunLoopStop owns the two reasons a healthy runner deliberately leaves
 // its claim loop. It is kept independent of the rest of runLoop so update timing
 // and signal precedence can be exercised without starting sessions or heartbeats.
-func waitForRunLoopStop(ctx context.Context, signals <-chan os.Signal, server string, interval time.Duration, check selfUpdateChecker) (runLoopStopReason, string) {
+// A receive on checkNow runs the update check at once, between ticks: the
+// owner's "Update Runner Now" (HeartbeatResponse.CheckSelfUpdate).
+func waitForRunLoopStop(ctx context.Context, signals <-chan os.Signal, server string, interval time.Duration, check selfUpdateChecker, checkNow <-chan struct{}) (runLoopStopReason, string) {
 	var ticker *time.Ticker
 	var ticks <-chan time.Time
 	if check != nil {
 		ticker = time.NewTicker(interval)
 		ticks = ticker.C
 		defer ticker.Stop()
+	} else {
+		// No updater to run: a request for a check is left unread, as a tick would be.
+		checkNow = nil
 	}
 	for {
 		select {
@@ -73,17 +78,18 @@ func waitForRunLoopStop(ctx context.Context, signals <-chan os.Signal, server st
 		case <-signals:
 			return runLoopStopSignal, ""
 		case <-ticks:
-			if remote, ok := check(ctx, server); ok {
-				// The manifest request may have overlapped an operator/service stop.
-				// Prefer that explicit signal to an automatic restart when both are
-				// ready, rather than turning SIGTERM into an update by select lottery.
-				select {
-				case <-signals:
-					return runLoopStopSignal, ""
-				default:
-				}
-				return runLoopStopUpdate, remote
+		case <-checkNow:
+		}
+		if remote, ok := check(ctx, server); ok {
+			// The manifest request may have overlapped an operator/service stop.
+			// Prefer that explicit signal to an automatic restart when both are
+			// ready, rather than turning SIGTERM into an update by select lottery.
+			select {
+			case <-signals:
+				return runLoopStopSignal, ""
+			default:
 			}
+			return runLoopStopUpdate, remote
 		}
 	}
 }
@@ -92,7 +98,8 @@ func waitForRunLoopStop(ctx context.Context, signals <-chan os.Signal, server st
 // which it does only while no turn is in flight (closeForUpdate). While any turn runs, the check
 // reports nothing and logs one line, and the next tick asks again: the release stays published, so
 // waiting loses nothing. There is no deadline after which the update stops waiting — a runner busy
-// at every check stays on its release until a check finds it idle.
+// at every check stays on its release until a check finds it idle. The heartbeat reports the wait
+// as waitingForIdle.
 func updateWhenNoTurnInFlight(check selfUpdateChecker, pool *sessionPool, interval time.Duration) selfUpdateChecker {
 	return func(ctx context.Context, server string) (string, bool) {
 		remote, ok := check(ctx, server)
@@ -102,6 +109,7 @@ func updateWhenNoTurnInFlight(check selfUpdateChecker, pool *sessionPool, interv
 		if n := pool.closeForUpdate(); n > 0 {
 			logln(fmt.Sprintf("orbit %s update available; deferred — %d turn(s) in flight, checking again in %s",
 				remote, n, interval))
+			noteSelfUpdate(selfUpdateStateWaitingForIdle, "", "")
 			return "", false
 		}
 		return remote, true
@@ -880,13 +888,32 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	monitorCtx, stopMonitor := context.WithCancel(context.Background())
 	monitorDone := make(chan struct{})
 	var updateRequested atomic.Bool
+	// One beat right away, between ticks (runHeartbeatTicks). Buffered by one and never waited on:
+	// asking while a beat is already owed leaves exactly that one owed.
+	hbNow := make(chan struct{}, 1)
+	beatNow := func() {
+		select {
+		case hbNow <- struct{}{}:
+		default:
+		}
+	}
+	// The owner's "Update Runner Now" (HeartbeatResponse.CheckSelfUpdate) runs the release check
+	// below without waiting for its next tick. Buffered by one, like hbNow.
+	checkSelfUpdateNow := make(chan struct{}, 1)
 	var check selfUpdateChecker
 	if selfUpdateEnabled() {
-		check = updateWhenNoTurnInFlight(availableSelfUpdate, pool, selfUpdateCheckInterval)
+		gated := updateWhenNoTurnInFlight(availableSelfUpdate, pool, selfUpdateCheckInterval)
+		check = func(ctx context.Context, server string) (string, bool) {
+			remote, ok := gated(ctx, server)
+			// What the check found rides a beat now rather than up to half a minute from now: after
+			// an Update Runner Now, somebody is watching for it.
+			beatNow()
+			return remote, ok
+		}
 	}
 	go func() {
 		defer close(monitorDone)
-		reason, remote := waitForRunLoopStop(monitorCtx, sig, cfg.ServerURL, selfUpdateCheckInterval, check)
+		reason, remote := waitForRunLoopStop(monitorCtx, sig, cfg.ServerURL, selfUpdateCheckInterval, check, checkSelfUpdateNow)
 		if reason == runLoopStopNone {
 			return
 		}
@@ -1110,15 +1137,6 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// Heartbeat every 30s; honor server-requested cancellations.
 	hbStop := make(chan struct{})
 	hbDone := make(chan struct{})
-	// One beat right away, between ticks (runHeartbeatTicks). Buffered by one and never waited on:
-	// asking while a beat is already owed leaves exactly that one owed.
-	hbNow := make(chan struct{}, 1)
-	beatNow := func() {
-		select {
-		case hbNow <- struct{}{}:
-		default:
-		}
-	}
 	// A session that finds its engine signed out as it starts it says so (noteEngineSignedOut): the
 	// probe confirms it and the next beat carries it at once. Coalesced, since every session started on
 	// the same refused sign-in says the same thing.
@@ -1187,6 +1205,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				Repos:                repoHealth.snapshotNow(),
 				RunsAsRoot:           &runsAsRoot,
 				ReposRoot:            machineReposRoot,
+				SelfUpdate:           selfUpdateReport(),
 			}, t.heartbeat)
 			if err != nil {
 				logln("heartbeat failed:", err)
@@ -1506,6 +1525,20 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			if resp.RefreshModelCatalog {
 				logln("model catalog refresh requested by the control plane")
 				go refreshModelCatalog()
+			}
+			// Check for a runner release now: the owner pressed Update Runner Now. Handed to the
+			// monitor, which runs the periodic check through the same turn gate — a turn in flight
+			// still defers the update, and the next beat reports waitingForIdle.
+			if resp.CheckSelfUpdate {
+				if check == nil {
+					logln("runner update check requested by the control plane; self-update is off:", selfUpdateDisabledReason())
+				} else {
+					logln("runner update check requested by the control plane")
+					select {
+					case checkSelfUpdateNow <- struct{}{}:
+					default:
+					}
+				}
 			}
 			// Repair a shared checkout the user saw reported as wedged. Runs here, on the
 			// heartbeat's own goroutine, because it's short and must not overlap the next one:

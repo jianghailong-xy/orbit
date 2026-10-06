@@ -200,6 +200,16 @@ Check what is published with `curl -fsS "$ORBIT_VERIFY_ORIGIN/dl/version.json"` 
 `sudo orbit upgrade` from an account that is not the runner's, and runners released before assignment
 existed all read `/dl/version.json` directly, so they always get the latest release.
 
+Each runner reports where its updates stand on every heartbeat, and `GET /api/runners` and
+`GET /api/runners/:id` return it as `selfUpdate`. Its `state` is `enabled`, `disabledByEnv` (`reason` says
+which: `ORBIT_NO_SELFUPDATE`, a development build, or a platform with no published build), `dirNotWritable`
+(`installDir` is not writable by the runner's account; `sudo orbit upgrade` there moves the install),
+`waitingForIdle` (a release waits for the turns in flight), `failed` (`reason` is the runner's own words) or
+`heldByRollout`. `lastUpdatedAt`, `lastUpdatedFrom` and `lastUpdatedTo` describe the last update the runner
+installed into itself. A runner too old to report any of this has `selfUpdate: null`. The owner's Update Runner
+Now, `POST /api/runners/:id/self-update`, has the runner run its update check at once rather than at the next
+10-minute one, by the same rules: the release assigned to it, and never during a turn in flight.
+
 ### Native hand-off (platform-specific)
 
 ```bash

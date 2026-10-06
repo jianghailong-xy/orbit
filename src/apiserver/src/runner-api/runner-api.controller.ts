@@ -304,6 +304,7 @@ import { antigravityGoogleLoginRefusal, antigravitySignInUnderWay } from '../com
 import { RUNNER_OS_HEADER, withRunnerOs } from '../common/runner-platform';
 import { loginCodeRelay } from '../runners/login-code-relay';
 import { readRunnerRepoHealth, sanitizeRunnerRepoHealth } from '../common/runner-repo-health';
+import { sanitizeRunnerSelfUpdate } from '../common/runner-self-update';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { ALWAYS_ALLOWED_TOOLS, resolvePermissionMode } from '../common/permission-mode';
 import { orchestrationEnabled } from '../common/orchestration-switch';
@@ -1013,6 +1014,12 @@ export class RunnerApiController {
         // ROOT_REFUSED_PERMISSION_MODES). Omitted by a runner too old to report it, which keeps
         // the stored value — NULL there means "never told us" and stays unrestricted.
         runsAsRoot: dto?.runsAsRoot ?? undefined,
+        // Where this runner's updates of itself stand. Written by every beat, and as NULL when the
+        // beat omits it: unlike `engines` or `repos`, absence is not "no news" but a binary that
+        // does not report it — an older release, or one a rollback put back — and the state a
+        // newer binary reported must not outlive it. A report this server can't read is NULL too.
+        selfUpdate:
+          (sanitizeRunnerSelfUpdate(dto?.selfUpdate) as unknown as Prisma.InputJsonValue | null) ?? Prisma.DbNull,
         // The directory this machine clones into, under which a workspace created from a git URL
         // gets its checkout. An empty string is treated as no report, exactly like the omission an
         // older runner sends: NULL here means "this machine never told us where it clones", and
@@ -1283,6 +1290,7 @@ export class RunnerApiController {
     let repoCleanupRequest: RunnerHeartbeatResponse['repoCleanupRequest'];
     let claudeHistoryRequest: RunnerHeartbeatResponse['claudeHistoryRequest'];
     let refreshModelCatalog: RunnerHeartbeatResponse['refreshModelCatalog'];
+    let checkSelfUpdate: RunnerHeartbeatResponse['checkSelfUpdate'];
     try {
       cancelSessionIds = await this.realtime.drainCancellations(runner.id);
       // Manual git mutations are fail-closed during rolling upgrades. A capable
@@ -1335,6 +1343,8 @@ export class RunnerApiController {
       // so a hiccup while draining it costs a heartbeat, where a hiccup IN it, drained earlier,
       // would have cost the directory listing behind it.
       refreshModelCatalog = await this.drainModelCatalogRefresh(runner.id);
+      // The same kind of request, kept on the row the same way, so it goes last beside it.
+      checkSelfUpdate = await this.drainSelfUpdateRequest(runner.id);
     } catch {
       // A transient DB hiccup shouldn't fail the heartbeat; all arrive next cycle.
     }
@@ -1357,6 +1367,7 @@ export class RunnerApiController {
       agentDirs,
       repoCleanupRequest,
       refreshModelCatalog,
+      checkSelfUpdate,
       // Only when a claim holds a command for this process: an older runner's response stays the shape
       // it always was, and a direct caller comparing responses sees no new key.
       ...(codexRateLimitResetRequest ? { codexRateLimitResetRequest } : {}),
@@ -1493,6 +1504,22 @@ export class RunnerApiController {
     const claimed = await this.prisma.runner.updateMany({
       where: { id: runnerId, modelCatalogRefreshAt: { not: null } },
       data: { modelCatalogRefreshAt: null },
+    });
+    return claimed.count > 0 ? true : undefined;
+  }
+
+  /**
+   * Whether this runner should check for a release of itself on this beat: the owner pressed
+   * Update Runner Now (RunnersService.requestSelfUpdate).
+   *
+   * Claimed, not redelivered, for drainModelCatalogRefresh's reason: the answer is the
+   * `selfUpdate` state later heartbeats carry — the new version, or `waitingForIdle` while a turn
+   * runs — so a redelivered request would re-run the check on every beat. The clear is the claim.
+   */
+  private async drainSelfUpdateRequest(runnerId: string): Promise<true | undefined> {
+    const claimed = await this.prisma.runner.updateMany({
+      where: { id: runnerId, selfUpdateRequestedAt: { not: null } },
+      data: { selfUpdateRequestedAt: null },
     });
     return claimed.count > 0 ? true : undefined;
   }

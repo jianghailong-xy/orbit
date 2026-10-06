@@ -63,6 +63,13 @@ export class RunnersController {
     return this.runners.approveDeviceEnrollment(user.userId, userCode);
   }
 
+  // One runner, the same shape as its entry in the list. After every static GET above, for the
+  // reason `reorder` is: Nest matches in declaration order. Owner-scoped: anyone else's is a 404.
+  @Get(':id')
+  get(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.runners.getRunner(user.userId, id);
+  }
+
   @Patch(':id')
   update(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: UpdateRunnerDto) {
     return this.runners.updateRunner(user.userId, id, dto);
@@ -181,6 +188,13 @@ export class RunnersController {
   @Post(':id/refresh-models')
   refreshModels(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.runners.requestModelCatalogRefresh(user.userId, id);
+  }
+
+  // Update Runner Now: check for a runner release at once rather than at the runner's next
+  // periodic check. Owner-scoped like the controls above: it can restart that machine's runner.
+  @Post(':id/self-update')
+  requestSelfUpdate(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.runners.requestSelfUpdate(user.userId, id);
   }
 
   // What Claude Code history already sits under a directory on this machine, asked while someone
