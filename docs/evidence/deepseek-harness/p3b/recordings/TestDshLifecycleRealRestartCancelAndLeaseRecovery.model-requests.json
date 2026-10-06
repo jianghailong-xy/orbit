@@ -1,0 +1,390 @@
+[
+  {
+    "call": 1,
+    "messages": [
+      {
+        "content": [
+          {
+            "text": "Remember P3B-WORD and answer.",
+            "type": "text"
+          },
+          {
+            "text": "Current runtime context. This snapshot supersedes earlier runtime-context snapshots.\n\nCurrent DSH file policy: workspace-write. Any available operation enforced by the DSH file sandbox may modify files under the session workspace: \"/tmp/orbit-dsh-p3b-kWhHCj/TestDshLifecycleRealRestartCancelAndLeaseRecovery2194466262/001/work\". Some platform temporary areas may also be writable.\n\nApproval policy: ask. Operations that require approval may ask through the configured answerers; without an available answerer, the request fails closed.",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      }
+    ]
+  },
+  {
+    "call": 2,
+    "messages": [
+      {
+        "content": [
+          {
+            "text": "Remember P3B-WORD and answer.",
+            "type": "text"
+          },
+          {
+            "text": "Current runtime context. This snapshot supersedes earlier runtime-context snapshots.\n\nCurrent DSH file policy: workspace-write. Any available operation enforced by the DSH file sandbox may modify files under the session workspace: \"/tmp/orbit-dsh-p3b-kWhHCj/TestDshLifecycleRealRestartCancelAndLeaseRecovery2194466262/001/work\". Some platform temporary areas may also be writable.\n\nApproval policy: ask. Operations that require approval may ask through the configured answerers; without an available answerer, the request fails closed.",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "text": "P3B first answer",
+            "type": "text"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "text": "Hold this turn.",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      }
+    ]
+  },
+  {
+    "call": 3,
+    "messages": [
+      {
+        "content": [
+          {
+            "text": "Remember P3B-WORD and answer.",
+            "type": "text"
+          },
+          {
+            "text": "Current runtime context. This snapshot supersedes earlier runtime-context snapshots.\n\nCurrent DSH file policy: workspace-write. Any available operation enforced by the DSH file sandbox may modify files under the session workspace: \"/tmp/orbit-dsh-p3b-kWhHCj/TestDshLifecycleRealRestartCancelAndLeaseRecovery2194466262/001/work\". Some platform temporary areas may also be writable.\n\nApproval policy: ask. Operations that require approval may ask through the configured answerers; without an available answerer, the request fails closed.",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "text": "P3B first answer",
+            "type": "text"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "text": "Hold this turn.",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "text": "P3B partial",
+            "type": "text"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "text": "What was the word?",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      }
+    ]
+  },
+  {
+    "call": 4,
+    "messages": [
+      {
+        "content": [
+          {
+            "text": "Remember P3B-WORD and answer.",
+            "type": "text"
+          },
+          {
+            "text": "Current runtime context. This snapshot supersedes earlier runtime-context snapshots.\n\nCurrent DSH file policy: workspace-write. Any available operation enforced by the DSH file sandbox may modify files under the session workspace: \"/tmp/orbit-dsh-p3b-kWhHCj/TestDshLifecycleRealRestartCancelAndLeaseRecovery2194466262/001/work\". Some platform temporary areas may also be writable.\n\nApproval policy: ask. Operations that require approval may ask through the configured answerers; without an available answerer, the request fails closed.",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "text": "P3B first answer",
+            "type": "text"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "text": "Hold this turn.",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "text": "P3B partial",
+            "type": "text"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "text": "What was the word?",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "text": "P3B third answer",
+            "type": "text"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "text": "Write the file.",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      }
+    ]
+  },
+  {
+    "call": 5,
+    "messages": [
+      {
+        "content": [
+          {
+            "text": "Remember P3B-WORD and answer.",
+            "type": "text"
+          },
+          {
+            "text": "Current runtime context. This snapshot supersedes earlier runtime-context snapshots.\n\nCurrent DSH file policy: workspace-write. Any available operation enforced by the DSH file sandbox may modify files under the session workspace: \"/tmp/orbit-dsh-p3b-kWhHCj/TestDshLifecycleRealRestartCancelAndLeaseRecovery2194466262/001/work\". Some platform temporary areas may also be writable.\n\nApproval policy: ask. Operations that require approval may ask through the configured answerers; without an available answerer, the request fails closed.",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "text": "P3B first answer",
+            "type": "text"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "text": "Hold this turn.",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "text": "P3B partial",
+            "type": "text"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "text": "What was the word?",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "text": "P3B third answer",
+            "type": "text"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "text": "Write the file.",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "id": "call_p3b_write",
+            "input": {
+              "content": "P3B real dsh tool effect",
+              "file_path": "/tmp/orbit-dsh-p3b-kWhHCj/TestDshLifecycleRealRestartCancelAndLeaseRecovery2194466262/001/work/written.txt"
+            },
+            "name": "write",
+            "type": "tool_use"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "content": [
+              {
+                "text": "\u003cpath\u003e/tmp/orbit-dsh-p3b-kWhHCj/TestDshLifecycleRealRestartCancelAndLeaseRecovery2194466262/001/work/written.txt\u003c/path\u003e\n\u003ctype\u003efile\u003c/type\u003e\n\u003ccontent\u003e\nCreated file\n\u003c/content\u003e",
+                "type": "text"
+              }
+            ],
+            "is_error": false,
+            "tool_use_id": "call_p3b_write",
+            "type": "tool_result"
+          }
+        ],
+        "role": "user"
+      }
+    ]
+  },
+  {
+    "call": 6,
+    "messages": [
+      {
+        "content": [
+          {
+            "text": "Remember P3B-WORD and answer.",
+            "type": "text"
+          },
+          {
+            "text": "Current runtime context. This snapshot supersedes earlier runtime-context snapshots.\n\nCurrent DSH file policy: workspace-write. Any available operation enforced by the DSH file sandbox may modify files under the session workspace: \"/tmp/orbit-dsh-p3b-kWhHCj/TestDshLifecycleRealRestartCancelAndLeaseRecovery2194466262/001/work\". Some platform temporary areas may also be writable.\n\nApproval policy: ask. Operations that require approval may ask through the configured answerers; without an available answerer, the request fails closed.",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "text": "P3B first answer",
+            "type": "text"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "text": "Hold this turn.",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "text": "P3B partial",
+            "type": "text"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "text": "What was the word?",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "text": "P3B third answer",
+            "type": "text"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "text": "Write the file.",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "id": "call_p3b_write",
+            "input": {
+              "content": "P3B real dsh tool effect",
+              "file_path": "/tmp/orbit-dsh-p3b-kWhHCj/TestDshLifecycleRealRestartCancelAndLeaseRecovery2194466262/001/work/written.txt"
+            },
+            "name": "write",
+            "type": "tool_use"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "content": [
+              {
+                "text": "\u003cpath\u003e/tmp/orbit-dsh-p3b-kWhHCj/TestDshLifecycleRealRestartCancelAndLeaseRecovery2194466262/001/work/written.txt\u003c/path\u003e\n\u003ctype\u003efile\u003c/type\u003e\n\u003ccontent\u003e\nCreated file\n\u003c/content\u003e",
+                "type": "text"
+              }
+            ],
+            "is_error": false,
+            "tool_use_id": "call_p3b_write",
+            "type": "tool_result"
+          },
+          {
+            "text": "Finish.",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      }
+    ]
+  }
+]

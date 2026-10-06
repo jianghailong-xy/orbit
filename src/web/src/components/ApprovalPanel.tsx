@@ -5,6 +5,7 @@ import type { ApprovalInfo, PermissionRule } from '../api';
 import { BatchGraph } from './BatchGraph';
 import { CardActionButton, CardActions } from './CardAction';
 import { ReviewCard } from './ReviewCard';
+import { useIsMobile } from '../lib/useMediaQuery';
 import { ENTER_HINT, SHORTCUT_HINT, useApproveHotkey, useCardKeyClaim } from './CardHotkey';
 import { buildBatchGraph, describeShape, shouldDraw } from '../lib/batchGraph';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
@@ -310,9 +311,13 @@ export function ApprovalPanel({
   answerable = true,
   onChatAbout,
   onDecline,
+  rememberable = true,
 }: {
   approval: ApprovalInfo;
   onDecide: OnDecide;
+  /** Whether this session's runtime honours remember rules (`approvalRememberOffered`). False
+   *  drops "Always allow" and its shortcut: the card is Approve / Reject only. */
+  rememberable?: boolean;
   active?: boolean;
   /** Whether an answer to this card can still reach anybody — see UNANSWERABLE_NOTE. */
   answerable?: boolean;
@@ -322,16 +327,17 @@ export function ApprovalPanel({
   onDecline?: (id: string, toolName: string, subject: string) => void;
 }): JSX.Element {
   const isQuestion = approval.toolName === 'AskUserQuestion';
+  const narrow = useIsMobile();
   const [reviewOpen, setReviewOpen] = useState(false);
   const compact = isPlan(approval) || isProjectCreate(approval);
   // A dead card owns no hotkey and shows no shortcut hint: the caller already skips it when
   // choosing the active card, and this holds even when something else calls it directly.
-  const armed = active && answerable && (!compact || reviewOpen);
+  const armed = active && answerable && (!narrow || !compact || reviewOpen);
   // "Always allow" — the running session stops asking (claude's engine matches future calls),
   // and the rule is kept on this session's workspace so its other sessions start with it too.
   // Empty for questions/plans and Bash commands with no clean prefix; a compound Bash line
   // yields one rule per distinct sub-command.
-  const rules = isQuestion ? [] : rememberRulesFor(approval);
+  const rules = isQuestion || !rememberable ? [] : rememberRulesFor(approval);
   // One claim for the card, so that the two triggers below are one card asking rather than two.
   // The keys are the card's only while it is the highest card asking: a question card above it on
   // the screen holds them first, and this one holds them over every card below it (`CardHotkey.ts`)

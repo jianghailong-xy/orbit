@@ -39,6 +39,7 @@ func cmdMcp() {
 		watchesOff:            !watchesEnabledFromEnv(),
 		wikiOff:               !wikiEnabledFromEnv(),
 		onlyTools:             mcpToolsFromEnv(),
+		callTimeout:           mcpCallTimeoutFromEnv(),
 	}
 	srv.serve(os.Stdin, os.Stdout)
 }
@@ -56,9 +57,31 @@ type mcpServer struct {
 	// Spawned with ORBIT_MCP_TOOLS: these tools and no others, listed or called (a Wiki maintenance
 	// run, wiki_maintenance_session.go). Nil serves every tool.
 	onlyTools map[string]bool
+	// How long the engine lets one tool call run before it reports the call failed (ORBIT_MCP_CALL_TIMEOUT_SECONDS);
+	// 0 when it waits for as long as the call takes. See handOffOwnerWait.
+	callTimeout time.Duration
 }
 
 const envMCPPermissionPrompt = "ORBIT_MCP_PERMISSION_PROMPT"
+
+// envMCPCallTimeout is set by a runtime whose engine ends an MCP tool call on its own deadline, and
+// whose mcpServers declaration cannot change it (DeepSeek Harness, dsh_mcp.go). Unset, every call
+// behaves as it always has.
+const envMCPCallTimeout = "ORBIT_MCP_CALL_TIMEOUT_SECONDS"
+
+func mcpCallTimeoutFromEnv() time.Duration {
+	seconds, err := strconv.Atoi(strings.TrimSpace(os.Getenv(envMCPCallTimeout)))
+	if err != nil || seconds <= 0 {
+		return 0
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+// longestInlineWait is how long a call may hold the engine's tool call waiting for something: half the
+// engine's deadline, leaving the rest for the round-trips around the wait. 0 means no cap.
+func longestInlineWait(callTimeout time.Duration) time.Duration {
+	return callTimeout / 2
+}
 
 func mcpPermissionPromptEnabled() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv(envMCPPermissionPrompt))) {
@@ -296,6 +319,9 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 	// same runWikiTool (wiki_tools.go).
 	if result, handled := s.callWikiTool(name, args); handled {
 		return result
+	}
+	if s.callTimeout > 0 && s.sessionID != "" && waitsForTheOwner(name, args) {
+		return s.handOffOwnerWait(name, args)
 	}
 	switch name {
 	case "task_list":
@@ -730,6 +756,25 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult("The item is closed, with your reason on it.\n"+prettyJSON(raw), false)
 
+	case "open_item_hand_over":
+		id := getString(args, "projectId")
+		itemID := getString(args, "itemId")
+		if id == "" || itemID == "" {
+			return toolResult("projectId and itemId are required", true)
+		}
+		note := strings.TrimSpace(getString(args, "note"))
+		if note == "" {
+			return toolResult("note is required: explain why the coordinator is handing this item to the account owner", true)
+		}
+		// The acting session IS the authority: the server checks it against the project's coordinator
+		// pointer and refuses an item that is already the owner's or a caller from another session.
+		raw, err := s.t.handOverOpenItem(s.sessionID, id, itemID, note)
+		if err != nil {
+			return toolResult("hand over open item failed: "+err.Error(), true)
+		}
+		return toolResult("The item is now with the account owner, with your explanation on it.\n"+
+			prettyJSON(raw), false)
+
 	case "integration_retry":
 		id := getString(args, "projectId")
 		taskID := getString(args, "taskId")
@@ -824,7 +869,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("title is required", true)
 		}
 		body := map[string]interface{}{"title": title}
-		copyIfPresent(body, args, "description", "attachmentIds", "listId", "projectId", "parentTaskId", "verifiesTaskId", "verification", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "handoff")
+		copyIfPresent(body, args, "description", "attachmentIds", "listId", "projectId", "fixesOpenItemId", "parentTaskId", "verifiesTaskId", "verification", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "handoff")
 		if err := requireHandoffNamesItsDestination(body); err != nil {
 			return toolResult(err.Error(), true)
 		}
@@ -869,7 +914,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 				return toolResult(fmt.Sprintf("tasks[%d]: title is required", i), true)
 			}
 			body := map[string]interface{}{"title": title}
-			copyIfPresent(body, item, "description", "attachmentIds", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef", "handoff")
+			copyIfPresent(body, item, "description", "attachmentIds", "listId", "projectId", "fixesOpenItemId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef", "handoff")
 			// Per item, because a crossing is per item: one plan can file most of its work at home
 			// and one piece of it over the line, and the item that crosses is the one that has to
 			// name where it is going.
@@ -916,7 +961,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// gives it all three outcomes for free: absent stays absent (the task keeps what it says),
 		// a string is forwarded as given, and an explicit null survives as null rather than being
 		// mistaken for "not supplied" — that last one is the whole clear path.
-		copyIfPresent(body, args, "title", "description", "status", "listId", "projectId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "runAt", "provider", "model", "modelHint", "modelHintReason", "acceptanceCriteria", "criterionKey", "codeless", "codelessReason", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "dependsOnTaskIds", "autoRunWhenReady", "priority", "completionPolicy", "verdict", "labels", "supersededByTaskId", "terminalReason", "handoff")
+		copyIfPresent(body, args, "title", "description", "status", "listId", "projectId", "fixesOpenItemId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "runAt", "provider", "model", "modelHint", "modelHintReason", "acceptanceCriteria", "criterionKey", "codeless", "codelessReason", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "dependsOnTaskIds", "autoRunWhenReady", "priority", "completionPolicy", "verdict", "labels", "supersededByTaskId", "terminalReason", "handoff")
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
 		}
@@ -1345,6 +1390,11 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if err != nil {
 			return toolResult(err.Error(), true)
 		}
+		// A wait the engine cuts short would report a merge that then lands as a failed call. Running
+		// out of a shorter wait is not a failure and says so (merge_receipts has the outcome).
+		if longest := int(longestInlineWait(s.callTimeout) / time.Second); s.callTimeout > 0 && wait > longest {
+			wait = longest
+		}
 		body := map[string]interface{}{}
 		copyIfPresent(body, args, "targetBranch")
 		if wait > 0 {
@@ -1476,6 +1526,89 @@ const (
 // condition is gone and the owner's part is to agree or not — which is what this card is, and why the
 // tool cannot be reached without one.
 const blockerResolveApprovalToolName = "orbit_blocker_resolve"
+
+// ownerWaitTools are the calls that put a card in front of the owner and block until it is answered.
+var ownerWaitTools = map[string]bool{
+	"task_create": true, "task_create_batch": true, "project_create": true, "project_blocker_resolve": true,
+	"tasklist_propose_dag": true, "provider_create": true, "provider_update": true, "provider_delete": true,
+}
+
+func waitsForTheOwner(name string, args map[string]interface{}) bool {
+	// A dry-run batch writes nothing and asks nobody (task_create_batch).
+	return ownerWaitTools[name] && !(name == "task_create_batch" && getBool(args, "dryRun"))
+}
+
+// handOffOwnerWait runs a call that waits for the owner in a runner-hosted job instead of in this one,
+// when the engine ends tool calls on a deadline of its own (envMCPCallTimeout).
+//
+// A person can take longer than that deadline. Held here, the engine would tell the model the call
+// failed while this process went on waiting, and the write would still happen once the owner
+// confirmed: a failure the model acts on, and a side effect it never hears of. Cancelling on the
+// engine's say-so cannot fix that alone — the card is already on the owner's screen. So the call
+// returns at once, saying truthfully that nothing is written yet, and the job runs the very same call
+// (the same `orbit mcp`, this session's identity, its card naming the job so it outlives the turn).
+// When the owner answers, the job exits with what the call would have returned and wakes the session.
+// Without a job service to hand it to, the call is refused before any card is filed.
+func (s *mcpServer) handOffOwnerWait(name string, args map[string]interface{}) map[string]interface{} {
+	refuse := func(why string) map[string]interface{} {
+		return toolResult(fmt.Sprintf("%s was not run, and nothing was filed or written: it waits for the owner's "+
+			"confirmation, which can take longer than this engine lets a tool call run (%s), so it cannot be held "+
+			"in this call, and %s. Ask the owner in the conversation instead.", name, s.callTimeout, why), true)
+	}
+	socket, token := os.Getenv(envBgSocket), os.Getenv(envBgToken)
+	if socket == "" || token == "" {
+		return refuse("this session has no runner-hosted background job service to hand the wait to")
+	}
+	exe := orbitCLIExecutable()
+	if exe == "" {
+		return refuse("the orbit executable could not be resolved")
+	}
+	params, err := json.Marshal(map[string]interface{}{"name": name, "arguments": args})
+	if err != nil {
+		return refuse(err.Error())
+	}
+	request, _ := json.Marshal(rpcRequest{JSONRPC: "2.0", ID: json.RawMessage("1"), Method: "tools/call", Params: params})
+	file, err := os.CreateTemp("", "orbit-mcp-handoff-*.json")
+	if err != nil {
+		return refuse(err.Error())
+	}
+	_, err = file.Write(append(request, '\n'))
+	if closeErr := file.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		_ = os.Remove(file.Name())
+		return refuse(err.Error())
+	}
+	// The job's environment is the runner's, which carries this session and the job's own id but not
+	// the rest of who is asking: the agent the write is attributed to, the current task, the
+	// orchestration switch. They are this server's own, put back as it was started with them. The
+	// timeout is cleared so the job waits as long as the owner takes, and only this tool is served.
+	// The request file is unlinked once open, so nothing is left behind however the job ends.
+	command := fmt.Sprintf("{ rm -f %s && ORBIT_AGENT_ID=%s ORBIT_TASK_ID=%s %s=%s %s=%s %s= %s mcp; } < %s",
+		shellQuote(file.Name()), shellQuote(s.agentID), shellQuote(s.taskID),
+		envMCPOrchestration, orchestrationEnv(s.allowOrchestration), envMCPTools, shellQuote(name), envMCPCallTimeout,
+		shellQuote(exe), shellQuote(file.Name()))
+	raw, err := bgSocketCall(socket, token, "run", map[string]interface{}{
+		"command": command, "kind": bgKindWatch, "wakeOnExit": true,
+		"description": "Orbit " + name + ": waiting for the owner's confirmation",
+	})
+	if err != nil {
+		_ = os.Remove(file.Name())
+		return refuse("handing the wait to a runner-hosted job failed: " + err.Error())
+	}
+	var job struct {
+		JobID string `json:"jobId"`
+	}
+	_ = json.Unmarshal(raw, &job)
+	return toolResult(fmt.Sprintf("Not done yet — handed to runner-hosted job %s. %s waits for the owner's "+
+		"confirmation, which can take longer than this engine lets a tool call run (%s), so that job asks them and "+
+		"waits instead of this call. Nothing is written unless the owner confirms; if they do, the job performs the "+
+		"write itself. Do not call %s again for the same thing. When the owner answers, the job exits and Orbit "+
+		"wakes this session with its output: the JSON-RPC reply carrying exactly what this call would have "+
+		"returned (what was created, or the refusal). If there is nothing else to do, end your turn; bg_output "+
+		"reads the job at any time.\n%s", job.JobID, name, s.callTimeout, name, prettyJSON(raw)), false)
+}
 
 // askBeforeCreate files a card for a create and blocks until the human answers it. It returns
 // declined == "" for a yes, and otherwise the reason to hand back in place of the write. The MCP
@@ -2412,9 +2545,15 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"items":       str,
 				"description": "Ids of existing Orbit attachments owned by the caller, such as uploaded files or images from a session. Copies them into this task's inputs in the same transaction as creation; originals are preserved and each run receives its own copies. Pass attachment ids, not local file paths or URLs. Omit when no attachments are needed.",
 			},
-			"listId":             map[string]interface{}{"type": []string{"string", "null"}},
-			"assigneeId":         map[string]interface{}{"type": []string{"string", "null"}},
-			"projectId":          projectIDProp,
+			"listId":     map[string]interface{}{"type": []string{"string", "null"}},
+			"assigneeId": map[string]interface{}{"type": []string{"string", "null"}},
+			"projectId":  projectIDProp,
+			"fixesOpenItemId": map[string]interface{}{
+				"type": "string",
+				"description": "Attach this task to an OPEN integration or TASK_FAILED item as its concrete fix. " +
+					"The item must be in the same project and assigned to the owner or coordinating session; " +
+					"an item may have multiple fixing tasks.",
+			},
 			"handoff":            handoffProp,
 			"parentTaskId":       parentTaskIDProp,
 			"acceptanceCriteria": acceptanceCriteriaProp,
@@ -3139,6 +3278,32 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			}, "projectId", "itemId", "note"),
 		},
 		{
+			"name": "open_item_hand_over",
+			"description": "Hand one of this project's open coordinator items to the account owner, and " +
+				"say why. This is a deliberate decision, not the escalation clock: the item becomes OWNER " +
+				"/ HANDED_OVER, the explanation and this coordinator session stay on the row, and the owner " +
+				"is notified after the compare-and-set commits. Only the conversation coordinating this " +
+				"project may call it; an item that is already closed, already the owner's, or has no hand-over " +
+				"door in the open-item matrix is refused. Use integration_retry for a retryable task landing or promotion " +
+				"check, and ask_owner when the owner must choose; use this door when the coordinator cannot " +
+				"settle the item and needs to hand it over. It does not rerun or close the item. The note is " +
+				"required and is limited to 2000 characters.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project you coordinate, as shown in its web UI URL (/projects/<id>).",
+				},
+				"itemId": map[string]interface{}{
+					"type":        "string",
+					"description": "The open item to hand to the owner, as project_get or the open-items list spells it.",
+				},
+				"note": map[string]interface{}{
+					"type":        "string",
+					"description": "Why the coordinator cannot settle it. Required, up to 2000 characters, and kept on the item.",
+				},
+			}, "projectId", "itemId", "note"),
+		},
+		{
 			"name": "integration_retry",
 			"description": "Run one of your project's failed integrations again. With taskId: a task " +
 				"that is DONE whose newest landing onto the project's integration line ended CHECK_FAILED " +
@@ -3162,7 +3327,10 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"about the failure stay open and " +
 				"read as being handled until that job reports — if it lands or passes they are marked " +
 				"handled in your name with your reason, and if it fails again they are marked superseded " +
-				"by the new item its failure opens. Refused with the reason when the task's landing or the " +
+				"by the new item its failure opens. If the coordinator cannot settle the item, use " +
+				"open_item_hand_over with an explanation; if changing a merge-check command, time limit or " +
+				"another owner-only choice is required, use ask_owner with options. This tool never hands " +
+				"an item to the owner and never answers that choice. Refused with the reason when the task's landing or the " +
 				"candidate is already queued or running, when the failure's item is the account owner's " +
 				"(escalated, or a project that is not Automatic), when the owner has an open blocker on " +
 				"the task, or when the task or candidate is not this project's. Only the conversation the " +
@@ -3292,12 +3460,16 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"name":        "task_update",
 			"description": "Update a task's fields. Direct status DONE is refused for every actor; the refusal names the declared EXECUTABLE, VERIFICATION, EVIDENCE_JUDGMENT, or OWNER_CONFIRMED path, and an OWNER_CONFIRMED task is confirmed only by the account owner in the Orbit app. A write that lands a task on OWNER_CONFIRMED in no project, or in a project whose Automatic is off — by changing the criterion, the project or the criterion it serves — needs ownerConfirmationReason (stored or sent), or it is refused 409 OWNER_CONFIRMATION_REASON_REQUIRED and nothing is written. FAILED remains writable as a run's conservative self-report. When setting `description`, write it as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps) — what would PROVE the task done goes in `acceptanceCriteria`, not into the prompt. `acceptanceCriteria` is editable for the whole life of the task, which is where it usually gets written: omit it to leave the current criteria untouched, pass a string to replace them, pass null to clear them. It states what settles THIS task, not the project it is filed under (project_get). `parentTaskId` moves this task under another one you own (same project, never itself or one of its own subtasks) — membership only, with no effect on when it runs. `projectId` re-files this task under another project, or null takes it out of every project — how a mis-filing is corrected, and the account owner's to make: a session acting under a project scope is refused UNMAPPED_PROJECT_WORK for null and PROJECT_SCOPE_MISMATCH for another project, and a declared crossing waits on the owner as CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING (read the row with project_crossings). Pass null for assigneeId/listId/parentTaskId/projectId/dueDate/runAt/provider/model/modelHint/modelHintReason to clear them. `codeless: true` declares that the task produces no code, which takes it out of its acceptance criterion's landing: it needs `codelessReason` in the same call, and is refused for a task that already has commits of its own.",
 			"inputSchema": obj(map[string]interface{}{
-				"taskId":             taskIDProp,
-				"title":              str,
-				"description":        taskDescriptionProp,
-				"status":             taskUpdateStatus,
-				"listId":             map[string]interface{}{"type": []string{"string", "null"}},
-				"projectId":          updateProjectIDProp,
+				"taskId":      taskIDProp,
+				"title":       str,
+				"description": taskDescriptionProp,
+				"status":      taskUpdateStatus,
+				"listId":      map[string]interface{}{"type": []string{"string", "null"}},
+				"projectId":   updateProjectIDProp,
+				"fixesOpenItemId": map[string]interface{}{
+					"type":        []string{"string", "null"},
+					"description": "Attach this task to an OPEN integration or TASK_FAILED item as its concrete fix. Omit to preserve the current link; pass null to detach it. The item must be in the same project and assigned to the owner or coordinating session.",
+				},
 				"handoff":            updateHandoffProp,
 				"assigneeId":         map[string]interface{}{"type": []string{"string", "null"}},
 				"parentTaskId":       updateParentTaskIDProp,
@@ -3886,7 +4058,13 @@ func sessionWaitPolls(depth int) int {
 		polls /= 2
 	}
 	if polls < minSessionWaitPolls {
-		return minSessionWaitPolls
+		polls = minSessionWaitPolls
+	}
+	// Under an engine that ends the call itself (envMCPCallTimeout), the wait ends first: the session
+	// was already created, and a call reported failed would invite a second one. The watch the wait
+	// records keeps waiting either way.
+	if limit := longestInlineWait(mcpCallTimeoutFromEnv()); limit > 0 && time.Duration(polls)*sessionWaitInterval > limit {
+		polls = int(limit / sessionWaitInterval)
 	}
 	return polls
 }

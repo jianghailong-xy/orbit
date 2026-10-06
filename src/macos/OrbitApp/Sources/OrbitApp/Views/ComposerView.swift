@@ -151,8 +151,16 @@ struct ComposerView: View {
     /// hold here: a session cannot move machines. Bypass on a root runner is not awaiting its moment,
     /// it is a session claude refuses to start. Shown but not selectable (web parity: the option
     /// carries `disabled` rather than being filtered out), so the reason stays visible.
+    ///
+    /// A mode the RUNTIME refuses outright is disabled for the same reason: DeepSeek Harness runs only
+    /// Default, Auto and Don't Ask, and the server rejects a session configured with any other.
     private func modeRunnable(_ mode: PermissionMode) -> Bool {
         AgentDefaults.isRunnable(mode, runsAsRoot: console.runnerRunsAsRoot)
+            && modeSupported(mode)
+    }
+
+    private func modeSupported(_ mode: PermissionMode) -> Bool {
+        AgentDefaults.isSupported(mode, provider: console.provider, configured: console.configuredProviders)
     }
 
     /// Keep a stored project-defined OpenCode variant visible until a catalog explicitly says it
@@ -427,7 +435,7 @@ struct ComposerView: View {
                 // detail rather than beside it, where a phone's footer has no room for an email (web
                 // parity).
                 PlanUsageIndicator(usage: usage,
-                                   account: console.accountLabel.map {
+                                   account: (console.accountLabel ?? console.poolAccountLabel).map {
                                        PlanUsageAccount(label: $0, note: console.accountNote)
                                    }, resetConsole: console)
             }
@@ -545,7 +553,9 @@ struct ComposerView: View {
                     console.permissionModeWasEdited = true
                     Task { await console.applyConfig(permissionMode: mode.rawValue) }
                 } label: {
-                    menuItemLabel(AgentDefaults.label(mode), selected: mode == console.permissionMode)
+                    menuItemLabel(modeSupported(mode) ? AgentDefaults.label(mode)
+                                      : "\(AgentDefaults.label(mode)) — not on DeepSeek Harness",
+                                  selected: mode == console.permissionMode)
                 }
                 .disabled(!modeRunnable(mode))
             }
@@ -602,8 +612,8 @@ struct ComposerView: View {
                         // "Orbit lost my provider". The running one is exempt — it is the row's
                         // own caption, and a parenthetical there would sit under every turn.
                         let blocked = choice.unavailable != nil && choice.slug != console.provider
-                        // Each built-in engine's accounts under it, as the new-session picker lists
-                        // them (web parity): on the engine the session is on, the ones it moves
+                        // Each built-in engine's accounts under it (web parity): on the engine the
+                        // session (or draft) is on, the ones it moves
                         // between; under another, the ones a switch onto that engine lands on.
                         let here = choice.slug == console.accountEngine
                         let elsewhere = here || blocked ? [] : console.accountChoices(for: choice.slug)
@@ -614,27 +624,34 @@ struct ComposerView: View {
                         // that, so it is greyed out with its reason instead.
                         let fixable = blocked && choice.fixEngine != nil
                         let reason = choice.unavailable ?? ""
-                        let fix = fixable ? (choice.fixEngine == "antigravity" ? " →" : ", sign in →") : ""
-                        Button {
-                            // Picking a blocked row isn't a switch — it's a request for the
-                            // sign-in that would make it one, so go to that runner's Engines
-                            // section rather than doing nothing.
-                            if fixable {
-                                if choice.fixEngine == "antigravity", let url = console.antigravityProvidersURL { openURL(url) }
-                                else if let rid = console.runnerID { app.route(to: .runner(rid)) }
-                            } else if !blocked {
-                                Task { await console.selectProvider(choice.slug) }
+                        let fix = fixable ? (["antigravity", "dsh", DshRuntime.connectFix].contains(choice.fixEngine ?? "") ? " →" : ", sign in →") : ""
+                        // On iOS the engine names a section of its accounts instead of a row above
+                        // them (`accountsUnderHeader`).
+                        let headsSection = Self.accountsUnderHeader && listsAccounts
+                        if !headsSection {
+                            Button {
+                                // Picking a blocked row isn't a switch — it's a request for the
+                                // sign-in that would make it one, so go to that runner's Engines
+                                // section rather than doing nothing.
+                                if fixable {
+                                    if let rid = console.runnerID, let url = console.webFixURL(engine: choice.fixEngine ?? "", runnerID: rid) { openURL(url) }
+                                    else if let rid = console.runnerID { app.route(to: .runner(rid)) }
+                                } else if !blocked {
+                                    Task { await console.selectProvider(choice.slug) }
+                                }
+                            } label: {
+                                menuItemLabel(
+                                    blocked ? "\(choice.label) — \(reason)\(fix)" : [choice.label, choice.labelDetail].compactMap { $0 }.joined(separator: " · "),
+                                    selected: choice.slug == console.provider && !listsAccounts)
                             }
-                        } label: {
-                            menuItemLabel(
-                                blocked ? "\(choice.label) — \(reason)\(fix)" : [choice.label, choice.labelDetail].compactMap { $0 }.joined(separator: " · "),
-                                selected: choice.slug == console.provider && !listsAccounts)
+                            .disabled(blocked && !fixable)
                         }
-                        .disabled(blocked && !fixable)
-                        if here && console.accountRowsOffered {
-                            accountItems(choice.slug)
-                        } else if !elsewhere.isEmpty {
-                            switchAccountItems(choice.slug, elsewhere)
+                        if headsSection {
+                            Section([choice.label, choice.labelDetail].compactMap { $0 }.joined(separator: " · ")) {
+                                engineAccountItems(choice.slug, here: here, elsewhere: elsewhere)
+                            }
+                        } else {
+                            engineAccountItems(choice.slug, here: here, elsewhere: elsewhere)
                         }
                     }
                 } label: {
@@ -738,10 +755,12 @@ struct ComposerView: View {
     }
 
     /// The decision behind this task run, while the chip still shows the model it picked
-    /// (`ComposerLogic.smartRoute`); nil on a session opened by hand and on a shadow-only run.
+    /// (`ComposerLogic.smartRoute`); nil on a session opened by hand, on a shadow-only run, and on
+    /// every run while the account's switch for smart model selection is off.
     private var smartRoute: TaskRunRoute? {
         ComposerLogic.smartRoute(taskID: console.taskID, route: console.worktree.detail?.route,
-                                 modelID: console.modelID)
+                                 modelID: console.modelID,
+                                 smartSelection: app.user?.preferences?.smartModelSelection ?? false)
     }
 
     /// The model's name as the chip shows it: "Runtime default" for a draft whose provider has not
@@ -909,6 +928,28 @@ struct ComposerView: View {
             .contentShape(Rectangle())
     }
 
+    /// An engine's accounts in the Provider submenu: on the engine the session is on, the ones it moves
+    /// between; under another, the ones a switch onto that engine lands on.
+    @ViewBuilder
+    private func engineAccountItems(_ engine: String, here: Bool, elsewhere: [AccountChoice]) -> some View {
+        if here && console.accountRowsOffered {
+            accountItems(engine)
+        } else if !elsewhere.isEmpty {
+            switchAccountItems(engine, elsewhere)
+        }
+    }
+
+    /// iOS 26 gives every row of a menu the image column once any row has an image, so an account
+    /// can't be drawn one level in from its engine: the engine names a section of its accounts
+    /// instead. Its own row would add nothing there — on the session's engine it is the pick already
+    /// (`selectProvider` returns), and a switch onto another lands through its Automatic row or an
+    /// account. macOS keeps the engine row with its accounts under it.
+    #if os(iOS)
+    private static let accountsUnderHeader = true
+    #else
+    private static let accountsUnderHeader = false
+    #endif
+
     /// The runner's accounts of the session's engine, right under it in the Provider submenu (web
     /// parity): Automatic first where its workspace leaves the account to Orbit, then each account with
     /// its own quota. A pick moves the session there (`ConsoleModel.switchAccount`); a signed-out
@@ -922,10 +963,10 @@ struct ComposerView: View {
                 #if os(iOS)
                 // Once it is the pick, "Current" says all there is: what Automatic does is why
                 // someone picks it, not news to the session already on it.
-                accountRowLabel("Automatic", detail: console.sessionAutomatic ? nil : "Resets soonest",
+                accountRowLabel("Automatic", detail: console.sessionAutomatic ? nil : "Switches to soonest reset",
                                 selected: console.sessionAutomatic)
                 #else
-                menuItemLabel("Automatic · Resets soonest", selected: console.sessionAutomatic)
+                menuItemLabel("Automatic · Switches to soonest reset", selected: console.sessionAutomatic)
                 #endif
             }
         }
@@ -963,9 +1004,9 @@ struct ComposerView: View {
                 Task { await console.selectProvider(engine, account: CodexAccounts.automaticID) }
             } label: {
                 #if os(iOS)
-                accountRowLabel("Automatic", detail: "Resets soonest", selected: false)
+                accountRowLabel("Automatic", detail: "Switches to soonest reset", selected: false)
                 #else
-                menuItemLabel("Automatic · Resets soonest", selected: false)
+                menuItemLabel("Automatic · Switches to soonest reset", selected: false)
                 #endif
             }
         }
@@ -1003,37 +1044,35 @@ struct ComposerView: View {
         Text(Self.menuBreakable(text))
         if selected { Text("Current") }
         #else
+        // A macOS menu turns this row into a title and an image and draws the image in the menu's
+        // own colour — a clear checkmark rendered as a tick on every row (seen in the P5 Mac shots:
+        // both DeepSeek models and every mode ticked). So the image exists only on the selected row.
         HStack(spacing: 8) {
             Text(text).lineLimit(1)
             Spacer(minLength: 8)
-            Image(systemName: "checkmark")
-                .foregroundStyle(selected ? Color.accentColor : Color.clear)
-                .frame(width: 20, alignment: .trailing)
-                .accessibilityHidden(!selected)
+            if selected {
+                Image(systemName: "checkmark")
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 20, alignment: .trailing)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         #endif
     }
 
     #if os(iOS)
-    /// An account under its engine in the Provider submenu, one level in from the provider rows: the
-    /// transparent glyph takes the image column the provider rows leave empty, and iOS starts the
-    /// title of a row with an image past that column. Its quota — or what Automatic does — goes
-    /// underneath; the account the session is on says "Current" there first.
+    /// An account in its engine's section of the Provider submenu (`accountsUnderHeader`), on the
+    /// margin like every other row. Its quota — or what Automatic does — goes underneath; the account
+    /// the session is on says "Current" there first.
     @ViewBuilder
     private func accountRowLabel(_ name: String, detail: String?, selected: Bool) -> some View {
-        Label { Text(Self.menuBreakable(name)) } icon: { Image(uiImage: Self.clearGlyph) }
+        Text(Self.menuBreakable(name))
         if selected {
             Text(detail.map { "Current · \($0)" } ?? "Current")
         } else if let detail {
             Text(detail)
         }
     }
-
-    /// The indent for `accountRowLabel`: a checkmark drawn fully transparent, rendered as is — a
-    /// template image would be tinted back into a visible check by the menu.
-    private static let clearGlyph = UIImage(systemName: "checkmark")?
-        .withTintColor(.clear, renderingMode: .alwaysOriginal) ?? UIImage()
 
     /// A name the menu has to wrap — an email, a "name@Provider" — breaks before its "@" or after a
     /// dot, where a zero-width space marks the line's break opportunities, rather than where the

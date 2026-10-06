@@ -213,7 +213,7 @@ struct AgentContentColumn: View {
             // goes on following the selected session. A phone never reads this — its folder page is
             // a frame the compact stack pushes (`CompactSections`).
             if let address = app.projectSessionsColumn, rowNavigation == .selection {
-                SessionProjectPage(address: address, rowNavigation: rowNavigation, searchQuery: $searchQuery)
+                SessionProjectPage(address: address, rowNavigation: rowNavigation)
             } else {
                 if let address = app.folderColumn {
                     SessionFolderPage(address: address, rowNavigation: rowNavigation, searchQuery: $searchQuery)
@@ -271,7 +271,8 @@ struct AgentContentColumn: View {
         // text); the hits replace the list's sections until the field is cleared (see `AgentPanes`).
         .sessionListSearch(text: $searchQuery,
                            fromBottom: SessionListPresentation.resolve(
-                               isCompactWidth: horizontalSizeClass == .compact).searchesFromBottom)
+                               isCompactWidth: horizontalSizeClass == .compact).searchesFromBottom,
+                           isEnabled: app.projectSessionsColumn == nil || rowNavigation != .selection)
         // The query used to be `AgentPanes`' own state, so switching workspace (`.id(a.id)`) dropped
         // it. It outlives that rebuild now, so clear it here to land on the new workspace's sessions
         // rather than on the old workspace's search results.
@@ -380,6 +381,8 @@ struct AgentPanes: View {
     /// state: this pane is rebuilt per workspace (`.id(a.id)`), so @State would unfold it on every
     /// switch, and on every launch.
     @AppStorage("sessionList.pinnedCollapsed") private var pinnedCollapsed = false
+    /// The last grouping drawn and its inputs (see `body`).
+    @State private var listingMemo = SessionListingMemo<SessionListGrouping>()
     #endif
     // Set true when the composer hands ↑/↓ back on Escape, so the session list can be arrow-navigated
     // without a click; the binding also tracks click-to-focus.
@@ -394,7 +397,14 @@ struct AgentPanes: View {
         // this column. Compact's rows push their own pages onto the section's `NavigationStack`, so
         // there the List has nothing to select (and in a plain stack wouldn't respond to a tap).
         #if os(iOS)
-        let projectRows = Dictionary(uniqueKeysWithValues: projectListing.projects.map { ($0.id, $0) })
+        // The grouping runs only when what it is computed from changed (`SessionListingMemo`): the
+        // body re-runs on a selection, a pop back to the list or a focus request, none of which
+        // moves a row. The list's closures, which SwiftUI also runs on its own as rows scroll in,
+        // read these rather than regrouping the account's sessions each time.
+        let grouping = listingMemo.value(for: listInputs, compute: Self.grouping)
+        let folderListing = grouping.folderListing
+        let timeSections = grouping.timeSections
+        let projectRows = grouping.projectRows
         #endif
         List(selection: listSelection) {
             #if os(iOS)
@@ -811,11 +821,31 @@ struct AgentPanes: View {
     }
 
     #if os(iOS)
+    /// What the list's grouping is computed from, read off the models each pass — which is also
+    /// what re-runs the body when one of them changes (see `SessionListingMemo`).
+    private var listInputs: SessionListInputs {
+        SessionListInputs(workspaceID: agent.id, sessions: agents.agentSessions, tagFilter: tagFilter,
+                          accountSessions: app.sessions, allSessions: agents.allSessions,
+                          folders: app.sessionFolders, projects: app.projects?.sidebarProjects ?? [],
+                          watches: app.watches?.summaries ?? [:], view: view, groupByTag: groupByTag,
+                          searching: isSearching, runnerOffline: agents.runnerIsOffline(agent.runnerId))
+    }
+
+    /// The whole grouping, from its inputs alone: static, so it cannot read a fact the memo's key
+    /// does not carry.
+    private static func grouping(_ inputs: SessionListInputs, _ lines: SessionLineCache) -> SessionListGrouping {
+        let projectListing = Self.projectListing(inputs, lines)
+        let folderListing = Self.folderListing(projectListing, inputs)
+        let projectRows = Dictionary(uniqueKeysWithValues: projectListing.projects.map { ($0.id, $0) })
+        return SessionListGrouping(projectListing: projectListing, folderListing: folderListing,
+                                   timeSections: Self.timeSections(folderListing, inputs), projectRows: projectRows)
+    }
+
     /// The recency sections the list draws, split out of the `ForEach` so the leading one can be
     /// rendered without its title (see the list body). Over what is left after the folders take
     /// theirs — a session inside a folder is drawn behind its row, not here (§3.3).
-    private var timeSections: [SessionTimeSection] {
-        SessionTimeGrouping.sections(folderListing.sessions, pinnedFirst: view == .open && tagFilter == nil)
+    private static func timeSections(_ folderListing: SessionFolderListing, _ inputs: SessionListInputs) -> [SessionTimeSection] {
+        SessionTimeGrouping.sections(folderListing.sessions, pinnedFirst: inputs.view == .open && inputs.tagFilter == nil)
     }
 
     /// This workspace's list, split by folder (§3.3): the folder rows the list draws at its top,
@@ -825,37 +855,43 @@ struct AgentPanes: View {
     /// row's spinner exactly as it silences the workspace's own. Trash, a tag filter and Group by
     /// Tag all leave the folder rows empty (§3.3): each is a grouping of its own, and a second one
     /// stacked on the list would leave a session with two places to be.
-    private var folderListing: SessionFolderListing {
-        let ungrouped = SessionFolderGrouping.listing(shownSessions,
-                                      folders: app.sessionFolders.filter { $0.workspaceId == agent.id },
-                                      view: view,
-                                      byTag: tagFilter != nil || groupByTag,
-                                      runnerOffline: agents.runnerIsOffline(agent.runnerId))
-        guard SessionProjectGrouping.listShowsProjects(view: view, byTag: tagFilter != nil || groupByTag) else {
-            return ungrouped
+    private static func folderListing(_ projectListing: SessionProjectListing, _ inputs: SessionListInputs) -> SessionFolderListing {
+        guard SessionProjectGrouping.listShowsProjects(view: inputs.view, byTag: inputs.byTag) else {
+            return SessionFolderGrouping.listing(inputs.shownSessions,
+                                      folders: inputs.workspaceFolders,
+                                      view: inputs.view,
+                                      byTag: inputs.byTag,
+                                      runnerOffline: inputs.runnerOffline)
         }
         return SessionFolderListing(folders: projectListing.folders,
                                     sessions: projectListing.entries.map(\.timeGroupingSession))
     }
 
-    private var projectListing: SessionProjectListing {
-        SessionProjectGrouping.listing(shownSessions,
-                                      folders: app.sessionFolders.filter { $0.workspaceId == agent.id },
-                                      projects: app.projects?.sidebarProjects ?? [], view: view,
-                                      byTag: tagFilter != nil || groupByTag, searching: isSearching,
-                                      runnerOffline: agents.runnerIsOffline(agent.runnerId),
-                                      coordinators: agents.allSessions + app.sessions,
-                                      contentSessions: view == .open ? app.sessions : agents.allSessions,
-                                      watching: Dictionary((app.sessions + agents.allSessions).compactMap { session in
-                                          app.watches?.summary(for: session.id).map { (session.id, $0) }
+    private static func projectListing(_ inputs: SessionListInputs, _ lines: SessionLineCache) -> SessionProjectListing {
+        let shownSessions = inputs.shownSessions
+        // The grouping reads only the coordinators out of these, so only they are copied out of the
+        // account's lists — not several hundred sessions each, concatenated whole on every pass.
+        let isCoordinator = { (session: Session) in session.projectMembership?.role == .coordinator }
+        let coordinators = inputs.allSessions.filter(isCoordinator) + inputs.accountSessions.filter(isCoordinator)
+        // Only the sessions the grouping looks a watch up for — this list's own and the projects'
+        // coordinators — not every session of the account, each a `PublicID` key conversion.
+        let watched = shownSessions + coordinators
+        return SessionProjectGrouping.listing(shownSessions,
+                                      folders: inputs.workspaceFolders,
+                                      projects: inputs.projects, view: inputs.view,
+                                      byTag: inputs.byTag, searching: inputs.searching,
+                                      runnerOffline: inputs.runnerOffline,
+                                      coordinators: coordinators,
+                                      contentSessions: inputs.view == .open ? inputs.accountSessions : inputs.allSessions,
+                                      watching: Dictionary(watched.compactMap { session in
+                                          inputs.watch(for: session.id).map { (session.id, $0) }
                                       }, uniquingKeysWith: { _, latest in latest }),
-                                      line: { SessionLine.make(for: $0, live: true,
-                                                              watching: app.watches?.summary(for: $0.id)) })
+                                      line: { lines.line(for: $0, watching: inputs.watch(for: $0.id)) })
     }
 
     private func projectRow(_ row: SessionProjectRow) -> some View {
         let address = SessionProjectAddress(projectID: row.projectId, agentID: agent.id, view: view)
-        return SessionProjectRowView(row: row, onOpen: {
+        let onOpen = {
             switch row.target {
             case .session(let id):
                 if let session = (app.sessions + agents.allSessions).first(where: { $0.id == id }) {
@@ -863,10 +899,9 @@ struct AgentPanes: View {
                 }
             case .project: app.openProjectSessions(address)
             }
-        }, onSessions: { app.openProjectSessions(address) })
-        .sessionProjectRowActions(row, onCoordinator: {
-            if let coordinator = row.coordinator { app.openProjectMember(coordinator, push: rowNavigation == .push) }
-        }, onSessions: { app.openProjectSessions(address) }, onProject: {
+        }
+        return SessionProjectRowView(row: row, onOpen: { app.openProjectSessions(address) })
+        .sessionProjectRowActions(row, onOpen: onOpen, onSessions: { app.openProjectSessions(address) }, onProject: {
             app.openProject(row.projectId)
         }, onMove: { if let coordinator = row.coordinator { movingSession = coordinator } })
     }
@@ -1208,7 +1243,7 @@ struct NewSessionView: View {
     #if os(macOS)
     @State private var showSwitcher = false
     #endif
-    @State private var showProviderPicker = false
+    @State private var showEnginePicker = false
 
     init(agent: Agent, registry: ConsoleRegistry, defaultModel: String,
          configuredProviders: [ConfiguredProvider] = [],
@@ -1249,21 +1284,21 @@ struct NewSessionView: View {
         VStack(spacing: 0) {
             if draft.localStatusCards.isEmpty {
                 VStack(spacing: 18) {
-                    // Who runs this session is the hero — the native port of web's
-                    // `NewSessionProviderHero`: the vendor's own mark, then its name as the one
-                    // tappable identity. The workspace name sits in the iOS navigation bar;
-                    // macOS keeps its workspace switcher below the hero.
+                    // Which engine runs this session is the hero — the native port of web's
+                    // `NewSessionProviderHero`: the vendor's own mark, then the engine's name as the
+                    // one tappable identity, with the provider it spends when that is not its own
+                    // sign-in ("via DeepSeek") — picked in the composer's Provider menu. The
+                    // workspace name sits in the iOS navigation bar; macOS keeps its workspace
+                    // switcher below the hero.
                     VStack(spacing: 14) {
-                        ProviderMark(provider: draft.provider, size: 68,
-                                     brandKey: currentProviderChoice.brandKey,
-                                     label: currentProviderChoice.label,
-                                     poolSize: currentProviderChoice.poolSize,
-                                     poolUnit: currentProviderChoice.poolUnit)
-                        Button { showProviderPicker = true } label: {
+                        ProviderMark(provider: currentEngine.slug, size: 68,
+                                     brandKey: currentEngine.brandKey,
+                                     label: currentEngine.label)
+                        Button { showEnginePicker = true } label: {
                             HStack(spacing: 7) {
-                                Text(currentProviderChoice.label)
+                                Text(currentEngine.label)
                                     .font(.title.weight(.bold)).foregroundStyle(.primary).lineLimit(1)
-                                if let detail = currentProviderChoice.labelDetail {
+                                if let detail = currentEngine.providerDetail {
                                     Text(detail).font(.footnote).foregroundStyle(.secondary)
                                 }
                                 Image(systemName: "chevron.down").font(.subheadline.weight(.semibold))
@@ -1272,7 +1307,7 @@ struct NewSessionView: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("Provider: \(currentProviderChoice.label). Switch")
+                        .accessibilityLabel("Engine: \(currentEngine.label)\(currentEngine.providerDetail.map { " \($0)" } ?? ""). Switch")
                     }
                     VStack(spacing: 5) {
                         // The pick is sticky, so it can point at an engine this machine can no
@@ -1282,8 +1317,7 @@ struct NewSessionView: View {
                            currentProviderChoice.fixEngine != nil {
                             Button {
                                 if let rid = agent.runnerId {
-                                    if currentProviderChoice.fixEngine == "antigravity",
-                                       let url = draft.providersURL(engine: "antigravity", runnerID: rid) { openURL(url) }
+                                    if let url = draft.webFixURL(engine: currentProviderChoice.fixEngine ?? "", runnerID: rid) { openURL(url) }
                                     else { app.route(to: .runner(rid)) }
                                 }
                             } label: {
@@ -1395,19 +1429,14 @@ struct NewSessionView: View {
             }
         }
         #endif
-        .sheet(isPresented: $showProviderPicker) {
+        .sheet(isPresented: $showEnginePicker) {
             // The draft's own runnerID is only set for a live session, so take the agent's — it is
             // the machine this draft would run on, and the one whose Engines section fixes a row.
-            ProviderSwitchSheet(
-                choices: providerChoices.contains { $0.slug == draft.provider } ? providerChoices : [currentProviderChoice] + providerChoices, currentSlug: draft.provider, agentName: agent.name,
-                currentAccount: draft.provider == "claude" ? draft.account(for: "claude") : draft.codexAccount,
-                automatic: ["codex", "claude"].reduce(into: [String: Bool]()) { offered, engine in
-                    if draft.automaticOffered(engine) { offered[engine] = draft.draftAutomatic(engine) }
-                },
+            EngineSwitchSheet(
+                engines: engines, current: currentEngine, agentName: agent.name,
                 onSelect: { slug in draft.pickDraftProvider(slug) },
-                onSelectAccount: { slug, account in draft.pickDraftAccount(slug, account) },
                 onFixRunner: agent.runnerId.map { rid in { engine in
-                    if engine == "antigravity", let url = draft.providersURL(engine: engine, runnerID: rid) { openURL(url) }
+                    if let url = draft.webFixURL(engine: engine, runnerID: rid) { openURL(url) }
                     else { app.route(to: .runner(rid)) }
                 } })
         }
@@ -1430,7 +1459,22 @@ struct NewSessionView: View {
                                        pools: draft.allPools,
                                        planUsage: draft.runnerPlanUsage,
                                        antigravity: draft.runnerAntigravity,
-                                       antigravityKeyAvailable: agent.antigravityKeyAvailableByRunner?[draft.runnerID ?? agent.runnerId ?? ""] == true)
+                                       antigravityKeyAvailable: agent.antigravityKeyAvailableByRunner?[draft.runnerID ?? agent.runnerId ?? ""] == true,
+                                       dshState: draft.dshRunnerState)
+    }
+
+    /// The engines the hero offers, each landing on the draft's pick when it holds it, else on what
+    /// this workspace last ran there (web parity).
+    private var engines: [EngineChoice] {
+        SessionProviderChoices.engines(providerChoices, configured: draft.configuredProviders,
+                                       preferred: [draft.provider, agent.defaultProvider])
+    }
+
+    /// The engine of the draft's pick — synthesized when no group holds it (`opencode`, a removed
+    /// provider) or holds it but cannot run it, so the hero still names what it would run.
+    private var currentEngine: EngineChoice {
+        engines.first { $0.provider.slug == draft.provider }
+            ?? SessionProviderChoices.engine(for: currentProviderChoice, configured: draft.configuredProviders)
     }
 
     private var currentProviderChoice: ProviderChoice {
@@ -1784,6 +1828,7 @@ struct AgentFormContent: View {
     let agents: AgentsModel
     let agent: Agent
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppModel.self) private var app
 
     @State private var name = ""
     @State private var effort: Effort = .default
@@ -1844,15 +1889,19 @@ struct AgentFormContent: View {
             }
 
             // Off by default, and only the owner's to turn on: it decides what task runs cost, so the
-            // agent tools cannot set it (docs/model-routing-design.md §7.2).
-            Section("Task runs") {
-                Toggle(isOn: $modelRouting) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(TaskDetailCopy.smartSelectionSwitch)
-                        Text(TaskDetailCopy.smartSelectionSwitchDetail)
-                            .font(.orbitLabel)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
+            // agent tools cannot set it (docs/model-routing-design.md §7.2). With the account's switch
+            // off (the default) the Agent has no switch of its own; its stored value is left alone,
+            // since Done sends it only when it moved.
+            if app.user?.preferences?.smartModelSelection ?? false {
+                Section("Task runs") {
+                    Toggle(isOn: $modelRouting) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(TaskDetailCopy.smartSelectionSwitch)
+                            Text(TaskDetailCopy.smartSelectionSwitchDetail)
+                                .font(.orbitLabel)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                 }
             }

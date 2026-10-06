@@ -311,7 +311,12 @@ function ResultCard({ toast, onOpen }: { toast: ToastItem; onOpen: (toast: Toast
   );
 }
 
-/** ③ What failed, what it was about, the server's words to read twice and paste, and what to do. */
+/** ③ What failed, what it was about, the server's words to read twice and paste, and what to do.
+ *
+ *  The copy block carries the click into the session, the same as ② — a press that only follows the
+ *  toast is one the whole card should answer, not one the card keeps to a button of its own. A
+ *  button is left here only for what does MORE than follow it (`action`, which resolves in the
+ *  session) or what acts on the card's own text (`Copy error`). */
 function AttentionCard({ toast, onOpen }: { toast: ToastItem; onOpen: (toast: ToastItem) => void }) {
   const copyable = typeof toast.detail === 'string' ? toast.detail : null;
   const action = toast.action;
@@ -319,15 +324,26 @@ function AttentionCard({ toast, onOpen }: { toast: ToastItem; onOpen: (toast: To
     <div className={`toast toast--card toast--attention toast--${toast.tone} toast--live`}>
       <div className="toast-row">
         <Glyph toast={toast} />
-        <span className="toast-copy">
-          <Copy toast={toast} withDetail={false} />
-        </span>
+        {toast.sessionId ? (
+          <button
+            type="button"
+            className="toast-copy toast-copy--link"
+            aria-label={typeof toast.subtitle === 'string' ? `Open ${toast.subtitle}` : undefined}
+            onClick={() => onOpen(toast)}
+          >
+            <Copy toast={toast} withDetail={false} />
+          </button>
+        ) : (
+          <span className="toast-copy">
+            <Copy toast={toast} withDetail={false} />
+          </span>
+        )}
         <button type="button" className="toast-close" aria-label="Dismiss" onClick={() => closeToast(toast.id)}>
           <CloseOutlined />
         </button>
       </div>
       {present(toast.detail) && <div className="toast-reason">{toast.detail}</div>}
-      {(action || toast.sessionId || copyable) && (
+      {(action || copyable) && (
         <div className="toast-actions">
           {action && (
             <button
@@ -340,15 +356,6 @@ function AttentionCard({ toast, onOpen }: { toast: ToastItem; onOpen: (toast: To
               }}
             >
               {action.label}
-            </button>
-          )}
-          {toast.sessionId && !action && (
-            <button
-              type="button"
-              className="toast-action toast-action--primary"
-              onClick={() => onOpen(toast)}
-            >
-              Open session
             </button>
           )}
           {copyable && (

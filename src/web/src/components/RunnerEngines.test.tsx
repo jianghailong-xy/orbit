@@ -265,8 +265,8 @@ describe('the "On your runners" section', () => {
   it.each([
     [{ supported: false, installed: true, version: '1.2.16', envKeyAvailable: false }, 'Update runner'],
     [{ supported: true, installed: false, version: null, envKeyAvailable: false }, 'Not installed'],
-    [{ supported: true, installed: true, version: 'agy 1.2.16', envKeyAvailable: false }, 'Ready'],
-  ] as const)('adds an Antigravity installation row without sign-in or quota: %s', (state, label) => {
+    [{ supported: true, installed: true, version: 'agy 1.2.16', envKeyAvailable: false }, 'Unknown'],
+  ] as const)('shows Antigravity readiness and the upgrade required for older runners: %s', (state, label) => {
     const box = runner({ antigravity: state, engines: [health({ engine: 'kimi' })] });
     const html = render([box], { path: `/providers?runner=${encodeId(box.id)}&engine=antigravity` });
     const row = html.slice(html.indexOf('data-engine="antigravity"'), html.indexOf('>Kimi Code<'));
@@ -274,13 +274,13 @@ describe('the "On your runners" section', () => {
     expect(html.match(/re-row focused/g)).toHaveLength(1);
     expect(row).toContain('>Antigravity<');
     expect(row).toContain(label);
-    expect(row).toContain('No sign-in · runs on your Gemini key');
+    expect(row).toContain('Update this runner to sign in with Google.');
     expect(row).not.toContain('>Sign in<');
     expect(html).toContain('1 runner · 1 signed in');
     expect(summaryOf(box)).toBe('1 of 3 signed in');
-    expect(summaryOf({ ...box, install: install({ engine: 'antigravity', status: 'installing' }) })).toBe('1 of 3 signed in');
+    expect(summaryOf({ ...box, install: install({ engine: 'antigravity', status: 'installing' }) })).toBe('Installing…');
     if (!state.supported) {
-      expect(row).toContain('Needs Orbit runner 0.1.209+ — updates itself when idle');
+      expect(row).toContain('Update runner');
       expect(row).not.toContain('>Install<');
     } else if (!state.installed) {
       expect(row).toContain('Not installed — Orbit can install it here');
@@ -366,7 +366,7 @@ describe('the "On your runners" section', () => {
         install: install({ status: 'done', engine: 'codex', command: 'npm install -g @openai/codex' }),
       }),
     ]);
-    const codex = html.slice(html.indexOf('>Codex<'), html.indexOf('>Kimi Code<'));
+    const codex = html.slice(html.indexOf('>Codex<'), html.indexOf('data-engine="antigravity"'));
     expect(codex).toContain('>Installed<');
     expect(codex).toContain('>Sign in<');
     expect(codex).not.toContain('>Install<');
@@ -443,11 +443,10 @@ describe('the "On your runners" section', () => {
     expect(render([box])).not.toContain('focused');
   });
 
-  it('says who keeps these current without offering to do it here', () => {
+  it('explains the subscription source and leaves machine upkeep on the runner page', () => {
     const box = runner({ engines: [health({ engine: 'claude', version: '2.1.220' })] });
     const html = render([box]);
-    // The answer to "do I have to manage this?" — said once, at the top, not per row.
-    expect(html).toContain('Orbit keeps these CLIs updated every 30 min.');
+    expect(html).toContain('Use subscriptions signed in on your machines.');
     // But not the lever. `POST /runners/:id/engine-update` takes no engine: its object is the
     // machine, and every other control on this page is scoped to one (runner, engine) pair. It
     // lives on the machine's own page, which this card already links to.

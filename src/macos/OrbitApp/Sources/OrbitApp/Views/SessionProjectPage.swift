@@ -3,17 +3,15 @@ import SwiftUI
 import OrbitKit
 
 /// The project occupies its coordinator's place, with the same two scan lines as a session row.
-/// The progress chip is a sibling button: its full-height hit area opens the project's sessions.
+/// A tap opens the project's sessions; Open Session in the menu reaches the grouping target.
 struct SessionProjectRowView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     let row: SessionProjectRow
     let onOpen: () -> Void
-    let onSessions: () -> Void
 
     private var regular: Bool {
         SessionListPresentation.resolve(isCompactWidth: horizontalSizeClass == .compact) == .regular
     }
-    private var verticalPadding: CGFloat { regular ? 5 : 2 }
 
     var body: some View {
         Button(action: onOpen) {
@@ -25,7 +23,6 @@ struct SessionProjectRowView: View {
             .accessibilityValue(statusWords)
         }
         .buttonStyle(.plain)
-        .overlay(alignment: .leading) { progressTap }
     }
 
     private var compactRow: some View {
@@ -46,12 +43,7 @@ struct SessionProjectRowView: View {
 
     private var firstLine: some View {
         HStack(spacing: 8) {
-            Image(systemName: "square.grid.2x2")
-                .font(.orbitMeta)
-                .foregroundStyle(.blue)
-                .accessibilityHidden(true)
             Text(row.title)
-                .bold()
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .layoutPriority(1)
@@ -62,40 +54,19 @@ struct SessionProjectRowView: View {
                 Text(relative)
                     .font(.orbitMeta)
                     .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: regular, vertical: false)
+                    .lineLimit(1)
+                    .fixedSize()
             }
         }
     }
 
     private var secondLine: some View {
         HStack(spacing: 7) {
-            // Reserve exactly the visible chip's width; the sibling button draws it over this slot.
-            progressChip.hidden()
+            progressChip
             Text(row.line.text)
                 .font(.orbitListSubtitle)
                 .foregroundStyle(lineColor)
                 .lineLimit(1)
-        }
-    }
-
-    private var progressTap: some View {
-        GeometryReader { proxy in
-            Button(action: onSessions) {
-                VStack(spacing: 0) {
-                    Spacer(minLength: 0)
-                    progressChip
-                }
-                .padding(.bottom, verticalPadding)
-                .frame(height: proxy.size.height)
-                // Include the List's top and bottom cell insets without changing its row height.
-                .padding(.vertical, 15)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .offset(y: -15)
-            .accessibilityLabel(SessionProjectCopy.sessions)
-            .accessibilityValue(SessionProjectCopy.progressHint(sessions: row.sessionCount,
-                                                                 running: row.runningCount))
         }
     }
 
@@ -188,7 +159,7 @@ private struct SessionProjectRowActions: ViewModifier {
     @Environment(AppModel.self) private var app
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     let row: SessionProjectRow
-    let onCoordinator: () -> Void
+    let onOpen: () -> Void
     let onSessions: () -> Void
     let onProject: () -> Void
     let onMove: () -> Void
@@ -213,16 +184,21 @@ private struct SessionProjectRowActions: ViewModifier {
 
     @ViewBuilder
     private var menu: some View {
-        Button(action: onCoordinator) {
-            Label(SessionProjectCopy.openCoordinator, systemImage: "bubble.left")
+        Button(action: onOpen) {
+            Label(SessionProjectCopy.openSession, systemImage: "bubble.left")
         }
-        .disabled(row.coordinator == nil)
+        .disabled(!canOpenSession)
         Button(action: onSessions) { Label(SessionProjectCopy.sessions, systemImage: "list.bullet") }
         Button(action: onProject) { Label(SessionProjectCopy.openProject, systemImage: "square.grid.2x2") }
         Divider()
         actionButton(pinAction)
         Button(action: onMove) { Label(SessionProjectCopy.move, systemImage: "folder") }
             .disabled(row.coordinator == nil)
+    }
+
+    private var canOpenSession: Bool {
+        if case .session = row.target { return true }
+        return false
     }
 
     private var leadingActions: [RowSwipeAction] { row.coordinator == nil ? [] : [pinAction] }
@@ -246,10 +222,10 @@ private struct SessionProjectRowActions: ViewModifier {
 }
 
 extension View {
-    func sessionProjectRowActions(_ row: SessionProjectRow, onCoordinator: @escaping () -> Void,
+    func sessionProjectRowActions(_ row: SessionProjectRow, onOpen: @escaping () -> Void,
                                   onSessions: @escaping () -> Void, onProject: @escaping () -> Void,
                                   onMove: @escaping () -> Void) -> some View {
-        modifier(SessionProjectRowActions(row: row, onCoordinator: onCoordinator, onSessions: onSessions,
+        modifier(SessionProjectRowActions(row: row, onOpen: onOpen, onSessions: onSessions,
                                           onProject: onProject, onMove: onMove))
     }
 }
@@ -259,40 +235,33 @@ struct SessionProjectPage: View {
     @Environment(AppModel.self) private var app
     let address: SessionProjectAddress
     var rowNavigation: SessionRowNavigation = .push
-    var searchQuery: Binding<String>? = nil
 
     @State private var rowSwipe = RowSwipeState()
     @State private var taggingSession: Session?
     @State private var sharingSession: Session?
     @State private var movingSession: Session?
-    @State private var hits: [SessionSearchHit] = []
-    @State private var hitsQuery = ""
-    @State private var contentSearched = true
-    @State private var searching = false
-    @AppStorage("sessionList.pinnedCollapsed") private var pinnedCollapsed = false
 
     private var sessions: [Session] { app.projectSessions }
+    private var runningCount: Int {
+        sessions.filter { session in
+            if case .spinner = SessionStatusGlyph.make(for: session, watching: app.watches?.summary(for: session.id)).shape {
+                return true
+            }
+            return false
+        }.count
+    }
     private var project: ProjectSummary? {
         app.projects?.sidebarProjects.first { $0.id == address.projectID } ?? app.projects?.project(address.projectID)
     }
     private var coordinator: Session? {
         sessions.first { $0.projectMembership?.role == .coordinator }
     }
-    private var availableCoordinator: Session? {
-        coordinator ?? (app.sessions + (app.agents?.allSessions ?? [])).first {
-            $0.projectMembership?.projectId == address.projectID && $0.projectMembership?.role == .coordinator
-        }
-    }
     private var titleText: String {
         project?.title ?? sessions.first?.projectMembership?.projectTitle ?? "Project"
     }
-    private var query: String {
-        searchQuery?.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    }
-    private var isSearching: Bool { !query.isEmpty }
     private var timeSections: [SessionTimeSection] {
         SessionTimeGrouping.sections(sessions.filter { $0.projectMembership?.role != .coordinator },
-                                     pinnedFirst: address.view == .open)
+                                     pinnedFirst: false)
     }
     private var selection: Binding<String?>? {
         guard rowNavigation == .selection else { return nil }
@@ -305,30 +274,16 @@ struct SessionProjectPage: View {
 
     var body: some View {
         List(selection: selection) {
-            if isSearching {
-                searchResults
-            } else {
-                progressCard
-                    .listRowSeparator(.hidden)
-                if let coordinator {
-                    Section(SessionProjectCopy.coordinatorSection) { sessionRow(coordinator) }
-                }
-                ForEach(timeSections) { section in
-                    if section.title == "Pinned" {
-                        Section {
-                            if !pinnedCollapsed {
-                                ForEach(section.sessions) { sessionRow($0) }
-                            }
-                        } header: {
-                            pinnedSectionHeader
-                        }
-                    } else {
-                        Section {
-                            ForEach(section.sessions) { sessionRow($0) }
-                        } header: {
-                            Text(section.title).textCase(nil)
-                        }
-                    }
+            progressCard
+                .listRowSeparator(.hidden)
+            if let coordinator {
+                Section(SessionProjectCopy.coordinatorSection) { sessionRow(coordinator) }
+            }
+            ForEach(timeSections) { section in
+                Section {
+                    ForEach(section.sessions) { sessionRow($0) }
+                } header: {
+                    Text(section.title).textCase(nil)
                 }
             }
         }
@@ -337,12 +292,7 @@ struct SessionProjectPage: View {
         .rowSwipeList(rowSwipe)
         .refreshable { await app.loadProjectSessions(address) }
         .overlay {
-            if isSearching {
-                if hits.isEmpty && !searching && !hitsQuery.isEmpty {
-                    ContentUnavailableView("No matches", systemImage: "magnifyingglass",
-                                           description: Text("Nothing matches \u{201C}\(hitsQuery)\u{201D}."))
-                }
-            } else if sessions.isEmpty && !app.projectSessionsLoading {
+            if sessions.isEmpty && !app.projectSessionsLoading {
                 if let failure = app.projectSessionsError {
                     ContentUnavailableView("Couldn't load sessions", systemImage: "exclamationmark.bubble",
                                            description: Text(failure))
@@ -361,7 +311,7 @@ struct SessionProjectPage: View {
                 }
             }
             ToolbarItem(placement: .principal) { title }
-            ToolbarItem(placement: .topBarTrailing) { projectMenu }
+            ToolbarItem(placement: .topBarTrailing) { openProjectButton }
         }
         .sheet(item: $taggingSession) { SessionTagSheet(session: $0).environment(app) }
         .sheet(item: $sharingSession) { session in
@@ -383,7 +333,6 @@ struct SessionProjectPage: View {
                 await app.loadProjectSessions(address)
             }
         }
-        .task(id: query) { await runSearch() }
     }
 
     private var title: some View {
@@ -399,12 +348,21 @@ struct SessionProjectPage: View {
     }
 
     private var progressCard: some View {
+        VStack(spacing: 0) {
+            progressLine
+            landingLine
+        }
+        .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+        .padding(.vertical, 4)
+    }
+
+    private var progressLine: some View {
         HStack(spacing: 10) {
             if let counts = project?.taskCounts {
-                SessionProjectProgressBar(counts: counts, running: project?.buckets.running ?? 0)
+                SessionProjectProgressBar(counts: counts, running: runningCount)
                     .frame(width: 66)
                 Text(SessionProjectCopy.pageProgress(done: counts.done, total: counts.total,
-                                                     running: project?.buckets.running ?? 0))
+                                                     running: runningCount))
                     .font(.orbitMeta)
                     .foregroundStyle(.secondary)
             } else {
@@ -412,102 +370,63 @@ struct SessionProjectPage: View {
                     .font(.orbitMeta)
                     .foregroundStyle(.secondary)
             }
-            Spacer(minLength: 4)
-            Button { app.openProject(address.projectID) } label: {
-                HStack(spacing: 4) {
-                    Text("Project")
-                    Image(systemName: "chevron.right")
-                }
-                .font(.orbitMeta.weight(.semibold))
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(Color.accentColor)
+            Spacer()
         }
         .padding(12)
-        .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
-        .padding(.vertical, 4)
     }
 
-    private var projectMenu: some View {
-        Menu {
-            Button { app.openProject(address.projectID) } label: {
-                Label(SessionProjectCopy.openProject, systemImage: "square.grid.2x2")
-            }
-            Button {
-                if let coordinator = availableCoordinator {
-                    app.openProjectMember(coordinator, push: rowNavigation == .push)
+    /// The project page's landing line, drawn only while something is in flight; a tap opens the
+    /// project page, whose Work overview carries the same row.
+    @ViewBuilder private var landingLine: some View {
+        if let integration = app.projectSessionsIntegration, integration.inFlight != nil {
+            Divider().padding(.leading, 12)
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                if let line = ProjectPage.landingLine(integration, now: context.date,
+                                                     updatedAt: app.projectSessionsIntegrationReadAt,
+                                                     refreshFailed: app.projectSessionsIntegrationReadFailed) {
+                    Button { app.openProject(address.projectID) } label: {
+                        HStack(spacing: 8) {
+                            ProjectLandingRow(line: line)
+                            Image(systemName: "chevron.right")
+                                .font(.orbitMeta.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
                 }
-            } label: {
-                Label(SessionProjectCopy.openCoordinator, systemImage: "bubble.left")
             }
-            .disabled(availableCoordinator == nil)
-        } label: {
-            Image(systemName: "ellipsis.circle")
         }
-        .accessibilityLabel("Project actions")
+    }
+
+    /// On a phone the project's page is pushed over this one, so back returns here and the drawer
+    /// keeps this project selected; the iPad opens it in the Projects section.
+    private func openProject() {
+        app.openProjectFromConversation(address.projectID, overConsole: rowNavigation == .push)
+    }
+
+    private var openProjectButton: some View {
+        Button { openProject() } label: {
+            Image(systemName: "square.grid.2x2")
+        }
+        .accessibilityLabel(SessionProjectCopy.openProject)
     }
 
     @ViewBuilder private func sessionRow(_ session: Session) -> some View {
-        let row = AgentSessionRow(session: session, showsPin: address.view == .open)
+        let scope: SessionView = session.effectiveLifecycleState == .completed ? .completed : .open
+        let row = AgentSessionRow(session: session, showsPin: scope == .open)
         switch rowNavigation {
         case .selection:
-            row.sessionRowActions(session, scope: address.view, onTag: { taggingSession = session },
+            row.sessionRowActions(session, scope: scope, onTag: { taggingSession = session },
                                   onShare: { sharingSession = session }, onMove: { movingSession = session })
                 .tag(session.id)
         case .push:
             Button { app.openProjectMember(session, push: true) } label: { row.foregroundStyle(.primary) }
-                .sessionRowActions(session, scope: address.view, onTag: { taggingSession = session },
+                .sessionRowActions(session, scope: scope, onTag: { taggingSession = session },
                                    onShare: { sharingSession = session }, onMove: { movingSession = session })
         }
-    }
-
-    private var pinnedSectionHeader: some View {
-        Button {
-            withAnimation { pinnedCollapsed.toggle() }
-        } label: {
-            HStack {
-                Text("Pinned").textCase(nil)
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .rotationEffect(.degrees(pinnedCollapsed ? 0 : 90))
-                    .accessibilityHidden(true)
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(.isHeader)
-    }
-
-    private var searchResults: some View {
-        Section {
-            ForEach(hits) { hit in
-                Button { app.route(to: .session(hit.id)) } label: {
-                    SessionSearchRow(hit: hit, query: hitsQuery)
-                }
-                .buttonStyle(.plain)
-            }
-        } header: {
-            Text(contentSearched ? "All sessions" : "Matching names only — type more to search message text.")
-                .textCase(nil)
-        }
-    }
-
-    /// The wide column keeps the same global session search as the folder and workspace pages.
-    private func runSearch() async {
-        let q = query
-        guard !q.isEmpty else {
-            hits = []
-            hitsQuery = ""
-            return
-        }
-        try? await Task.sleep(for: sessionSearchDebounce)
-        guard !Task.isCancelled else { return }
-        searching = true
-        defer { searching = false }
-        guard let result = await app.searchSessions(q), !Task.isCancelled else { return }
-        hits = result.hits
-        contentSearched = result.contentSearched
-        hitsQuery = result.q
     }
 }
 #endif

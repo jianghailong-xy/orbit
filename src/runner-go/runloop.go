@@ -192,6 +192,7 @@ var catalogRuntimes = []catalogRuntime{
 	{providerOpenCode, openCodeCLIAvailable, fetchGlobalOpenCodeModelCatalog},
 	// agy lists the models built into its binary: the same on every machine and for every key.
 	{providerAntigravity, antigravityCLIAvailable, fetchAntigravityModelCatalog},
+	{providerDsh, dshCLIAvailable, fetchDshModelCatalog},
 }
 
 // models is where c keeps engine's list.
@@ -207,6 +208,8 @@ func (c *ModelCatalog) models(engine string) *[]ModelInfo {
 		return &c.OpenCode
 	case providerAntigravity:
 		return &c.Antigravity
+	case providerDsh:
+		return &c.Dsh
 	}
 	return nil
 }
@@ -255,7 +258,7 @@ func readModelCatalog(ctx context.Context, runtimes []catalogRuntime, signedOut 
 // carrying over must not keep. A first round that read nothing reports nothing, as before.
 func mergeModelCatalog(prev, next *ModelCatalog, signedOut map[string]bool) *ModelCatalog {
 	if prev == nil && len(next.Codex) == 0 && len(next.Claude) == 0 && len(next.Kimi) == 0 &&
-		len(next.OpenCode) == 0 && len(next.Antigravity) == 0 {
+		len(next.OpenCode) == 0 && len(next.Antigravity) == 0 && len(next.Dsh) == 0 {
 		return nil
 	}
 	merged := carryOverModelCatalog(prev, next)
@@ -290,6 +293,9 @@ func carryOverModelCatalog(prev, next *ModelCatalog) *ModelCatalog {
 	}
 	if len(next.Antigravity) == 0 {
 		next.Antigravity = prev.Antigravity
+	}
+	if len(next.Dsh) == 0 {
+		next.Dsh = prev.Dsh
 	}
 	return next
 }
@@ -1121,6 +1127,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		beatNow()
 	})
 	engineSignedOut := func() { go reprobeAfterSignOut() }
+	// The control plane wakes this runner when a sign-in it is driving needs the next heartbeat now.
+	go runWakeLoop(loopCtx, t.waitForWake, beatNow)
 	engineSignedOutSeen.Store(&engineSignedOut)
 	defer engineSignedOutSeen.Store(nil)
 	// Heartbeat-delivered work may spawn git subprocesses that outlive the heartbeat
@@ -1454,10 +1462,12 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					// the Providers page shouldn't keep calling this engine signed out for the
 					// rest of the refresh interval — nor for the half minute until the next
 					// heartbeat, under a card that already says this runner is ready. So
-					// re-probe, and send what it found at once.
+					// re-probe, and send what it found at once. Only this engine: it is the one
+					// that changed, and asking every other CLI first kept the answer back for
+					// seconds, longer on a loaded machine.
 					if res.Status == loginDone {
 						go func() {
-							engineHealth.refresh()
+							engineHealth.refreshEngine(loginFlowFor(lr.Engine).engine)
 							beatNow()
 						}()
 					}
@@ -1540,9 +1550,12 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					if err := removeAccount(kind, claudeUsage, codexUsage, rr.Account, kind.liveDirs(pool.sessionIDs())); err != nil {
 						res.Status, res.Message = "failed", firstLine(err.Error())
 					} else {
-						// Re-probe the engines as well, so the account leaves the page's list on the
-						// next beat rather than in five minutes.
-						go engineHealth.refresh()
+						// Re-probe this engine and beat at once, so the account leaves the page's list
+						// now rather than a heartbeat — or five minutes — later.
+						go func() {
+							engineHealth.refreshEngine(kind.engine)
+							beatNow()
+						}()
 					}
 					if err := t.accountRemoveResult(res); err != nil {
 						logln("account-remove-result POST failed:", err)
@@ -1553,7 +1566,10 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				if err := removeAccount(codexAccountKind, claudeUsage, codexUsage, rr.Account, codexSessionAccountHomes(pool.sessionIDs())); err != nil {
 					res.Status, res.Message = "failed", firstLine(err.Error())
 				} else {
-					go engineHealth.refresh()
+					go func() {
+						engineHealth.refreshEngine(providerCodex)
+						beatNow()
+					}()
 				}
 				if err := t.codexAccountRemoveResult(res); err != nil {
 					logln("codex-account-remove-result POST failed:", err)

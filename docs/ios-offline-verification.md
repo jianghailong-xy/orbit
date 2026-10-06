@@ -56,7 +56,7 @@ export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 S=5DC6920A-2A6D-45BA-84E4-EAAD1A637CD6      # iPhone 17 Pro / iOS 26.5
 
 cd src/ios && xcodegen generate
-xcodebuild -scheme Orbit -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+xcodebuild -scheme Orbit -destination "platform=iOS Simulator,id=$S" \
   -derivedDataPath /tmp/orbit-dd build
 xcrun simctl install "$S" /tmp/orbit-dd/Build/Products/Debug-iphonesimulator/Orbit.app
 ```

@@ -14,6 +14,7 @@ import { ownPoolWithAccess, poolAccessQuery, sharedPoolAsProviderPool, sharedPoo
 import { AccountPools, PoolHint } from '../components/AccountPools';
 import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
 import { RunnerEngines } from '../components/RunnerEngines';
+import { DshRunnerStatus } from '../components/DshRunnerStatus';
 import { useIsMobile } from '../lib/useMediaQuery';
 import { useToast } from '../lib/toast';
 import type { Runner } from '../components/TasksSidePanel';
@@ -102,6 +103,12 @@ export function ProvidersPage() {
                     See runners ↑
                   </a>
                 </div>
+              </div>
+            )}
+            {p.runtime === 'dsh' && <DshRunnerStatus runners={(runners.data ?? []) as Runner[]} />}
+            {p.runtime === 'claude' && p.presetSlug === 'deepseek' && (
+              <div className="prov-runtime">
+                <div>Runs on Claude Code</div>
               </div>
             )}
           </div>

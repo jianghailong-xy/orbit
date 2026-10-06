@@ -71,6 +71,10 @@ export const DONE_REQUEST_TITLE = 'Is this project done?';
 /** Only the conversation a project is coordinated from may ask to record it done. */
 export const DONE_REQUEST_COORDINATOR_ONLY = 'DONE_REQUEST_COORDINATOR_ONLY';
 export const DONE_REQUEST_NOT_READY = 'DONE_REQUEST_NOT_READY';
+/** The owner's Not yet… door can only end an OPEN DONE_REQUEST. */
+export const DONE_REQUEST_NOT_OPEN = 'DONE_REQUEST_NOT_OPEN';
+/** Validation code shared by the DTO-facing and direct service-facing doors. */
+export const DONE_REQUEST_DECLINE_NOTE_REQUIRED = 'DONE_REQUEST_DECLINE_NOTE_REQUIRED';
 
 /** Bounds on what a request carries: a call is a sentence or two, and a gap is read on a card. */
 export const MAX_DONE_REQUEST_JUDGMENT = 2_000;
@@ -79,6 +83,8 @@ export const MAX_DONE_REQUEST_GAP_TITLE = 200;
 export const MAX_DONE_REQUEST_GAP_TEXT = 2_000;
 export const MAX_DONE_REQUEST_EVIDENCE_REFS = 20;
 export const MAX_DONE_REQUEST_EVIDENCE_REF = 500;
+/** The owner's explanation is a card-sized sentence, not an unbounded report. */
+export const MAX_DONE_REQUEST_DECLINE_NOTE = 2_000;
 
 /** One criterion, as the check reads it. */
 export interface DoneStateCriterion {
@@ -475,6 +481,62 @@ export function normalizeDoneRequestGaps(
 /** The line under the item's title, in the project page's words. */
 export function doneRequestDetailLine(request: DoneRequest): string {
   return `The coordinator asked · ${count(request.gaps.length, 'gap', 'gaps')} it couldn’t prove`;
+}
+
+/**
+ * What the coordinator receives when the owner presses Not yet… .
+ *
+ * This is deliberately built from the request snapshot and the settled note, rather than from a
+ * later project read.  The card may be answered after the project moved, and the useful context is
+ * exactly what the coordinator asked the owner to judge: its judgment, every gap and every warning.
+ * Keeping the rendering deterministic also lets the item/session turn key make a replay byte-for-
+ * byte identical to the first delivery.
+ */
+export function doneRequestDeclineMessage(
+  request: DoneRequest,
+  note: string,
+  declinedAt: Date,
+): string {
+  const gaps = request.gaps.length > 0
+    ? request.gaps.map((gap, index) => {
+      const title = gap.title ? ` — ${gap.title}` : '';
+      const evidence = gap.evidenceRefs?.length
+        ? ` Evidence: ${gap.evidenceRefs.join(', ')}`
+        : '';
+      return `${index + 1}. [${gap.criterionKey}]${title}: ${gap.whyNotProven ?? 'not proven'} `
+        + `Coordinator checked: ${gap.coordinatorChecked ?? 'not recorded'}.${evidence}`;
+    }).join('\n')
+    : 'None recorded.';
+  const warnings = request.warnings?.length
+    ? request.warnings.map((warning, index) => {
+      const criterion = warning.criterion
+        ? ` [${warning.criterion.key}] ${warning.criterion.text}`
+        : '';
+      const reason = warning.reason ? ` (${warning.reason})` : '';
+      const tasks = warning.tasks?.length
+        ? ` Tasks: ${warning.tasks.map((task) => `${task.taskId} — ${task.title}`).join('; ')}`
+        : '';
+      const items = warning.items?.length
+        ? ` Items: ${warning.items.map((item) => `${item.itemId} — ${item.title}`).join('; ')}`
+        : '';
+      const jobs = warning.jobs?.length
+        ? ` Jobs: ${warning.jobs.map((job) => `${job.integrationJobId} — ${job.kind} (${job.state})`).join('; ')}`
+        : '';
+      return `${index + 1}. [${warning.severity}/${warning.code}] ${warning.message}`
+        + `${criterion}${reason} Next: ${warning.requiredAction}${tasks}${items}${jobs}`;
+    }).join('\n')
+    : 'None.';
+  return [
+    `From Orbit · owner says not yet for “${DONE_REQUEST_TITLE}”.`,
+    `What’s missing before it’s done? ${note}`,
+    `Coordinator judgment: ${request.judgment}`,
+    'Gaps the coordinator named:',
+    gaps,
+    'Warnings on the card:',
+    warnings,
+    'After the missing work is complete, call project_request_done again.',
+    `Answered at ${declinedAt.toISOString()}.`,
+  ].join('\n');
 }
 
 /**

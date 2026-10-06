@@ -26,7 +26,10 @@ cd "$(git rev-parse --show-toplevel)"
 # counter on an unreleased 0.1.1 for 100 betas.
 if [ "$ver" = "next" ]; then
   # versionsort.suffix=-beta makes -beta.N sort below its stable; without it 0.1.1-beta.2 > 0.1.1.
-  latest="$(git -c versionsort.suffix=-beta tag --list 'v[0-9]*' --sort=-v:refname | head -1)"
+  # --count=1, not `| head -1`: once there are enough tags, head closes the pipe before git is done
+  # writing, git dies of SIGPIPE, and pipefail ends the script silently with exit 141.
+  latest="$(git -c versionsort.suffix=-beta for-each-ref --count=1 --sort=-v:refname \
+    --format='%(refname:short)' 'refs/tags/v[0-9]*')"
   if [ -z "$latest" ]; then
     echo "✗ no v* tag found — pass an explicit version instead of 'next'" >&2
     exit 1

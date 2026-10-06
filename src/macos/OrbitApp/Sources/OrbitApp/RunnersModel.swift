@@ -102,6 +102,12 @@ final class RunnersModel {
         await press { _ = try await self.api.startEngineUpdate(id) }
     }
 
+    /// Install the pinned DeepSeek Harness CLI on the machine (the same install relay as Antigravity's).
+    @discardableResult
+    func installDsh(_ id: String) async -> String? {
+        await press { _ = try await self.api.installDsh(id) }
+    }
+
     /// The machine re-reads its CLIs' model lists; the new ones arrive on a later check-in.
     @discardableResult
     func refreshModels(_ id: String) async -> String? {

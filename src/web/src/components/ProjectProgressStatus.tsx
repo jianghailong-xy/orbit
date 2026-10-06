@@ -1,4 +1,4 @@
-import { useId, useState, type JSX, type ReactNode } from 'react';
+import { useCallback, useId, useState, useSyncExternalStore, type JSX, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { Alert, Button, Input, Modal } from 'antd';
@@ -16,6 +16,15 @@ import type {
 import { api } from '../api';
 import { stripAnsi } from '../lib/ansi';
 import { checkDuration } from '../lib/checkDuration';
+import {
+  CHAT_ABOUT_THIS,
+  CHAT_REFUSAL_LABEL,
+  EXCEPTION_CHAT_PREFIX,
+  PAUSE_CHAT_PREFIX,
+  coordinatorChatPath,
+  itemChat,
+  type CoordinatorChatSubject,
+} from '../lib/coordinatorChat';
 import { decisionReceiptAnchor, type ReceiptPlacement } from '../lib/decisionReceipt';
 import { encodeId } from '../lib/idCodec';
 import { projectOpenItemsQuery } from '../lib/queries';
@@ -25,6 +34,7 @@ import {
   START_ROW_OWN,
   startRequestSummary,
 } from '../lib/projectStart';
+import { PROJECT_DONE_COPY } from '../lib/projectDone';
 import { newRunRequestToken, runRequestResend } from '../lib/runRequestToken';
 import { refreshTaskScheduleViews } from '../lib/taskSchedule';
 import { readTaskRunConflict } from '../lib/taskRunHandoff';
@@ -368,10 +378,12 @@ export function FusePauseCard({
   projectId,
   row,
   now,
+  onChat,
 }: {
   projectId: string;
   row: ProjectOpenItemRow;
   now: number;
+  onChat?: (subject: CoordinatorChatSubject) => void;
 }): JSX.Element {
   const qc = useQueryClient();
   const resume = useMutation({
@@ -384,7 +396,14 @@ export function FusePauseCard({
     },
   });
   return (
-    <ItemCard row={row} heading={row.title} tone="owner" now={now} id={`fuse-${row.itemId}`}>
+    <ItemCard
+      row={row}
+      heading={row.title}
+      tone="owner"
+      now={now}
+      id={`fuse-${row.itemId}`}
+      onChat={onChat}
+    >
       <Button
         type="primary"
         size="small"
@@ -852,10 +871,12 @@ export function OpenItemCard({
   projectId,
   row,
   now,
+  onChat,
 }: {
   projectId: string;
   row: ProjectOpenItemRow;
   now: number;
+  onChat?: (subject: CoordinatorChatSubject) => void;
 }): JSX.Element {
   return (
     <ItemCard
@@ -863,6 +884,7 @@ export function OpenItemCard({
       heading={itemHeading(row)}
       tone="coordinator"
       now={now}
+      onChat={onChat}
     >
       <CardActions projectId={projectId} row={row} />
     </ItemCard>
@@ -1095,6 +1117,150 @@ function ItemHandlingRows({
   );
 }
 
+/** The card's fact block in words, for a chat about the item: the same rows `ItemFactRows` draws,
+ *  minus the check's output — a coordinator that wants it reads the item. */
+function itemFactLines(row: ProjectOpenItemRow): string[] {
+  const facts = row.facts;
+  if (!facts) return [];
+  const lines: string[] = [];
+  if (facts.task) lines.push(`Task: ${facts.task.title}`);
+  if (facts.targetRef) {
+    const sha = facts.targetSha ? ` at ${facts.targetSha.slice(0, 7)}` : '';
+    lines.push(`Into: ${facts.targetRef}${sha}${facts.nothingLanded ? ' · nothing landed' : ''}`);
+  }
+  if (facts.files.length > 0) lines.push(`Files: ${facts.files.join(' · ')}`);
+  if (facts.review) {
+    const declared = facts.review.declaredPaths;
+    lines.push(`Declared: ${declared.length > 0 ? declared.join(' · ') : 'no paths'}`);
+  }
+  if (facts.check) {
+    lines.push(`Check: ${facts.check.command} · ${checkVerdict(facts.check)} after `
+      + `${checkDuration(facts.check.durationMs)}`);
+  }
+  if (facts.branchUnchanged) {
+    lines.push(
+      'Branch: unchanged — the task passed on its own branch; it fails only on the combined tree',
+    );
+  }
+  if (facts.failure) {
+    lines.push(`How: ${howFailed(facts.failure)}`);
+    lines.push(`Retries: ${chainStanding(facts.failure)}`);
+  }
+  if (facts.errorCode) lines.push(`Error: ${facts.errorCode}`);
+  return lines;
+}
+
+/** How an item that is the owner's became theirs, as the clause a chat about it carries — the
+ *  escalation heading's story, told about the item rather than to the reader. */
+function ownerClause(row: ProjectOpenItemRow, now: number): string {
+  switch (row.assigneeReason) {
+    case 'ESCALATED':
+      return `the owner’s now — no one acted on it for ${waitedBeforeEscalation(row)}`;
+    case 'COORDINATOR_ENDED':
+      return 'the owner’s now — the coordinator conversation ended';
+    case 'CHAIN_LIMIT':
+      return 'the owner’s now — the 3rd failure in this chain';
+    case 'HANDED_OVER':
+      return 'the owner’s now — the coordinator handed it over';
+    case 'NO_COORDINATOR':
+      return 'the owner’s — the project had no coordinator when it opened';
+    default:
+      return `waiting on the owner for ${formatSpan(waitedMs(row, now))}`;
+  }
+}
+
+/** Who asked for the rerun an item's handling is, or was: the owner's own door (0380), or the
+ *  coordinator's. A settled row says it in `resolvedBy`, an open one in `handling.userId`. */
+function handledByOwner(row: ProjectOpenItemRow): boolean {
+  return row.outcome ? row.outcome.resolvedBy === 'USER' : row.handling?.userId != null;
+}
+
+/**
+ * Where an item's handling stands (§4.7), as the line a chat about it carries: whose move it is,
+ * since when, and what is in flight. The stage is the server's (`ProjectOpenItemRow.chat`).
+ */
+export function itemStandingLine(row: ProjectOpenItemRow, now: number): string {
+  if (row.kind === 'FUSE_PAUSED') {
+    return 'the coordinator stopped itself, and only the owner can lift it';
+  }
+  const handling = row.handling ?? null;
+  switch (itemChat(row).stage) {
+    case 'HANDLING': {
+      const rerun = handling
+        ? `being handled — ${handlingLine(row, handling, now)}`
+        : 'being handled by the coordinator';
+      // The clock can hand an item to the owner while its rerun still runs (§4.7 H4): both are true,
+      // and whose move it is next is the second half.
+      return row.assignee === 'OWNER' ? `${rerun}; ${ownerClause(row, now)}` : rerun;
+    }
+    case 'WITH_COORDINATOR': {
+      const left = row.escalateAt == null ? null : Date.parse(row.escalateAt) - now;
+      return `waiting on the coordinator for ${formatSpan(waitedMs(row, now))}`
+        + (left != null && left > 0 ? ` — it goes to the owner in ${formatSpan(left)}` : '');
+    }
+    case 'WITH_OWNER':
+      return ownerClause(row, now);
+    case 'HANDLED': {
+      const owner = handledByOwner(row);
+      // The card's `outcomeLine` names the coordinator for a close with no job; the owner's own
+      // "Mark as handled" is one too, and the chat says whose it was.
+      const how = owner && row.outcome?.jobId == null ? 'closed by hand, with its reason' : outcomeLine(row);
+      return `handled by ${owner ? 'the owner' : 'the coordinator'} ${ago(row.outcome?.resolvedAt, now)}`
+        + `${how ? ` — ${how}` : ''}`;
+    }
+    case 'SUPERSEDED':
+      return `superseded — ${handledByOwner(row) ? 'the owner’s' : 'the coordinator’s'} rerun failed `
+        + 'again, and a new item took its place';
+  }
+}
+
+/** What the composer's bar says once "Chat about this" armed it for this item. */
+export function openItemChatBanner(row: ProjectOpenItemRow): string {
+  return (row.kind === 'FUSE_PAUSED' ? PAUSE_CHAT_PREFIX : EXCEPTION_CHAT_PREFIX) + row.title;
+}
+
+/**
+ * What "Chat about this" carries ahead of the reader's message (§4.8): the project, the item and
+ * what failed, and where its handling stands — because the conversation it is read in may not have
+ * this item in front of it any more: it is a row of the project's list, not a turn of that
+ * transcript. The ids ride along so an answer about an item that has since moved can be told apart
+ * from one about this one (the native ends' `ExceptionCards.chatContext` does the same).
+ *
+ * It describes; it authorizes nothing. A rerun, a merge or a close is still a door somebody presses.
+ */
+export function openItemChatContext({
+  projectTitle,
+  projectId,
+  row,
+  now,
+}: {
+  projectTitle: string | null;
+  projectId: string;
+  row: ProjectOpenItemRow;
+  now: number;
+}): string {
+  const what = row.kind === 'FUSE_PAUSED' ? 'pause' : 'exception';
+  const reason = row.handling?.reason || row.outcome?.note || null;
+  const ids = [
+    `project ${projectId}`,
+    `open item ${row.itemId}`,
+    ...(row.taskId ? [`task ${row.taskId}`] : []),
+    ...(row.promotionId ? [`promotion ${row.promotionId}`] : []),
+    `waiting since ${row.waitingSince}`,
+  ];
+  return [
+    `About the ${what}${projectTitle ? ` in “${projectTitle}”` : ''}:`,
+    '',
+    row.title,
+    ...(row.detailLine ? [row.detailLine] : []),
+    ...itemFactLines(row),
+    `Where it stands: ${itemStandingLine(row, now)}`,
+    ...(reason ? [`${handledByOwner(row) ? 'The owner’s' : 'The coordinator’s'} reason: ${reason}`] : []),
+    '',
+    `(${ids.join(' · ')})`,
+  ].join('\n');
+}
+
 /** The state word a card's head wears (§4.7), or null for an item nobody is handling. */
 function handlingTag(
   row: ProjectOpenItemRow,
@@ -1172,14 +1338,16 @@ export function EscalatedItemCard({
   projectId,
   row,
   now,
+  onChat,
 }: {
   projectId: string;
   row: ProjectOpenItemRow;
   now: number;
+  onChat?: (subject: CoordinatorChatSubject) => void;
 }): JSX.Element {
   const heading = escalationHeading(row, now) ?? itemHeading(row);
   return (
-    <ItemCard row={row} heading={heading} tone="owner" now={now}>
+    <ItemCard row={row} heading={heading} tone="owner" now={now} onChat={onChat}>
       <CardActions projectId={projectId} row={row} />
     </ItemCard>
   );
@@ -1188,18 +1356,21 @@ export function EscalatedItemCard({
 /**
  * An exception the coordinator's handling has ended (§4.7 H5): handled — its rerun landed or
  * passed, or it closed the item with a reason — or superseded by the card its failed rerun opened.
- * The same card, at the same place in the conversation, with nothing left to press: what it was
- * about, how it ended, and the coordinator's reason.
+ * The same card, at the same place in the conversation, with no door left on it: what it was about,
+ * how it ended, and the coordinator's reason. What it still has is the conversation — about how a
+ * handled one was handled; a superseded one says the chat belongs to the item that replaced it.
  */
 export function SettledItemCard({
   row,
   now,
+  onChat,
 }: {
   row: ProjectOpenItemRow;
   now: number;
+  onChat?: (subject: CoordinatorChatSubject) => void;
 }): JSX.Element {
   return (
-    <ItemCard row={row} heading={itemHeading(row)} tone="settled" now={now} />
+    <ItemCard row={row} heading={itemHeading(row)} tone="settled" now={now} onChat={onChat} />
   );
 }
 
@@ -1211,14 +1382,58 @@ function settledLine(row: ProjectOpenItemRow, now: number): string {
     : `Handled by the coordinator · ${when}`;
 }
 
-/** The chrome all three share: the head with its provenance mark, the fact block, the actions, and
- *  the footer that says who owes an answer and by when. */
+/**
+ * "Chat about this" (§4.8): a message to the project's coordinator conversation about this item,
+ * carrying what the card says (`openItemChatContext`). Its own row under the doors, because it is
+ * not one of them — it presses nothing on the item, so it is drawn on every card, whoever holds the
+ * item and however its handling ended — and a refusal is said beside it, in the server's terms,
+ * rather than leaving a grey button to explain itself.
+ *
+ * In the coordinator's conversation the host arms its composer (`onChat`); anywhere else the press
+ * opens that conversation, which arms it on arrival (`coordinatorChatPath`).
+ */
+function ItemChatRow({
+  row,
+  onChat,
+}: {
+  row: ProjectOpenItemRow;
+  onChat?: (subject: CoordinatorChatSubject) => void;
+}): JSX.Element {
+  const navigate = useNavigate();
+  const chat = itemChat(row);
+  // A host with a composer of its own can always take the message; one without has to know where
+  // the conversation is.
+  const refusal = chat.refusal ?? (!onChat && !chat.sessionId ? 'NO_COORDINATOR' : null);
+  const subject: CoordinatorChatSubject = { kind: 'item', row };
+  return (
+    <div className="project-open-item-chat">
+      <Button
+        size="small"
+        disabled={refusal != null}
+        onClick={() => {
+          if (refusal != null) return;
+          if (onChat) onChat(subject);
+          else if (chat.sessionId) navigate(coordinatorChatPath(chat.sessionId, subject));
+        }}
+      >
+        {CHAT_ABOUT_THIS}
+      </Button>
+      {refusal != null ? (
+        <span className="project-open-item-chat-refusal">{CHAT_REFUSAL_LABEL[refusal]}</span>
+      ) : null}
+    </div>
+  );
+}
+
+/** The chrome all three share: the head with its provenance mark, the fact block, the actions, the
+ *  chat, and the footer that says who owes an answer and by when. */
 function ItemCard({
   row,
   heading,
   tone,
   now,
   id,
+  onChat,
   children,
 }: {
   row: ProjectOpenItemRow;
@@ -1229,6 +1444,8 @@ function ItemCard({
   tone: 'owner' | 'coordinator' | 'settled';
   now: number;
   id?: string;
+  /** The host's composer, when the card is drawn in the conversation a chat about it goes to. */
+  onChat?: (subject: CoordinatorChatSubject) => void;
   children?: ReactNode;
 }): JSX.Element {
   const tag = handlingTag(row);
@@ -1256,6 +1473,7 @@ function ItemCard({
         <ItemFactRows row={row} />
         <ItemHandlingRows row={row} now={now} />
         <div className="project-open-item-actions">{children}</div>
+        <ItemChatRow row={row} onChat={onChat} />
       </div>
       <div className="project-open-item-foot">
         {tone === 'settled' ? settledLine(row, now) : ownerLine(row, now)}
@@ -1271,25 +1489,29 @@ export function ItemAsCard({
   projectId,
   row,
   now,
+  onChat,
 }: {
   projectId: string;
   row: ProjectOpenItemRow;
   now: number;
+  /** "Chat about this" into the host's own composer — given by the coordinator conversation, which
+   *  is where the chat is held (`ItemChatRow`). */
+  onChat?: (subject: CoordinatorChatSubject) => void;
 }): JSX.Element | null {
   if (row.kind === 'FUSE_PAUSED') {
-    return <FusePauseCard projectId={projectId} row={row} now={now} />;
+    return <FusePauseCard projectId={projectId} row={row} now={now} onChat={onChat} />;
   }
   // Ended by the coordinator's handling (§4.7 H5): the card stays where it was, saying how it ended.
-  if (row.outcome) return <SettledItemCard row={row} now={now} />;
+  if (row.outcome) return <SettledItemCard row={row} now={now} onChat={onChat} />;
   // A question has its own card, mounted beside this one by both hosts — drawing it again here
   // would be two cards answering one question, and only one of them could win. A merge approval is
   // the same: `ProjectPromotionCard` draws it from the candidate itself, which is where what would
   // land and what the checks came to actually live.
   if (hasCardOfItsOwn(row)) return null;
   return escalationHeading(row, now) != null ? (
-    <EscalatedItemCard projectId={projectId} row={row} now={now} />
+    <EscalatedItemCard projectId={projectId} row={row} now={now} onChat={onChat} />
   ) : (
-    <OpenItemCard projectId={projectId} row={row} now={now} />
+    <OpenItemCard projectId={projectId} row={row} now={now} onChat={onChat} />
   );
 }
 
@@ -1475,6 +1697,77 @@ function OwnStartRowView({ onStart }: { onStart: () => void }): JSX.Element {
   );
 }
 
+/** The owner-facing DONE_REQUEST row opens the same settlement card as the transcript. */
+function DoneRequestRowView({
+  row,
+  now,
+  onReview,
+  reviewing,
+}: {
+  row: ProjectOpenItemRow;
+  now: number;
+  onReview?: () => void;
+  reviewing?: boolean;
+}): JSX.Element {
+  const detail = row.doneRequest
+    ? `${PROJECT_DONE_COPY.openItemsDoneRequest} · ${row.doneRequest.gaps.length} ${PROJECT_DONE_COPY.gapsItCouldntProve}`
+    : row.detailLine;
+  return (
+    <li className="project-open-item-row is-owner project-open-item-done-request" data-kind="DONE_REQUEST">
+      <span className="project-open-item-dot" aria-hidden="true" />
+      <div className="project-open-item-main">
+        <div className="project-open-item-state is-ready-to-close">{PROJECT_DONE_COPY.readyToClose}</div>
+        <div className="project-open-item-title" title={PROJECT_DONE_COPY.heading}>{PROJECT_DONE_COPY.heading}</div>
+        {detail ? <div className="project-open-item-line" title={detail}>{detail}</div> : null}
+      </div>
+      <div className="project-open-item-who">
+        <span>{WHO.OWNER}</span>
+        <time className="project-open-item-age" dateTime={row.waitingSince}>{waitingLabel(row, now)}</time>
+      </div>
+      <div className="project-open-item-press">
+        {onReview ? (
+          <button type="button" className="project-open-item-action is-primary" disabled={reviewing} onClick={onReview}>
+            {ACTION_LABEL.REVIEW}
+          </button>
+        ) : null}
+      </div>
+    </li>
+  );
+}
+
+/** The owner's own "Record as done…" while no coordinator has asked: a grey hint, because nobody is
+ *  waiting on it — so it is not counted with what needs them. */
+function OwnDoneRowView({ onRecord }: { onRecord: () => void }): JSX.Element {
+  return (
+    <li className="project-open-item-row is-owner is-own-start is-hint project-open-item-done-own" data-kind="DONE">
+      <span className="project-open-item-dot" aria-hidden="true" />
+      <div className="project-open-item-main">
+        <button type="button" className="project-open-item-title project-open-item-start" onClick={onRecord}>
+          {PROJECT_DONE_COPY.recordAsDoneRow}
+        </button>
+        <div className="project-open-item-line">{PROJECT_DONE_COPY.notAskedYet}</div>
+      </div>
+      <div className="project-open-item-who" />
+      <div className="project-open-item-press" />
+    </li>
+  );
+}
+
+/**
+ * The coordinator's open DONE_REQUEST, as the open-items entry `ProjectOpenItems` polls holds it, or
+ * null. A passive read of that one cache line: it starts no request and adds no entry of its own.
+ */
+export function useOpenDoneRequest(projectId: string | null | undefined): ProjectOpenItemRow | null {
+  const qc = useQueryClient();
+  const subscribe = useCallback((onChange: () => void) => qc.getQueryCache().subscribe(onChange), [qc]);
+  const read = (): ProjectOpenItemRow | null => (
+    projectId
+      ? (qc.getQueryData(projectOpenItemsQuery(projectId).queryKey)?.doneRequest ?? null)
+      : null
+  );
+  return useSyncExternalStore(subscribe, read, read);
+}
+
 /**
  * The project page's Open items card (mock 2 ②): what is waiting, in the two groups that say who is
  * expected to act, oldest first in both.
@@ -1494,6 +1787,9 @@ export function ProjectOpenItems({
   onReviewStart,
   reviewingStart,
   onStartProject,
+  onReviewDone,
+  reviewingDone,
+  onRecordDone,
 }: {
   projectId: string | null | undefined;
   now?: number;
@@ -1505,6 +1801,9 @@ export function ProjectOpenItems({
   reviewingStart?: boolean;
   /** Start… while nobody has asked: the same card, over the page. */
   onStartProject?: () => void;
+  onReviewDone?: () => void;
+  reviewingDone?: boolean;
+  onRecordDone?: () => void;
 }): JSX.Element | null {
   const items = useQuery({
     ...projectOpenItemsQuery(projectId ?? ''),
@@ -1515,18 +1814,21 @@ export function ProjectOpenItems({
   // waiting on a person the way the rows are, it is the reason some of them are waiting.
   const paused = (items.data?.needsYou ?? []).filter((row) => row.kind === 'FUSE_PAUSED');
   const startRequest = started === false ? (items.data?.startRequest ?? null) : null;
+  const doneRequest = items.data?.doneRequest ?? null;
   const needsYou = [
     ...(startRequest ? [startRequest] : []),
-    ...(items.data?.needsYou ?? []).filter((row) => row.kind !== 'FUSE_PAUSED'),
+    ...(doneRequest ? [doneRequest] : []),
+    ...(items.data?.needsYou ?? []).filter((row) => row.kind !== 'FUSE_PAUSED' && row.kind !== 'DONE_REQUEST'),
   ];
   const withCoordinator = items.data?.withCoordinator ?? [];
   // Only once the read has answered: a request still on its way is not a project nobody asked for.
   const ownStart = started === false && items.data !== undefined && !startRequest && onStartProject
     ? onStartProject
     : null;
+  const ownDone = items.data !== undefined && !doneRequest && onRecordDone ? onRecordDone : null;
   if (
     !projectId
-    || (paused.length + needsYou.length + withCoordinator.length === 0 && !ownStart)
+    || (paused.length + needsYou.length + withCoordinator.length === 0 && !ownStart && !ownDone)
   ) return null;
 
   return (
@@ -1540,11 +1842,12 @@ export function ProjectOpenItems({
       {paused.map((row) => (
         <FusePauseCard key={row.itemId} projectId={projectId} row={row} now={now} />
       ))}
-      {needsYou.length > 0 || ownStart ? (
+      {needsYou.length > 0 || ownStart || ownDone ? (
         <>
           <div className="project-open-items-group">{NEEDS_YOU_GROUP}</div>
           <ul className="project-open-items-list">
             {ownStart ? <OwnStartRowView onStart={ownStart} /> : null}
+            {ownDone ? <OwnDoneRowView onRecord={ownDone} /> : null}
             {needsYou.map((row) =>
               row === startRequest ? (
                 <StartRequestRowView
@@ -1553,6 +1856,14 @@ export function ProjectOpenItems({
                   now={now}
                   onReview={onReviewStart}
                   reviewing={reviewingStart}
+                />
+              ) : row === doneRequest ? (
+                <DoneRequestRowView
+                  key={row.itemId}
+                  row={row}
+                  now={now}
+                  onReview={onReviewDone}
+                  reviewing={reviewingDone}
                 />
               ) : (
                 <OpenItemRowView key={row.itemId} row={row} now={now} />

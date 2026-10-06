@@ -1687,7 +1687,7 @@ private struct TaskDetailContent: View {
     private func detailsSection(_ task: TaskItem) -> some View {
         Section {
             assigneePicker(task)
-            suggestedPicker(task)
+            if smartSelection { suggestedPicker(task) }
             providerPicker(task)
             modelPicker(task)
             listPicker(task)
@@ -1707,7 +1707,7 @@ private struct TaskDetailContent: View {
         } footer: {
             VStack(alignment: .leading, spacing: 4) {
                 // The coordinator's reason for the suggested tier, in grey under the card.
-                if let note = TaskDetailLogic.modelHintNote(task) {
+                if smartSelection, let note = TaskDetailLogic.modelHintNote(task) {
                     Text(note)
                 }
                 if let footnote = TaskDetailLogic.createdFootnote(
@@ -1809,6 +1809,10 @@ private struct TaskDetailContent: View {
         .disabled(tasks.isMutating(task.id))
     }
 
+    /// The account's switch for smart model selection. Off (the default), none of it is drawn here:
+    /// no Suggested, no ✦ placeholder, and runs read as they did before routing — as on the web.
+    private var smartSelection: Bool { model.user?.preferences?.smartModelSelection ?? false }
+
     /// The agent this task runs on, resolved from the loaded agent list — its provider is what an
     /// unpinned task inherits, and its runner is where the model catalogue comes from.
     private func assigneeAgent(_ task: TaskItem) -> Agent? {
@@ -1850,7 +1854,7 @@ private struct TaskDetailContent: View {
             catalog: model.agents?.modelCatalog(for: assigneeAgent(task)?.runnerId),
             configured: model.agents?.configuredProviders)
         // Unpinned on an assignee with smart selection on, each run's model is picked for it.
-        let unpinned = assigneeAgent(task)?.modelRouting == true
+        let unpinned = smartSelection && assigneeAgent(task)?.modelRouting == true
             ? TaskDetailCopy.smartSelectionPlaceholder : "Provider default"
         return Picker(TaskDetailCopy.modelLabel, selection: Binding(
             get: { task.model },
@@ -2200,7 +2204,7 @@ private struct TaskDetailContent: View {
                 HStack(spacing: 8) {
                     Button { model.route(to: .session(session.id)) } label: { runRow(session, task) }
                         .buttonStyle(.plain)
-                    if let route = TaskDetailLogic.runRoute(session) {
+                    if let route = TaskDetailLogic.runRoute(session, smartSelection: smartSelection) {
                         let pick = TaskDetailLogic.routePick(route) { runModelName($0, task) }
                         Button {
                             routeWhy = TaskRouteWhy(id: session.id, title: TaskDetailCopy.why(pick),
@@ -2237,7 +2241,7 @@ private struct TaskDetailContent: View {
     /// run smart selection put on its pick, the tier it was routed at; a spinner while it runs. A run
     /// on an Agent without smart selection says in purple what it would have picked.
     private func runRow(_ session: SessionRef, _ task: TaskItem) -> some View {
-        let route = TaskDetailLogic.runRoute(session)
+        let route = TaskDetailLogic.runRoute(session, smartSelection: smartSelection)
         let name: (String) -> String = { runModelName($0, task) }
         return HStack(spacing: 10) {
             Group {
@@ -2262,7 +2266,7 @@ private struct TaskDetailContent: View {
                     // One run of text, so the dot sits evenly between where it stands and what it ran on.
                     let status = Text(sessionLabel(session))
                         .foregroundStyle(session.resolvedRunState == .running ? Color.accentColor : sessionColor(session))
-                    if let ranOn = TaskDetailLogic.runModelLine(session, modelLabel: name) {
+                    if let ranOn = TaskDetailLogic.runModelLine(session, smartSelection: smartSelection, modelLabel: name) {
                         (status + Text(" · \(ranOn)").foregroundStyle(Color.secondary))
                             .lineLimit(1)
                             .truncationMode(.tail)

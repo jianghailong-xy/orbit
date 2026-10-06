@@ -326,6 +326,11 @@ async function mountTranscript(): Promise<FakeEventSource> {
 describe('the jump-to-bottom button', { timeout: 60_000 }, () => {
   it('holds a bar-opened preview through streaming and dismissal until the reader returns to the tail', async () => {
     const stream = await mountTranscript();
+    // This case exercises the compact review used on narrow screens.
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query === '(max-width: 960px)', media: query,
+      addEventListener: () => {}, removeEventListener: () => {},
+    }));
     const previewHost = document.createElement('div');
     scroller().append(previewHost);
     const previewRoot = createRoot(previewHost);

@@ -34,7 +34,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { Avatar, Dropdown, Tooltip } from 'antd';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { useLocation, useMatch, useNavigate } from 'react-router-dom';
+import { useLocation, useMatch, useNavigate, useSearchParams } from 'react-router-dom';
 import type {
   PlanUsage,
   RunnerAntigravityState,
@@ -293,9 +293,15 @@ async function logout() {
   location.href = '/login';
 }
 
-export function TasksSidePanel({ open = false }: { open?: boolean }) {
+// Every row is a destination, as on the iPhone drawer (OrbitKit `DrawerDestination`): a section, a
+// workspace's session list, or a project's sessions page. A row is lit while the screen belongs to
+// it, a click on the lit row goes nowhere, and any other click lands on its destination's root.
+// `onNavigate` is told of every click, so the narrow layout's drawer closes even when the click
+// changed nothing, or only the query (a project's page is a `?project=` on the console).
+export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; onNavigate?: () => void }) {
   const loc = useLocation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   // The signed-in user, for the footer avatar + name. Shares its key with the account
   // page (and the BootGate pre-warm) so it reads straight from cache.
   const me = useQuery(meQuery());
@@ -360,11 +366,22 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
     openProjectId && openProjects.some((p) => encodeId(p.id) === openProjectId)
       ? `project:${openProjectId}`
       : null;
+  // A project's sessions page — the console with `?project=` — is that project's row's, over
+  // whichever workspace or member session it shows, and the workspace's row is not lit there.
+  const onConsole = !!(workspacesMatch ?? agentsMatch) || !!sessionId;
+  const projectPageId = onConsole ? routeId(searchParams.get('project')) : null;
+  const projectPageKey =
+    projectPageId && openProjects.some((p) => encodeId(p.id) === projectPageId)
+      ? `project:${projectPageId}`
+      : null;
+  const litWorkspaceId = projectPageKey ? null : activeWorkspaceId;
 
   // Workspace/session routes have no proxy parent in TOP: a resolved Workspace highlights its own
   // row, while an unresolved deep link briefly leaves the fixed nav unselected. Runner management
   // remains scoped to Runners.
-  const routeKey = activeWorkspaceId
+  const routeKey = projectPageKey
+    ? projectPageKey
+    : activeWorkspaceId
     ? '' // scoped to one workspace — its row highlights below, no top item
     : loc.pathname.startsWith('/workspaces/') ||
         loc.pathname.startsWith('/sessions/') ||
@@ -554,17 +571,23 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
 
   // Open a workspace's console — the same destination the runner detail page uses.
   // Config-only workspaces (no runner) have no console to open.
+  // The lit workspace's row goes nowhere: its list is already showing.
   const openWorkspace = useCallback(
     (a: Workspace) => {
-      if (!(a.runner?.id ?? a.runnerId)) return;
+      onNavigate?.();
+      if (!(a.runner?.id ?? a.runnerId) || a.id === litWorkspaceId) return;
       navigate(`/workspaces/${encodeId(a.id)}`);
     },
-    [navigate],
+    [navigate, onNavigate, litWorkspaceId],
   );
 
   const openTopNav = useCallback(
-    (key: string) => navigate(`/${key}`),
-    [navigate],
+    (key: string) => {
+      onNavigate?.();
+      if (key === sel) return;
+      navigate(`/${key}`);
+    },
+    [navigate, onNavigate, sel],
   );
 
   // Cmd/Ctrl + P opens Projects from every route. Like the other modifier shortcuts, it remains
@@ -615,10 +638,16 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [activeWorkspaceId, orderedWorkspaces, openWorkspace]);
 
+  // A project's row opens its sessions page over the workspace showing (members span workspaces,
+  // so the workspace only decides where the page's back leads), or the first one; with no
+  // workspace to show it over, the project's own page.
   const openProject = (project: SidebarProject) => {
+    onNavigate?.();
     const key = encodeId(project.id);
+    if (sel === `project:${key}`) return;
     setSel(`project:${key}`);
-    navigate(`/projects/${key}`);
+    const over = activeWorkspaceId ?? orderedWorkspaces.find((a) => a.runner?.id ?? a.runnerId)?.id;
+    navigate(over ? `/workspaces/${encodeId(over)}?project=${key}` : `/projects/${key}`);
   };
 
   return (
@@ -692,7 +721,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
           return (
             <div
               key={a.id}
-              className={`tp-rail-item ${a.id === activeWorkspaceId ? 'active' : ''}`}
+              className={`tp-rail-item ${a.id === litWorkspaceId ? 'active' : ''}`}
               onClick={() => openWorkspace(a)}
               title={`${a.name} · ${runnerLabel}${shortcutLabel ? `  ${shortcutLabel}` : ''}`}
             >
@@ -791,7 +820,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
                       key={a.id}
                       workspace={a}
                       runnerLabel={runnerLabel}
-                      active={a.id === activeWorkspaceId}
+                      active={a.id === litWorkspaceId}
                       offline={workspaceRunnerIsOffline(
                         runnerId,
                         runnerId ? runnerOnlineById.get(runnerId) : undefined,

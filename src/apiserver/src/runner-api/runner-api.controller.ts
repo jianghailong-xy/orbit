@@ -26,6 +26,7 @@ import type { Response } from 'express';
 import { PublicIdPipe } from '../common/public-id';
 import { MachineProtocol } from '../common/machine-protocol';
 import { readWorktreeArtifactRequest } from '../sessions/worktree-artifact';
+import { branchName } from '../projects/project-criterion-landing';
 import { TasksService } from '../tasks/tasks.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import {
@@ -65,7 +66,10 @@ import {
   DeviceStartRequest,
   DeviceStartResponse,
   apiErrorRetryAt,
+  apiErrorRetryBudgetLeft,
+  POOL_RATE_LIMIT_WAIT_MS,
   isAsyncAgentLaunchAck,
+  isRateLimitApiErrorText,
   isRetryableApiErrorText,
   IntegrationJobProgressRequest,
   IntegrationJobResultRequest,
@@ -159,7 +163,7 @@ import {
   coordinatorOpeningIsCurrent,
   wrapCoordinatorDeliveryContext,
 } from '../projects/coordinator-opening';
-import { appendWikiContext } from '../wiki/wiki-push';
+import { modelRoutingEnabled } from '../common/model-routing-switch';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { PushService } from '../push/push.service';
@@ -329,6 +333,8 @@ import {
 } from '../common/session-inbox-fence';
 import {
   ADVERTISED_RUNTIMES,
+  DSH_RUNNER_UPGRADE_ERROR,
+  PROVIDER_UNAVAILABLE_ERROR,
   SOURCE_PROTOCOL_UNSUPPORTED_ERROR,
   advertisedRunnerProviders,
   runnerAdvertisesProvider,
@@ -340,7 +346,7 @@ import {
   hasResolvedSource,
   sessionSourceSnapshot,
 } from '../projects/session-source';
-import { providerSlugsOn, sessionExecRuntime } from '../providers/custom-provider';
+import { providerDispatchWhereOn, providerSlugsOn, sessionExecRuntime } from '../providers/custom-provider';
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
@@ -361,6 +367,11 @@ const REPO_CLEANUP_TIMEOUT_MS = 3 * 60_000;
 // itself. maxWait uses the same value: a batch that already burned its compile should queue for
 // a pool slot instead of failing fast and paying the compile again.
 const EVENTS_INGEST_TRANSACTION_TIMEOUT_MS = 120_000;
+// A first integration back-fills every other finished code task in the same transaction as the
+// turn that starts the line. That work is proportional to the project's completed tasks, so the
+// interactive 5s default expires before a large project's queue can commit. Keep the atomic
+// boundary, but give this path the same bounded window as durable event ingestion.
+const TURN_COMPLETE_TRANSACTION_TIMEOUT_MS = 120_000;
 // The WASM query compiler and the wire bind cost grow super-linearly with the row count, and a
 // backlogged batch holds thousands: one 32k-parameter createMany compiles for minutes, while 256
 // rows stay in the milliseconds. Chunked inside the same transaction, so the retry-idempotency
@@ -521,6 +532,27 @@ async function acceptanceBudgetSeconds(
     select: { acceptanceTimeoutSeconds: true },
   });
   return task?.acceptanceTimeoutSeconds ?? null;
+}
+
+async function persistedDshSupport(db: Prisma.TransactionClient, runnerId: string): Promise<boolean> {
+  const snapshot = await db.runner.findUnique({
+    where: { id: runnerId }, select: { capabilities: true, capabilitiesReportedAt: true },
+  });
+  return !!snapshot?.capabilitiesReportedAt && snapshot.capabilities.includes('provider:dsh');
+}
+
+async function assertDshLeaseSupport(
+  tx: Prisma.TransactionClient,
+  runnerId: string,
+  session: { provider: string; providerBuiltin: boolean; ownerId: string },
+  providerHeader?: string,
+): Promise<boolean> {
+  if (!session.provider || await sessionExecRuntime(tx, session) !== AgentProvider.DSH) return false;
+  if (!runnerAdvertisesProvider(providerHeader, AgentProvider.DSH) || !await persistedDshSupport(tx, runnerId)) {
+    throw new ConflictException(DSH_RUNNER_UPGRADE_ERROR);
+  }
+  await tx.$executeRaw`SELECT set_config('orbit.runner_supports_dsh', '1', true)`;
+  return true;
 }
 
 export function runnerSupportsCapability(
@@ -2006,7 +2038,7 @@ export class RunnerApiController {
    */
   private async markProviderUpgradeRequired(
     runnerId: string,
-    slugs: string[],
+    providerWhere: Prisma.SessionWhereInput,
     upgradeError: string,
     candidates?: Array<{ id: string; error: string | null }>,
   ): Promise<boolean> {
@@ -2016,7 +2048,7 @@ export class RunnerApiController {
         where: {
           assignedRunnerId: runnerId,
           status: RunStatus.PENDING,
-          provider: { in: slugs },
+          ...providerWhere,
           cancelRequestedAt: null,
         },
         select: { id: true, error: true },
@@ -2031,7 +2063,7 @@ export class RunnerApiController {
           id: { in: unmarked },
           assignedRunnerId: runnerId,
           status: RunStatus.PENDING,
-          provider: { in: slugs },
+          ...providerWhere,
           cancelRequestedAt: null,
         },
         data: { error: upgradeError },
@@ -2113,14 +2145,17 @@ export class RunnerApiController {
     const supportsTerminalHandoff = runnerSupportsCapability(capabilities, SESSION_TERMINAL_HANDOFF_V1);
     const supportsSourcePin = runnerSupportsCapability(capabilities, SESSION_SOURCE_PIN_V1);
     const supportedProviders = advertisedRunnerProviders(providerHeader);
+    if (supportedProviders.includes(AgentProvider.DSH) && !await persistedDshSupport(this.prisma, runner.id)) {
+      supportedProviders.splice(supportedProviders.indexOf(AgentProvider.DSH), 1);
+    }
     for (const { provider, upgradeError } of ADVERTISED_RUNTIMES) {
       if (supportedProviders.includes(provider)) continue;
       // Explain the stall on the OpenCode/Antigravity rows themselves — a Gemini key's included,
       // which runs on Antigravity under a slug of its own — and then carry on: the claim SQL (plus
       // migration 0080's and 0367's triggers, 0372's for the borrowed slugs) already keeps them away
       // from a legacy runner, so failing the request would only strand this runner's other work.
-      const slugs = await providerSlugsOn(this.prisma, runner.ownerId, provider);
-      await this.markProviderUpgradeRequired(runner.id, slugs, upgradeError);
+      const providerWhere = await providerDispatchWhereOn(this.prisma, runner.ownerId, provider);
+      await this.markProviderUpgradeRequired(runner.id, providerWhere, upgradeError);
     }
     if (!supportsSourcePin) {
       // Same shape, same reason (SR35): the claim SQL already withholds these rows, and failing the
@@ -2154,6 +2189,30 @@ export class RunnerApiController {
     return job;
   }
 
+  /**
+   * Long-poll: returns `{ wake: true }` once something this runner's heartbeat carries is waiting
+   * for it — a sign-in to start, a pasted code (RealtimeService.notifyRunnerWake) — and the runner
+   * beats at once instead of at its next 30s tick. `{ wake: false }` is the poll timing out.
+   *
+   * Nothing is handed over here: the heartbeat stays the one place the work is delivered, so a runner
+   * that never polls this (an older one) is only as slow as it always was.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Get('wake')
+  async wake(
+    @CurrentRunner() runner: { id: string },
+    @Res({ passthrough: true }) res?: Response,
+  ): Promise<{ wake: boolean }> {
+    // A runner that stopped polling must not take a wake with it: the next poll is owed that one.
+    let hungUp: AbortSignal | undefined;
+    if (res) {
+      const hangUp = new AbortController();
+      res.once('close', () => hangUp.abort());
+      hungUp = hangUp.signal;
+    }
+    return { wake: await this.realtime.waitForRunnerWake(runner.id, LONG_POLL_MS, hungUp) };
+  }
+
   /** Retain every open checkout on restart; the payload status tells the runner which is active. */
   @UseGuards(RunnerAuthGuard)
   @Get('sessions/reclaim')
@@ -2180,6 +2239,20 @@ export class RunnerApiController {
         // Same standing "always allow" grants the claim path sends: a reclaimed session must
         // not start re-asking about calls this workspace already approved permanently.
         workspace: { include: { permissionRules: { orderBy: { createdAt: 'asc' } } } },
+        task: {
+          select: {
+            codeless: true,
+            project: {
+              select: {
+                codebases: {
+                  where: { slot: 'primary' },
+                  select: { integrationRef: true },
+                  take: 1,
+                },
+              },
+            },
+          },
+        },
         // `engines` for the Codex account the workspace chose, resolved as the claim resolves it.
         assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true, engines: true } },
         // The account-level permission default and orchestration switch, which replaced the
@@ -2187,19 +2260,28 @@ export class RunnerApiController {
         owner: { select: { preferences: true } },
       },
     });
+    const supportsDsh = runnerAdvertisesProvider(providerHeader, AgentProvider.DSH)
+      && await persistedDshSupport(this.prisma, runner.id);
     const undrivable = new Set<string>();
     for (const { provider, upgradeError } of ADVERTISED_RUNTIMES) {
-      if (runnerAdvertisesProvider(providerHeader, provider)) continue;
+      if (provider === AgentProvider.DSH ? supportsDsh : runnerAdvertisesProvider(providerHeader, provider)) continue;
       // The configured rows that borrow the runtime too: this runner would rebuild a Gemini key's
       // session as Claude just the same.
       const slugs = await providerSlugsOn(this.prisma, runner.ownerId, provider);
       const onProvider = sessions.filter((session) =>
-        slugs.includes(session.provider ?? AgentProvider.CLAUDE),
+        provider === AgentProvider.DSH
+          ? (session.providerBuiltin && session.provider === provider)
+            || (!session.providerBuiltin && slugs.slice(1).includes(session.provider))
+          : slugs.includes(session.provider ?? AgentProvider.CLAUDE)
+            && !(session.provider === AgentProvider.DSH && session.providerBuiltin),
       );
       if (onProvider.length === 0) continue;
       await this.markProviderUpgradeRequired(
         runner.id,
-        slugs,
+        provider === AgentProvider.DSH
+          ? { OR: [{ provider, providerBuiltin: true }, { provider: { in: slugs.slice(1) }, providerBuiltin: false }] }
+          : { provider: { in: slugs }, ...(slugs.includes(AgentProvider.DSH)
+              ? { NOT: { provider: AgentProvider.DSH, providerBuiltin: true } } : {}) },
         upgradeError,
         onProvider
           .filter(
@@ -2261,6 +2343,9 @@ export class RunnerApiController {
         continue;
       }
       const workspace = s.workspace;
+      const taskIntegrationRef = s.task && !s.task.codeless
+        ? s.task.project?.codebases[0]?.integrationRef
+        : null;
       const declared = s.provider ?? null;
       // Custom provider borrows a built-in runtime — resolve the runner-facing provider, model,
       // and injected env so a resumed session keeps talking to the configured endpoint. Owner
@@ -2282,6 +2367,12 @@ export class RunnerApiController {
             : ((await this.queue.resolveLoginPool(this.prisma, s, declared!)) ??
               (await this.queue.resolvePoolMember(this.prisma, s, declared!)) ??
               (await this.queue.resolveSharedPool(this.prisma, s, declared!)))));
+      if (!declaredIsBuiltin && (!customRow?.enabled
+        || !['claude', 'codex', 'kimi', 'antigravity', 'dsh'].includes(customRow.runtime))) {
+        await this.markProviderUpgradeRequired(runner.id, { id: s.id }, PROVIDER_UNAVAILABLE_ERROR,
+          s.status === RunStatus.PENDING ? [{ id: s.id, error: s.error }] : []);
+        continue;
+      }
       const resolveExec = (sessionModel: string | null) =>
         resolveProviderExec({
           declaredProvider: declared,
@@ -2407,9 +2498,12 @@ export class RunnerApiController {
         workDir: workspace?.workDir ?? undefined,
         branch: s.branch ?? undefined,
         autoInitGit: workspace?.autoInitGit ?? undefined,
-        // cf. the claim path: the branch this session merges into, so a restarted runner
-        // still judges "already merged" against it rather than main.
-        mergeTarget: s.mergeTarget ?? workspace?.defaultMergeTarget ?? undefined,
+        // cf. the claim path: the branch this session merges into (including a project task's
+        // integration line), so a restarted runner still judges "already merged" against it.
+        mergeTarget: s.mergeTarget
+          ?? (taskIntegrationRef
+            ? branchName(taskIntegrationRef)
+            : workspace?.defaultMergeTarget ?? undefined),
         agentId: s.workspaceId ?? undefined,
         taskId: s.taskId ?? undefined,
         allowOrchestration,
@@ -2498,6 +2592,7 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: TakeoverTurnLeasesRequest,
     @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
+    @Headers(RUNNER_PROVIDERS_HEADER) providerHeader?: string,
   ): Promise<TakeoverTurnLeasesResponse> {
     const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
     if (!leaseOwner) throw new BadRequestException('leaseOwner is required');
@@ -2510,6 +2605,9 @@ export class RunnerApiController {
       const owned = await tx.$queryRaw<
         Array<{
           id: string;
+          provider: string;
+          providerBuiltin: boolean;
+          ownerId: string;
           inboxLeaseGeneration: string | null;
           inboxLeaseOwner: string | null;
           status: RunStatus;
@@ -2523,7 +2621,7 @@ export class RunnerApiController {
           commitRequestedAt: Date | null;
         }>
       >`
-        SELECT id, "inbox_lease_generation" AS "inboxLeaseGeneration",
+        SELECT id, provider, "provider_builtin" AS "providerBuiltin", "owner_id" AS "ownerId", "inbox_lease_generation" AS "inboxLeaseGeneration",
                "inbox_lease_owner" AS "inboxLeaseOwner", status,
                "merge_status" AS "mergeStatus",
                "merge_operation_id" AS "mergeOperationId",
@@ -2540,6 +2638,7 @@ export class RunnerApiController {
       if (owned.length === 0) {
         throw new ForbiddenException('session does not belong to this runner');
       }
+      const onDsh = await assertDshLeaseSupport(tx, runner.id, owned[0], providerHeader);
       if (!OPEN.includes(owned[0].status)) {
         throw new ConflictException('session is no longer open');
       }
@@ -2597,7 +2696,7 @@ export class RunnerApiController {
       // dies with it for the same reason. A runner killed mid-turn (crash, restart, self-update)
       // emits no turn_end, so the flag stays true and the session reads as generating forever —
       // it is what makes a parked session count toward the running set in the UI.
-      await tx.$executeRaw`
+      const acquired = await tx.$executeRaw`
         UPDATE "session"
         SET "inbox_lease_generation" = ${fence}::uuid,
             "inbox_lease_owner" = ${leaseOwner}::uuid,
@@ -2608,6 +2707,7 @@ export class RunnerApiController {
             "engine_turn_active" = false
         WHERE id = ${sessionId}::uuid
       `;
+      if (onDsh && acquired !== 1) throw new ConflictException(DSH_RUNNER_UPGRADE_ERROR);
       await tx.$executeRaw`
         UPDATE "conversation_turn"
         SET "lease_deadline_at" = now() - interval '1 second'
@@ -2649,6 +2749,7 @@ export class RunnerApiController {
     @CurrentRunner() runner: { id: string },
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: ActivateTurnLeasesRequest,
+    @Headers(RUNNER_PROVIDERS_HEADER) providerHeader?: string,
   ): Promise<ActivateTurnLeasesResponse> {
     const generation = parseLeaseGeneration(dto?.leaseGeneration);
     if (!generation) throw new BadRequestException('leaseGeneration is required');
@@ -2662,10 +2763,12 @@ export class RunnerApiController {
     // sessions from ever being claimed.
     const preflight = await this.prisma.session.findUnique({
       where: { id: sessionId },
-      select: { inboxLeaseOwner: true, inboxLeaseGeneration: true, status: true },
+      select: { inboxLeaseOwner: true, inboxLeaseGeneration: true, status: true, provider: true, providerBuiltin: true, ownerId: true },
     });
+    const preflightRuntime = preflight ? await sessionExecRuntime(this.prisma, preflight) : undefined;
     if (
       preflight &&
+      preflightRuntime !== AgentProvider.DSH &&
       OPEN.includes(preflight.status) &&
       preflight.inboxLeaseOwner === leaseOwner &&
       preflight.inboxLeaseGeneration === generation
@@ -2683,12 +2786,15 @@ export class RunnerApiController {
       const owned = await tx.$queryRaw<
         Array<{
           id: string;
+          provider: string;
+          providerBuiltin: boolean;
+          ownerId: string;
           inboxLeaseGeneration: string | null;
           inboxLeaseOwner: string | null;
           status: RunStatus;
         }>
       >`
-        SELECT id, "inbox_lease_generation" AS "inboxLeaseGeneration",
+        SELECT id, provider, "provider_builtin" AS "providerBuiltin", "owner_id" AS "ownerId", "inbox_lease_generation" AS "inboxLeaseGeneration",
                "inbox_lease_owner" AS "inboxLeaseOwner", status
         FROM "session"
         WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runner.id}::uuid
@@ -2697,6 +2803,7 @@ export class RunnerApiController {
       if (owned.length === 0) {
         throw new ForbiddenException('session does not belong to this runner');
       }
+      const onDsh = await assertDshLeaseSupport(tx, runner.id, owned[0], providerHeader);
       if (!OPEN.includes(owned[0].status)) {
         throw new ConflictException('session is no longer open');
       }
@@ -2745,7 +2852,7 @@ export class RunnerApiController {
       ) {
         throw new ConflictException('inbox generation has already been retired or reused');
       }
-      await tx.$executeRaw`
+      const acquired = await tx.$executeRaw`
         UPDATE "session"
         SET "inbox_lease_generation" = ${generation}::uuid
         WHERE id = ${sessionId}::uuid
@@ -2753,6 +2860,7 @@ export class RunnerApiController {
       // A legacy NULL poll or a predecessor may have leased after reclaim but before this
       // activation acquired the Session lock. Make every non-current executable turn visible
       // now, rather than letting it block the new engine for the normal five-minute deadline.
+      if (onDsh && acquired !== 1) throw new ConflictException(DSH_RUNNER_UPGRADE_ERROR);
       await tx.$executeRaw`
         UPDATE "conversation_turn"
         SET "lease_deadline_at" = now() - interval '1 second'
@@ -3339,15 +3447,11 @@ export class RunnerApiController {
             coordinatorContextEpoch: true,
             coordinatorContextAckKey: true,
             // The switch picks which instruction text is delivered, and so is part of the context
-            // key — read here and in turnComplete alike, so both sides compute the same key.
-            coordinatorForProject: { select: { id: true, coordinatorEnabled: true } },
-            // What the wiki context below is decided from: which space this session's workspace is
-            // bound to, and the three things about a run that take it out of the push entirely —
-            // a verifier, a foreman, or a judgment session (design §7.3). The fourth, coordinating
-            // a project, is `coordinatorForProject` above.
-            workspaceId: true,
-            dispatchOrigin: true,
-            task: { select: { verifiesTaskId: true, isForeman: true } },
+            // key — read here and in turnComplete alike, so both sides compute the same key. So does
+            // the project owner's smart model selection (common/model-routing-switch.ts).
+            coordinatorForProject: {
+              select: { id: true, coordinatorEnabled: true, owner: { select: { preferences: true } } },
+            },
           },
         });
         // A message turn that already produced runtime output is a lease re-delivery.
@@ -3489,14 +3593,17 @@ export class RunnerApiController {
               sessionContext.prompt,
               sessionContext.titleBeforeProjectManagement,
               sessionContext.coordinatorForProject,
+              modelRoutingEnabled(sessionContext.coordinatorForProject?.owner ?? null),
             );
           } else if (t.kind !== 'steer' && sessionContext.coordinatorForProject) {
-            const { id: projectId, coordinatorEnabled } = sessionContext.coordinatorForProject;
+            const { id: projectId, coordinatorEnabled, owner } = sessionContext.coordinatorForProject;
+            const modelRouting = modelRoutingEnabled(owner);
             const contextKey = buildCoordinatorDeliveryContextKey(
               projectId,
               leaseGeneration!,
               sessionContext.coordinatorContextEpoch,
               coordinatorEnabled,
+              modelRouting,
             );
             if (sessionContext.coordinatorContextAckKey !== contextKey) {
               // A dedicated project-page coordinator's initial turn already IS the canonical
@@ -3508,9 +3615,9 @@ export class RunnerApiController {
                 !runtimeStarted
                 && t.clientTurnId === `initial-${sessionId}`
                 && sessionContext.titleBeforeProjectManagement == null
-                && coordinatorOpeningIsCurrent(sessionContext.prompt, projectId, coordinatorEnabled);
+                && coordinatorOpeningIsCurrent(sessionContext.prompt, projectId, coordinatorEnabled, modelRouting);
               if (!openingAlreadyPresent) {
-                content = wrapCoordinatorDeliveryContext(content, projectId, coordinatorEnabled);
+                content = wrapCoordinatorDeliveryContext(content, projectId, coordinatorEnabled, modelRouting);
               }
               if (t.coordinatorContextKey !== contextKey) {
                 await tx.conversationTurn.updateMany({
@@ -3518,37 +3625,6 @@ export class RunnerApiController {
                   data: { coordinatorContextKey: contextKey },
                 });
               }
-            }
-          }
-          // The wiki's opening context for this session: the notes the owner has confirmed for the
-          // codebase it works in (design §7.1). Beside the coordinator block and on the same rule —
-          // delivery-time context, appended to what the person wrote and never written over it, so
-          // `turn.content` and the task start card built from it are untouched. Said once per engine
-          // process rather than once per turn, which is why it asks the lease generation. A project's
-          // coordinator is handed none (the owner, 2026-09-29), decided from the same
-          // `coordinatorForProject` its standing role above is appended from.
-          //
-          // Best-effort, exactly like the list conditions and the background jobs above: a note
-          // ABOUT the work must never be the reason the turn carrying it fails to be delivered.
-          if (t.kind !== 'steer') {
-            try {
-              content = (await appendWikiContext(tx, {
-                sessionId,
-                turnId: t.id,
-                leaseGeneration,
-                ownerId: sessionContext.ownerId,
-                workspaceId: sessionContext.workspaceId,
-                taskId: owned[0].taskId,
-                task: sessionContext.task,
-                dispatchOrigin: sessionContext.dispatchOrigin,
-                coordinatorForProject: sessionContext.coordinatorForProject,
-                content,
-              })) ?? content;
-            } catch (e) {
-              this.logger.warn(
-                `could not attach wiki context to session ${sessionId}: `
-                + `${e instanceof Error ? e.message : e}`,
-              );
             }
           }
         }
@@ -4042,7 +4118,9 @@ export class RunnerApiController {
           assignedRunnerId: true,
           inboxLeaseGeneration: true,
           coordinatorContextEpoch: true,
-          coordinatorForProject: { select: { id: true, coordinatorEnabled: true } },
+          coordinatorForProject: {
+            select: { id: true, coordinatorEnabled: true, owner: { select: { preferences: true } } },
+          },
           mergeStatus: true,
           mergedSourceSha: true,
           // Armed by the event batch that carried this turn's error (the runner flushes events
@@ -4056,6 +4134,7 @@ export class RunnerApiController {
           // Which shared pool's key, or login pool's account, a failed turn may have ended on — see
           // `keyRetryAt` below.
           provider: true,
+          providerBuiltin: true,
           poolKeyId: true,
           poolCodexAccountId: true,
           model: true,
@@ -4101,6 +4180,7 @@ export class RunnerApiController {
               current.inboxLeaseGeneration,
               current.coordinatorContextEpoch,
               current.coordinatorForProject.coordinatorEnabled,
+              modelRoutingEnabled(current.coordinatorForProject.owner),
             )
           : null;
       const acknowledgedCoordinatorContextKey =
@@ -4407,7 +4487,7 @@ export class RunnerApiController {
         && completedTurn?.kind === 'message'
         && current.retryAt == null
         // Only a configured provider's slug can name a pool, as in quotaRetryAt.
-        && !isBuiltinProvider(current.provider)
+        && !isBuiltinProvider(current.provider, current.providerBuiltin)
           ? ((await this.queue.sharedPoolRetryAt(tx, current, new Date()))
             ?? (await this.queue.loginPoolRetryAt(tx, current, new Date())))
           : null;
@@ -4566,7 +4646,7 @@ export class RunnerApiController {
       // transaction as the DONE so the two commit together (contract §2.3 J-T1a). Outside the
       // comparison block for the same reason `recordTaskFailure` is.
       if (acceptanceTaskCompleted && current.taskId) {
-        await enqueueForDoneTask(tx, current.ownerId, current.taskId);
+        await enqueueForDoneTask(tx, current.ownerId, current.taskId, { sessionId });
       }
       // The task a successful message turn is about, read once for the two questions the completion
       // asks of it: whether an EXECUTABLE acceptance shell turn is owed now, and whether a run of an
@@ -5000,7 +5080,12 @@ export class RunnerApiController {
         reviewToDeliver,
         reviewsAbandoned,
       };
-    }, loggedRetry(this.logger, 'runnerApi.turnComplete'));
+    }, loggedRetry(this.logger, 'runnerApi.turnComplete', {
+      transaction: {
+        timeout: TURN_COMPLETE_TRANSACTION_TIMEOUT_MS,
+        maxWait: TURN_COMPLETE_TRANSACTION_TIMEOUT_MS,
+      },
+    }));
     // The review this completion recorded, handed to its reviewer after the commit (§2 D2); and the
     // ones this completion found it had been handed and dropped, whose cards are the owner's now (T5).
     if ('reviewToDeliver' in finalized && finalized.reviewToDeliver) {
@@ -5446,7 +5531,7 @@ export class RunnerApiController {
           return !acc || e.seq > acc.seq ? { seq: e.seq, text, turnId: e.turnId ?? null } : acc;
         }, null);
       // The same provider outage when a runtime reports it as the turn's error instead of as a reply
-      // — Codex's "Selected model is at capacity". Only an error the retry would re-send past counts:
+      // — Codex's model-at-capacity or exhausted-429 message. Only an error the retry would re-send past counts:
       // every other error line is the runtime narrating its own reconnects or a failure a re-send
       // reproduces, and neither is an answer, which is what a reply here would clear the streak for.
       const lastRetryableError = durable
@@ -6020,7 +6105,7 @@ export class RunnerApiController {
         effectiveStatus === RunStatus.FAILED
         && current.retryAt == null
         && !quotaSpent
-        && !isBuiltinProvider(current.provider)
+        && !isBuiltinProvider(current.provider, current.providerBuiltin)
           ? ((await this.queue.sharedPoolRetryAt(tx, current, new Date()))
             ?? (await this.queue.loginPoolRetryAt(tx, current, new Date())))
           : null;
@@ -6919,6 +7004,7 @@ export class RunnerApiController {
     delivered = true,
   ): Promise<{ retryAt?: Date | null; retryAttempts?: number; claudeAccount?: string; poolSwitchNotice?: string }> {
     const quotaSpent = isUsageLimitErrorText(text);
+    const rateLimited = isRateLimitApiErrorText(text);
     if (!quotaSpent && !isRetryableApiErrorText(text)) return { retryAt: null, retryAttempts: 0 };
     if (!delivered && !quotaSpent) return {};
     const session = await tx.session.findUnique({
@@ -6931,11 +7017,32 @@ export class RunnerApiController {
         claudeAccount: true,
         claudeAccountPinned: true,
         poolSwitchNotice: true,
+        poolCodexAccountId: true,
+        poolKeyId: true,
         workspace: { select: { env: true, codexAccount: true, claudeAccount: true } },
       },
     });
     if (!session) return {};
-    if (!quotaSpent) return { retryAt: apiErrorRetryAt(session.retryAttempts, new Date()) };
+    if (!quotaSpent) {
+      // A rate limit is the one transient failure a pool can be asked about rather than answered with the
+      // ladder below: the gateway records a short throttle on the credential when a 429 outlasts the wait
+      // it may hold a request open for (providers/pool-gateway.service.ts throttledUntil), so the pool
+      // knows the moment this session can run again — and answers `now` when another credential of the
+      // pool can take it, which the re-send's claim then moves the session to. Both return null while the
+      // credential the session is on can still run, which is also what they answer for a session on no
+      // pool at all: the failure was not the credential's, or there is none to speak for it, and the
+      // ladder stands.
+      // The budget is asked first and separately: the pool answers *when* the session can run, the
+      // budget is what stops a credential from being re-sent to forever, and the sweep spends an attempt
+      // per re-send whatever armed it.
+      if (rateLimited && apiErrorRetryBudgetLeft(session.retryAttempts)) {
+        const at =
+          (await this.queue.sharedPoolRetryAt(this.prisma, session, new Date(), POOL_RATE_LIMIT_WAIT_MS)) ??
+          (await this.queue.loginPoolRetryAt(this.prisma, session, new Date(), POOL_RATE_LIMIT_WAIT_MS));
+        if (at) return { retryAt: at };
+      }
+      return { retryAt: apiErrorRetryAt(session.retryAttempts, new Date()) };
+    }
     // A turn nobody delivered, in a session that still owes its "Switched to" line, ran on the engine
     // that line's move is replacing: the account it found spent is the one already left, and taking it
     // for the new one moved the session again — back onto the spent one when the snapshot lags.
@@ -7049,7 +7156,7 @@ export class RunnerApiController {
   private async quotaRetryAt(
     tx: QuotaRetryTransaction,
     runnerId: string,
-    session: { ownerId: string; provider: string; codexAccount: string | null; claudeAccount?: string | null },
+    session: { ownerId: string; provider: string; providerBuiltin?: boolean; codexAccount: string | null; claudeAccount?: string | null },
     text: string,
     workspace: { env: unknown; codexAccount: string | null; claudeAccount: string | null } | null | undefined,
   ): Promise<Date | null> {
@@ -7059,7 +7166,9 @@ export class RunnerApiController {
       select: { planUsage: true, engines: true },
     });
     // Only a configured provider's slug can name a pool.
-    const pool = isBuiltinProvider(session.provider)
+    const pool = isBuiltinProvider(
+      session.provider, session.providerBuiltin ?? (session.provider !== AgentProvider.DSH),
+    )
       ? null
       : await this.queue.accountPoolResumesAt(session.ownerId, session.provider, now);
     const at =

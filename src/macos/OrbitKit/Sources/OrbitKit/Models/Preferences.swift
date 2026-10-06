@@ -26,6 +26,31 @@ public struct UserPreferences: Codable, Equatable, Sendable {
     /// Whether an agent may push a line of its own (the `notify` tool / `orbit notify`) to this
     /// account's devices. Absent means on; only opting out is ever written.
     public let notifyAgentMessage: Bool?
+    /// The account's master switch for smart model selection (docs/model-routing-design.md). Off
+    /// unless it is exactly `true`: absent, or anything but a boolean, decodes nil and reads as off
+    /// (`smartModelSelection`), so a stray value never fails the whole `me` payload.
+    public let modelRouting: Bool?
+
+    /// Whether smart model selection is on for this account — only an explicit `true` turns it on.
+    public var smartModelSelection: Bool { modelRouting == true }
+
+    private enum CodingKeys: String, CodingKey {
+        case theme, defaultModel, defaultModels, defaultPermissionMode, defaultEffort
+        case enableOrchestration, notifySessionFinished, notifyAgentMessage, modelRouting
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        theme = try c.decodeIfPresent(String.self, forKey: .theme)
+        defaultModel = try c.decodeIfPresent(String.self, forKey: .defaultModel)
+        defaultModels = try c.decodeIfPresent([String: String].self, forKey: .defaultModels)
+        defaultPermissionMode = try c.decodeIfPresent(String.self, forKey: .defaultPermissionMode)
+        defaultEffort = try c.decodeIfPresent(String.self, forKey: .defaultEffort)
+        enableOrchestration = try c.decodeIfPresent(Bool.self, forKey: .enableOrchestration)
+        notifySessionFinished = try c.decodeIfPresent(Bool.self, forKey: .notifySessionFinished)
+        notifyAgentMessage = try c.decodeIfPresent(Bool.self, forKey: .notifyAgentMessage)
+        modelRouting = (try? c.decodeIfPresent(Bool.self, forKey: .modelRouting)) ?? nil
+    }
 }
 
 /// PATCH /users/me/preferences — only the present keys are merged; nil omits (synthesized
@@ -39,10 +64,12 @@ public struct UpdatePreferencesRequest: Encodable, Sendable {
     public var enableOrchestration: Bool?
     public var notifySessionFinished: Bool?
     public var notifyAgentMessage: Bool?
+    public var modelRouting: Bool?
     public init(theme: String? = nil, defaultModel: String? = nil, defaultModels: [String: String]? = nil,
                 defaultPermissionMode: String? = nil,
                 defaultEffort: String? = nil, enableOrchestration: Bool? = nil,
-                notifySessionFinished: Bool? = nil, notifyAgentMessage: Bool? = nil) {
+                notifySessionFinished: Bool? = nil, notifyAgentMessage: Bool? = nil,
+                modelRouting: Bool? = nil) {
         self.theme = theme
         self.defaultModel = defaultModel
         self.defaultModels = defaultModels
@@ -51,5 +78,6 @@ public struct UpdatePreferencesRequest: Encodable, Sendable {
         self.enableOrchestration = enableOrchestration
         self.notifySessionFinished = notifySessionFinished
         self.notifyAgentMessage = notifyAgentMessage
+        self.modelRouting = modelRouting
     }
 }

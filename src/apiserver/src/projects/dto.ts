@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -25,6 +25,7 @@ import {
   ProjectStatus,
   type AcceptedGap,
   type DoneRequestGap,
+  type ProjectDoneRequestDeclineBody,
   type ProjectDoneRequestBody,
   type ProjectStartRequestBody,
   type RequestProjectDoneBody,
@@ -39,6 +40,7 @@ import { MAX_START_REQUEST_WHY } from './project-start-request';
 import {
   MAX_DONE_REQUEST_EVIDENCE_REF,
   MAX_DONE_REQUEST_EVIDENCE_REFS,
+  MAX_DONE_REQUEST_DECLINE_NOTE,
   MAX_DONE_REQUEST_GAPS,
   MAX_DONE_REQUEST_GAP_TEXT,
   MAX_DONE_REQUEST_GAP_TITLE,
@@ -460,6 +462,17 @@ export class DoneProjectDto implements ProjectDoneRequestBody {
 }
 
 /**
+ * `POST /projects/:id/done-requests/:itemId/decline`: the account owner's Not yet… note.
+ *
+ * The service trims and validates again because this DTO is only the HTTP boundary; direct callers
+ * and retries must meet the same rule.
+ */
+export class DeclineDoneRequestDto implements ProjectDoneRequestDeclineBody {
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  @IsString() @MinLength(1) @MaxLength(MAX_DONE_REQUEST_DECLINE_NOTE) note!: string;
+}
+
+/**
  * `POST /projects/:id/start` (`@orbit/shared` `StartProjectRequestBody`): the version of the
  * criteria the owner read, and every setting the project is to run with — each one required,
  * because a start writes the whole set and a field left out would be a setting nobody chose.
@@ -677,6 +690,11 @@ export class AnswerOpenItemDto {
  * length, so a caller that reaches it another way is held to the same rule.
  */
 export class ResolveOpenItemDto {
+  @IsString() @MinLength(1) @MaxLength(MAX_OPEN_ITEM_RESOLUTION_NOTE) note!: string;
+}
+
+/** The coordinator's explanation when it deliberately hands an open item to the account owner. */
+export class HandOverOpenItemDto {
   @IsString() @MinLength(1) @MaxLength(MAX_OPEN_ITEM_RESOLUTION_NOTE) note!: string;
 }
 

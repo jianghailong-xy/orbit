@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -271,6 +273,21 @@ afterEach(async () => {
   }
 });
 
+describe('project entry typography', () => {
+  const fromRepo = (...candidates: string[]): string => {
+    const found = candidates.map((each) => resolve(process.cwd(), each)).find(existsSync);
+    if (!found) throw new Error(`none of ${candidates.join(', ')} exists from ${process.cwd()}`);
+    return readFileSync(found, 'utf8');
+  };
+
+  it('uses the same title weight as ordinary session rows (owner 10-04)', () => {
+    const css = fromRepo('src/index.css', 'src/web/src/index.css').replace(/\/\*[\s\S]*?\*\//gu, '');
+    const overrides = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/gu)].filter(([, selector, body]) =>
+      /\.session-project-row\s+\.session-title\b/u.test(selector) && /\bfont-weight\s*:/u.test(body));
+    expect(overrides, '项目条目标题与会话行同一字重（owner 10-04）').toHaveLength(0);
+  });
+});
+
 describe('project entries in the session list', { timeout: 60_000 }, () => {
   it('merges Open members into one two-line session row with a project icon and progress', async () => {
     await mount();
@@ -342,11 +359,11 @@ describe('project entries in the session list', { timeout: 60_000 }, () => {
     expect(projectRow().querySelector('.session-project-progress-bar')).toBeNull();
   });
 
-  it('opens the coordinator when the project entry is clicked', async () => {
+  it('opens the project sessions page when the project entry is clicked', async () => {
     await mount();
     await click(projectRow(), 'the project entry');
-    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}`));
-    expect(projectRow().classList.contains('active')).toBe(true);
+    await until(() => expect(mounted().querySelector('.session-project-page')).not.toBeNull());
+    expect(new URLSearchParams(location.split('?')[1]).get('project')).toBeTruthy();
   });
 
   it('files all project members under the coordinator folder, including members filed elsewhere', async () => {
@@ -354,12 +371,14 @@ describe('project entries in the session list', { timeout: 60_000 }, () => {
     folders = [FOLDER, elsewhere];
     rows = [LOOSE, { ...COORDINATOR, folderId: FOLDER.id }, { ...TASK, folderId: elsewhere.id }];
     await mount(() => expect(mounted().querySelectorAll('.session-folder-row')).toHaveLength(2));
+    expect(mounted().querySelector('.session-search')).not.toBeNull();
     expect(projectRows()).toHaveLength(0);
     const folder = [...mounted().querySelectorAll<HTMLElement>('.session-folder-row')].find((el) => el.textContent?.includes(FOLDER.name))!;
     expect(folder.querySelector('.session-folder-count')?.textContent).toBe('2');
     await click(folder, 'the coordinator folder');
     await until(() => expect(titles()).toEqual(['Project Alpha']));
     expect(projectRows()).toHaveLength(1);
+    expect(mounted().querySelector('.session-search')).not.toBeNull();
   });
 
   it('keeps Trash sessions flat', async () => {
@@ -424,7 +443,7 @@ describe('project entry status and second line', { timeout: 60_000 }, () => {
     expect(preview()?.classList.contains('tone-approval')).toBe(true);
   });
 
-  it('names a member waiting in another workspace while keeping the activity dot local', async () => {
+  it('names a member waiting in another workspace while keeping the running spinner local', async () => {
     rows = [LOOSE, TASK];
     const elsewhere = { workspaceId: OTHER_WORKSPACE_ID, workspace: { id: OTHER_WORKSPACE_ID, name: 'other workspace' } };
     remoteRows = [
@@ -441,7 +460,9 @@ describe('project entry status and second line', { timeout: 60_000 }, () => {
     expect(titles()).toEqual(expect.arrayContaining(['Loose conversation', 'Project Alpha']));
     expect(titles()).toHaveLength(2);
     expect(preview()?.classList.contains('tone-approval')).toBe(true);
-    expect(projectRow().querySelector('.session-project-status')?.getAttribute('data-state')).toBe('running');
+    expect(projectRow().querySelector('.session-project-icon .anticon-loading')).not.toBeNull();
+    expect(projectRow().querySelector('.session-project-icon .sidebar-nav-icon')).toBeNull();
+    expect(projectRow().querySelector('.session-project-status')).toBeNull();
     expect(projectRow().querySelector('.session-project-progress')?.getAttribute('title')).toBe('3 sessions · 1 running');
   });
 
@@ -457,12 +478,14 @@ describe('project entry status and second line', { timeout: 60_000 }, () => {
     expect(preview()?.classList.contains('tone-running')).toBe(true);
   });
 
-  it('uses the coordinator’s ordinary running line and a blue activity dot', async () => {
+  it('uses the coordinator’s ordinary running line and the session’s blue spinner', async () => {
     rows = [LOOSE, { ...COORDINATOR, status: 'RUNNING', runState: 'RUNNING', lastToolUse: 'Bash' }, TASK];
     await mount();
     expect(preview()?.textContent).toBe('Running Bash…');
     expect(preview()?.classList.contains('tone-running')).toBe(true);
-    expect(projectRow().querySelector('.session-project-status')?.getAttribute('data-state')).toBe('running');
+    expect(projectRow().querySelector('.session-project-icon .anticon-loading')).not.toBeNull();
+    expect(projectRow().querySelector('.session-project-icon .sidebar-nav-icon')).toBeNull();
+    expect(projectRow().querySelector('.session-project-status')).toBeNull();
   });
 
   it('says No coordinator when none is available', async () => {

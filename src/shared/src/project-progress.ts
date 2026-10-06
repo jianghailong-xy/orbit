@@ -397,8 +397,10 @@ export interface OpenItemFacts {
  * then would be saying something nobody knows yet.
  */
 export interface OpenItemHandling<Instant = string> {
-  /** The coordinator conversation that asked for the rerun. */
-  sessionId: string;
+  /** The coordinator conversation that asked for the rerun, or null when the owner did. */
+  sessionId: string | null;
+  /** The account owner that asked for the rerun, or null when the coordinator did. */
+  userId: string | null;
   /** Why it said the rerun would come out differently, as it said it. */
   reason: string;
   startedAt: Instant;
@@ -421,10 +423,11 @@ export interface OpenItemHandling<Instant = string> {
 export interface OpenItemOutcome<Instant = string> {
   state: 'RESOLVED' | 'SUPERSEDED';
   resolution: 'HANDLED' | 'RETRIED';
-  resolvedBy: 'COORDINATOR';
-  /** The coordinator conversation it is attributed to: the one that asked for the rerun, or the one
-   *  that closed the item. */
+  resolvedBy: 'COORDINATOR' | 'USER';
+  /** The coordinator conversation it is attributed to, when a coordinator asked. */
   resolvedBySessionId: string | null;
+  /** The account owner it is attributed to, when the owner asked. */
+  resolvedByUserId: string | null;
   resolvedAt: Instant;
   /** The reason the coordinator gave — for its rerun, or for closing the item by hand. */
   note: string | null;
@@ -432,6 +435,49 @@ export interface OpenItemOutcome<Instant = string> {
   jobId: string | null;
   /** The item that took this one's place, when the rerun failed again. */
   supersededByItemId: string | null;
+}
+
+/**
+ * Where an item's handling stands right now, in one word (§4.7): what a card says beside its
+ * "Chat about this", and what the coordinator is told along with the message that press carries.
+ *
+ * `HANDLING` while the coordinator's rerun of it is queued or running (H1); `WITH_COORDINATOR` while
+ * it waits for the coordinator to act on it; `WITH_OWNER` while it is the account owner's — from
+ * birth, or because it became theirs (§4.1); `HANDLED` and `SUPERSEDED` once the coordinator's
+ * handling ended it (H2, H3).
+ */
+export type OpenItemStage =
+  | 'HANDLING'
+  | 'WITH_COORDINATOR'
+  | 'WITH_OWNER'
+  | 'HANDLED'
+  | 'SUPERSEDED';
+
+/**
+ * Why "Chat about this" cannot be had for an item, when it cannot.
+ *
+ * `NO_COORDINATOR`: the project has no coordinator conversation to hold it. `COORDINATOR_UNAVAILABLE`:
+ * it has one, and that conversation cannot take a message now — in Trash, ending, or ended with
+ * nothing to resume (the same answer every session payload publishes as `canSend`).
+ * `SUPERSEDED`: a failed rerun replaced the item with a new one, and that one is what a chat about
+ * the failure is about.
+ */
+export type OpenItemChatRefusal = 'NO_COORDINATOR' | 'COORDINATOR_UNAVAILABLE' | 'SUPERSEDED';
+
+/**
+ * "Chat about this" for one item, as the server decides it (§4.8).
+ *
+ * A message to the project's coordinator conversation and nothing else: it presses no door, so it is
+ * offered whoever holds the item, and refused only where there is nowhere for the message to go or
+ * where it would be about the wrong item. What the doors on the same card may do is still `actions`,
+ * decided as before.
+ */
+export interface OpenItemChat {
+  /** The project's coordinator conversation — where the chat is held. Null when there is none. */
+  sessionId: string | null;
+  stage: OpenItemStage;
+  /** Null when the chat can be had; otherwise why it cannot. */
+  refusal: OpenItemChatRefusal | null;
 }
 
 /**
@@ -455,12 +501,18 @@ export interface ProjectOpenItemRow<Instant = string> {
   escalateAt: Instant | null;
   escalatedAt: Instant | null;
   taskId: string | null;
+  /** Tasks filed as concrete fixes for this item, newest task state included. */
+  handledBy?: Array<{ taskId: string; title: string; state: string }>;
   /** The attempt this item is about, when there is one: the run whose failure opened it. */
   sessionId: string | null;
   promotionId: string | null;
   fuseEpisodeId: string | null;
   delivery: { state: OpenItemDeliveryState; sessionId: string | null; at: Instant | null };
   actions: OpenItemAction[];
+  /** The server's one-sentence answer to "what must happen next". Optional for rolling deploys. */
+  requiredAction?: string;
+  /** The first executable door for the item, when the server can name one. */
+  primaryAction?: OpenItemAction;
   /** Present for a `COORDINATOR_QUESTION` and null for every other kind. */
   question: CoordinatorQuestion | null;
   /** The request a `START_REQUEST` carries — what the "Start this project?" card is drawn from —
@@ -478,6 +530,11 @@ export interface ProjectOpenItemRow<Instant = string> {
   handling?: OpenItemHandling<Instant> | null;
   /** How it ended — only on a row of `settled`, and null on every open one. */
   outcome?: OpenItemOutcome<Instant> | null;
+  /** The coordinator's explanation when it deliberately handed the item to the owner. */
+  handoverNote?: string | null;
+  /** "Chat about this": where the item's handling stands, and whether a message about it can reach
+   *  the project's coordinator conversation. Absent from a server that predates it. */
+  chat?: OpenItemChat | null;
 }
 
 /** The project's open exceptions, split by who is expected to act (§4.8). */
@@ -556,6 +613,10 @@ export interface OpenItemDeliveryCard {
   } | null;
   /** The doors that exist for this item today, as the server decides them (§4.8). */
   actions: OpenItemAction[];
+  /** The same server-derived next-step sentence served on the project row. */
+  requiredAction?: string;
+  /** The first executable door for the item, when one is available. */
+  primaryAction?: OpenItemAction;
   /**
    * What the platform knew about the landing when it handed the item over, or null when it is not
    * answerable — an item about no task at all, which is what a promotion's is.
@@ -812,7 +873,8 @@ export interface ProjectListCoordinatorItems<Instant = string> {
   count: number;
   leadKind: CoordinatorLeadKind;
   oldestWaitingSince: Instant;
-  nextEscalationAt: Instant;
+  /** Null when every held item is currently making progress (there is no expiry to count down to). */
+  nextEscalationAt: Instant | null;
 }
 
 /**
@@ -821,12 +883,15 @@ export interface ProjectListCoordinatorItems<Instant = string> {
  * Absent when nobody has decided a line and nothing has integrated yet: a project with no line has
  * no line to draw, and printing the default rule's guess there would state a decision nobody made.
  */
-export interface ProjectListIntegration {
+export interface ProjectListIntegration<Instant = string> {
   line: IntegrationLine;
   /** The branch's name, spelled as a merge receipt spells it (no `refs/heads/`). */
   ref: string;
   /** QUEUED or RUNNING jobs, including project merges and checks. Exceptions are not activity. */
   activeJobCount?: number;
+  /** The job the project page's landing line would describe, chosen by the same rule; absent when
+   *  nothing is in flight and on older servers. The session list's project row states it. */
+  inFlight?: ProjectIntegrationInFlight<Instant>;
 }
 
 /**
@@ -904,6 +969,8 @@ export interface SessionOwnerItem<Instant = string> {
   title: string;
   /** Since when it has been waiting on the owner. The banner shows the oldest. */
   since: Instant;
+  /** The short reason for an escalated item, derived from its raw kind. */
+  need?: string;
 }
 
 /**

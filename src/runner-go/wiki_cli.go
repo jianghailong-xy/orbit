@@ -177,6 +177,19 @@ Options:
 An op is one of add / reinforce / amend / supersede / retire / challenge, and cites the records it
 came from. Record only what someone could not read from the code; a claim you cannot cite is not
 ready. What this writes waits for the owner — do not tell the user it is saved.
+
+A source is {"kind": KIND, "ref": REF, "quote": TEXT}, and what REF is depends on the kind:
+  turn, event, task, task_comment, approval, merge_receipt, note
+                   the record's id: its UUID, or the short id Orbit shows. A turn of this session
+                   is {"kind":"turn","session":"self"} and takes no ref
+  owner_decision   the id of the project blocker the owner resolved with a note
+  tool_call        the tool call's id, or the tool_use_id its engine gave the call (toolu_…,
+                   call_…): this session's own call first, else the one session of the owner's
+                   that made it
+  commit           the commit's full sha
+  evidence, criterion, url
+                   cannot be cited yet
+A ref that names nothing is refused, naming the source as ops[i].sources[j].ref.
 `,
 	"verify": `orbit wiki verify — have the local model verify what this session proposed into an automatic space
 

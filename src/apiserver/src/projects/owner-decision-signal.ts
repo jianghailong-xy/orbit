@@ -8,7 +8,7 @@ import {
 import { readWaitingOwnerConfirmations } from '../tasks/owner-confirmation-read';
 import { CRITERIA_WEAKENING_EFFECT_CLASS } from './criteria-weakening-intent';
 import { stillUnanswered } from './criteria-pending-decisions';
-import { openItemsNoLongerOwed, ownerItemKind } from './project-open-item';
+import { openItemsNoLongerOwed, ownerItemKind, ownerItemNeed } from './project-open-item';
 import { projectsToRecordAsDone } from './project-looks-finished';
 import { projectsReadyToClose } from './project-done-request';
 import {
@@ -376,7 +376,15 @@ async function readOwnerItemSignals(
       items: [],
     };
     signal.count += 1;
-    signal.items?.push({ itemId: row.id, kind, title: row.title, since: row.waitingSince });
+    signal.items?.push({
+      itemId: row.id,
+      kind,
+      title: row.title,
+      since: row.waitingSince,
+      // `row.kind` is already in this read; do not issue a second item/facts query just to name
+      // the short reason beside an escalated item in the session list.
+      need: ownerItemNeed(row.kind),
+    });
     bySession.set(sessionId, signal);
   }
   return [...bySession.values()];
@@ -452,6 +460,7 @@ export function ownerItemsForRow(
     kind: item.kind,
     title: item.title,
     since: item.since.toISOString(),
+    ...(item.need == null ? {} : { need: item.need }),
   }));
 }
 

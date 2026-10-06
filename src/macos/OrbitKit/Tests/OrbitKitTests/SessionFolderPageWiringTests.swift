@@ -74,18 +74,23 @@ final class SessionFolderPageWiringTests: XCTestCase {
     /// behind its row rather than in the time sections below (§3.3).
     func testTheFolderRowsLeadTheListAndTakeTheirSessionsOutOfTheTimeSections() throws {
         let agents = code(try appSource("Views/AgentsView.swift"))
-        let listing = try slice(agents, from: "private var folderListing: SessionFolderListing {",
+        let listing = try slice(agents, from: "private static func folderListing(_ projectListing: SessionProjectListing, _ inputs: SessionListInputs) -> SessionFolderListing {",
                                 to: "\n    }")
-        XCTAssertTrue(listing.contains("SessionFolderGrouping.listing(shownSessions,"))
-        XCTAssertTrue(listing.contains("folders: app.sessionFolders.filter { $0.workspaceId == agent.id }"),
+        XCTAssertTrue(listing.contains("SessionFolderGrouping.listing(inputs.shownSessions,"))
+        XCTAssertTrue(listing.contains("folders: inputs.workspaceFolders,"),
                       "this workspace's folders, out of the owner's whole library")
-        XCTAssertTrue(listing.contains("view: view,"))
-        XCTAssertTrue(listing.contains("byTag: tagFilter != nil || groupByTag,"),
+        XCTAssertTrue(listing.contains("view: inputs.view,"))
+        XCTAssertTrue(listing.contains("byTag: inputs.byTag,"),
                       "a tag filter or Group by Tag draws no folders: two groupings on one list")
-        XCTAssertTrue(listing.contains("runnerOffline: agents.runnerIsOffline(agent.runnerId))"),
+        XCTAssertTrue(listing.contains("runnerOffline: inputs.runnerOffline)"),
                       "an offline Runner silences a folder row's spinner, as the workspace row's")
+        let inputs = try slice(agents, from: "private var listInputs: SessionListInputs {", to: "\n    }")
+        for part in ["sessions: agents.agentSessions, tagFilter: tagFilter,", "folders: app.sessionFolders,",
+                     "view: view, groupByTag: groupByTag,", "runnerOffline: agents.runnerIsOffline(agent.runnerId)"] {
+            XCTAssertTrue(inputs.contains(part), "the grouping's inputs carry `\(part)`")
+        }
 
-        let sections = try slice(agents, from: "private var timeSections: [SessionTimeSection] {",
+        let sections = try slice(agents, from: "private static func timeSections(_ folderListing: SessionFolderListing, _ inputs: SessionListInputs) -> [SessionTimeSection] {",
                                  to: "\n    }")
         XCTAssertTrue(sections.contains("SessionTimeGrouping.sections(folderListing.sessions,"),
                       "the time sections are built from what the folders left")
@@ -98,7 +103,7 @@ final class SessionFolderPageWiringTests: XCTestCase {
             XCTUnwrap(body.range(of: "ForEach(Array(timeSections.enumerated())")?.lowerBound),
         ]
         XCTAssertEqual(order, order.sorted(), "folders at the very top, the time sections under them")
-        XCTAssertEqual(try branches(of: "SessionFolderGrouping.listing(shownSessions,", in: agents), ["os(iOS)"])
+        XCTAssertEqual(try branches(of: "SessionFolderGrouping.listing(inputs.shownSessions,", in: agents), ["os(iOS)"])
         XCTAssertEqual(try branches(of: "private func folderRow(_ row: SessionFolderRow)", in: agents), ["os(iOS)"])
     }
 
@@ -205,8 +210,8 @@ final class SessionFolderPageWiringTests: XCTestCase {
                       "the ✎ composes for the folder's own workspace")
 
         // The page's list is the list outside: Pinned then the recency sections, the same rows.
-        XCTAssertTrue(page.contains("SessionTimeGrouping.sections(sessions, pinnedFirst: address.view == .open)"))
-        XCTAssertTrue(page.contains("SessionFolderGrouping.sessions(agents.agentSessions, inFolder: address.folderID,"))
+        XCTAssertTrue(page.contains("SessionTimeGrouping.sections(sessions, pinnedFirst: inputs.view == .open)"))
+        XCTAssertTrue(page.contains("SessionFolderGrouping.sessions(inputs.sessions, inFolder: inputs.folderID ?? \"\","))
     }
 
     /// The page's rows are the workspace list's rows: the same `AgentSessionRow` wrapped the same

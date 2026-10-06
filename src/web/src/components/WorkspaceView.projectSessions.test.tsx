@@ -7,6 +7,8 @@ import { MemoryRouter, Route, Routes, useLocation, useNavigate, type NavigateFun
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
 import { ControlPlaneProvider } from '../lib/useControlPlane';
+import { SessionSearch } from './SessionSearch';
+import { projectSessionsQuery } from '../lib/queries';
 
 // Exercise navigation, menus and both list scopes through the real WorkspaceView. Named API reads
 // call api() within api.ts, so stub them separately from the query factories' api export.
@@ -178,6 +180,7 @@ async function mount(ready: () => void = () => expect(projectRows()).toHaveLengt
         <MemoryRouter initialEntries={[path]}>
           <AntApp>
             {withControlPlane ? <ControlPlaneProvider>{view}</ControlPlaneProvider> : view}
+            <SessionSearch />
             <LocationProbe />
           </AntApp>
         </MemoryRouter>
@@ -194,8 +197,8 @@ async function click(element: Element | null | undefined, what: string): Promise
 }
 const menuItem = (label: string): HTMLElement | undefined =>
   // Submenus use their own portal, outside the dropdown's root element.
-  [...document.querySelectorAll<HTMLElement>('.ant-dropdown-menu-item')].find(
-    (el) => el.textContent?.trim().startsWith(label),
+  [...document.querySelectorAll<HTMLElement>('.ant-dropdown:not(.ant-dropdown-hidden) .ant-dropdown-menu-item')].find(
+    (el) => el.closest<HTMLElement>('.ant-dropdown')?.style.pointerEvents !== 'none' && el.textContent?.trim().startsWith(label),
   );
 async function chooseView(label: string): Promise<void> {
   await click(mounted().querySelector('.session-scope-menu'), 'the view menu');
@@ -323,7 +326,7 @@ const remote = (n: number, title: string, extra: Record<string, unknown> = {}) =
 });
 
 async function openSessions(): Promise<void> {
-  await click(projectRow().querySelector('.session-project-progress'), 'the project progress tag');
+  await click(projectRow(), 'the project entry');
   await until(() => expect(page()).not.toBeNull());
 }
 
@@ -362,10 +365,16 @@ async function swipe(entry: HTMLElement, dx: number, source: Element = entry): P
 }
 
 describe('project entry navigation and actions', { timeout: 60_000 }, () => {
-  it.each([false, true])('opens the coordinator when nobody waits or the coordinator waits (waiting=%s)', async (waiting) => {
+  it.each([false, true])('opens the sessions page from the entry, and the coordinator from Open Session when nobody waits or the coordinator waits (waiting=%s)', async (waiting) => {
     rows = [LOOSE, { ...COORDINATOR, ...(waiting ? { pendingApprovals: 1, waitingKind: 'OWNER_CONFIRMATION' } : {}) }, { ...TASK, ...(waiting ? { pendingApprovals: 1, waitingKind: 'OWNER_CONFIRMATION' } : {}) }];
     await mount();
     await click(projectRow(), 'the project entry');
+    await until(() => expect(page()).not.toBeNull());
+    expect(new URLSearchParams(location.split('?')[1]).get('project')).toBe(PROJECT_ID);
+    await back();
+    await until(() => expect(page()).toBeNull());
+    await hoverProjectMenu();
+    await click(menuItem('Open Session'), 'Open Session for the coordinator');
     await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}`));
   });
 
@@ -375,7 +384,9 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
     rows = [LOOSE, COORDINATOR, newer, older];
     await mount();
     expect(preview()?.textContent).toContain('Build the package');
-    await click(projectRow(), 'the project entry');
+    await act(async () => projectRow().dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })));
+    await until(() => expect(menuItem('Open Session')).toBeTruthy());
+    await click(menuItem('Open Session'), 'Open Session for the waiting member');
     await until(() => expect(location).toBe(`/sessions/${TASK.id}`));
     expect(projectRow().classList.contains('active')).toBe(true);
   });
@@ -384,15 +395,20 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
     rows = [LOOSE, TASK];
     projects = [project({ coordinatorActivity: null })];
     await mount();
+    await hoverProjectMenu();
+    expect(menuItem('Open Session')?.classList.contains('ant-dropdown-menu-item-disabled')).toBe(true);
+    await click(menuItem('Open Session'), 'the disabled Open Session');
+    expect(location).toBe(`/sessions/${LOOSE.id}`);
     await click(projectRow(), 'the project entry without a coordinator');
     await until(() => expect(location).toBe(`/sessions/${LOOSE.id}?project=${PROJECT_ID}`));
     await until(() => expect(page()?.textContent).toContain('Build the package'));
   });
 
-  it('makes the progress tag an independent click target with the session-count hint', async () => {
+  it('draws the progress tag as part of the entry, with the session-count hint', async () => {
     await mount();
     const progress = projectRow().querySelector('.session-project-progress');
     expect(progress?.getAttribute('title')).toBe('2 sessions · 1 running');
+    expect(progress?.closest('button')).toBeNull();
     await click(progress, 'the project progress tag');
     await until(() => expect(location).toBe(`/sessions/${LOOSE.id}?project=${PROJECT_ID}`));
     expect(page()).not.toBeNull();
@@ -403,11 +419,17 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
     expect(projectRow().classList.contains('active')).toBe(true);
   });
 
-  it('has only Coordinator, Sessions, Project, Pin and Move in its hover menu and no reply actions', async () => {
+  it.each(['hover', 'context'] as const)('has exactly the project actions in its %s menu', async (trigger) => {
     await mount();
-    await hoverProjectMenu();
+    if (trigger === 'hover') await hoverProjectMenu();
+    else {
+      await act(async () => projectRow().dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })));
+      await until(() => expect(menuItem('Sessions')).toBeTruthy());
+    }
     const labels = [...document.querySelectorAll('.ant-dropdown:not(.ant-dropdown-hidden) .ant-dropdown-menu-item')].map((item) => item.textContent?.trim());
-    expect(labels).toEqual(['Open Coordinator', 'Sessions', 'Open Project', 'Pin', 'Move…']);
+    expect(labels).toEqual(['Open Session', 'Sessions', 'Open Project', 'Pin', 'Move…']);
+    const items = document.querySelector('.ant-dropdown:not(.ant-dropdown-hidden) .ant-dropdown-menu')?.children;
+    expect(items?.[3].classList.contains('ant-dropdown-menu-item-divider')).toBe(true);
     expect(document.querySelectorAll('.ant-dropdown:not(.ant-dropdown-hidden) .ant-dropdown-menu-item-divider')).toHaveLength(1);
     const entryText = projectRow().textContent ?? '';
     for (const forbidden of ['Complete', 'Share', 'Delete', 'Confirm done', 'Chat about this', 'Approve', 'Reject', 'Start project']) {
@@ -437,7 +459,7 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
     rows = [LOOSE, { ...COORDINATOR, pinnedAt: '2026-10-01T09:00:00Z' }, TASK];
     await mount();
     await hoverProjectMenu();
-    expect(menuItem('Unpin')).toBeTruthy();
+    expect([...document.querySelectorAll('.ant-dropdown:not(.ant-dropdown-hidden) .ant-dropdown-menu-item')].map((item) => item.textContent?.trim())).toEqual(['Open Session', 'Sessions', 'Open Project', 'Unpin', 'Move…']);
     await click(menuItem('Unpin'), 'Unpin');
     await until(() => expect(apiModule.unpinSession).toHaveBeenCalledWith(COORDINATOR.id));
   });
@@ -508,25 +530,94 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     })).toBe(false);
   });
 
-  it('lists the coordinator first and every member across workspaces in time sections', async () => {
-    remoteRows = [remote(825, 'Resolve remote issue', { lastTurnAt: '2026-10-04T10:00:00Z' })];
+  it('lists Open and Completed members across workspaces, excludes Trash and counts running members', async () => {
+    remoteRows = [
+      remote(825, 'Resolve remote issue', { lastTurnAt: '2026-10-04T10:00:00Z' }),
+      remote(826, 'Completed remote work', { lifecycleState: 'COMPLETED', status: 'SUCCEEDED', runState: 'SUCCEEDED', lastTurnAt: '2026-10-04T09:00:00Z' }),
+      remote(827, 'Trashed remote work', { lifecycleState: 'TRASH', lastTurnAt: '2026-10-04T11:00:00Z' }),
+    ];
+    projects = [project({ buckets: { running: 99 } })];
     await mount();
     await openSessions();
     const header = page()?.querySelector('.session-project-page-header');
     expect(header?.textContent).toContain('Project Alpha');
-    expect(header?.textContent).toContain('Project · 3 sessions');
+    expect(header?.textContent).toContain('Project · 4 sessions');
     expect(page()?.textContent).toContain('2/5 done · 1 running');
     expect(page()?.querySelector('.session-new')).toBeNull();
     expect(page()?.querySelector('[aria-label="New session"]')).toBeNull();
-    expect(sessionRows().map((entry) => entry.querySelector('.session-title')?.textContent)).toEqual(['Plan the release', 'Resolve remote issue', 'Build the package']);
+    expect(sessionRows().map((entry) => entry.querySelector('.session-title')?.textContent)).toEqual(['Plan the release', 'Resolve remote issue', 'Completed remote work', 'Build the package']);
     const coordinatorSection = page()?.querySelector('.session-project-coordinator');
     expect(coordinatorSection?.textContent).toContain('Coordinator');
     expect(coordinatorSection?.querySelector('.session-title')?.textContent).toBe('Plan the release');
     expect(sessionRows()[0].querySelector('.coordinator-badge')).not.toBeNull();
     expect(projectQueryCalls().some((params) => params.get('projectId') === PROJECT_ID && params.get('view') === 'open')).toBe(true);
+    expect(projectQueryCalls().some((params) => params.get('projectId') === PROJECT_ID && params.get('view') === 'completed')).toBe(true);
+    expect(projectQueryCalls().some((params) => params.get('view') === 'trash')).toBe(false);
     await click(memberRow('Resolve remote issue'), 'the remote member');
     await until(() => expect(location).toBe(`/sessions/${pid(825)}?project=${PROJECT_ID}`));
-    expect(titles()).toEqual(['Plan the release', 'Resolve remote issue', 'Build the package']);
+    expect(titles()).toEqual(['Plan the release', 'Resolve remote issue', 'Completed remote work', 'Build the package']);
+  });
+
+  it.each(['open', 'completed'] as const)('gives mixed member rows their own lifecycle actions from the %s page', async (view) => {
+    rows = [LOOSE, COORDINATOR, { ...TASK, lifecycleState: 'COMPLETED', status: 'SUCCEEDED', runState: 'SUCCEEDED' }];
+    const address = `/sessions/${LOOSE.id}?project=${PROJECT_ID}${view === 'completed' ? '&view=completed' : ''}`;
+    await mount(() => expect(titles()).toEqual([COORDINATOR.title, TASK.title]), address);
+    await click(memberRow(TASK.title)?.querySelector('[aria-label="More actions"]'), 'the Completed member menu');
+    await until(() => expect(menuItem('Move to Open')).toBeTruthy());
+    expect(menuItem('Complete')).toBeUndefined();
+    await click(memberRow(COORDINATOR.title)?.querySelector('[aria-label="More actions"]'), 'the Open coordinator menu');
+    await until(() => {
+      expect(menuItem('Complete')).toBeTruthy();
+      expect(menuItem('Move to Open')).toBeUndefined();
+    });
+  });
+
+  it('counts each member once when Open and Completed responses overlap during a lifecycle change', async () => {
+    await mount();
+    await openSessions();
+    await act(async () => client!.setQueryData(projectSessionsQuery({ projectId: PROJECT_ID, view: 'completed' }).queryKey,
+      [{ ...TASK, lifecycleState: 'COMPLETED', status: 'SUCCEEDED', runState: 'SUCCEEDED' }]));
+    expect(titles()).toEqual([COORDINATOR.title, TASK.title]);
+    expect(page()?.querySelector('.session-project-page-header')?.textContent).toContain('Project · 2 sessions');
+  });
+
+  it.each(['open', 'completed'] as const)('uses each member’s lifecycle for phone swipe buttons and full swipes from the %s page', async (view) => {
+    mobile = true;
+    rows = [LOOSE, COORDINATOR, { ...TASK, lifecycleState: 'COMPLETED', status: 'SUCCEEDED', runState: 'SUCCEEDED' }];
+    const address = `/sessions/${LOOSE.id}?project=${PROJECT_ID}${view === 'completed' ? '&view=completed' : ''}`;
+    await mount(() => expect(titles()).toEqual([COORDINATOR.title, TASK.title]), address);
+    const leadingLabels = (title: string) => [...memberRow(title)!.querySelectorAll('.session-swipe-actions.leading button')].map((button) => button.getAttribute('aria-label'));
+    expect(leadingLabels(COORDINATOR.title)).toEqual(['Complete', 'Pin']);
+    expect(leadingLabels(TASK.title)).toEqual(['Move to Open', 'Pin']);
+    await swipe(memberRow(TASK.title)!, 300);
+    await until(() => expect(apiModule.restoreSession).toHaveBeenCalledWith(TASK.id));
+    expect(apiModule.completeSession).not.toHaveBeenCalled();
+    await until(() => expect(leadingLabels(TASK.title)).toEqual(['Complete', 'Pin']));
+    await swipe(memberRow(TASK.title)!, 300);
+    await until(() => expect(apiModule.completeSession).toHaveBeenCalledWith(TASK.id));
+    await until(() => expect(leadingLabels(TASK.title)).toEqual(['Move to Open', 'Pin']));
+    expect(titles()).toEqual([COORDINATOR.title, TASK.title]);
+  });
+
+  it('uses the selected member’s fresher lifecycle for both phone buttons and the full swipe action', async () => {
+    mobile = true;
+    rows = [LOOSE, COORDINATOR, { ...TASK, lifecycleState: 'COMPLETED', status: 'SUCCEEDED', runState: 'SUCCEEDED' }];
+    vi.mocked(apiModule.getSession).mockResolvedValue({ ...TASK, lifecycleState: 'OPEN', status: 'AWAITING_INPUT', runState: 'AWAITING_INPUT' } as never);
+    await mount(() => expect(titles()).toEqual([COORDINATOR.title, TASK.title]), `/sessions/${TASK.id}?project=${PROJECT_ID}&view=completed`);
+    await until(() => expect([...memberRow(TASK.title)!.querySelectorAll('.session-swipe-actions.leading button')].map((button) => button.getAttribute('aria-label'))).toEqual(['Complete', 'Pin']));
+    await swipe(memberRow(TASK.title)!, 300);
+    await until(() => expect(apiModule.completeSession).toHaveBeenCalledWith(TASK.id));
+    expect(apiModule.restoreSession).not.toHaveBeenCalled();
+  });
+
+  it('hides the project page search button while keeping the global keyboard palette', async () => {
+    await mount();
+    expect(mounted().querySelector('.session-search')).not.toBeNull();
+    await openSessions();
+    expect(page()?.querySelector('.session-search')).toBeNull();
+    await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true })));
+    await until(() => expect(document.querySelector('.ssearch-input')).not.toBeNull());
+    await until(() => expect(document.querySelectorAll('.ssearch-row')).toHaveLength(3));
   });
 
   it('preserves the page in member links, browser Back and a fresh mount of the address', async () => {
@@ -549,7 +640,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     expect(memberRow(TASK.title)?.classList.contains('active')).toBe(true);
   });
 
-  it('inherits Completed scope, keeps it in member navigation and restores it on refresh', async () => {
+  it('lists all members from Completed, keeps its address in navigation and restores it on refresh', async () => {
     rows = [LOOSE, { ...COORDINATOR, lifecycleState: 'COMPLETED' }, { ...TASK, lifecycleState: 'COMPLETED' }];
     remoteRows = [remote(826, 'Completed remote work', { lifecycleState: 'COMPLETED' }), remote(827, 'Open remote work')];
     await mount(() => expect(titles()).toEqual(['Loose conversation']));
@@ -558,15 +649,15 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     await openSessions();
     expect(location).toBe(`/workspaces/${WORKSPACE_ID}?project=${PROJECT_ID}&view=completed`);
     expect(titles()).toEqual(expect.arrayContaining(['Plan the release', 'Build the package', 'Completed remote work']));
-    expect(titles()).not.toContain('Open remote work');
+    expect(titles()).toContain('Open remote work');
     await click(memberRow(TASK.title), TASK.title);
     await until(() => expect(location).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}&view=completed`));
     const address = location;
     await unmount();
     await mount(() => expect(page()).not.toBeNull(), address);
-    await until(() => expect(titles()).toHaveLength(3));
-    expect(titles()).not.toContain('Open remote work');
-    expect(projectQueryCalls().every((params) => params.get('view') === 'completed')).toBe(true);
+    await until(() => expect(titles()).toHaveLength(4));
+    expect(titles()).toContain('Open remote work');
+    expect(new Set(projectQueryCalls().map((params) => params.get('view')))).toEqual(new Set(['open', 'completed']));
     await click(memberRow(TASK.title)?.querySelector('[aria-label="More actions"]'), 'the completed member menu after refresh');
     await until(() => expect(menuItem('Move to Open')).toBeTruthy());
     expect(menuItem('Complete')).toBeUndefined();
@@ -621,19 +712,22 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     expect(location).toContain(`?project=${PROJECT_ID}`);
   });
 
-  it('removes a completed member from the Open project page immediately', async () => {
+  it('keeps a completed member in the project page and changes its row actions immediately', async () => {
     await mount();
     await openSessions();
     await click(memberRow(TASK.title)?.querySelector('[aria-label="More actions"]'), 'the member menu');
     await until(() => expect(menuItem('Complete')).toBeTruthy());
     await click(menuItem('Complete'), 'Complete');
     await until(() => expect(apiModule.completeSession).toHaveBeenCalledWith(TASK.id));
-    await until(() => expect(titles()).toEqual([COORDINATOR.title]));
+    await until(() => expect(titles()).toEqual([COORDINATOR.title, TASK.title]));
+    await click(memberRow(TASK.title)?.querySelector('[aria-label="More actions"]'), 'the completed member menu');
+    await until(() => expect(menuItem('Move to Open')).toBeTruthy());
+    expect(menuItem('Complete')).toBeUndefined();
     expect(location).toContain(`?project=${PROJECT_ID}`);
-    expect(page()?.querySelector('.session-project-page-header')?.textContent).toContain('Project · 1 sessions');
+    expect(page()?.querySelector('.session-project-page-header')?.textContent).toContain('Project · 2 sessions');
   });
 
-  it('removes a restored member while retaining the Completed page scope', async () => {
+  it('keeps a restored member and changes its actions while retaining the Completed page address', async () => {
     rows = [LOOSE, { ...COORDINATOR, lifecycleState: 'COMPLETED' }, { ...TASK, lifecycleState: 'COMPLETED' }];
     const address = `/sessions/${LOOSE.id}?project=${PROJECT_ID}&view=completed`;
     await mount(() => expect(titles()).toHaveLength(2), address);
@@ -641,24 +735,27 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     await until(() => expect(menuItem('Move to Open')).toBeTruthy());
     await click(menuItem('Move to Open'), 'Move to Open');
     await until(() => expect(apiModule.restoreSession).toHaveBeenCalledWith(TASK.id));
-    await until(() => expect(titles()).toEqual([COORDINATOR.title]));
+    await until(() => expect(titles()).toEqual([COORDINATOR.title, TASK.title]));
+    await click(memberRow(TASK.title)?.querySelector('[aria-label="More actions"]'), 'the restored member menu');
+    await until(() => expect(menuItem('Complete')).toBeTruthy());
+    expect(menuItem('Move to Open')).toBeUndefined();
     expect(location).toBe(address);
-    expect(projectQueryCalls().every((params) => params.get('view') === 'completed')).toBe(true);
+    expect(new Set(projectQueryCalls().map((params) => params.get('view')))).toEqual(new Set(['open', 'completed']));
   });
 
-  it.each(['open', 'completed'] as const)('opens the opposite-view coordinator from the %s page menu without adding it to the member list', async (view) => {
+  it.each(['open', 'completed'] as const)('lists and opens the opposite-view coordinator from the %s page menu', async (view) => {
     const completed = view === 'completed';
     rows = [LOOSE, { ...TASK, lifecycleState: completed ? 'COMPLETED' : 'OPEN' }];
     remoteRows = [{ ...COORDINATOR, lifecycleState: completed ? 'OPEN' : 'COMPLETED', workspaceId: OTHER_WORKSPACE_ID, workspace: { id: OTHER_WORKSPACE_ID, name: 'other workspace' } }];
     const search = `?project=${PROJECT_ID}${completed ? '&view=completed' : ''}`;
-    await mount(() => expect(titles()).toEqual([TASK.title]), `/sessions/${LOOSE.id}${search}`);
-    expect(page()?.querySelector('.session-project-page-header')?.textContent).toContain('Project · 1 sessions');
-    expect(page()?.querySelector('.session-project-coordinator')).toBeNull();
+    await mount(() => expect(titles()).toEqual([COORDINATOR.title, TASK.title]), `/sessions/${LOOSE.id}${search}`);
+    expect(page()?.querySelector('.session-project-page-header')?.textContent).toContain('Project · 2 sessions');
+    expect(page()?.querySelector('.session-project-coordinator .session-title')?.textContent).toBe(COORDINATOR.title);
     await click(page()?.querySelector('.session-project-page-header .session-kebab'), 'the page menu');
     await until(() => expect(menuItem('Open Coordinator')?.classList.contains('ant-dropdown-menu-item-disabled')).toBe(false));
     await click(menuItem('Open Coordinator'), 'Open Coordinator');
     await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}${search}`));
-    expect(titles()).toEqual([TASK.title]);
+    expect(titles()).toEqual([COORDINATOR.title, TASK.title]);
     expect(projectQueryCalls().every((params) => params.get('projectId') === PROJECT_ID)).toBe(true);
   });
 });
@@ -727,7 +824,7 @@ describe('project-specific supplemental reads', { timeout: 60_000 }, () => {
       await new Promise((resolve) => setTimeout(resolve, 700));
     });
     await settle();
-    expect(projectQueryCalls()).toHaveLength(countBefore + 1);
+    expect(projectQueryCalls()).toHaveLength(countBefore + (surface === 'page' ? 2 : 1));
     expect(projectQueryCalls().every((params) => params.get('projectId') === PROJECT_ID)).toBe(true);
   });
 });

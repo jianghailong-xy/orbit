@@ -45,13 +45,15 @@ node scripts/deepseek-harness-p0/reproduce.mjs /tmp/orbit-dsh-p0-evidence
 
 **【源码 S2】** 非空 `DSH_TELEMETRY_DISABLED=1` 禁用遥测 entry，acp bundle 禁用 HMR。**【实测】** 禁遥测仍会生成 `.anonymous-user-id`。**【待验】** 长时间运行、profile 插件变更及升级行为；不能推断所有后台联网或自更新行为已测尽。P2 将运行中进程钉在不可变版本目录，更新只给后续启动使用。
 
+**【实测 + 源码】** `DSH_TELEMETRY_DISABLED=1` 不关闭请求扩展字段。默认 bundle 挂载的 `session-log-deepseek` 和 `plugin-package-inventory-deepseek` 会给每个模型请求加上 `dsh_session_log`（会话规范日志的未确认增量，含消息、工具输入输出和 cwd）与 `dsh_plugin_packages`（启用插件的 name/version），发往配置的 baseURL。两者的官方开关是各自 row 的 `config.enabled`。Orbit overlay 将两者都设为 `false`；关闭后真 dsh 发出的请求不再带这两个字段，会话日志里也不写 `delivery-accepted`。详见[会话环境](deepseek-harness-runtime-environment.md#随模型请求上传的会话日志)和 `docs/evidence/deepseek-harness/session-log-upload/`。
+
 ## 3. 系统提示、AGENTS 与 MCP
 
 **【实测】** `initialize-new-text-thought` 的模型请求保留 Harness identity、工具指导和 cwd 模板，包含 Orbit suffix 与 workspace `AGENTS.md` 指令。workspace AGENTS 进入 `<system-reminder>`；这和 system-role 追加是两个不同渠道。
 
 **【实测 + 源码 S4】** 固定、受控模板可以用 `system-prompt.config.personaSuffix`，必须重述要保留的 cwd suffix 和 personaPrefix。任意用户 `appendSystemPrompt` 推荐单独 additive section：[append-prompt.mjs](../scripts/deepseek-harness-p0/append-prompt.mjs)，通过 patch `insert` 加载绝对 `file:` URL，`inject=['systemPrompt']`，注册 `order:10201`、`interpolate:false`、独立 name。`literal-additive-system-prompt` 验证 `{{this_must_remain_literal}}` 原样进入模型 system，并保留默认 identity/工具指导。不要设置 `complete:true`。
 
-**【源码 S4】** 外部插件最近的 `package.json` 若声明 name，必须同时有非空 version，否则官方 `dsh_plugin_packages` request extension 准备失败。P4 把小插件与带版本的 manifest 一起置于专用会话配置目录，保留代码版本/哈希；不要直接将任意用户文本当作模板。
+**【源码 S4】** 外部插件最近的 `package.json` 若声明 name，必须同时有非空 version，否则官方 `dsh_plugin_packages` request extension 准备失败（Orbit overlay 已关闭该扩展，manifest 仍保留版本）。P4 把小插件与带版本的 manifest 一起置于专用会话配置目录，保留代码版本/哈希；不要直接将任意用户文本当作模板。
 
 **【源码 S4，待验】** user-global AGENTS 根跟随 `DSH_HOME`，workspace AGENTS 按目录发现。skills 的完整发现、子目录覆盖和用户 allowlist 未在 P0 穷尽验证，由 P4 验收；不能因此称全部 Agent 设置已生效。
 

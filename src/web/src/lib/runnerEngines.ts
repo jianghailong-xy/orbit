@@ -17,6 +17,7 @@ export const ENGINE_CLI_NAME: Record<ReportedEngine, string> = {
   kimi: 'Kimi Code',
   opencode: 'OpenCode',
   antigravity: 'Antigravity CLI',
+  dsh: 'DeepSeek Harness',
 };
 
 const MINUTE = 60_000;
