@@ -1,3 +1,4 @@
+import { accountIsPaused } from './accountPause';
 import type { PlanUsageSnapshot } from '@orbit/shared';
 import { encodeId } from './idCodec';
 import { planUsageRows } from './planUsage';
@@ -21,6 +22,7 @@ export interface CodexLogin {
   /** ACTIVE, or SIGNED_OUT once OpenAI refused it — which only the sign-in again of the person who
    *  signed it in undoes (migration 0371; the pool owner's alone before that). */
   state: string;
+  pausedUntil?: string | null;
   email: string | null;
   /** Who signed it in — a person of the pool. They alone may sign it in again; with the pool's admins
    *  they may take it out. The pool's `people` name them. */
@@ -144,7 +146,27 @@ function loginMember(pool: ProviderPool, login: CodexLogin, index: number, now: 
     planUsage: login.usage,
     state,
     resetsAt: state === 'SPENT' ? (loginSpentUntil(login, now) ?? null) : null,
-    next: index === 0 && state === 'AVAILABLE',
+    next: index === 0 && state === 'AVAILABLE' && !accountIsPaused(login.pausedUntil, now),
+    pausedUntil: login.pausedUntil,
     login,
   };
+}
+
+/**
+ * The account a session on a login pool is on, as the session's detail names it (`poolCodexLogin`,
+ * the masked view the session DTO carries): that account as the pool's member of it — whatever its
+ * state, a spent one still renders — read as the claim's pick (`current`). The pool's own `next`
+ * member is no answer here: it marks the account a session STARTING now would get, which with the
+ * pool's oldest account spent can be nobody while the session runs on that very account. Null when
+ * the session names none, or names an account the pool no longer holds (the next claim chooses
+ * again, and naming anyone until then would be a guess).
+ */
+export function poolSessionLoginMember(
+  pool: ProviderPool,
+  login: CodexLogin | null | undefined,
+  now: number = Date.now(),
+): { member: PoolMember; current: boolean } | null {
+  if (!login) return null;
+  const member = withLogin(pool, now).members.find((m) => m.login?.fingerprint === login.fingerprint);
+  return member ? { member, current: true } : null;
 }

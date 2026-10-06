@@ -24,7 +24,6 @@ final class SharedPoolCopyParityTests: XCTestCase {
     private static let sharedPools = "src/web/src/lib/sharedPools.ts"
     private static let providerPools = "src/web/src/lib/providerPools.ts"
     private static let sessionProviderChoices = "src/web/src/lib/sessionProviderChoices.ts"
-    private static let hero = "src/web/src/components/NewSessionProviderHero.tsx"
 
     private enum ParityError: Error, CustomStringConvertible {
         case missing(String)
@@ -227,12 +226,12 @@ final class SharedPoolCopyParityTests: XCTestCase {
         assertSays(lib, "planUsage: keyWindow(key, pool),", in: Self.sharedPools)
         assertSays(lib, "...(pool.logins ?? []).map((login) => loginMember(pool, login)), ...keyMembers(pool)",
                    in: Self.sharedPools)
-        assertSays(lib, "next: login.next,", in: Self.sharedPools)
+        assertSays(lib, "next: login.next && !accountIsPaused(login.pausedUntil),", in: Self.sharedPools)
         // A stopped key's reset is its own mark when OpenAI set one, else the month's end; the pool's is
         // the EARLIEST of those, both as this client reads them (`SharedPoolPage.earliest`).
         assertSays(lib, "resetsAt: state === 'SPENT' ? (key.spentUntil ?? pool.window.end) : null,",
                    in: Self.sharedPools)
-        assertSays(lib, "next: key.next,", in: Self.sharedPools)
+        assertSays(lib, "next: key.next && !accountIsPaused(key.pausedUntil),", in: Self.sharedPools)
         assertSays(lib, "resetsAt: !free && stops.length > 0 ? earliest(stops) : null,", in: Self.sharedPools)
         assertSays(lib, "const earliest = (stops: string[]): string => stops.reduce((a, b) => (Date.parse(a) <= Date.parse(b) ? a : b));",
                    in: Self.sharedPools)
@@ -272,14 +271,9 @@ final class SharedPoolCopyParityTests: XCTestCase {
                    in: Self.sessionProviderChoices)
         assertSays(choicesSource, "poolUnit: 'key' as const", in: Self.sessionProviderChoices)
         assertSays(choicesSource, "poolUnit?: 'key';", in: Self.sessionProviderChoices)
-        assertSays(try web(Self.hero),
-                   "aria-label={`${choice.poolSize} ${choice.poolUnit ?? 'account'}${choice.poolSize === 1 ? '' : 's'}`}",
-                   in: Self.hero)
         XCTAssertEqual(tile.brandKey, "openai")
         XCTAssertEqual(tile.poolUnit, "key")
         XCTAssertEqual(tile.poolSize, 1)
-        XCTAssertEqual(SessionProviderChoices.poolBadgeLabel(size: tile.poolSize ?? 0, unit: tile.poolUnit), "1 key")
-        XCTAssertEqual(SessionProviderChoices.poolBadgeLabel(size: 2, unit: nil), "2 accounts")
 
         // The composer: the key beside the quota is the one the pool picks for the viewer.
         let account = PoolAccount(member: drawn.members[0], current: false)

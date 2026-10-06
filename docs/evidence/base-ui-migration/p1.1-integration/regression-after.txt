@@ -1,0 +1,53 @@
+TAP version 13
+# Subtest: worktree overlay prepares lockfile dependencies without changing the shared installation
+    # Subtest: compatible lock reuses packages but keeps shared, Prisma and Vite artifacts local
+    ok 1 - compatible lock reuses packages but keeps shared, Prisma and Vite artifacts local
+      ---
+      duration_ms: 346.737453
+      type: 'test'
+      ...
+    # Subtest: an old shared root overlay cannot retain stale real workspace packages
+    ok 2 - an old shared root overlay cannot retain stale real workspace packages
+      ---
+      duration_ms: 227.165423
+      type: 'test'
+      ...
+    # Subtest: a stale private package cannot shadow a compatible shared installation
+    ok 3 - a stale private package cannot shadow a compatible shared installation
+      ---
+      duration_ms: 394.984568
+      type: 'test'
+      ...
+    # Subtest: new locked dependency installs privately and a second preparation preserves local artifacts
+    ok 4 - new locked dependency installs privately and a second preparation preserves local artifacts
+      ---
+      duration_ms: 762.528562
+      type: 'test'
+      ...
+    # Subtest: failed real npm ci cannot write through existing root, workspace, scope or bin links
+    ok 5 - failed real npm ci cannot write through existing root, workspace, scope or bin links
+      ---
+      duration_ms: 350.825227
+      type: 'test'
+      ...
+    # Subtest: an extra nested package in the shared installation cannot shadow the locked root version
+    ok 6 - an extra nested package in the shared installation cannot shadow the locked root version
+      ---
+      duration_ms: 826.644073
+      type: 'test'
+      ...
+    1..6
+ok 1 - worktree overlay prepares lockfile dependencies without changing the shared installation
+  ---
+  duration_ms: 3654.541996
+  type: 'test'
+  ...
+1..1
+# tests 7
+# suites 0
+# pass 7
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 3694.570501

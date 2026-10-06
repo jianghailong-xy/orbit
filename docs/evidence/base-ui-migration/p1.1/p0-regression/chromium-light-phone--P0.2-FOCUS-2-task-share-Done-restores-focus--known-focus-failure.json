@@ -1,0 +1,12 @@
+{
+  "key": "P0.2-FOCUS-2",
+  "reason": "Done keeps the task panel open but returns focus to BODY instead of its trigger.",
+  "observed": {
+    "url": "http://127.0.0.1:4173/tasks/2zwQZ2hd93IvLb59t6p5V",
+    "taskPanelCount": 1,
+    "activeElement": {
+      "tag": "BODY",
+      "label": null
+    }
+  }
+}

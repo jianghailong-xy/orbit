@@ -53,6 +53,8 @@ const KEY_VIEW_SELECT = {
   enabled: true,
   shareCap: true,
   spentUntil: true,
+  throttledUntil: true,
+  pausedUntil: true,
   createdAt: true,
 } satisfies Prisma.PoolApiKeySelect;
 
@@ -71,6 +73,8 @@ const LOGIN_VIEW_SELECT = {
   expiresAt: true,
   createdAt: true,
   spentUntil: true,
+  throttledUntil: true,
+  pausedUntil: true,
   usage: true,
 } satisfies Prisma.PoolCodexLoginSelect;
 
@@ -180,6 +184,7 @@ function poolView(
         fingerprint: maskedKey(key.keyHint),
         state: key.state,
         enabled: key.enabled,
+        pausedUntil: key.pausedUntil && key.pausedUntil > now ? key.pausedUntil.toISOString() : null,
         shareCap: key.shareCap,
         // Out of budget until then — OpenAI said so (the page's "Out of budget · resets …"); null when not.
         spentUntil: key.spentUntil && key.spentUntil > now ? key.spentUntil : null,
@@ -511,6 +516,20 @@ export class SharedPoolsService {
     const key = await this.prisma.poolApiKey.findUnique({ where: { id: keyId }, select: { poolId: true } });
     if (!key) return false;
     const { count } = await this.prisma.poolApiKey.updateMany({ where: { id: keyId }, data: { spentUntil: until } });
+    if (count > 0) this.publish(await this.peopleOf(key.poolId), key.poolId);
+    return count > 0;
+  }
+
+  /**
+   * OpenAI rate-limited this key and the wait it named outlasted what the pool gateway may hold a request
+   * open for, so its 429 went back to codex — which does not retry one (migration 0382). Recorded as a
+   * SHORT window, and deliberately not `spentUntil`: an out-of-budget key is a reset away in days, this is
+   * minutes. No claim chooses the key until it passes. True when a key was marked. The gateway's to call.
+   */
+  async markKeyThrottled(keyId: string, until: Date): Promise<boolean> {
+    const key = await this.prisma.poolApiKey.findUnique({ where: { id: keyId }, select: { poolId: true } });
+    if (!key) return false;
+    const { count } = await this.prisma.poolApiKey.updateMany({ where: { id: keyId }, data: { throttledUntil: until } });
     if (count > 0) this.publish(await this.peopleOf(key.poolId), key.poolId);
     return count > 0;
   }

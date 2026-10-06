@@ -1,0 +1,17 @@
+{
+  "added": [
+    "node_modules/@base-ui/react",
+    "node_modules/@base-ui/utils",
+    "node_modules/@floating-ui/core",
+    "node_modules/@floating-ui/dom",
+    "node_modules/@floating-ui/react-dom",
+    "node_modules/@floating-ui/utils",
+    "node_modules/reselect"
+  ],
+  "changed": [
+    "src/web"
+  ],
+  "removed": [],
+  "baseUI": "1.8.0",
+  "antd": "6.6.5"
+}

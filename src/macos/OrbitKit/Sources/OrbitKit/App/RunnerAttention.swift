@@ -205,6 +205,7 @@ public enum RunnerAttention {
         case .claude: return RunnerPageCopy.RUNNER_LOGIN_CLAUDE
         case .codex: return RunnerPageCopy.RUNNER_LOGIN_CODEX
         case .kimi: return RunnerPageCopy.RUNNER_LOGIN_KIMI
+        case .antigravity: return "Antigravity"
         }
     }
 

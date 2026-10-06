@@ -1,0 +1,5 @@
+{
+  "command": "npm test -w @orbit/web -- src/lib/theme.test.tsx src/components/ui/boundary.test.ts",
+  "exitCode": 0,
+  "durationSeconds": 1.0144176483154297
+}

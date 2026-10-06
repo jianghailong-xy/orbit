@@ -326,10 +326,22 @@ async function recordMerge(
 
 const MERGED_INTO_MAIN = { result: 'MERGED', targetBranch: 'main', targetShaAfter: sha('c') };
 
-/** A blocker of a kind this file does not raise through a delivery, written the way 0125 shapes one. */
+/**
+ * A blocker of a kind this file does not raise through a delivery, written the way 0125 shapes one —
+ * or, with a `detail`, one a delivery used to raise and no longer does: since a delivery's landing
+ * questions became the coordinator's exception items (`blocker-disposition.ts` §4), an undeclared
+ * file raises no blocker, and the rows raised before that change are what is left to read and end.
+ */
 async function insertBlocker(
   stack: Stack,
-  row: { projectId: string; kind: string; subjectType: string; subjectId: string; dedupeKey: string },
+  row: {
+    projectId: string;
+    kind: string;
+    subjectType: string;
+    subjectId: string;
+    dedupeKey: string;
+    detail?: Record<string, unknown>;
+  },
 ): Promise<string> {
   const id = randomUUID();
   await stack.sql.query(
@@ -339,11 +351,11 @@ async function insertBlocker(
        "lifecycle_generation", "condition_version", "first_seen_at", "last_seen_at", "updated_at"
      ) VALUES (
        $1::uuid, $2::uuid, $3, 'USER', 'HUMAN', 'CRITICAL', $4,
-       now(), $5, $6, '{}'::jsonb, $7, 1, $8, now(), now(), now()
+       now(), $5, $6, $9::jsonb, $7, 1, $8, now(), now(), now()
      )`,
     [
       id, row.projectId, row.kind, `Look at ${row.kind} and decide.`, row.subjectType,
-      row.subjectId, row.dedupeKey, 'c'.repeat(64),
+      row.subjectId, row.dedupeKey, 'c'.repeat(64), JSON.stringify(row.detail ?? {}),
     ],
   );
   return id;
@@ -456,16 +468,22 @@ test('the owner reads a blocker and ends it with a written reason, and nobody ca
     });
 
     const f = await fixture(stack, 'door');
-    const [criterionKey] = await state(stack, f, ['这条标准的活改了没让它改的东西']);
-    const title = 'door 的交付：只动 projects 目录';
-    const taskId = await fileWork(stack, f, criterionKey!, title, { description: DECLARATION });
+    // An argued exemption: a question about the ruler, and so still the owner's blocker in an
+    // Automatic project (`blocker-disposition.ts` §4). An undeclared file is the coordinator's
+    // review now, and its old rows are what `scopeRow` below stands for.
+    const criterionText = '这条标准的活声称某条判据不适用';
+    const [criterionKey] = await state(stack, f, [criterionText]);
+    const title = 'door 的交付：写了豁免理由';
+    const taskId = await fileWork(stack, f, criterionKey!, title, {
+      completionCriterionOverrideReason: ARGUMENT,
+    });
     await settle(stack, taskId);
-    await attempt(stack, f, taskId, 'door', [IN_SCOPE, STRAY]);
+    await attempt(stack, f, taskId, 'door', [IN_SCOPE]);
     const delivered = await stack.router.routeUnlandedCriteria([f.projectId]);
     assert.equal(
       delivered.find((one) => one.criterionSubjectId === criterionSubjectId(f.projectId, criterionKey!))
         ?.blockerKind,
-      'AWAITING_USER_APPROVAL',
+      'HUMAN_DECISION_REQUIRED',
       'the fixture did not raise the blocker this case is about',
     );
     const [raised] = await stack.db.projectBlocker.findMany({
@@ -473,6 +491,17 @@ test('the owner reads a blocker and ends it with a written reason, and nobody ca
       select: { id: true, requiredAction: true },
     });
     assert.ok(raised, 'the raised blocker is not on the project');
+    // An undeclared-file blocker raised before delivery reviews existed, exactly as raiseBlocker
+    // wrote it — the shape production still holds open rows of. About the same task, whose
+    // argument prose is right there on the row it names: a scope blocker must not serve it.
+    const scopeRow = await insertBlocker(stack, {
+      projectId: f.projectId,
+      kind: 'AWAITING_USER_APPROVAL',
+      subjectType: 'TASK',
+      subjectId: taskId,
+      dedupeKey: `AWAITING_USER_APPROVAL:OUTSIDE_DECLARED_SCOPE:${taskId}`,
+      detail: { reason: 'OUTSIDE_DECLARED_SCOPE', source: 'CRITERION_UNLANDED', taskId, paths: [STRAY] },
+    });
     // A kind outside the three that clear themselves, about something that is not a task, so "any
     // blocker" is not only those three.
     const stalled = await insertBlocker(stack, {
@@ -493,19 +522,28 @@ test('the owner reads a blocker and ends it with a written reason, and nobody ca
         assert.equal(blockers.resolvedCount, 0);
         assert.deepEqual(blockers.resolved, []);
         assert.deepEqual(blockers.open.map((one) => one.id).sort(),
-          [uuidToBase62(raised.id), uuidToBase62(stalled)].sort());
+          [uuidToBase62(raised.id), uuidToBase62(stalled), uuidToBase62(scopeRow)].sort());
         const served = blockers.open.find((one) => one.id === uuidToBase62(raised.id))!;
-        assert.equal(served.kind, 'AWAITING_USER_APPROVAL');
+        assert.equal(served.kind, 'HUMAN_DECISION_REQUIRED');
         assert.equal(served.requiredAction, raised.requiredAction);
         assert.ok(served.requiredAction.trim() !== '', 'the blocker says nothing about what to do');
-        assert.equal(served.detail.reason, 'OUTSIDE_DECLARED_SCOPE');
-        assert.deepEqual(served.detail.paths, [STRAY], 'the read does not name the stray file');
+        assert.equal(served.detail.reason, 'CRITERION_EXEMPTION_ARGUED');
+        assert.deepEqual(served.detail.paths, [], 'an argument about the ruler names files');
         assert.equal(served.subjectTitle, title, 'the read does not say which work it is about');
-        assert.equal(served.agentArgument, null,
-          'a scope blocker exposed unrelated task prose as an agent argument');
-        assert.equal(served.criterionText, '这条标准的活改了没让它改的东西',
+        assert.equal(served.agentArgument, ARGUMENT,
+          'the read dropped the agent explanation for an argued exemption');
+        assert.equal(served.criterionText, criterionText,
           'the read does not show the current criterion wording');
         assert.equal(served.resolvedAt, null);
+        const scope = blockers.open.find((one) => one.id === uuidToBase62(scopeRow))!;
+        assert.equal(scope.kind, 'AWAITING_USER_APPROVAL');
+        assert.equal(scope.detail.reason, 'OUTSIDE_DECLARED_SCOPE');
+        assert.deepEqual(scope.detail.paths, [STRAY], 'the read does not name the stray file');
+        assert.equal(scope.subjectTitle, title, 'the read does not say which work it is about');
+        assert.equal(scope.agentArgument, null,
+          'a scope blocker exposed unrelated task prose as an agent argument');
+        assert.equal(scope.criterionText, criterionText,
+          'the read does not show the current criterion wording');
       });
 
     await t.test('somebody who does not own the project is refused, and the blocker stays open',
@@ -547,7 +585,8 @@ test('the owner reads a blocker and ends it with a written reason, and nobody ca
 
       const read = await call(door.base, f.ownerId, 'GET', `/api/projects/${f.projectId}`);
       const blockers = read.json.blockers as ServedBlockers;
-      assert.deepEqual(blockers.open.map((one) => one.id), [uuidToBase62(stalled)]);
+      assert.deepEqual(blockers.open.map((one) => one.id).sort(),
+        [uuidToBase62(stalled), uuidToBase62(scopeRow)].sort());
       assert.equal(blockers.resolvedCount, 1);
       assert.equal(blockers.resolved[0]?.id, uuidToBase62(raised.id));
       assert.equal(blockers.resolved[0]?.resolvedBy, 'USER');
@@ -641,8 +680,8 @@ test('the owner reads a blocker and ends it with a written reason, and nobody ca
   });
 
 // (b) -----------------------------------------------------------------------------------------
-test('an argued exemption, a moved standard and an undeclared file wait for their work to land, '
-  + 'then resolve themselves with the reason written down',
+test('an argued exemption, a moved standard and an undeclared-file blocker raised before reviews '
+  + 'existed wait for their work to land, then resolve themselves with the reason written down',
   { skip, timeout: 300_000 }, async (t) => {
     const stack = await connect();
     t.after(() => disconnect(stack));
@@ -678,13 +717,20 @@ test('an argued exemption, a moved standard and an undeclared file wait for thei
     }
 
     const delivered = await stack.router.routeUnlandedCriteria([f.projectId]);
-    const kindFor = (key: string) => delivered
-      .find((one) => one.criterionSubjectId === criterionSubjectId(f.projectId, key))?.blockerKind;
+    const spentFor = (key: string) => delivered
+      .find((one) => one.criterionSubjectId === criterionSubjectId(f.projectId, key));
     assert.deepEqual(
-      [kindFor(exemptionKey!), kindFor(standardKey!), kindFor(scopeKey!)],
-      ['HUMAN_DECISION_REQUIRED', 'POLICY_MANUAL_HOLD', 'AWAITING_USER_APPROVAL'],
-      'the fixture did not raise the three blockers this case is about',
+      [spentFor(exemptionKey!)?.blockerKind, spentFor(standardKey!)?.blockerKind,
+        spentFor(scopeKey!)?.blockerKind],
+      ['HUMAN_DECISION_REQUIRED', 'POLICY_MANUAL_HOLD', undefined],
+      'the fixture did not raise the two blockers this case is about, or raised a third',
     );
+    // The undeclared file is no longer the owner's blocker: it is the coordinator's delivery review
+    // (`blocker-disposition.ts` §4), and a merge is not what ends it.
+    assert.equal(spentFor(scopeKey!)?.review?.reason, 'OUTSIDE_DECLARED_SCOPE');
+    const reviewId = spentFor(scopeKey!)!.review!.itemId!;
+    const reviewState = async () =>
+      (await stack.db.projectOpenItem.findUniqueOrThrow({ where: { id: reviewId } })).state;
     const projectRead = await stack.projects.get(f.ownerId, f.projectId);
     const exemptionView = projectRead.blockers.open.find((one) => one.subjectId === exemption);
     assert.equal(exemptionView?.agentArgument, ARGUMENT,
@@ -706,6 +752,16 @@ test('an argued exemption, a moved standard and an undeclared file wait for thei
       subjectType: 'TASK',
       subjectId: exemption,
       dedupeKey: keys.noJudgment,
+    });
+    // The undeclared-file blocker such a delivery raised before it became a review — the shape
+    // production still holds open rows of — still ends when its work lands.
+    await insertBlocker(stack, {
+      projectId: f.projectId,
+      kind: 'AWAITING_USER_APPROVAL',
+      subjectType: 'TASK',
+      subjectId: scope,
+      dedupeKey: keys.scope,
+      detail: { reason: 'OUTSIDE_DECLARED_SCOPE', source: 'CRITERION_UNLANDED', taskId: scope, paths: [STRAY] },
     });
 
     const all = [keys.exemption, keys.standard, keys.scope, keys.noJudgment].sort();
@@ -747,6 +803,8 @@ test('an argued exemption, a moved standard and an undeclared file wait for thei
       await recordMerge(stack, f, sessions.scope, MERGED_INTO_MAIN);
       assert.deepEqual(await open(), [keys.noJudgment],
         'landing resolved a blocker that is not about landing, or left one that is');
+      assert.equal(await reviewState(), 'OPEN',
+        'a merge ended the review of files outside the declaration: it decides nothing about them');
     });
 
     await t.test('each automatic resolution is recorded as AUTO, with why, and by nobody',

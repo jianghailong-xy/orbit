@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,7 +22,10 @@ import (
 )
 
 const (
-	runnerCapabilitiesHeader         = "X-Orbit-Runner-Capabilities"
+	runnerCapabilitiesHeader = "X-Orbit-Runner-Capabilities"
+	// The operating system this binary was built for (runtime.GOOS). The control plane offers a
+	// sign-in only where it works — Antigravity's Google login is Linux-only for now.
+	runnerOSHeader                   = "X-Orbit-Runner-Os"
 	sessionOrchestrationCredentialV1 = "session-orchestration-credential-v1"
 	sessionTerminalHandoffV1         = "session-terminal-handoff-v1"
 	sessionWorktreeOpsV1             = "session-worktree-ops-v1"
@@ -76,6 +80,7 @@ func init() {
 		integrationJobCapabilityV1,
 		promotionAutomaticLandCapabilityV1,
 		codexAccountLoginCapabilityV1,
+		antigravityGoogleLoginCapabilityV1,
 		codexAccountRemoveCapabilityV1,
 		codexAccountMoveCapabilityV1,
 		claudeAccountLoginCapabilityV1,
@@ -269,6 +274,7 @@ func (t *Transport) doVia(ctx context.Context, client *http.Client, method, path
 	}
 	req.Header.Set("content-type", "application/json")
 	req.Header.Set(runnerCapabilitiesHeader, runnerCapabilitiesV1)
+	req.Header.Set(runnerOSHeader, runtime.GOOS)
 	req.Header.Set("X-Orbit-Supported-Providers", runnerSupportedProviders)
 	req.Header.Set(runnerWriteCapabilityRevisionHeader, strconv.Itoa(runnerWriteCapabilityRevision))
 	req.Header.Set(runnerWriteSchemaRevisionHeader, strconv.Itoa(runnerWriteSchemaRevision))
@@ -360,6 +366,18 @@ func (t *Transport) claimSession(ctx context.Context) (*ClaimedSession, error) {
 		return nil, nil
 	}
 	return &r, nil
+}
+
+// waitForWake long-polls GET /runner/wake: true once the control plane has something this runner's
+// heartbeat carries waiting for it (see runWakeLoop), false when the poll times out.
+func (t *Transport) waitForWake(ctx context.Context) (bool, error) {
+	var r struct {
+		Wake bool `json:"wake"`
+	}
+	if err := t.do(ctx, "GET", "/runner/wake", nil, &r, 35*time.Second); err != nil {
+		return false, err
+	}
+	return r.Wake, nil
 }
 
 // reclaim lists every open session assigned to this runner so its lightweight
@@ -746,20 +764,45 @@ func (t *Transport) fetchAttachment(ctx context.Context, sessionID, attID string
 	return data, nil
 }
 
+const maxSessionAttachmentBytes = 25 << 20
+
+var errAttachmentTooLarge = errors.New("File exceeds the 25 MiB limit")
+
 func (t *Transport) uploadSessionAttachment(ctx context.Context, sessionID, path, mimeType string) (string, error) {
-	if ctx == nil {
-		ctx = context.Background()
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", err
+	}
+	if !info.Mode().IsRegular() {
+		return "", errors.New("File is not a regular file")
 	}
 	file, err := os.Open(path)
 	if err != nil {
 		return "", err
 	}
 	defer file.Close()
+	return t.uploadSessionAttachmentFile(ctx, sessionID, file, mimeType, filepath.Base(path))
+}
+
+func (t *Transport) uploadSessionAttachmentFile(ctx context.Context, sessionID string, file *os.File, mimeType, filename string) (string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	info, err := file.Stat()
+	if err != nil {
+		return "", err
+	}
+	if !info.Mode().IsRegular() || info.Size() == 0 {
+		return "", errors.New("File is empty or is not a regular file")
+	}
+	if info.Size() > maxSessionAttachmentBytes {
+		return "", errAttachmentTooLarge
+	}
 
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
 	header := textproto.MIMEHeader{}
-	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="file"; filename="%s"`, escapeMultipartFilename(filepath.Base(path))))
+	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="file"; filename="%s"`, escapeMultipartFilename(filename)))
 	if mimeType != "" {
 		header.Set("Content-Type", mimeType)
 	}
@@ -767,8 +810,16 @@ func (t *Transport) uploadSessionAttachment(ctx context.Context, sessionID, path
 	if err != nil {
 		return "", err
 	}
-	if _, err := io.Copy(part, file); err != nil {
+	// The file may grow after Stat; read at most one byte beyond the upload limit.
+	n, err := io.Copy(part, io.LimitReader(file, maxSessionAttachmentBytes+1))
+	if err != nil {
 		return "", err
+	}
+	if n > maxSessionAttachmentBytes {
+		return "", errAttachmentTooLarge
+	}
+	if n == 0 {
+		return "", errors.New("File is empty")
 	}
 	if err := writer.Close(); err != nil {
 		return "", err
@@ -791,14 +842,14 @@ func (t *Transport) uploadSessionAttachment(ctx context.Context, sessionID, path
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("POST attachment %s -> %d %s", filepath.Base(path), resp.StatusCode, string(data))
+		return "", fmt.Errorf("POST attachment %s -> %d %s", filename, resp.StatusCode, string(data))
 	}
 	var out AttachmentCreateResponse
 	if err := json.Unmarshal(data, &out); err != nil {
 		return "", err
 	}
 	if out.ID == "" {
-		return "", fmt.Errorf("POST attachment %s returned empty id", filepath.Base(path))
+		return "", fmt.Errorf("POST attachment %s returned empty id", filename)
 	}
 	return out.ID, nil
 }
@@ -1407,6 +1458,23 @@ func (t *Transport) requestProjectStart(sessionID, id string, body map[string]in
 	return out, err
 }
 
+// requestProjectDone files a coordinator's request that the account owner record its project done,
+// and returns at once: the owner answers on the "Is this project done?" card.
+//
+// The session header is the authority, as it is for requestProjectStart — the server checks it
+// against the project's own coordinator pointer and refuses DONE_REQUEST_COORDINATOR_ONLY for
+// anything else. A project that is not ready is a 409 DONE_REQUEST_NOT_READY carrying every finding,
+// which travels as the server raised it; `projectDoneRequestRefusal` is what renders it.
+func (t *Transport) requestProjectDone(sessionID, id string, body map[string]interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/projects/"+url.PathEscape(id)+"/done-requests", body,
+		&out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
 // resolveOpenItem closes one of the project's exception items, with the reason the assignee gives
 // (contract §4.7's "标记已处理").
 //
@@ -1429,10 +1497,27 @@ func (t *Transport) resolveOpenItem(sessionID, id, itemID, note string) (json.Ra
 	return out, err
 }
 
+// handOverOpenItem deliberately gives one of the project's coordinator items to the account
+// owner, retaining the explanation on the item.  The session header is the authority: the server
+// checks it against the project's coordinator pointer and performs the assignment CAS.
+func (t *Transport) handOverOpenItem(sessionID, id, itemID, note string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	if err := validatePathSegmentID(itemID); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST",
+		"/runner/projects/"+url.PathEscape(id)+"/open-items/"+url.PathEscape(itemID)+"/hand-over",
+		map[string]interface{}{"note": note}, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
 // retryIntegration asks for the next generation of a DONE task's failed landing, as the acting
 // session (contract §2.3 J-T1b). The session header is the authority the server checks against the
 // project's coordinator pointer; the reason travels as the body and is kept on the new generation and
-// on every item it supersedes. A refusal — in flight, the owner's, not this project's — travels as the
+// on every item it handles. A refusal — in flight, the owner's, not this project's — travels as the
 // server raised it.
 func (t *Transport) retryIntegration(sessionID, id, taskID, reason string) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
@@ -1444,6 +1529,25 @@ func (t *Transport) retryIntegration(sessionID, id, taskID, reason string) (json
 	var out json.RawMessage
 	err := t.doHeaders(nil, "POST",
 		"/runner/projects/"+url.PathEscape(id)+"/tasks/"+url.PathEscape(taskID)+"/integration/retry",
+		map[string]interface{}{"reason": reason}, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
+// retryPromotionCheck asks for a blocked candidate's check to run again, as the acting session
+// (contract §4.7 H1) — retryIntegration's door for an item that names no task. The session header is
+// the authority the server checks against the project's coordinator pointer; the reason travels as
+// the body and is kept on the new check and on every item it handles. A refusal travels as the server
+// raised it.
+func (t *Transport) retryPromotionCheck(sessionID, id, promotionID, reason string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	if err := validatePathSegmentID(promotionID); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST",
+		"/runner/projects/"+url.PathEscape(id)+"/promotions/"+url.PathEscape(promotionID)+"/integration/retry",
 		map[string]interface{}{"reason": reason}, &out, taskOpTimeout, sessionHeader(sessionID))
 	return out, err
 }

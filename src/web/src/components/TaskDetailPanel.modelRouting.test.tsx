@@ -5,6 +5,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { encodeId } from '../lib/idCodec';
+import { meQuery, type UserPreferences } from '../lib/queries';
+import type { ConfiguredProvider } from '../lib/workspaceDefaults';
 
 /**
  * Smart model selection in the task panel (docs/model-routing-design.md §9; the web mock §2–§3).
@@ -17,6 +19,9 @@ import { encodeId } from '../lib/idCodec';
  * Runs: each run's "model · effort", a ✦ tier tag on a run that ran on the pick (↑ when a failure
  * moved it up), a purple line on a run that did not, saying what smart selection would have picked —
  * and either one opens the Why: the decision's own reasons and its policy and time.
+ *
+ * All of it only while the account's switch (`preferences.modelRouting`) is on; off — the default —
+ * the panel reads as it did before smart selection existed.
  */
 
 vi.mock('../api', async (importOriginal) => ({
@@ -109,9 +114,17 @@ async function settle(): Promise<void> {
   }
 }
 
-/** The panel over this read, with the assignee Agent and its runner as the workspace list reports them. */
-async function mount(data: Record<string, unknown>, agent: Record<string, unknown> = {}): Promise<void> {
+/** The panel over this read, with the assignee Agent and its runner as the workspace list reports them,
+ *  for an account with smart selection on unless `preferences` says otherwise. */
+async function mount(
+  data: Record<string, unknown>,
+  agent: Record<string, unknown> = {},
+  machine: Record<string, unknown> = {},
+  providers: ConfiguredProvider[] = [],
+  preferences: UserPreferences = { modelRouting: true },
+): Promise<void> {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
+  client.setQueryData(meQuery().queryKey, { id: 'u1', email: 'a@b.c', name: 'A', createdAt: '2026-01-01T00:00:00Z', preferences });
   client.setQueryData(['task', TASK], data);
   client.setQueryData(['workspaces'], [{ id: AGENT, name: 'orbit', runnerId: RUNNER, provider: 'claude', ...agent }]);
   client.setQueryData(['runners'], [
@@ -125,9 +138,10 @@ async function mount(data: Record<string, unknown>, agent: Record<string, unknow
           { value: 'claude-sonnet-5-5', label: 'Sonnet 5.5' },
         ],
       },
+      ...machine,
     },
   ]);
-  client.setQueryData(['providers'], []);
+  client.setQueryData(['providers'], providers);
   container = document.createElement('div');
   document.body.appendChild(container);
   const next = createRoot(container);
@@ -310,6 +324,38 @@ describe('the Suggested tier in Details', { timeout: 60_000 }, () => {
   });
 });
 
+describe('Gemini task provider pins', () => {
+  const gemini: ConfiguredProvider = { slug: 'gemini', label: 'Gemini', runtime: 'antigravity', presetSlug: 'gemini', models: [] };
+
+  it.each([false, true])('uses the workspace server key boolean %s and links unsupported Gemini to Providers', async (keyAvailable) => {
+    await mount(detail(), { antigravityKeyAvailableByRunner: { [RUNNER]: keyAvailable } }, {
+      antigravity: { supported: false, installed: true, version: '1.2.16', envKeyAvailable: true },
+    }, [gemini]);
+    await act(async () => {
+      field('Provider').querySelector('.ant-select-content')!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    });
+    await vi.waitFor(() => expect(document.body.querySelectorAll('.ant-select-item-option').length).toBe(keyAvailable ? 6 : 5));
+    const options = [...document.body.querySelectorAll<HTMLElement>('.ant-select-item-option')];
+    const builtin = options.find((option) => option.textContent?.includes('env key'));
+    expect(!!builtin).toBe(keyAvailable);
+    if (builtin) expect(builtin.textContent).toContain('env key');
+    expect(options.some((option) => option.textContent === 'OpenCode')).toBe(true);
+    const provider = options.find((option) => option.textContent?.includes('API key'))!;
+    expect(provider.textContent).toContain('Antigravity');
+    expect(provider.textContent).toContain('Update runner');
+    await click(provider, 'Gemini needing a runner update');
+    expect(where).toBe('/providers');
+    expect(patches()).toEqual([]);
+  });
+
+  it('keeps a pinned Antigravity provider visible with its environment key label', async () => {
+    await mount(detail({ provider: 'antigravity' }), { antigravityKeyAvailableByRunner: { [RUNNER]: false } }, {
+      antigravity: { supported: true, installed: true, version: '1.2.16', envKeyAvailable: false },
+    }, [gemini]);
+    expect(field('Provider').textContent).toContain('Antigravityenv key');
+  });
+});
+
 describe('what each run was routed to, and why', { timeout: 60_000 }, () => {
   const escalated = route({
     level: 'L',
@@ -436,4 +482,53 @@ describe('what each run was routed to, and why', { timeout: 60_000 }, () => {
     expect(panel().querySelector('.tdp-route-tag')).toBeNull();
     expect(panel().querySelector('.tdp-route-would')).toBeNull();
   });
+});
+
+describe('with the account switch off', { timeout: 60_000 }, () => {
+  const cases: Array<[string, UserPreferences]> = [
+    ['preferences without modelRouting', {}],
+    ['modelRouting: false', { modelRouting: false }],
+  ];
+  for (const [what, preferences] of cases) {
+    it(`(${what}) nothing of smart selection shows`, async () => {
+      const shadow = route({ level: 'S', model: 'claude-sonnet-5-5', effort: 'low', applied: false });
+      // Everything that draws smart selection while it is on: a tier and its reason, an assignee with
+      // the Agent switch on, a run on the pick, a run beside it, and a run not claimed yet.
+      await mount(
+        detail({
+          sessions: [
+            run(RUN_3, { status: 'PENDING', route: route({ level: 'L', model: 'claude-opus-5-5', effort: 'high' }) }),
+            run(RUN_2, { status: 'RUNNING', model: 'claude-sonnet-5-5', effort: 'medium', route: route() }),
+            run(RUN_1, { status: 'SUCCEEDED', model: 'claude-opus-5-5', effort: null, route: shadow }),
+          ],
+        }),
+        { modelRouting: true },
+        {},
+        [],
+        preferences,
+      );
+
+      // Details: no Suggested, and Model's placeholder is the one it always had.
+      expect(labels().slice(0, 3)).toEqual(['Assignee', 'Provider', 'Model']);
+      expect(labels()).not.toContain('Suggested');
+      expect(panel().querySelector('.tdp-hint-value')).toBeNull();
+      expect(panel().textContent).not.toContain(`Coordinator: ${REASON}`);
+      expect(field('Model').querySelector('.ant-select-placeholder')?.textContent).toBe('Provider default');
+
+      // Runs: what each run used, and nothing about what smart selection picked or would have.
+      expect(row(RUN_3).querySelector('.tdp-session-sub')?.textContent).toBe(short('2026-10-03T01:12:00.000Z'));
+      expect(row(RUN_2).querySelector('.tdp-session-sub')?.textContent).toBe(
+        `${short('2026-10-03T01:12:00.000Z')} · Sonnet 5.5 · medium`,
+      );
+      expect(row(RUN_1).querySelector('.tdp-session-sub')?.textContent).toBe(
+        `${short('2026-10-03T01:12:00.000Z')} · Opus 5.5 · default effort`,
+      );
+      expect(panel().querySelector('.tdp-route-tag')).toBeNull();
+      expect(panel().querySelector('.tdp-route-would')).toBeNull();
+      expect(panel().querySelector('.tdp-route-why')).toBeNull();
+      expect(panel().textContent).not.toContain('✦');
+      expect(panel().textContent).not.toContain('Smart selection');
+      expect(panel().textContent).not.toContain('would have picked');
+    });
+  }
 });

@@ -1,0 +1,361 @@
+.orbit-choice,
+.orbit-radio-group,
+.orbit-switch {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  color: var(--text-1);
+  font-family: var(--orbit-font-family);
+  font-size: var(--orbit-font-size);
+  font-weight: 400;
+  line-height: var(--orbit-line-height);
+}
+
+.orbit-choice {
+  display: inline-flex;
+  align-items: baseline;
+  cursor: pointer;
+}
+
+.orbit-choice::after {
+  display: inline-block;
+  width: 0;
+  overflow: hidden;
+  content: '\00a0';
+}
+
+.orbit-choice-label {
+  padding-inline: 8px;
+}
+
+.orbit-checkbox,
+.orbit-radio {
+  position: relative;
+  box-sizing: border-box;
+  display: block;
+  flex: none;
+  align-self: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  color: var(--text-1);
+  line-height: 1;
+  cursor: inherit;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.orbit-checkbox {
+  border-radius: var(--orbit-radius-sm);
+}
+
+.orbit-radio {
+  border-radius: 50%;
+}
+
+.orbit-checkbox[data-checked],
+.orbit-radio[data-checked] {
+  border-color: var(--orbit-control-primary);
+  background: var(--orbit-control-primary);
+}
+
+.orbit-checkbox::after {
+  position: absolute;
+  box-sizing: border-box;
+  top: 7px;
+  inset-inline-start: 3px;
+  display: table;
+  width: calc(16px / 14 * 5);
+  height: calc(16px / 14 * 8);
+  border: 2px solid var(--orbit-control-on-primary);
+  border-top: 0;
+  border-inline-start: 0;
+  opacity: 0;
+  transform: rotate(45deg) translate(-50%, -50%);
+  content: '';
+}
+
+.orbit-radio::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--orbit-control-on-primary);
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  content: '';
+}
+
+.orbit-checkbox[data-checked]::after,
+.orbit-radio[data-checked]::after {
+  opacity: 1;
+}
+
+.orbit-checkbox[data-indeterminate] {
+  border-color: var(--border);
+  background: var(--bg-raised);
+}
+
+.orbit-checkbox[data-indeterminate]::after {
+  top: 50%;
+  inset-inline-start: 50%;
+  width: 8px;
+  height: 8px;
+  border: 0;
+  background: var(--orbit-control-primary);
+  opacity: 1;
+  transform: translate(-50%, -50%);
+}
+
+.orbit-checkbox:focus-visible,
+.orbit-radio:focus-visible,
+.orbit-switch:focus-visible {
+  outline: var(--orbit-focus-width) solid var(--orbit-focus-color);
+  outline-offset: var(--orbit-focus-offset);
+}
+
+.orbit-choice:has([data-disabled]) {
+  cursor: not-allowed;
+}
+
+.orbit-choice:has([data-disabled]) .orbit-choice-label,
+.orbit-radio-button:has([data-disabled]) {
+  color: var(--orbit-control-disabled-text);
+}
+
+.orbit-checkbox[data-disabled],
+.orbit-radio[data-disabled] {
+  border-color: var(--border);
+  background: var(--orbit-control-disabled-bg);
+}
+
+.orbit-checkbox[data-disabled]::after {
+  border-color: var(--orbit-control-disabled-text);
+}
+
+.orbit-checkbox[data-disabled][data-indeterminate]::after,
+.orbit-radio[data-disabled]::after {
+  background: var(--orbit-control-disabled-text);
+}
+
+.orbit-radio-group {
+  display: inline-block;
+  font-size: 0;
+  line-height: 0;
+}
+
+.orbit-radio-group[data-variant='default'] > .orbit-choice:not(:last-child) {
+  margin-inline-end: 8px;
+}
+
+.orbit-radio-group[data-variant='button'] {
+  --orbit-radio-button-height: var(--orbit-control-height);
+  --orbit-radio-button-padding: var(--orbit-control-padding-inline);
+  --orbit-radio-button-radius: var(--orbit-radius);
+}
+
+.orbit-radio-group[data-variant='button'][data-size='small'] {
+  --orbit-radio-button-height: var(--orbit-control-height-sm);
+  --orbit-radio-button-padding: var(--orbit-control-padding-inline-sm);
+  --orbit-radio-button-radius: var(--orbit-radius-sm);
+}
+
+.orbit-radio-group[data-variant='button'] > .orbit-choice {
+  position: relative;
+  display: inline-block;
+  height: var(--orbit-radio-button-height);
+  padding-inline: var(--orbit-radio-button-padding);
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  line-height: calc(var(--orbit-radio-button-height) - 2px);
+}
+
+.orbit-radio-group[data-variant='button'] > .orbit-choice:not(:last-child) {
+  margin-inline-end: -1px;
+}
+
+.orbit-radio-group[data-variant='button'] > .orbit-choice:first-child {
+  border-start-start-radius: var(--orbit-radio-button-radius);
+  border-end-start-radius: var(--orbit-radio-button-radius);
+}
+
+.orbit-radio-group[data-variant='button'] > .orbit-choice:last-child {
+  border-start-end-radius: var(--orbit-radio-button-radius);
+  border-end-end-radius: var(--orbit-radio-button-radius);
+}
+
+.orbit-radio-group[data-variant='button'] .orbit-choice-label {
+  padding: 0;
+}
+
+.orbit-radio-group[data-variant='button'] > .orbit-choice::after {
+  content: none;
+}
+
+.orbit-radio-group[data-variant='button'] .orbit-radio {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  opacity: 0;
+}
+
+.orbit-radio-group[data-variant='button'] > .orbit-choice:has([data-checked]):not(:has([data-disabled])) {
+  z-index: 1;
+  color: var(--orbit-control-primary);
+  border-color: var(--orbit-control-primary);
+}
+
+.orbit-radio-group[data-variant='button'] > .orbit-choice:has(:focus-visible) {
+  outline: var(--orbit-focus-width) solid var(--orbit-focus-color);
+  outline-offset: var(--orbit-focus-offset);
+}
+
+.orbit-radio-group[data-variant='button'] > .orbit-choice:has([data-disabled]) {
+  background: var(--orbit-control-disabled-bg);
+}
+
+.orbit-radio-group[data-variant='button'] > .orbit-choice:has([data-disabled][data-checked]) {
+  background: rgba(0, 0, 0, 0.15);
+}
+
+:root[data-theme='dark'] .orbit-radio-group[data-variant='button'] > .orbit-choice:has([data-disabled][data-checked]) {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.orbit-switch {
+  --orbit-switch-handle-size: 18px;
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 22px;
+  border: 0;
+  border-radius: 100px;
+  background: var(--orbit-control-disabled-text);
+  vertical-align: middle;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.2s;
+}
+
+.orbit-switch[data-size='small'] {
+  --orbit-switch-handle-size: 12px;
+  width: 28px;
+  height: 16px;
+  line-height: 16px;
+}
+
+.orbit-switch-thumb {
+  position: absolute;
+  top: 2px;
+  inset-inline-start: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--orbit-switch-handle-size);
+  height: var(--orbit-switch-handle-size);
+  border-radius: 9px;
+  background: var(--orbit-control-on-primary);
+  box-shadow: 0 2px 4px 0 rgba(0, 35, 11, 0.2);
+  transition: inset-inline-start 0.2s ease-in-out, width 0.2s ease-in-out;
+}
+
+.orbit-switch[data-checked] {
+  background: var(--orbit-control-primary);
+}
+
+.orbit-switch[data-checked] .orbit-switch-thumb {
+  inset-inline-start: calc(100% - var(--orbit-switch-handle-size) - 2px);
+}
+
+.orbit-switch:active:not([data-disabled]) .orbit-switch-thumb {
+  width: calc(var(--orbit-switch-handle-size) * 1.3);
+}
+
+.orbit-switch[data-checked]:active:not([data-disabled]) .orbit-switch-thumb {
+  inset-inline-start: calc(100% - var(--orbit-switch-handle-size) * 1.3 - 2px);
+}
+
+.orbit-switch[data-disabled] {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.orbit-switch-loading {
+  color: rgba(0, 0, 0, 0.65);
+  font-size: 14px;
+}
+
+.orbit-switch[data-size='small'] .orbit-switch-loading {
+  font-size: 10.5px;
+}
+
+.orbit-switch[data-checked] .orbit-switch-loading {
+  color: var(--orbit-control-primary);
+}
+
+.orbit-checkbox[aria-invalid='true']:not([data-disabled]),
+.orbit-radio[aria-invalid='true']:not([data-disabled]),
+.orbit-radio-group[aria-invalid='true'] .orbit-radio:not([data-disabled]),
+.orbit-radio-group[aria-invalid='true'][data-variant='button'] > .orbit-choice:not(:has([data-disabled])) {
+  border-color: var(--error);
+}
+
+.orbit-switch[aria-invalid='true']:not([data-disabled]) {
+  box-shadow: 0 0 0 1px var(--error);
+}
+
+.orbit-choice:hover .orbit-radio:not([data-disabled]) {
+  border-color: var(--orbit-control-primary);
+}
+
+.orbit-choice:hover .orbit-radio[data-checked]:not([data-disabled]) {
+  border-color: transparent;
+  background: var(--orbit-control-primary-hover);
+}
+
+.orbit-radio-group[data-variant='button'] > .orbit-choice:hover:not(:has([data-disabled])) {
+  color: var(--orbit-control-primary);
+}
+
+.orbit-radio-group[data-variant='button'] > .orbit-choice:hover:has([data-checked]):not(:has([data-disabled])) {
+  color: var(--orbit-control-primary-hover);
+  border-color: var(--orbit-control-primary-hover);
+}
+
+.orbit-radio-group[data-variant='button'] > .orbit-choice:active:has([data-checked]):not(:has([data-disabled])) {
+  color: var(--orbit-control-primary-active);
+  border-color: var(--orbit-control-primary-active);
+}
+
+.orbit-switch:hover:not([data-disabled]) {
+  background: var(--text-3);
+}
+
+.orbit-switch[data-checked]:hover:not([data-disabled]) {
+  background: var(--orbit-control-primary-hover);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .orbit-choice:hover .orbit-checkbox:not([data-disabled]) {
+    border-color: var(--orbit-control-primary);
+  }
+
+  .orbit-choice:hover .orbit-checkbox[data-checked]:not([data-disabled]):not([data-indeterminate]) {
+    border-color: transparent;
+    background: var(--orbit-control-primary-hover);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orbit-checkbox,
+  .orbit-radio,
+  .orbit-switch,
+  .orbit-switch-thumb {
+    transition: none;
+  }
+}

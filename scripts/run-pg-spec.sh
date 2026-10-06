@@ -77,6 +77,12 @@ NODE="${NODE:-node}"
 
 die() { echo "run-pg-spec: $*" >&2; exit 2; }
 [ "$#" -ge 1 ] || die "usage: $(basename "$0") <path/to/x.pg.spec.ts> [more...]"
+# Node 26 process isolation can expose only a file wrapper; named acceptance uses in-process TAP.
+case "${RUN_PG_SPEC_TEST_ISOLATION:-}" in
+  '') ;;
+  none|process) PG_MATRIX_NODE_TEST_ARGS+=("--test-isolation=$RUN_PG_SPEC_TEST_ISOLATION") ;;
+  *) die "RUN_PG_SPEC_TEST_ISOLATION must be none or process" ;;
+esac
 
 # Accept a path relative to the caller's directory or to the repo root; the acceptance harness
 # uses the latter.
@@ -117,8 +123,23 @@ rm -rf "$API/build"
 mkdir -p "$API/build/node_modules/@orbit"
 ln -sfn "$REPO/src/shared" "$API/build/node_modules/@orbit/shared"       # run time
 
+# Capture the actual node:test child in a regular file, never in a command-substitution pipe.
+# Acceptance scripts can retain the individual TAP logs to verify mandatory scenario names.
+LOG_DIR="${RUN_PG_SPEC_LOG_DIR:-}"
+REMOVE_LOG_DIR=0
+if [ -n "$LOG_DIR" ]; then
+  mkdir -p "$LOG_DIR" || die "could not create the TAP log directory"
+else
+  LOG_DIR="$(mktemp -d)" || die "could not create the TAP log directory"
+  REMOVE_LOG_DIR=1
+fi
+
 # --- the throwaway server -----------------------------------------------------------------------
-cleanup() { echo "==> removing $CONTAINER"; docker rm -f -v "$CONTAINER" >/dev/null 2>&1 || true; }
+cleanup() {
+  echo "==> removing $CONTAINER"
+  docker rm -f -v "$CONTAINER" >/dev/null 2>&1 || true
+  [ "$REMOVE_LOG_DIR" = 0 ] || rm -rf "$LOG_DIR"
+}
 trap cleanup EXIT INT TERM
 
 echo "==> provisioning $CONTAINER ($IMAGE, PGDATA on tmpfs)"
@@ -181,13 +202,14 @@ for spec in "${SPECS[@]}"; do
     child+=(COORDINATOR_PG_URL="$URL" ORBIT_TEST_PG_URL="$URL" WORK_OVERVIEW_PG_URL="$URL")
 
   echo "########## $base ##########"
-  out="$(cd "$API" && env "${child[@]}" \
-    timeout -k 20 "$SPEC_TIMEOUT" "$NODE" "${PG_MATRIX_NODE_TEST_ARGS[@]}" "$js" 2>&1)"
+  out_file="$LOG_DIR/$n-${base%.ts}.tap"
+  (cd "$API" && env "${child[@]}" \
+    timeout -k 20 "$SPEC_TIMEOUT" "$NODE" "${PG_MATRIX_NODE_TEST_ARGS[@]}" "$js") >"$out_file" 2>&1
   rc=$?
-  printf '%s\n' "$out"
+  cat "$out_file"
   echo "SPEC_EXIT=$rc"
 
-  IFS=$'\t' read -r t p f s unreadable < <(printf '%s\n' "$out" | pg_matrix_summary)
+  IFS=$'\t' read -r t p f s unreadable < <(pg_matrix_summary <"$out_file")
   why=""
   if [ "$rc" = "124" ] || [ "$rc" = "137" ]; then why="TIMEOUT/KILLED rc=$rc (hang or leaked handle)"
   elif [ "$rc" != "0" ];                      then why="node exited rc=$rc"; fi

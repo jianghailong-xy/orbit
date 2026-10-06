@@ -6,13 +6,15 @@ import { App as AntdApp } from 'antd';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { Runner } from '../components/TasksSidePanel';
+import { meQuery, type UserPreferences } from '../lib/queries';
 import { RunnerDetailPage } from './RunnerDetailPage';
 
 /**
  * Smart model selection on the Agent's settings (docs/model-routing-design.md §9; the web mock §1):
  * a switch under Worktree isolation, off until the owner turns it on, saved as the workspace's
  * `modelRouting` through the user API — and the read-only Model line saying, once it is on, that
- * the model it names is only what the sessions opened by hand start on.
+ * the model it names is only what the sessions opened by hand start on. All of it only while the
+ * account's switch (`preferences.modelRouting`) is on; off — the default — the Agent has none of it.
  */
 
 vi.mock('../api', async (original) => ({ ...(await original<typeof import('../api')>()), api: vi.fn() }));
@@ -90,8 +92,10 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-/** The runner's page over one workspace. Every PATCH and POST the page sends is collected. */
-function mount(ws: ReturnType<typeof workspace>) {
+/** The runner's page over one workspace, for an account with smart selection on unless `preferences`
+ *  says otherwise. Every PATCH and POST the page sends is collected. */
+function mount(ws: ReturnType<typeof workspace>, preferences: UserPreferences = { modelRouting: true }) {
+  const me = { id: 'u', email: 'u@example.invalid', name: 'u', createdAt: '', preferences };
   const writes: Array<{ method: string; path: string; body: Record<string, unknown> }> = [];
   apiMock.mockImplementation(async (path: string, options?: { method?: string; body?: unknown }) => {
     const method = options?.method ?? 'GET';
@@ -103,7 +107,7 @@ function mount(ws: ReturnType<typeof workspace>) {
     if (path === '/workspaces') return [ws];
     if (path === '/providers') return [];
     if (path === '/sessions/counts') return [];
-    if (path === '/users/me') return { id: 'u', email: 'u@example.invalid', name: 'u', createdAt: '', preferences: {} };
+    if (path === '/users/me') return me;
     if (path.includes('permission-rules')) return [];
     if (path.includes('imported')) return { count: 0 };
     return {};
@@ -112,6 +116,7 @@ function mount(ws: ReturnType<typeof workspace>) {
   qc.setQueryData(['runners'], [RUNNER]);
   qc.setQueryData(['workspaces'], [ws]);
   qc.setQueryData(['providers'], []);
+  qc.setQueryData(meQuery().queryKey, me);
   host = document.createElement('div');
   document.body.appendChild(host);
   root = createRoot(host);
@@ -291,4 +296,30 @@ describe('the engines smart selection may use', () => {
     expect(writes).toHaveLength(1);
     expect(writes[0].body).toMatchObject({ enableWorktree: false, modelRoutingProviders: ['codex'] });
   });
+});
+
+describe('with the account switch off', () => {
+  const cases: Array<[string, UserPreferences]> = [
+    ['preferences without modelRouting', {}],
+    ['modelRouting: false', { modelRouting: false }],
+  ];
+  for (const [what, preferences] of cases) {
+    it(`(${what}) nothing of smart selection shows, and saving leaves the Agent's own setting as it was`, async () => {
+      // An Agent that had it on, with another engine ticked, before the account turned it off.
+      const { writes } = mount(workspace({ modelRouting: true, modelRoutingProviders: ['codex'] }), preferences);
+      await openEditor();
+
+      expect(settingLabels()).toEqual(['Worktree isolation']);
+      expect(form().querySelector('.rd-route-engines')).toBeNull();
+      expect(form().textContent).not.toContain(SWITCH_LABEL);
+      expect(form().textContent).not.toContain('Engines it may use');
+      // The Model line is today's, though the Agent's own switch is on.
+      expect(modelLine()).toBe(MODEL_LINE_OFF);
+
+      await click(form().querySelector<HTMLElement>('.rd-set-row [role="switch"]')!); // Worktree isolation
+      await click(byText('button', 'Save'));
+      expect(writes).toHaveLength(1);
+      expect(writes[0].body).toMatchObject({ enableWorktree: false, modelRouting: true, modelRoutingProviders: ['codex'] });
+    });
+  }
 });

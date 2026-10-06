@@ -67,6 +67,8 @@ import { ENTER_HINT, useDecisionCardKeys } from './CardHotkey';
 import { PROVENANCE_LABEL, shortSeal } from './CriteriaDecisionCard';
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 import { ago } from '../lib/watches';
+import { ReviewCard } from './ReviewCard';
+import { useIsMobile } from '../lib/useMediaQuery';
 
 /**
  * "Start this project?" — the one card on which the account owner starts a project: the criteria
@@ -448,6 +450,8 @@ export function SessionStartProjectCard({
   onChatAbout?: (plan: SettlementPlanChat) => void;
   onViewTasks?: () => void;
 }): JSX.Element | null {
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const narrow = useIsMobile();
   const qc = useQueryClient();
   const project = projectId ?? '';
   const enabled = Boolean(projectId);
@@ -532,6 +536,7 @@ export function SessionStartProjectCard({
   };
   const talkAbout = (): void => {
     if (!request || criteria === null) return;
+    setReviewOpen(false);
     onChatAbout?.({
       projectId: project,
       criteriaDigest: request.criteriaDigest,
@@ -542,7 +547,7 @@ export function SessionStartProjectCard({
   };
   const anchor = useRef<HTMLDivElement>(null);
   const keys = useDecisionCardKeys({
-    confirmEnabled: onScreen && !start.isPending && stale === null && draft !== null && startDraftComplete(draft),
+    confirmEnabled: (!narrow || reviewOpen) && onScreen && !start.isPending && stale === null && draft !== null && startDraftComplete(draft),
     onConfirm: press,
     anchor,
   });
@@ -550,6 +555,9 @@ export function SessionStartProjectCard({
   if (!onScreen || !shown || !request || !draft) return null;
   const branchRef = request.settings.projectBranchName ?? `refs/heads/project/${project}`;
   return (
+    <ReviewCard id="settlement-preview" title={START_PROJECT_TITLE} summary={title}
+      meta={stale ?? `${criteria?.length ?? 0} criteria · ${document?._count?.tasks ?? 0} tasks`}
+      open={reviewOpen} onOpenChange={setReviewOpen}>
     <StartProjectCard
       ref={anchor}
       key={shown.itemId}
@@ -569,8 +577,9 @@ export function SessionStartProjectCard({
       onDraft={(next) => setEdited({ itemId: shown.itemId, draft: next })}
       onStart={press}
       onChatAbout={talkAbout}
-      onViewTasks={onViewTasks}
+      onViewTasks={onViewTasks ? () => { setReviewOpen(false); onViewTasks(); } : undefined}
     />
+    </ReviewCard>
   );
 }
 

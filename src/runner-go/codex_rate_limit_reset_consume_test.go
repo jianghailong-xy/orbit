@@ -122,9 +122,9 @@ func (s *codexResetProviderState) consume(key string) string {
 }
 
 func (s *codexResetProviderState) rateLimits() map[string]interface{} {
-	used := 20.0
+	used := 0.0
 	if s.Resettable {
-		used = 100
+		used = 99
 	}
 	answer := map[string]interface{}{
 		"rateLimits": map[string]interface{}{
@@ -302,6 +302,7 @@ type codexResetModel struct {
 	op    codexResetModelOperation
 	stops []*codexResetStop
 	lose  map[string]int
+	usage *PlanUsage
 }
 
 // codexResetModelOperation is the operation row: its checkpoints and its claim.
@@ -369,6 +370,12 @@ func (m *codexResetModel) operation() codexResetModelOperation {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.op
+}
+
+func (m *codexResetModel) planUsage() *PlanUsage {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.usage
 }
 
 func (m *codexResetModel) edit(change func(*codexResetModelOperation)) {
@@ -889,13 +896,17 @@ func (h *codexResetHarness) process(tune ...func(*codexResetConsumer)) *codexRes
 	probe := newCodexPlanUsageProbe(transport.leaseOwner)
 	consumer := newCodexResetConsumer(probe)
 	consumer.now, consumer.wait = h.clock.now, h.clock.wait
-	for _, change := range tune {
-		change(consumer)
-	}
 	var ops sync.WaitGroup
 	relay := newCodexResetRelay(ctx, transport, consumer.execute, &ops)
 	relay.now, relay.wait = h.clock.now, h.clock.wait
 	p := &codexResetTestProcess{h: h, relay: relay, probe: probe, ops: &ops, cancel: cancel}
+	consumer.wakeHeartbeat = func() {
+		h.clock.advance(time.Nanosecond)
+		p.heartbeat()
+	}
+	for _, change := range tune {
+		change(consumer)
+	}
 	// A step that waits for its claim to be delivered again gets the heartbeat a live process would send; a
 	// test about what happens without one sets awaiting to its own function.
 	relay.awaiting = func(codexResetClaim) { p.heartbeat() }
@@ -906,6 +917,9 @@ func (h *codexResetHarness) process(tune ...func(*codexResetConsumer)) *codexRes
 // heartbeat is one heartbeat of this process: the command the control plane hands it, if any, passed to
 // its relay as runloop.go passes it.
 func (p *codexResetTestProcess) heartbeat() *CodexRateLimitResetCommand {
+	p.h.cp.mu.Lock()
+	p.h.cp.usage = p.probe.snapshot()
+	p.h.cp.mu.Unlock()
 	cmd := p.h.cp.dispatch(p.relay.leaseOwner)
 	p.relay.handle(cmd, p.h.clock.now(), false)
 	return cmd
@@ -952,7 +966,7 @@ func TestCodexResetConsumeCallsTheProviderInOrderUnderThePersistedKey(t *testing
 		"deliver CONSUME/1",
 		codexResetReadRequests, "app "+codexRateLimitResetConsumeMethod,
 		"CONSUME_OUTCOME/reset -> APPLIED REFRESHING REFRESH",
-		codexResetReadRequests,
+		codexResetReadRequests, "deliver REFRESH/1",
 		"REFRESHED -> APPLIED SUCCEEDED STOP",
 	))
 	if calls := h.requireOnlyThePersistedKey(events); calls != 1 {
@@ -1009,6 +1023,101 @@ func TestCodexResetConsumeCallsTheProviderInOrderUnderThePersistedKey(t *testing
 	}
 }
 
+// A REFRESHED result becomes visible only after a heartbeat has published the same read's windows.
+func TestCodexResetRefreshPublishesUsageBeforeSuccess(t *testing.T) {
+	h := newCodexResetHarness(t, codexResetSignedIn(2, true))
+	prompted := make(chan struct{})
+	p := h.process(func(c *codexResetConsumer) {
+		c.wakeHeartbeat = func() { close(prompted) }
+	})
+	p.relay.awaiting = nil
+	usage, err := p.probe.fetch(context.Background(), p.probe.client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.probe.store(usage)
+	before := h.clock.now()
+	cmd := p.heartbeat()
+	select {
+	case <-prompted:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the refreshed usage did not prompt a heartbeat")
+	}
+	if got := h.cp.planUsage(); got == nil || got.Primary == nil || got.Primary.Utilization != 99 {
+		t.Fatalf("the control plane holds %+v before the heartbeat, want the original 99%%", got)
+	}
+	if got := p.probe.snapshot(); got == nil || got.Primary == nil || got.Primary.Utilization != 0 {
+		t.Fatalf("the runner cached %+v after the reset, want 0%%", got)
+	}
+	// A delayed answer to the pre-reset heartbeat cannot acknowledge the new usage.
+	p.relay.handle(cmd, before, false)
+	if op := h.cp.operation(); op.status() != "REFRESHING" {
+		t.Fatalf("the operation ended before a fresh heartbeat: %+v", op)
+	}
+	for _, result := range h.results(h.events()) {
+		if result.Kind == "REFRESHED" {
+			t.Fatal("success was reported without a heartbeat carrying the refreshed usage")
+		}
+	}
+	// Hold success at its route to inspect the usage the UI can read before success lands.
+	held := h.cp.stopAt("REFRESHED", false)
+	h.clock.advance(time.Nanosecond)
+	p.heartbeat()
+	held.await(t)
+	if got := h.cp.planUsage(); got == nil || got.Primary == nil || got.Primary.Utilization != 0 ||
+		got.RateLimitReset == nil || got.RateLimitReset.RateLimitResetCredits.AvailableCount != 1 {
+		t.Fatalf("the heartbeat published %+v before success, want 0%% and 1 credit", got)
+	}
+	close(held.release)
+	p.finish()
+	if op := h.cp.operation(); op.status() != "SUCCEEDED" {
+		t.Fatalf("the operation ended %+v, want SUCCEEDED", op)
+	}
+	if calls := h.requireOnlyThePersistedKey(h.events()); calls != 1 {
+		t.Fatalf("%d consume calls, want exactly one", calls)
+	}
+}
+
+func TestCodexResetRefreshWithoutUsageHeartbeatStopsWithoutSuccess(t *testing.T) {
+	for _, cancel := range []bool{false, true} {
+		t.Run(fmt.Sprintf("cancel=%v", cancel), func(t *testing.T) {
+			h := newCodexResetHarness(t, codexResetSignedIn(2, true))
+			prompted := make(chan struct{})
+			p := h.process(func(c *codexResetConsumer) {
+				c.wakeHeartbeat = func() {
+					// Keep the provider's reads on their ordinary budget, then bound the
+					// missing heartbeat wait to a millisecond for this test.
+					if !cancel {
+						c.attemptTimeout = time.Millisecond
+					}
+					close(prompted)
+				}
+			})
+			p.relay.awaiting = nil
+			p.heartbeat()
+			select {
+			case <-prompted:
+			case <-time.After(10 * time.Second):
+				t.Fatal("the refreshed usage did not prompt a heartbeat")
+			}
+			if cancel {
+				p.cancel()
+			}
+			p.finish()
+			results := h.results(h.events())
+			if len(results) != 1 || results[0].Kind != "CONSUME_OUTCOME" {
+				t.Fatalf("the step reported %+v without a usage heartbeat, want only the confirmed consume", results)
+			}
+			if op := h.cp.operation(); op.status() != "REFRESHING" {
+				t.Fatalf("the operation ended %+v, want its successor to refresh", op)
+			}
+			if calls := h.requireOnlyThePersistedKey(h.events()); calls != 1 {
+				t.Fatalf("%d consume calls, want exactly one", calls)
+			}
+		})
+	}
+}
+
 // §1.2 and §7.3: each provider outcome becomes the status the contract derives from it. reset and
 // alreadyRedeemed are CONFIRMED and followed by an authoritative read that carries the provider's count;
 // nothingToReset and noCredit are CONFIRMED with no refresh at all. No outcome is asked for twice.
@@ -1050,7 +1159,7 @@ func TestCodexResetConsumeMapsEachOutcomeToItsOperationStatus(t *testing.T) {
 			refreshes := codexRateLimitResetOutcomeEffects[tc.outcome].RefreshRequired
 			if refreshes {
 				want = codexResetSteps(want, "CONSUME_OUTCOME/"+tc.outcome+" -> APPLIED REFRESHING REFRESH",
-					codexResetReadRequests, "REFRESHED -> APPLIED SUCCEEDED STOP")
+					codexResetReadRequests, "deliver REFRESH/1", "REFRESHED -> APPLIED SUCCEEDED STOP")
 			} else {
 				want = codexResetSteps(want, "CONSUME_OUTCOME/"+tc.outcome+" -> APPLIED "+tc.status+" STOP")
 			}
@@ -1186,7 +1295,7 @@ func TestCodexResetConsumeCallsNothingForAnAccountItCannotVouchFor(t *testing.T)
 			"deliver CONSUME/1",
 			codexResetReadRequests, "CONSUME_RETRYING/ACCOUNT_UNIDENTIFIED -> APPLIED CONSUMING RETRY_CONSUME (held)",
 			codexResetReadRequests, "app "+codexRateLimitResetConsumeMethod, "CONSUME_OUTCOME/reset -> APPLIED REFRESHING REFRESH",
-			codexResetReadRequests, "REFRESHED -> APPLIED SUCCEEDED STOP",
+			codexResetReadRequests, "deliver REFRESH/1", "REFRESHED -> APPLIED SUCCEEDED STOP",
 		))
 		if calls := h.requireOnlyThePersistedKey(events); calls != 1 {
 			t.Fatalf("%d consume calls, want 1", calls)
@@ -1248,7 +1357,7 @@ func TestCodexResetConsumeRetriesWithoutAnOutcomeUnderTheSameKey(t *testing.T) {
 		codexResetReadRequests, "app "+consume, retry("APP_SERVER_UNAVAILABLE"),
 		codexResetReadRequests, "deliver CONSUME/1",
 		codexResetReadRequests, "app "+consume, "CONSUME_OUTCOME/alreadyRedeemed -> APPLIED REFRESHING REFRESH",
-		codexResetReadRequests, "REFRESHED -> APPLIED SUCCEEDED STOP",
+		codexResetReadRequests, "deliver REFRESH/1", "REFRESHED -> APPLIED SUCCEEDED STOP",
 	))
 	if calls := h.requireOnlyThePersistedKey(events); calls != 5 {
 		t.Fatalf("%d consume calls, want 5", calls)
@@ -1286,7 +1395,7 @@ func TestCodexResetRefreshFollowsOnlyAConfirmedConsume(t *testing.T) {
 			"CONSUME_OUTCOME/reset -> APPLIED REFRESHING REFRESH (receipt lost)",
 			"CONSUME_OUTCOME/reset -> DUPLICATE REFRESHING REFRESH (receipt lost)",
 			"CONSUME_OUTCOME/reset -> DUPLICATE REFRESHING REFRESH",
-			codexResetReadRequests, "REFRESHED -> APPLIED SUCCEEDED STOP",
+			codexResetReadRequests, "deliver REFRESH/1", "REFRESHED -> APPLIED SUCCEEDED STOP",
 		))
 		if calls := h.requireOnlyThePersistedKey(events); calls != 1 {
 			t.Fatalf("%d consume calls, want 1", calls)
@@ -1326,7 +1435,7 @@ func TestCodexResetRefreshFollowsOnlyAConfirmedConsume(t *testing.T) {
 			"deliver CONSUME/2",
 			"CONSUME_OUTCOME/reset -> refused STALE_CLAIM",
 			codexResetReadRequests, consume, "CONSUME_OUTCOME/alreadyRedeemed -> APPLIED REFRESHING REFRESH",
-			codexResetReadRequests, "REFRESHED -> APPLIED SUCCEEDED STOP",
+			codexResetReadRequests, "deliver REFRESH/2", "REFRESHED -> APPLIED SUCCEEDED STOP",
 		))
 		if calls := h.requireOnlyThePersistedKey(events); calls != 2 {
 			t.Fatalf("%d consume calls, want the slow claim's and its successor's", calls)
@@ -1353,7 +1462,7 @@ func TestCodexResetRefreshFollowsOnlyAConfirmedConsume(t *testing.T) {
 			"CONSUME_OUTCOME/reset -> APPLIED REFRESHING REFRESH",
 			"app initialize", "REFRESH_FAILED/APP_SERVER_UNAVAILABLE -> APPLIED REFRESHING RETRY_REFRESH",
 			codexResetReadRequests, "REFRESH_FAILED/READ_FAILED -> APPLIED REFRESHING RETRY_REFRESH",
-			codexResetReadRequests, "REFRESHED -> APPLIED SUCCEEDED STOP",
+			codexResetReadRequests, "deliver REFRESH/1", "REFRESHED -> APPLIED SUCCEEDED STOP",
 		))
 		if calls := h.requireOnlyThePersistedKey(events); calls != 1 {
 			t.Fatalf("%d consume calls, want 1", calls)
@@ -1407,7 +1516,7 @@ func TestCodexResetRefreshFollowsOnlyAConfirmedConsume(t *testing.T) {
 		}
 		events := h.events()
 		codexResetRequireSequence(t, events, codexResetSteps(
-			"deliver REFRESH/1", codexResetReadRequests, "REFRESHED -> APPLIED SUCCEEDED STOP",
+			"deliver REFRESH/1", codexResetReadRequests, "deliver REFRESH/1", "REFRESHED -> APPLIED SUCCEEDED STOP",
 		))
 		if calls := h.requireOnlyThePersistedKey(events); calls != 0 {
 			t.Fatalf("%d consume calls, want none", calls)
@@ -1431,9 +1540,9 @@ func TestCodexResetConsumeRecoversFromACrashAtEveryCheckpoint(t *testing.T) {
 	}
 	successorConsumes := func(outcome string) []string {
 		return codexResetSteps("deliver CONSUME/2", codexResetReadRequests, "app "+consume,
-			"CONSUME_OUTCOME/"+outcome+" -> APPLIED REFRESHING REFRESH", codexResetReadRequests, "REFRESHED -> APPLIED SUCCEEDED STOP")
+			"CONSUME_OUTCOME/"+outcome+" -> APPLIED REFRESHING REFRESH", codexResetReadRequests, "deliver REFRESH/2", "REFRESHED -> APPLIED SUCCEEDED STOP")
 	}
-	successorRefreshes := codexResetSteps("deliver REFRESH/2", codexResetReadRequests, "REFRESHED -> APPLIED SUCCEEDED STOP")
+	successorRefreshes := codexResetSteps("deliver REFRESH/2", codexResetReadRequests, "deliver REFRESH/2", "REFRESHED -> APPLIED SUCCEEDED STOP")
 
 	for _, tc := range []struct {
 		name string
@@ -1573,7 +1682,13 @@ func TestCodexResetCapabilityIsDeclaredWithTheConsumeThatServesIt(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if wiring := "newCodexResetRelay(resetCtx, t, newCodexResetConsumer(codexUsageProbe).execute, &heartbeatOps)"; !strings.Contains(string(runloop), wiring) {
-		t.Fatalf("runloop.go no longer builds its reset relay as %s", wiring)
+	for _, wiring := range []string{
+		"resetConsumer := newCodexResetConsumer(codexUsageProbe)",
+		"resetConsumer.wakeHeartbeat = beatNow",
+		"newCodexResetRelay(resetCtx, t, resetConsumer.execute, &heartbeatOps)",
+	} {
+		if !strings.Contains(string(runloop), wiring) {
+			t.Fatalf("runloop.go no longer wires its reset heartbeat as %s", wiring)
+		}
 	}
 }

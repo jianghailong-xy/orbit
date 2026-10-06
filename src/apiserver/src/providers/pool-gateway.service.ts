@@ -6,6 +6,7 @@ import { AgentProvider } from '@orbit/shared';
 import { sha256 } from '../common/crypto.util';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { PrismaService } from '../prisma/prisma.service';
+import { poolPauseBlocksRequest } from './pool-pause';
 import { responseCostMicros } from './openai-prices';
 import { keyRoom, poolKeysResumeAt } from './pool-key-select';
 import { PoolUsageLedger } from './pool-usage-ledger';
@@ -44,14 +45,38 @@ export function gatewayAllows(method: string, path: string): boolean {
 const MAX_BODY_BYTES = 30 * 1024 * 1024;
 
 /**
- * A 429 that is a rate limit, not a spent budget, is waited out and sent again on the SAME key — never
- * moved to another one (design §2.3): at most RATE_LIMIT_ATTEMPTS sends, no single wait over
- * RATE_LIMIT_MAX_WAIT_MS and none that would take the waiting past RATE_LIMIT_BUDGET_MS, so the answer
- * leaves well inside the edge's 100-second limit. Codex 0.158 does not retry a 429 itself.
+ * A 429 that is a rate limit, not a spent budget, is waited out and sent again on the SAME credential:
+ * at most RATE_LIMIT_ATTEMPTS sends, no single wait over RATE_LIMIT_MAX_WAIT_MS and none that would take
+ * the waiting past RATE_LIMIT_BUDGET_MS, so the answer leaves well inside the edge's 100-second limit.
+ * Codex does not retry a 429 itself (measured on 0.160: one request, then the turn fails), so a limit
+ * that outlasts this wait does reach it — which is why the credential is marked `throttled_until` before
+ * that answer goes back (throttledUntil below): no claim picks it until the mark passes, and the retry
+ * the failed turn arms waits for that instead of a fixed ladder.
  */
 const RATE_LIMIT_ATTEMPTS = 4;
 const RATE_LIMIT_MAX_WAIT_MS = 20_000;
 const RATE_LIMIT_BUDGET_MS = 40_000;
+
+/**
+ * The shortest and the longest a credential is held out of new claims once a rate limit outlasted the
+ * wait above. The floor, because the answer only goes back at all when the upstream was still refusing
+ * after RATE_LIMIT_BUDGET_MS — a `retry-after` shorter than that is a reading from before it. The cap,
+ * so that a nonsense one cannot park a credential for hours.
+ */
+export const THROTTLE_MIN_MS = 60_000;
+export const THROTTLE_MAX_MS = 15 * 60_000;
+
+/**
+ * Until when a credential that just rate-limited this gateway is held out of new claims: what the upstream
+ * asked to be left alone for, inside the bounds above. Codex does not retry a 429 itself, so the turn ends
+ * — and without a mark the next claim would put the session back on the same credential and the retry
+ * would arm on a fixed ladder. With one, no claim chooses it until it passes (pool-login-select.ts
+ * loginCanRun, pool-key-select.ts keyCanRun) and the pool's own retry waits for that moment instead.
+ */
+export function throttledUntil(headers: IncomingHttpHeaders, body: Buffer | undefined, now: Date): Date {
+  const hint = rateLimitWait(headers, body, 1);
+  return new Date(now.getTime() + Math.min(THROTTLE_MAX_MS, Math.max(THROTTLE_MIN_MS, hint)));
+}
 
 /** An upstream stream that goes this long without a byte is given up on. */
 const UPSTREAM_IDLE_MS = 5 * 60_000;
@@ -117,6 +142,9 @@ interface GatewayKey {
   enabled: boolean;
   shareCap: number | null;
   spentUntil: Date | null;
+  throttledUntil: Date | null;
+  pausedAt?: Date | null;
+  pausedUntil?: Date | null;
   keyHint: string;
   secretEncrypted: string;
 }
@@ -148,7 +176,8 @@ export interface Answer {
  *   refused here with the reason, and the session's next claim moves it.
  * - WHAT OPENAI SAID: `insufficient_quota` marks the key out of budget until it resets; a 401 marks it
  *   INVALID. Either way the turn ends, as any quota ends one, and the next claim moves the session. A rate
- *   limit is waited out on the same key.
+ *   limit is waited out on the same key; one that outlasts that wait is recorded as a short
+ *   `throttled_until` on the key before its 429 goes back, so no claim picks it until then.
  * - WHAT IT COST: the usage the response ends with, per person and per key, into PoolUsageLedger.
  *
  * No database connection is held while a response streams: every read is made before the request goes
@@ -180,6 +209,10 @@ export class PoolGatewayService {
     if (!key || why) {
       refuse(res, 403, 'orbit_pool_key_unavailable', await this.unavailable(caller, key, why, now));
       this.log.log(`session ${caller.sessionId} pool ${caller.poolId}: ${key ? `${maskedKey(key.keyHint)} ${why}` : 'no key'} — refused`);
+      return;
+    }
+    if (await poolPauseBlocksRequest(this.prisma, caller.sessionId, key, now)) {
+      refuse(res, 403, 'orbit_pool_account_paused', `This account is paused until ${key.pausedUntil!.toISOString()}`);
       return;
     }
     let body: Buffer;
@@ -217,6 +250,13 @@ export class PoolGatewayService {
       if (outcome.errorCode === 'insufficient_quota') {
         await this.pools.markKeySpent(key.id, spentUntil(answer.response.headers, now));
         this.log.log(`session ${caller.sessionId} key ${maskedKey(key.keyHint)}: insufficient_quota — marked out of budget`);
+      } else if (status === 429 && !(outcome.errorCode && SPENT_ERROR_CODES.has(outcome.errorCode))) {
+        // A rate limit the wait above did not outlast — the one kind of 429 that reaches codex, which
+        // does not retry it. Marked before the answer goes back, so the claim the failed turn's retry
+        // makes already finds it out and moves the session, or waits for the moment it can run.
+        const until = throttledUntil(answer.response.headers, answer.body, now);
+        await this.pools.markKeyThrottled(key.id, until);
+        this.log.log(`session ${caller.sessionId} key ${maskedKey(key.keyHint)}: rate limited — held out until ${until.toISOString()}`);
       }
       this.record(caller, key, outcome, now);
       relayHead(res, answer.response);
@@ -282,7 +322,8 @@ export class PoolGatewayService {
       where: { id: keyId, poolId },
       select: {
         id: true, label: true, contributorId: true, state: true, enabled: true, shareCap: true, spentUntil: true,
-        keyHint: true, secretEncrypted: true,
+        throttledUntil: true,
+        keyHint: true, secretEncrypted: true, pausedAt: true, pausedUntil: true,
       },
     });
   }

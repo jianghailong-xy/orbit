@@ -210,11 +210,41 @@ public enum PromotionCards {
         let branch = shortRef(view.sourceRef)
         let into = shortRef(view.upstreamRef)
         switch stage(view) {
-        case .merging: return "Merging \(branch) into \(into)…"
+        case .merging:
+            if view.execution?.state == "QUEUED" { return "Merge queued: \(branch) into \(into)" }
+            if view.execution?.state != "RUNNING" { return "Merge confirmed: \(branch) into \(into)" }
+            if view.execution?.phase == "CHECK" { return "Re-checking \(branch) before merging into \(into)…" }
+            return "Merging \(branch) into \(into)…"
         case .merged: return view.merged?.automatic == true ? mergedAutomaticallyHeading : mergedHeading
         case .blocked: return "\(branch) can’t merge into \(into) yet"
         default: return "Merge \(branch) into \(into)?"
         }
+    }
+
+    /// The transcript preview keeps the branch on its own line, outside the heading.
+    public static func previewTitle(_ view: ProjectPromotionView) -> String {
+        let into = shortRef(view.upstreamRef)
+        switch stage(view) {
+        case .askingYou: return "Merge to \(into)"
+        case .merging: return "\(mergingActionLabel(view)) · \(into)"
+        case .blocked: return "Merge to \(into) blocked"
+        case .merged: return title(view)
+        case .none: return supersededTitle
+        }
+    }
+
+    public static func previewCounts(_ view: ProjectPromotionView) -> String {
+        let tasks = view.taskIds.count
+        let taskCount = "\(tasks) task\(tasks == 1 ? "" : "s")"
+        guard let commits = view.commitsAhead else { return taskCount }
+        return "\(commits) commit\(commits == 1 ? "" : "s") · \(taskCount)"
+    }
+
+    /// No commands in the preview, but every recorded check contributes to its verdict.
+    public static func previewChecks(_ view: ProjectPromotionView) -> String {
+        guard !view.checks.isEmpty else { return "No checks recorded" }
+        if view.checks.contains(where: { $0.timedOut == true }) { return "Checks timed out" }
+        return view.checks.allSatisfy(\.passed) ? "✓ Checks passed" : "✕ Checks failed"
     }
 
     /// `project/bg-jobs · 7 commits ahead of main` — mock 4's Branch row.
@@ -233,12 +263,14 @@ public enum PromotionCards {
     /// `✓ Passed on the combined tree · <command> · 6m 12s`, or what failed instead. The check the
     /// owner is being asked to trust, named by the command that ran and how long it took.
     public static func checksLine(_ view: ProjectPromotionView) -> String {
-        guard let check = view.checks.last else { return "no checks recorded" }
-        let elapsed = check.durationMs.map { " · \(duration(ms: $0))" } ?? ""
-        let verdict = check.passed
-            ? "✓ Passed on the combined tree"
-            : (check.timedOut == true ? "✕ Timed out on the combined tree" : "✕ Failed on the combined tree")
-        return "\(verdict) · \(check.command)\(elapsed)"
+        guard !view.checks.isEmpty else { return "no checks recorded" }
+        return view.checks.map { check in
+            let elapsed = check.durationMs.map { " · \(duration(ms: $0))" } ?? ""
+            let verdict = check.passed
+                ? "✓ Passed on the combined tree"
+                : (check.timedOut == true ? "✕ Timed out on the combined tree" : "✕ Failed on the combined tree")
+            return "\(verdict) · \(check.command)\(elapsed)"
+        }.joined(separator: "\n\n")
     }
 
     /// The upstream row: whether this candidate conflicts with it, and — on a re-check — that it
@@ -269,9 +301,28 @@ public enum PromotionCards {
     /// B's status row: the upstream moved after the check, so the combined tree is being checked
     /// again — and nobody has to press anything for that.
     public static func mergingStatusLine(_ view: ProjectPromotionView) -> String {
-        view.state == .rechecking
-            ? "\(shortRef(view.upstreamRef)) moved since the check — re-checking the combined tree"
-            : "checks passed and this is landing on \(shortRef(view.upstreamRef))"
+        let into = shortRef(view.upstreamRef)
+        if view.execution?.state == "QUEUED" { return "confirmed — queued to merge into \(into)" }
+        guard view.execution?.state == "RUNNING" else { return "confirmed — waiting for merge execution" }
+        switch view.execution?.phase {
+        case "CHECK":
+            return view.state == .rechecking
+                ? "\(into) moved since the check — re-checking the combined tree"
+                : "re-checking the combined tree"
+        case "FETCH": return "confirmed — fetching the branches"
+        case "MAIN_SYNC": return "confirmed — syncing the branches"
+        case "REBASE": return "confirmed — rebasing the branch"
+        case "MERGE": return "confirmed — preparing the combined tree"
+        case "VERIFY": return "confirmed — verifying the tested tree"
+        case "PUSH": return "confirmed — publishing the tested tree to \(into)"
+        default: return "confirmed — starting the merge"
+        }
+    }
+
+    public static func mergingActionLabel(_ view: ProjectPromotionView) -> String {
+        if view.execution?.state == "QUEUED" { return "Queued" }
+        if view.execution?.state != "RUNNING" { return "Confirmed" }
+        return view.execution?.phase == "CHECK" ? "Re-checking…" : merging
     }
 
     /// C's commit row: what landed, who merged it, and when.

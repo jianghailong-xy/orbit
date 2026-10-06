@@ -1,0 +1,215 @@
+{
+  "baselineCommit": "1068a14b899911838526111b6814394e99762aaf",
+  "path": "src/web/src/index.css",
+  "rule": "范围为基线的闭区间行号，覆盖区间内所有 antd/ant-class 命中（包括注释）。每批只改自身选择器并保留同块 .anticon；新增或移动规则按业务前缀重新归属，禁止将旧行号直接应用于新源码。全局桥接规则保留至 P6。",
+  "groups": [
+    {
+      "from": 4,
+      "to": 4,
+      "phase": "P1.1 → P6",
+      "owner": "主题桥说明",
+      "replacement": "按最终主题来源更新注释",
+      "preserve": "Orbit CSS 与 AntD 共存期间主题同步"
+    },
+    {
+      "from": 1050,
+      "to": 1106,
+      "phase": "P5.1",
+      "owner": "TasksSidePanel 账号菜单",
+      "replacement": "Orbit Menu 自有类名",
+      "preserve": "头像资料行、危险操作颜色、图标与菜单间距"
+    },
+    {
+      "from": 1392,
+      "to": 1393,
+      "phase": "P4.3",
+      "owner": "TaskListView 范围菜单",
+      "replacement": "Orbit Menu 自有类名",
+      "preserve": "范围选择、宽度与当前项"
+    },
+    {
+      "from": 1671,
+      "to": 1671,
+      "phase": "P4.3",
+      "owner": "任务过滤分段计数",
+      "replacement": "Orbit 分段控件选中状态",
+      "preserve": "计数徽标、选中颜色与危险项提示"
+    },
+    {
+      "from": 2540,
+      "to": 2776,
+      "phase": "P4.2",
+      "owner": "RunnerDetailPage",
+      "replacement": "Orbit Input/Radio/Switch/Checkbox 类名与状态",
+      "preserve": "环境变量行、导入、历史模式、引擎开关、禁用且选中状态以及层叠优先级"
+    },
+    {
+      "from": 3285,
+      "to": 3285,
+      "phase": "P5.3",
+      "owner": "WorkspaceView 会话列",
+      "replacement": "Orbit 分段选择外壳",
+      "preserve": "导航列分段宽度和对齐"
+    },
+    {
+      "from": 4032,
+      "to": 4255,
+      "phase": "P5.1",
+      "owner": "SessionOutputs",
+      "replacement": "Orbit Drawer/Menu 内容容器",
+      "preserve": "diff抽屉无额外内边距、merge菜单滚动与过滤"
+    },
+    {
+      "from": 5769,
+      "to": 5896,
+      "phase": "P3.1 → P5.3",
+      "owner": "WorkspaceView 输入框试点与完整切换",
+      "replacement": "Orbit Textarea/原生textarea和按钮状态类",
+      "preserve": "镜像/自动增高、shell模式、选区、placeholder、焦点轮廓、禁用发送与手机尺寸"
+    },
+    {
+      "from": 5995,
+      "to": 6257,
+      "phase": "P5.3",
+      "owner": "WorkspaceView composer菜单",
+      "replacement": "Orbit Select/Menu/Button 自有类名",
+      "preserve": "placeholder、模型/智能模式、工作区pill、附件菜单图标/分隔、触摸区域及禁用项"
+    },
+    {
+      "from": 6502,
+      "to": 6517,
+      "phase": "P5.2 → P5.3",
+      "owner": "WorkspaceView 附件图片",
+      "replacement": "Orbit 图片缩略图外壳",
+      "preserve": "附件chip填充、遮罩、圆角及授权预览"
+    },
+    {
+      "from": 6923,
+      "to": 6985,
+      "phase": "P5.2",
+      "owner": "Transcript/Markdown 图片",
+      "replacement": "Orbit 图片及预览组外壳",
+      "preserve": "缩略图圆角、缩放光标、hover遮罩、富文本图片宽度"
+    },
+    {
+      "from": 9673,
+      "to": 9688,
+      "phase": "P4.3",
+      "owner": "StartProjectCard/ProjectRunSettings",
+      "replacement": "Orbit Radio 自有类与业务前缀",
+      "preserve": "执行模式行的密度、层叠顺序、标签点击及禁用"
+    },
+    {
+      "from": 10857,
+      "to": 11366,
+      "phase": "P3.2",
+      "owner": "TaskDetailPanel",
+      "replacement": "Orbit Button/Select/Segmented 状态类",
+      "preserve": "顶栏图标按钮、负责人选择器对齐/placeholder、依赖视图切换"
+    },
+    {
+      "from": 12005,
+      "to": 12085,
+      "phase": "P4.3",
+      "owner": "ProjectDependencyGraph/TaskDependencyGraph",
+      "replacement": "原生标题与Orbit Dialog内容容器",
+      "preserve": "图标题、桌面/手机全屏弹窗、header/close/body布局与图画布尺寸"
+    },
+    {
+      "from": 12394,
+      "to": 12394,
+      "phase": "P3.2",
+      "owner": "TaskDetailPanel compose",
+      "replacement": "Orbit Input业务类",
+      "preserve": "快速输入布局和内容宽度"
+    },
+    {
+      "from": 12678,
+      "to": 12690,
+      "phase": "P1.1/P1.2/P2.2 → P6",
+      "owner": "全站手机输入与Select防缩放",
+      "replacement": "Orbit字段/搜索框语义类先补齐；旧选择器P6退役",
+      "preserve": "手机focus字体至少16px避免iOS自动放大，保留pinch-to-zoom与桌面紧凑字号"
+    },
+    {
+      "from": 12874,
+      "to": 12874,
+      "phase": "P5.1",
+      "owner": "SessionOutputs抽屉header说明",
+      "replacement": "随Orbit Drawer更新说明",
+      "preserve": "最大化/恢复按钮位于关闭按钮前"
+    },
+    {
+      "from": 13393,
+      "to": 13463,
+      "phase": "P3.2",
+      "owner": "ShareModal",
+      "replacement": "Orbit Menu/Checkbox业务类",
+      "preserve": "分享权限菜单、图标间距与层级勾选框"
+    },
+    {
+      "from": 13645,
+      "to": 15147,
+      "phase": "P4.2",
+      "owner": "Providers/RunnerEngines/账号池/登录授权",
+      "replacement": "原生table与Orbit Tag/Button/Radio/Segmented和复制控件",
+      "preserve": "密钥表格列、引擎状态、账号退出按钮、账号类型选择、授权码复制与添加引擎标签"
+    },
+    {
+      "from": 15308,
+      "to": 15354,
+      "phase": "P5.1",
+      "owner": "SessionSearch",
+      "replacement": "Orbit Dialog内容容器",
+      "preserve": "搜索弹窗尺寸、内边距、初始焦点及Esc关闭"
+    },
+    {
+      "from": 15576,
+      "to": 15576,
+      "phase": "P5.1",
+      "owner": "NewSessionProviderHero",
+      "replacement": "Orbit Popover容器",
+      "preserve": "新会话提供方浮层边界与内边距"
+    },
+    {
+      "from": 15614,
+      "to": 15620,
+      "phase": "P5.3",
+      "owner": "WorkspaceView provider/account菜单",
+      "replacement": "Orbit Menu业务行",
+      "preserve": "修复提示、账号行和作用域排版"
+    },
+    {
+      "from": 15772,
+      "to": 16958,
+      "phase": "P4.3",
+      "owner": "项目详情/任务行/验收卡/工具栏",
+      "replacement": "原生标题/列表/卡片及Orbit字段/状态类",
+      "preserve": "项目状态标签、空状态、禁用执行设置、警告边框、整行打开、验收进度/展开按钮、明暗卡片与分段过滤"
+    },
+    {
+      "from": 17702,
+      "to": 17702,
+      "phase": "P4.3",
+      "owner": "WatchRelations",
+      "replacement": "Orbit Popover自有容器",
+      "preserve": "watch关系列表密度与浮层宽度"
+    },
+    {
+      "from": 19189,
+      "to": 19189,
+      "phase": "P4.4",
+      "owner": "Wiki文档树链接说明",
+      "replacement": "保留自有链接样式并移除退役后的库说明",
+      "preserve": "目录文字权重与点击呈现"
+    },
+    {
+      "from": 19768,
+      "to": 20438,
+      "phase": "P4.4",
+      "owner": "Wiki设置/文章脚注/计划",
+      "replacement": "Orbit Radio/InputNumber/Button/Drawer类",
+      "preserve": "设置模式列、限制字段宽度、手机脚注底部圆角/拖拽提示、手机计划操作按钮高度与空态"
+    }
+  ]
+}

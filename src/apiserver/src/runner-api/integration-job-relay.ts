@@ -33,9 +33,12 @@ import {
   shortBranchName,
 } from '../projects/project-integration-job';
 import {
+  ownerHoldOnHandledItems,
   recordIntegrationFailure,
   recordPromotionApproval,
+  resolveHandledItems,
   resolveIntegrationItemsOnLanding,
+  supersedeHandledItems,
 } from '../projects/project-open-item';
 import { sessionReportedWork } from '../projects/landing-source-branch';
 import {
@@ -352,13 +355,22 @@ async function claimOne(
          -- same paths and open exactly the same card, once per queued task. The item is the retry
          -- mechanism (J5): when the coordinator has dealt with it and the item closes, the queue
          -- moves again on its own.
+         --
+         -- Except the conflicted task's own later landings. Sending that task back is how a merge
+         -- commit absorbing the upstream reaches its source branch (§3.1 M3), and held here, its
+         -- next landing would wait on the item it is there to close. The claim cannot read git, so
+         -- only the task is decided here; whether the source carries the absorb is J-S2's call on
+         -- the runner. With both tips in it, the source lands by J-S4 MERGE and that landing closes
+         -- the item. Without them, it meets the same conflict and opens another item, and every
+         -- other task's landing waits as before.
          AND NOT EXISTS (
            SELECT 1 FROM "project_open_item" i
              JOIN "project_integration_job" f ON f."id" = i."integration_job_id"
             WHERE f."serial_key" = c."serial_key"
               AND f."phase" = 'MAIN_SYNC'
               AND i."kind" = 'INTEGRATION_CONFLICT'
-              AND i."state" = 'OPEN')
+              AND i."state" = 'OPEN'
+              AND f."task_id" IS DISTINCT FROM c."task_id")
          AND (
            -- A queued job whose repository and target ref nobody holds.
            (c."state" = 'QUEUED' AND NOT EXISTS (
@@ -638,6 +650,7 @@ export async function applyIntegrationJobResult(
         claimLeaseOwner: true, claimGeneration: true, runnerId: true, claimedAt: true,
         generation: true, retryOfJobId: true, retryFailureClass: true, retryReason: true,
         retryRequestedBySessionId: true,
+        retryRequestedByUserId: true,
         session: { select: { baseSha: true } },
         task: { select: { title: true, assigneeId: true, creatorType: true, creatorId: true } },
       },
@@ -814,6 +827,14 @@ export async function applyIntegrationJobResult(
     }
 
     const checks = clipChecks(body.checks ?? []);
+    // §4.7 H2 for a candidate: the coordinator's rerun of a blocked candidate's check passed, so the
+    // items it was handling are HANDLED in its name — BEFORE the promotion is applied below, because
+    // the Automatic setting's own rule counts every open integration item of the project (M-T11), and
+    // an item this very check just answered must not be what keeps the candidate from it. An item the
+    // owner holds by now is not touched, and is counted: the merge then waits on their card.
+    if (job.kind === 'CHECK_PROMOTION' && job.promotionId && state === 'READY') {
+      await resolveHandledItems(tx, job.id);
+    }
     // §3: a promotion job's result is the promotion's, and moves it in the same transaction — a
     // MERGED promotion and the receipts saying its tasks are on the upstream are one fact (M9).
     // BEFORE the job's own update, not after: `project_integration_job_terminal_guard` refuses a
@@ -947,6 +968,9 @@ export async function applyIntegrationJobResult(
         state: state as 'CONFLICT' | 'CHECK_FAILED' | 'ERROR',
         title: integrationItemTitle(state, job.kind, job.task?.title ?? 'a task'),
         dedupeKey: integrationDedupeKey(state, job.id),
+        // §4.7 H4: when this job is a rerun whose item the clock handed to the owner while it ran, the
+        // failure it opens stays theirs — the coordinator's rerun does not carry the decision back.
+        heldByOwner: await ownerHoldOnHandledItems(tx, job.id),
         payload: failurePayload(state, {
           kind: job.kind,
           phase: body.phase ?? null,
@@ -963,11 +987,16 @@ export async function applyIntegrationJobResult(
                 failureClass: job.retryFailureClass,
                 reason: job.retryReason,
                 requestedBySessionId: job.retryRequestedBySessionId,
+                requestedByUserId: job.retryRequestedByUserId,
               }
             : null,
         }),
       });
       openItemId = opened?.itemId ?? openItemId;
+      // §4.7 H3: a rerun that failed again supersedes the items it was handling with the one it just
+      // opened, in this transaction — the old card ends RETRIED and points at the new failure, which
+      // is in front of somebody; nothing about it is closed quietly.
+      if (opened) await supersedeHandledItems(tx, job.id, opened.itemId);
     }
     // §2.2 J-T5: the task's landing answers what was open about landing it, in this same
     // transaction — beside the receipt that says the work is there, which is the fact the item was
@@ -977,6 +1006,10 @@ export async function applyIntegrationJobResult(
     // be the only record that the work has not reached the line — the landing owed for it failed, and
     // a generation of the work is owed only one (§2.3 J-T1e, `landingBehindTheWorkKey`).
     if (jobLanded(effectiveState) && job.taskId && !leftWorkBehind) {
+      // §4.7 H2 first: the items the coordinator's rerun was handling are HANDLED in its name, and
+      // only then does the landing answer whatever else is open about the task (LANDED, by the
+      // platform) — including an item the clock gave the owner while the rerun ran.
+      await resolveHandledItems(tx, job.id);
       await resolveIntegrationItemsOnLanding(tx, job.taskId);
     }
 
@@ -1077,6 +1110,7 @@ function nothingToLandComment(input: {
       failureClass: string | null;
       reason: string | null;
       requestedBySessionId: string | null;
+      requestedByUserId: string | null;
     } | null;
   },
 ): Record<string, unknown> {

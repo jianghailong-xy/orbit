@@ -16,6 +16,10 @@ export interface PoolKeyCandidate {
   othersCostMicros: number;
   /** Out of budget until then — OpenAI answered `insufficient_quota` for it; null when it has not. */
   spentUntil: Date | null;
+  /** Rate-limited until then — OpenAI answered 429 and the gateway's own wait was not enough to outlast
+   *  it (migration 0382); null when it has not been. Short: minutes, and not a budget. */
+  throttledUntil: Date | null;
+  pausedUntil?: Date | null;
 }
 
 /**
@@ -32,25 +36,32 @@ function spent(key: PoolKeyCandidate, now: Date): boolean {
   return key.spentUntil !== null && key.spentUntil.getTime() > now.getTime();
 }
 
+/** Whether a rate limit OpenAI answered, and the gateway could not wait out, still holds `key` at `now`. */
+function throttled(key: PoolKeyCandidate, now: Date): boolean {
+  return key.throttledUntil !== null && key.throttledUntil.getTime() > now.getTime();
+}
+
 /**
  * Whether a session of `requesterId` may run on `key` now: its contributor has it switched on, OpenAI has
- * neither refused it nor said it is out of budget, and — when it is somebody else's — the others have not
- * spent its share cap this month.
+ * neither refused it nor said it is out of budget nor rate-limited it past the gateway's own wait, and —
+ * when it is somebody else's — the others have not spent its share cap this month.
  */
 export function keyCanRun(key: PoolKeyCandidate, requesterId: string, now: Date): boolean {
-  return key.enabled && key.state === 'ACTIVE' && !spent(key, now) && keyRoom(key, requesterId) > 0;
+  return key.enabled && key.state === 'ACTIVE' && !(key.pausedUntil && key.pausedUntil > now) && !spent(key, now) && !throttled(key, now) && keyRoom(key, requesterId) > 0;
 }
 
 /**
  * When `key` can run for `requesterId` again: `now` while it can; else the later of the reset OpenAI's
- * out-of-budget mark runs to and — for a cap the others have spent — the first of next month, when caps
- * count from zero. Null when waiting brings nothing back: its contributor switched it off, or OpenAI
- * refused or disabled it, and only a person can change that.
+ * out-of-budget mark runs to, the mark a rate limit the gateway could not wait out left, and — for a cap
+ * the others have spent — the first of next month, when caps count from zero. Null when waiting brings
+ * nothing back: its contributor switched it off, or OpenAI refused or disabled it, and only a person can
+ * change that.
  */
 export function keyRunsAgainAt(key: PoolKeyCandidate, requesterId: string, now: Date): Date | null {
   if (!key.enabled || key.state !== 'ACTIVE') return null;
-  let at = now.getTime();
+  let at = Math.max(now.getTime(), key.pausedUntil?.getTime() ?? 0);
   if (spent(key, now)) at = Math.max(at, key.spentUntil!.getTime());
+  if (throttled(key, now)) at = Math.max(at, key.throttledUntil!.getTime());
   if (keyRoom(key, requesterId) <= 0) at = Math.max(at, nextUsageWindowStart(now).getTime());
   return new Date(at);
 }
@@ -119,10 +130,13 @@ export function poolKeySwitchNotice(
   return `Switched to ${to.label} — ${from ? whyKeyLeft(from, requesterId, now) : 'the previous key is no longer in this pool'}`;
 }
 
-/** Refused first, since that one needs somebody to act; out of budget covers a spent cap as well as OpenAI's word. */
+/** Refused first, since that one needs somebody to act; then out of budget, a spent cap as well as OpenAI's
+ *  word; a key rate-limited past the gateway's own wait is none of those and says so. */
 function whyKeyLeft(from: PoolKeyCandidate & { label: string }, requesterId: string, now: Date): string {
   if (from.state === 'INVALID') return `${from.label} was rejected by OpenAI`;
   if (!from.enabled || from.state === 'DISABLED') return `${from.label} is disabled`;
+  if (from.pausedUntil && from.pausedUntil > now) return `${from.label} is paused`;
   if (spent(from, now) || keyRoom(from, requesterId) <= 0) return `${from.label} is out of budget`;
+  if (throttled(from, now)) return `${from.label} is rate limited right now`;
   return `${from.label} is unavailable`;
 }

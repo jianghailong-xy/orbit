@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act } from 'react';
+import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App as AntApp } from 'antd';
@@ -7,6 +7,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NEAR_BOTTOM } from '../lib/tailPinning';
 import type { Runner } from './TasksSidePanel';
+import { revealCard } from './DecisionRail';
+import { ReviewCard } from './ReviewCard';
 
 /**
  * When the jump-to-bottom button (`.scroll-to-bottom`) is on screen.
@@ -322,6 +324,50 @@ async function mountTranscript(): Promise<FakeEventSource> {
 }
 
 describe('the jump-to-bottom button', { timeout: 60_000 }, () => {
+  it('holds a bar-opened preview through streaming and dismissal until the reader returns to the tail', async () => {
+    const stream = await mountTranscript();
+    // This case exercises the compact review used on narrow screens.
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query === '(max-width: 960px)', media: query,
+      addEventListener: () => {}, removeEventListener: () => {},
+    }));
+    const previewHost = document.createElement('div');
+    scroller().append(previewHost);
+    const previewRoot = createRoot(previewHost);
+    function Preview() {
+      const [open, setOpen] = useState(false);
+      return <ReviewCard title="Review the plan" summary="The pending plan" open={open} onOpenChange={setOpen}>
+        <p>Plan details</p>
+      </ReviewCard>;
+    }
+    try {
+      await act(async () => previewRoot.render(<Preview />));
+      await act(async () => { revealCard(previewHost); });
+      expect(document.querySelector('.review-card-dialog[data-open]')).not.toBeNull();
+      // Even a preview at the tail must not re-enable follow while it is being reviewed.
+      const heldAt = scrollTop;
+      await reportScroll();
+      await grow(600);
+      await publish(stream, { seq: 100, type: 'text_delta', payload: { text: 'while reviewing' } });
+      expect(scrollTop).toBe(heldAt);
+      await act(async () => {
+        document.querySelector<HTMLButtonElement>('.review-card-dialog [aria-label="Close"]')!.click();
+      });
+      expect(document.querySelector('.review-card-dialog[data-open]')).toBeNull();
+      await grow(600);
+      await publish(stream, { seq: 101, type: 'text_delta', payload: { text: 'after closing' } });
+      expect(scrollTop).toBe(heldAt);
+      await act(async () => button()!.click());
+      await reportScroll();
+      await grow(600);
+      await publish(stream, { seq: 102, type: 'text_delta', payload: { text: 'following again' } });
+      expect(gap()).toBe(0);
+    } finally {
+      await act(async () => previewRoot.unmount());
+      previewHost.remove();
+    }
+  });
+
   it('shows once the tail has sat out of view under a pinned reader, and goes once it is back', async () => {
     await mountTranscript();
 

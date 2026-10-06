@@ -1,0 +1,52 @@
+{
+  "projectBranch": "project/34ZZeq0e3IR65GVm2kAs7",
+  "projectTipAtStart": "6bbf3ecc3dc2f72193ecb58e6cfb0540753bafce",
+  "deliveryBranch": "orbit/p1-07d1ac",
+  "deliveryBase": "6bbf3ecc3dc2f72193ecb58e6cfb0540753bafce",
+  "p11Commit": "703b8f6ce4c75d8975ed867e9808f0f0198716f8",
+  "beforeCandidate": {
+    "path": "/tmp/orbit-p11-before-aa737ee0",
+    "commit": "e01b9d931f79740cb5a10dfd9a7184c49b0fb4c9",
+    "tree": "e53e1874427e154506c750de8979eb2131177746",
+    "parents": [
+      "6bbf3ecc3dc2f72193ecb58e6cfb0540753bafce",
+      "703b8f6ce4c75d8975ed867e9808f0f0198716f8"
+    ],
+    "lockfileSha256": "64b44fb60f58f77638ff2f1b2837c3ae858e168d192de78379c7a3c825a044b6"
+  },
+  "runtime": {
+    "node": "v26.10.0",
+    "npm": "11.19.1"
+  },
+  "diagnosticCandidate": {
+    "path": "/tmp/orbit-p11-after-aa737ee0",
+    "commit": "f26c5ebb4c06d593c5af4db27cd93836448de2f9",
+    "tree": "9f554a41f0f673a4ff47752f9ed33091c8737cdf",
+    "parents": [
+      "3abb5194b6bc60f2097122f23d832dd8da6b335f",
+      "703b8f6ce4c75d8975ed867e9808f0f0198716f8"
+    ],
+    "lockfileSha256": "64b44fb60f58f77638ff2f1b2837c3ae858e168d192de78379c7a3c825a044b6"
+  },
+  "finalCandidate": {
+    "path": "/tmp/orbit-p11-final-aa737ee0",
+    "commit": "c7f61251769331f0f2909d4e4d7ee245a01241d7",
+    "tree": "e84b0811c6b2485b9c62b8c01c01f518dca97ae2",
+    "parents": [
+      "ca80677d4a68262a69ea1f04a4b83f17d53f2a21",
+      "703b8f6ce4c75d8975ed867e9808f0f0198716f8"
+    ],
+    "lockfileSha256": "64b44fb60f58f77638ff2f1b2837c3ae858e168d192de78379c7a3c825a044b6"
+  },
+  "implementationCommit": "ca80677d4a68262a69ea1f04a4b83f17d53f2a21",
+  "sourceHashes": {
+    "scripts/worktree-overlay.sh": "80f1e58301d7a9f939da349695868994e307275346e1f6ade0ceb17ab948f31f",
+    "scripts/worktree-dependencies.mjs": "118d5f4c071a91376d226bf3472e2fc6818920c3d1d16aad7096f8da41f74156",
+    "scripts/worktree-overlay.test.mjs": "e5e02e7feaf99aa1b88b0233f14b43030d9a7fa5b5ed334e93cbdde73ad1b1a3"
+  },
+  "baselineRegressionEntry": {
+    "path": "/tmp/orbit-overlay-before/scripts/worktree-overlay.sh",
+    "sha256": "4ac114d38c920310df8b98736acc8c6bea8d36f33d6cd6f27eaa23d981ee980a"
+  },
+  "baselineRegressionSourceHash": "e5e02e7feaf99aa1b88b0233f14b43030d9a7fa5b5ed334e93cbdde73ad1b1a3"
+}

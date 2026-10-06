@@ -155,7 +155,7 @@ public enum ProjectDrawerMark: Equatable, Sendable {
 /// a coordinator's turns arrive on the session stream, which names no project. Read beside the row,
 /// they are what makes a project whose coordinator is working read as running, and sort where the
 /// work is, the moment the session list shows it rather than at the next fetch.
-public struct ProjectCoordinatorPulse: Equatable, Sendable {
+public struct ProjectCoordinatorPulse: Codable, Equatable, Sendable {
     /// The conversation draws the session list's running spinner.
     public let working: Bool
     /// Its newest turn: activity the project's own task stamps do not record.
@@ -225,7 +225,7 @@ public enum ProjectAttention {
     }
 
     /// How long an item has been waiting, for the chips that name one: `20m`, `2h`, `3d`.
-    private static func elapsedLabel(_ iso: String?, now: Date) -> String? {
+    static func elapsedLabel(_ iso: String?, now: Date) -> String? {
         let at = rank(iso)
         let nowSeconds = now.timeIntervalSince1970
         if at == -.infinity || at > nowSeconds { return nil }
@@ -312,18 +312,21 @@ public enum ProjectAttention {
         if (project.attention?.userBlockers ?? 0) > 0 { return .needsUser }
 
         let b = project.buckets
-        let quiet = quietDays(project.lastActivityAt, now: now)
+        let platformWorking = (project.integration?.activeJobCount ?? 0) > 0
+            || project.coordinatorActivity?.working == true
+        let quiet = platformWorking ? nil : quietDays(project.lastActivityAt, now: now)
         if b.running > 0, quiet != nil { return .noActivityRunning }
         if b.running == 0, b.ready > 0, quiet != nil { return .noActivityReady }
 
-        if b.running + b.ready + b.blocked + b.awaitingVerification + failedTaskCount(project) == 0,
+        // Finished task work does not settle a landing exception. Keep its reason visible.
+        if project.attention?.coordinatorItems != nil { return .coordinatorHandling }
+
+        if !platformWorking,
+           b.running + b.ready + b.blocked + b.awaitingVerification + failedTaskCount(project) == 0,
            b.done + b.cancelled > 0 {
             return .readyToClose
         }
 
-        // Last, and only when nothing else is wrong: the coordinator working an exception is the
-        // project moving.
-        if project.attention?.coordinatorItems != nil { return .coordinatorHandling }
         return nil
     }
 
@@ -338,11 +341,15 @@ public enum ProjectAttention {
         if reason == .autoRemediation { return .attention }
         if let reason, reason.isNeedsYou { return .attention }
 
+        if (project.integration?.activeJobCount ?? 0) > 0
+            || project.coordinatorActivity?.working == true { return .running }
+
         let quietRunning = b.running > 0 && quietDays(project.lastActivityAt, now: now) != nil
         if b.running > 0, !quietRunning { return .running }
 
         // A coordinator working an exception earns the lane its activity earns.
         if let reason, reason != .coordinatorHandling { return .attention }
+        if reason == .coordinatorHandling && b.ready == 0 { return .waiting }
         if project.taskCount == 0 { return .definition }
         if b.ready > 0 { return .ready }
         if b.blocked > 0 || b.awaitingVerification > 0 { return .waiting }
@@ -430,6 +437,7 @@ public enum ProjectAttention {
         case .integrationCheckFailed: return "checks failed"
         case .integrationError: return "handling an integration error"
         case .taskFailed: return "handling a failed task"
+        case .deliveryReview: return "reviewing a delivery"
         case .unknown: return nil
         }
     }
@@ -508,7 +516,7 @@ public enum ProjectAttention {
             let settled = b.done + b.cancelled
             let total = b.running + b.ready + b.blocked + b.awaitingVerification
                 + failedTaskCount(project) + settled
-            return ProjectAttentionChip(tone: .brand, text: "\(settled)/\(total) settled · still open")
+            return ProjectAttentionChip(tone: .brand, text: "\(settled)/\(total) tasks settled · project still open")
 
         case .noActivityRunning:
             guard let days = quietDays(project.lastActivityAt, now: now) else { return nil }
@@ -572,7 +580,8 @@ public enum ProjectAttention {
                                   coordinator: ProjectCoordinatorPulse? = nil) -> ProjectDrawerMark {
         let waiting = needsYouItemCount(project)
         if waiting > 0 { return .needsYou(waiting) }
-        if project.buckets.running > 0 || coordinator?.working == true { return .running }
+        if project.buckets.running > 0 || (coordinator ?? project.coordinatorActivity)?.working == true
+            || (project.integration?.activeJobCount ?? 0) > 0 { return .running }
         return .idle
     }
 
@@ -598,7 +607,7 @@ public enum ProjectAttention {
     /// is newer.
     private static func latestActivity(_ project: ProjectSummary,
                                        _ coordinators: [String: ProjectCoordinatorPulse]) -> String? {
-        let turn = coordinators[PublicID.storageKey(project.id)]?.lastTurnAt
+        let turn = (coordinators[PublicID.storageKey(project.id)] ?? project.coordinatorActivity)?.lastTurnAt
         return rank(turn) > rank(project.lastActivityAt) ? turn : project.lastActivityAt
     }
 

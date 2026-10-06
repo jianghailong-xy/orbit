@@ -24,6 +24,10 @@
 - 按钮的形状（原生胶囊还是自绘圆形）由「滑动按钮圆形设计」那条线决定；这里只定清单、顺序、颜色。
 - 长按菜单是左滑的“正本”：左滑有的动作，长按里都要有（`SessionRowActions.swift` 文件头的约定）。
 
+### 会话详情菜单
+
+iOS 会话详情右上角使用 `⋯` 菜单：Share… / Copy Link；Rename… / Pin（或 Unpin）/ Move… / Tags…；关联会话提供 Open Task 或 Open Project；末尾是 Complete Session 和红色 Move to Trash。Copy Link 复制需登录的会话地址，Share… 打开原分享设置面板。活跃运行的完成、移入回收站项注明 `Stops the current run`；Completed 将完成项替换为 Move to Open；Trash 只提供 Move to Open 与需确认的 Delete Permanently。详情页的 Move、Tags 复用列表面板，并在打开时加载数据，以支持直接通过链接进入会话。
+
 ## 3. 文件夹
 
 ### 3.1 模型

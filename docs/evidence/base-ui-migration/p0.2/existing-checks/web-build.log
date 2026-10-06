@@ -1,0 +1,30 @@
+
+> @orbit/web@0.1.0 build
+> tsc -b && vite build
+
+vite v8.3.1 building client environment for production...
+transforming...
+✓ 4070 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                     6.08 kB │ gzip:   2.58 kB
+dist/assets/Transcript-DdKuH37F.css                 1.06 kB │ gzip:   0.44 kB
+dist/assets/TaskDependencyGraph-DLioOiRN.css       15.41 kB │ gzip:   2.56 kB
+dist/assets/index-Ck-NDcBU.css                    356.27 kB │ gzip:  58.85 kB
+dist/assets/rolldown-runtime-hePW80VL.js            0.71 kB │ gzip:   0.42 kB
+dist/assets/ProjectTaskPanel-DwSS0Gg1.js            1.06 kB │ gzip:   0.61 kB
+dist/assets/projectTaskRoute-CSicv1Wh.js            5.49 kB │ gzip:   2.39 kB
+dist/assets/ProjectDependencyGraph-BqIuVMeZ.js     14.28 kB │ gzip:   5.22 kB
+dist/assets/projectDependencyGraph-DdLb_0Bs.js    163.57 kB │ gzip:  55.35 kB
+dist/assets/TaskDependencyGraph-D_KCtGEp.js       190.12 kB │ gzip:  61.39 kB
+dist/assets/taskDependencyGraph-CraDAEzb.js       536.66 kB │ gzip: 176.35 kB
+dist/assets/Transcript-D2EUKdRY.js                747.75 kB │ gzip: 229.50 kB
+dist/assets/sessionExport-fu3Uf8MF.js             788.30 kB │ gzip: 191.39 kB
+dist/assets/index-Bvjc8RIE.js                   1,687.72 kB │ gzip: 505.06 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 613ms

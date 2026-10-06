@@ -20,12 +20,6 @@ public struct PoolAccount: Equatable, Sendable {
 /// run at all (`ProviderPool.unavailable`) are the server's answers, the claim's own selector asked
 /// the way the claim asks it, so nothing here re-derives them.
 public enum ProviderPools {
-    /// The picker row the pools' own accounts fold away under (web's `NewSessionProviderHero`).
-    public static let pinAccountLabel = "Pin a specific account"
-    /// The picker's section of pools, in the words the /providers page heads its pools with (web's
-    /// `AccountPools`).
-    public static let sectionTitle = "Account pools"
-    public static let sectionFooter = ProvidersOverview.accountPoolsDetail
 
     /// The pools as providers the pickers and the composer resolve like any configured one: an
     /// account pool runs on its members' Claude subscriptions, whose models are the Claude CLI's own
@@ -154,7 +148,8 @@ public enum ProviderPools {
     /// `canTakeWork`). One that reports no quota counts — the claim still picks it, just last — and so
     /// does one whose quota the endpoint would not report: the key is not refused.
     public static func readyCount(_ pool: ProviderPool) -> Int {
-        pool.members.filter { [.available, .running, .noQuota, .usageUnknown].contains($0.state) }.count
+        pool.members.filter { !AccountPause.isPaused($0.pausedUntil)
+            && [.available, .running, .noQuota, .usageUnknown].contains($0.state) }.count
     }
 
     /// The Accounts header's trailing words (web's `PoolGauge`): the account the next session starts
@@ -163,11 +158,15 @@ public enum ProviderPools {
     /// elsewhere — then the gauge `headGauge` reads; with none, when the first spent one frees up; with
     /// none that can run, why.
     public static func headline(_ pool: ProviderPool, now: Date = Date(), timeZone: TimeZone = .current) -> String {
-        if let next = pool.members.first(where: \.next) {
+        if let next = pool.members.first(where: { $0.next && !AccountPause.isPaused($0.pausedUntil, now: now) }) {
             if let shared = pool.shared, SharedPoolPage.hasPeople(shared) { return "Next for you: \(next.label)" }
             return next.login != nil && pool.members.count == 1 ? next.label : "Next: \(next.label)"
         }
         if let unavailable = pool.unavailable { return unavailable }
+        let paused = pool.members.filter { AccountPause.isPaused($0.pausedUntil, now: now) }
+        if !paused.isEmpty {
+            return "\(paused.count) paused"
+        }
         if pool.members.contains(where: { $0.state == .spent }) {
             return spentNote(pool, now: now, timeZone: timeZone) ?? "All spent"
         }

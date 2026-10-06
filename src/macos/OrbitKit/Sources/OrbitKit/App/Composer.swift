@@ -22,9 +22,11 @@ public enum ComposerLogic {
     /// shows that model (docs/model-routing-design.md §9): it marks the model chip ✦ and opens its
     /// menu on why. A model changed here is this run's own, a session opened by hand has no route,
     /// and a run on an Agent without smart selection has one that was not applied — all three keep
-    /// the chip as it always was (web parity: `smartRoute` in WorkspaceView.tsx).
-    public static func smartRoute(taskID: String?, route: TaskRunRoute?, modelID: String) -> TaskRunRoute? {
-        guard let taskID, !taskID.isEmpty, let route, route.applied,
+    /// the chip as it always was (web parity: `smartRoute` in WorkspaceView.tsx). So does every run
+    /// while the account's switch (`UserPreferences.smartModelSelection`) is off, the default.
+    public static func smartRoute(taskID: String?, route: TaskRunRoute?, modelID: String,
+                                  smartSelection: Bool) -> TaskRunRoute? {
+        guard smartSelection, let taskID, !taskID.isEmpty, let route, route.applied,
               let level = route.level, !level.isEmpty, route.model == modelID else { return nil }
         return route
     }

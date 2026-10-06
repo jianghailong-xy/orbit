@@ -46,6 +46,7 @@ func bgCollector() (emitFn, *[]string) {
 func TestScanTranscriptEmitsAndDedupes(t *testing.T) {
 	emit, got := bgCollector()
 	bg := newBgTailer(context.Background(), emit, nil)
+	defer bg.stopAll()
 	path := filepath.Join(t.TempDir(), "s.jsonl")
 	content := jsonlLine(t, taskNotif("bok", "toolu_A", "completed")) +
 		jsonlLine(t, taskNotif("bei", "toolu_B", "running")) +
@@ -68,6 +69,7 @@ func TestScanTranscriptEmitsAndDedupes(t *testing.T) {
 func TestScanTranscriptIncremental(t *testing.T) {
 	emit, got := bgCollector()
 	bg := newBgTailer(context.Background(), emit, nil)
+	defer bg.stopAll()
 	path := filepath.Join(t.TempDir(), "s.jsonl")
 	if err := os.WriteFile(path, []byte(jsonlLine(t, taskNotif("a", "toolu_A", "completed"))), 0o644); err != nil {
 		t.Fatal(err)
@@ -94,6 +96,7 @@ func TestScanTranscriptIncremental(t *testing.T) {
 func TestNotificationDedupeAcrossSources(t *testing.T) {
 	emit, got := bgCollector()
 	bg := newBgTailer(context.Background(), emit, nil)
+	defer bg.stopAll()
 	n := taskNotif("bok", "toolu_A", "completed")
 
 	bgTaskFromNotification(n, emit, bg) // stdout path
@@ -112,6 +115,7 @@ func TestNotificationDedupeAcrossSources(t *testing.T) {
 func TestScanTranscriptPartialLine(t *testing.T) {
 	emit, got := bgCollector()
 	bg := newBgTailer(context.Background(), emit, nil)
+	defer bg.stopAll()
 	path := filepath.Join(t.TempDir(), "s.jsonl")
 	full := jsonlLine(t, taskNotif("a", "toolu_A", "completed")) // trailing '\n'
 
@@ -134,6 +138,7 @@ func TestScanTranscriptPartialLine(t *testing.T) {
 func TestScanTranscriptBoundsHugeIrrelevantLinesAndContinues(t *testing.T) {
 	emit, got := bgCollector()
 	bg := newBgTailer(context.Background(), emit, nil)
+	defer bg.stopAll()
 	path := filepath.Join(t.TempDir(), "s.jsonl")
 	huge := strings.Repeat("x", transcriptRelevantLineCap+transcriptReadBuffer) + "\n"
 	content := huge + jsonlLine(t, taskNotif("a", "toolu_A", "completed"))

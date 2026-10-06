@@ -16,6 +16,7 @@ import {
   type AccountEngine,
 } from '@orbit/shared';
 import { DEFAULT_ACCOUNT, accountEnvVar, accountOnRunner } from './account';
+import { runnerAccountPausedUntil } from '../common/account-pause';
 
 /** An account a runner added: 4 random bytes in lowercase hex (src/runner-go/account_slot.go).
  *  Default is no entry of `accounts`: it is that engine's snapshot's own windows. */
@@ -114,10 +115,11 @@ export function automaticAccount(
   runnerEngines: unknown,
   planUsage: unknown,
   now: Date,
+  accountPauses?: unknown,
 ): string | null {
   if (!workspaceLeavesAccountToOrbit(engine, workspace, runnerEngines)) return null;
   const usage = isObject(planUsage) ? (planUsage as PlanUsage) : null;
-  return accountToStartOn(engine, accountsOf(engine, runnerEngines), usage, now);
+  return accountToStartOn(engine, accountsOf(engine, runnerEngines, accountPauses, now), usage, now);
 }
 
 /** {@link automaticAccount} for Codex. */
@@ -152,15 +154,17 @@ export function accountBeforeDispatch(
   runnerEngines: unknown,
   planUsage: unknown,
   now: Date,
-): { from: string; to: string } | null {
+  accountPauses?: unknown,
+): { from: string; to: string; paused?: boolean } | null {
   if (session.pinned || !workspaceLeavesAccountToOrbit(engine, workspace, runnerEngines)) return null;
   const choice = engine === 'claude' ? { claudeAccount: session.account } : { codexAccount: session.account };
   const from = runAccount(engine, workspace?.env, choice, runnerEngines);
   if (!from) return null;
   const usage = isObject(planUsage) ? (planUsage as PlanUsage) : null;
-  if (!planUsageBlockedUntil(usage, engine, now, from)) return null;
-  const to = accountToMoveTo(engine, accountsOf(engine, runnerEngines), usage, now, from);
-  return to ? { from, to } : null;
+  const paused = runnerAccountPausedUntil(accountPauses, engine, from, now) !== null;
+  if (!paused && !planUsageBlockedUntil(usage, engine, now, from)) return null;
+  const to = accountToMoveTo(engine, accountsOf(engine, runnerEngines, accountPauses, now), usage, now, from);
+  return to ? { from, to, ...(paused ? { paused: true } : {}) } : null;
 }
 
 export function accountAfterUsageLimit(
@@ -170,13 +174,14 @@ export function accountAfterUsageLimit(
   runnerEngines: unknown,
   planUsage: unknown,
   now: Date,
+  accountPauses?: unknown,
 ): { from: string; to: string } | null {
   if (session.pinned || !workspaceLeavesAccountToOrbit(engine, workspace, runnerEngines)) return null;
   const choice = engine === 'claude' ? { claudeAccount: session.account } : { codexAccount: session.account };
   const from = runAccount(engine, workspace?.env, choice, runnerEngines);
   if (!from) return null;
   const usage = isObject(planUsage) ? (planUsage as PlanUsage) : null;
-  const to = accountToMoveTo(engine, accountsOf(engine, runnerEngines), usage, now, from);
+  const to = accountToMoveTo(engine, accountsOf(engine, runnerEngines, accountPauses, now), usage, now, from);
   return to ? { from, to } : null;
 }
 
@@ -201,14 +206,35 @@ export function accountLabel(engine: AccountEngine, id: string, runner: NamedRun
  */
 export function accountSwitchNotice(
   engine: AccountEngine,
-  move: { from: string; to: string },
+  move: { from: string; to: string; paused?: boolean },
   runner: NamedRunner,
 ): string {
-  return `Switched to ${accountLabel(engine, move.to, runner)} — the usage limit on ${accountLabel(engine, move.from, runner)} is reached`;
+  return move.paused
+    ? `Switched to ${accountLabel(engine, move.to, runner)} — ${accountLabel(engine, move.from, runner)} is paused`
+    : `Switched to ${accountLabel(engine, move.to, runner)} — the usage limit on ${accountLabel(engine, move.from, runner)} is reached`;
 }
 
-const accountsOf = (engine: AccountEngine, runnerEngines: unknown) =>
-  sanitizeRunnerEngines(runnerEngines)?.find((entry) => entry.engine === engine)?.accounts;
+const accountsOf = (engine: AccountEngine, runnerEngines: unknown, pauses?: unknown, now = new Date()) =>
+  sanitizeRunnerEngines(runnerEngines)?.find((entry) => entry.engine === engine)?.accounts?.map((account) => ({
+    ...account,
+    pausedUntil: runnerAccountPausedUntil(pauses, engine, account.id, now)?.toISOString(),
+  }));
+
+/** Pause on the account this session actually spends, including a directory selected by env. */
+export function sessionAccountPausedUntil(
+  session: { provider: string | null; providerBuiltin: boolean; codexAccount?: string | null; claudeAccount?: string | null },
+  workspace: ({ env?: unknown } & WorkspaceAccountChoices) | null | undefined,
+  runner: { engines: unknown; accountPauses?: unknown },
+  now = new Date(),
+): Date | null {
+  const engine = session.provider;
+  if (!session.providerBuiltin || (engine !== 'codex' && engine !== 'claude')) return null;
+  const account = runAccount(engine, workspace?.env, {
+    codexAccount: session.codexAccount ?? workspace?.codexAccount,
+    claudeAccount: session.claudeAccount ?? workspace?.claudeAccount,
+  }, runner.engines);
+  return runnerAccountPausedUntil(runner.accountPauses, engine, account, now);
+}
 
 /** The accounts a workspace pins its sessions to, one per engine that keeps accounts. */
 export interface WorkspaceAccountChoices {

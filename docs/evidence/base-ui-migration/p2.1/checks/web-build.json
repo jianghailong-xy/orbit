@@ -1,0 +1,14 @@
+{
+  "command": [
+    "npm",
+    "run",
+    "build",
+    "-w",
+    "@orbit/web"
+  ],
+  "cwd": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410",
+  "startedAt": "2026-10-04T04:01:02.046691+00:00",
+  "head": "297d33e97729c66ebdc8f2b63b0e094db1d9e8df",
+  "exitCode": 0,
+  "elapsedSeconds": 2.741
+}

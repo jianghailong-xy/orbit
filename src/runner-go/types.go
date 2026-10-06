@@ -131,10 +131,14 @@ type AgentDirTarget struct {
 // this machine, from the same probe `orbit doctor` prints. Auth is a word, not a bool, because
 // some CLIs won't answer — and an engine that won't say must never be shown as signed in.
 type EngineHealthReport struct {
-	Engine    string `json:"engine"`
-	Installed bool   `json:"installed"`
-	Version   string `json:"version,omitempty"`
-	Auth      string `json:"auth"` // "yes" | "no" | "unknown"
+	Engine            string `json:"engine"`
+	Installed         bool   `json:"installed"`
+	Version           string `json:"version,omitempty"`
+	InstallationError string `json:"installationError,omitempty"`
+	Auth              string `json:"auth"` // "yes" | "no" | "unknown"
+	// Antigravity only: selected credentials and the quota read made with its Google auth probe.
+	AuthSource string     `json:"authSource,omitempty"` // "google" | "env_key"
+	PlanUsage  *PlanUsage `json:"planUsage,omitempty"`
 	// What the updater last did to this engine. Nil until it has run once — which the UI shows
 	// as "not reported yet", never as a problem.
 	Update *EngineUpdateReport `json:"update,omitempty"`
@@ -143,6 +147,9 @@ type EngineHealthReport struct {
 	// than accounts takes it for. Omitted for the other engines, and whenever the slots couldn't
 	// be listed — a report without it is read as one account, the way it was before accounts.
 	Accounts []EngineAccountReport `json:"accounts,omitempty"`
+	// DeepSeek Harness uses session-dispatched keys; the runner-wide probe never
+	// authenticates or claims a local login from the ACP handshake.
+	Dsh *DshRuntimeHealth `json:"dsh,omitempty"`
 }
 
 // EngineAccountReport mirrors @orbit/shared RunnerEngineAccount: one account slot and its own
@@ -264,6 +271,7 @@ type ModelCatalog struct {
 	Kimi        []ModelInfo `json:"kimi,omitempty"`
 	OpenCode    []ModelInfo `json:"opencode,omitempty"`
 	Antigravity []ModelInfo `json:"antigravity,omitempty"`
+	Dsh         []ModelInfo `json:"dsh,omitempty"`
 }
 
 type ModelInfo struct {
@@ -705,6 +713,7 @@ type ArtifactCommand struct {
 	RequestID string `json:"requestId"`
 	SessionID string `json:"sessionId"`
 	Path      string `json:"path"`
+	Source    string `json:"source,omitempty"`
 }
 
 type ArtifactResultRequest struct {
@@ -712,6 +721,7 @@ type ArtifactResultRequest struct {
 	Status       string `json:"status"` // "uploaded" | "missing" | "error"
 	AttachmentID string `json:"attachmentId,omitempty"`
 	Message      string `json:"message,omitempty"`
+	ErrorCode    string `json:"errorCode,omitempty"`
 }
 
 // CommitResultRequest mirrors @orbit/shared SessionCommitResultRequest: the outcome of a

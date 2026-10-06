@@ -209,6 +209,52 @@ test('requestStart files the request in the runner owner scope, as the acting se
   assert.deepEqual(filed, { itemId: 'item-1', state: 'OPEN', warnings: [] });
 });
 
+test('requestDone is exposed as POST projects/:id/done-requests', () => {
+  const handler = RunnerProjectsController.prototype.requestDone;
+  assert.equal(Reflect.getMetadata(PATH_METADATA, handler), 'projects/:id/done-requests');
+  assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.POST);
+});
+
+/** A done request is filed the same way: in the runner owner's scope, as the acting session. */
+test('requestDone files the request in the runner owner scope, as the acting session', async () => {
+  const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, 'requestDone') as
+    | Record<string, { data?: unknown }>
+    | undefined;
+  const headers = Object.values(args ?? {})
+    .map((arg) => arg.data)
+    .filter((data) => typeof data === 'string' && data.includes('-'));
+  assert.deepEqual(headers, ['x-orbit-session-id']);
+
+  const seen: unknown[] = [];
+  const openItems = {
+    requestDone: async (...call: unknown[]) => {
+      seen.push(call);
+      return { itemId: 'item-2', state: 'OPEN', warnings: [] };
+    },
+  } as never;
+  const controller = new RunnerProjectsController(
+    {} as never,
+    acceptanceDouble(),
+    {} as never,
+    orchestrationDouble(),
+    openItems,
+  );
+  const body = {
+    judgment: 'Every criterion is met and on main; the go-live made no commits, and I checked it.',
+    gaps: [{
+      criterionKey: 'criterion-7',
+      whyNotProven: 'its task made no commits, so there is no merge to hold a receipt for',
+      coordinatorChecked: 'the live web bundle has the new strings',
+      evidenceRefs: ['task 34Y4xlxE comment'],
+    }],
+  };
+
+  const filed = await controller.requestDone(RUNNER, ` ${SESSION_ID} `, 'project-1', body);
+
+  assert.deepEqual(seen, [['owner-1', 'project-1', SESSION_ID, body]]);
+  assert.deepEqual(filed, { itemId: 'item-2', state: 'OPEN', warnings: [] });
+});
+
 test('retryIntegration is exposed as POST projects/:id/tasks/:taskId/integration/retry', () => {
   const handler = RunnerProjectsController.prototype.retryIntegration;
   assert.equal(
@@ -268,6 +314,61 @@ test('retryIntegration reruns the landing in the runner owner scope, as the acti
   // A missing header is passed on as missing, for the service to refuse — never read as the owner.
   await controller.retryIntegration(RUNNER, undefined, 'project-1', 'task-1', body);
   assert.deepEqual(seen[1], ['owner-1', 'project-1', 'task-1', body, undefined]);
+});
+
+test('retryPromotionCheck is exposed as POST projects/:id/promotions/:promotionId/integration/retry', () => {
+  const handler = RunnerProjectsController.prototype.retryPromotionCheck;
+  assert.equal(
+    Reflect.getMetadata(PATH_METADATA, handler),
+    'projects/:id/promotions/:promotionId/integration/retry',
+  );
+  assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.POST);
+  const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, 'retryPromotionCheck') as
+    | Record<string, { data?: unknown; pipes?: unknown[] }>
+    | undefined;
+  for (const id of ['id', 'promotionId']) {
+    const arg = Object.values(args ?? {}).find((candidate) => candidate.data === id);
+    assert.ok(arg, `no ${id} param on retryPromotionCheck`);
+    assert.ok(
+      (arg.pipes ?? []).some((pipe) => pipe === PublicIdPipe || pipe instanceof PublicIdPipe),
+      `${id} does not resolve through PublicIdPipe`,
+    );
+  }
+});
+
+/** The candidate's re-check, asked for the same way: the runner owner's scope, the acting session. */
+test('retryPromotionCheck re-checks the candidate in the runner owner scope, as the acting session', async () => {
+  const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, 'retryPromotionCheck') as
+    | Record<string, { data?: unknown }>
+    | undefined;
+  const headers = Object.values(args ?? {})
+    .map((arg) => arg.data)
+    .filter((data) => typeof data === 'string' && data.includes('-'));
+  assert.deepEqual(headers, ['x-orbit-session-id']);
+
+  const seen: unknown[] = [];
+  const openItems = {
+    retryPromotionCheck: async (...call: unknown[]) => {
+      seen.push(call);
+      return { promotionId: 'promotion-1', jobId: 'job-3', generation: 2 };
+    },
+  } as never;
+  const controller = new RunnerProjectsController(
+    {} as never,
+    acceptanceDouble(),
+    {} as never,
+    orchestrationDouble(),
+    openItems,
+  );
+  const body = { reason: 'main\'s merge-check baseline was repaired' };
+
+  const retried = await controller.retryPromotionCheck(RUNNER, ` ${SESSION_ID} `, 'project-1', 'promotion-1', body);
+
+  assert.deepEqual(seen, [['owner-1', 'project-1', 'promotion-1', body, SESSION_ID]]);
+  assert.deepEqual(retried, { promotionId: 'promotion-1', jobId: 'job-3', generation: 2 });
+  // A missing header is passed on as missing, for the service to refuse — never read as the owner.
+  await controller.retryPromotionCheck(RUNNER, undefined, 'project-1', 'promotion-1', body);
+  assert.deepEqual(seen[1], ['owner-1', 'project-1', 'promotion-1', body, undefined]);
 });
 
 /**
@@ -638,6 +739,7 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     // confirmation card — that press is not here, and its absence is the assertion below.
     'ensureCoordinator',
     'getProject',
+    'handOverOpenItem',
     // Unit L7's one, and it is a GET on purpose. §7 RB2 puts the ANSWER to a cross-project
     // crossing with the user, so this door carries the question and not the write: an agent that
     // could sign a crossing for another goal is the incident this whole unit exists for wearing a
@@ -646,6 +748,10 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     'listProjectHandoffs',
     'recordMergeEvidence',
     'removeProject',
+    // The coordinator asking the owner to record the project done (`project_request_done`). It is
+    // the counterpart of requestStart: the service checks readiness and files a card; only the
+    // owner's press records DONE.
+    'requestDone',
     // The coordinator asking the owner to START the project (`project_request_start`). Beside the
     // question and for the same reasons: only the conversation the project is coordinated from may
     // ask, and asking starts nothing — the owner's press on the start card does — so the acting
@@ -666,6 +772,10 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     // is the coordinator's to decide, and the acting session is the authority the service checks —
     // and it spends no orchestration credential: it queues the line's own work and starts no session.
     'retryIntegration',
+    // The same door for the item that names no task (§4.7 H1): a blocked candidate's check run again
+    // by the coordinator, with a reason, as the acting session. It queues the candidate's next check
+    // and nothing past it — the merge into main stays the owner's card or the Automatic setting's.
+    'retryPromotionCheck',
     // The second half of the coordinator pair above, and the one that does not go stale: a message
     // ADDRESSED to the project, resolved to whichever conversation coordinates it at the moment of
     // delivery. `ensureCoordinator` answers with an id, and an id is exactly what a rotation between
@@ -692,10 +802,13 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     listProjectHandoffs: RequestMethod.GET,
     recordMergeEvidence: RequestMethod.POST,
     removeProject: RequestMethod.DELETE,
+    requestDone: RequestMethod.POST,
     requestStart: RequestMethod.POST,
     resolveBlocker: RequestMethod.POST,
     resolveOpenItem: RequestMethod.POST,
+    handOverOpenItem: RequestMethod.POST,
     retryIntegration: RequestMethod.POST,
+    retryPromotionCheck: RequestMethod.POST,
     // POST: it writes a turn, and a rotation is a side effect it may have. Both are the send the
     // project's coordinator would have received anyway — this door moves WHERE it is addressed from
     // a session to a project, and adds no authority to it.

@@ -75,6 +75,7 @@ test('task model suggestions survive create, batch, update, clearing and approva
   const owner = randomUUID();
   const runnerId = randomUUID();
   const token = `model-hint-${randomUUID()}`;
+  // An account that never turned smart model selection on: suggestions are accepted and kept with it off.
   await sql.query(`INSERT INTO "user"("id","email","name","password_hash") VALUES ($1,$2,'model hints','h')`, [owner, `${owner}@model-hint.invalid`]);
   await sql.query(`INSERT INTO "runner"("id","name","owner_id","token_hash","status","last_heartbeat_at","capabilities")
     VALUES ($1,'model hints',$2,$3,'ONLINE',now(),'{}'::text[])`, [runnerId, owner, sha256(token)]);
@@ -207,7 +208,8 @@ test('task model suggestions survive create, batch, update, clearing and approva
 
   await t.test('coordinator opening and delivery forms require suggestions even with Automatic off', () => {
     for (const enabled of [true, false]) {
-      for (const form of [buildCoordinatorInstructions('model hints', randomUUID(), enabled), buildCoordinatorDeliveryInstructions(randomUUID(), enabled)]) {
+      // Rendered for an owner with smart model selection on, the only owner they ask a tier of.
+      for (const form of [buildCoordinatorInstructions('model hints', randomUUID(), enabled, true), buildCoordinatorDeliveryInstructions(randomUUID(), enabled, true)]) {
         assert.match(form, /每个任务填 modelHint（S\/M\/L\/XL）和一句 modelHintReason/);
         assert.match(form, /缺建议的任务也用 task_update 补上/);
         assert.match(form, /引擎仍用 provider 字段指定/);

@@ -212,6 +212,7 @@ describe("each engine's sign-in, quota and way to its sign-in", () => {
       ['Kimi Code', 'ok', 'Signed in'],
       // OpenCode signs in per provider, with nothing on the machine to report.
       ['OpenCode', 'muted', '—'],
+      ['Antigravity CLI', 'muted', 'Update runner'],
     ]);
   });
 
@@ -234,6 +235,7 @@ describe("each engine's sign-in, quota and way to its sign-in", () => {
       ['Codex', 'warn', 'Signed out'],
       ['Kimi Code', 'warn', 'Signed out'],
       ['OpenCode', 'muted', 'Not installed'],
+      ['Antigravity CLI', 'muted', 'Update runner'],
     ]);
   });
 
@@ -245,10 +247,11 @@ describe("each engine's sign-in, quota and way to its sign-in", () => {
       ['Codex', [], 'No quota reported'],
       ['Kimi Code', [], 'No quota reported'],
       ['OpenCode', [], '—'],
+      ['Antigravity CLI', [], '—'],
     ]);
     // Signed out, the last reading is about sessions that can no longer start.
     const out = rowsOf(render(wikova({ engines: [health({ engine: 'claude', auth: 'no' })] })));
-    expect(out.map((row) => [row.quota, row.quotaNote])).toEqual([[[], '—']]);
+    expect(out.map((row) => [row.quota, row.quotaNote])).toEqual([[[], '—'], [[], '—']]);
   });
 
   it('reads a window past its reset as the fresh one it now is', () => {
@@ -305,7 +308,7 @@ describe("each engine's sign-in, quota and way to its sign-in", () => {
   it('leads every row to that engine’s sign-in on Providers, its card opened', () => {
     const r = wikova();
     expect(rowsOf(render(r)).map((row) => row.href)).toEqual(
-      ['claude', 'codex', 'kimi', 'opencode'].map(
+      ['claude', 'codex', 'kimi', 'opencode', 'antigravity'].map(
         (engine) => `/providers?runner=${encodeId(r.id)}&engine=${engine}`,
       ),
     );

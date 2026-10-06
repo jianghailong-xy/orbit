@@ -8,8 +8,10 @@ import {
   PlayCircleOutlined,
   TeamOutlined,
 } from '@ant-design/icons';
-import { Button, Checkbox, Input, Modal, Popconfirm, Radio, Segmented, Select, Tag, Tooltip } from 'antd';
+import { Button, Checkbox, Input, Modal, Popconfirm, Radio, Segmented, Select, Tooltip } from 'antd';
 import { api } from '../api';
+import { accountIsPaused, usePauseClock } from '../lib/accountPause';
+import { AccountPauseActions, AccountPauseStatus } from './AccountPause';
 import { isLoginPool, loginLine, type CodexLogin } from '../lib/codexLogin';
 import { encodeId, routeId } from '../lib/idCodec';
 import { planUsageRows } from '../lib/planUsage';
@@ -161,36 +163,46 @@ export function PoolGauge({ pool }: { pool: ProviderPool }) {
   );
 }
 
+const poolPauseEndpoint = (poolId: string, memberId: string) =>
+  `/providers/pools/${encodeId(poolId)}/members/${memberId.startsWith('login:') ? encodeURIComponent(memberId) : encodeId(memberId)}/pause`;
+
+function PoolPauseActions({ pool, member }: { pool: ProviderPool; member: PoolMember }) {
+  const permitted = !pool.shared || (member.login
+    ? canSignOutAccount(pool.shared, member.login)
+    : member.key && canRemoveKey(pool.shared, member.key));
+  if (!permitted) return null;
+  return <AccountPauseActions pool shared={!!pool.shared && hasPeople(pool.shared)} name={member.label} until={member.pausedUntil} endpoint={poolPauseEndpoint(pool.id, member.id)} />;
+}
+
 /** One account in a pool: who it is, where it stands, its own gauge, and what can be done about it.
  *  `refusal` is why the pool would no longer admit it (memberRefusal). */
 function MemberRow({
+  pool,
   member,
   refusal,
   onRemove,
 }: {
+  pool: ProviderPool;
   member: PoolMember;
   refusal: string | null;
   onRemove?: () => void;
 }) {
   const navigate = useNavigate();
-  const status = memberStatus(member, undefined, refusal);
+  const now = usePauseClock(member.pausedUntil);
+  const status = memberStatus({ ...member, pausedUntil: null }, now, refusal);
   const quota = memberQuota(member);
   return (
-    <div className="re-row pool-row" data-member={member.id}>
+    <div className={`re-row pool-row${accountIsPaused(member.pausedUntil, now) ? ' account-paused' : ''}`} data-member={member.id}>
       <div className="re-id">
         <ProviderTile slug={member.presetSlug ?? member.slug} label={member.label} size={28} />
         <div style={{ minWidth: 0 }}>
           <div className="re-name" title={member.label}>
             <span className="pool-member-label">{member.label}</span>
-            {member.next && <span className="re-chip">NEXT</span>}
+            {member.next && !accountIsPaused(member.pausedUntil, now) && <span className="re-chip">NEXT</span>}
           </div>
         </div>
       </div>
-      <div className="pool-status">
-        <Tag color={status.color} title={status.label}>
-          {status.label}
-        </Tag>
-      </div>
+      <AccountPauseStatus className="pool-status" until={member.pausedUntil} now={now} detail={member.login?.state === 'ACTIVE' ? 'Signed in' : undefined} status={status} />
       <div className="re-quota">
         {quota ? (
           <>
@@ -207,6 +219,7 @@ function MemberRow({
         )}
       </div>
       <div className="re-act">
+        <PoolPauseActions pool={pool} member={member} />
         {/* A refused key is final for the key, not for the account: a new one is the way back, and
             it is pasted on the provider's own page. */}
         {member.state === 'REFUSED' && (
@@ -270,7 +283,8 @@ function KeyRow({
   tagged?: boolean;
 }) {
   const key = member.key!;
-  const status = memberStatus(member);
+  const now = usePauseClock(member.pausedUntil);
+  const status = memberStatus({ ...member, pausedUntil: null }, now);
   const cap = key.shareCap;
   const spent = key.usage.othersCostUsd;
   const percent = cap === null ? null : cap > 0 ? Math.min(100, Math.round((spent / cap) * 100)) : 100;
@@ -280,14 +294,14 @@ function KeyRow({
   const toggle = key.contributor.you ? actions.onSwitch : undefined;
   const remove = canRemoveKey(pool, key) ? actions.onRemove : undefined;
   return (
-    <div className="re-row pool-row pool-row-key" data-member={key.id}>
+    <div className={`re-row pool-row pool-row-key${accountIsPaused(member.pausedUntil, now) ? ' account-paused' : ''}`} data-member={key.id}>
       <div className="re-id">
         <PersonMark pool={pool} userId={key.contributor.userId} name={key.contributor.name} />
         <div style={{ minWidth: 0 }}>
           <div className="re-name" title={key.label}>
             <span className="pool-member-label">{key.label}</span>
             {key.contributor.you && <span className="pool-you">you</span>}
-            {member.next && <span className="re-chip">NEXT</span>}
+            {member.next && !accountIsPaused(member.pausedUntil, now) && <span className="re-chip">NEXT</span>}
           </div>
           <div className="pool-key-mask">
             {key.contributor.name} · {key.fingerprint}
@@ -300,11 +314,7 @@ function KeyRow({
           </div>
         </div>
       </div>
-      <div className="pool-status">
-        <Tag color={status.color} title={status.label}>
-          {status.label}
-        </Tag>
-      </div>
+      <AccountPauseStatus className="pool-status" until={member.pausedUntil} now={now} detail={member.login?.state === 'ACTIVE' ? 'Signed in' : undefined} status={status} />
       <div className="re-quota pool-key-money">
         {/* Short on purpose: what the others spent on it, against the cap its contributor set — the
             whole sentence is the cell's own title. */}
@@ -325,6 +335,7 @@ function KeyRow({
         )}
       </div>
       <div className="re-act">
+        {canRemoveKey(pool, key) && <AccountPauseActions pool shared={hasPeople(pool)} name={member.label} until={member.pausedUntil} endpoint={poolPauseEndpoint(pool.id, member.id)} />}
         {replace && (
           <Button size="small" type="primary" onClick={() => replace(key)}>
             Replace key
@@ -400,7 +411,8 @@ function LoginRow({
   contributor?: { name: string; you: boolean };
 }) {
   const login = member.login!;
-  const status = memberStatus(member);
+  const now = usePauseClock(member.pausedUntil);
+  const status = memberStatus({ ...member, pausedUntil: null }, now);
   const windows = login.usage ? planUsageRows(login.usage) : [];
   const signedOut = member.state === 'SIGNED_OUT';
   const { onSignIn, onSignOut, canSignInAgain, canSignOut } = actions;
@@ -410,14 +422,14 @@ function LoginRow({
   // running on them, and the confirmation says so in the plural when more than one stays.
   const others = pool.members.length - 1;
   return (
-    <div className="re-row pool-row pool-row-login" data-member={member.id}>
+    <div className={`re-row pool-row pool-row-login${accountIsPaused(member.pausedUntil, now) ? ' account-paused' : ''}`} data-member={member.id}>
       <div className="re-id">
         <ProviderTile slug="openai" label="ChatGPT" size={28} />
         <div style={{ minWidth: 0 }}>
           <div className="re-name" title={member.label}>
             <span className="pool-member-label">{member.label}</span>
             {/* With one account there is nothing to choose between, so the mark would say nothing. */}
-            {member.next && pool.members.length > 1 && <span className="re-chip">NEXT</span>}
+            {member.next && !accountIsPaused(member.pausedUntil, now) && pool.members.length > 1 && <span className="re-chip">NEXT</span>}
           </div>
           <div className="pool-key-mask">
             {contributor && `${contributor.name} · `}
@@ -431,11 +443,7 @@ function LoginRow({
           </div>
         </div>
       </div>
-      <div className="pool-status">
-        <Tag color={status.color} title={status.label}>
-          {status.label}
-        </Tag>
-      </div>
+      <AccountPauseStatus className="pool-status" until={member.pausedUntil} now={now} detail={member.login?.state === 'ACTIVE' ? 'Signed in' : undefined} status={status} />
       <div className="re-quota pool-login-quota">
         {windows.length > 0 ? (
           windows.map((row) => (
@@ -458,6 +466,7 @@ function LoginRow({
         )}
       </div>
       <div className="re-act">
+        <PoolPauseActions pool={pool} member={member} />
         {signInAgain && (
           <Button size="small" type="primary" onClick={() => onSignIn!(login)}>
             Sign in again
@@ -572,6 +581,7 @@ export function PoolMembers({
         ) : (
           <MemberRow
             key={member.id}
+            pool={pool}
             member={member}
             refusal={memberRefusal(member, refusals)}
             onRemove={onRemove && (() => onRemove(member))}
@@ -597,6 +607,8 @@ function PoolCard({
   keyActions?: KeyActions;
   loginActions?: LoginActions;
 }) {
+  // Folded cards have no member rows to refresh the catalogue when a pause ends.
+  usePauseClock(pool.members.flatMap((member) => accountIsPaused(member.pausedUntil) ? [member.pausedUntil!] : []).sort()[0]);
   const { shared } = pool;
   const member = readByMember(pool);
   const people = !!shared && hasPeople(shared);
@@ -679,8 +691,7 @@ export function AccountPools({
       <div className="re-sec-head pool-sec-head">
         <h3>Account pools</h3>
         <span className="re-sec-sub">
-          Several keys under one name — each session starts on one with room, and moves on when it
-          runs out.
+          Several accounts under one name.
         </span>
         <Button size="small" className="pool-new" onClick={() => setCreating(true)}>
           New pool

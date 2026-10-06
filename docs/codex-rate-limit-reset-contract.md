@@ -254,6 +254,9 @@ Web 的 `readRequiredAfter` 从 `GET /runners/:id/codex-rate-limit-reset` 的 `l
 `NONE` 的原因：`SETTLED`、`RUNNER_MISMATCH`、`NO_ACTIVE_LEASE`、`CAPABILITY_MISSING`、`RUNNER_DRAINING`、`SNAPSHOT_MISSING`、`CLAIM_HELD`、
 `DEADLINE_PASSED`（持有者的 heartbeat 已到检查点期限：不续租、不投递，claim 老化后由 §7.5 结算）。`DELIVER` 给持有者时续租 claim（§7.4）。
 
+heartbeat 携带 `planUsage` 时，须先成功存储才派发 reset command；CAS 重试耗尽或写入异常时，heartbeat 本身仍成功，
+但本次不派发，等下一次上报。这样读取完成后的新投递也确认完整用量已到服务端。
+
 旧 runner 会忽略这个字段（Go `encoding/json` 默认忽略未知字段）；它们也不声明 capability，本来就收不到。
 
 ### 6.3 Runner → API：`POST /runner/codex-rate-limit-reset-result`
@@ -305,8 +308,10 @@ CONSUME：
 6. 回执响应 `next: REFRESH` → 立刻进入 REFRESH，不必等下一次 heartbeat。
 
 REFRESH：在收到 consume outcome **之后开始**一次新的 `account/rateLimits/read`（不复用第 2 步那次），块的 `generation`
-为本进程；指纹不一致 → `REFRESH_FAILED / ACCOUNT_MISMATCH`；成功 → `REFRESHED`，并写入 probe 缓存，让后续 heartbeat
-带上它（CAS 会把这次重复判为 `REJECT_DUPLICATE`）。
+为本进程；指纹不一致 → `REFRESH_FAILED / ACCOUNT_MISMATCH`。读成功后把完整用量写入 probe 缓存，立即唤醒 heartbeat，
+等一次在读取完成之后发出的 heartbeat 重新投递同一 claim，再上报 `REFRESHED`。完整用量因此先于成功状态落库，
+客户端完成后的刷新即可取得新窗口；`REFRESHED` 的块 CAS 会把这次重复判为 `REJECT_DUPLICATE`。
+若在一次 attempt 的期限内没有新投递，或进程停止，则不报成功，已确认的 consume 留给后续 REFRESH。
 
 进程在任何一步崩溃：内存状态直接丢弃。服务端的 claim 60 秒后由新进程接管（代数加一），新进程从第 1 步重新开始；
 如果 consume 已经 CONFIRMED，它只会收到 REFRESH command。
@@ -338,6 +343,7 @@ REFRESH：在收到 consume outcome **之后开始**一次新的 `account/rateLi
 - CONSUME_OUTCOME 的回执给出 `REFRESH` / `RETRY_REFRESH`（服务端已 CONFIRMED）之后才开始 REFRESH；此后这个步骤只读、不再
   consume，接下来的结果都属于 REFRESH 阶段，不带 key。
 - 每次读到的块都写入 usage probe 的缓存，读取经过 probe 的同一个 reader：`generation` 相同，`sequence` 与 probe 自己的读连续。
+  带旧块的完整读取晚返回时，用量窗口也不覆盖新快照；不带块的会话用量通知仍正常更新窗口。
 
 ### 6.5 投递、回执与终态的边界
 

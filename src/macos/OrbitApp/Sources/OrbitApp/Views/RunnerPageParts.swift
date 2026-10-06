@@ -180,11 +180,14 @@ struct RunnerWindowRow: View {
     var body: some View {
         let warn = row.nearLimit
         VStack(alignment: .leading, spacing: 4) {
+            if let group = row.groupLabel {
+                Text(group).font(.orbitLabel.weight(.semibold))
+            }
             HStack(alignment: .firstTextBaseline) {
                 Text(row.label)
                     .font(.orbitLabel.weight(.semibold))
                 Spacer(minLength: 8)
-                Text(verbatim: "\(row.percent)%")
+                Text(verbatim: "\(row.percent)%\(row.remaining ? " remaining" : "")")
                     .font(.orbitLabel)
                     .foregroundStyle(Color.secondary)
                     .monospacedDigit()
@@ -308,7 +311,16 @@ struct RunnerEngineRow: View {
                             .font(.orbitListSubtitle)
                             .foregroundStyle(RunnerInk.amber)
                     }
-                    if RunnerPageFormat.needsSignIn(health) {
+                    if health.engine == "antigravity" {
+                        if RunnerPageFormat.antigravityCanSignIn(runner) {
+                            RunnerCapsule(enabled: !offline) { Text(health.auth == "yes" && health.authSource == "google" ? "Re-sign in" : "Sign in with Google") }
+                            GoogleSignInTermsView()
+                        } else if let hint = EngineAuth.antigravityLoginHint(runner.antigravity?.googleLogin) {
+                            Text(hint)
+                                .font(.orbitLabel)
+                                .foregroundStyle(Color.secondary)
+                        }
+                    } else if RunnerPageFormat.needsSignIn(health) {
                         RunnerCapsule(enabled: !offline) { Text(RunnerPageCopy.RUNNER_SIGN_IN) }
                     }
                     if !windows.isEmpty {
@@ -332,7 +344,7 @@ struct RunnerEngineRow: View {
     /// `2.1.284 · Signed in`, the state in its colour.
     private var statusLine: AttributedString {
         typealias Colour = AttributeScopes.SwiftUIAttributes.ForegroundColorAttribute
-        let status = RunnerPageFormat.engineStatus(health)
+        let status = RunnerPageFormat.engineStatus(health, runner: runner)
         let version = health.installed == true ? RunnerPageFormat.engineVersion(health.version) : nil
         var line = AttributedString(version ?? "")
         if let status {

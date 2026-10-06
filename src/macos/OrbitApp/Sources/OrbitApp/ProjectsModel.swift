@@ -5,20 +5,24 @@ import OrbitKit
 /// The account's projects, behind the Projects section and the drawer's project rows. Owned by
 /// `AppModel` and rebuilt per instance, like the other section stores.
 ///
-/// The control plane has no project event, so the list is refetched: when the section or the
-/// drawer appears, on pull-to-refresh, on a short coalesced nudge after a task moved (a task write
-/// is what moves a project's lanes), and after every write this client makes.
+/// The list is refetched: when the section or the drawer appears, on pull-to-refresh, on a short
+/// coalesced nudge after a project changed or a member session or task moved (a task write
+/// is what moves a project's lanes), after every write this client makes, and every 15 seconds
+/// while loaded: integration jobs can move without changing a task or session.
 @MainActor
 @Observable
 final class ProjectsModel {
     /// Every project, open and closed, as `GET /projects` answered — newest first.
     private(set) var projects: [ProjectSummary] = []
+    /// The slimmer open-project summaries, including the session list's stored task progress.
+    private(set) var sidebarProjects: [ProjectSummary] = []
     private(set) var loadState = ListLoadState()
 
     private let api: APIClient
     /// Handed out from inside view bodies, so reading and filling it must not invalidate them.
     @ObservationIgnored private var details: [String: ProjectDetailModel] = [:]
     @ObservationIgnored private var nudgeTask: Task<Void, Never>?
+    @ObservationIgnored private var refreshNotBefore = Date.distantPast
 
     init(baseURL: URL, tokenStore: TokenStore) {
         api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
@@ -41,6 +45,7 @@ final class ProjectsModel {
 
     func load() async {
         loadState.begin()
+        async let sidebarRead = api.sidebarProjects()
         do {
             let list = try await api.projects()
             if list != projects { projects = list }
@@ -48,9 +53,18 @@ final class ProjectsModel {
         } catch {
             loadState.fail()
         }
+        if let list = try? await sidebarRead, list != sidebarProjects { sidebarProjects = list }
     }
 
-    /// A task moved, and a project's lanes with it maybe: refetch shortly, once for a burst.
+    /// Called by the app's existing polling task, which stops on sign-out.
+    func refreshIfDue(now: Date = Date()) async {
+        guard loadState.hasLoaded, now >= refreshNotBefore else { return }
+        refreshNotBefore = now.addingTimeInterval(15)
+        await load()
+        for detail in details.values where detail.isVisible { await detail.load(refreshGraph: false) }
+    }
+
+    /// A project or its member changed: refetch shortly, once for a burst.
     func nudge() {
         guard nudgeTask == nil, loadState.hasLoaded else { return }
         nudgeTask = Task { @MainActor [weak self] in
@@ -88,15 +102,21 @@ final class ProjectDetailModel {
     /// The integration read failed and there is no earlier answer to draw — what How it runs says
     /// instead of a spinner that never ends.
     private(set) var integrationUnread = false
+    private(set) var integrationReadAt: Date?
+    private(set) var integrationReadFailed = false
     private(set) var openItems: ProjectOpenItemsView?
+    /// A failed first read must not leave the Open items panel spinning or claim there are none.
+    private(set) var openItemsUnread = false
     private(set) var coordinator: ProjectCoordinatorStatus?
     private(set) var graph: ProjectDependencyGraph?
     private(set) var readyQueue: ProjectReadyToRun?
+    private(set) var readyQueueUnread = false
     /// Run-queue rows a Run press is starting: the row says so until the next read has it running.
     private(set) var starting: Set<String> = []
     private(set) var tasks: [ProjectTaskRow] = []
     private(set) var nextTaskCursor: String?
     private(set) var loadingMoreTasks = false
+    @ObservationIgnored private var refreshing = false
     private(set) var loadState = ListLoadState()
     /// The project is gone (deleted here or elsewhere); the page says so instead of spinning.
     private(set) var missing = false
@@ -125,18 +145,36 @@ final class ProjectDetailModel {
 
     /// Every read the page draws, side by side. The document is the one the page cannot draw
     /// without; the others each leave their own card out when they fail.
-    func load() async {
+    func load(refreshGraph: Bool = true) async {
+        guard !refreshing, !loadingMoreTasks else { return }
+        refreshing = true
+        defer { refreshing = false }
         loadState.begin()
-        async let documentRead = api.project(projectID)
-        async let panoramaRead = api.projectPanorama(projectID)
-        async let integrationRead = api.projectIntegration(projectID)
-        async let openItemsRead = api.projectOpenItems(projectID: projectID)
-        async let coordinatorRead = api.projectCoordinatorStatus(projectID)
-        async let graphRead = api.projectDependencyGraph(projectID)
-        async let queueRead = api.projectReadyToRun(projectID)
-        async let tasksRead = api.projectTaskPage(projectID)
+        // Keep these reads concurrent without `async let`: iOS 27's concurrency runtime can abort
+        // while tearing down several async-let result buffers in one continuation. Explicit task
+        // handles keep each result on its own allocation and preserve the page's parallel reads.
+        let documentRead = Task { try await api.project(projectID) }
+        let panoramaRead = Task { try await api.projectPanorama(projectID) }
+        let integrationRead = Task { try await api.projectIntegration(projectID) }
+        let openItemsRead = Task { try await api.projectOpenItems(projectID: projectID) }
+        let coordinatorRead = Task { try await api.projectCoordinatorStatus(projectID) }
+        let graphRead: Task<ProjectDependencyGraph, Error>? = refreshGraph
+            ? Task { try await api.projectDependencyGraph(projectID) }
+            : nil
+        let queueRead = Task { try await api.projectReadyToRun(projectID) }
+        let tasksRead = Task { try await refreshedTaskWindow(count: max(100, tasks.count)) }
+        defer {
+            documentRead.cancel()
+            panoramaRead.cancel()
+            integrationRead.cancel()
+            openItemsRead.cancel()
+            coordinatorRead.cancel()
+            graphRead?.cancel()
+            queueRead.cancel()
+            tasksRead.cancel()
+        }
         do {
-            let fetched = try await documentRead
+            let fetched = try await documentRead.value
             document = fetched
             missing = false
             loadState.succeed()
@@ -146,25 +184,53 @@ final class ProjectDetailModel {
         } catch {
             loadState.fail()
         }
-        panorama = (try? await panoramaRead) ?? panorama
-        if let view = try? await integrationRead {
+        panorama = (try? await panoramaRead.value) ?? panorama
+        if let view = try? await integrationRead.value {
             integration = view
             integrationUnread = false
+            integrationReadAt = Date()
+            integrationReadFailed = false
         } else {
             integrationUnread = integration == nil
+            integrationReadFailed = true
         }
-        openItems = (try? await openItemsRead) ?? openItems
-        coordinator = (try? await coordinatorRead) ?? coordinator
-        graph = (try? await graphRead) ?? graph
-        readyQueue = (try? await queueRead) ?? readyQueue
-        if let page = try? await tasksRead {
+        if let items = try? await openItemsRead.value {
+            openItems = items
+            openItemsUnread = false
+        } else {
+            openItemsUnread = openItems == nil
+        }
+        coordinator = (try? await coordinatorRead.value) ?? coordinator
+        if let graphRead {
+            graph = (try? await graphRead.value) ?? graph
+        }
+        if let queue = try? await queueRead.value {
+            readyQueue = queue
+            readyQueueUnread = false
+        } else {
+            readyQueueUnread = true
+        }
+        if let page = try? await tasksRead.value {
             tasks = page.items
             nextTaskCursor = page.nextCursor
         }
     }
 
+    /// Refresh every loaded page so a polling tick neither collapses the list nor leaves its tail stale.
+    private func refreshedTaskWindow(count: Int) async throws -> ProjectTaskPage {
+        var items: [ProjectTaskRow] = []
+        var cursor: String?
+        repeat {
+            let page = try await api.projectTaskPage(projectID, cursor: cursor,
+                                                    limit: min(200, count - items.count))
+            items += page.items
+            cursor = page.nextCursor
+        } while items.count < count && cursor != nil
+        return ProjectTaskPage(items: items, nextCursor: cursor)
+    }
+
     func loadMoreTasks() async {
-        guard let cursor = nextTaskCursor, !loadingMoreTasks else { return }
+        guard let cursor = nextTaskCursor, !loadingMoreTasks, !refreshing else { return }
         loadingMoreTasks = true
         defer { loadingMoreTasks = false }
         guard let page = try? await api.projectTaskPage(projectID, cursor: cursor) else { return }

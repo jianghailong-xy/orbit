@@ -1557,8 +1557,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `project` or `project_acceptance_*` object is named, so the 0177 pair and every stored task
       // and criterion row are out of its reach. No function, trigger or type is created, replaced or
       // dropped — so it is not another writer of the DONE fence and names none of the six preserved
-      // objects. No INSERT, UPDATE or DELETE: nothing is backfilled. (0343 is left to the unlanded
-      // delivery-review migration of the same project's branch that already spells it.)
+      // objects. No INSERT, UPDATE or DELETE: nothing is backfilled. (0343 remains unused in this
+      // line; the delivery-review migration is 0375 because the current production/branch ledger
+      // already occupies the intervening numbers.)
       '0344_integration_job_retry',
       // The owner DONE record (0345): four columns on `project` plus CHECKs for its provenance,
       // digest and accepted-gap array. Existing DONE rows are backfilled only in those new columns
@@ -1596,16 +1597,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // criterion row are out of its reach. No function, trigger or type is created, replaced or
       // dropped — so it is not another writer of the DONE fence and names none of the six preserved
       // objects. No INSERT, UPDATE or DELETE: the new table starts empty and every session reads
-      // NULL. (0343 is the delivery review's, as said above, and 0347 is the token-sum drop just
-      // above, so this took the next number nobody used.)
+      // NULL. (0375 is the delivery review's, and 0347 is the token-sum drop just above, so this
+      // took the next number nobody used in its sequence.)
       '0348_session_folder',
       // Who sent a turn: one nullable UUID column with no default on `conversation_turn`
       // (`sender_session_id`, deliberately no foreign key) and one partial index on it. Read against
       // every claim above: `conversation_turn` is not among the preserved relations and nothing else
       // is named — no `task`, `session`, `project` or `project_acceptance_*` object, no function,
       // trigger or type created, replaced or dropped, and no INSERT, UPDATE or DELETE. (Written as
-      // 0343 on its own branch and renumbered before it landed: 0343 is the delivery review's, as
-      // said above, and 0348 is spelled by the unlanded session-folders branch.)
+      // Written as 0343 on its own branch and renumbered before it landed: this line keeps 0343
+      // unoccupied, while 0348 is spelled by the unlanded session-folders branch.)
       '0349_conversation_turn_sender_session',
       // Session requests (0350): one new table, `session_request`, whose one foreign key is to the
       // recipient `session` row (ON DELETE CASCADE), with CHECKs and partial indexes of its own; a
@@ -1777,6 +1778,21 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // (0366 is the retry-claim lease just above, which landed first, so this took 0367; 0369,
       // below, landed before this did and left 0367 to it.)
       '0367_antigravity_runtime',
+      // An exception item the coordinator is handling (0368): five nullable columns with no default
+      // on `project_open_item` (`handling_job_id`, `handling_session_id`, `handling_reason`,
+      // `handling_started_at`, `resolved_by_job_id`, catalog-only), four CHECKs every stored item
+      // satisfies because all five read NULL in it, one partial index over OPEN rows, and
+      // `project_integration_job_retry_kind_chk` dropped and added back admitting CHECK_PROMOTION — a
+      // superset every stored job satisfies. Read against every claim above: `project_open_item` and
+      // `project_integration_job` are the only relations named and neither is a preserved one; no
+      // `task`, `session`, `project` or `project_acceptance_*` object is named, so the 0177 pair and
+      // every stored task and criterion row are out of its reach. No function, trigger or type is
+      // created, replaced or dropped — the only DROP is a CHECK restated in the same statement — so it
+      // is not another writer of the DONE fence and names none of the six preserved objects. No
+      // INSERT, UPDATE or DELETE: nothing is backfilled. (Written as 0364 on its own branch and
+      // renumbered before it landed: 0364, 0365 and 0366 landed first, 0369 just below left 0367 and
+      // 0368 to two branches not yet landed, and 0367 is the other one's.)
+      '0368_open_item_coordinator_handling',
       // Every live workspace's place in the sidebar, written down (0369): one UPDATE … FROM of
       // `workspace.position`, computed from `workspace` and `runner` rows and nothing else. Read
       // against every claim above: neither table is a preserved relation, and no `task`, `session`,
@@ -1843,7 +1859,58 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // of the six preserved objects; no `project_acceptance_*` object is named. No INSERT, UPDATE or
       // DELETE. (Written as 0371 on its own branch and renumbered before it landed: 0371 is the pool
       // login person above, and 0372 is spelled by another branch not yet landed.)
-      '0373_owner_confirmation_reason'],
+      '0373_owner_confirmation_reason',
+      // An account paused by hand (0374, common/account-pause.ts): one nullable JSONB column on
+      // `runner` (`account_pauses`) and two nullable TIMESTAMPTZ(3) columns (`paused_at`,
+      // `paused_until`) on each of `provider_pool_member`, `pool_api_key` and `pool_codex_login`,
+      // none with a default, so every ADD COLUMN is catalog-only. Read against every claim above:
+      // none of those four relations is a preserved one, and no `task`, `session`, `project` or
+      // `project_acceptance_*` object is named, so the 0177 pair and every stored task and criterion
+      // row are out of its reach. No function, trigger, type, enum, constraint or index is created,
+      // replaced or dropped, so it is not another writer of the DONE fence and names none of the six
+      // preserved objects. No INSERT, UPDATE or DELETE: nothing is backfilled — every stored account
+      // reads as not paused, and a pause is written only when somebody asks for one.
+      '0374_account_pause',
+      // Delivery landing questions (0375): widen only project_open_item_kind_chk with
+      // DELIVERY_REVIEW. Existing rows satisfy the replacement constraint; no task, project,
+      // acceptance, DONE fence, trigger or function is rewritten and nothing is backfilled.
+      '0375_delivery_review_item',
+      // Android push registration (0376) adds one nullable TEXT column and one unique index to
+      // device_token only. No existing token, user FK, task, project, acceptance row, fence,
+      // function or trigger is changed, and there is no DML or preserved object in its scope.
+      // Renumbered before landing because the delivery-review migration already occupies 0375.
+      '0376_android_push_installation',
+      // DeepSeek Harness runner admission (0377): one new session acquisition trigger and its
+      // function, plus a replacement of 0367/0372's Antigravity claim function that excludes
+      // discriminator-marked native dsh sessions from a colliding configured provider lookup.
+      // The new function reads model_provider and locks the authorized runner FOR SHARE NOWAIT;
+      // neither function writes another relation or touches a preserved ledger, task, project,
+      // criterion, enum, acceptance object or DONE fence. No stored row is rewritten, and no
+      // existing trigger, table, column, constraint, index or type is dropped or altered.
+      '0377_dsh_runner_gate',
+      // Open-item hand-over history (0378): three nullable columns and two checks on
+      // project_open_item only. No existing rows are rewritten, and the session id deliberately
+      // has no foreign key so purging a conversation cannot erase the owner's explanation.
+      '0378_open_item_hand_over',
+      // A task's concrete fix for an exception item (0379): one nullable task FK to
+      // project_open_item, SET NULL on item deletion and an index for the read/escalation paths.
+      // No existing row is backfilled, and no preserved completion/fence object is touched.
+      '0379_open_item_fix_link',
+      // Owner integration retry attribution (0380): one nullable requester column on
+      // project_integration_job and one nullable owner-attribution column on project_open_item;
+      // the two existing all-or-none CHECKs are replaced with XOR checks. Existing coordinator
+      // retries satisfy the widened constraints, and no task, project, acceptance, DONE fence,
+      // trigger or function is rewritten; nothing is backfilled.
+      '0380_owner_integration_retry',
+      // Reopen landing intent (0381): one task-keyed marker row records the explicit task_reopen
+      // door until the next DONE queues its LAND_TASK generation. It is consumed transactionally;
+      // no existing task, project, acceptance, DONE fence, trigger or function is rewritten.
+      '0381_task_reopen_landing_intent',
+      // Credential throttle (0382): one nullable `throttled_until` on pool_codex_login and one on
+      // pool_api_key, written by the pool gateways when a 429 outlasts the wait they may hold open.
+      // Two ADD COLUMN of a nullable timestamp and nothing else — no task, project, acceptance, DONE
+      // fence, trigger or function is touched, and no existing row is backfilled.
+      '0382_pool_credential_throttle'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

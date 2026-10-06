@@ -1,0 +1,184 @@
+{
+  "cached": "dark",
+  "account": "light",
+  "adoption": [
+    {
+      "old": null,
+      "current": "dark"
+    },
+    {
+      "old": "dark",
+      "current": "dark"
+    },
+    {
+      "old": "dark",
+      "current": "dark"
+    },
+    {
+      "old": "dark",
+      "current": "light"
+    }
+  ],
+  "setupPatch": "synthetic account preparation before app execution",
+  "requests": [
+    {
+      "method": "PATCH",
+      "path": "/api/users/me/preferences",
+      "query": "",
+      "body": "{\"theme\":\"light\"}"
+    },
+    {
+      "method": "GET",
+      "path": "/api/runners",
+      "query": "",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/users/me",
+      "query": "",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/providers",
+      "query": "",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces",
+      "query": "",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/sessions",
+      "query": "runnerId=2zwQZ2hd93IvLb59t6p28&workspaceId=2zwQZ2hd93IvLb59t6p1s&view=open&limit=40",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/users/me",
+      "query": "",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/wiki/spaces",
+      "query": "",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/sidebar",
+      "query": "",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/runners",
+      "query": "",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces",
+      "query": "",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/sessions/counts",
+      "query": "",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/sessions",
+      "query": "runnerId=2zwQZ2hd93IvLb59t6p28&workspaceId=2zwQZ2hd93IvLb59t6p1s&view=open&limit=40",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces",
+      "query": "",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/providers",
+      "query": "",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/sessions",
+      "query": "runnerId=2zwQZ2hd93IvLb59t6p28&workspaceId=2zwQZ2hd93IvLb59t6p1s&view=open&limit=40",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/workspaces",
+      "query": "",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/providers",
+      "query": "",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/users/me",
+      "query": "",
+      "body": null
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/users/me/preferences",
+      "query": "",
+      "body": "{\"theme\":\"light\"}"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/users/me/preferences",
+      "query": "",
+      "body": "{\"theme\":\"dark\"}"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/users/me/preferences",
+      "query": "",
+      "body": "{\"theme\":\"system\"}"
+    }
+  ],
+  "pageErrors": [],
+  "mutations": [
+    {
+      "old": null,
+      "current": "dark"
+    },
+    {
+      "old": "dark",
+      "current": "light"
+    },
+    {
+      "old": "light",
+      "current": "dark"
+    },
+    {
+      "old": "dark",
+      "current": "dark"
+    },
+    {
+      "old": "dark",
+      "current": "light"
+    },
+    {
+      "old": "light",
+      "current": "dark"
+    }
+  ]
+}

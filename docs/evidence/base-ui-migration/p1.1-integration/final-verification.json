@@ -1,0 +1,10 @@
+{
+  "sameInstallAndGeneratedFileIdentity": [
+    "node_modules/@base-ui/react/package.json",
+    "node_modules/.package-lock.json",
+    "src/apiserver/node_modules/.prisma/client/index.d.ts"
+  ],
+  "realViteCacheDirectories": true,
+  "trackedTreeUnchanged": true,
+  "mainInstallUnchanged": true
+}

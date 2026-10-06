@@ -82,6 +82,16 @@ final class SettingsCopyParityTests: XCTestCase {
         assertSays(page, "hint=\"\(SettingsCopy.letSessionsOrchestrateHint)\"", in: Self.settings)
     }
 
+    /// Smart model selection: the Session defaults card's switch, with its label and hint.
+    func testSmartModelSelectionSaysWhatTheWebPageSays() throws {
+        let page = try web(Self.settings)
+        assertSays(page, "label=\"\(SettingsCopy.smartModelSelection)\"", in: Self.settings)
+        assertSays(page, "hint=\"\(SettingsCopy.smartModelSelectionHint)\"", in: Self.settings)
+        assertSays(page, "checked={prefs.modelRouting === true}", in: Self.settings)
+        assertSays(page, "save.mutate({ modelRouting: v })", in: Self.settings)
+        XCTAssertEqual(SettingsHome.title(.modelRouting), SettingsCopy.smartModelSelection)
+    }
+
     /// The edit-profile card's field is called what the web Profile page calls the same value.
     func testTheNameFieldSaysWhatTheProfilePageSays() throws {
         assertSays(try web(Self.profile), ">\(SettingsCopy.nameLabel)</div>", in: Self.profile)
@@ -136,7 +146,7 @@ final class SettingsCopyParityTests: XCTestCase {
         assertSays(engines, "<h3>\(ProvidersOverview.onYourRunners)</h3>", in: Self.engines)
         assertSays(engines, "re-sec-sub\"> \(ProvidersOverview.onYourRunnersDetail)", in: Self.engines)
         assertSays(engines, "return '\(ProvidersOverview.runnerSummary(try runner(engines: nil)))'", in: Self.engines)
-        assertSays(engines, "'All signed in' : `${ready} of ${ENGINES.length} signed in`", in: Self.engines)
+        assertSays(engines, "'All signed in' : `${ready} of ${engines.length} signed in`", in: Self.engines)
 
         let pools = try web(Self.pools)
         assertSays(pools, "<h3>\(ProvidersOverview.accountPools)</h3>", in: Self.pools)

@@ -8,6 +8,7 @@ import {
 } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
+import type { TaskIntegrationView } from '@orbit/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { ApiError, api } from '../api';
 import { newRunRequestToken } from '../lib/runRequestToken';
@@ -97,8 +98,8 @@ function task(over: Record<string, unknown> = {}) {
   };
 }
 
-function renderPanel(data: Record<string, unknown>, deleting = false): string {
-  const qc = new QueryClient({
+function renderPanel(data: Record<string, unknown>, deleting = false, client?: QueryClient): string {
+  const qc = client ?? new QueryClient({
     defaultOptions: { queries: { retry: false, refetchOnMount: false, retryOnMount: false } },
   });
   qc.setQueryData(['task', TASK_ID], data);
@@ -116,6 +117,140 @@ function renderPanel(data: Record<string, unknown>, deleting = false): string {
     </QueryClientProvider>,
   );
 }
+
+describe('the landing of a DONE task, apart from its status (§2.7a)', () => {
+  const QUEUED_AT = '2026-10-04T01:00:00.000Z';
+  const STARTED_AT = '2026-10-04T01:02:00.000Z';
+  const HEARTBEAT_AT = '2026-10-04T01:03:00.000Z';
+  const FINISHED_AT = '2026-10-04T01:04:00.000Z';
+  type JobState = NonNullable<TaskIntegrationView['landTask']>['state'];
+
+  /** What the server's read model says about a task whose newest landing is in `state`. */
+  function integration(state: JobState): TaskIntegrationView {
+    const stopped = state === 'CHECK_FAILED' || state === 'CONFLICT';
+    return {
+      state: state === 'LANDED' ? 'ON_INTEGRATION_LINE' : state as TaskIntegrationView['state'],
+      since: QUEUED_AT,
+      handler: stopped ? 'COORDINATOR' : null,
+      openItemId: stopped ? 'item19' : null,
+      jobId: 'landing19',
+      checksRunningForMs: state === 'RUNNING' ? 60_000 : null,
+      landTask: {
+        jobId: 'landing19',
+        state,
+        phase: state === 'RUNNING' || state === 'CHECK_FAILED' ? 'CHECK' : state === 'CONFLICT' ? 'MAIN_SYNC' : null,
+        generation: '19',
+        queuedAt: QUEUED_AT,
+        startedAt: state === 'QUEUED' ? null : STARTED_AT,
+        heartbeatAt: state === 'QUEUED' ? null : HEARTBEAT_AT,
+        finishedAt: state === 'QUEUED' || state === 'RUNNING' ? null : FINISHED_AT,
+        targetRef: 'refs/heads/project/landing-visibility',
+        waitMs: 120_000,
+        blockingReason: state === 'QUEUED'
+          ? { code: 'WAITING_MAIN_SYNC', summary: 'Waiting for the project line to sync: an earlier landing could not merge upstream into this branch, and its conflict is still open' }
+          : state === 'CHECK_FAILED'
+            ? { code: 'CHECK_FAILED', summary: 'Checks failed on the combined tree: the merge check exited 1 (expected 0)' }
+            : state === 'CONFLICT'
+              ? { code: 'CONFLICT', summary: 'Stopped at a conflict: upstream could not be merged into the target branch (2 conflicting files)' }
+              : null,
+      },
+    };
+  }
+
+  const section = (html: string) =>
+    /<section class="tdp-section" aria-label="Task landing">([\s\S]*?)<\/section>/.exec(html)?.[1];
+  const meta = (html: string) => /<div class="tdp-meta">([\s\S]*?)<\/div>/.exec(html)?.[1];
+
+  it.each([
+    ['QUEUED', 'Waiting to land', 'tone-amber'],
+    ['RUNNING', 'Landing', 'tone-blue'],
+    ['LANDED', 'Landed', 'tone-green'],
+    ['CHECK_FAILED', 'Landing checks failed', 'tone-red'],
+    ['CONFLICT', 'Landing conflict', 'tone-red'],
+  ] as const)('a DONE task whose landing is %s says both, apart, with the server’s facts and no new action', (state, label, tone) => {
+    const html = renderPanel(task({ status: 'DONE', integration: integration(state) }));
+    // The header: the task's status, and the landing beside it — never folded into it.
+    const head = meta(html)!;
+    expect(head).toContain('>Done</span>');
+    expect(head).toContain(`<span class="tdp-badge ${tone}" data-landing-badge="">${label}</span>`);
+
+    const block = section(html);
+    expect(block).toBeDefined();
+    expect(block).toContain(`data-land-task-state="${state}"`);
+    expect(block).toContain('<span class="land-task-task-state">Task DONE</span>');
+    expect(block).toContain(`<span class="tdp-badge ${tone}">${label}</span>`);
+    expect(block).toContain('generation 19');
+    expect(block).toContain('<code title="refs/heads/project/landing-visibility">project/landing-visibility</code>');
+    expect(block).toContain('<dt>Queue wait</dt><dd>2m</dd>');
+    expect(block).toContain(`dateTime="${QUEUED_AT}"`);
+    expect(block).not.toMatch(/<button|<a /);
+    if (state === 'QUEUED') {
+      expect(block).toContain('data-blocking-reason="WAITING_MAIN_SYNC"');
+      expect(block).toContain('Waiting for the project line to sync');
+      expect(block).toContain('<dt>Started</dt><dd>—</dd>');
+    } else {
+      expect(block).toContain(`dateTime="${STARTED_AT}"`);
+      expect(block).toContain(`dateTime="${HEARTBEAT_AT}"`);
+    }
+    if (state === 'RUNNING') {
+      expect(block).toContain('<span class="land-task-step">checking</span>');
+      expect(block).toContain('<dt>Finished</dt><dd>—</dd>');
+      expect(block).not.toContain('data-blocking-reason');
+    }
+    if (state === 'LANDED') expect(block).not.toContain('data-blocking-reason');
+    if (state === 'CHECK_FAILED') {
+      expect(block).toContain('stopped while checking');
+      expect(block).toContain('the merge check exited 1 (expected 0)');
+    }
+    if (state === 'CONFLICT') {
+      expect(block).toContain('stopped while syncing main');
+      expect(block).toContain('upstream could not be merged into the target branch');
+    }
+    if (state !== 'QUEUED' && state !== 'RUNNING') expect(block).toContain(`dateTime="${FINISHED_AT}"`);
+  });
+
+  it('a newer attempt after a receipt keeps saying where the work already is', () => {
+    const view = integration('QUEUED');
+    view.state = 'ON_UPSTREAM';
+    const block = section(renderPanel(task({ status: 'DONE', integration: view })))!;
+    expect(block).toContain('Waiting to land');
+    expect(block).toContain('Its work is on main by an existing receipt.');
+  });
+
+  it('a DONE task whose landing is not queued yet still reads as waiting to land', () => {
+    const html = renderPanel(task({ status: 'DONE', integration: { ...integration('QUEUED'), landTask: null } }));
+    expect(meta(html)).toContain('data-landing-badge="">Waiting to land</span>');
+    expect(section(html)).toContain('the landing has not been queued yet');
+  });
+
+  it.each([
+    ['QUEUED', 15_000],
+    ['RUNNING', 4000],
+    ['LANDED', false],
+    ['CHECK_FAILED', false],
+    ['CONFLICT', false],
+  ] as const)('reads a %s landing again on its own clock with no busy session (%s)', (state, expected) => {
+    const qc = new QueryClient();
+    renderPanel(task({ status: 'DONE', sessions: [], integration: integration(state) }), false, qc);
+    const query = qc.getQueryCache().find({ queryKey: ['task', TASK_ID] })!;
+    // An observer's option, carried on the query it observes; QueryOptions does not declare it.
+    const interval = (query.options as { refetchInterval?: (q: typeof query) => number | false }).refetchInterval;
+    if (typeof interval !== 'function') throw new Error('Task detail must select its refresh interval');
+    expect(interval(query)).toBe(expected);
+  });
+
+  it('draws nothing for a task with no landing, or from a server that predates the read model', () => {
+    for (const data of [
+      task({ status: 'DONE' }),
+      task({ status: 'DONE', integration: { state: 'NOT_APPLICABLE', since: null, handler: null,
+        openItemId: null, jobId: null, checksRunningForMs: null, landTask: null } }),
+    ]) {
+      const html = renderPanel(data);
+      expect(html).not.toContain('aria-label="Task landing"');
+      expect(html).not.toContain('data-landing-badge');
+    }
+  });
+});
 
 /** The header's primary action, as its label and whether it can be pressed. */
 function primaryAction(html: string): { label: string; disabled: boolean } | null {

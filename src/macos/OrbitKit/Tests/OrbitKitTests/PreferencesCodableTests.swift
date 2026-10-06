@@ -102,6 +102,37 @@ final class PreferencesCodableTests: XCTestCase {
         XCTAssertEqual(cleared["defaultEffort"] as? String, "")
     }
 
+    /// The account's switch for smart model selection: off unless it is exactly `true`. Absent (an
+    /// account that never touched it) and anything but a boolean decode nil — never a failed `me`.
+    func testPreferencesDecodesTheModelRoutingSwitchLeniently() throws {
+        func prefs(_ body: String) throws -> UserPreferences? {
+            try JSONDecoder().decode(User.self, from: Data(#"{"id":"u1","email":"a@b.com","preferences":\#(body)}"#.utf8)).preferences
+        }
+        XCTAssertEqual(try prefs(#"{"modelRouting":true}"#)?.modelRouting, true)
+        XCTAssertEqual(try prefs(#"{"modelRouting":true}"#)?.smartModelSelection, true)
+        XCTAssertEqual(try prefs(#"{"modelRouting":false}"#)?.smartModelSelection, false)
+        let bare = try prefs(#"{"theme":"light"}"#)
+        XCTAssertNil(bare?.modelRouting)
+        XCTAssertEqual(bare?.smartModelSelection, false, "absent is off")
+        for odd in [#""true""#, "1", "null", #"{"on":true}"#] {
+            let p = try prefs(#"{"theme":"dark","modelRouting":\#(odd)}"#)
+            XCTAssertNil(p?.modelRouting, odd)
+            XCTAssertEqual(p?.smartModelSelection, false, odd)
+            XCTAssertEqual(p?.theme, "dark", "the rest of the preferences still decode")
+        }
+    }
+
+    /// Flipping it sends `modelRouting` alone, `false` included — PATCH /users/me/preferences
+    /// {modelRouting}, as the web Settings page does.
+    func testUpdatePreferencesModelRoutingOnly() throws {
+        for value in [true, false] {
+            let obj = try jsonObject(UpdatePreferencesRequest(modelRouting: value))
+            XCTAssertEqual(obj["modelRouting"] as? Bool, value)
+            XCTAssertEqual(obj.count, 1)
+        }
+        XCTAssertFalse(try jsonObject(UpdatePreferencesRequest(theme: "dark")).keys.contains("modelRouting"))
+    }
+
     func testModelPreferencesRoundTripAndRemainOptional() throws {
         let json = #"{"preferences":{"defaultModels":{"codex":"gpt-6.1-sol","claude":"claude-sonnet-5"}},"id":"u1","email":"a@b.com"}"#
         let user = try JSONDecoder().decode(User.self, from: Data(json.utf8))

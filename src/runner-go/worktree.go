@@ -2293,6 +2293,12 @@ func (r *failedCommitRegistry) forget(reported []CommitErrorExpiry) {
 // plenty for a one-line message, and the call runs on the user's own subscription.
 const commitMsgModel = "sonnet"
 
+// commitMsgEngine is the CLI generateCommitMessage runs, resolved off PATH. A variable only so the
+// test binary can name one that does not exist (noCommitMsgEngine): otherwise every commit and
+// finalize a test drives spends a real call on this machine's own login — a network round trip
+// that can take the whole minute below — and no test can assert on what a model writes anyway.
+var commitMsgEngine = "claude"
+
 // commitMsgPrompt instructs the one-shot Claude; the staged diff is appended verbatim.
 const commitMsgPrompt = `Generate a git commit message for the staged changes below.
 
@@ -2327,7 +2333,7 @@ func generateCommitMessage(wtPath, fallback string) string {
 	defer os.RemoveAll(tmp)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "claude", "-p", commitMsgPrompt+diff,
+	cmd := exec.CommandContext(ctx, commitMsgEngine, "-p", commitMsgPrompt+diff,
 		"--model", commitMsgModel, "--output-format", "text")
 	cmd.Dir = tmp
 	out, err := cmd.Output()

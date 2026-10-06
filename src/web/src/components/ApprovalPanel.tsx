@@ -4,6 +4,8 @@ import remarkGfm from 'remark-gfm';
 import type { ApprovalInfo, PermissionRule } from '../api';
 import { BatchGraph } from './BatchGraph';
 import { CardActionButton, CardActions } from './CardAction';
+import { ReviewCard } from './ReviewCard';
+import { useIsMobile } from '../lib/useMediaQuery';
 import { ENTER_HINT, SHORTCUT_HINT, useApproveHotkey, useCardKeyClaim } from './CardHotkey';
 import { buildBatchGraph, describeShape, shouldDraw } from '../lib/batchGraph';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
@@ -321,9 +323,12 @@ export function ApprovalPanel({
   onDecline?: (id: string, toolName: string, subject: string) => void;
 }): JSX.Element {
   const isQuestion = approval.toolName === 'AskUserQuestion';
+  const narrow = useIsMobile();
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const compact = isPlan(approval) || isProjectCreate(approval);
   // A dead card owns no hotkey and shows no shortcut hint: the caller already skips it when
   // choosing the active card, and this holds even when something else calls it directly.
-  const armed = active && answerable;
+  const armed = active && answerable && (!narrow || !compact || reviewOpen);
   // "Always allow" — the running session stops asking (claude's engine matches future calls),
   // and the rule is kept on this session's workspace so its other sessions start with it too.
   // Empty for questions/plans and Bash commands with no clean prefix; a compound Bash line
@@ -337,10 +342,10 @@ export function ApprovalPanel({
   const keys = useCardKeyClaim(armed && !isQuestion, anchor);
   // Plain card: Enter approves; ⌘/Ctrl + Enter always-allows (only when that option exists).
   // Questions have no submit hotkey — they submit only via the Submit button.
-  useApproveHotkey(keys, () => onDecide(approval.id, 'allow'), { requireMod: false });
+  useApproveHotkey(keys, () => onDecide(approval.id, 'allow'), { requireMod: false, anchor });
   useApproveHotkey(keys && rules.length > 0, () => {
     if (rules.length) onDecide(approval.id, 'allow', undefined, undefined, rules);
-  });
+  }, { anchor });
   if (isQuestion) {
     // A form over options, whatever the options say. The completion decision is Orbit's own card
     // (`EvidenceDecisionCard.tsx`), drawn from the pending read; a question offering the same two
@@ -371,10 +376,7 @@ export function ApprovalPanel({
         : blocker
           ? (blocker.subjectTitle || blocker.kind || 'this blocker')
           : null;
-  return (
-    <div ref={anchor} className="approval-card">
-      <div className="approval-head">
-        {isPlan(approval)
+  const heading = isPlan(approval)
           ? '📋 Confirm: exit plan mode and proceed with this plan?'
           : dag
             ? `🔗 Confirm: restructure dependencies in ${dag.preview.listTitle ?? 'this list'}?`
@@ -388,7 +390,15 @@ export function ApprovalPanel({
                   : '📝 Confirm: create 1 task?'
                 : blocker
                   ? `🚧 Confirm: this no longer blocks ${blocker.projectTitle || 'the project'}?`
-                  : `🔓 Approve tool call: ${approval.toolName}`}
+                  : `🔓 Approve tool call: ${approval.toolName}`;
+  return (
+    <ReviewCard enabled={compact} title={heading}
+      summary={markdownToPlainLines(plan || create?.prose || '')}
+      meta={!answerable ? 'No longer waiting for an answer' : undefined}
+      open={reviewOpen} onOpenChange={setReviewOpen}>
+    <div ref={anchor} className="approval-card">
+      <div className="approval-head">
+        {heading}
       </div>
       {/* A create is read top to bottom like a plan, so it grows instead of scrolling. */}
       <div className={`approval-body${plan || create || blocker ? ' is-plan' : ''}`}>
@@ -451,6 +461,7 @@ export function ApprovalPanel({
             // so it arms the composer and the refusal rides back with the next send. Everything
             // else — a plan, a tool call — is denied where it stands.
             if (declineSubject !== null && onDecline) {
+              setReviewOpen(false);
               onDecline(approval.id, approval.toolName ?? '', declineSubject);
             } else {
               onDecide(approval.id, 'deny');
@@ -464,6 +475,7 @@ export function ApprovalPanel({
         </CardActionButton>
       </CardActions>
     </div>
+    </ReviewCard>
   );
 }
 
@@ -796,6 +808,7 @@ function QuestionForm({
   answerable: boolean;
   onChatAbout?: (id: string, question: string) => void;
 }): JSX.Element {
+  const [reviewOpen, setReviewOpen] = useState(false);
   const questions = questionsOf(approval.input);
   const [sel, setSel] = useState<Record<string, string[]>>({});
   // Free-text answers, keyed by question text — claude's AskUserQuestion always lets
@@ -845,6 +858,10 @@ function QuestionForm({
   };
 
   return (
+    <ReviewCard title="Claude has a question for you"
+      summary={questions.map((question) => question.question ?? '').join(' · ')}
+      meta={!answerable ? 'No longer waiting for an answer' : `${questions.length} question${questions.length === 1 ? '' : 's'}`}
+      open={reviewOpen} onOpenChange={setReviewOpen}>
     <div className="approval-card">
       <div className="approval-head">❓ Claude has a question for you</div>
       <div className="approval-body is-questions">
@@ -901,11 +918,12 @@ function QuestionForm({
         <CardActionButton
           tone="outline"
           disabled={!answerable}
-          onClick={() => onChatAbout?.(approval.id, chatLabel)}
+          onClick={() => { setReviewOpen(false); onChatAbout?.(approval.id, chatLabel); }}
         >
           💬 Chat about this
         </CardActionButton>
       </CardActions>
     </div>
+    </ReviewCard>
   );
 }

@@ -20,16 +20,18 @@ vi.mock('../api', async (importOriginal) => {
     api: vi.fn(),
     getSession: vi.fn(),
     commitSession: vi.fn(),
+    mergeSessionToMain: vi.fn(),
     resumeSession: vi.fn(),
     getSessionEventPage: vi.fn(),
     listApprovals: vi.fn(),
   };
 });
 
-const { api, getSession, commitSession, resumeSession, getSessionEventPage, listApprovals } = await import('../api');
+const { api, getSession, commitSession, mergeSessionToMain, resumeSession, getSessionEventPage, listApprovals } = await import('../api');
 const apiMock = vi.mocked(api);
 const getSessionMock = vi.mocked(getSession);
 const commitMock = vi.mocked(commitSession);
+const mergeMock = vi.mocked(mergeSessionToMain);
 const resumeMock = vi.mocked(resumeSession);
 const { encodeId } = await import('../lib/idCodec');
 const { WorkspaceView } = await import('./WorkspaceView');
@@ -72,7 +74,15 @@ const server: {
   commitStatus: string | null;
   commitError: string | null;
   commitResultMessage: string | null;
-} = { commitStatus: null, commitError: null, commitResultMessage: null };
+  worktreeDirty: boolean;
+  mergeStatus: string | null;
+  mergeTarget: string | null;
+  mergeError: string | null;
+  mergeTargets: string[];
+} = {
+  commitStatus: null, commitError: null, commitResultMessage: null, worktreeDirty: true,
+  mergeStatus: null, mergeTarget: null, mergeError: null, mergeTargets: [],
+};
 
 const sessionRow = () => ({
   // The client asks for `X-Orbit-Id-Format: public`, so what it holds — and compares — is the
@@ -99,10 +109,14 @@ const sessionDetail = () => ({
   isolationStatus: 'worktree',
   branch: 'orbit/commit-while-building-1a2b3c',
   changedFiles: [{ path: 'src/web/src/api.ts', additions: 2, deletions: 0 }],
-  worktreeDirty: true,
+  worktreeDirty: server.worktreeDirty,
   commitStatus: server.commitStatus,
   commitError: server.commitError,
   commitResultMessage: server.commitResultMessage,
+  mergeStatus: server.mergeStatus,
+  mergeTarget: server.mergeTarget,
+  mergeError: server.mergeError,
+  mergeTargets: server.mergeTargets,
 });
 
 class FakeEventSource {
@@ -161,12 +175,19 @@ beforeEach(() => {
   server.commitStatus = null;
   server.commitError = null;
   server.commitResultMessage = null;
+  server.worktreeDirty = true;
+  server.mergeStatus = null;
+  server.mergeTarget = null;
+  server.mergeError = null;
+  server.mergeTargets = [];
   vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {} });
   vi.stubGlobal('EventSource', FakeEventSource);
   apiMock.mockReset();
   getSessionMock.mockReset();
   getSessionMock.mockImplementation(async () => sessionDetail() as never);
   commitMock.mockReset();
+  mergeMock.mockReset();
+  resumeMock.mockReset();
   vi.mocked(getSessionEventPage).mockReset();
   vi.mocked(getSessionEventPage).mockImplementation(async () => ({ events: [], hasMore: false }));
   vi.mocked(listApprovals).mockReset();
@@ -270,18 +291,7 @@ afterEach(async () => {
   }
 });
 
-/** Mount the session, commit its worktree, and let the runner's outcome land. */
-async function commitAndAwaitOutcome(outcome: {
-  status: 'committed' | 'nochange' | 'error';
-  message?: string | null;
-  error?: string | null;
-}): Promise<void> {
-  commitMock.mockImplementation(async () => {
-    server.commitStatus = outcome.status;
-    server.commitResultMessage = outcome.message ?? null;
-    server.commitError = outcome.error ?? null;
-    return undefined as never;
-  });
+async function mountWorkspace(): Promise<void> {
   const nextClient = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
   });
@@ -306,6 +316,21 @@ async function commitAndAwaitOutcome(outcome: {
   await waitForUi(() => {
     expect(mounted().querySelector('.wt-bar')).toBeTruthy();
   });
+}
+
+/** Mount the session, commit its worktree, and let the runner's outcome land. */
+async function commitAndAwaitOutcome(outcome: {
+  status: 'committed' | 'nochange' | 'error';
+  message?: string | null;
+  error?: string | null;
+}): Promise<void> {
+  commitMock.mockImplementation(async () => {
+    server.commitStatus = outcome.status;
+    server.commitResultMessage = outcome.message ?? null;
+    server.commitError = outcome.error ?? null;
+    return undefined as never;
+  });
+  await mountWorkspace();
   const commit = [...mounted().querySelectorAll<HTMLButtonElement>('.wt-bar button')].find(
     (button) => button.textContent === 'Commit',
   );
@@ -399,5 +424,43 @@ describe('a failed commit handed to the session', () => {
     expect(content).toContain(`It said: "${plain}"`);
     expect(content).toContain('checked out on orbit/commit-while-building-1a2b3c.');
     expect(clientTurnId, 'the hand-off is one logical send, retried under one key').toEqual(expect.any(String));
+  });
+});
+
+describe('a merge conflict handed directly from its toast to the session', () => {
+  it.each(['main', 'release/1.2'])('resolves the originating branch onto %s after leaving its session', async (target) => {
+    const reason = 'CONFLICT (content): Merge conflict in src/web/src/api.ts';
+    server.worktreeDirty = false;
+    server.mergeTargets = [target];
+    mergeMock.mockImplementation(async () => {
+      server.mergeStatus = 'conflict';
+      server.mergeTarget = target;
+      server.mergeError = reason;
+      return undefined as never;
+    });
+    resumeMock.mockResolvedValue({} as never);
+    await mountWorkspace();
+    const merge = [...mounted().querySelectorAll<HTMLButtonElement>('.wt-bar button')].find(
+      (button) => button.textContent === `Merge to ${target}`,
+    );
+    expect(merge).toBeTruthy();
+    await act(async () => merge!.click());
+    await waitForUi(() => expect(toastStatus()).toBe(`Couldn't merge into ${target}`));
+    expect(toastDetail()).toBe(reason);
+
+    // The toast belongs to the accepted merge, even after its conversation's bar is gone.
+    await act(async () => mounted().querySelector<HTMLElement>('.session-new')!.click());
+    await waitForUi(() => expect(mounted().querySelector('.wt-bar')).toBeNull());
+    const card = document.body.querySelector<HTMLElement>('.toast--attention')!;
+    const actions = [...card.querySelectorAll<HTMLButtonElement>('.toast-actions button')];
+    expect(actions.map((button) => button.textContent)).toEqual(['Resolve in session', 'Copy error']);
+    await act(async () => actions[0]!.click());
+    await waitForUi(() => expect(resumeMock).toHaveBeenCalledOnce());
+    const [id, content, , , , clientTurnId] = resumeMock.mock.calls[0]!;
+    expect(id).toBe(SESSION_PUBLIC);
+    expect(content).toContain(`Rebase this branch onto the latest ${target} and resolve any conflicts.`);
+    expect(content).toContain('checked out on orbit/commit-while-building-1a2b3c.');
+    expect(content).toContain(`Run git rebase ${target}`);
+    expect(clientTurnId).toEqual(expect.any(String));
   });
 });

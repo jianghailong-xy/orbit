@@ -149,9 +149,19 @@ var engineSpecs = []engineSpec{
 		// The manifest the installer and the updater read.
 		latestURL:   "https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/" + runtime.GOOS + "_" + runtime.GOARCH + ".json",
 		latestField: "version",
-		// API-key mode only: a Google-account sign-in is not something Orbit runs agy with.
+		// A key, or the runner's Google sign-in, which is made from Orbit and only on Linux
+		// (antigravity_google_login.go): `orbit doctor` has no sign-in of its own to offer.
 		apiKeyEnv:     "GEMINI_API_KEY",
-		loginHeadless: "set GEMINI_API_KEY in the runner's environment, or give the session a Gemini API key; Google-account sign-in is not supported",
+		loginHeadless: "set GEMINI_API_KEY in the runner's environment or give the session a Gemini API key — or, on a Linux runner, sign in to Google from Orbit",
+	},
+	{
+		name:          "DeepSeek Harness",
+		bin:           providerDsh,
+		installCmd:    dshInstallDescription,
+		updateCmd:     dshInstallDescription,
+		installAlt:    "install DeepSeek Harness from Orbit or run orbit doctor",
+		apiKeyEnv:     "ORBIT_DSH_API_KEY",
+		loginHeadless: "configure a DeepSeek Harness API key in Orbit; only a real model request validates it",
 	},
 }
 
@@ -176,7 +186,10 @@ type engineHealth struct {
 	path          string // where the binary was found (dir used for the PATH check)
 	version       string
 	auth          authState
+	authSource    string
+	planUsage     *PlanUsage
 	onServicePath bool // found on the background service's baked PATH (not just the shell's)
+	installError  string
 }
 
 // serviceLoginPath reconstructs the PATH the background service runs with, the
@@ -210,6 +223,30 @@ func lookPathIn(bin, pathList string) (string, bool) {
 
 func checkEngine(spec engineSpec, servicePath string) engineHealth {
 	h := engineHealth{spec: spec}
+	if spec.bin == providerDsh {
+		platformErr := dshPlatformError()
+		path, err := dshExecutableIn(dshVersionDir())
+		if err != nil {
+			if platformErr != nil {
+				err = platformErr
+			}
+			h.installError = err.Error()
+			return h
+		}
+		h.installed, h.path, h.onServicePath = true, path, true
+		if platformErr != nil {
+			h.installError = platformErr.Error()
+			return h
+		}
+		h.version, err = dshProbeVersion(path)
+		if err == nil && !dshVersionCompatible(h.version) {
+			err = fmt.Errorf("DSH_VERSION_INCOMPATIBLE: DeepSeek Harness version incompatible: supported version is exactly %s", dshSupportedVersion)
+		}
+		if err != nil {
+			h.installError = err.Error()
+		}
+		return h // Auth is unknown; neither an API key nor ACP authenticate proves login.
+	}
 	// Prefer the service PATH (what the runner uses; includes ~/.local/bin). Fall
 	// back to the doctor's own PATH so a binary in an unusual dir still registers as
 	// installed — just flagged as not on the service PATH.
@@ -230,7 +267,13 @@ func checkEngine(spec engineSpec, servicePath string) engineHealth {
 	h.path = abs
 	h.onServicePath = onSvc
 	h.version = engineVersion(abs)
-	h.auth = probeAuth(spec.bin, abs)
+	if spec.bin == providerAntigravity {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		h.auth, h.authSource, h.planUsage = probeAntigravityAuth(ctx, abs, nil)
+	} else {
+		h.auth = probeAuth(spec.bin, abs)
+	}
 	return h
 }
 
@@ -244,6 +287,20 @@ func engineVersion(binPath string) string {
 		return ""
 	}
 	return strings.TrimSpace(firstLine(string(out)))
+}
+
+// engineStarts reports whether the CLI at binPath can be run at all — the question "installed"
+// never asks, and the one a damaged install needs answered.
+//
+// `<bin> --version` exits 0 on every engine Orbit supports and prints nothing a caller needs, so
+// it is the cheapest probe that separates a working CLI from a dead one. Anything else is the same
+// answer: a non-zero status, or a signal — which is what macOS gives a native install it refuses
+// to exec (exit 137, not a byte of output) — means this engine cannot run the session about to be
+// spawned on it. A probe that never returns counts as no answer either.
+func engineStarts(binPath string, timeout time.Duration) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return exec.CommandContext(ctx, binPath, "--version").Run() == nil
 }
 
 // probeAuth reports whether the engine is signed in, using each CLI's own
@@ -354,15 +411,8 @@ func probeAuthIn(ctx context.Context, bin, binPath string, env []string) authSta
 		}
 		return authUnknown
 	case providerAntigravity:
-		// Orbit runs agy on a Gemini API key alone (docs/antigravity-runtime-contract.md §1.1): the
-		// key in the environment is all there is to being signed in, and agy has nothing to ask.
-		if env == nil {
-			env = os.Environ()
-		}
-		if strings.TrimSpace(envValue(env, "GEMINI_API_KEY")) != "" {
-			return authYes
-		}
-		return authNo
+		auth, _, _ := probeAntigravityAuth(ctx, binPath, env)
+		return auth
 	}
 	return authUnknown
 }
@@ -484,6 +534,17 @@ func installEngine(spec engineSpec, proxyVars []envVar) bool {
 // Returns true only when the command exits 0.
 func runInstallCmd(spec engineSpec, proxyVars []envVar) bool {
 	fmt.Printf("  running: %s\n", spec.installCmd)
+	if spec.bin == providerDsh {
+		engineInstall.mu.Lock()
+		defer engineInstall.mu.Unlock()
+		ctx, cancel := context.WithTimeout(context.Background(), engineInstallTimeout)
+		defer cancel()
+		if err := installDsh(ctx, proxyVars); err != nil {
+			fmt.Printf("  ✗ install failed (%s)\n", err)
+			return false
+		}
+		return true
+	}
 	cmd := exec.Command("sh", "-c", spec.installCmd)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -601,6 +662,14 @@ func runDoctor(fix bool, proxyVars []envVar) []engineHealth {
 }
 
 func formatEngineLine(h engineHealth) string {
+	if h.spec.bin == providerDsh {
+		if h.installError != "" {
+			return fmt.Sprintf("✗ %s — %s", h.spec.name, h.installError)
+		}
+		if h.installed {
+			return fmt.Sprintf("✓ %s (%s) — request authentication unverified", h.spec.name, h.version)
+		}
+	}
 	if !h.installed {
 		return fmt.Sprintf("✗ %s — not installed", h.spec.name)
 	}

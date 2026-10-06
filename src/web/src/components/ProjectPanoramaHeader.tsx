@@ -2,10 +2,10 @@ import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { queryOptions, useQuery } from '@tanstack/react-query';
 import { Alert, Button, Spin, Typography } from 'antd';
-import { Link } from 'react-router-dom';
-import type { ProjectIntegrationView } from '@orbit/shared';
+import { INTEGRATION_CLAIM_STALE_MS, type ProjectIntegrationView, type ProjectManualReady } from '@orbit/shared';
 import { api } from '../api';
-import { projectIntegrationQuery } from '../lib/queries';
+import { projectIntegrationQuery, projectReadyToRunQuery } from '../lib/queries';
+import { ProjectTaskLink } from './ProjectTaskLink';
 
 /**
  * Where a project's work stands, and — when none of it is moving — why (the header card of the
@@ -18,13 +18,11 @@ import { projectIntegrationQuery } from '../lib/queries';
  *     explicit terminal lanes keep every task in the denominator.
  *  2. **A stacked meter.** The same lanes as one 9px bar, so the proportion is readable without
  *     doing arithmetic on seven figures.
- *  3. **A stalled banner.** Rendered only when `ready > 0 && running === 0` — work that could
- *     start and nothing starting it — carrying the dispatch ledger's own account of why.
+ *  3. **Manual work to start.** The run queue names tasks with no automatic dispatch or schedule.
+ *     Ready/running totals alone cannot diagnose a dispatch failure.
  *
- * `Running` counts a task with a LIVE SESSION on it, not one whose row says IN_PROGRESS: dispatch
- * never writes that column (see `project-panorama.ts`). Which is what the cell's own footnote has
- * always claimed, and is what keeps the banner below from calling a project with three agents
- * working on it stalled.
+ * `Running` counts task work in progress: a live session or an IN_PROGRESS task row. Landing jobs
+ * are reported separately, and neither number diagnoses whether dispatch needs attention.
  *
  * FETCHES ITS OWN DATA, deliberately: it is mounted next to four other cards that each read a
  * different endpoint, and a header that took its numbers as props would make the page decide when
@@ -37,8 +35,8 @@ import { projectIntegrationQuery } from '../lib/queries';
  * amber in dark mode is 6.4 (both measured by `src/lib/statusPalette.test.ts`'s pipeline, and both
  * under the ΔE 8 floor). Two consequences are baked into the palette below: `Done` wears
  * `--success` rather than `--success-solid`, and `Blocked` wears neutral `--text-3` rather than a
- * fifth hue — a neutral there is what lets `Ready`'s amber read as the one bucket asking for
- * attention. The meter, which has no room for a shape, carries the numbers in its `aria-label`.
+ * fifth hue. Ready is also neutral in this card: readiness is not an error. The meter, which has
+ * no room for a shape, carries the numbers in its `aria-label`.
  */
 
 export interface ProjectPanoramaBuckets {
@@ -178,18 +176,18 @@ export function integrationLanes(
 ): ReadonlyArray<{ key: string; label: string; value: number; footnote: string; glyph: BucketGlyph; color: string }> {
   const at = (value: number | undefined) => value ?? 0;
   const lanes = [
-    { key: 'running', label: 'Running', value: buckets.running, footnote: 'active sessions',
+    { key: 'running', label: 'Running', value: buckets.running, footnote: 'task work in progress',
       glyph: 'disc' as BucketGlyph, color: 'var(--brand)' },
     { key: 'ready', label: 'Ready', value: buckets.ready, footnote: 'can start now',
-      glyph: 'triangle' as BucketGlyph, color: 'var(--warning-solid)' },
+      glyph: 'triangle' as BucketGlyph, color: 'var(--text-3)' },
     { key: 'blocked', label: 'Waiting', value: buckets.blocked,
-      // What it is waiting FOR, once a landing is the thing holding it: nobody has to act on that
-      // one, so a reader who sees this footnote can stop looking for somebody to chase.
-      footnote: at(buckets.waitingForLanding) > 0 ? 'for a prerequisite to land' : 'waiting on dependencies',
+      footnote: at(buckets.waitingForLanding) > 0
+        ? `${buckets.waitingForLanding} waiting for a prerequisite to land`
+        : 'waiting on dependencies',
       glyph: 'square' as BucketGlyph, color: 'var(--text-3)' },
-    { key: 'integrating', label: 'Integrating', value: at(buckets.integrating),
-      footnote: 'checks running on the combined tree',
-      glyph: 'spinner' as BucketGlyph, color: 'var(--brand)' },
+    { key: 'integrating', label: 'Pending landing', value: at(buckets.integrating),
+      footnote: 'no landing receipt yet',
+      glyph: 'hourglass' as BucketGlyph, color: 'var(--text-3)' },
     ...(line === 'MAIN' ? [] : [{
       key: 'onIntegrationLine', label: 'On project branch', value: at(buckets.onIntegrationLine),
       footnote: 'not on main yet', glyph: 'branch' as BucketGlyph, color: 'var(--success)',
@@ -226,16 +224,8 @@ export function panoramaBucketValue(buckets: ProjectPanoramaBuckets, key: Bucket
  */
 export const READY_UNTIL_STARTED = 'starts when you start';
 
-/**
- * Work that could start, and nothing starting it.
- *
- * The one condition this card exists to make visible, and the only thing that renders the banner:
- * neither number is remarkable alone — a project with four ready tasks is normal, and a project
- * with nothing running is normal — but together they mean the queue is not being served.
- */
-export function stalledOnReady(buckets: ProjectPanoramaBuckets): boolean {
-  return buckets.ready > 0 && buckets.running === 0;
-}
+/** A paused project intentionally leaves ready work undispatched. */
+export const READY_WHILE_PAUSED = 'project is paused';
 
 /**
  * The landing in flight, in the words the card's live line uses — the one row that says what the
@@ -247,21 +237,37 @@ export function stalledOnReady(buckets: ProjectPanoramaBuckets): boolean {
  * project had stopped.
  */
 export interface LandingLine {
+  word: string;
   /** The task being landed, `N jobs` when more than one is in flight, or null when the job names no
    *  single task (a promotion, a merge check) — the row then draws its word and state alone. */
   what: string | null;
-  /** Whether the combined-tree checks are running, as opposed to the job still waiting its turn.
+  /** Whether the job is running, as opposed to still waiting its turn.
    *  What the ring's spin and the two brand-blue words are drawn from; the `state` word is what
    *  carries the same fact to a reader who cannot use motion. */
   running: boolean;
-  /** "checking" or "queued". */
+  /** The runner's current phase, or "queued". */
   state: string;
   /** "1m 20s". See `landingClock`. */
   clock: string;
+  clockLabel: string;
+  updated: string | null;
 }
 
-/** The row's first word, and the whole of what the line is about. */
-export const LANDING_WORD = 'Landing';
+export const JOB_WORDS = {
+  LAND_TASK: 'Landing',
+  CHECK_PROMOTION: 'Merge check',
+  LAND_PROMOTION: 'Merge to main',
+};
+
+export const JOB_PHASES = {
+  FETCH: 'fetching',
+  MAIN_SYNC: 'syncing main',
+  REBASE: 'rebasing',
+  MERGE: 'merging',
+  CHECK: 'checking',
+  VERIFY: 'verifying',
+  PUSH: 'pushing',
+};
 
 /**
  * "1m 20s" — the landing clock, minutes and seconds ALWAYS, at every length.
@@ -289,19 +295,35 @@ export function landingClock(ms: number): string {
  * says what a single task's title would have pretended to — that this is the oldest of several, not
  * the only thing the queue is doing.
  */
-export function landingLine(view: ProjectIntegrationView, now: number): LandingLine | null {
+export function landingLine(
+  view: ProjectIntegrationView,
+  now: number,
+  observation: { updatedAt?: number; failed?: boolean } = {},
+): LandingLine | null {
   const inFlight = view.inFlight;
   if (!inFlight) return null;
   const running = inFlight.state === 'RUNNING';
   const jobs = view.integratingCount + view.queuedCount;
   const startedAt = Date.parse(inFlight.startedAt);
+  const heartbeatAt = Date.parse(inFlight.heartbeatAt ?? '');
+  const heartbeatStale = running && Number.isFinite(heartbeatAt)
+    && now - heartbeatAt > INTEGRATION_CLAIM_STALE_MS;
+  const readStale = observation.updatedAt !== undefined && now - observation.updatedAt > 90_000;
+  const unavailable = observation.failed === true || readStale || heartbeatStale;
+  const updatedAt = running && Number.isFinite(heartbeatAt) ? heartbeatAt : observation.updatedAt;
+  const elapsedAt = unavailable ? Math.min(now, updatedAt ?? now) : now;
+  const age = updatedAt === undefined ? null : Math.max(0, Math.floor((now - updatedAt) / 60_000));
   return {
+    word: inFlight.kind ? JOB_WORDS[inFlight.kind] ?? 'Integration' : 'Integration',
     what: jobs > 1 ? `${jobs} jobs` : inFlight.taskTitle,
-    running,
-    state: running ? 'checking' : 'queued',
+    running: running && !unavailable,
+    state: unavailable ? 'Update unavailable'
+      : running ? (inFlight.phase ? JOB_PHASES[inFlight.phase] ?? 'running' : 'running') : 'queued',
     // An instant this clock cannot read is no elapsed time rather than `NaN` on the page: the row
     // stays up and counts from zero, which is the one thing it can still say truthfully.
-    clock: landingClock(Number.isFinite(startedAt) ? now - startedAt : 0),
+    clock: landingClock(Number.isFinite(startedAt) ? elapsedAt - startedAt : 0),
+    clockLabel: running ? 'Elapsed' : 'Queued for',
+    updated: age === null ? null : age === 0 ? 'Updated just now' : `Updated ${age}m ago`,
   };
 }
 
@@ -309,22 +331,25 @@ export function landingLine(view: ProjectIntegrationView, now: number): LandingL
  * The live line itself: a ring, what is being landed, which half of the wait it is in, and how long
  * it has been there.
  *
- * The ring SPINS while the checks run and stands still while the job is queued, and its colour
+ * The ring SPINS while the job runs and stands still while it is queued, and its colour
  * follows the same two states — but neither is the only channel: `checking` and `queued` are the
  * words, and `prefers-reduced-motion` takes the spin away without touching them.
  */
 function LandingRow({ line }: { line: LandingLine }) {
   return (
     <div className={line.running ? 'project-landing project-landing-running' : 'project-landing'}>
-      <span className="project-landing-ring">
-        <Glyph shape="spinner" color="currentColor" size={13} />
-      </span>
-      <span className="project-landing-word">{LANDING_WORD}</span>
-      {/* Always drawn, even empty: it is the row's flexible middle, and the one that keeps the state
-          and the clock against the right edge whether or not the job has a name. */}
-      <span className="project-landing-what">{line.what}</span>
-      <span className="project-landing-state">{line.state}</span>
-      <span className="project-landing-clock">{line.clock}</span>
+      <div className="project-landing-heading">
+        <span className="project-landing-ring">
+          <Glyph shape="spinner" color="currentColor" size={13} />
+        </span>
+        <span className="project-landing-word">{line.word}</span>
+        <span className="project-landing-state">{line.state}</span>
+      </div>
+      {line.what ? <div className="project-landing-what">{line.what}</div> : null}
+      <div className="project-landing-meta">
+        <span>{line.clockLabel} <span className="project-landing-clock">{line.clock}</span></span>
+        {line.updated ? <span>{line.updated}</span> : null}
+      </div>
     </div>
   );
 }
@@ -404,19 +429,17 @@ function Kpi({
   footnote,
   glyph,
   color,
-  attention,
 }: {
   label: string;
   value: number;
   footnote: string;
   glyph: BucketGlyph;
   color: string;
-  attention: boolean;
 }) {
   return (
     <div
       style={{
-        background: attention ? 'var(--warning-bg)' : 'var(--bg-raised)',
+        background: 'var(--bg-raised)',
         padding: '14px 15px 15px',
       }}
     >
@@ -515,39 +538,36 @@ export function BucketMeter({
 }
 
 
-/** Ready work exists and nothing is picking it up. This is deliberately a compact secondary
- *  action: when the coordinator also needs a reply, that conversation remains the page's primary
- *  CTA instead of competing with a second large blue button. */
-function StalledBanner({ buckets }: { buckets: ProjectPanoramaBuckets }) {
+/** Manual dispatch is a choice, not a runner diagnosis. The named task opens over this project. */
+function ManualReadyBanner({ manual, projectId }: { manual: ProjectManualReady; projectId: string }) {
   return (
     <div
       style={{
         display: 'flex',
-        flexWrap: 'wrap',
         gap: '10px 12px',
         alignItems: 'flex-start',
         marginTop: 16,
         padding: '12px 14px',
-        background: 'var(--warning-bg)',
-        border: '1px solid var(--warning-border)',
+        background: 'var(--bg-hover)',
+        border: '1px solid var(--border-subtle)',
         borderRadius: 8,
       }}
     >
       <span style={{ paddingTop: 3 }}>
-        <Glyph shape="triangle" color="var(--warning-solid)" size={11} />
+        <Glyph shape="triangle" color="var(--text-3)" size={11} />
       </span>
-      <div style={{ flex: '1 1 260px', minWidth: 0, fontSize: 13, lineHeight: 1.55 }}>
-        <b style={{ color: 'var(--text-1)' }}>Dispatch needs attention</b>
+      <div style={{ flex: 1, minWidth: 0, fontSize: 13, lineHeight: 1.55 }}>
+        <b style={{ color: 'var(--text-1)' }}>Ready to start</b>
         <div style={{ color: 'var(--text-2)', marginTop: 2 }}>
-          {buckets.ready} task{buckets.ready === 1 ? ' is' : 's are'} ready, but nothing is running.
-          {' '}Check the assignees&apos; runner and provider.
+          {manual.count} task{manual.count === 1 ? ' is' : 's are'} set to start manually.
         </div>
+        <ProjectTaskLink projectId={projectId} taskId={manual.taskId} className="project-manual-task">
+          {manual.title}
+        </ProjectTaskLink>
+        <ProjectTaskLink projectId={projectId} taskId={manual.taskId} className="project-manual-open">
+          Open task
+        </ProjectTaskLink>
       </div>
-      <Link to="/providers">
-        <Button size="small">
-          Check providers
-        </Button>
-      </Link>
     </div>
   );
 }
@@ -615,6 +635,7 @@ export function ProjectPanoramaHeader({
   projectStatus,
   integrationLine,
   started,
+  paused = false,
 }: {
   projectId: string;
   /** Goal-level status. Task completion does not close a project, so this is what lets the card
@@ -627,6 +648,7 @@ export function ProjectPanoramaHeader({
   /** Whether the project has been started, from the document the page holds. Only `false` changes
    *  anything: ready work on a project nobody has started is waiting for the start. */
   started?: boolean | null;
+  paused?: boolean;
 }) {
   const panorama = useQuery({ ...projectPanoramaQuery(projectId), enabled: Boolean(projectId) });
 
@@ -635,6 +657,7 @@ export function ProjectPanoramaHeader({
   // handed in because the row is drawn inside this card, and a card that only knew there was a line
   // (the `integrationLine` prop) could not say what the line is doing.
   const integration = useQuery({ ...projectIntegrationQuery(projectId), enabled: Boolean(projectId) });
+  const ready = useQuery({ ...projectReadyToRunQuery(projectId), enabled: Boolean(projectId) });
   const inFlight = integration.data?.inFlight ?? null;
   // The clock counts in SECONDS while something is landing, rather than stepping with the 30s poll
   // above: a number that jumped half a minute at a time would read as the stalled page this row
@@ -685,16 +708,20 @@ export function ProjectPanoramaHeader({
       projectStatus={projectStatus}
       integrationLine={integrationLine}
       started={started}
-      landing={integration.data ? landingLine(integration.data, now) : null}
+      paused={paused}
+      projectId={projectId}
+      manualReady={ready.isError ? null : ready.data?.manualReady ?? null}
+      landing={integration.data ? landingLine(integration.data, now, {
+        updatedAt: integration.dataUpdatedAt, failed: integration.isError,
+      }) : null}
     />
   );
 }
 
 /**
  * The card itself, drawn from a panorama already in hand — the header above once its read answers,
- * and a public project page from the panorama its link carries. `banners: false` leaves out the two
- * banners, which speak to the project's owner: "Dispatch needs attention" sends them to their
- * providers, and "Ready to wrap up" asks them to confirm the outcome (docs/share-links-design.md §7).
+ * and a public project page from the panorama its link carries. `banners: false` leaves out the
+ * owner's manual-task and wrap-up actions (docs/share-links-design.md §7).
  */
 export function ProjectPanoramaCard({
   panorama,
@@ -703,6 +730,9 @@ export function ProjectPanoramaCard({
   banners = true,
   landing = null,
   started,
+  paused = false,
+  projectId,
+  manualReady = null,
 }: {
   panorama: ProjectPanorama;
   projectStatus?: 'OPEN' | 'DONE' | 'CANCELLED';
@@ -710,17 +740,20 @@ export function ProjectPanoramaCard({
   banners?: boolean;
   /** Whether the project has been started; `false` says ready work waits for the start. */
   started?: boolean | null;
+  paused?: boolean;
+  projectId?: string;
+  manualReady?: ProjectManualReady | null;
   /** The landing in flight, from the header's own integration read. A public project page has no
    *  such read, so it draws the card without the row. */
   landing?: LandingLine | null;
 }) {
   const { shape } = panorama;
   const loaded = panorama.buckets;
-  // Ready work with nothing running is the queue not being served — unless nobody has started the
-  // project, when it is the start that ready work is waiting for, and the Ready cell says so.
   const notStarted = started === false;
-  const stalled = stalledOnReady(loaded) && !notStarted;
-  const readyFootnote = notStarted ? READY_UNTIL_STARTED : 'can start now';
+  const manual = !notStarted && !paused && projectStatus !== 'DONE' && projectStatus !== 'CANCELLED'
+    && loaded.ready > 0 ? manualReady : null;
+  const readyFootnote = notStarted ? READY_UNTIL_STARTED : paused ? READY_WHILE_PAUSED
+    : manual?.count === loaded.ready ? 'can start manually' : 'can start now';
   const lanes = reportsIntegrationLanes(loaded)
     ? integrationLanes(loaded, integrationLine ?? null).map((lane) =>
         lane.key === 'ready' ? { ...lane, footnote: readyFootnote } : lane)
@@ -735,9 +768,12 @@ export function ProjectPanoramaCard({
     && loaded.blocked === 0
     && awaitingVerification === 0
     && failed === 0
+    && (loaded.integrating ?? 0) === 0
+    && (loaded.onIntegrationLine ?? 0) === 0
+    && landing === null
     && settled > 0;
   const footnotes: Record<BucketKey, string> = {
-    running: 'active sessions',
+    running: 'task work in progress',
     ready: readyFootnote,
     blocked: 'waiting on dependencies',
     awaitingVerification: 'verifier must conclude',
@@ -748,6 +784,14 @@ export function ProjectPanoramaCard({
     failed: 'coordinated continuation',
     cancelled: 'closed without completion',
   };
+  const cells = lanes ?? PANORAMA_BUCKETS.map((bucket) => ({
+    key: bucket.key as string,
+    label: bucket.label,
+    value: panoramaBucketValue(loaded, bucket.key),
+    footnote: footnotes[bucket.key],
+    glyph: bucket.glyph,
+    color: bucket.key === 'ready' ? 'var(--text-3)' : bucket.color,
+  }));
 
   return (
     <Card
@@ -764,14 +808,13 @@ export function ProjectPanoramaCard({
         </div>
       ) : null}
       <div
+        className={lanes ? 'project-overview-grid' : undefined}
         style={{
           display: 'grid',
-          // Three across when the done count is split three ways, which is what makes the six
-          // lanes two full rows rather than four and a gap — the grid's own background shows
-          // through an unfilled slot, and a grey rectangle beside "On main" reads as a cell that
-          // failed to render. `auto-fit` everywhere else, unchanged.
+          // Integration lanes use three columns on desktop and two on a phone (in CSS).
+          // The older, unsplit lanes retain their auto-fit layout.
           gridTemplateColumns: lanes
-            ? 'repeat(3, minmax(0, 1fr))'
+            ? undefined
             : 'repeat(auto-fit, minmax(132px, 1fr))',
           gap: 2,
           background: 'var(--border-subtle)',
@@ -780,16 +823,7 @@ export function ProjectPanoramaCard({
           overflow: 'hidden',
         }}
       >
-        {(lanes
-          ?? PANORAMA_BUCKETS.map((bucket) => ({
-            key: bucket.key as string,
-            label: bucket.label,
-            value: panoramaBucketValue(loaded, bucket.key),
-            footnote: footnotes[bucket.key],
-            glyph: bucket.glyph,
-            color: bucket.color,
-          }))
-        ).map((lane) => (
+        {cells.map((lane) => (
           <Kpi
             key={lane.key}
             label={lane.label}
@@ -797,20 +831,16 @@ export function ProjectPanoramaCard({
             footnote={lane.footnote}
             glyph={lane.glyph}
             color={lane.color}
-            // The one cell that changes colour, and only in the state this card is about: ready
-            // work with nothing serving it. The amber is a second reading of the banner below, not
-            // the thing that says it.
-            attention={banners && lane.key === 'ready' && stalled}
           />
         ))}
       </div>
 
       <div style={{ marginTop: 14 }}>
-        <BucketMeter buckets={loaded} segments={lanes ?? undefined} />
+        <BucketMeter buckets={loaded} segments={cells} />
       </div>
 
-      {banners && stalled ? (
-        <StalledBanner buckets={loaded} />
+      {banners && manual && projectId ? (
+        <ManualReadyBanner manual={manual} projectId={projectId} />
       ) : null}
 
       {banners && wrappingUp ? <WrappingUpBanner settled={settled} /> : null}

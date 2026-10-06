@@ -207,20 +207,58 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 	// ── J-S2 MAIN_SYNC ────────────────────────────────────────────────────────────────────────
 	// Only a project branch absorbs upstream: on a MAIN line the target IS upstream.
 	base := targetSha
+	// What J-S3 measures "already contained" against. Normally the same as `base` — the target
+	// after J-S2's own absorb — but not when the absorb went onto the SOURCE (below): there the
+	// target still is what it was, and a base that already contains the source would answer
+	// ALREADY_LANDED for work nobody has pushed anywhere.
+	containedIn := targetSha
+	absorbedBySource := false
 	if cmd.TargetRef != cmd.UpstreamRef && !isAncestor(scratch, upstreamSha, targetSha) {
-		report("MAIN_SYNC", nil)
-		merged, conflicts, err := integrationMerge(scratch, upstreamSha,
-			fmt.Sprintf("Merge %s into %s", cmd.UpstreamRef, cmd.TargetRef))
-		if err != nil {
-			result.State, result.Phase, result.Conflicts = "CONFLICT", "MAIN_SYNC", conflicts
-			return result
+		if sourceCarriesTheAbsorb(scratch, sourceSha, targetSha, upstreamSha) {
+			// The source has already made this merge, with whatever resolution it took (§3.1 M3).
+			// Making it again on the target's tip asks git for that resolution a second time, and
+			// conflicts where the source already answered — so nothing is merged here, and J-S4
+			// lands the source as it is.
+			absorbedBySource = true
+		} else if sourceCarriesAnEarlierAbsorb(scratch, sourceSha, targetSha, upstreamSha) {
+			// The source absorbed an upstream that has moved on since, and carries the resolution
+			// the target does not have (the sync-task door, and the absorb of a reworked task).
+			// Absorbing the current upstream on the TARGET's tip would meet the conflicts the
+			// source already resolved and stop at MAIN_SYNC again, so the absorb goes onto the
+			// SOURCE instead — the branch that holds the resolution. A clean absorb is landed by
+			// J-S4's MERGE below; a conflict here is U′..U touching the very place the resolution
+			// did, and is reported as the MAIN_SYNC conflict it is.
+			report("MAIN_SYNC", nil)
+			if _, err := git(scratch, "checkout", "--detach", sourceSha); err != nil {
+				result.State, result.Phase, result.ErrorCode = "ERROR", "MAIN_SYNC", "SOURCE_BRANCH_MISSING"
+				result.ErrorDetail = map[string]any{"ref": cmd.SourceRef, "detail": errText(err)}
+				return result
+			}
+			merged, conflicts, err := integrationMerge(scratch, upstreamSha,
+				fmt.Sprintf("Merge %s into %s", cmd.UpstreamRef, cmd.SourceRef))
+			if err != nil {
+				result.State, result.Phase, result.Conflicts = "CONFLICT", "MAIN_SYNC", conflicts
+				return result
+			}
+			result.MainSyncSha = merged
+			base = merged
+			absorbedBySource = true
+		} else {
+			report("MAIN_SYNC", nil)
+			merged, conflicts, err := integrationMerge(scratch, upstreamSha,
+				fmt.Sprintf("Merge %s into %s", cmd.UpstreamRef, cmd.TargetRef))
+			if err != nil {
+				result.State, result.Phase, result.Conflicts = "CONFLICT", "MAIN_SYNC", conflicts
+				return result
+			}
+			result.MainSyncSha = merged
+			base = merged
+			containedIn = merged
 		}
-		result.MainSyncSha = merged
-		base = merged
 	}
 
 	// ── J-S3 already contained ────────────────────────────────────────────────────────────────
-	if isAncestor(scratch, sourceSha, base) {
+	if isAncestor(scratch, sourceSha, containedIn) {
 		// THE EMPTY BRANCH FIRST, because "already contained" is trivially true of one: its tip is
 		// the commit it forked at, and every fork point is in the target it forked from. A branch
 		// whose tip IS the commit its session started at carries nothing of the task's own, and
@@ -257,10 +295,13 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 	fork, _ := git(scratch, "merge-base", sourceSha, base)
 	merges, _ := git(scratch, "rev-list", "--merges", fork+".."+sourceSha)
 	var tested string
-	if strings.TrimSpace(merges) != "" {
+	if absorbedBySource || strings.TrimSpace(merges) != "" {
 		// A source that contains merge commits carries somebody's conflict resolutions inside
 		// them. A rebase would replay the sides and ask for those resolutions again; a merge keeps
-		// them (§2.4 J-S4).
+		// them (§2.4 J-S4). A source that absorbed the upstream itself always comes this way: the
+		// target's tip is its ancestor, so the merge is exactly the source's tree — and so does a
+		// source J-S2 absorbed the CURRENT upstream into: the source is the base's ancestor, so
+		// the merge is exactly the base's tree, the source plus what upstream gained since.
 		report("MERGE", nil)
 		merged, conflicts, err := integrationMerge(scratch, sourceSha,
 			fmt.Sprintf("Merge %s into %s", cmd.SourceRef, cmd.TargetRef))
@@ -379,6 +420,52 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 	}
 	result.State, result.Phase = "LANDED", "VERIFY"
 	return result
+}
+
+// sourceCarriesTheAbsorb reports a source that has already done J-S2's merge itself: it contains
+// the upstream tip and the target tip this job fetched (§3.1 M3).
+//
+// THE CONFLICT THIS EXISTS FOR (2026-10-03, project 34Y7My8sqhKLWtmCQYv1l). The project branch and
+// main had each added a migration to the same ledger, so absorbing main into the branch conflicted.
+// J-S2 tried that absorb on the target's own tip before it looked at the source, so a branch that
+// had merged both tips and resolved the ledger met the conflict it had already resolved, and so did
+// the task reopened to rework it: every landing on that line stopped at MAIN_SYNC.
+//
+// Both tips, measured on this job's fetch. A source that absorbed an upstream that has moved since,
+// or that was cut from a target tip that has moved since, does not carry this absorb, and J-S2
+// makes it as before: a conflict there is still the MAIN_SYNC conflict it always was.
+//
+// Not the upstream tip itself, which has nothing of its own to land. Taking this path for it would
+// push a bare main sync and turn J-S3's NOTHING_TO_LAND (0300) into a landing.
+func sourceCarriesTheAbsorb(dir, sourceSha, targetSha, upstreamSha string) bool {
+	return sourceSha != upstreamSha &&
+		isAncestor(dir, upstreamSha, sourceSha) && isAncestor(dir, targetSha, sourceSha)
+}
+
+// sourceCarriesAnEarlierAbsorb reports a source that absorbed the upstream at an EARLIER tip and
+// carries the resolution on top: it contains the target tip, its newest commit shared with the
+// upstream tip this job fetched — the upstream commit it absorbed, U′ — is one the target does not
+// have, and its own tip is past U′. J-S2 then merges the CURRENT upstream into such a source rather
+// than into the target's tip: the branch that holds the resolution between the project work and U′,
+// which a merge into the target would throw away and meet again as the same conflict.
+//
+// A source whose shared tip is in the target absorbed nothing the target does not know, and one
+// whose tip IS the shared tip is an upstream commit itself — nothing of its own to land, whose
+// NOTHING_TO_LAND must not be turned into a bare main sync (the same reason sourceCarriesTheAbsorb
+// excludes the upstream tip itself). Both stay on J-S2's old path.
+func sourceCarriesAnEarlierAbsorb(dir, sourceSha, targetSha, upstreamSha string) bool {
+	if !isAncestor(dir, targetSha, sourceSha) || isAncestor(dir, upstreamSha, sourceSha) {
+		return false
+	}
+	shared, err := git(dir, "merge-base", sourceSha, upstreamSha)
+	if err != nil {
+		return false
+	}
+	shared = strings.TrimSpace(shared)
+	if shared == "" || shared == sourceSha || isAncestor(dir, shared, targetSha) {
+		return false
+	}
+	return true
 }
 
 // promoteOnce is one pass at merging a project's finished work into its upstream

@@ -1,0 +1,32 @@
+<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>29 wiki home layout</title>
+<style>
+body{margin:0;background:#f3f4f6;font:14px/1.6 Inter,"Noto Sans SC",sans-serif;color:#1f2329}
+.sheet{width:2040px;padding:36px 40px 48px;box-sizing:border-box}
+h1{font-size:24px;margin:0 0 6px} .sub{color:#646a73;margin:0 0 24px}
+.row{display:flex;gap:24px;align-items:flex-start}
+.col{flex:1;min-width:0} .lab{font-weight:650;margin:0 0 8px;font-size:15px}
+.lab .k{display:inline-block;padding:0 8px;border-radius:4px;margin-right:8px;font-size:12px;color:#fff;background:#8f959e}
+.lab .k.new{background:#3370ff}
+img{display:block;width:100%;border:1px solid #dee0e3;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.06)}
+.notes{margin:24px 0 0;display:grid;grid-template-columns:1fr 1fr;gap:10px 32px}
+.notes div{background:#fff;border:1px solid #e5e6eb;border-radius:8px;padding:10px 14px}
+.notes b{color:#3370ff;margin-right:6px}
+.small{width:1300px;margin-top:28px}
+</style></head><body><div class="sheet">
+<h1>29 · Wiki 首页（web 桌面）布局优化：铺满右侧整块区域，随宽度重排</h1>
+<p class="sub">真实 WikiPage 组件 + 落地后的 index.css 渲染，数据仿 10-06 截图。左：现状；右：优化后。均为 1920×1080 窗口。手机端（≤960px）单列顺序不变，iOS 板不受影响。</p>
+<div class="row">
+ <div class="col"><p class="lab"><span class="k">现状</span>1040px 定宽居中，主列短、右栏挤、目录撑高整页</p><img src="29/before-1920.png"></div>
+ <div class="col"><p class="lab"><span class="k new">改</span>满宽流式，目录独立滚动，等你处理的放最上面</p><img src="29/after-1920.png"></div>
+</div>
+<div class="notes">
+ <div><b>①</b>去掉 1040px 上限，首页铺满右侧整块区域（Mintlify / GitBook 的 wide 模式）。首页是看板不是正文；文章页仍保持阅读宽度，不动。</div>
+ <div><b>②</b>左侧目录 sticky + 独立滚动（高度 = 视口）。35 篇目录不再决定页面高度，主内容下面不再出现大片空白（Docusaurus / Mintlify 做法）。</div>
+ <div><b>③</b>"等你处理"条：Review 与 Plan 并排置顶，横跨主区。Review 有待办时用浅琥珀底强调（Slab 的"待验证"色）。这是 Orbit 首页最该先看到的东西——owner 审 agent 的提案、确认 plan。</div>
+ <div><b>④</b>主列 = 知识本身：Recent decisions 拿到宽列，标题不再截断；Recently changed 每次维护运行一行：谁 · 改了几条 · 分级计数 · View run / Revert run · 时间（DeepWiki"Last indexed"式的新鲜度）。</div>
+ <div><b>⑤</b>右栏 = Agents used the wiki（Orbit 独有的"被 agent 消费"指标），从顶到底。Principles 留在主区、待办条下方横跨两列——DOM 不变（手机单列与 iOS 的顺序由它钉住），布局全由 CSS grid + display: contents 完成。</div>
+ <div><b>⑥</b>按主区宽度重排（container query）：主区 ≥1500px 时 Recent decisions 与 Recently changed 并排成三列（下方 2560 图）；更窄时两者叠在 Review/Plan 下方；侧栏宽 clamp(280px, 24%, 380px)，始终贴右从顶到底。</div>
+</div>
+<div class="row" style="margin-top:28px"><div class="col"><p class="lab"><span class="k">现状</span>2560×1440 窗口</p><img src="29/before-2560.png"></div><div class="col"><p class="lab"><span class="k new">改</span>2560×1440 窗口：三列，填满整个宽度</p><img src="29/after-2560.png"></div></div>
+<div class="small"><p class="lab"><span class="k new">改</span>1440×900 窗口</p><img src="29/after-1440.png"></div>
+</div></body></html>

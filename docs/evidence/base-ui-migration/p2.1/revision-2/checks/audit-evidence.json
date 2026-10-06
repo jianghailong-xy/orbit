@@ -1,0 +1,11 @@
+{
+  "command": [
+    "python3",
+    "docs/evidence/base-ui-migration/p2.1/revision-2/audit-evidence.py"
+  ],
+  "cwd": "/root/.orbit/worktrees/e14d82e1-4060-540b-8381-6df264c90410",
+  "startedAt": "2026-10-04T05:16:25.108865+00:00",
+  "head": "e3f53d40246c005aac7c3e1060f0734d38afbb47",
+  "exitCode": 0,
+  "elapsedSeconds": 0.391
+}

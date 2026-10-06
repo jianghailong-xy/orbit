@@ -1,0 +1,50 @@
+{
+  "probe": "google-session-auth-failures",
+  "agy_version": "1.2.16",
+  "measured": "2026-10-04, Linux amd64, official agy 1.2.16; private temp HOME and --gemini_dir, D-Bus pointed at a nonexistent socket, AGY_CLI_DISABLE_AUTO_UPDATE=true, no API key in the environment",
+  "token": "antigravity-cli/antigravity-oauth-token in the recorded shape (docs/evidence/antigravity-cli-1.2.16/google-auth-credential-file.json), every value a placeholder: auth_method \"consumer\", token_type \"Bearer\", expiry 2000-01-01T00:00:00Z. Any other auth_method (oauth, google, google_oauth, business, sso, ...) is refused before agy contacts Google (\"Unknown auth method\"), with the same stdout, stderr and exit code.",
+  "argv": [
+    "<TMP>/agy",
+    "--gemini_dir=<TMP>/gemini",
+    "--log-file=<TMP>/agy.log",
+    "--print=",
+    "--input-format",
+    "stream-json",
+    "--output-format",
+    "stream-json",
+    "--disable-slash-commands",
+    "--print-timeout=0s"
+  ],
+  "stdin_action": "held open until process exit",
+  "exit_code": 1,
+  "stdout": "{\"event\":\"result\",\"result\":{\"conversation_id\":\"\",\"status\":\"ERROR\",\"response\":\"\",\"error\":\"authentication failed or timed out\",\"duration_seconds\":0,\"num_turns\":0,\"usage\":{\"input_tokens\":0,\"output_tokens\":0,\"thinking_tokens\":0,\"cache_read_tokens\":0,\"total_tokens\":0}}}\n",
+  "stderr": "Error: authentication required. Run 'agy' to log in, then retry.\nerror: authentication failed or timed out\n",
+  "same_stdout_stderr_exit": [
+    "refused",
+    "network_proxy_refused",
+    "network_dns"
+  ],
+  "cases": {
+    "refused": {
+      "network": "direct; Google answers the placeholder refresh token",
+      "log_lines": [
+        "W1004 10:38:37.730473      69 browser.go:258] token refresh failed: oauth2: \"invalid_grant\" \"Bad Request\"",
+        "I1004 10:38:37.730510      69 keyring.go:76] keyringAuth: saved token invalid: oauth2: \"invalid_grant\" \"Bad Request\""
+      ]
+    },
+    "network_proxy_refused": {
+      "network": "HTTPS_PROXY=http://127.0.0.1:9 (connection refused)",
+      "log_lines": [
+        "W1004 10:39:20.275676     312 browser.go:256] token refresh failed due to network error: Post \"https://oauth2.googleapis.com/token\": proxyconnect tcp: dial tcp 127.0.0.1:9: connect: connection refused",
+        "W1004 10:39:20.275694     312 keyring.go:74] keyringAuth: token validation failed due to network error (token may still be valid): Post \"https://oauth2.googleapis.com/token\": proxyconnect tcp: dial tcp 127.0.0.1:9: connect: connection refused"
+      ]
+    },
+    "network_dns": {
+      "network": "HTTPS_PROXY=http://no-such-host.invalid:3128 (name does not resolve)",
+      "log_lines": [
+        "W1004 10:40:05.217205     128 browser.go:256] token refresh failed due to network error: Post \"https://oauth2.googleapis.com/token\": proxyconnect tcp: dial tcp: lookup no-such-host.invalid on <DNS>:53: no such host",
+        "W1004 10:40:05.217217     128 keyring.go:74] keyringAuth: token validation failed due to network error (token may still be valid): Post \"https://oauth2.googleapis.com/token\": proxyconnect tcp: dial tcp: lookup no-such-host.invalid on <DNS>:53: no such host"
+      ]
+    }
+  }
+}

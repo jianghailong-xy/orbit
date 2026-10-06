@@ -1,11 +1,13 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AgentProvider, providerPreset, RunEventType, type PlanUsageSnapshot, type ProviderPreset } from '@orbit/shared';
 import { CLAUDE_EFFORT_ORDER } from '../common/runtime-provider';
 import { GENERATING_SESSION_FILTER } from '../common/session-generating';
+import { accountPauseUntil } from '../common/account-pause';
+import { PublicIdPipe } from '../common/public-id';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
-import { codexLoginView, codexPoolUnavailableReason } from './codex-login';
+import { codexLoginView, codexPoolUnavailableReason, maskedAccount, POOL_LOGIN_SELECT } from './codex-login';
 import { CreateModelProviderDto, CreateProviderPoolDto, UpdateModelProviderDto } from './dto';
 import { decryptSecret, encryptSecret } from './provider-crypto';
 import { catalogDefaultModel, catalogModels, presetCatalog } from './model-catalog';
@@ -100,6 +102,12 @@ function assertReasoningLevels(runtime: string, models: unknown): void {
   }
 }
 
+function assertDshRuntimeCatalog(runtime: string, models: unknown, defaultModel?: string): void {
+  if (runtime === AgentProvider.DSH && ((Array.isArray(models) && models.length > 0) || defaultModel?.trim())) {
+    throw new BadRequestException('DeepSeek Harness models and default come from the runtime ACP catalogue');
+  }
+}
+
 /** A provider row as refusing an edit to a pool member reads it, before and after the edit. */
 type PoolEditRow = PoolAdmissionRow & { id: string; label: string };
 
@@ -109,22 +117,6 @@ type PoolEditRow = PoolAdmissionRow & { id: string; label: string };
  *  the encrypted pair is never selected on any path that builds a response. */
 /** A pool's ChatGPT logins, read beside the pool itself: a login belongs to a person of the pool
  *  (migration 0371), so it is no relation of the pool row. Each by its email and `…AB12`, oldest first. */
-const POOL_LOGIN_SELECT = {
-  poolId: true,
-  accountId: true,
-  // Who signed it in — the person whose sign-in again brings it back, and who may take it out with the
-  // pool's admins.
-  userId: true,
-  email: true,
-  plan: true,
-  state: true,
-  lastError: true,
-  expiresAt: true,
-  createdAt: true,
-  // What the pool gateway last read off the backend's answers, and the reset it named (migration 0324).
-  usage: true,
-  spentUntil: true,
-} satisfies Prisma.PoolCodexLoginSelect;
 
 type PoolLoginRow = Prisma.PoolCodexLoginGetPayload<{ select: typeof POOL_LOGIN_SELECT }>;
 
@@ -141,7 +133,7 @@ const POOL_SELECT = {
       { provider: { createdAt: 'asc' } },
       { providerId: 'asc' },
     ],
-    select: { provider: { select: { id: true, slug: true, label: true } } },
+    select: { pausedUntil: true, provider: { select: { id: true, slug: true, label: true } } },
   },
 } satisfies Prisma.ProviderPoolSelect;
 
@@ -149,7 +141,7 @@ function poolView(
   { members, ...pool }: Prisma.ProviderPoolGetPayload<{ select: typeof POOL_SELECT }>,
   logins: PoolLoginRow[],
 ) {
-  return { ...pool, members: members.map((member) => member.provider), ...loginsOf(logins) };
+  return { ...pool, members: members.map((member) => ({ ...member.provider, pausedUntil: member.pausedUntil && member.pausedUntil > new Date() ? member.pausedUntil : null })), ...loginsOf(logins) };
 }
 
 /** A pool's accounts as every read of it carries them, each by its email and `…AB12`: `logins`, every
@@ -188,6 +180,7 @@ const POOL_QUOTA_SELECT = {
   members: {
     ...POOL_SELECT.members,
     select: {
+      pausedUntil: true,
       provider: {
         select: {
           ...POOL_SELECT.members.select.provider.select,
@@ -297,7 +290,7 @@ export class ProvidersService {
         // The built-in entries below already name `opencode` and `antigravity`; the compatibility
         // guard rows that hold those slugs are not second providers to choose between.
         slug: { notIn: COMPATIBILITY_GUARD_SLUGS },
-        enabled: true,
+        AND: [{ OR: [{ enabled: true }, { slug: AgentProvider.DSH }] }],
         OR: [{ ownerId: null }, { ownerId }],
       },
       orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
@@ -309,6 +302,7 @@ export class ProvidersService {
         defaultModel: true,
         presetSlug: true,
         followsPreset: true,
+        enabled: true,
       },
     });
     const pools = await this.prisma.providerPool.findMany({
@@ -320,12 +314,14 @@ export class ProvidersService {
     });
     return [
       // A built-in engine carries no label: the slug is the engine's name, and it runs on itself.
-      ...Object.values(AgentProvider).map((slug) => ({ slug, runtime: slug, builtin: true })),
+      ...Object.values(AgentProvider)
+        .filter((slug) => slug !== AgentProvider.DSH || ![...rows, ...pools].some((row) => row.slug === slug))
+        .map((slug) => ({ slug, runtime: slug, builtin: true })),
       // Same preset resolution the pickers get, so the models named here are the ones the
       // provider currently offers rather than the copy stored when it was connected. Which
       // preset backs the row is the picker's business, not the caller's: dropped here.
-      ...rows.map((row) => {
-        const { presetSlug, followsPreset, ...view } = withPreset(row);
+      ...rows.filter((row) => row.enabled !== false).map((row) => {
+        const { presetSlug, followsPreset, enabled, ...view } = withPreset(row);
         return { ...view, builtin: false };
       }),
       // A pool runs on its members' Claude subscriptions, whose models are the Claude CLI's own —
@@ -389,11 +385,13 @@ export class ProvidersService {
   /** Create a provider. ownerId null = shared (admin area); set = the caller's personal one. */
   async create(ownerId: string | null, dto: CreateModelProviderDto) {
     const preset = this.assertPreset(dto.presetSlug);
+    const runtime = dto.runtime ?? preset?.runtime ?? AgentProvider.CLAUDE;
+    assertDshRuntimeCatalog(runtime, dto.models, dto.defaultModel);
     // Following means the catalogue supplies the models — a list sent alongside it would only be a
     // stale copy of the same thing. What's stored is then a snapshot: reads serve the preset, so it
     // only ever surfaces if we stop shipping that preset.
     const follows = !!preset && dto.followsPreset !== false;
-    const models = follows
+    const models = runtime === AgentProvider.DSH ? [] : follows
       ? catalogModels(preset!).map((m) => ({
           value: m.value,
           label: m.label,
@@ -403,11 +401,11 @@ export class ProvidersService {
     const base = slugBase(dto.slug ?? preset?.slug ?? dto.label);
     const data = {
       label: dto.label,
-      runtime: dto.runtime ?? preset?.runtime ?? 'claude',
+      runtime,
       baseUrl: dto.baseUrl,
       apiKeyEnc: encryptSecret(dto.apiKey),
       models: models as Prisma.InputJsonValue,
-      defaultModel: (follows ? catalogDefaultModel(preset!) : dto.defaultModel) ?? dto.models?.[0]?.value ?? null,
+      defaultModel: runtime === AgentProvider.DSH ? null : (follows ? catalogDefaultModel(preset!) : dto.defaultModel) ?? dto.models?.[0]?.value ?? null,
       // Identity outlives ownership: a row that maintains its own list is still an Anthropic one.
       presetSlug: preset?.slug ?? null,
       followsPreset: follows,
@@ -458,7 +456,17 @@ export class ProvidersService {
    *  users pass their id (their personal rows). Cross-scope ids read as not-found. */
   async update(ownerId: string | null, id: string, dto: UpdateModelProviderDto) {
     const current = await this.getScoped(ownerId, id);
-    assertReasoningLevels(dto.runtime ?? current.runtime, dto.models ?? current.models);
+    const runtime = dto.runtime ?? current.runtime;
+    assertDshRuntimeCatalog(runtime, dto.models, dto.defaultModel);
+    if (
+      dto.runtime && dto.runtime !== current.runtime &&
+      (dto.runtime === AgentProvider.DSH || current.runtime === AgentProvider.DSH)
+    ) {
+      // A history read can race a session created on the previous runtime. Keep the identity
+      // stable and require a separate provider instead of moving its future resume ids.
+      throw new BadRequestException('provider runtime cannot change into or out of dsh; create a separate provider');
+    }
+    if (runtime !== AgentProvider.DSH) assertReasoningLevels(runtime, dto.models ?? current.models);
     const data: Prisma.ModelProviderUpdateInput = {
       label: dto.label,
       runtime: dto.runtime,
@@ -497,7 +505,10 @@ export class ProvidersService {
   }
 
   async remove(ownerId: string | null, id: string) {
-    await this.getScoped(ownerId, id);
+    const current = await this.getScoped(ownerId, id);
+    if ((current.runtime === AgentProvider.DSH || current.slug === AgentProvider.DSH) && await this.hasProviderHistory(current)) {
+      throw new BadRequestException('DeepSeek Harness provider has session or task history and cannot be removed');
+    }
     await this.prisma.modelProvider.delete({ where: { id } });
     this.publishChanged(ownerId, id);
     return { ok: true };
@@ -584,6 +595,64 @@ export class ProvidersService {
     return this.getScopedPool(ownerId, poolId);
   }
 
+  /** Pause just this pool membership; signing in and quota are independent of this control. */
+  async pausePoolMember(userId: string, poolId: string, memberId: string, durationMinutes: number | null) {
+    accountPauseUntil(durationMinutes); // Validate before looking up any account.
+    const result = await this.prisma.$transaction(async (tx) => {
+      const pool = await tx.providerPool.findFirst({
+        where: { id: poolId, OR: [{ ownerId: userId }, { people: { some: { userId } } }] },
+        select: { ownerId: true, engine: true, people: { select: { userId: true, role: true } } },
+      });
+      if (!pool) throw new NotFoundException('pool not found');
+      const admin = pool.ownerId === userId || pool.people.some((person) => person.userId === userId && person.role === 'ADMIN');
+      type PauseRow = { pausedAt: Date | null; pausedUntil: Date | null };
+      // Set the cutoff only AFTER acquiring the row lock: a turn delivered while this write waited
+      // belongs to the active turn, and must still finish. Extending a live pause keeps its cutoff.
+      const dataFor = (rows: PauseRow[]) => {
+        const row = rows[0];
+        if (!row) throw new NotFoundException('account not found');
+        const now = new Date();
+        const pausedUntil = accountPauseUntil(durationMinutes, now);
+        return {
+          pausedAt: pausedUntil ? (row.pausedUntil && row.pausedUntil > now ? row.pausedAt ?? now : now) : null,
+          pausedUntil,
+        };
+      };
+      let data: PauseRow;
+      if (memberId.startsWith('login:')) {
+        const rows = await tx.poolCodexLogin.findMany({ where: { poolId }, select: { accountId: true, userId: true } });
+        const named = rows.filter((row) => maskedAccount(row.accountId) === memberId.slice(6));
+        if (named.length > 1) throw new ConflictException('More than one account has this fingerprint');
+        if (!named.length) throw new NotFoundException('account not found');
+        if (!admin && named[0].userId !== userId) throw new ForbiddenException('Only the contributor or a pool admin can pause this account');
+        data = dataFor(await tx.$queryRaw<PauseRow[]>`
+          SELECT "paused_at" AS "pausedAt", "paused_until" AS "pausedUntil" FROM "pool_codex_login"
+          WHERE "pool_id" = ${poolId}::uuid AND "account_id" = ${named[0].accountId} FOR UPDATE`);
+        await tx.poolCodexLogin.update({ where: { poolId_accountId: { poolId, accountId: named[0].accountId } }, data });
+      } else {
+        const id = new PublicIdPipe().transform(memberId, { type: 'param', data: 'memberId' }) as string;
+        if (pool.engine === AgentProvider.CLAUDE) {
+          if (pool.ownerId !== userId) throw new NotFoundException('pool not found');
+          data = dataFor(await tx.$queryRaw<PauseRow[]>`
+            SELECT "paused_at" AS "pausedAt", "paused_until" AS "pausedUntil" FROM "provider_pool_member"
+            WHERE "pool_id" = ${poolId}::uuid AND "provider_id" = ${id}::uuid AND "owner_id" = ${userId}::uuid FOR UPDATE`);
+          await tx.providerPoolMember.update({ where: { poolId_providerId: { poolId, providerId: id } }, data });
+        } else {
+          const key = await tx.poolApiKey.findFirst({ where: { id, poolId }, select: { contributorId: true } });
+          if (!key) throw new NotFoundException('account not found');
+          if (!admin && key.contributorId !== userId) throw new ForbiddenException('Only the contributor or a pool admin can pause this account');
+          data = dataFor(await tx.$queryRaw<PauseRow[]>`
+            SELECT "paused_at" AS "pausedAt", "paused_until" AS "pausedUntil" FROM "pool_api_key"
+            WHERE "pool_id" = ${poolId}::uuid AND "id" = ${id}::uuid FOR UPDATE`);
+          await tx.poolApiKey.update({ where: { id }, data });
+        }
+      }
+      return { pausedUntil: data.pausedUntil?.toISOString() ?? null, people: [pool.ownerId, ...pool.people.map((person) => person.userId)] };
+    });
+    for (const id of new Set(result.people)) this.publishChanged(id, poolId);
+    return { pausedUntil: result.pausedUntil };
+  }
+
   /** Delete a pool. Its members are providers in their own right and stay as they are. */
   async removePool(ownerId: string, id: string) {
     await this.getScopedPool(ownerId, id);
@@ -614,6 +683,9 @@ export class ProvidersService {
     model?: string;
     runtime?: string;
   }): Promise<{ ok: boolean; status?: number; message: string }> {
+    if (dto.runtime === AgentProvider.DSH) {
+      throw new BadRequestException('DeepSeek Harness requires runtime prompt validation');
+    }
     const base = this.assertTestableUrl(dto.baseUrl).replace(/\/+$/, '');
     const model = (dto.model ?? '').trim();
     if (!model) throw new BadRequestException('add a model before testing');
@@ -703,6 +775,15 @@ export class ProvidersService {
     return row;
   }
 
+  private async hasProviderHistory(row: { slug: string; ownerId: string | null }): Promise<boolean> {
+    const where = { provider: row.slug, ...(row.ownerId === null ? {} : { ownerId: row.ownerId }) };
+    const [session, task] = await Promise.all([
+      this.prisma.session.findFirst({ where: { ...where, providerBuiltin: false }, select: { id: true } }),
+      this.prisma.task.findFirst({ where, select: { id: true } }),
+    ]);
+    return !!session || !!task;
+  }
+
   private async getScopedPool(ownerId: string, id: string) {
     const pool = await this.prisma.providerPool.findFirst({
       where: { id, ownerId, shared: false },
@@ -767,10 +848,11 @@ export class ProvidersService {
           members: [],
         };
       }
-      const quota = members.map(({ provider: row }) => {
+      const quota = members.map(({ provider: row, pausedUntil }) => {
         const standing = this.planUsage.usageStanding(row);
         return {
           row,
+          pausedUntil,
           usage: this.planUsage.snapshot(row),
           refused: standing === 'KEY_REFUSED',
           usageUnreadable: standing === 'USAGE_UNKNOWN',
@@ -788,7 +870,7 @@ export class ProvidersService {
         resetsAt: selection.kind === 'EXHAUSTED' ? (selection.resetsAt?.toISOString() ?? null) : null,
         unavailable:
           selection.kind !== 'UNAVAILABLE' ? null : members.length > 0 ? 'No account can run' : 'No accounts',
-        members: quota.map(({ row, usage, refused, usageUnreadable }) => {
+        members: quota.map(({ row, usage, refused, usageUnreadable, pausedUntil }) => {
           const spent = spentUntil(usage, now);
           const state: PoolMemberState = refused
             ? 'REFUSED'
@@ -811,6 +893,7 @@ export class ProvidersService {
             presetSlug: row.presetSlug,
             enabled: row.enabled,
             planUsage: usage,
+            pausedUntil: pausedUntil && pausedUntil > now ? pausedUntil.toISOString() : null,
             state,
             resetsAt: state === 'SPENT' ? (spent?.toISOString() ?? null) : null,
             next: selection.kind === 'SELECTED' && selection.row.id === row.id,

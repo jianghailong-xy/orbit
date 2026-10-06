@@ -61,7 +61,9 @@ private struct RunnerEngineContent: View {
         let offline = RunnerPageFormat.isOffline(runner, now: now)
         Form {
             head(health, now: now)
-            if let health, health.installed == true, let login = RunnerPageFormat.loginEngine(engine) {
+            if engine == "antigravity" {
+                antigravitySection(health, offline: offline, now: now)
+            } else if let health, health.installed == true, let login = RunnerPageFormat.loginEngine(engine) {
                 accountsSection(health, login: login, offline: offline, now: now)
             }
             updateSection(offline: offline)
@@ -100,6 +102,38 @@ private struct RunnerEngineContent: View {
 
     // MARK: sections
 
+    @ViewBuilder private func antigravitySection(_ health: RunnerEngineHealth?, offline: Bool, now: Date) -> some View {
+        Section {
+            if health?.auth == "yes" {
+                Text(health?.authSource == "google" ? "Google account" : "env key · runs on your Gemini key")
+            }
+            if let status = health.flatMap({ RunnerPageFormat.engineStatus($0, runner: runner) }), health?.auth != "yes" {
+                Text(status.text).foregroundStyle(RunnerInk.status(status.tone))
+            }
+            ForEach(RunnerPageFormat.engineWindows(runner, engine: engine)) { row in
+                RunnerWindowRow(row: row, resets: RunnerPageFormat.resetsLine(row, now: now))
+            }
+            if let hint = EngineAuth.antigravityLoginHint(runner.antigravity?.googleLogin) {
+                Text(hint).font(.orbitLabel).foregroundStyle(Color.secondary)
+            } else if RunnerPageFormat.antigravityCanSignIn(runner) {
+                if signingIn != nil {
+                    RunnerSignInView(runnerID: runner.id, engine: .antigravity)
+                    Button("Close") { closeSignIn() }
+                } else {
+                    Button(health?.auth == "yes" && health?.authSource == "google" ? "Re-sign in · change Google account" : "Sign in with Google") {
+                        signingIn = CodexAccounts.defaultID
+                    }
+                    .disabled(offline)
+                    GoogleSignInTermsView()
+                }
+            }
+        } header: {
+            RunnerSectionHeader("Sign-In")
+        } footer: {
+            if offline { Text(RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER) }
+        }
+    }
+
     /// The engine, its version and whether it is kept current.
     @ViewBuilder private func head(_ health: RunnerEngineHealth?, now: Date) -> some View {
         Section {
@@ -130,7 +164,9 @@ private struct RunnerEngineContent: View {
                                               now: Date) -> some View {
         Section {
             ForEach(RunnerPageFormat.accountLines(health)) { line in
-                accountRow(line, login: login, offline: offline, now: now)
+                accountRow(line, login: login, offline: offline, now: now,
+                           canPause: RunnerPageFormat.keepsAccounts(engine)
+                               && (health.accounts ?? []).contains { $0.id == line.id })
                     // Rename stays out of the swipe actions: it opens an editor rather than performing
                     // the action, which is not what a swipe promises (SessionRowActions.swift).
                     .contextMenu {
@@ -188,7 +224,7 @@ private struct RunnerEngineContent: View {
 
     /// One account: its name and where it lives, where it stands, its windows — and its way (back) in.
     @ViewBuilder private func accountRow(_ line: RunnerPageFormat.AccountLine, login: LoginEngine, offline: Bool,
-                                         now: Date) -> some View {
+                                         now: Date, canPause: Bool) -> some View {
         let windows = RunnerPageFormat.accountWindows(runner, engine: engine, account: line.id)
         let status = RunnerPageFormat.authStatus(line.auth)
         let removal = RunnerPageFormat.removal(runner.accountRemove, engine: engine, account: line.id)
@@ -232,6 +268,13 @@ private struct RunnerEngineContent: View {
                 Button("Close") { closeSignIn() }
                     .buttonStyle(.borderless)
                     .font(.orbitLabel)
+            } else if canPause && (line.auth == "yes" || AccountPause.isPaused(line.pausedUntil, now: now)) {
+                AccountPauseControls(name: line.name, pausedUntil: line.pausedUntil,
+                                     scope: "Personal account · This runner. Paused sessions wait until it resumes or you switch accounts.",
+                                     signedInAction: { signingIn = line.id },
+                                     signInDisabled: offline || removal?.pending == true) { minutes in
+                    await runners.pauseAccount(runner.id, engine: login, account: line.id, durationMinutes: minutes)
+                }
             } else {
                 Button(line.auth == "yes" ? "Sign In Again" : RunnerPageCopy.RUNNER_SIGN_IN) {
                     signingIn = line.id

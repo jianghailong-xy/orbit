@@ -1,19 +1,22 @@
 import { useNavigate } from 'react-router-dom';
+import { useRef } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DeleteOutlined, EditOutlined } from '@ant-design/icons';
 import { Button, Popconfirm, Space, Table, Tag, type TableColumnsType } from 'antd';
 import { api } from '../api';
 import { isLoginPool } from '../lib/codexLogin';
 import { routeId } from '../lib/idCodec';
-import { providersQuery } from '../lib/queries';
+import { providersQuery, runnersQuery } from '../lib/queries';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { poolEligibleCount, poolRefusals, providerPoolsQuery } from '../lib/providerPools';
+import { providerDisplayLabel } from '../lib/sessionProviderChoices';
 import { ownPoolWithAccess, poolAccessQuery, sharedPoolAsProviderPool, sharedPoolsQuery } from '../lib/sharedPools';
 import { AccountPools, PoolHint } from '../components/AccountPools';
 import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
 import { RunnerEngines } from '../components/RunnerEngines';
 import { useIsMobile } from '../lib/useMediaQuery';
 import { useToast } from '../lib/toast';
+import type { Runner } from '../components/TasksSidePanel';
 
 /**
  * Where a workspace's model comes from — two kinds of identity, in the order a new user has them.
@@ -35,6 +38,11 @@ export function ProvidersPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
+  const runnerSection = useRef<HTMLDivElement>(null);
+  const runners = useQuery(runnersQuery());
+  const geminiReady = ((runners.data ?? []) as Runner[]).filter(
+    (runner) => runner.online && runner.antigravity?.supported && runner.antigravity.installed === true,
+  ).length;
   const providers = useQuery({ queryKey: PROVIDERS_LIST_KEY, queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE) });
   // Which account is busy moves with sessions, not with provider edits, so nothing pushes it: read
   // again while the page is open.
@@ -77,8 +85,26 @@ export function ProvidersPage() {
       // vendor: its logo (by preset, not by the row's identifier) and the name it was given.
       render: (_, p) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-          <ProviderTile slug={p.presetSlug ?? p.slug} label={p.label} size={32} />
-          <div className="prov-cell-name">{p.label}</div>
+          <ProviderTile slug={p.presetSlug ?? p.slug} label={providerDisplayLabel(p.label, p.presetSlug)} size={32} />
+          <div style={{ minWidth: 0 }}>
+            <div className="prov-cell-name">{providerDisplayLabel(p.label, p.presetSlug)}</div>
+            {p.runtime === 'antigravity' && (
+              <div className="prov-runtime">
+                <div>Runs on the Antigravity CLI</div>
+                <div>
+                  <span style={geminiReady === 0 ? { color: 'var(--warning)' } : undefined}>
+                    {geminiReady === 0 ? 'Not ready on any runner' : `Ready on ${geminiReady} runner${geminiReady === 1 ? '' : 's'}`}
+                  </span>{' '}
+                  <a className="re-link" href="#provider-runners" onClick={(event) => {
+                    event.preventDefault();
+                    runnerSection.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }}>
+                    See runners ↑
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
           {/* The Enabled column collapses to a dot on narrow screens — the tag's words would
               outrun a phone's width on their own. */}
           {isMobile && (
@@ -131,7 +157,7 @@ export function ProvidersPage() {
               size="small"
               type="text"
               icon={<EditOutlined />}
-              aria-label={`Edit ${p.label}`}
+              aria-label={`Edit ${providerDisplayLabel(p.label, p.presetSlug)}`}
               onClick={() => navigate(`/providers/${p.id}`)}
             />
           ) : (
@@ -139,9 +165,9 @@ export function ProvidersPage() {
               Edit
             </Button>
           )}
-          <Popconfirm title={`Delete ${p.label}?`} onConfirm={() => deleteMut.mutate(p.id)}>
+          <Popconfirm title={`Delete ${providerDisplayLabel(p.label, p.presetSlug)}?`} onConfirm={() => deleteMut.mutate(p.id)}>
             {isMobile ? (
-              <Button size="small" type="text" danger icon={<DeleteOutlined />} aria-label={`Delete ${p.label}`} />
+              <Button size="small" type="text" danger icon={<DeleteOutlined />} aria-label={`Delete ${providerDisplayLabel(p.label, p.presetSlug)}`} />
             ) : (
               <Button size="small" danger>
                 Delete
@@ -155,23 +181,21 @@ export function ProvidersPage() {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1 className="page-title" style={{ marginBottom: 0 }}>
-            Providers
-          </h1>
-          <div style={{ color: 'var(--text-3)', fontSize: 12 }}>
-            Where your workspaces&apos; models come from — the CLIs signed in on your machines, and the
-            API keys on your account.
-          </div>
-        </div>
+      <div className="prov-page-head">
+        <h1 className="page-title" style={{ marginBottom: 0 }}>
+          Providers
+        </h1>
         {/* Still only about keys: an engine gets its identity from the Sign in on its own row. */}
         <Button type="primary" onClick={() => navigate('/providers/new')}>
           Add provider
         </Button>
+        <div className="prov-page-sub">
+          Where your workspaces&apos; models come from — the CLIs signed in on your machines, and the
+          API keys on your account.
+        </div>
       </div>
 
-      <RunnerEngines />
+      <div ref={runnerSection} id="provider-runners"><RunnerEngines /></div>
 
       {/* A pool that exists is always shown, whatever its keys have since become: hiding it would
           leave sessions dispatching to something the page no longer lets you see or delete. The

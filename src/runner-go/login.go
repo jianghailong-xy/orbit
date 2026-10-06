@@ -24,6 +24,8 @@ const loginRelayTimeout = 10 * time.Minute
 // that declares this.
 const codexAccountLoginCapabilityV1 = "codex-account-login/v1"
 
+const antigravityGoogleLoginCapabilityV1 = "antigravity-google-login/v1"
+
 // lookLoginEngine is lookEngine, the binary the relay probes. A variable so a test can stand a
 // fake CLI in: the service PATH lookEngine searches puts ~/.local/bin first, where a dev machine's
 // real codex lives.
@@ -162,9 +164,13 @@ func loginFlowFor(engine string) loginFlow {
 		return loginFlow{engine: providerOpenCode}
 	}
 	if engine == providerAntigravity {
-		// Orbit runs agy on a Gemini API key only; there is nothing to sign in to. Explicit for the
-		// same reason as OpenCode: falling through would launch Claude's login.
-		return loginFlow{engine: providerAntigravity}
+		return loginFlow{
+			engine:    providerAntigravity,
+			argv:      []string{agyExecutable},
+			pty:       true,
+			takesCode: true,
+			progress:  antigravityGoogleLoginProgress,
+		}
 	}
 	// Anything else (including the empty engine an older control plane sends) is claude.
 	return loginFlow{
@@ -205,6 +211,8 @@ type loginRelay struct {
 	// above created leaves one a live session is stuck to alone. Set by the run loop; nil in a
 	// runner that has none.
 	liveSessionIDs func() []string
+	// Tests can shorten the relay's existing ten-minute budget without waiting ten minutes.
+	timeout time.Duration
 }
 
 // addedAccountSlot is one add-account attempt's slot: which engine it belongs to, the id it created,
@@ -235,8 +243,13 @@ type loginRun struct {
 	// and kind is the engine whose store it lives in. They belong to the run rather than to the
 	// relay — several attempts can be in flight at once, each with a slot of its own — so the run
 	// that ends without signing in knows exactly which empty account to take away again.
-	slot string
-	kind accountSlotKind
+	slot     string
+	kind     accountSlotKind
+	google   *antigravityGoogleLoginOutput
+	ctx      context.Context
+	binPath  string
+	finished chan struct{}
+	signedIn bool
 }
 
 // loginAccountKey names the account a sign-in writes: the engine's one login, or — for an engine
@@ -283,8 +296,8 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 		report(LoginResultRequest{Status: loginFailed, Message: "OpenCode sign-in is provider-specific — run `opencode auth login` on this runner and choose the provider there", Attempt: attempt})
 		return
 	}
-	if flow.engine == providerAntigravity {
-		report(LoginResultRequest{Status: loginFailed, Message: "Antigravity runs on a Gemini API key in Orbit, not a Google-account sign-in — set GEMINI_API_KEY for this runner, or give the session a Gemini API key", Attempt: attempt})
+	if flow.engine == providerAntigravity && runtime.GOOS != "linux" {
+		report(LoginResultRequest{Status: loginFailed, Message: "Antigravity 的 Google 登录暂时只支持 Linux runner", Attempt: attempt})
 		return
 	}
 	// An engine whose CLI keeps a login per directory can sign in another account; every other
@@ -387,44 +400,98 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 		if prev.cancel != nil {
 			prev.cancel()
 		}
+		if flow.engine == providerAntigravity && prev.finished != nil {
+			// Finish rollback of the old attempt's token before a replacement moves it again.
+			r.mu.Unlock()
+			<-prev.finished
+			r.start(lr, send)
+			return
+		}
 		delete(r.runs, key)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), loginRelayTimeout)
+	timeout := r.timeout
+	if timeout <= 0 {
+		timeout = loginRelayTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	var cmd *exec.Cmd
-	if flow.pty {
+	var google *antigravityGoogleLoginOutput
+	cleanup := func() {}
+	finishGoogle := func(bool) {}
+	binPath := ""
+	if flow.engine == providerAntigravity {
+		var ok bool
+		binPath, ok = lookLoginEngine(flow.engine)
+		if !ok {
+			r.mu.Unlock()
+			cancel()
+			giveUp("this runner has no agy executable — install Antigravity first")
+			return
+		}
+		var err error
+		cmd, cleanup, err = antigravityGoogleCommand(ctx, binPath, env, false)
+		if err != nil {
+			r.mu.Unlock()
+			cancel()
+			giveUp("could not prepare the Google sign-in: " + firstLine(err.Error()))
+			return
+		}
+		cmd.Env = envWithValue(cmd.Env, "SSH_CONNECTION", "127.0.0.1 1 127.0.0.1 2")
+		cmd.Env = envWithValue(cmd.Env, "TERM", "xterm-256color")
+		finishGoogle, err = preserveAntigravityGoogleLogin()
+		if err != nil {
+			r.mu.Unlock()
+			cancel()
+			cleanup()
+			giveUp("could not prepare the existing Google login: " + firstLine(err.Error()))
+			return
+		}
+		google = &antigravityGoogleLoginOutput{}
+	} else if flow.pty {
 		cmd = ptyCommand(ctx, flow.argv...)
 	} else {
 		cmd = exec.CommandContext(ctx, flow.argv[0], flow.argv[1:]...)
 	}
-	cmd.Env = env
+	if google == nil {
+		cmd.Env = env
+	}
 	// Only a flow that takes a pasted code needs a writable stdin; the device flow completes
 	// on its own, so there is nothing to hold open.
 	var stdin io.WriteCloser
-	if flow.takesCode {
+	if flow.takesCode && google == nil {
 		p, err := cmd.StdinPipe()
 		if err != nil {
 			r.mu.Unlock()
 			cancel()
+			cleanup()
 			giveUp("could not open a pipe to the sign-in: " + err.Error())
 			return
 		}
 		stdin = p
 	}
 	out := &syncBuffer{}
-	cmd.Stdout = out
-	cmd.Stderr = out
-	if err := cmd.Start(); err != nil {
+	var startErr error
+	if google != nil {
+		stdin, startErr = startAntigravityGooglePTY(cmd, google)
+	} else {
+		cmd.Stdout = out
+		cmd.Stderr = out
+		startErr = cmd.Start()
+	}
+	if startErr != nil {
 		r.mu.Unlock()
 		cancel()
+		cleanup()
+		finishGoogle(false)
 		if stdin != nil {
 			_ = stdin.Close()
 		}
 		// `script` missing is the one failure worth naming precisely: everything else the user
 		// can act on, but this one means the relay can never work on this machine.
-		giveUp(signInStartError(err, flow))
+		giveUp(signInStartError(startErr, flow))
 		return
 	}
-	run = &loginRun{key: key, attempt: attempt, stdin: stdin, cancel: cancel, out: out, slot: createdSlot, kind: kind}
+	run = &loginRun{key: key, attempt: attempt, stdin: stdin, cancel: cancel, out: out, slot: createdSlot, kind: kind, google: google, ctx: ctx, binPath: binPath, finished: make(chan struct{})}
 	if r.runs == nil {
 		r.runs = map[string]*loginRun{}
 	}
@@ -435,6 +502,14 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 	go func() {
 		defer r.wg.Done()
 		r.pump(run, flow, cmd, env, report)
+		cleanup()
+		finishGoogle(run.signedIn)
+		r.mu.Lock()
+		if r.runs[run.key] == run {
+			delete(r.runs, run.key)
+		}
+		r.mu.Unlock()
+		close(run.finished)
 	}()
 }
 
@@ -451,10 +526,22 @@ func (r *loginRelay) stop() {
 	r.wg.Wait()
 }
 
+func (r *loginRelay) cancelLogin(lr LoginCommand) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if run := r.runs[loginAccountKey(lr.Engine, lr.Account)]; run != nil && (lr.Attempt == "" || lr.Attempt == run.attempt) {
+		run.cancel()
+	}
+}
+
 // pump watches the sign-in: publish the URL as soon as it appears, then wait for the CLI to exit
 // and report whether this machine ended up signed in. env is the environment the CLI ran in, and
 // so the one to ask whether it did.
 func (r *loginRelay) pump(run *loginRun, flow loginFlow, cmd *exec.Cmd, env []string, report func(LoginResultRequest)) {
+	if run.google != nil {
+		r.pumpAntigravityGoogle(run, cmd, report)
+		return
+	}
 	out := run.out
 	// Wait in its own goroutine so the URL poll below can tell "still running" from "already
 	// exited" — cmd.ProcessState stays nil until Wait returns, so it can't answer that itself.
@@ -622,10 +709,17 @@ func (r *loginRelay) submitCode(lr LoginCommand, report func(LoginResultRequest)
 		report(LoginResultRequest{Status: loginFailed, Message: "the sign-in expired before the code arrived — start it again"})
 		return
 	}
+	if run.google != nil && lr.Attempt != "" && lr.Attempt != run.attempt {
+		return
+	}
 	send := report
 	report = func(res LoginResultRequest) {
 		res.Attempt = run.attempt
 		send(res)
+	}
+	if run.google != nil {
+		r.submitAntigravityGoogleCode(run, code, report)
+		return
 	}
 	seen := strings.Count(run.out.String(), loginInvalidCodeMarker)
 	if _, err := io.WriteString(run.stdin, strings.TrimSpace(code)+"\n"); err != nil {

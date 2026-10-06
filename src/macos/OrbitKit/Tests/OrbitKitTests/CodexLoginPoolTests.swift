@@ -333,4 +333,57 @@ final class CodexLoginPoolTests: XCTestCase {
         XCTAssertEqual(CodexSignIn.doneTitle(nil, pool: out), "Your ChatGPT account is in My Codex")
         XCTAssertEqual(CodexSignIn.doneRow(held), "ChatGPT Pro · …7QX4 · its sign-in stays on the Orbit server")
     }
+
+    // MARK: - the session's account
+
+    /// The account a session's detail names (its `poolCodexLogin`) is the pool's member with that
+    /// account — whatever its state: a spent one still renders (web's `poolSessionLoginMember`). The
+    /// production failure this fixes: with the pool's oldest account spent NO member is `next`, so the
+    /// composer's old read found nobody while the session ran on that very account.
+    func testTheSessionAccountIsTheMemberTheDetailNamesWhateverItsState() throws {
+        let spent = account(primary: 100, secondary: 100)
+        let fresh = account(email: "hl.work@gmail.com", fingerprint: "…AAAA", primary: 18, secondary: 40)
+        let codex = try pool(spent, fresh)
+
+        // Nothing is `next`: the old read finds nobody — the blank composer.
+        XCTAssertTrue(codex.members.allSatisfy { !$0.next })
+        XCTAssertNil(ProviderPools.sessionAccount(in: codex, memberID: nil))
+
+        // The session's detail names the spent account it runs on: that is the member the composer
+        // draws, read as the claim's pick — and its words say so, never "starts on".
+        let named = CodexLogin(state: "ACTIVE", email: "wikova@orbitd.io", plan: "pro", fingerprint: "…7QX4",
+                               usage: windows(100, 100))
+        let member = try XCTUnwrap(CodexLoginPool.sessionMember(in: codex, login: named))
+        XCTAssertEqual(member.id, "login:…7QX4")
+        XCTAssertEqual(member.state, .spent)
+        XCTAssertEqual(member.planUsage?.primary?.utilization, 100)
+        let account = PoolAccount(member: member, current: true)
+        XCTAssertEqual(ProviderPools.accountHelp(pool: codex, account: account),
+                       "My Codex is running this session on wikova@orbitd.io")
+    }
+
+    /// A session naming an account the pool no longer holds draws nobody: the next claim chooses again.
+    func testTheSessionAccountIsNilWhenThePoolNoLongerHoldsIt() throws {
+        let codex = try pool(lin, work)
+        let gone = CodexLogin(state: "ACTIVE", email: nil, plan: nil, fingerprint: "…XXXX")
+        XCTAssertNil(CodexLoginPool.sessionMember(in: codex, login: gone))
+        XCTAssertNil(CodexLoginPool.sessionMember(in: codex, login: nil))
+    }
+
+    /// The session detail's masked account decodes into `Session.poolCodexLogin` — email and `…AB12`,
+    /// no raw id — and a control plane that predates the field decodes without it.
+    func testTheSessionDetailCarriesTheMaskedAccount() throws {
+        let json = """
+        {"id": "s1", "title": null, "status": "RUNNING", "poolCodexLogin": \(account())}
+        """
+        let session = try decoder.decode(Session.self, from: Data(json.utf8))
+        let login = try XCTUnwrap(session.poolCodexLogin)
+        XCTAssertEqual(login.email, "wikova@orbitd.io")
+        XCTAssertEqual(login.fingerprint, "…7QX4")
+        XCTAssertEqual(login.plan, "pro")
+
+        let without = try decoder.decode(Session.self,
+                                         from: Data(#"{"id": "s2", "title": null, "status": "RUNNING"}"#.utf8))
+        XCTAssertNil(without.poolCodexLogin)
+    }
 }

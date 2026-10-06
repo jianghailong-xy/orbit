@@ -83,6 +83,55 @@ function project(
 }
 
 describe('attention classification', () => {
+  it('uses the same working coordinator fact as the sidebar', () => {
+    const row = project({
+      buckets: { done: 1 }, lastActivityAt: at(2 * QUIET_MS),
+      coordinatorActivity: { working: true, lastTurnAt: at(MINUTE) },
+    });
+    expect(attentionSectionOf(row, NOW)).toBe('running');
+    expect(attentionReasonOf(row, NOW)).toBeNull();
+    expect(projectIsWorking(row)).toBe(true);
+    expect(attentionSectionOf({ ...row, status: 'DONE' }, NOW)).toBe('completed');
+  });
+
+  it('keeps landing and merging projects active even after their task work has finished', () => {
+    for (const buckets of [{ done: 1, blocked: 17 }, { done: 21 }]) {
+      const row = project({
+        buckets,
+        lastActivityAt: at(2 * QUIET_MS),
+        integration: { line: 'PROJECT_BRANCH', ref: 'project/x', activeJobCount: 1 },
+      });
+      expect(attentionSectionOf(row, NOW)).toBe('running');
+      expect(attentionReasonOf(row, NOW)).toBeNull();
+      expect(projectIsWorking(row)).toBe(true);
+    }
+  });
+
+  it('keeps owner decisions and control-plane blockers ahead of integration activity', () => {
+    for (const overlay of [
+      attention({ ownerItems: [ownerItem('PROMOTION_APPROVAL', 1, HOUR)] }),
+      attention({ coordinatorBlockers: 1 }),
+    ]) {
+      const row = project({
+        buckets: { done: 1 }, attention: overlay,
+        integration: { line: 'PROJECT_BRANCH', ref: 'project/x', activeJobCount: 1 },
+      });
+      expect(attentionSectionOf(row, NOW)).toBe('attention');
+      expect(projectIsWorking(row)).toBe(true);
+    }
+  });
+
+  it('does not turn an integration exception or an older server into active work', () => {
+    for (const activeJobCount of [0, undefined]) {
+      const row = project({
+        buckets: { done: 1, blocked: 1, integrating: 1 }, _count: { tasks: 2 },
+        integration: { line: 'PROJECT_BRANCH', ref: 'project/x', activeJobCount },
+      });
+      expect(attentionSectionOf(row, NOW)).toBe('waiting');
+      expect(projectIsWorking(row)).toBe(false);
+    }
+  });
+
   it.each([
     ['coordinator', 1, 0],
     ['system', 0, 1],
@@ -427,7 +476,7 @@ describe('attentionChipOf', () => {
     const row = project({ buckets: { done: 5, cancelled: 7 } });
     expect(attentionChipOf(row, NOW)).toEqual({
       tone: 'brand',
-      text: '12/12 settled · still open',
+      text: '12/12 tasks settled · project still open',
     });
   });
 
@@ -583,10 +632,26 @@ describe('attention by reason', () => {
     });
   });
 
+  it('keeps a landing exception visible after every task is DONE', () => {
+    const row = project({
+      buckets: { done: 4 },
+      integration: { line: 'PROJECT_BRANCH', ref: 'project/x', activeJobCount: 0 },
+      attention: attention({ coordinatorItems: coordinatorItems('INTEGRATION_CHECK_FAILED', 3 * HOUR) }),
+    });
+    expect(attentionReasonOf(row, NOW)).toBe('coordinator-handling');
+    expect(attentionSectionOf(row, NOW)).toBe('waiting');
+    expect(attentionChipOf(row, NOW)?.text).toBe('Coordinator · checks failed · 3h');
+    expect(projectIsWorking(row)).toBe(false);
+    const retrying = { ...row, integration: { ...row.integration!, activeJobCount: 1 } };
+    expect(attentionSectionOf(retrying, NOW)).toBe('running');
+    expect(attentionChipOf(retrying, NOW)?.text).toBe('Coordinator · checks failed · 3h');
+  });
+
   it.each([
     ['INTEGRATION_CHECK_FAILED', 'Coordinator · checks failed · 3h'],
     ['INTEGRATION_ERROR', 'Coordinator · handling an integration error · 3h'],
     ['TASK_FAILED', 'Coordinator · handling a failed task · 3h'],
+    ['DELIVERY_REVIEW', 'Coordinator · reviewing a delivery · 3h'],
   ] as const)('names what the coordinator is doing with a %s', (leadKind, text) => {
     const row = project({
       buckets: { running: 1 },
