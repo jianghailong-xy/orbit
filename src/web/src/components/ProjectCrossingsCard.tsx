@@ -28,6 +28,29 @@ import {
  * it, one considered answer becomes an answer about somebody else's work.
  */
 
+/**
+ * A MOVE_TASK, in the card's own words. A request to move a task that already exists is not a
+ * filing: the task is filed already, and confirming the request IS the move (account owner,
+ * 2026-10-06), so nobody is left to send anything again. Each sentence is one literal, so a client
+ * that shows the same request can hold its words to these.
+ */
+export const MOVE_TASK_SUBJECT_LABEL = 'Task to move';
+export const MOVE_TASK_REQUESTED_CRITERION_LABEL = 'Target criterion requested';
+export const MOVE_TASK_WITHDRAWN_CRITERION_LABEL = 'Source criterion it serves now';
+export const MOVE_TASK_WITHDRAWN_CRITERION_NOTE = 'Confirming the move withdraws this declaration.';
+export const MOVE_TASK_CRITERION_GONE = 'The target project no longer states this criterion.';
+export const MOVE_TASK_APPROVE_CONSEQUENCE = 'Confirming is the move: the task joins the target project as soon as you answer, and nobody has to send the request again.';
+export const MOVE_TASK_DENY_CONSEQUENCE = 'Refusing is final for this request, and the task stays where it is. If you change your mind, move the task yourself.';
+
+/** What each state means for a MOVE_TASK, where `CROSSING_STATE_MEANING` speaks for a filing: the
+ *  task is already filed, so "not filed anywhere until you answer" would be false of it. */
+export const MOVE_TASK_STATE_MEANING: Readonly<Record<CrossingState, string>> = {
+  PENDING: 'the task stays in its project until you answer, and confirming moves it',
+  APPROVED: 'the task has not moved: this yes was recorded without moving it',
+  DENIED: 'refusing is final for this request, and the task stays where it is',
+  APPLIED: 'the task was moved when this request was confirmed',
+};
+
 /** What the second press is agreeing to, as data rather than as a sentence built at the call site.
  *  Exported because it is the part worth testing: the prompt must name both ends, or it is a
  *  confirmation of nothing. */
@@ -35,16 +58,45 @@ export function crossingConfirmPrompt(
   row: ProjectCrossingRow,
   decision: 'APPROVE' | 'DENY',
 ): { verb: string; from: string; to: string; subject: string; consequence: string } {
+  const verb = decision === 'APPROVE' ? 'Approve' : 'Refuse';
+  const from = row.fromProject?.title ?? (row.fromProjectPublicId ?? row.fromProjectId);
+  const to = row.toProject?.title ?? (row.toProjectPublicId ?? row.toProjectId);
+  if (row.kind === 'MOVE_TASK') {
+    return {
+      verb,
+      from,
+      to,
+      // The task as it reads now; the row's own title is the one it had when the move was asked.
+      subject: row.subjectTask?.title ?? row.title,
+      consequence: decision === 'APPROVE' ? MOVE_TASK_APPROVE_CONSEQUENCE : MOVE_TASK_DENY_CONSEQUENCE,
+    };
+  }
   return {
-    verb: decision === 'APPROVE' ? 'Approve' : 'Refuse',
-    from: row.fromProject?.title ?? (row.fromProjectPublicId ?? row.fromProjectId),
-    to: row.toProject?.title ?? (row.toProjectPublicId ?? row.toProjectId),
+    verb,
+    from,
+    to,
     subject: row.title,
     consequence:
       decision === 'APPROVE'
         ? 'The writer may then file this work under the target project. It is not filed by this answer.'
         : 'Refusing is final for this crossing. If you change your mind, file the work yourself.',
   };
+}
+
+/** The server's reason for refusing an answer, under its code when it sent one. A confirmation
+ *  refused because the task is being landed right then says so, and that the request still waits. */
+function RefusalReason({ error }: { error: Error }) {
+  const code = (error as { code?: unknown }).code;
+  return (
+    <>
+      {typeof code === 'string' ? (
+        <>
+          <Typography.Text code>{code}</Typography.Text>{' '}
+        </>
+      ) : null}
+      {error.message}
+    </>
+  );
 }
 
 /** A crossing that is still a question is the only one that can be answered. */
@@ -77,6 +129,51 @@ function ProjectEnd({
   );
 }
 
+/** MOVE_TASK: the task that already exists and is asked to move, by title and by id. */
+function MoveSubject({ row }: { row: ProjectCrossingRow }) {
+  const id = row.subjectTaskPublicId ?? row.subjectTaskId;
+  return (
+    <div style={{ marginTop: 4 }}>
+      <Typography.Text type="secondary">{MOVE_TASK_SUBJECT_LABEL}: </Typography.Text>
+      <Typography.Text strong>{row.subjectTask?.title ?? row.title}</Typography.Text>
+      {id ? (
+        <>
+          {' '}
+          <Typography.Text code copyable={{ text: id }}>
+            {id}
+          </Typography.Text>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+/** MOVE_TASK: what the task would count towards over there, and what it counts towards here now —
+ *  the declaration the move takes back. */
+function MoveCriteria({ row }: { row: ProjectCrossingRow }) {
+  const requested = row.requestedCriterion;
+  const withdrawn = row.withdrawnCriterion;
+  return (
+    <>
+      {requested ? (
+        <div>
+          <Typography.Text type="secondary">{MOVE_TASK_REQUESTED_CRITERION_LABEL}: </Typography.Text>
+          <Typography.Text>{requested.text ?? MOVE_TASK_CRITERION_GONE}</Typography.Text>{' '}
+          <Typography.Text code>{requested.key}</Typography.Text>
+        </div>
+      ) : null}
+      {withdrawn ? (
+        <div>
+          <Typography.Text type="secondary">{MOVE_TASK_WITHDRAWN_CRITERION_LABEL}: </Typography.Text>
+          <Typography.Text>{withdrawn.text}</Typography.Text>{' '}
+          <Typography.Text code>{withdrawn.key}</Typography.Text>{' '}
+          <Typography.Text type="secondary">{MOVE_TASK_WITHDRAWN_CRITERION_NOTE}</Typography.Text>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 /**
  * One crossing.
  *
@@ -101,6 +198,7 @@ export function CrossingRow({
   onAnswer: (decision: 'APPROVE' | 'DENY') => void;
 }) {
   const prompt = confirming ? crossingConfirmPrompt(row, confirming) : null;
+  const move = row.kind === 'MOVE_TASK';
   return (
     <li
       style={{ listStyle: 'none', padding: '10px 0', borderTop: '1px solid var(--border-subtle)' }}
@@ -112,7 +210,7 @@ export function CrossingRow({
         <Typography.Text strong>{labelFor(CROSSING_STATE_LABEL, row.state)}</Typography.Text>
         <Tag aria-label={`Crossing kind ${row.kind}`}>{row.kind}</Tag>
       </div>
-      <div style={{ marginTop: 4 }}>{row.title}</div>
+      {move ? <MoveSubject row={row} /> : <div style={{ marginTop: 4 }}>{row.title}</div>}
       <div style={{ marginTop: 4 }}>
         <ProjectEnd
           title={row.fromProject?.title}
@@ -127,8 +225,9 @@ export function CrossingRow({
         />
       </div>
       <Typography.Text type="secondary">
-        {labelFor(CROSSING_STATE_MEANING, row.state)}
+        {labelFor(move ? MOVE_TASK_STATE_MEANING : CROSSING_STATE_MEANING, row.state)}
       </Typography.Text>
+      {move ? <MoveCriteria row={row} /> : null}
       {row.reason ? (
         <div>
           <Typography.Text type="secondary">Reason given: {row.reason}</Typography.Text>
@@ -140,7 +239,7 @@ export function CrossingRow({
           showIcon
           style={{ marginTop: 8 }}
           message="That answer was not recorded"
-          description={error.message}
+          description={<RefusalReason error={error} />}
         />
       ) : null}
 

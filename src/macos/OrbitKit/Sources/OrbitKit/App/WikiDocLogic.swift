@@ -2,8 +2,8 @@ import Foundation
 
 // The Wiki's documents on the native pages (criterion 10 revised 2026-09-28, mocks 24, 26, 28) — the Swift
 // half of the web's `src/web/src/lib/wikiDocs.ts`: the directory by the confirmed plan's categories and
-// documents, one document with its sentences' marks and footnotes, and Browse by category and the A–Z index
-// by document.
+// documents, the home's documents, one document with its sentences' marks and footnotes, and Browse by
+// category and the A–Z index by document.
 //
 // Every sentence is a constant here, not a literal in a view, because `WikiDocsCopyParityTests` looks each
 // one up in the web source; every reading is proved against the cases in `src/shared/src/wiki-docs.fixture.json`,
@@ -127,6 +127,20 @@ public enum WikiDocCopy {
         let said = WikiModeLogic.runWhen(iso, timeZone: timeZone)
         return said.isEmpty ? nil : said
     }
+
+    // The home, by the confirmed plan (design §12.3.1, mocks 30 ③, 31 ① ⑥).
+
+    /// The line under the home's head once a plan is confirmed: `35 documents · 5 written` (`wikiDocsWritten`).
+    public static func docsWritten(total: Int, written: Int) -> String {
+        "\(plural(total, "document", "documents")) · \(WikiArticleCopy.count(written)) written"
+    }
+    /// A new space's one card (mock 31 ⑥): why it has nothing, over Set up maintenance (`WIKI_NO_DOCUMENTS_NOTE`).
+    public static let noDocumentsNote =
+        "This wiki has no documents yet. Maintenance drafts a plan and writes them; it isn’t set up for this space."
+    /// A category's documents not written yet, folded into one row under its written ones (`wikiNotWrittenYet`).
+    public static func notWrittenYet(_ n: Int) -> String { "+\(WikiArticleCopy.count(n)) not written yet" }
+    /// A category none of whose documents is written yet, as its one row (`wikiDocsNotWrittenYet`).
+    public static func docsNotWrittenYet(_ n: Int) -> String { "\(plural(n, "document", "documents")) · \(notWrittenShort)" }
 }
 
 public enum WikiDocLogic {
@@ -649,6 +663,80 @@ public enum WikiDocLogic {
 
     /// Whether a space reads by its documents (a plan is confirmed), or still by topic (`wikiReadsByDocs`).
     public static func readsByDocs(_ directory: WikiDocsDirectory?) -> Bool { directory?.plan != nil }
+
+    // MARK: the home, by the confirmed plan (design §12.3.1, mocks 30 ③, 31 ① ③ ⑥)
+
+    /// The line under the home's head (`wikiHomeLine`): the confirmed plan's documents and how many are written;
+    /// before a plan, the topic articles the home lists in its place; with neither, `No documents yet`.
+    public static func homeLine(_ directory: WikiDocsDirectory?, articles: Int) -> String {
+        if let directory, readsByDocs(directory) {
+            let docs = directory.categories.flatMap { $0.docs ?? [] }
+            return WikiDocCopy.docsWritten(total: directory.docs?.total ?? docs.count,
+                                           written: directory.docs?.written ?? docs.filter { $0.written == true }.count)
+        }
+        return articles > 0 ? WikiArticleCopy.articleCount(articles) : WikiCopy.noDocuments
+    }
+
+    /// A written document on the home: its number, title and lead, and whether it is new to the reader.
+    public struct HomeDoc: Equatable, Sendable, Identifiable {
+        public let slug: String
+        public let number: String
+        public let title: String
+        /// Its two lines (contract `docs.lead`); nil when the read carries none.
+        public let lead: String?
+        /// A blue dot: written after the reader last looked at the home.
+        public let fresh: Bool
+        public var id: String { slug }
+    }
+
+    /// A document not written yet, as its category's folded row opens to it: its number and title, in grey.
+    public struct HomeTodo: Equatable, Sendable, Identifiable {
+        public let slug: String
+        public let number: String
+        public let title: String
+        public var id: String { slug }
+    }
+
+    /// One category of the home: its written documents, then the ones not written yet, which fold into one row.
+    public struct HomeCategory: Equatable, Sendable, Identifiable {
+        public let key: String
+        public let number: Int
+        public let title: String
+        public let written: [HomeDoc]
+        public let notWritten: [HomeTodo]
+        public var id: String { key }
+    }
+
+    /// The home's documents (`wikiHomeCategories`): the confirmed plan's categories in its order — a category
+    /// with no document left out, as the directory leaves it — each with its documents in the plan's order, the
+    /// written ones first. `seen` is when the reader last looked at the home (`WikiSeenLog`): a document written
+    /// after it is new, and every written one is to a reader who has not looked before; nil, before the stamp
+    /// is read, marks none.
+    public static func homeCategories(_ directory: WikiDocsDirectory, seen: Double?) -> [HomeCategory] {
+        directory.categories.compactMap { category in
+            let docs = category.docs ?? []
+            guard !docs.isEmpty else { return nil }
+            return HomeCategory(
+                key: category.key, number: category.number ?? 0,
+                title: category.title.isEmpty ? category.key : category.title,
+                written: docs.filter { $0.written == true }.map { doc in
+                    HomeDoc(slug: doc.slug, number: doc.number ?? "", title: doc.title.isEmpty ? doc.slug : doc.title,
+                            lead: doc.lead, fresh: seen.map { WikiSeenLog.isNew(doc.updatedAt, seen: $0) } ?? false)
+                },
+                notWritten: docs.filter { $0.written != true }.map { doc in
+                    HomeTodo(slug: doc.slug, number: doc.number ?? "", title: doc.title.isEmpty ? doc.slug : doc.title)
+                })
+        }
+    }
+
+    /// A category's folded row (`wikiNotWrittenRow`): `+3 not written yet` under written ones, `3 documents · Not
+    /// written yet` alone; none when all are written.
+    public static func notWrittenRow(_ category: HomeCategory) -> String? {
+        guard !category.notWritten.isEmpty else { return nil }
+        return category.written.isEmpty
+            ? WikiDocCopy.docsNotWrittenYet(category.notWritten.count)
+            : WikiDocCopy.notWrittenYet(category.notWritten.count)
+    }
 
     // MARK: Browse by category, by document
 

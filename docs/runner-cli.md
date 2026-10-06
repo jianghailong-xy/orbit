@@ -254,11 +254,114 @@ orbit token revoke <token-id>
 The token value is printed once. Store it in the integration's secret manager as `ORBIT_SERVICE_TOKEN`. A
 service token cannot mint another token, and revocation is checked on every request.
 
+## Personal access tokens
+
+A personal access token lets a script or a terminal act as **you**: it calls the REST API the web app uses
+(`/api/...`), and what it writes is recorded as yours. `orbit login` gets one through the browser; or issue one
+in Orbit under **Settings → Access tokens**, with the scopes it needs (read-only, read-write, or a custom set),
+optionally the workspaces it is confined to, and a lifetime of 30, 90 or 365 days, or none. The token is shown
+once.
+
+```bash
+orbit login                                   # approve in the browser; add --server https://orbit.example.com on a new machine
+orbit login --scopes read-write --expires 30d --name "deploy box"
+orbit login --with-token < token.txt          # a token issued under Settings → Access tokens
+orbit whoami
+orbit api /api/tasks
+orbit api -X POST /api/tasks --data-file - < task.json
+orbit api /api/tasks/page --paginate --json
+orbit logout                                  # revokes the token, then forgets it
+```
+
+- `orbit login` asks the server for a token and opens `<server>/cli-login?code=…`. Signed in to Orbit there,
+  you see the token's name, scopes, lifetime and the host asking, and approve or deny it. The CLI waits up to
+  ten minutes, then saves the token it is handed. `--name` defaults to `orbit CLI on <host>`, `--scopes` to
+  `read-only` (or `read-write`, or a list such as `tasks:read,tasks:write`), and `--expires` to `90d` (`30d`,
+  `365d` or `never`). The token belongs to the account that approved it. The server keeps only its hash, and
+  the token itself is in the one answer the CLI collects.
+- `orbit login --with-token` reads an issued token from stdin only, so it never sits in an argument list or a
+  shell history.
+- Either way the CLI checks the token with the server and saves it, with the server's URL, in
+  `$ORBIT_HOME/user.json` (`~/.orbit/user.json`, mode `0600` in a `0700` directory). The file is separate from
+  the runner's `config.json`, and the runner service never reads it. A machine needs no runner to log in.
+- `ORBIT_USER_TOKEN` takes precedence over a saved login, for CI and containers. It is sent to
+  `ORBIT_SERVER_URL`, or else to this machine's runner server, or else to the server the binary was built for.
+- `orbit api [-X METHOD] PATH [--data JSON | --data-file -] [--paginate] [--json]` sends one request under
+  `/api` on the token's own server and prints the answer, indented (or compact with `--json`). It exits
+  non-zero on anything but 2xx, after printing the answer. `--paginate` follows `nextCursor`, as
+  `/api/tasks/page` answers, and prints every page. PATH can be a path only, never a URL.
+- `orbit logout` revokes the token on the server and removes `user.json`; when the server cannot be reached
+  it removes nothing. `--keep-token` only removes the file.
+- A 401 means the token is invalid, revoked or expired; the server does not say which. Run `orbit login`
+  again.
+- No scope opens the owner's own decisions (confirmation cards, evidence verdicts, approvals, starting or
+  finishing a project), the account, administration, or the access tokens themselves. Those stay in the app.
+
+### Which identity a command acts as
+
+The first of these that is present decides. `orbit whoami` prints the identity and the rule that chose it, and
+`orbit capabilities --json` carries the same answer as `identity`:
+
+1. `ORBIT_SESSION_ID`: inside an Orbit session the CLI acts as that session. A personal access token on the
+   machine is ignored there, and stderr says so once, so an agent never becomes you because somebody logged
+   in on its machine.
+2. `ORBIT_SERVICE_TOKEN`: a service token.
+3. `ORBIT_USER_TOKEN`, or else the login saved in `user.json`: you. A process the runner started skips this
+   rule (see [On a runner machine](#on-a-runner-machine)).
+4. The runner credential in `config.json`: the machine.
+
+`orbit api` acts only as you. So do the `task`, `project` and `session` commands while you are logged in: each one
+whose user route answers it the way its runner route does calls that route with your token, on your server, and
+prints the same JSON it prints as the runner. `orbit session list` and `orbit session get` read
+`GET /api/sessions/compact` and `GET /api/sessions/:id/compact` for that. The rest are refused before anything is
+read or sent, saying why and what to use instead: the ones that act for an Orbit session (`task evidence-decide`,
+`request-confirmation`, `confirmation-review`, `confirmation-return` and `await`; `project ensure-coordinator`,
+`send`, `request-start` and `request-done`; `session await` and `reply`), and the few whose user route answers
+in another shape or not at all (`task batch-pin`, `session create`, `session import`). No command falls back to
+the runner credential while you are logged in: the machine's other commands — `orbit task-list`, `orbit provider`,
+`orbit notify`, `orbit token` and the rest — are refused too, so run them where you are not logged in.
+`orbit capabilities --json` marks every command `available` or not under the identity in effect, with the reason.
+
+Inside a session the session decides for every command, the session commands included: a service token in the
+session's environment is not used there.
+
+### Service token or personal access token?
+
+Use a **service token** for an integration that belongs to this machine: a bridge or a cron job that drives the
+sessions this runner hosts. Use a **personal access token** for anything that should act as **you**: creating
+and updating tasks, reading projects, or working with sessions across your account, from this machine or any
+other.
+
+| | Service token | Personal access token |
+| --- | --- | --- |
+| Represents | An integration on this machine | You |
+| Issued by | `orbit token mint`, with this machine's runner credential | You, under Settings → Access tokens |
+| Reaches | `orbit session` get, list, send and create, for this runner's sessions; create is pinned to one workspace | The REST API under `/api`, within its scopes and optional workspaces |
+| Lifetime | 24 hours by default, at most 90 days | 30, 90 or 365 days, or none |
+| Revoked with | `orbit token revoke` | `orbit logout`, or Settings → Access tokens |
+
+### On a runner machine
+
+Logging in on a runner machine is supported, and no agent process is ever handed `ORBIT_USER_TOKEN`. But when
+the runner service runs as the same OS user, every agent session it starts can read `user.json`: file
+permissions do not separate the processes of one account. `orbit login` warns when that is the case. Do your
+own scripting on that machine as a separate OS user, or give the token used there only the scopes it needs,
+confine it to workspaces, and keep its lifetime short.
+
+The commands the runner runs itself never act as you, even when you are logged in in its `ORBIT_HOME`. This
+covers a task's EXECUTABLE acceptance command and a `!` command in a session. The runner marks the processes it
+starts for its sessions (engines, shell commands, background jobs) with `ORBIT_RUNNER_CHILD=1`, and there the CLI
+skips your login: such a process acts as its session if it has one, and otherwise as the machine. So
+`orbit wiki check` and `orbit wiki plan check` still run as the runner, and `orbit whoami` there says why. A
+terminal you open yourself has no such mark.
+
 ## Security notes
 
 - The runner token in `~/.orbit/config.json` is a long-lived machine credential. Protect it with operating-
   system file permissions and never copy it into a repository or shared log.
 - A service token should receive only the scopes and lifetime its integration needs.
+- `~/.orbit/user.json` holds a personal access token that acts as you. Run `orbit logout` (or revoke the token
+  under Settings → Access tokens) when a machine no longer needs it.
 - The runner machine's OS account is the local trust boundary; sibling processes owned by that account are
   not isolated from each other.
 - Capability output is contextual. Treat it as the source of truth after upgrades or credential changes.

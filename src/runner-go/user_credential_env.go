@@ -21,16 +21,20 @@ func userCredentialEnvKey(key string) bool {
 	}
 }
 
-// withoutUserCredentials is env without its userCredentialEnvKey entries, for a spawn that is handed
-// its base environment instead of building it with envWithAgent: applied where the session's ORBIT_*
-// go on, so the spawn does not depend on every caller having dropped them first.
-func withoutUserCredentials(env []string) []string {
-	kept := make([]string, 0, len(env))
+// runnerChildEnv is env as the runner hands it to a process it starts: without its userCredentialEnvKey
+// entries, and marked envRunnerChild whatever env said of that, so the CLI there never acts as the
+// person whose login is saved on the machine either (§7.2). envWithAgent ends in it, and a spawn handed
+// its base environment instead applies it where the session's ORBIT_* go on, so the spawn does not
+// depend on every caller having done so first. An environment built from nothing has no credential to
+// drop and says envRunnerChild itself; TestAgentEnvironmentsWithholdUserCredentials holds every place
+// that builds one to both.
+func runnerChildEnv(env []string) []string {
+	kept := make([]string, 0, len(env)+1)
 	for _, entry := range env {
 		key, _, _ := strings.Cut(entry, "=")
-		if !userCredentialEnvKey(key) {
+		if !userCredentialEnvKey(key) && !strings.EqualFold(key, envRunnerChild) {
 			kept = append(kept, entry)
 		}
 	}
-	return kept
+	return append(kept, envRunnerChild+"=1")
 }

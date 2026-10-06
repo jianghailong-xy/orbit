@@ -275,53 +275,6 @@ struct CodexPoolPageView: View {
         .sheet(item: $sheet) { kind in
             sheetView(kind)
         }
-        .confirmationDialog(signingOut.map(CodexLoginPool.signOutTitle) ?? CodexLoginPool.signOut,
-                            isPresented: asked($signingOut), titleVisibility: .visible, presenting: signingOut) { login in
-            Button(CodexLoginPool.signOut, role: .destructive) {
-                run(done: CodexLoginPool.signedOut(login)) { await accountActions?.signOut(login) }
-            }
-            Button(CodexSignIn.cancel, role: .cancel) {}
-        } message: { _ in
-            Text(CodexLoginPool.signOutNote(pool))
-        }
-        .confirmationDialog(removingKey.map(SharedPoolPage.removeKeyTitle) ?? "",
-                            isPresented: asked($removingKey), titleVisibility: .visible, presenting: removingKey) { key in
-            Button(SharedPoolPage.remove, role: .destructive) {
-                run(done: SharedPoolPage.removedKey(key)) { await accessActions?.removeKey(key) }
-            }
-            Button(AddPoolKey.cancel, role: .cancel) {}
-        } message: { _ in
-            Text(SharedPoolPage.removeKeyNote)
-        }
-        .confirmationDialog(removingPerson.flatMap { person in page.access.map { SharedPoolPage.removePersonTitle(person, in: $0) } } ?? "",
-                            isPresented: asked($removingPerson), titleVisibility: .visible,
-                            presenting: removingPerson) { person in
-            Button(SharedPoolPage.remove, role: .destructive) {
-                run { await accessActions?.removePerson(person) }
-            }
-            Button(AddPoolKey.cancel, role: .cancel) {}
-        } message: { _ in
-            Text(SharedPoolPage.removePersonNote)
-        }
-        .confirmationDialog(page.access.map(JustMine.title) ?? "", isPresented: $confirmingJustMine,
-                            titleVisibility: .visible) {
-            Button(JustMine.confirm, role: .destructive) {
-                run { await accessActions?.keepToSelf() }
-            }
-            Button(AddPoolKey.cancel, role: .cancel) {}
-        } message: {
-            if let access = page.access {
-                Text(JustMine.cost(access, accounts: page.accounts))
-            }
-        }
-        .confirmationDialog(page.exitTitle, isPresented: $confirmingExit, titleVisibility: .visible) {
-            Button(page.exitConfirm, role: .destructive) {
-                run { await exit() }
-            }
-            Button(AddPoolKey.cancel, role: .cancel) {}
-        } message: {
-            Text(page.outNote)
-        }
         .overlay(alignment: .bottom) {
             if let notice {
                 Text(notice)
@@ -418,6 +371,17 @@ struct CodexPoolPageView: View {
                     }
                 }
             }
+            // On the row that asks — its own Sign out control and the swipe both raise this — so the
+            // panel opens against it rather than at the top of the page.
+            .orbitConfirmation(CodexLoginPool.signOutTitle,
+                               isPresented: asked($signingOut), presenting: signingOut) { login in
+                Button(CodexLoginPool.signOut, role: .destructive) {
+                    run(done: CodexLoginPool.signedOut(login)) { await accountActions?.signOut(login) }
+                }
+                Button(CodexSignIn.cancel, role: .cancel) {}
+            } message: { _ in
+                Text(CodexLoginPool.signOutNote(pool))
+            }
         } else if let key = member.key, let access = page.access {
             VStack(alignment: .leading, spacing: 10) {
                 PoolKeyRow(key: key, pool: access, next: member.next, tagged: page.tagged) {
@@ -441,6 +405,16 @@ struct CodexPoolPageView: View {
                     }
                     .tint(.gray)
                 }
+            }
+            // On the key's own row, whose swipe raises it.
+            .orbitConfirmation(SharedPoolPage.removeKeyTitle,
+                               isPresented: asked($removingKey), presenting: removingKey) { key in
+                Button(SharedPoolPage.remove, role: .destructive) {
+                    run(done: SharedPoolPage.removedKey(key)) { await accessActions?.removeKey(key) }
+                }
+                Button(AddPoolKey.cancel, role: .cancel) {}
+            } message: { _ in
+                Text(SharedPoolPage.removeKeyNote)
             }
         }
     }
@@ -481,6 +455,18 @@ struct CodexPoolPageView: View {
                         .foregroundStyle(.secondary)
                 }
                 .padding(.vertical, 4)
+                // The switch that asks: flipping it to Just me raises this, so it opens against the
+                // control rather than at the top of the page.
+                .orbitConfirmation(page.access.map(JustMine.title) ?? "", isPresented: $confirmingJustMine) {
+                    Button(JustMine.confirm, role: .destructive) {
+                        run { await accessActions?.keepToSelf() }
+                    }
+                    Button(AddPoolKey.cancel, role: .cancel) {}
+                } message: {
+                    if let access = page.access {
+                        Text(JustMine.cost(access, accounts: page.accounts))
+                    }
+                }
             }
             ForEach(card.rows) { person in
                 PoolPersonRow(person: person, pool: card.pool, line: card.line(person),
@@ -501,6 +487,17 @@ struct CodexPoolPageView: View {
                                 .tint(.gray)
                             }
                         }
+                    }
+                    // On the person's row, whose swipe raises it.
+                    .orbitConfirmation({ person in
+                        page.access.map { SharedPoolPage.removePersonTitle(person, in: $0) } ?? ""
+                    }, isPresented: asked($removingPerson), presenting: removingPerson) { person in
+                        Button(SharedPoolPage.remove, role: .destructive) {
+                            run { await accessActions?.removePerson(person) }
+                        }
+                        Button(AddPoolKey.cancel, role: .cancel) {}
+                    } message: { _ in
+                        Text(SharedPoolPage.removePersonNote)
                     }
             }
             if card.addsPeople {
@@ -566,6 +563,14 @@ struct CodexPoolPageView: View {
             Button(role: .destructive) { confirmingExit = true } label: {
                 Text(page.exitLabel)
                     .frame(maxWidth: .infinity)
+            }
+            .orbitConfirmation(page.exitTitle, isPresented: $confirmingExit) {
+                Button(page.exitConfirm, role: .destructive) {
+                    run { await exit() }
+                }
+                Button(AddPoolKey.cancel, role: .cancel) {}
+            } message: {
+                Text(page.outNote)
             }
         } footer: {
             Text(page.outNote)

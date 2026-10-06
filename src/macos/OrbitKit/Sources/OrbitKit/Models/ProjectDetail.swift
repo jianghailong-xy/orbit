@@ -137,6 +137,9 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
     /// The revision the switch's write is fenced against — a decimal string, compared as text.
     public let configRevision: String?
     public let coordinatorSessionId: String?
+    /// The workspace the coordinator's conversation runs in — the one whose Wiki space the Wiki opens
+    /// from this project's pages (wiki design §12.3.4). Nil from a server that did not say.
+    public let coordinatorWorkspaceId: String?
     /// Everything filed under the project, settled work included.
     public let taskCount: Int
     public let acceptanceCriteriaItems: [ProjectCriterion]
@@ -175,7 +178,7 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
                                                             text: $0.text)
                            },
                            derivedDone: derivedDone, doneBy: doneBy, doneAt: doneAt,
-                           acceptedGaps: acceptedGaps)
+                           acceptedGaps: acceptedGaps, tasksByStatus: tasksByStatus)
     }
 
     /// Whether the project has been started, read off `startedAt` and off nothing else — not off
@@ -189,7 +192,7 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
     public init(id: String, title: String, status: ProjectStatus = .open, goal: String? = nil,
                 instructions: String? = nil, createdAt: String = "", updatedAt: String? = nil,
                 coordinatorEnabled: Bool? = nil, configRevision: String? = nil,
-                coordinatorSessionId: String? = nil, taskCount: Int = 0,
+                coordinatorSessionId: String? = nil, coordinatorWorkspaceId: String? = nil, taskCount: Int = 0,
                 acceptanceCriteriaItems: [ProjectCriterion] = [],
                 integration: ProjectIntegrationSettings? = nil,
                 tasksByStatus: [String: Int]? = nil, blockers: ProjectBlockers? = nil,
@@ -206,6 +209,7 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
         self.coordinatorEnabled = coordinatorEnabled
         self.configRevision = configRevision
         self.coordinatorSessionId = coordinatorSessionId
+        self.coordinatorWorkspaceId = coordinatorWorkspaceId
         self.taskCount = taskCount
         self.acceptanceCriteriaItems = acceptanceCriteriaItems
         self.integration = integration
@@ -227,7 +231,7 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
 
     enum CodingKeys: String, CodingKey {
         case id, title, status, goal, instructions, createdAt, updatedAt, coordinatorEnabled,
-             configRevision, coordinatorSessionId, acceptanceCriteriaItems, integration, tasksByStatus,
+             configRevision, coordinatorSessionId, coordinatorWorkspaceId, acceptanceCriteriaItems, integration, tasksByStatus,
              blockers, startedAt, pausedAt, maxConcurrentTasks, derivedDone, doneBy, doneAt,
              acceptedGaps
         case counts = "_count"
@@ -245,6 +249,7 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
         coordinatorEnabled = try c.decodeIfPresent(Bool.self, forKey: .coordinatorEnabled)
         configRevision = decodeDecimal(c, .configRevision)
         coordinatorSessionId = try c.decodeIfPresent(String.self, forKey: .coordinatorSessionId)
+        coordinatorWorkspaceId = try? c.decodeIfPresent(String.self, forKey: .coordinatorWorkspaceId)
         taskCount = try c.decodeIfPresent(Counts.self, forKey: .counts)?.tasks ?? 0
         acceptanceCriteriaItems = try c.decodeIfPresent([ProjectCriterion].self,
                                                         forKey: .acceptanceCriteriaItems) ?? []
@@ -273,6 +278,7 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
         try c.encodeIfPresent(coordinatorEnabled, forKey: .coordinatorEnabled)
         try c.encodeIfPresent(configRevision, forKey: .configRevision)
         try c.encodeIfPresent(coordinatorSessionId, forKey: .coordinatorSessionId)
+        try c.encodeIfPresent(coordinatorWorkspaceId, forKey: .coordinatorWorkspaceId)
         try c.encode(Counts(tasks: taskCount), forKey: .counts)
         try c.encode(acceptanceCriteriaItems, forKey: .acceptanceCriteriaItems)
         try c.encodeIfPresent(integration, forKey: .integration)

@@ -5,6 +5,7 @@ import { Button, Dropdown, Popconfirm, Tag, type MenuProps } from 'antd';
 import { DeleteOutlined, DownloadOutlined, EditOutlined, EllipsisOutlined, LoadingOutlined, LoginOutlined, PauseOutlined, PlayCircleOutlined, PlusOutlined, WarningOutlined } from '@ant-design/icons';
 import {
   accountToStartOn,
+  withEnginePlanUsage,
   type InstallEngine,
   type LoginEngine,
   type PlanUsageSnapshot,
@@ -21,8 +22,10 @@ import {
   accountDir,
   accountNameOf,
   accountPlanUsage,
+  addsAntigravityAccounts,
   defaultAccountName,
   engineKeepsAccounts,
+  runsOnEnvKey,
 } from '../lib/engineAccounts';
 import {
   bindingPlanUsageRow,
@@ -197,12 +200,13 @@ function accountRowsOf(
 
 /** Whether every sign-in an engine needs is in place. With several Codex accounts that is all of
  *  them: a folded card that called the machine signed in over a signed-out account would be
- *  hiding the one thing it exists to surface. */
+ *  hiding the one thing it exists to surface. An Antigravity Default that runs on the machine's
+ *  Gemini key needs none (runsOnEnvKey). */
 function signedIn(health: RunnerEngineHealth): boolean {
   return (
     health.installed &&
     health.auth === 'yes' &&
-    (health.accounts ?? []).every((account) => account.auth === 'yes')
+    (health.accounts ?? []).every((account) => account.auth === 'yes' || runsOnEnvKey(health, account))
   );
 }
 
@@ -364,10 +368,12 @@ function EngineRow({
     onSuccess: () => void qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
   });
 
-  // Only one runtime's quota is this engine's; the others belong to the other rows.
+  // Only one runtime's quota is this engine's; the others belong to the other rows. Antigravity's
+  // comes with its engine's health, folded in beside the rest.
+  const usage = withEnginePlanUsage(runner.planUsage, runner.engines);
   const single = engineKeepsAccounts(engine) && health?.accounts?.length === 1 ? health.accounts[0] : undefined;
   const now = usePauseClock(single?.pausedUntil);
-  const snapshot = engine === 'antigravity' ? (health?.authSource === 'google' ? health.planUsage ?? null : null) : planUsageSnapshotForProvider(runner.planUsage, engine);
+  const snapshot = planUsageSnapshotForProvider(usage, engine);
   const quota = quotaOf(kind, snapshot, !!runner.online, now);
   // More than one Codex account: this row heads their group, and each account is a row of its own
   // below it (AccountRow), with its own state.
@@ -376,14 +382,17 @@ function EngineRow({
   // those staying — one being removed is counted as gone already.
   const kept = accounts.filter((account) => !beingRemoved(runner, engine, account.id));
   const ready = kept.filter((account) => {
-    const own = accountKindOf(account);
-    return !accountIsPaused(account.pausedUntil, now) && available(own, quotaOf(own, accountPlanUsage(runner.planUsage, engine, account.id), !!runner.online, now));
+    // Antigravity's Default on the machine's Gemini key says no for a Google sign-in it does not
+    // need: it takes sessions on the key.
+    const own = runsOnEnvKey(health, account) ? 'in' : accountKindOf(account);
+    return !accountIsPaused(account.pausedUntil, now) && available(own, quotaOf(own, accountPlanUsage(usage, engine, account.id), !!runner.online, now));
   }).length;
   // "Add account" is how a machine gets from one account to two, so it is not the group's to hold:
   // the Codex row offers it whenever the probe speaks for the engine, whether it heads a group yet
-  // or not.
+  // or not. An Antigravity account is a Google sign-in, which only some runners can add.
   const addsAccounts =
-    engineKeepsAccounts(engine) && (kind === 'in' || kind === 'out' || kind === 'unknown');
+    engineKeepsAccounts(engine) && (kind === 'in' || kind === 'out' || kind === 'unknown') &&
+    (engine !== 'antigravity' || addsAntigravityAccounts(runner));
 
   // An offline machine isn't updating anything, and the header already says so — repeating it
   // per row as a warning would put three alarms on one fact the user has already read.
@@ -454,7 +463,7 @@ function EngineRow({
                 </b>
               </>
             ) : (
-              <>{metaFor(kind, engine, health)}{engine === 'antigravity' && health?.authSource === 'google' && kind === 'in' ? ' · Google account' : ''}</>
+              <>{metaFor(kind, engine, health)}</>
             )}
             {/* Whether this CLI is being kept current, next to what it currently is — the two
                 halves of the same question, and useless apart. */}
@@ -497,7 +506,9 @@ function EngineRow({
           <RunnerAccountMenu
             offline={offline}
             onSignIn={kind === 'in' && (engine !== 'antigravity' || (googleLogin === 'available' && !envKey)) ? () => onSignIn(signIn === engine ? null : engine) : undefined}
-            pause={single && (kind === 'in' || accountIsPaused(single.pausedUntil, now)) ? {
+            // A Gemini key is not an account of the machine's to pause: Default on it is no Google
+            // sign-in at all.
+            pause={single && ((kind === 'in' && !envKey) || accountIsPaused(single.pausedUntil, now)) ? {
               name: accountNameOf(single), until: single.pausedUntil,
               endpoint: `/runners/${runner.id}/accounts/${engine}/${single.id}/pause`,
             } : undefined}
@@ -703,6 +714,7 @@ function AccountRow({
   next,
   duplicateOf,
   lastOfGroup,
+  envKey,
   signIn,
   onSignIn,
 }: {
@@ -720,12 +732,15 @@ function AccountRow({
   /** The last account under this engine: where the rail's spine ends rather than carrying on to a
    *  row that isn't there (.re-acct-end). */
   lastOfGroup?: boolean;
+  /** Antigravity's Default on a runner that runs it on its Gemini key (runsOnEnvKey): in, on the key,
+   *  with nothing to sign in, pause or read quota for. */
+  envKey?: boolean;
   signIn: string | null;
   onSignIn: (panel: string | null) => void;
 }) {
   const message = useToast();
   const qc = useQueryClient();
-  const kind = accountKindOf(account);
+  const kind = envKey ? 'in' : accountKindOf(account);
   const [editing, setEditing] = useState(false);
   const [confirmingRemove, setConfirmingRemove] = useState(false);
   const isDefault = account.id === 'default';
@@ -753,7 +768,7 @@ function AccountRow({
   // Each account's quota is its own: the runner reads every account in that account's CODEX_HOME,
   // and an account it has not read shows none rather than borrowing another's limit.
   const now = usePauseClock(account.pausedUntil);
-  const snapshot = accountPlanUsage(runner.planUsage, engine, account.id);
+  const snapshot = accountPlanUsage(withEnginePlanUsage(runner.planUsage, runner.engines), engine, account.id);
   const quota = quotaOf(kind, snapshot, !!runner.online, now);
   const toggle = () => onSignIn(signIn === panel ? null : panel);
   // Removing deletes the slot's sign-in from the machine, and only signing in again brings it back:
@@ -780,9 +795,9 @@ function AccountRow({
       offline={!runner.online}
       removing={removing}
       onRename={() => setEditing(true)}
-      onSignIn={kind === 'in' ? toggle : undefined}
+      onSignIn={kind === 'in' && !envKey ? toggle : undefined}
       onRemove={isDefault ? undefined : () => setConfirmingRemove(true)}
-      pause={kind === 'in' || accountIsPaused(account.pausedUntil, now) ? {
+      pause={(kind === 'in' && !envKey) || accountIsPaused(account.pausedUntil, now) ? {
         name: accountNameOf(account), until: account.pausedUntil,
         endpoint: `/runners/${runner.id}/accounts/${engine}/${account.id}/pause`,
       } : undefined}
@@ -810,7 +825,8 @@ function AccountRow({
       ) : (
         <AccountPauseStatus until={account.pausedUntil} now={now} detail={kind === 'in' ? 'Signed in' : undefined} status={statusOf(kind, quota, now)} />
       )}
-      <QuotaCell kind={kind} quota={quota} />
+      {/* What the engine's own row says for the same key when it is the machine's one account. */}
+      {envKey ? <div className="re-quota re-meta">env key · runs on your Gemini key</div> : <QuotaCell kind={kind} quota={quota} />}
       <div className="re-act">
         {kind !== 'in' && (
           <Button size="small" className="re-action" type={runner.online ? 'primary' : 'default'} disabled={!runner.online || removing} onClick={toggle}>
@@ -1064,8 +1080,8 @@ function RunnerEngineCard({
           const repeats = duplicateAccounts(accounts);
           // The same question the server asks when a session starts with no account picked.
           const next =
-            (engine === 'claude' || engine === 'codex') && accounts.length > 0
-              ? accountToStartOn(engine, accounts, runner.planUsage, new Date())
+            engineKeepsAccounts(engine) && accounts.length > 0
+              ? accountToStartOn(engine, accounts, withEnginePlanUsage(runner.planUsage, runner.engines), new Date())
               : null;
           return (
             <Fragment key={engine}>
@@ -1088,6 +1104,7 @@ function RunnerEngineCard({
                   next={account.id === next}
                   duplicateOf={repeats.get(account.id)}
                   lastOfGroup={index === accounts.length - 1}
+                  envKey={runsOnEnvKey(health, account)}
                   signIn={signIn}
                   onSignIn={setSignIn}
                 />

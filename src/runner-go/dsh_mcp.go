@@ -99,6 +99,7 @@ func dshOrbitMCPEnv(job *ClaimedSession) []map[string]string {
 		envMCPPermissionPrompt + "=0",
 		envSpawnDepth + "=" + strconv.Itoa(job.SpawnDepth),
 		envMCPCallTimeout + "=" + strconv.Itoa(int(dshMCPToolCallTimeout/time.Second)),
+		envRunnerChild + "=1",
 	}
 	// Where the runner's own config lives, so the server authenticates as this runner.
 	if home := machineHome(); filepath.IsAbs(home) {

@@ -1471,6 +1471,28 @@ export function wikiPlanBanner(
   }
 }
 
+/**
+ * Activity's amber plan banners (design §12.3.3): the home's banner for each kind of thing of the plan
+ * that waits on the owner, in the order the looks win — held, the draft that failed, the draft to
+ * confirm, the changes — each with how many of `wikiPlanPending` it is, so a page's amber banners add
+ * up to the number on the head's Activity badge. Empty when nothing waits.
+ */
+export function wikiPlanWaitingBanners(
+  state: WikiPlanState,
+  context: { now: number; docs: { written: number; total: number } | null; runnerOnline: boolean | null },
+): Array<WikiPlanBanner & { look: WikiPlanLook; count: number }> {
+  const held = wikiPlanHeld(wikiPlanOpenJob(state) ?? wikiPlanBuildJob(state), context.runnerOnline) ? 1 : 0;
+  const waiting: Array<[WikiPlanLook, number]> = [
+    ['held', held],
+    ['draftFailed', wikiPlanFailedJob(state) ? 1 : 0],
+    ['draftReady', state.draft ? 1 : 0],
+    ['changes', state.proposals.length],
+  ];
+  return waiting
+    .filter(([, count]) => count > 0)
+    .map(([look, count]) => ({ ...wikiPlanBanner(look, state, context), look, count }));
+}
+
 /** The desktop's Plan card (mock 25 ③ and its A–G): its dot, count, sentence, rows, and what it offers. */
 export interface WikiPlanCard {
   dot: 'amber' | 'blue' | 'grey' | null;

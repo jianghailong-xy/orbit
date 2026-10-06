@@ -18,16 +18,44 @@ public enum WikiCopy {
     public static let searchPlaceholder = "Search the wiki"              // WIKI_SEARCH_PLACEHOLDER
     public static let reviewTitle = "Review"                             // WIKI_REVIEW_TITLE
 
-    /// The drawer's amber count said in words, and the home page's banner (`wikiProposalsToReview`).
-    public static func proposalsToReview(_ count: Int) -> String { "\(count) proposals to review" }
+    /// The proposals waiting in Review: Activity's first banner (`wikiProposalsToReview`).
+    public static func proposalsToReview(_ count: Int) -> String {
+        "\(count) proposal\(count == 1 ? "" : "s") to review"
+    }
     /// The same count under Review's own title (`wikiProposalsFrom`).
     public static func proposalsFrom(_ count: Int, sessions: Int) -> String {
         "\(count) proposal\(count == 1 ? "" : "s") from \(sessions) session\(sessions == 1 ? "" : "s")"
     }
     public static func oldest(_ when: String) -> String { "oldest \(when)" }             // wikiOldest
 
-    // The bands of the home page, in the order both clients draw them.
+    /// The Activity page and the number waiting on the owner (design §12.3.2–§12.3.4, §12.3.7). The
+    /// number is every space's proposals and the things each plan waits on the owner for
+    /// (`WikiSpaceLogic.waiting`); the drawer's Wiki row and the bar's Activity badge show it, and say it
+    /// the way the Projects row says its own.
+    public static let activity = "Activity"                                             // WIKI_ACTIVITY
+    public static func waitingOnYou(_ count: Int) -> String { "\(count) waiting on you" }   // wikiWaitingOnYou
+    /// Beside Recently changed: how many of its rows came after the reader last looked.
+    public static func newSinceLastLooked(_ count: Int) -> String {                     // wikiNewSinceLastLooked
+        "\(count) new since you last looked"
+    }
+    /// The share of Activity's first banner that is another space's: `3 proposals to review · 2 in wikova`.
+    public static func countInSpace(_ count: Int, _ space: String) -> String { "· \(count) in \(space)" }   // wikiCountInSpace
+    /// After another space's plan banner, which space it is: `Plan draft ready to confirm · in wikova`.
+    public static func inSpace(_ space: String) -> String { "· in \(space)" }           // wikiInSpace
+    /// After a space's name in the picker, what waits on the owner in it: `wikova · 2 waiting`.
+    public static func spaceWaiting(_ count: Int) -> String { "· \(count) waiting" }    // wikiSpaceWaiting
+    /// The native picker's words (design §12.3.4, mock 31 ④): the way into Wiki settings under the spaces,
+    /// and each space's documents under its repository.
+    public static let manageSpaces = "Manage spaces"                                    // WIKI_MANAGE_SPACES
+    public static func documentCount(_ count: Int) -> String {                          // wikiDocumentCount
+        "\(WikiArticleCopy.count(count)) \(count == 1 ? "document" : "documents")"
+    }
+    public static let noDocuments = "No documents yet"                                  // WIKI_NO_DOCUMENTS
+
+    // The home's one band with a heading, and Activity's three.
     public static let principles = "Principles"                         // WIKI_PRINCIPLES
+    /// After the home's first three principles, the way to all of them: `All 6 ›` (`wikiAllPrinciples`).
+    public static func allPrinciples(_ count: Int) -> String { "All \(count) ›" }
     public static let recentDecisions = "Recent decisions"              // WIKI_RECENT_DECISIONS
     public static let recentlyChanged = "Recently changed"              // WIKI_RECENTLY_CHANGED
     public static let agentsUsed = "Agents used the wiki"               // WIKI_AGENTS_USED
@@ -40,6 +68,8 @@ public enum WikiCopy {
     }
 
     public static let noSpaces = "No wiki space yet. A space is a codebase, and the first one is made when a session proposes into it."
+    /// What the Wiki section says to an account the server has not switched the wiki on for.
+    public static let disabledNote = "The wiki is not switched on for this account."   // WIKI_DISABLED_NOTE
     public static let spacePickerHint = "The codebase this wiki describes"   // WIKI_SPACE_PICKER_HINT
 
     /// The two numbers of the usage block.
@@ -176,8 +206,7 @@ public enum WikiCopy {
     public static let tabAmend = "Amend"                                    // WIKI_TAB_AMEND
     public static let tabRetire = "Retire"                                  // WIKI_TAB_RETIRE
 
-    /// Empty states.
-    public static let noEntries = "Nothing has been recorded in this space yet."   // WIKI_NO_ENTRIES
+    /// Empty states. The home's principles have none: with no principle the band is not drawn at all.
     public static let noReview = "Nothing is waiting for you."                     // WIKI_NO_REVIEW
     public static let noChanges = "Nothing has changed yet."                       // WIKI_NO_CHANGES
     public static let noDecisions = "No decision has been recorded yet."           // WIKI_NO_DECISIONS
@@ -305,17 +334,103 @@ public struct WikiDiffHunk: Equatable, Sendable {
 public enum WikiLogic {
     // MARK: the home page's bands
 
-    /// The home page's bands, top to bottom — the order the web's phone page draws them in (mock 12,
-    /// `WikiHome.tsx`), and the order `WikiView` lays its sections out in. `WikiCopyParityTests` holds
-    /// both to it. The topics are not a band: they are the Contents sheet (mock 12 ③).
+    /// The home's bands under its head (the title and the space), top to bottom (design §12.3.1, mocks 30 ③,
+    /// 31 ① ③): the line that says what the space holds, the search, the principles — only when there are
+    /// any — the documents by category, then Browse by category · A–Z index. The web phone's order:
+    /// `WikiPage.tsx`'s head, `WikiHome.tsx` and the phone rules in index.css, which `WikiCopyParityTests`
+    /// holds to this, and the order `WikiHomePage` lays its sections out in. Nothing here says how the wiki is
+    /// kept: that is Activity's (`ActivityBand`).
     public enum HomeBand: String, CaseIterable, Sendable {
-        case search, reviewBanner, principles, recentDecisions, recentlyChanged, agentsUsed
+        case state, search, principles, documents, more
 
-        /// The band's heading, for the four that have one.
+        /// The band's heading, for the one that has one.
+        public var title: String? { self == .principles ? WikiCopy.principles : nil }
+    }
+
+    /// How many principles the home reads: the most one read answers, far above any space's own rules
+    /// (`PRINCIPLES_READ`).
+    public static let principlesRead = 200
+    /// The principles the home lists before `All N ›` (`PRINCIPLES_SHOWN`, mock 31 ③).
+    public static let principlesShown = 3
+
+    /// The home's principles, from their own read (`?kind=principle`): every one, of any status, oldest
+    /// recorded first — the owner's rules do not reshuffle as the space fills up, and a new one appends to the
+    /// bottom; its blue dot says it is new. Never picked out of the newest 200 entries of every kind: a space
+    /// holds thousands, and its principles are among the oldest of them.
+    public static func principles(_ entries: [WikiEntry]) -> [WikiEntry] {
+        entries.filter { $0.kind == .principle }.enumerated().sorted { a, b in
+            let at = RelativeTime.parse(a.element.recordedAt ?? "") ?? .distantPast
+            let bt = RelativeTime.parse(b.element.recordedAt ?? "") ?? .distantPast
+            return at != bt ? at < bt : a.offset < b.offset
+        }.map(\.element)
+    }
+
+    /// A principle's day at the end of its row: `9/6`, in the reader's zone (`wikiShortDay`).
+    public static func shortDay(_ iso: String?, timeZone: TimeZone = .current) -> String? {
+        guard let iso, let date = RelativeTime.parse(iso) else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let parts = calendar.dateComponents([.month, .day], from: date)
+        guard let month = parts.month, let day = parts.day else { return nil }
+        return "\(month)/\(day)"
+    }
+
+    /// What the home's documents band draws (`WikiHome.tsx`'s branches; design §12.3.1).
+    public enum HomeDocuments: Equatable, Sendable {
+        /// The first read is out: grey bars in the rows' shape (mock 31 ⑦).
+        case loading
+        /// The confirmed plan's documents, a category a group (mock 30 ③).
+        case categories([WikiDocLogic.HomeCategory])
+        /// Before a plan is confirmed: the topic articles, as the directory groups them, a title a row.
+        case topics([WikiArticleLogic.DirectoryGroup])
+        /// Neither, and maintenance not set up: the one card that says how a space comes to have documents
+        /// (mock 31 ⑥).
+        case newSpace
+        /// Neither, with maintenance set up: nothing, the line under the head saying `No documents yet`.
+        case nothing
+
+        /// Whether the home ends on Browse by category · A–Z index: once its first read is in, with
+        /// something listed.
+        public var listed: Bool {
+            switch self {
+            case .categories, .topics: return true
+            case .loading, .newSpace, .nothing: return false
+            }
+        }
+    }
+
+    /// The home's documents: the confirmed plan's, by category; before one, the topic articles; else a new
+    /// space's card, or nothing once maintenance is set up. `loading` is the first read alone — a read the
+    /// page already has stays drawn while it is read again.
+    public static func homeDocuments(docs: WikiDocsDirectory?, articles: WikiArticleDirectory?, loading: Bool,
+                                     maintenance: Bool, seen: Double?) -> HomeDocuments {
+        if loading { return .loading }
+        if let docs, WikiDocLogic.readsByDocs(docs) { return .categories(WikiDocLogic.homeCategories(docs, seen: seen)) }
+        let groups = articles.map(WikiArticleLogic.directoryGroups) ?? []
+        if groups.contains(where: { !$0.topics.isEmpty }) { return .topics(groups) }
+        return maintenance ? .nothing : .newSpace
+    }
+
+    /// The line under the home's head (`WikiHomeState`): what `WikiDocLogic.homeLine` says of the reads the
+    /// documents band lists — the topics before a plan — or nil, a grey bar, while the first read is out.
+    public static func homeLine(docs: WikiDocsDirectory?, articles: WikiArticleDirectory?, loading: Bool) -> String? {
+        guard !loading else { return nil }
+        let topics = (articles.map(WikiArticleLogic.directoryGroups) ?? []).reduce(0) { $0 + $1.topics.count }
+        return WikiDocLogic.homeLine(WikiDocLogic.readsByDocs(docs) ? docs : nil, articles: topics)
+    }
+
+    /// Activity's blocks, top to bottom (design §12.3.2, mock 31 ②) — the home's management blocks, moved
+    /// in their order, as the web's `WikiActivityPage.tsx` draws them: the status line, the proposals'
+    /// banner, the space's plan banners, then the other spaces' plan banners that wait on the owner,
+    /// Recent decisions, Recently changed and Agents used the wiki. `WikiActivityPage` lays its sections out
+    /// in this order and `WikiCopyParityTests` holds the web page to it.
+    public enum ActivityBand: String, CaseIterable, Sendable {
+        case status, reviewBanner, planBanners, otherPlanBanners, recentDecisions, recentlyChanged, agentsUsed
+
+        /// The band's heading, for the three that have one.
         public var title: String? {
             switch self {
-            case .search, .reviewBanner: return nil
-            case .principles:      return WikiCopy.principles
+            case .status, .reviewBanner, .planBanners, .otherPlanBanners: return nil
             case .recentDecisions: return WikiCopy.recentDecisions
             case .recentlyChanged: return WikiCopy.recentlyChanged
             case .agentsUsed:      return WikiCopy.agentsUsed
@@ -341,13 +456,25 @@ public enum WikiLogic {
 
     public static var entrySections: [String] { EntrySection.allCases.map(\.title) }
 
-    // MARK: the drawer's amber number
+    // MARK: whether the account has the wiki
 
-    /// The proposals waiting for the owner, summed over every space — the drawer row's amber number,
-    /// counted exactly as the web sidebar counts it (`space.pendingOps`, summed). A space an older
-    /// server sent no count for adds nothing.
-    public static func proposalsToReview(_ spaces: [WikiSpace]) -> Int {
-        spaces.reduce(0) { $0 + max(0, $1.pendingOps ?? 0) }
+    /// The refusal every wiki route answers an account the server has not switched the wiki on for —
+    /// the apiserver's ORBIT_WIKI (`WIKI_DISABLED`).
+    public static let disabledCode = "WIKI_DISABLED"
+
+    /// Whether an error is that answer: a 404 carrying WIKI_DISABLED, which says the wiki is off, not
+    /// that a read failed (`isWikiDisabled`).
+    public static func isDisabled(_ error: Error) -> Bool {
+        guard case APIError.http(let status, _) = error, status == 404 else { return false }
+        return APIClient.refusalCode(error) == disabledCode
+    }
+
+    /// Whether the wiki's entry points are drawn — the drawer's Wiki row, which is the iPad sidebar's
+    /// too (`wikiShown`): once the spaces read has answered anything but WIKI_DISABLED, and when it
+    /// failed for any other reason, since a read that failed is not the server saying there is no wiki.
+    /// Not while it is on its way, so an account the wiki is off for is never offered a row to press.
+    public static func shown(_ spaces: ListLoadState, disabled: Bool) -> Bool {
+        spaces.hasLoaded ? !disabled : spaces.lastLoadFailed
     }
 
     // MARK: marks
@@ -685,11 +812,13 @@ public enum WikiLogic {
         knownTitle(card, entry: entry) ?? WikiCopy.entryWord
     }
 
-    /// The card's title when one is known — the draft's, else the named entry's; nil rather than the
+    /// The card's title when one is known — the draft's, else the named entry's: as its own read has it,
+    /// or until that read lands, as Review's read carries it (`entryTitle`). Nil rather than the
     /// placeholder word, for a line that is better left out than filled with "entry".
     public static func knownTitle(_ card: ReviewCard, entry: WikiEntry?) -> String? {
         if let title = card.op.payload?["entry"]?["title"]?.stringValue { return title }
         if let title = entry?.title, !title.isEmpty { return title }
+        if let title = card.op.entryTitle, !title.isEmpty { return title }
         return nil
     }
 
@@ -775,21 +904,25 @@ public enum WikiLogic {
     }
 }
 
-// MARK: - the home page, as its bands draw it
+// MARK: - Activity, as its bands draw it
 
-/// One space's home page: the reads it is drawn from, and each band's rows derived from them the way
-/// the web's `WikiHome.tsx` derives its own — so the two clients show the same rows in the same
-/// order, whatever either one's layout does with them.
+/// What one space's Activity is drawn from (design §12.3.2): the home's management blocks as they stood until
+/// 2026-10-06 — the status line, Recent decisions, Recently changed, Agents used the wiki — and each band's rows
+/// derived from them the way the web's `WikiActivityPage.tsx` derives its own (from the blocks it still takes
+/// out of `WikiHome.tsx`), so the two clients show the same rows in the same order. The home itself is content
+/// (`WikiLogic.HomeBand`).
 public struct WikiHomeContent: Equatable, Sendable {
     /// The space on screen, with its usage window.
     public let space: WikiSpace
     /// Every space, for the picker.
     public let spaces: [WikiSpace]
+    /// The newest entries of every kind, as many as one read answers (200): what the status line counts
+    /// until the health read is in. Never the bands' rows — a space holds thousands of entries, and its
+    /// decisions are among the oldest of them.
     public let entries: [WikiEntry]
+    /// The space's newest decisions, read on their own (`?kind=decision`, `recentDecisionCount` of them).
+    public let decisionEntries: [WikiEntry]
     public let timeline: [WikiTimelineItem]
-    /// Proposals waiting in this space — the banner's number, as the web home's Review card counts it
-    /// (the drawer's row sums every space's).
-    public let proposals: Int
     /// The runs Recently changed folds, each as its own read answers it (`GET /wiki/changesets/:id`):
     /// what their rows count and whether they offer Revert run….
     public let runs: [WikiChangesetView]
@@ -797,36 +930,25 @@ public struct WikiHomeContent: Equatable, Sendable {
     /// where its maintenance run stands — what the status line says. Nil when that read failed.
     public let health: WikiSpaceHealth?
 
+    /// The decision log's rows: the newest four.
+    public static let recentDecisionCount = 4
+
     public init(space: WikiSpace, spaces: [WikiSpace], entries: [WikiEntry],
-                timeline: [WikiTimelineItem], proposals: Int, runs: [WikiChangesetView] = [],
-                health: WikiSpaceHealth? = nil) {
+                decisions: [WikiEntry] = [], timeline: [WikiTimelineItem],
+                runs: [WikiChangesetView] = [], health: WikiSpaceHealth? = nil) {
         self.space = space
         self.spaces = spaces
         self.entries = entries
+        self.decisionEntries = decisions
         self.timeline = timeline
-        self.proposals = proposals
         self.runs = runs
         self.health = health
     }
 
-    /// Every principle, of any status, oldest recorded first — the web's order for the owner's own
-    /// rules, which do not reshuffle as the space fills up.
-    public var principles: [WikiEntry] {
-        entries.filter { $0.kind == .principle }.sorted {
-            (RelativeTime.parse($0.recordedAt ?? "") ?? .distantPast)
-                < (RelativeTime.parse($1.recordedAt ?? "") ?? .distantPast)
-        }
+    /// The four newest decisions, of any status, from their own read.
+    public var recentDecisions: [WikiEntry] {
+        Array(WikiLogic.entries(decisionEntries, ofKind: .decision).prefix(Self.recentDecisionCount))
     }
-
-    /// Whether every principle is the owner's own — then the band says so once, in its header,
-    /// instead of on every row (mock 07 ①).
-    public var principlesAllOwner: Bool {
-        let rows = principles
-        return !rows.isEmpty && rows.allSatisfy { $0.trust == .owner }
-    }
-
-    /// The four newest decisions, of any status.
-    public var recentDecisions: [WikiEntry] { Array(WikiLogic.entries(entries, ofKind: .decision).prefix(4)) }
 
     /// The five newest changes.
     public var recentlyChanged: [WikiTimelineItem] { Array(timeline.prefix(5)) }
@@ -835,6 +957,20 @@ public struct WikiHomeContent: Equatable, Sendable {
     /// items name (`wikiRecentRows(...).slice(0, 5)` on the web).
     public var recentRows: [WikiModeLogic.RecentRow] {
         Array(WikiModeLogic.recentRows(timeline).prefix(5))
+    }
+
+    /// When one of those rows happened: the change's own time, or the newest of a run's.
+    public static func time(of row: WikiModeLogic.RecentRow) -> String? {
+        switch row {
+        case .op(let item):          return item.at
+        case .run(_, _, let at, _):  return at
+        }
+    }
+
+    /// How many of those rows came after the reader last looked (`seen`, `WikiSeenLog`): what Activity
+    /// says beside Recently changed (`N new since you last looked`), the rows that wear its blue dot.
+    public func newRows(seen: Double) -> Int {
+        recentRows.filter { WikiSeenLog.isNew(Self.time(of: $0), seen: seen) }.count
     }
 
     /// The runs those rows fold, by their changesets' ids — what the home reads for each one.

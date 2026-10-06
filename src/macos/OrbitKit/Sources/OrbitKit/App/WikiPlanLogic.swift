@@ -1288,4 +1288,31 @@ public enum WikiPlanLogic {
         case .noPlan: return Banner(text: "No plan yet — draft one", tone: .blue, to: .plan)
         }
     }
+
+    /// One of Activity's amber plan banners: the home's banner for one kind of thing that waits, and how
+    /// many of `pending` it is.
+    public struct WaitingBanner: Equatable, Sendable {
+        public let banner: Banner
+        public let look: Look
+        public let count: Int
+    }
+
+    /// Activity's amber plan banners (`wikiPlanWaitingBanners`, design §12.3.3): the home's banner for each
+    /// kind of thing of the plan that waits on the owner, in the order the looks win — held, the draft that
+    /// failed, the draft to confirm, the changes — each with how many of `pending` it is, so a page's amber
+    /// banners add up to the number on the bar's Activity badge. Empty when nothing waits.
+    public static func waitingBanners(_ state: WikiPlanState, now: Date, docs: (written: Int, total: Int)?,
+                                      runnerOnline: Bool?) -> [WaitingBanner] {
+        let held = held(openJob(state) ?? buildJob(state), runnerOnline: runnerOnline) != nil ? 1 : 0
+        let waiting: [(Look, Int)] = [
+            (.held, held),
+            (.draftFailed, failedJob(state) != nil ? 1 : 0),
+            (.draftReady, state.draft != nil ? 1 : 0),
+            (.changes, (state.proposals ?? []).count),
+        ]
+        return waiting.filter { $0.1 > 0 }.map { look, count in
+            WaitingBanner(banner: banner(look, state: state, now: now, docs: docs, runnerOnline: runnerOnline),
+                          look: look, count: count)
+        }
+    }
 }

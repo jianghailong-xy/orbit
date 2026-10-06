@@ -287,8 +287,8 @@ struct RunnerCapsule<Label: View>: View {
 }
 
 /// One engine on the runner's page: its mark and name, its version and where its sign-ins stand, a
-/// failed update that has become its problem, Sign In when a login it needs is out, and — while it
-/// is signed in with one account — its quota windows.
+/// failed update that has become its problem, Sign In when a login it needs is out, and the quota
+/// window closest to its limit — with several accounts, that of the one a new session starts on, named.
 struct RunnerEngineRow: View {
     let health: RunnerEngineHealth
     let runner: Runner
@@ -297,6 +297,7 @@ struct RunnerEngineRow: View {
 
     var body: some View {
         let windows = RunnerPageFormat.engineWindows(runner, engine: health.engine)
+        let next = RunnerPageFormat.engineNextAccount(runner, engine: health.engine)
         HStack(spacing: 12) {
             HStack(alignment: .top, spacing: 12) {
                 ProviderMark(provider: health.engine, size: 28, label: RunnerPageFormat.engineName(health.engine))
@@ -311,17 +312,21 @@ struct RunnerEngineRow: View {
                             .font(.orbitListSubtitle)
                             .foregroundStyle(RunnerInk.amber)
                     }
-                    if health.engine == "antigravity" {
-                        if RunnerPageFormat.antigravityCanSignIn(runner) {
-                            RunnerCapsule(enabled: !offline) { Text(health.auth == "yes" && health.authSource == "google" ? "Re-sign in" : "Sign in with Google") }
-                            GoogleSignInTermsView()
-                        } else if let hint = EngineAuth.antigravityLoginHint(runner.antigravity?.googleLogin) {
-                            Text(hint)
-                                .font(.orbitLabel)
-                                .foregroundStyle(Color.secondary)
-                        }
+                    // An Antigravity that can't sign in with Google here says why instead; one that can is
+                    // signed in like every other engine, on its page.
+                    if let hint = RunnerPageFormat.signInHint(runner, engine: health.engine) {
+                        Text(hint)
+                            .font(.orbitLabel)
+                            .foregroundStyle(Color.secondary)
                     } else if RunnerPageFormat.needsSignIn(health) {
                         RunnerCapsule(enabled: !offline) { Text(RunnerPageCopy.RUNNER_SIGN_IN) }
+                    }
+                    // Several accounts: whose window this is — the account a new session starts on.
+                    if let next {
+                        Text(RunnerPageCopy.runnerEngineNext(account: next))
+                            .font(.orbitLabel)
+                            .foregroundStyle(Color.secondary)
+                            .padding(.top, 8)
                     }
                     if !windows.isEmpty {
                         VStack(alignment: .leading, spacing: 10) {
@@ -329,7 +334,7 @@ struct RunnerEngineRow: View {
                                 RunnerWindowRow(row: row, resets: RunnerPageFormat.resetsLine(row, now: now))
                             }
                         }
-                        .padding(.top, 8)
+                        .padding(.top, next == nil ? 8 : 4)
                     }
                 }
             }

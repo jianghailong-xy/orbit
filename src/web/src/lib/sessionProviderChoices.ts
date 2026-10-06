@@ -1,8 +1,8 @@
-import { AgentProvider, PROVIDER_PRESETS, type ProviderBrand } from '@orbit/shared';
+import { AgentProvider, isAccountEngine, PROVIDER_PRESETS, withEnginePlanUsage, type ProviderBrand } from '@orbit/shared';
 import type { PlanUsage, RunnerAntigravityState, RunnerEngineHealth, RunnerModelCatalog, RuntimeDefaultModels } from '@orbit/shared';
 import type { CodexLogin } from './codexLogin';
 import { DSH_CONNECT_HREF, DSH_PRESET_SLUG, DSH_STATE_LABEL, dshRunnerState, type DshRunnerFacts } from './dshRuntime';
-import { accountNameOf, accountPlanUsage } from './engineAccounts';
+import { accountNameOf, accountPlanUsage, runsOnEnvKey } from './engineAccounts';
 import { encodeId } from './idCodec';
 import { bindingPlanUsageRow, currentPlanUsageRows } from './planUsage';
 import type { SharedPool } from './sharedPools';
@@ -83,8 +83,9 @@ export interface ProviderChoice {
    *  since the pool beside it already runs on it. */
   inPool?: boolean;
   /** The runner's own accounts of this engine, when it has signed in more than one: offered under
-   *  its row, so a session can start on another account than its workspace's. Codex and Claude — the
-   *  engines whose CLI keeps a login per directory (Session.codexAccount, Session.claudeAccount). */
+   *  its row, so a session can start on another account than its workspace's. Codex, Claude and
+   *  Antigravity — the engines whose CLI keeps a login per directory (Session.codexAccount,
+   *  Session.claudeAccount, Session.antigravityAccount). */
   accounts?: AccountChoice[];
   /** Not a provider at all: the offer to connect one (DeepSeek Harness with no key yet). Always
    *  `unavailable`, never a session's provider, so no runtime's menu lists it. */
@@ -97,7 +98,9 @@ export interface AccountChoice {
   id: string;
   label: string;
   /** Its own quota's tightest window — the one closest to its limit, which is the one that stops it
-   *  — compactly: "5h 100%", "Weekly 0%". Absent when the runner reports none. */
+   *  — compactly: "5h 100%", "Weekly 0%"; for Antigravity the bucket with the least left, by agy's
+   *  name for it: "gemini-5h 4% left". Absent when the runner reports none. "env key" for
+   *  Antigravity's Default on a runner that runs it on its Gemini key, which has no quota to show. */
   quota?: string;
   /** That window is at least 90% spent — where the composer's quota pill turns orange too. */
   nearLimit?: boolean;
@@ -257,7 +260,8 @@ function antigravityBlocker(state?: RunnerAntigravityState, health?: RunnerEngin
  * away. `configured` is expected to carry the pools too (poolsAsProviders), since that is where a
  * pool's models and runtime are resolved from; `pools` says which of its entries are pools.
  *
- * `planUsage` is the runner's quota report, read for each of its Codex and Claude accounts' own windows.
+ * `planUsage` is the runner's quota report, read for each of its Codex and Claude accounts' own windows;
+ * its Antigravity accounts' travel with `engineHealth` and are read from there (withEnginePlanUsage).
  */
 export function providerChoices(
   configured: ConfiguredProvider[],
@@ -271,15 +275,18 @@ export function providerChoices(
   dshRunner?: DshRunnerFacts | null,
 ): ProviderChoice[] {
   const usesGoogleAccount = antigravity?.authSource === 'google' && !(antigravityKeyAvailable && !antigravity.envKeyAvailable);
+  const usage = withEnginePlanUsage(planUsage, engineHealth);
   const engines: ProviderChoice[] = ENGINE_SLUGS.filter(
     (slug) => slug !== AgentProvider.ANTIGRAVITY || antigravityKeyAvailable || antigravity?.authSource === 'google',
   ).map((slug) => {
     const health = engineHealth?.find((e) => e.engine === slug);
     const blocker = slug === AgentProvider.ANTIGRAVITY ? antigravityBlocker(antigravity, health, !antigravityKeyAvailable || usesGoogleAccount) : engineBlocker(health);
     const accounts =
-      (slug === AgentProvider.CODEX || slug === AgentProvider.CLAUDE) && !blocker && (health?.accounts?.length ?? 0) >= 2
+      isAccountEngine(slug) && !blocker && (health?.accounts?.length ?? 0) >= 2
         ? health!.accounts!.map((account): AccountChoice => {
-            const snapshot = accountPlanUsage(planUsage, slug, account.id);
+            // Antigravity's Default on the runner's Gemini key: it runs, on the key, with no quota.
+            if (runsOnEnvKey(health, account)) return { id: account.id, label: accountNameOf(account), quota: 'env key' };
+            const snapshot = accountPlanUsage(usage, slug, account.id);
             // The window that stops it: a Claude login's 5-hour window can read 0% while its weekly
             // one is spent, and the first window alone would say it has room.
             const quota =
@@ -289,7 +296,10 @@ export function providerChoices(
               label: accountNameOf(account),
               ...(quota
                 ? {
-                    quota: `${compactWindowLabel(quota.label)} ${quota.percent}%`,
+                    // Antigravity's buckets say what is left, under agy's own names for them.
+                    quota: quota.remaining
+                      ? `${quota.groupLabel ?? quota.label} ${quota.percent}% left`
+                      : `${compactWindowLabel(quota.label)} ${quota.percent}%`,
                     ...(quota.nearLimit ? { nearLimit: true } : {}),
                   }
                 : {}),
@@ -565,8 +575,3 @@ export function engineChoices(
     return engineChoiceFor(landing, configured);
   });
 }
-
-/** The small label beside an engine's name: how its own sign-in signs in (Antigravity's "env key"),
- *  and nothing for a provider of it — which provider is the composer's Provider menu's to say. */
-export const engineProviderDetail = (engine: EngineChoice): string | undefined =>
-  engine.provider.slug === engine.slug ? engine.provider.labelDetail : undefined;

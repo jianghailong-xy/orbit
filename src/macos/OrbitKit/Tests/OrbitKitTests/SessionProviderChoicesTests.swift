@@ -639,7 +639,6 @@ final class SessionProviderChoicesTests: XCTestCase {
         XCTAssertEqual(engines.map(\.slug), ["claude", "codex", "kimi"])
         XCTAssertEqual(engines.map(\.provider.slug), ["claude", "codex", "kimi"])
         XCTAssertEqual(engines.map(\.label), ["Claude", "Codex", "Kimi"])
-        XCTAssertNil(engines[0].providerDetail)
     }
 
     func testEnginesLandOnAPreferredProviderThatCanRun() {
@@ -647,7 +646,6 @@ final class SessionProviderChoicesTests: XCTestCase {
         let engines = SessionProviderChoices.engines(SessionProviderChoices.choices(configured: configured),
                                                      configured: configured, preferred: ["deepseek", "moonshot"])
         XCTAssertEqual(engines.map(\.provider.slug), ["deepseek", "codex", "moonshot"])
-        XCTAssertNil(engines[0].providerDetail)
     }
 
     func testEnginesSkipASignedOutEngineForAKeyThatCanRunAndCarryTheReasonWhenNothingCan() {
@@ -668,7 +666,6 @@ final class SessionProviderChoicesTests: XCTestCase {
         let gone = SessionProviderChoices.current("gone-away", in: [], configured: [])
         let engine = SessionProviderChoices.engine(for: gone, configured: [])
         XCTAssertEqual(engine.slug, "claude")
-        XCTAssertNil(engine.providerDetail)
     }
 
     // MARK: - OpenCode and the keys it may spend (web parity)
@@ -692,7 +689,6 @@ final class SessionProviderChoicesTests: XCTestCase {
         let engine = SessionProviderChoices.engines(choices, configured: configured, preferred: ["opencode/deepseek"])
             .first { $0.slug == "opencode" }
         XCTAssertEqual(engine?.label, "OpenCode")
-        XCTAssertNil(engine?.providerDetail)
         XCTAssertEqual(SessionProviderChoices.sameRuntime("opencode/deepseek", in: choices, configured: configured).map(\.slug),
                        ["opencode", "opencode/deepseek"])
 

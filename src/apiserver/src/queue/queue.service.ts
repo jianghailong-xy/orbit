@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { EventEmitter } from 'events';
 import {
   AgentProvider,
+  isAccountEngine,
   ClaimedSession,
   PermissionMode,
   fastModeAvailable,
@@ -27,8 +28,14 @@ import {
   sharedPoolUnavailableReason,
 } from '../providers/shared-pool';
 import { PoolNotices } from '../providers/pool-notice';
-import { CLAUDE_ACCOUNT_MOVE_V1, CODEX_ACCOUNT_MOVE_V1 } from '../providers/account-move-capability';
-import { accountBeforeDispatch, accountSwitchNotice, sessionAccountPausedUntil } from '../providers/plan-usage-accounts';
+import { ACCOUNT_MOVE_CAPABILITY } from '../providers/account-move-capability';
+import {
+  accountBeforeDispatch,
+  accountSwitchNotice,
+  sessionAccountPausedUntil,
+  type WorkspaceAccountChoices,
+} from '../providers/plan-usage-accounts';
+import { ACCOUNT_CHOICE, ACCOUNT_PINNED } from '../providers/account';
 import {
   choosePoolMember,
   poolFallbackNotice,
@@ -168,7 +175,8 @@ export class QueueService {
       select: {
         id: true, ownerId: true, provider: true, providerBuiltin: true, error: true, model: true,
         codexAccount: true, codexAccountPinned: true, claudeAccount: true, claudeAccountPinned: true,
-        workspace: { select: { env: true, codexAccount: true, claudeAccount: true } },
+        antigravityAccount: true, antigravityAccountPinned: true,
+        workspace: { select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true } },
         assignedRunner: { select: { engines: true, accountPauses: true, planUsage: true, capabilities: true } },
       },
     });
@@ -180,11 +188,11 @@ export class QueueService {
       const engine = session.provider;
       let unavailable = false;
       let dshHeld = !!dshUnavailable && session.providerBuiltin && engine === AgentProvider.DSH;
-      if (until && runner && (engine === 'codex' || engine === 'claude')) {
-        const canMove = runner.capabilities.includes(engine === 'codex' ? CODEX_ACCOUNT_MOVE_V1 : CLAUDE_ACCOUNT_MOVE_V1);
+      if (until && runner && isAccountEngine(engine)) {
+        const canMove = runner.capabilities.includes(ACCOUNT_MOVE_CAPABILITY[engine]);
         const move = canMove && accountBeforeDispatch(engine, {
-          account: engine === 'codex' ? session.codexAccount : session.claudeAccount,
-          pinned: engine === 'codex' ? session.codexAccountPinned : session.claudeAccountPinned,
+          account: session[ACCOUNT_CHOICE[engine]],
+          pinned: session[ACCOUNT_PINNED[engine]],
         }, session.workspace, runner.engines, runner.planUsage, now, runner.accountPauses);
         if (move) until = null;
       }
@@ -533,26 +541,26 @@ export class QueueService {
     codexAccountPinned: boolean;
     claudeAccount: string | null;
     claudeAccountPinned: boolean;
-    workspace: { env: unknown; codexAccount: string | null; claudeAccount: string | null } | null;
+    antigravityAccount: string | null;
+    antigravityAccountPinned: boolean;
+    workspace: ({ env: unknown } & WorkspaceAccountChoices) | null;
     assignedRunner: { engines: unknown; accountNames: unknown; accountPauses?: unknown; planUsage: unknown; capabilities: string[] } | null;
-  }): Promise<{ codexAccount: string | null | undefined; claudeAccount: string | null | undefined }> {
+  }): Promise<WorkspaceAccountChoices> {
     const workspace = session.workspace;
-    const accounts = {
+    const accounts: WorkspaceAccountChoices = {
       codexAccount: session.codexAccount ?? workspace?.codexAccount,
       claudeAccount: session.claudeAccount ?? workspace?.claudeAccount,
+      antigravityAccount: session.antigravityAccount ?? workspace?.antigravityAccount,
     };
-    const engine =
-      session.provider === AgentProvider.CODEX || session.provider === AgentProvider.CLAUDE ? session.provider : null;
+    const engine = isAccountEngine(session.provider) ? session.provider : null;
     const runner = session.assignedRunner;
     if (!engine || !isBuiltinProvider(session.provider, session.providerBuiltin) || !runner) return accounts;
-    if (!(runner.capabilities ?? []).includes(engine === AgentProvider.CODEX ? CODEX_ACCOUNT_MOVE_V1 : CLAUDE_ACCOUNT_MOVE_V1)) {
-      return accounts;
-    }
-    const codex = engine === AgentProvider.CODEX;
-    const own = codex ? session.codexAccount : session.claudeAccount;
+    if (!(runner.capabilities ?? []).includes(ACCOUNT_MOVE_CAPABILITY[engine])) return accounts;
+    const column = ACCOUNT_CHOICE[engine];
+    const own = session[column];
     const move = accountBeforeDispatch(
       engine,
-      { account: own, pinned: codex ? session.codexAccountPinned : session.claudeAccountPinned },
+      { account: own, pinned: session[ACCOUNT_PINNED[engine]] },
       workspace,
       runner.engines,
       runner.planUsage,
@@ -561,10 +569,8 @@ export class QueueService {
     );
     if (!move) return accounts;
     const { count } = await this.prisma.session.updateMany({
-      where: codex
-        ? { id: session.id, codexAccount: own, codexAccountPinned: false }
-        : { id: session.id, claudeAccount: own, claudeAccountPinned: false },
-      data: codex ? { codexAccount: move.to } : { claudeAccount: move.to },
+      where: { id: session.id, [column]: own, [ACCOUNT_PINNED[engine]]: false },
+      data: { [column]: move.to },
     });
     if (count === 0) return accounts;
     // Owed only when no other line is: one already owed (a pool's) is said first, as PoolNotices.owe keeps it.
@@ -575,7 +581,7 @@ export class QueueService {
     // A resident engine still holds the previous account's environment. Reload before
     // the next message so a pause cannot be bypassed by reusing that warm process.
     if (move.paused) await new PoolNotices(this.prisma, this.realtime).carrier(session.id, engine);
-    return codex ? { ...accounts, codexAccount: move.to } : { ...accounts, claudeAccount: move.to };
+    return { ...accounts, [column]: move.to };
   }
 
   private async buildSession(sessionId: string): Promise<ClaimedSession> {
@@ -749,6 +755,7 @@ export class QueueService {
         // The account picked for this session, else its workspace's (accountsForClaim).
         codexAccount: accounts.codexAccount,
         claudeAccount: accounts.claudeAccount,
+        antigravityAccount: accounts.antigravityAccount,
         runnerEngines: session.assignedRunner?.engines,
       });
     let exec = resolveExec(session.model);

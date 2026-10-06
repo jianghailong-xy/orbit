@@ -229,10 +229,15 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
     /// The CLI's own answer to "am I signed in": `yes` / `no` / `unknown`.
     public let auth: String?
     /// The accounts this engine is signed into on the runner, Default first — reported for an engine
-    /// whose CLI keeps a login per directory (Codex, Claude). Absent from an older runner.
+    /// whose CLI keeps a login per directory (Codex, Claude, Antigravity). Absent from an older runner.
+    /// `auth` above stays the engine's answer: for Antigravity that may be a GEMINI_API_KEY, while its
+    /// Default account is the runner's Google sign-in alone (`RunnerPageFormat.runsOnEnvKey`).
     public let accounts: [RunnerEngineAccount]?
     public let update: RunnerEngineUpdate?
     public let authSource: String?
+    /// Antigravity only: its Google accounts' quota, which never rides in the runner's `planUsage` —
+    /// Default's buckets, present only while the runner's own Google sign-in answers yes, and every
+    /// other signed-in account's under `accounts`, by its id (`CodexAccounts.usage`).
     public let planUsage: PlanUsageSnapshot?
     /// Fixed-version/platform admission failure (`DSH_PLATFORM_UNSUPPORTED: …`), independent of
     /// whether a binary is present. Only DeepSeek Harness reports one today.
@@ -293,7 +298,8 @@ public struct RunnerEngineAccount: Codable, Equatable, Sendable, Identifiable {
     public let name: String?
     /// The CLI's own answer for this account: `yes` / `no` / `unknown`.
     public let auth: String?
-    /// The account's directory on that machine: a CODEX_HOME or a CLAUDE_CONFIG_DIR.
+    /// The account's directory on that machine: a CODEX_HOME, a CLAUDE_CONFIG_DIR, or the Gemini
+    /// directory an Antigravity Google sign-in lives in.
     public let home: String?
     /// The same directory under Codex's historical field name, Codex accounts only: read
     /// `home ?? codexHome`.
@@ -657,8 +663,9 @@ public struct PlanUsageSnapshot: Codable, Equatable, Sendable {
     /// Earned Codex reset state (absent on older runners and non-Codex snapshots).
     public let rateLimitReset: PlanUsageRateLimitReset?
     public let fetchedAt: String?
-    /// The runner's other accounts of this engine, by account id, each as its own windows: this
-    /// snapshot's windows are Default's (web `codexAccountSnapshot`).
+    /// The runner's other accounts of this engine — Codex, Claude Code or Antigravity — by account id,
+    /// each as its own windows: this snapshot's windows (or buckets) are Default's (web
+    /// `codexAccountSnapshot`).
     public var accounts: [String: PlanUsageSnapshot]? = nil
     public let buckets: [PlanUsageBucket]?
 
@@ -710,6 +717,12 @@ public struct PlanUsage: Codable, Equatable, Sendable {
     public let rateLimits: [PlanUsageRateLimit]?
     /// Earned Codex reset state on a flat (legacy) provider snapshot.
     public let rateLimitReset: PlanUsageRateLimitReset?
+    /// Every other account's own snapshot, by account id, on a flat (legacy) payload — where this
+    /// object's own windows are Default's. Web's `PlanUsage extends PlanUsageSnapshot`, so a flat
+    /// payload keeps its `accounts` as it is read; a client splitting the two types has to carry
+    /// them across itself, or a machine that reports one provider at a time loses every added
+    /// account's quota while its Default still reads (web `planUsageSnapshotForProvider`).
+    public let accounts: [String: PlanUsageSnapshot]?
     public let claude: PlanUsageSnapshot?
     public let codex: PlanUsageSnapshot?
     public let kimi: PlanUsageSnapshot?
@@ -723,6 +736,7 @@ public struct PlanUsage: Codable, Equatable, Sendable {
                 rateLimitReachedType: String? = nil, credits: PlanUsageCredits? = nil,
                 rateLimits: [PlanUsageRateLimit]? = nil,
                 rateLimitReset: PlanUsageRateLimitReset? = nil,
+                accounts: [String: PlanUsageSnapshot]? = nil,
                 claude: PlanUsageSnapshot? = nil, codex: PlanUsageSnapshot? = nil,
                 kimi: PlanUsageSnapshot? = nil,
                 fetchedAt: String? = nil) {
@@ -740,6 +754,7 @@ public struct PlanUsage: Codable, Equatable, Sendable {
         self.credits = credits
         self.rateLimits = rateLimits
         self.rateLimitReset = rateLimitReset
+        self.accounts = accounts
         self.claude = claude
         self.codex = codex
         self.kimi = kimi
@@ -878,9 +893,12 @@ public extension PlanUsage {
                           rateLimitReachedType: rateLimitReachedType, credits: credits,
                           rateLimits: rateLimits,
                           rateLimitReset: rateLimitReset,
-                          fetchedAt: fetchedAt)
+                          fetchedAt: fetchedAt, accounts: accounts)
     }
 
+    /// The runner's own report for one engine. Never Antigravity's, which travels with its engine
+    /// health instead (`RunnerEngineHealth.planUsage`): read every engine's accounts through
+    /// `CodexAccounts.usage`.
     func snapshot(for provider: String) -> PlanUsageSnapshot? {
         // OpenCode may use any underlying provider and Orbit does not collect a
         // provider-specific quota snapshot for it. Never mislabel Claude usage.

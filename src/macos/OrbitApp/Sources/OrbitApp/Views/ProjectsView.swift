@@ -395,6 +395,11 @@ struct ProjectDetailView: View {
     @State private var shareRead: ShareLinkRead?
     /// The page's open items, the owner's own start card, or the merge check's editor.
     @State private var pageSheet: ProjectPageSheet?
+    /// The crossing whose second press is showing, and the answer it would give. One at a time:
+    /// opening another question closes this one.
+    @State private var crossingAsk: ProjectCrossingAsk?
+    /// The door's refusal of that answer, on the row it was given on.
+    @State private var crossingRefusal: ProjectCrossingRefusal?
 
     /// A phone's width: two columns of lanes, four criteria before "View all" — the web's narrow page.
     private var compact: Bool {
@@ -473,24 +478,6 @@ struct ProjectDetailView: View {
         } message: {
             Text(notice ?? "")
         }
-        .confirmationDialog(confirmTitle, isPresented: Binding(get: { confirmingStatus != nil },
-                                                              set: { if !$0 { confirmingStatus = nil } }),
-                            titleVisibility: .visible) {
-            if let status = confirmingStatus {
-                Button(confirmButton(status), role: status == .cancelled ? .destructive : nil) {
-                    Task { notice = await store.setStatus(status) }
-                }
-            }
-        } message: {
-            Text(confirmMessage(store))
-        }
-        .confirmationDialog("Delete this project?", isPresented: $confirmingDelete, titleVisibility: .visible) {
-            Button("Delete project", role: .destructive) {
-                Task { notice = await store.delete() }
-            }
-        } message: {
-            Text("Only a project with no tasks can be deleted.")
-        }
     }
 
     // MARK: page
@@ -515,6 +502,7 @@ struct ProjectDetailView: View {
                 criteriaSection(document)
                 instructionsSection(document)
                 tasksSection(store, document)
+                crossingsSection(store)
             }
             .projectPageListStyle()
             .sheet(item: $pageSheet) { sheet in
@@ -555,25 +543,6 @@ struct ProjectDetailView: View {
             .disabled(resolveReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         } message: { blocker in
             Text(ProjectPage.resolveBlockerMessage(blocker))
-        }
-        .confirmationDialog(listToResume?.pausedList.map(ProjectPage.resumeListQuestion) ?? "",
-                            isPresented: Binding(get: { listToResume != nil },
-                                                 set: { if !$0 { listToResume = nil } }),
-                            titleVisibility: .visible, presenting: listToResume) { item in
-            if let list = item.pausedList {
-                Button(ProjectPage.resumeListPress) {
-                    Task { notice = await store.resumeList(list.id) }
-                }
-            }
-        } message: { item in
-            Text(ProjectPage.resumeListDetail(item))
-        }
-        .confirmationDialog(ProjectPage.replaceCoordinatorQuestion, isPresented: $confirmingReplace,
-                            titleVisibility: .visible) {
-            Button(ProjectPage.replaceCoordinatorConfirm, role: .destructive) { replaceCoordinator(store) }
-            Button(ProjectPage.replaceCoordinatorKeep, role: .cancel) {}
-        } message: {
-            Text(ProjectPage.replaceCoordinatorDetail)
         }
     }
 
@@ -1167,6 +1136,14 @@ struct ProjectDetailView: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                     .disabled(store.busy)
+                    // On the menu that asks, so the panel opens against it rather than at the top of
+                    // the page.
+                    .orbitConfirmation(ProjectPage.replaceCoordinatorQuestion, isPresented: $confirmingReplace) {
+                        Button(ProjectPage.replaceCoordinatorConfirm, role: .destructive) { replaceCoordinator(store) }
+                        Button(ProjectPage.replaceCoordinatorKeep, role: .cancel) {}
+                    } message: {
+                        Text(ProjectPage.replaceCoordinatorDetail)
+                    }
                 } else if status.openability.canOpen {
                     Button { openCoordinator(store, focus: nil) } label: {
                         Text(status.state == .neverOpened ? "Start coordinator" : "Start a new coordinator")
@@ -1631,6 +1608,23 @@ struct ProjectDetailView: View {
                 .buttonBorderShape(.capsule)
                 .controlSize(.small)
                 .disabled(store.busy)
+                // On the row's own button, so the panel opens against it rather than at the top of
+                // the page.
+                .orbitConfirmation({ $0.pausedList.map(ProjectPage.resumeListQuestion) ?? "" },
+                                    isPresented: Binding(get: { listToResume != nil },
+                                                         set: { if !$0 { listToResume = nil } }),
+                                    presenting: listToResume) { item in
+                    if let list = item.pausedList {
+                        Button(ProjectPage.resumeListPress) {
+                            Task { notice = await store.resumeList(list.id) }
+                        }
+                    }
+                    // An alert carries no way out but its buttons — the panel this question used to
+                    // be could be dismissed by tapping outside, so every alert says Cancel.
+                    Button(SharePanelCopy.cancel, role: .cancel) {}
+                } message: { item in
+                    Text(ProjectPage.resumeListDetail(item))
+                }
         case .running where item.sessionId != nil, .queued where item.sessionId != nil:
             Button(ProjectPage.openRunSession) {
                 if let session = item.sessionId { model.route(to: .session(session)) }
@@ -1861,6 +1855,64 @@ struct ProjectDetailView: View {
         model.push(.taskDetail(taskID: taskID))
     }
 
+    // MARK: crossings
+
+    /// Work asked across this project's line, in either direction — the account owner's to answer,
+    /// and nobody else's (web's `ProjectCrossingsCard.tsx`). Last, where the web draws it; drawn once
+    /// the project is an end of a crossing, or when the read failed with nothing to show.
+    @ViewBuilder
+    private func crossingsSection(_ store: ProjectDetailModel) -> some View {
+        if let rows = store.crossings, !rows.isEmpty {
+            Section {
+                ForEach(ProjectCrossings.ordered(rows)) { row in
+                    let asking = crossingAsk?.id == row.id
+                    ProjectCrossingRow(
+                        row: row,
+                        confirming: asking ? crossingAsk?.decision : nil,
+                        busy: store.answeringCrossing == row.id,
+                        locked: store.answeringCrossing.map { $0 != row.id } ?? false,
+                        refusal: asking && crossingRefusal?.id == row.id ? crossingRefusal?.refusal : nil,
+                        onAsk: { decision in
+                            crossingRefusal = nil
+                            crossingAsk = ProjectCrossingAsk(id: row.id, decision: decision)
+                        },
+                        onCancel: {
+                            crossingAsk = nil
+                            crossingRefusal = nil
+                        },
+                        onAnswer: { decision in answerCrossing(row, decision, store: store) })
+                }
+            } header: {
+                sectionHeader(ProjectCrossings.title,
+                              detail: ProjectCrossings.waiting(ProjectCrossings.waitingCount(rows)))
+            }
+        } else if store.crossingsUnread {
+            Section {
+                Label(ProjectCrossings.unreadable, systemImage: "exclamationmark.triangle")
+                    .font(.orbitLabel)
+                    .foregroundStyle(.secondary)
+            } header: {
+                sectionHeader(ProjectCrossings.title, detail: nil)
+            }
+        }
+    }
+
+    /// The second press: the answer goes with the key of the crossing it was given on. Taken, the
+    /// question closes over the re-read row — a confirmed move reads as moved; refused, it stays
+    /// open beside the door's own code and reason.
+    private func answerCrossing(_ row: ProjectCrossing, _ decision: ProjectCrossingDecision,
+                                store: ProjectDetailModel) {
+        PlatformHaptics.tap()
+        Task {
+            if let refusal = await store.decideCrossing(row, decision) {
+                crossingRefusal = ProjectCrossingRefusal(id: row.id, refusal: refusal)
+            } else {
+                crossingAsk = nil
+                crossingRefusal = nil
+            }
+        }
+    }
+
     // MARK: menu
 
     private func menu(_ store: ProjectDetailModel, _ document: ProjectDocument) -> some View {
@@ -1925,6 +1977,27 @@ struct ProjectDetailView: View {
             Image(systemName: "ellipsis.circle")
         }
         .disabled(store.busy)
+        // Both asks are raised by this menu, so they hang off it rather than off the page: the panel
+        // opens against the ⋯ that was pressed.
+        .orbitConfirmation(confirmTitle, isPresented: Binding(get: { confirmingStatus != nil },
+                                                              set: { if !$0 { confirmingStatus = nil } })) {
+            if let status = confirmingStatus {
+                Button(confirmButton(status), role: status == .cancelled ? .destructive : nil) {
+                    Task { notice = await store.setStatus(status) }
+                }
+            }
+            Button(SharePanelCopy.cancel, role: .cancel) {}
+        } message: {
+            Text(confirmMessage(store))
+        }
+        .orbitConfirmation("Delete this project?", isPresented: $confirmingDelete) {
+            Button("Delete project", role: .destructive) {
+                Task { notice = await store.delete() }
+            }
+            Button(SharePanelCopy.cancel, role: .cancel) {}
+        } message: {
+            Text("Only a project with no tasks can be deleted.")
+        }
     }
 
     /// Whether the project has a public link open; nil when that could not be read, so the menu
@@ -2039,8 +2112,8 @@ private enum ProjectPageSheet: String, Identifiable {
 /// (D2): the same card the conversation draws (`StartProjectCard`), set by the default rule
 /// (`StartProject.defaultSettings`) and pressed at the same door with no request to answer. It says
 /// nothing any coordinator said: no "asked by", no suggestion, no ready check, no Chat. Web's
-/// `ProjectStartDialog`.
-private struct OwnerStartProjectSheet: View {
+/// `ProjectStartDialog`. The project's sessions page opens it too, from its start row.
+struct OwnerStartProjectSheet: View {
     let store: ProjectDetailModel
     /// Where the card's "View tasks ›" goes: the page's own task list, under the sheet.
     let onViewTasks: () -> Void

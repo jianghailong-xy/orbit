@@ -171,18 +171,15 @@ final class SettingsStackWiringTests: XCTestCase {
         XCTAssertTrue(rows.contains("Text(SettingsCopy.smartModelSelectionHint)"))
         XCTAssertTrue(list.contains("UpdatePreferencesRequest(modelRouting: value)"))
         XCTAssertTrue(list.contains("modelRouting = p?.smartModelSelection ?? false"))
-        // Signing out asks first — and the panel hangs off that row rather than the `Form`, which is
-        // the view the system anchors it to: declared on the whole page it covered the header at the
-        // top of the screen while the row that asked sat at the bottom.
+        // Signing out asks first, in the shape the width calls for — `ConfirmationStyle` asks a phone
+        // for an alert and a tablet for the anchored panel, and every confirmation in the app goes
+        // through it rather than naming one of the two itself.
         XCTAssertTrue(list.contains("Button(role: .destructive) { confirmingSignOut = true }"))
         XCTAssertTrue(list.contains("Button(SettingsCopy.signOut, role: .destructive) { model.logout() }"))
-        let signOut = try slice(list, from: "private var signOutSection: some View {",
-                                to: "private func seed() {")
-        XCTAssertTrue(signOut.contains(".confirmationDialog(SettingsCopy.signOutTitle("),
-                      "the confirmation is declared on the row it belongs to")
-        let body = try slice(list, from: "var body: some View {", to: "private var displayName")
-        XCTAssertFalse(body.contains("confirmationDialog"),
-                       "and not on the form, which would anchor it to the top of the page")
+        XCTAssertTrue(list.contains(".orbitConfirmation(SettingsCopy.signOutTitle, isPresented: $confirmingSignOut)"),
+                      "the question goes through the width-aware confirmation")
+        XCTAssertTrue(list.contains("Button(SharePanelCopy.cancel, role: .cancel)"),
+                      "with Cancel beside the destructive press")
     }
 
     /// The avatar and name are one button, pencilled as ChatGPT's are, that opens the edit-profile
@@ -231,7 +228,8 @@ final class SettingsStackWiringTests: XCTestCase {
         XCTAssertTrue(card.contains("Label(SettingsCopy.chooseFile, systemImage: \"folder\")"))
         XCTAssertTrue(card.contains("Label(SettingsCopy.removePhoto, systemImage: \"trash\")"))
         XCTAssertTrue(card.contains("avatar.overlay(alignment: .bottomTrailing) { CameraBadge() }"))
-        XCTAssertFalse(card.contains("confirmationDialog"), "the photo's actions are a menu at the avatar, not a sheet from the bottom")
+        XCTAssertFalse(card.contains("confirmationDialog") || card.contains("orbitConfirmation"),
+                       "the photo's actions are a menu at the avatar, not a sheet from the bottom")
         XCTAssertTrue(card.contains(".photosPicker(isPresented: $showingLibrary, selection: $libraryPick, matching: .images)"))
         XCTAssertTrue(card.contains(".fileImporter(isPresented: $choosingFile, allowedContentTypes: [.image])"))
         XCTAssertTrue(card.contains("CameraPicker { taken in photoFlow = taken.map(PhotoFlow.crop) }"))

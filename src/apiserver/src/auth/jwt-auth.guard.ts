@@ -13,6 +13,7 @@ import { visitorAddress } from '../shared/public-surface.guard';
 import { ALLOW_QUERY_TOKEN } from './allow-query-token.decorator';
 import { PatRequestAudit, noteRefusal } from './pat-request-audit';
 import {
+  type PatDeclaration,
   PatRefusal,
   type PatWorkspaceConfinable,
   type PatWorkspaceObject,
@@ -83,8 +84,10 @@ export class JwtAuthGuard implements CanActivate {
       // Every write a token makes is recorded once it is answered, the ones refused here included (§6.4).
       this.audit?.watch(req, context.switchToHttp().getResponse(), grant);
       try {
-        const workspaceConfinable = this.admitToken(context, grant.scopes);
-        if (grant.workspaceIds.length > 0) await this.confine(req, workspaceConfinable, grant);
+        const admitted = this.admitToken(context, grant.scopes);
+        if (grant.workspaceIds.length > 0 && admitted.kind === 'SCOPE') {
+          await this.confine(req, admitted.workspaceConfinable, grant);
+        }
       } catch (error) {
         noteRefusal(req, error);
         throw error;
@@ -105,11 +108,12 @@ export class JwtAuthGuard implements CanActivate {
   /**
    * Whether this route is open to a verified token (§6.2), from what the route declares: a refusal
    * (@PatForbidden) is a 403 whatever the token holds; a scope (@PatScope) must be one it was granted;
-   * and a route that declares neither is a 403 as well — fail-closed, so a route added without a
-   * decision is closed to tokens rather than open to them. Answers what the route declares for a token
-   * confined to workspaces.
+   * the token acting on itself (@PatSelf) is open to every token, needing no scope and no workspace;
+   * and a route that declares none of them is a 403 as well — fail-closed, so a route added without
+   * a decision is closed to tokens rather than open to them. Answers the declaration that admitted
+   * the token, a scope's with what it declares for a token confined to workspaces.
    */
-  private admitToken(context: ExecutionContext, scopes: string[]): PatWorkspaceConfinable | undefined {
+  private admitToken(context: ExecutionContext, scopes: string[]): Extract<PatDeclaration, { kind: 'SCOPE' | 'SELF' }> {
     const declared = patDeclaration(this.reflector, context.getHandler(), context.getClass());
     if (declared.kind === 'FORBIDDEN') throw new PatRefusal(patForbiddenBody(declared.reason));
     if (declared.kind === 'UNDECLARED') {
@@ -118,6 +122,7 @@ export class JwtAuthGuard implements CanActivate {
         message: 'This route declares no access token scope, so a personal access token cannot call it',
       });
     }
+    if (declared.kind === 'SELF') return declared;
     if (!scopes.includes(declared.scope)) {
       throw new PatRefusal({
         code: 'PAT_SCOPE_MISSING',
@@ -125,7 +130,7 @@ export class JwtAuthGuard implements CanActivate {
         message: `This access token was not granted the ${declared.scope} scope this route needs`,
       });
     }
-    return declared.workspaceConfinable;
+    return declared;
   }
 
   /**

@@ -233,6 +233,7 @@ extension View {
 /// The same page is pushed on iPhone and replaces the session column on iPad.
 struct SessionProjectPage: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let address: SessionProjectAddress
     var rowNavigation: SessionRowNavigation = .push
 
@@ -242,8 +243,23 @@ struct SessionProjectPage: View {
     @State private var movingSession: Session?
     @State private var promotionReview: PromotionReviewTarget?
     @State private var promotionReceipt: PromotionReceiptTarget?
+    @State private var startSheet: StartSheet?
 
-    private var sessions: [Session] { app.projectSessions }
+    /// Which start card the start row opened over the page.
+    private enum StartSheet: String, Identifiable {
+        /// The coordinator's request, answered here (`RequestedStartProjectSheet`).
+        case asked
+        /// The owner's own start, set by the default rule (`OwnerStartProjectSheet`).
+        case own
+
+        var id: String { rawValue }
+    }
+
+    /// This page's members — never what the model still holds for another address. Its first frame
+    /// comes before its load has begun, and the load opens on what the app already holds.
+    private var sessions: [Session] { app.projectSessionsAddress == address ? app.projectSessions : [] }
+    /// Nothing has been read for this page until its own load has begun.
+    private var loading: Bool { app.projectSessionsLoading || app.projectSessionsAddress != address }
     /// This project's merge into main — never another project's, which the model still holds for
     /// the moment between an address change and its first read.
     private var merge: ProjectMergeModel? {
@@ -262,6 +278,18 @@ struct SessionProjectPage: View {
     }
     private var coordinator: Session? {
         sessions.first { $0.projectMembership?.role == .coordinator }
+    }
+    /// A project nobody has started, as its sidebar row says: the progress line says so.
+    private var notStarted: Bool {
+        project?.status == .open && project?.started == false
+    }
+    /// The start row (docs/mocks/project-start-sessions-page), by the project page's own rule: the
+    /// coordinator's request, the owner's own Start…, or nothing — nothing, too, until the open
+    /// items have answered, so the row never shows one press and then the other.
+    private var startRow: StartProject.PageRow? {
+        guard let project else { return nil }
+        return StartProject.pageRow(status: project.status, started: project.started,
+                                    openItems: app.projectSessionsOpenItems)
     }
     private var titleText: String {
         project?.title ?? sessions.first?.projectMembership?.projectTitle ?? "Project"
@@ -307,17 +335,25 @@ struct SessionProjectPage: View {
         .navigationBarTitleDisplayMode(.inline)
         .rowSwipeList(rowSwipe)
         .refreshable {
-            await app.loadProjectSessions(address)
-            await app.loadProjectMerge(address, force: true)
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask { @MainActor in await app.loadProjectSessions(address) }
+                group.addTask { @MainActor in await app.loadProjectIntegration(address) }
+                group.addTask { @MainActor in await app.loadProjectMerge(address, force: true) }
+                group.addTask { @MainActor in await app.loadProjectStart(address) }
+            }
         }
         .overlay {
-            if sessions.isEmpty && !app.projectSessionsLoading {
-                if let failure = app.projectSessionsError {
-                    ContentUnavailableView("Couldn't load sessions", systemImage: "exclamationmark.bubble",
-                                           description: Text(failure))
-                } else {
-                    ContentUnavailableView("No sessions", systemImage: "bubble.left.and.bubble.right")
+            // A failure stays up while the next poll is in flight, rather than blinking out every 4s.
+            if sessions.isEmpty, app.projectSessionsAddress == address, let failure = app.projectSessionsError {
+                ContentUnavailableView {
+                    Label("Couldn't load sessions", systemImage: "exclamationmark.bubble")
+                } description: {
+                    Text(CodexSignIn.sentence(failure))
+                } actions: {
+                    Button("Retry") { Task { await app.loadProjectSessions(address) } }
                 }
+            } else if sessions.isEmpty && !loading {
+                ContentUnavailableView("No sessions", systemImage: "bubble.left.and.bubble.right")
             }
         }
         .toolbar {
@@ -349,23 +385,63 @@ struct SessionProjectPage: View {
             if let merge { PromotionReviewSheet(source: merge, promotionID: target.id) }
         }
         .sheet(item: $promotionReceipt) { PromotionReceiptSheet(promotion: $0.promotion) }
-        .task(id: address) {
-            await app.loadProjectSessions(address)
-            await app.loadProjectMerge(address)
-            await app.projects?.load()
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(4))
-                if Task.isCancelled { break }
-                await app.loadProjectSessions(address)
-                await app.loadProjectMerge(address)
+        // The start card over this page, from the project page's own store, read afresh as it opens:
+        // this page holds none of the criteria, the plan or the line it is set from.
+        .sheet(item: $startSheet) { sheet in
+            if let store = app.projects?.detail(address.projectID) {
+                Group {
+                    switch sheet {
+                    case .asked: RequestedStartProjectSheet(store: store, onViewTasks: { viewStartTasks() })
+                    case .own: OwnerStartProjectSheet(store: store, onViewTasks: { viewStartTasks() })
+                    }
+                }
+                .task { await store.load() }
             }
+        }
+        // Side by side, each on its own 4-second poll: the landing line, the merge card and the start
+        // row never wait behind the member lists, the slowest reads the page makes, and a poll of the
+        // members asks for neither list again unless something moved (`pollProjectSessions`).
+        .task(id: address) {
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask { @MainActor in
+                    await app.loadProjectSessions(address)
+                    await Self.poll { await app.pollProjectSessions(address) }
+                }
+                group.addTask { @MainActor in
+                    await app.loadProjectIntegration(address)
+                    await Self.poll { await app.loadProjectIntegration(address) }
+                }
+                group.addTask { @MainActor in
+                    await app.loadProjectMerge(address)
+                    await Self.poll { await app.loadProjectMerge(address) }
+                }
+                group.addTask { @MainActor in
+                    await app.projects?.load()
+                    await app.loadProjectStart(address)
+                    await Self.poll { await app.loadProjectStart(address) }
+                }
+            }
+        }
+    }
+
+    /// `read` again 4 seconds after each one ends, until the page's task is cancelled: the page
+    /// went, or its address changed.
+    private static func poll(_ read: () async -> Void) async {
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(4))
+            if Task.isCancelled { break }
+            await read()
         }
     }
 
     private var title: some View {
         VStack(spacing: 1) {
             Text(titleText).font(.headline).lineLimit(1)
-            Text(SessionProjectCopy.pageSubtitle(sessions: sessions.count))
+            // No count while no member is known yet, from the app's lists or the read: "0 sessions"
+            // would be a claim nobody checked.
+            Text(loading && sessions.isEmpty
+                 ? SessionProjectCopy.pageSubtitleLoading
+                 : SessionProjectCopy.pageSubtitle(sessions: sessions.count))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -377,6 +453,7 @@ struct SessionProjectPage: View {
     private var progressCard: some View {
         VStack(spacing: 0) {
             progressLine
+            startLine
             landingLine
         }
         .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
@@ -388,8 +465,9 @@ struct SessionProjectPage: View {
             if let counts = project?.taskCounts {
                 SessionProjectProgressBar(counts: counts, running: runningCount)
                     .frame(width: 66)
-                Text(SessionProjectCopy.pageProgress(done: counts.done, total: counts.total,
-                                                     running: runningCount))
+                Text(notStarted ? SessionProjectCopy.pageNotStarted(tasks: counts.total)
+                                : SessionProjectCopy.pageProgress(done: counts.done, total: counts.total,
+                                                                  running: runningCount))
                     .font(.orbitMeta)
                     .foregroundStyle(.secondary)
             } else {
@@ -400,6 +478,72 @@ struct SessionProjectPage: View {
             Spacer()
         }
         .padding(12)
+    }
+
+    /// The start, under the progress line, while nobody has started the project
+    /// (docs/mocks/project-start-sessions-page): the coordinator's request — Ready to start, since
+    /// when, what it suggests, and Review and start — or, with none, the owner's own Start…, quiet.
+    /// Either opens the start card over this page, and only that card's Start the project starts
+    /// anything. Not counted as needing the reader, as a start request is counted nowhere.
+    @ViewBuilder private var startLine: some View {
+        if let row = startRow {
+            VStack(alignment: .leading, spacing: 10) {
+                switch row {
+                case .asked(let item):
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 7) {
+                            Circle().fill(Color.orange).frame(width: 8, height: 8)
+                            Text(StartProject.readyToStart).font(.orbitLabel.weight(.semibold))
+                            Spacer(minLength: 8)
+                            if let ago = RelativeTime.format(item.waitingSince) {
+                                Text(SessionProjectCopy.startAsked(ago))
+                                    .font(.orbitMeta).foregroundStyle(.secondary).lineLimit(1)
+                            }
+                        }
+                        if let settings = item.startRequest?.settings {
+                            Text(SessionProjectCopy.startSuggestion(settings))
+                                .font(.orbitMeta).foregroundStyle(.secondary)
+                                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                                .padding(.leading, 15)
+                        }
+                    }
+                    .accessibilityElement(children: .combine)
+                    Button { openStart(.asked) } label: {
+                        Text(SessionProjectCopy.startReview).font(.orbitLabel.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityHint(SessionProjectCopy.startHint)
+                case .own:
+                    HStack(spacing: 7) {
+                        Circle().fill(Color.secondary.opacity(0.45)).frame(width: 8, height: 8)
+                        Text(SessionProjectCopy.startNotAsked).font(.orbitMeta).foregroundStyle(.secondary)
+                    }
+                    Button { openStart(.own) } label: {
+                        Text(StartProject.rowOwn).font(.orbitLabel.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityHint(SessionProjectCopy.startHint)
+                }
+            }
+            .buttonBorderShape(.capsule)
+            .controlSize(.large)
+            .tint(Color.accentColor)
+            .padding(.horizontal, 12)
+            .padding(.bottom, 12)
+        }
+    }
+
+    private func openStart(_ sheet: StartSheet) {
+        PlatformHaptics.tap()
+        startSheet = sheet
+    }
+
+    /// The start card's "View tasks ›": the project's page, where its task list is.
+    private func viewStartTasks() {
+        startSheet = nil
+        openProject()
     }
 
     /// The project page's landing line, drawn only while something is in flight; a tap opens the
@@ -545,17 +689,13 @@ private struct ProjectMergeCardView: View {
         .padding(.vertical, 4)
     }
 
-    private func header(_ title: String, symbol: String?, badge: String? = nil) -> some View {
+    private func header(_ title: String, symbol: String, badge: String? = nil) -> some View {
         HStack(spacing: 8) {
-            if let symbol {
-                Image(systemName: symbol)
-                    .font(.orbitLabel.weight(.semibold))
-                    .foregroundStyle(tint)
-                    .frame(width: 26, height: 26)
-                    .background(tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 7))
-            } else {
-                ProgressView().controlSize(.small).tint(tint)
-            }
+            Image(systemName: symbol)
+                .font(.orbitLabel.weight(.semibold))
+                .foregroundStyle(tint)
+                .frame(width: 26, height: 26)
+                .background(tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 7))
             Text(title).font(.headline).foregroundStyle(shape == .asking ? Color.primary : tint)
                 .lineLimit(2)
             Spacer(minLength: 6)
@@ -612,8 +752,13 @@ private struct ProjectMergeCardView: View {
     }
 
     /// B: under way, and the reader may walk away; Cancel until the push begins.
+    ///
+    /// The head carries the same merge mark in its tile as A and D, rather than a spinner (owner
+    /// decision 2026-10-07): the card has one moving mark and it is the landing row's ring — the
+    /// project page's Integrating mark, sitting beside the word `fetching`. A spinner here said
+    /// "work is happening" a fourth time, in a mark neither this card nor this app uses elsewhere.
     @ViewBuilder private func merging(_ view: ProjectPromotionView) -> some View {
-        header(PromotionCards.pageTitle(view), symbol: nil)
+        header(PromotionCards.pageTitle(view), symbol: "arrow.triangle.merge")
         Text(PromotionCards.mergingStatusLine(view)).font(.orbitLabel)
         if let landing { ProjectLandingRow(line: landing) }
         Text(PromotionCards.pageNothingToDo).font(.orbitMeta).foregroundStyle(.secondary)
@@ -715,6 +860,100 @@ private struct ProjectMergeTimelineRow: View {
         }
         .buttonStyle(.plain)
         .accessibilityHint("Opens the merge's receipt")
+    }
+}
+
+/// "Review and start" — the coordinator's request to start, opened over the project's sessions page
+/// (docs/mocks/project-start-sessions-page): the card the conversation draws, from the same request
+/// — its suggestion, its reason and Orbit's ready check — pressed at the same door with the request
+/// named. Chat about this stays the conversation's: the coordinator's row is under this sheet.
+///
+/// The card keeps the request it was first drawn for, as the conversation's does, so a request that
+/// stops standing is said on the card (dimmed, Start dead) rather than replaced by a blank; and a
+/// press that went through holds it live while the sheet goes down, since the read the press makes
+/// has already answered that nobody is asked any more.
+private struct RequestedStartProjectSheet: View {
+    let store: ProjectDetailModel
+    /// Where the card's "View tasks ›" goes: the project's page.
+    let onViewTasks: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var held: ProjectOpenItemRow?
+    @State private var edited: StartSettingsDraft?
+    @State private var pressed = false
+    @State private var error: String?
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                card
+                    .padding()
+                    .frame(maxWidth: 640)
+                    .frame(maxWidth: .infinity)
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+        }
+        .task { await store.loadStartCard() }
+    }
+
+    @ViewBuilder
+    private var card: some View {
+        let live = store.document.flatMap { StartProject.live(openItems: store.openItems, started: $0.started) }
+        if let document = store.document, let confirmation = store.confirmation,
+           let row = live ?? held, let request = row.startRequest {
+            let draft = edited ?? StartSettingsDraft(request.settings)
+            StartProjectCard(
+                projectID: document.id,
+                projectTitle: document.title,
+                askedAt: row.waitingSince,
+                request: request,
+                criteria: document.acceptanceCriteriaItems.sorted { $0.ordinal < $1.ordinal }.map {
+                    ProjectCriteriaDocument.Item(id: $0.id, ordinal: $0.ordinal, text: $0.text,
+                                                 satisfied: $0.satisfied)
+                },
+                plan: StartProject.planView(graph: store.graph, request: request,
+                                            fallbackCount: document.taskCount),
+                draft: draft,
+                standing: pressed ? .live : StartProject.standing(itemID: row.itemId, request: request,
+                                                                  openItems: store.openItems,
+                                                                  confirmation: confirmation,
+                                                                  started: document.started),
+                onDraft: { edited = $0 },
+                onStart: { await start(request, draft, itemID: row.itemId) },
+                onViewTasks: onViewTasks,
+                error: error)
+            .onAppear { if held == nil { held = row } }
+        } else if store.document != nil, store.confirmation != nil, store.openItems != nil {
+            // The request stopped standing before this sheet could draw it: said, not drawn blank.
+            Text(StartProject.requestGone)
+                .font(.orbitLabel)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else if store.confirmationUnread {
+            Text(AcceptanceConfirmations.staleExplanation(nil) ?? "")
+                .font(.orbitLabel)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            ProgressView().frame(maxWidth: .infinity)
+        }
+    }
+
+    /// One press, one write, answering the request — and the card gives way once it went through.
+    private func start(_ request: ProjectStartRequest, _ draft: StartSettingsDraft, itemID: String) async {
+        guard draft.complete else { return }
+        pressed = true
+        if let refused = await store.startProject(StartProject.body(request: request, draft: draft,
+                                                                    requestId: itemID)) {
+            pressed = false
+            error = refused
+        } else {
+            dismiss()
+        }
     }
 }
 

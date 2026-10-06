@@ -229,15 +229,16 @@ final class AgentsModel {
         }
     }
 
-    /// Take what a cold launch restores (`AppModel.restoreLaunchSnapshot`): the workspace list and
-    /// its runner labels as the previous run had them, with the list pointed at the Open sessions of
-    /// the workspace the launch lands on — the app's Open snapshot then fills its rows before the
-    /// first frame. `loadState` is left alone: none of this is an answer from the server, and
-    /// `load()` replaces it all.
-    func adoptLaunchSnapshot(_ snapshot: LaunchSnapshot, showing agentID: String?) {
-        items = snapshot.agents
-        runnerNames = snapshot.runnerNames
-        runnerOrder = snapshot.runnerOrder
+    /// Take what a cold launch restores (`AppModel.adoptLaunchSnapshot`): the workspace list and its
+    /// runner labels as the previous run had them, with the list pointed at the Open sessions of the
+    /// workspace the launch lands on — the app's Open snapshot then fills its rows before the first
+    /// frame. `loadState` is left alone: none of this is an answer from the server, and `load()`
+    /// replaces it all. It arrives as the snapshot's fill-in, which is empty of workspaces once this
+    /// model's own fetch has answered (`LaunchSnapshot.fillIn`) — so this is never the older list.
+    func adoptLaunchSnapshot(_ workspaces: LaunchSnapshotFillIn.Workspaces, showing agentID: String?) {
+        items = workspaces.items
+        runnerNames = workspaces.runnerNames
+        runnerOrder = workspaces.runnerOrder
         if let agentID { lastSessionQuery = (agentID, .open) }
     }
 

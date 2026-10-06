@@ -42,6 +42,46 @@ func TestTaskEvidenceFourCLITruthsAndMCPDescriptorsAgree(t *testing.T) {
 	}
 }
 
+// The decision door refuses a session acting for one project the evidence of a task in another
+// (EVIDENCE_JUDGMENT_TASK_IN_ANOTHER_PROJECT): a confirmed move takes the task's undecided evidence
+// to the project it moved into, so the project it left can no longer decide it. Each place an agent
+// reads what the door checks names that refusal, and none still counts four checks.
+func TestEvidenceDecideNamesTheRefusalForATaskInAnotherProject(t *testing.T) {
+	tools := toolDescriptors(false, false)
+	description := mcpToolDescription(tools, "task_evidence_decide")
+	assertSaysAll(t, "the task_evidence_decide tool description", description,
+		"Five things are checked at decision time",
+		"a session that acts for one project — its coordinator, a judgment session opened for it, a run of one of its tasks — must not decide a task that is in another project (EVIDENCE_JUDGMENT_TASK_IN_ANOTHER_PROJECT",
+		"a task's evidence is decided from the project it is in now, and a task moved out takes its undecided evidence with it, so the project it left can no longer decide it",
+	)
+
+	help := collapsedSpace(taskActionHelp["evidence-decide"])
+	assertSaysAll(t, "`orbit task evidence-decide --help`", help,
+		"A session that acts for one project (its coordinator, a judgment session opened for it, a run of one of its tasks) is refused for a task in another (EVIDENCE_JUDGMENT_TASK_IN_ANOTHER_PROJECT)",
+		"a task's evidence is decided from the project it is in now, and a task moved out takes its undecided evidence with it, so the project it left can no longer decide it.",
+	)
+
+	var spec cliCapabilitySpec
+	for _, candidate := range baseCLICapabilities {
+		if candidate.Tool == "task_evidence_decide" {
+			spec = candidate
+		}
+	}
+	assertSaysAll(t, "`orbit capabilities` for task_evidence_decide", spec.Description,
+		"the deciding session must not have done the work, and a session acting for one project may not decide a task in another — a moved task's evidence is decided by the project it is in now",
+	)
+
+	for where, text := range map[string]string{
+		"the task_evidence_decide tool description":     description,
+		"`orbit task evidence-decide --help`":           help,
+		"`orbit capabilities` for task_evidence_decide": spec.Description,
+	} {
+		if strings.Contains(strings.ToLower(text), "four things") {
+			t.Errorf("%s still counts four checks:\n%s", where, text)
+		}
+	}
+}
+
 func TestTaskEvidenceCLIAndMCPUseTheSameWireStructure(t *testing.T) {
 	type observed struct {
 		method  string
