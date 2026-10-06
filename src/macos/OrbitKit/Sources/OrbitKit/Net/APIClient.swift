@@ -759,6 +759,26 @@ public final class APIClient: @unchecked Sendable {
         try await postEmpty("projects/\(projectID)/promotions/\(promotionID)/cancel")
     }
 
+    // MARK: a project's crossings — work asked across its line, answered by its owner
+
+    /// What has been asked about work crossing into or out of this project, in either direction:
+    /// filings, dependencies and moves, whether answered or not (`ProjectCrossings`).
+    public func projectCrossings(projectID: String) async throws -> [ProjectCrossing] {
+        try await get("projects/\(projectID)/handoffs")
+    }
+
+    /// Answer one crossing, from this project's page. The crossing key travels with the answer, so
+    /// one given on a list that changed since it was read is refused rather than recorded against
+    /// another crossing. A yes to a move IS the move: the server moves the task and spends the
+    /// request in the same write, or refuses with nothing written. The owner's own credential —
+    /// the door refuses a personal access token. The answer is not read here: the list the press
+    /// re-reads says what it left, as the browser does.
+    public func decideProjectCrossing(projectID: String, crossing: ProjectCrossing,
+                                      _ decision: ProjectCrossingDecision) async throws {
+        try await postRaw("projects/\(projectID)/handoffs/\(ProjectCrossings.doorID(crossing))/decision",
+                          body: ProjectCrossings.request(crossing, decision))
+    }
+
     // MARK: projects — the index and one project's page
 
     /// `GET /projects`: every project this account owns, newest first; `status` narrows the read.
