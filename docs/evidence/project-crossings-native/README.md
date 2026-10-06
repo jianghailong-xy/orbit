@@ -2,7 +2,7 @@
 
 Task: [iOS/macOS 项目页加跨项目确认卡（含移动请求），文案与 Web 一致](orbit-task:34b99rROWy9XZs7gyAr8t),
 project [跨项目移动任务：agent 发起，账号所有者确认即生效](orbit-project:34b8pthjtmO06pvd8i3FW), criterion 5.
-Branch `orbit/ios-macos-web-857cee`, code commit `4dddff557` on main `51f0cdfee`. Executed on HPC (Linux),
+Branch `orbit/ios-macos-web-857cee`, code commit `4dddff557` on main `51f0cdfee`, then main `be0f8c22a` merged (`7e8bad80c`). Executed on HPC (Linux),
 no local Mac: OrbitKit ran in `swift:6.1` docker; the macOS and iOS builds, the XCUITests and the pictures
 ran on GitHub Actions through push-triggered probe branches (never merged, deleted afterwards).
 
@@ -54,14 +54,18 @@ one for X2 → 409 `MOVE_TASK_LANDING_IN_FLIGHT`, no DENY.
 | Check | Result |
 |---|---|
 | OrbitKit, Linux `swift:6.1` docker, `4dddff557` | 3228 tests; the 32 new ones (`ProjectCrossings*`) pass; 5 failures in 2 tests — identical on clean main `51f0cdfee` (3196 tests, same 5): `ci/orbitkit-linux-swift61.txt` |
+| OrbitKit, same, after merging the newer main `be0f8c22a` (`7e8bad80c`) | 3228 tests; the new ones pass; 12 failures in 6 tests — identical on clean main `be0f8c22a` (3196 tests, same 12; its wiki home change broke four more wiki parity tests): same file |
 | client.yml on the probe of `4dddff557` (run 37505299361) | font-tokens ✓, nav-push ✓, iOS build ✓ (`** BUILD SUCCEEDED **`), macOS OrbitApp `swift build` ✓; macOS OrbitKit `swift test` ✗ with the same 2 tests (5 failures) as the same step on clean main in the same run: `ci/` |
 | XCUITest, iPhone simulator + Mac | both `** TEST SUCCEEDED **`: `ios/`, `mac/` (run 37509553027) |
+| native sources after merging `be0f8c22a` | `git diff 4dddff557 7e8bad80c -- src/macos src/ios` is empty, and the web card and `attribution.ts` are unchanged: the CI runs above built the same native code |
 | merge check, each step | `4dddff557` and clean main `51f0cdfee`: build, shared (398), apiserver (4545), web (4255), go — all exit 0: `ci/merge-check.txt` |
 
-The two tests red on main — `ConfirmationStyleWiringTests.testEveryConfirmationAsksThroughTheWidthAwareStyle`
-(the access-token revoke dialogs in `SettingsAdminView.swift` and `SettingsSheet.swift` call `.confirmationDialog` directly) and
-`WikiCopyParityTests.testTheDrawerRowCountsWhatTheWebSidebarCounts` (the web sidebar's wiki count moved) — came
-with other projects' merges (`90b80b42f`, `6c4e0ac0e`) and are not touched here.
+The tests red on main — `ConfirmationStyleWiringTests.testEveryConfirmationAsksThroughTheWidthAwareStyle`
+(the access-token revoke dialogs in `SettingsAdminView.swift` and `SettingsSheet.swift` call `.confirmationDialog` directly),
+`WikiCopyParityTests.testTheDrawerRowCountsWhatTheWebSidebarCounts` (the web sidebar's wiki count moved), and since
+`be0f8c22a` three more `WikiCopyParityTests`, one `WikiPlanCopyParityTests` and one `WikiReviewModeCopyParityTests` (the
+web wiki home's topic list, `2f9cc095f`) — came with other projects' merges (`90b80b42f`, `6c4e0ac0e`, `2f9cc095f`)
+and are not touched here.
 
 ## Limits
 
