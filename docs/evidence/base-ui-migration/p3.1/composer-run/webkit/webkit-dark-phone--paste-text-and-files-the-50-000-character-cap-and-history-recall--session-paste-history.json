@@ -1,0 +1,518 @@
+{
+  "ant": [
+    {
+      "label": "text-pasted",
+      "value": "pasted line one\npasted line two\npasted line three",
+      "caret": [
+        49,
+        49
+      ],
+      "focused": true,
+      "height": 86,
+      "menu": null,
+      "chips": [],
+      "staged": [],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "Control",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "V",
+          false,
+          false
+        ],
+        [
+          "paste",
+          null,
+          null,
+          false
+        ],
+        [
+          "input",
+          "insertFromPaste",
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "files-staged",
+      "value": "pasted line one\npasted line two\npasted line three",
+      "caret": [
+        49,
+        49
+      ],
+      "focused": true,
+      "height": 86,
+      "menu": null,
+      "chips": [],
+      "staged": [
+        "pasted.txt",
+        "image"
+      ],
+      "sent": "[]",
+      "events": [
+        [
+          "paste",
+          null,
+          null,
+          false
+        ],
+        [
+          "paste",
+          null,
+          null,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "length-after-oversized-paste-50000",
+      "value": "",
+      "caret": [
+        0,
+        0
+      ],
+      "focused": true,
+      "height": 38,
+      "menu": null,
+      "chips": [],
+      "staged": [
+        "pasted.txt",
+        "image"
+      ],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "Delete",
+          false,
+          false
+        ],
+        [
+          "input",
+          "deleteContentBackward",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "Control",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "V",
+          false,
+          false
+        ],
+        [
+          "paste",
+          null,
+          null,
+          false
+        ],
+        [
+          "input",
+          "insertFromPaste",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "Delete",
+          false,
+          false
+        ],
+        [
+          "input",
+          "deleteContentBackward",
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "history-up-newest",
+      "value": "Earlier prompt\nwith a second line",
+      "caret": [
+        0,
+        0
+      ],
+      "focused": true,
+      "height": 62,
+      "menu": null,
+      "chips": [],
+      "staged": [
+        "pasted.txt",
+        "image"
+      ],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "ArrowUp",
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "history-up-older",
+      "value": "Earlier prompt",
+      "caret": [
+        0,
+        0
+      ],
+      "focused": true,
+      "height": 38,
+      "menu": null,
+      "chips": [],
+      "staged": [
+        "pasted.txt",
+        "image"
+      ],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "ArrowUp",
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "history-down",
+      "value": "Earlier prompt\nwith a second line",
+      "caret": [
+        33,
+        33
+      ],
+      "focused": true,
+      "height": 62,
+      "menu": null,
+      "chips": [],
+      "staged": [
+        "pasted.txt",
+        "image"
+      ],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "ArrowDown",
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "history-down-restores-draft",
+      "value": "",
+      "caret": [
+        0,
+        0
+      ],
+      "focused": true,
+      "height": 38,
+      "menu": null,
+      "chips": [],
+      "staged": [
+        "pasted.txt",
+        "image"
+      ],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "ArrowDown",
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "focused-through-ref",
+      "value": "",
+      "caret": [
+        0,
+        0
+      ],
+      "focused": true,
+      "height": 38,
+      "menu": null,
+      "chips": [],
+      "staged": [
+        "pasted.txt",
+        "image"
+      ],
+      "sent": "[]",
+      "events": []
+    }
+  ],
+  "orbit": [
+    {
+      "label": "text-pasted",
+      "value": "pasted line one\npasted line two\npasted line three",
+      "caret": [
+        49,
+        49
+      ],
+      "focused": true,
+      "height": 86,
+      "menu": null,
+      "chips": [],
+      "staged": [],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "Control",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "V",
+          false,
+          false
+        ],
+        [
+          "paste",
+          null,
+          null,
+          false
+        ],
+        [
+          "input",
+          "insertFromPaste",
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "files-staged",
+      "value": "pasted line one\npasted line two\npasted line three",
+      "caret": [
+        49,
+        49
+      ],
+      "focused": true,
+      "height": 86,
+      "menu": null,
+      "chips": [],
+      "staged": [
+        "pasted.txt",
+        "image"
+      ],
+      "sent": "[]",
+      "events": [
+        [
+          "paste",
+          null,
+          null,
+          false
+        ],
+        [
+          "paste",
+          null,
+          null,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "length-after-oversized-paste-50000",
+      "value": "",
+      "caret": [
+        0,
+        0
+      ],
+      "focused": true,
+      "height": 38,
+      "menu": null,
+      "chips": [],
+      "staged": [
+        "pasted.txt",
+        "image"
+      ],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "Delete",
+          false,
+          false
+        ],
+        [
+          "input",
+          "deleteContentBackward",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "Control",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "V",
+          false,
+          false
+        ],
+        [
+          "paste",
+          null,
+          null,
+          false
+        ],
+        [
+          "input",
+          "insertFromPaste",
+          false,
+          false
+        ],
+        [
+          "keydown",
+          "Delete",
+          false,
+          false
+        ],
+        [
+          "input",
+          "deleteContentBackward",
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "history-up-newest",
+      "value": "Earlier prompt\nwith a second line",
+      "caret": [
+        0,
+        0
+      ],
+      "focused": true,
+      "height": 62,
+      "menu": null,
+      "chips": [],
+      "staged": [
+        "pasted.txt",
+        "image"
+      ],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "ArrowUp",
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "history-up-older",
+      "value": "Earlier prompt",
+      "caret": [
+        0,
+        0
+      ],
+      "focused": true,
+      "height": 38,
+      "menu": null,
+      "chips": [],
+      "staged": [
+        "pasted.txt",
+        "image"
+      ],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "ArrowUp",
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "history-down",
+      "value": "Earlier prompt\nwith a second line",
+      "caret": [
+        33,
+        33
+      ],
+      "focused": true,
+      "height": 62,
+      "menu": null,
+      "chips": [],
+      "staged": [
+        "pasted.txt",
+        "image"
+      ],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "ArrowDown",
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "history-down-restores-draft",
+      "value": "",
+      "caret": [
+        0,
+        0
+      ],
+      "focused": true,
+      "height": 38,
+      "menu": null,
+      "chips": [],
+      "staged": [
+        "pasted.txt",
+        "image"
+      ],
+      "sent": "[]",
+      "events": [
+        [
+          "keydown",
+          "ArrowDown",
+          false,
+          false
+        ]
+      ]
+    },
+    {
+      "label": "focused-through-ref",
+      "value": "",
+      "caret": [
+        0,
+        0
+      ],
+      "focused": true,
+      "height": 38,
+      "menu": null,
+      "chips": [],
+      "staged": [
+        "pasted.txt",
+        "image"
+      ],
+      "sent": "[]",
+      "events": []
+    }
+  ]
+}
