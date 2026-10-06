@@ -259,3 +259,43 @@ test('keyboard, labels, loading, disabled and native form values work', async ({
     switchSpace: true, disabledAndLoadingBlocked: true, mixedExposed: true, values: await region.getByLabel('Submitted values').textContent(), nativeTextReset: true }, null, 2), contentType: 'application/json' });
   await info.attach('interactive-controls', { body: await region.screenshot({ animations: 'disabled' }), contentType: 'image/png' });
 });
+
+test('a focused field under the pointer and the 601–960px font size match AntD', async ({ page }, info) => {
+  // P3.1 regression: the shared text-control rules let hover outrank focus, and lifted unadorned
+  // fields to 16px only at ≤600px where index.css lifts the AntD fields at ≤960px.
+  await open(page, info);
+  const state = (locator) => locator.evaluate(async (element) => {
+    await Promise.all(element.getAnimations().map((animation) => animation.finished));
+    const field = element.matches('input, textarea') ? element : element.querySelector('input');
+    const style = getComputedStyle(element);
+    return { hovered: element.matches(':hover'), focused: element.matches(':focus-within'), borderColor: style.borderColor,
+      boxShadow: style.boxShadow, fontSize: getComputedStyle(field).fontSize, lineHeight: getComputedStyle(field).lineHeight,
+      height: element.getBoundingClientRect().height };
+  });
+  const measured = {};
+  for (const name of ['input-middle', 'input-invalid', 'input-affix', 'textarea', 'textarea-invalid']) {
+    const { orbit, ant } = sides(page, name);
+    for (const [side, locator] of [['orbit', orbit], ['ant', ant]]) {
+      await locator.click();
+      measured[`${name} ${side}`] = await state(locator);
+    }
+    expect(measured[`${name} orbit`]).toMatchObject({ hovered: true, focused: true });
+    expect(measured[`${name} orbit`], `${name} focused under the pointer`).toEqual(measured[`${name} ant`]);
+  }
+  if (!info.project.use.isMobile) {
+    await page.mouse.move(0, 0);
+    for (const width of [601, 800, 959, 961]) {
+      await page.setViewportSize({ width, height: 900 });
+      for (const name of ['input-middle', 'input-affix', 'textarea']) {
+        const { orbit, ant } = sides(page, name);
+        const size = async (locator) => {
+          const { fontSize, lineHeight, height } = await state(locator);
+          return { fontSize, lineHeight, height };
+        };
+        measured[`${name} ${width}px`] = { orbit: await size(orbit), ant: await size(ant) };
+        expect(measured[`${name} ${width}px`].orbit, `${name} at ${width}px`).toEqual(measured[`${name} ${width}px`].ant);
+      }
+    }
+  }
+  await info.attach('focused-hover-and-breakpoint', { body: JSON.stringify(measured, null, 2), contentType: 'application/json' });
+});
