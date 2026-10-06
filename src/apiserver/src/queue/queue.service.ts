@@ -144,7 +144,7 @@ export class QueueService {
 
   /** Evaluate pauses before the short global claim lock. The inbox rechecks after claim,
    * so a concurrent pause cannot leak a new turn; paused rows never occupy runner capacity. */
-  private async pausedPendingSessions(runnerId: string): Promise<string[]> {
+  private async pausedPendingSessions(runnerId: string, supportsWikiMaintenance: boolean): Promise<string[]> {
     const now = new Date();
     const pending = await this.prisma.session.findMany({
       where: {
@@ -181,6 +181,14 @@ export class QueueService {
         unavailable = provider
           ? !provider.enabled || !['claude', 'codex', 'kimi', 'antigravity', 'dsh'].includes(provider.runtime)
           : !await accountPoolRuntime(this.prisma, session.ownerId, engine);
+        // A Wiki maintenance session is not held for it by a runner that declares wiki-maintenance-run/v1: the
+        // claim hands it over with its refusal (wiki/wiki-maintenance-session.ts), which that runner ends FAILED
+        // without starting any engine. Held here, it would wait PENDING for good, and its space's maintenance with it.
+        if (unavailable && supportsWikiMaintenance) {
+          const maintained = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+            SELECT s.id FROM "session" s WHERE s.id = ${session.id}::uuid AND ${wikiMaintenanceSessionSql('s')}`);
+          if (maintained.length > 0) unavailable = false;
+        }
         const key = `${session.ownerId}:${engine}`;
         if (!poolPauses.has(key)) poolPauses.set(key, await this.accountPoolPausedUntil(session.ownerId, engine, now));
         until = poolPauses.get(key) ?? null;
@@ -208,7 +216,7 @@ export class QueueService {
     const supportsOpenCode = runner.supportedProviders?.includes(AgentProvider.OPENCODE) ?? false;
     const supportsAntigravity = runner.supportedProviders?.includes(AgentProvider.ANTIGRAVITY) ?? false;
     const supportsDsh = runner.supportedProviders?.includes(AgentProvider.DSH) ?? false;
-    const paused = await this.pausedPendingSessions(runner.id);
+    const paused = await this.pausedPendingSessions(runner.id, supportsWikiMaintenance);
     // Atomically claim one PENDING session assigned to this runner. The runner id
     // must be cast to ::uuid: Prisma binds template params as text, and Postgres
     // has no `uuid = text` operator (claim silently fails otherwise — 42883).
@@ -285,7 +293,9 @@ export class QueueService {
             AND NOT (s.id = ANY(${paused}::uuid[]))
             AND s."cancel_requested_at" IS NULL
             AND s."assigned_runner_id" = ${runnerId}
-            -- An unresolved/disabled configured identity must never become a Claude job.
+            -- An unresolved/disabled configured identity must never become a Claude job. A Wiki maintenance
+            -- session does not become one: a runner that declares wiki-maintenance-run/v1 is handed it with its
+            -- refusal and no provider (buildSession), and ends it FAILED without starting any engine.
             AND (
               COALESCE(s.provider, 'claude') IN ('claude', 'codex', 'opencode', 'antigravity')
               OR (s."provider_builtin" AND s.provider IN ('kimi', 'dsh'))
@@ -306,6 +316,7 @@ export class QueueService {
                   )
                 )
               ))
+              OR (${supportsWikiMaintenance}::boolean AND ${wikiMaintenanceSessionSql('s')})
             )
             -- Both the request and the heartbeat must declare Harness. The database trigger
             -- repeats this so a legacy API transaction cannot bypass the capability gate.
@@ -661,7 +672,12 @@ export class QueueService {
     const accounts = await this.accountsForClaim(session);
     // A Wiki maintenance session's run (wiki/wiki-maintenance-session.ts), null for every other session.
     const maintenance = await wikiMaintenanceRunOf(this.prisma, session);
-    const declared = session.provider ?? null;
+    // One that may not start is built on no provider at all: the runner ends it FAILED with its refusal and
+    // starts no engine, so it is handed no provider's endpoint or key — not its pin's, not a pool member's —
+    // and its row is not given a model it never ran.
+    const refused = maintenance?.refusal !== undefined;
+    const declared = refused ? AgentProvider.CLAUDE : session.provider ?? null;
+    const declaredProviderBuiltin = refused || session.providerBuiltin;
     // A configured (custom) provider borrows a built-in runtime: resolve the runner-facing
     // built-in provider, model, and process env (baseUrl + decrypted key injected)
     // here, so the runner receives a plain claude/codex job and needs no changes. Ownership
@@ -670,7 +686,7 @@ export class QueueService {
     // of the owner's account pools, which dispatches as the member chosen for this claim — or, for a Codex
     // pool of their own, through the pool gateway on the ChatGPT login it holds — or a shared pool the
     // owner is in, which dispatches through the pool gateway; each on a token minted for this claim.
-    const declaredIsBuiltin = isBuiltinProvider(declared, session.providerBuiltin);
+    const declaredIsBuiltin = isBuiltinProvider(declared, declaredProviderBuiltin);
     // A maintenance run is never dispatched through a pool: it has no member to fall back on (its refusal says so).
     const customRow = declaredIsBuiltin
       ? null
@@ -685,7 +701,7 @@ export class QueueService {
     const resolveExec = (sessionModel: string | null) =>
       resolveProviderExec({
         declaredProvider: declared,
-        declaredProviderBuiltin: session.providerBuiltin,
+        declaredProviderBuiltin,
         customRow,
         sessionModel,
         usesRuntimeDefaultModel: session.usesRuntimeDefaultModel,
@@ -704,7 +720,7 @@ export class QueueService {
     // already-established conversation on reclaim/resume — only a model that is no longer offered
     // at all moves, and then the row must stop naming it or the pickers would keep showing a dead
     // id the session isn't running.
-    if (session.model === null || session.model.trim() === '' || exec.retiredPin) {
+    if (!refused && (session.model === null || session.model.trim() === '' || exec.retiredPin)) {
       // A user may PATCH an explicit session model after this snapshot was read. Compare against
       // the exact value that resolution ran on, so materialization is a compare-and-set instead of
       // overwriting that concurrent choice.
