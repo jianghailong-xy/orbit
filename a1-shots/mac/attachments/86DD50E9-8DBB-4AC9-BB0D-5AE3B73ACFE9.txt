@@ -1,0 +1,2 @@
+7-refused: 1 window(s)
+clicking the prompt's Continue at (571.0, 322.5) (window at (0.0, 31.0), 18 rows of blue, scale 1.0)

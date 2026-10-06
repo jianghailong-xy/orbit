@@ -1,0 +1,79 @@
+iPhone: iPhone 17 Pro com.apple.CoreSimulator.SimRuntime.iOS-26-5
+==> iPhone 22452A91-4697-4369-8812-53ADB77EB73B
+==> stub ready (pid 4939, after 8s): {"password": true, "google": true, "googleSignup": true}
+==> mac
+Test Case '-[A1MacProbeUITests.GoogleShotTests test1GoogleOnAndOpeningAccounts]' started.
+Test Case '-[A1MacProbeUITests.GoogleShotTests test1GoogleOnAndOpeningAccounts]' passed (12.152 seconds).
+Test Case '-[A1MacProbeUITests.GoogleShotTests test2GoogleOnForExistingAccounts]' started.
+Test Case '-[A1MacProbeUITests.GoogleShotTests test2GoogleOnForExistingAccounts]' passed (7.364 seconds).
+Test Case '-[A1MacProbeUITests.GoogleShotTests test3GoogleOff]' started.
+Test Case '-[A1MacProbeUITests.GoogleShotTests test3GoogleOff]' passed (7.998 seconds).
+Test Case '-[A1MacProbeUITests.GoogleShotTests test4ServerFromBeforeGoogleSignIn]' started.
+Test Case '-[A1MacProbeUITests.GoogleShotTests test4ServerFromBeforeGoogleSignIn]' passed (7.918 seconds).
+Test Case '-[A1MacProbeUITests.GoogleShotTests test5GoogleOnDark]' started.
+Test Case '-[A1MacProbeUITests.GoogleShotTests test5GoogleOnDark]' passed (7.476 seconds).
+Test Case '-[A1MacProbeUITests.GoogleShotTests test6ContinueWithGoogleSignsIn]' started.
+/Users/runner/work/orbit/orbit/.a1-probe/UITests/GoogleShotTests.swift:158: error: -[A1MacProbeUITests.GoogleShotTests test6ContinueWithGoogleSignsIn] : failed - Continue with Google never signed in; the stub saw ["GET /api/auth/methods"]; the page says ["", "", "", "", "", "", ""]
+Test Case '-[A1MacProbeUITests.GoogleShotTests test6ContinueWithGoogleSignsIn]' failed (99.336 seconds).
+Test Case '-[A1MacProbeUITests.GoogleShotTests test7ARefusedGoogleSignInSaysWhy]' started.
+/Users/runner/work/orbit/orbit/.a1-probe/UITests/GoogleShotTests.swift:176: error: -[A1MacProbeUITests.GoogleShotTests test7ARefusedGoogleSignInSaysWhy] : failed - the refusal never showed; the stub saw ["GET /api/auth/methods"]
+Test Case '-[A1MacProbeUITests.GoogleShotTests test7ARefusedGoogleSignInSaysWhy]' failed (100.553 seconds).
+	 Executed 7 tests, with 2 failures (0 unexpected) in 242.796 (242.811) seconds
+	 Executed 7 tests, with 2 failures (0 unexpected) in 242.796 (242.813) seconds
+	 Executed 7 tests, with 2 failures (0 unexpected) in 242.796 (242.816) seconds
+** TEST FAILED **
+/Users/runner/work/orbit/orbit/.a1-probe/shots/ios:
+total 0
+drwxr-xr-x  2 runner  staff   64 Oct  6 23:19 .
+drwxr-xr-x  4 runner  staff  128 Oct  6 23:19 ..
+
+/Users/runner/work/orbit/orbit/.a1-probe/shots/mac:
+total 24544
+drwxr-xr-x  47 runner  staff    1504 Oct  6 23:34 .
+drwxr-xr-x   4 runner  staff     128 Oct  6 23:19 ..
+drwxr-xr-x  51 runner  staff    1632 Oct  6 23:33 attachments
+-rw-r--r--   1 runner  staff  492945 Oct  6 23:34 auth-log.txt
+-rw-r--r--   1 runner  staff       4 Oct  6 23:34 default-handlers.txt
+-rw-r--r--   1 runner  staff  395878 Oct  6 23:33 mac-1-google-on-signup-open.png
+-rw-r--r--   1 runner  staff  389824 Oct  6 23:33 mac-2-google-on-existing-accounts.png
+-rw-r--r--   1 runner  staff  393625 Oct  6 23:33 mac-3-google-off.png
+-rw-r--r--   1 runner  staff  393625 Oct  6 23:33 mac-4-old-server-404.png
+-rw-r--r--   1 runner  staff  257021 Oct  6 23:33 mac-5-google-on-signup-open-dark.png
+-rw-r--r--   1 runner  staff  467147 Oct  6 23:33 mac-6-never-signed-in.png
+-rw-r--r--   1 runner  staff  467257 Oct  6 23:33 mac-6-sign-in-meanwhile-12.png
+-rw-r--r--   1 runner  staff  467257 Oct  6 23:33 mac-6-sign-in-meanwhile-16.png
+-rw-r--r--   1 runner  staff  466322 Oct  6 23:33 mac-6-sign-in-meanwhile-2.png
+-rw-r--r--   1 runner  staff  467257 Oct  6 23:33 mac-6-sign-in-meanwhile-24.png
+-rw-r--r--   1 runner  staff  467257 Oct  6 23:33 mac-6-sign-in-meanwhile-30.png
+-rw-r--r--   1 runner  staff  466336 Oct  6 23:33 mac-6-sign-in-meanwhile-4.png
+-rw-r--r--   1 runner  staff  466447 Oct  6 23:33 mac-6-sign-in-meanwhile-6.png
+-rw-r--r--   1 runner  staff  467147 Oct  6 23:33 mac-6-sign-in-meanwhile-60.png
+-rw-r--r--   1 runner  staff  467257 Oct  6 23:33 mac-6-sign-in-meanwhile-8.png
+-rw-r--r--   1 runner  staff  460753 Oct  6 23:33 mac-7-refused-meanwhile-12.png
+-rw-r--r--   1 runner  staff  460753 Oct  6 23:33 mac-7-refused-meanwhile-16.png
+-rw-r--r--   1 runner  staff  460256 Oct  6 23:33 mac-7-refused-meanwhile-2.png
+-rw-r--r--   1 runner  staff  460753 Oct  6 23:33 mac-7-refused-meanwhile-24.png
+-rw-r--r--   1 runner  staff  460753 Oct  6 23:33 mac-7-refused-meanwhile-30.png
+-rw-r--r--   1 runner  staff  460256 Oct  6 23:33 mac-7-refused-meanwhile-4.png
+-rw-r--r--   1 runner  staff  460753 Oct  6 23:33 mac-7-refused-meanwhile-6.png
+-rw-r--r--   1 runner  staff  460753 Oct  6 23:33 mac-7-refused-meanwhile-60.png
+-rw-r--r--   1 runner  staff  460753 Oct  6 23:33 mac-7-refused-meanwhile-8.png
+-rw-r--r--   1 runner  staff      36 Oct  6 23:33 mac-GoogleShotTeststest1GoogleOnAndOpeningAccounts-notes.txt
+-rw-r--r--   1 runner  staff      42 Oct  6 23:33 mac-GoogleShotTeststest2GoogleOnForExistingAccounts-notes.txt
+-rw-r--r--   1 runner  staff      25 Oct  6 23:33 mac-GoogleShotTeststest3GoogleOff-notes.txt
+-rw-r--r--   1 runner  staff      29 Oct  6 23:33 mac-GoogleShotTeststest4ServerFromBeforeGoogleSignIn-notes.txt
+-rw-r--r--   1 runner  staff      41 Oct  6 23:33 mac-GoogleShotTeststest5GoogleOnDark-notes.txt
+-rw-r--r--   1 runner  staff     123 Oct  6 23:33 mac-GoogleShotTeststest6ContinueWithGoogleSignsIn-notes.txt
+-rw-r--r--   1 runner  staff     123 Oct  6 23:33 mac-GoogleShotTeststest7ARefusedGoogleSignInSaysWhy-notes.txt
+-rw-r--r--   1 runner  staff   17607 Oct  6 23:33 mac-missing-refusal.txt
+-rw-r--r--   1 runner  staff   17704 Oct  6 23:33 mac-missing-signed-in.txt
+-rw-r--r--   1 runner  staff  468449 Oct  6 23:33 mac-sign-in-prompt.png
+-rw-r--r--   1 runner  staff   17835 Oct  6 23:33 mac-tree-1-google-on-signup-open.txt
+-rw-r--r--   1 runner  staff   17607 Oct  6 23:33 mac-tree-2-google-on-existing-accounts.txt
+-rw-r--r--   1 runner  staff   17567 Oct  6 23:33 mac-tree-3-google-off.txt
+-rw-r--r--   1 runner  staff   17567 Oct  6 23:33 mac-tree-4-old-server-404.txt
+-rw-r--r--   1 runner  staff   17835 Oct  6 23:33 mac-tree-5-google-on-signup-open-dark.txt
+-rw-r--r--   1 runner  staff    1553 Oct  6 23:33 requests.log
+-rw-r--r--   1 runner  staff      69 Oct  6 23:22 requests.log.out
+-rw-r--r--   1 runner  staff  673313 Oct  6 23:33 xcodebuild-mac.log
+.a1-probe/run.sh: line 86:  4939 Terminated: 15          python3 -u stub.py "$1" > "$1.out" 2>&1

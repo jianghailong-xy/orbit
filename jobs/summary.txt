@@ -1,0 +1,17 @@
+Login page probe (iPhone + Mac): completed / failure (job 112549350782, GitHub Actions 1000021237)
+    1 Set up job: success
+    2 Run actions/checkout@v7: success
+    3 Select latest Xcode: success
+    4 Install XcodeGen: success
+    5 Toolchain: success
+    6 Build, drive and capture: success
+    7 Keep the build's errors and the run's output beside the shots: success
+    8 Run actions/upload-artifact@v4: success
+    9 Fail as the capture did: failure
+   18 Post Run actions/checkout@v7: success
+   19 Complete job: success
+Push the results where a clone can read them: in_progress / None (job 112554312330, GitHub Actions 1000021282)
+    1 Set up job: success
+    2 Run actions/download-artifact@v4: None
+    3 Every job's steps and log: None
+    4 Push to probe/a1-google-mac-results: None
