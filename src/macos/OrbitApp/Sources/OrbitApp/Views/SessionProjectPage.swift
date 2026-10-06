@@ -311,13 +311,17 @@ struct SessionProjectPage: View {
             await app.loadProjectMerge(address, force: true)
         }
         .overlay {
-            if sessions.isEmpty && !app.projectSessionsLoading {
-                if let failure = app.projectSessionsError {
-                    ContentUnavailableView("Couldn't load sessions", systemImage: "exclamationmark.bubble",
-                                           description: Text(failure))
-                } else {
-                    ContentUnavailableView("No sessions", systemImage: "bubble.left.and.bubble.right")
+            // A failure stays up while the next poll is in flight, rather than blinking out every 4s.
+            if sessions.isEmpty, let failure = app.projectSessionsError {
+                ContentUnavailableView {
+                    Label("Couldn't load sessions", systemImage: "exclamationmark.bubble")
+                } description: {
+                    Text(CodexSignIn.sentence(failure))
+                } actions: {
+                    Button("Retry") { Task { await app.loadProjectSessions(address) } }
                 }
+            } else if sessions.isEmpty && !app.projectSessionsLoading {
+                ContentUnavailableView("No sessions", systemImage: "bubble.left.and.bubble.right")
             }
         }
         .toolbar {
