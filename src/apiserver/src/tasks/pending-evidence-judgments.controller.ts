@@ -1,5 +1,6 @@
 import { BadRequestException, Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import { TaskCompletionEvidenceService } from './task-completion-evidence.service';
@@ -18,6 +19,7 @@ import { TaskCompletionEvidenceService } from './task-completion-evidence.servic
 export class PendingEvidenceJudgmentsController {
   constructor(private readonly evidence: TaskCompletionEvidenceService) {}
 
+  @PatScope('tasks:read')
   @Get('pending')
   pending(
     @CurrentUser() user: AuthUser,

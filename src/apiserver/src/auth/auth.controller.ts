@@ -3,7 +3,9 @@ import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { AuthService } from './auth.service';
 import { BootstrapDto, ChangePasswordDto, LoginDto, RefreshDto } from './dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { PatForbidden } from './pat-scope.decorator';
 
+@PatForbidden('AUTH')
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService) {}

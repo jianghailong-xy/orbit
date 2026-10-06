@@ -1,5 +1,6 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PatForbidden, PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import {
@@ -54,6 +55,7 @@ export class WikiController {
    * another account's space is the same 404 every other route here answers with; leave it out and
    * the search spans every space this owner has.
    */
+  @PatScope('wiki:read')
   @Get('search')
   async search(
     @CurrentUser() user: AuthUser,
@@ -85,12 +87,14 @@ export class WikiController {
   }
 
   /** The owner's spaces, each with the pending count the sidebar shows. */
+  @PatScope('wiki:read')
   @Get('spaces')
   listSpaces(@CurrentUser() user: AuthUser) {
     return this.wiki.listSpaces(user.userId);
   }
 
   /** A space the owner creates outright: a codebase, or a wiki with no repository behind it. */
+  @PatScope('wiki:write')
   @Post('spaces')
   createSpace(
     @CurrentUser() user: AuthUser,
@@ -105,6 +109,7 @@ export class WikiController {
    * reads — the four aggregates over `wiki_exposure` that no other read of the document pays for
    * (see `WikiService.getSpaceView`).
    */
+  @PatScope('wiki:read')
   @Get('spaces/:id')
   getSpace(
     @CurrentUser() user: AuthUser,
@@ -121,6 +126,7 @@ export class WikiController {
    * review mode — the last the owner channel's alone, refused WIKI_OWNER_CHANNEL_ONLY to a request
    * that carries a session header, as a decide is.
    */
+  @PatScope('wiki:write')
   @Patch('spaces/:id')
   updateSpace(
     @CurrentUser() user: AuthUser,
@@ -132,12 +138,14 @@ export class WikiController {
   }
 
   /** Bind a workspace this space's sessions read and propose through (§2.1's manual binding). */
+  @PatScope('wiki:write')
   @Post('spaces/:id/workspaces')
   @HttpCode(HttpStatus.OK)
   bindWorkspace(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: BindWikiWorkspaceDto) {
     return this.wiki.bindWorkspace(user.userId, id, dto.workspaceId);
   }
 
+  @PatScope('wiki:read')
   @Get('spaces/:id/entries')
   listEntries(
     @CurrentUser() user: AuthUser,
@@ -156,6 +164,7 @@ export class WikiController {
    * A `:slug`, not a `PublicIdPipe`: a topic is named by the same slug pattern a space is
    * (`WIKI_SLUG_PATTERN`), and it is not a row this door could hand back an id for.
    */
+  @PatScope('wiki:read')
   @Get('spaces/:id/topics/:slug')
   getTopic(
     @CurrentUser() user: AuthUser,
@@ -166,6 +175,7 @@ export class WikiController {
   }
 
   /** What changed in this space lately, newest first — the home page's timeline. */
+  @PatScope('wiki:read')
   @Get('spaces/:id/timeline')
   timeline(
     @CurrentUser() user: AuthUser,
@@ -181,6 +191,7 @@ export class WikiController {
    * this door always, where its current revision came from: the changeset, the review mode that
    * applied it and the verdict it was applied on (contract `reviewModes.run.entry`).
    */
+  @PatScope('wiki:read')
   @Get('entries/:id')
   getEntry(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Query('include') include?: string) {
     const asked = askedFor(include);
@@ -196,6 +207,7 @@ export class WikiController {
    * The owner's Reject of an entry a review mode applied and nobody has confirmed (contract
    * `reviewModes.entryReject`). The owner channel's alone, like a decide.
    */
+  @PatForbidden('OWNER_INTERACTIVE')
   @Post('entries/:id/reject')
   @HttpCode(HttpStatus.OK)
   rejectEntry(
@@ -212,6 +224,7 @@ export class WikiController {
    * (contract `reviewModes.entryConfirm`): trust confirmed, a revision the owner authored, and pushed
    * from then on. The owner channel's alone, like a decide — no agent confirms anything.
    */
+  @PatForbidden('OWNER_INTERACTIVE')
   @Post('entries/:id/confirm')
   @HttpCode(HttpStatus.OK)
   confirmEntry(
@@ -223,6 +236,7 @@ export class WikiController {
   }
 
   /** What waits for the owner, newest first, across every space or one of them. */
+  @PatScope('wiki:read')
   @Get('review')
   review(@CurrentUser() user: AuthUser, @Query('space', PublicIdPipe) space?: string) {
     return this.wiki.listReview(user.userId, space);
@@ -232,6 +246,7 @@ export class WikiController {
    * The owner's own write, which applies at once (contract `effectPolicy.origins.owner`) — what Add to
    * Wiki and the Review page's Edit both call, and the same entry point an agent's proposal takes.
    */
+  @PatScope('wiki:write')
   @Post('spaces/:id/changesets')
   @HttpCode(HttpStatus.OK)
   async propose(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: WikiProposeDto) {
@@ -253,6 +268,7 @@ export class WikiController {
    * refused WIKI_OWNER_CHANNEL_ONLY however it authenticated, because an agent reporting a person's
    * answer is not a person answering.
    */
+  @PatForbidden('OWNER_INTERACTIVE')
   @Post('changesets/:id/decide')
   @HttpCode(HttpStatus.OK)
   decide(
@@ -268,6 +284,7 @@ export class WikiController {
    * Take back a run: every op of the changeset its space's review mode applied at once and the owner
    * has not answered (contract `reviewModes.revert`). The owner channel's alone, like a decide.
    */
+  @PatForbidden('OWNER_INTERACTIVE')
   @Post('changesets/:id/revert')
   @HttpCode(HttpStatus.OK)
   revert(
@@ -284,6 +301,7 @@ export class WikiController {
    * owner (contract `reviewModes.verification.reopen`). The owner channel's alone; the one-off import
    * calls the service method itself.
    */
+  @PatForbidden('OWNER_INTERACTIVE')
   @Post('spaces/:id/verifications/reopen')
   @HttpCode(HttpStatus.OK)
   reopenVerifications(
