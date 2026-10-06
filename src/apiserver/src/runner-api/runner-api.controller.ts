@@ -249,10 +249,14 @@ import {
   appendSessionRepliesContext,
   closeUnansweredRequests,
   closeUnreadSteerRequests,
+  foldQueuedReplyTurnsInto,
+  foldRequeuedReplyTurns,
   holdTurnRepliesForRetry,
+  isSessionReplyTurn,
   readRequestForBlock,
   readSessionReplyCards,
   readTurnRequestIds,
+  releaseUnreadSteerReplies,
   settleUnrunSessionRequests,
 } from '../sessions/session-request';
 import {
@@ -3546,9 +3550,10 @@ export class RunnerApiController {
         // outcomes held for this session's next turn — the ones whose reply turn an interrupt dropped,
         // or that came back while it had ended. Outside the first-delivery branch for the reason the
         // wake is: a reply turn handed out again after its runner died still has to say what it is
-        // for. Not best-effort: for a reply turn this block IS the turn.
-        if (t.kind === 'message') {
-          content = (await appendSessionRepliesContext(tx, sessionId, t.clientTurnId, content)) ?? content;
+        // for. Not best-effort: for a reply turn this block IS the turn. An outcome written into the
+        // running turn is a reply steer, and carries its blocks the same way, saying which turn they join.
+        if (t.kind === 'message' || (t.kind === 'steer' && isSessionReplyTurn(t.clientTurnId))) {
+          content = (await appendSessionRepliesContext(tx, sessionId, t.clientTurnId, content, t.kind)) ?? content;
         }
         // A confirmation request handed to this session for review, and a reviewer's return handed to
         // a run (docs/owner-confirmation-review-contract.md §2 D6, §8 B3): turns with nobody's words,
@@ -4334,6 +4339,9 @@ export class RunnerApiController {
           // A background job's exit the engine never read is a wake turn of its own again, and a
           // wake already queued for the next turn joins it rather than opening a second one.
           await foldQueuedWakeTurnsInto(tx, sessionId, steering);
+          // So is an outcome handed back to this session: the reply steer is its next-turn reply turn
+          // now, still carrying it, and a reply turn already queued joins it (session-request.ts).
+          await foldQueuedReplyTurnsInto(tx, sessionId, steering);
         }
         return {
           applied: requeued.count > 0,
@@ -4374,6 +4382,11 @@ export class RunnerApiController {
           && steering.deliveryStatus !== 'ACKNOWLEDGED'
           ? await closeUnreadSteerRequests(tx, sessionId, [dto.turnId])
           : [];
+        // And a reply steer the engine never took said nothing of the outcomes it carries back to this
+        // session as an asker: they are let go, for the request worker to hand back again.
+        if (acked.count > 0 && failedCurrentWork) {
+          await releaseUnreadSteerReplies(tx, sessionId, steering.clientTurnId);
+        }
         return {
           applied: acked.count > 0,
           steer: true,
@@ -4738,8 +4751,12 @@ export class RunnerApiController {
         const requeuedSteers = await requeueUnreadCurrentWorkSteers(tx, sessionId, [completedTurn.id]);
         currentWorkRequeued = requeuedSteers.length;
         // A background job's exit that missed this turn is a wake turn of its own again; a wake
-        // already queued for the next turn joins it rather than opening a second one behind it.
-        if (requeuedSteers.length > 0) await foldRequeuedWakeTurns(tx, sessionId, requeuedSteers);
+        // already queued for the next turn joins it rather than opening a second one behind it. The
+        // same for an outcome handed back to this session that missed it (session-request.ts).
+        if (requeuedSteers.length > 0) {
+          await foldRequeuedWakeTurns(tx, sessionId, requeuedSteers);
+          await foldRequeuedReplyTurns(tx, sessionId, requeuedSteers);
+        }
       } else if (completedTurn) {
         // A failing turn takes the session with it, and the drain below answers every queued row.
         // Requeueing into a queue about to be emptied would lose the message with nothing said;

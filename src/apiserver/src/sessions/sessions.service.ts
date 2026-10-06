@@ -4933,7 +4933,9 @@ export class SessionsService {
        * answered under the same Session lock in the same transaction — and as the NEXT_TURN message
        * it was otherwise. A route, never a refusal: nothing here answers 409 for a turn that cannot
        * steer. An option of this call and never a field of `dto`, so no request body can ask for it;
-       * a background job's exit is its one caller (runner-api `backgroundWake`).
+       * its callers are the platform's own deliveries: a background job's exit (runner-api
+       * `backgroundWake`) and a session request's outcome handed back to its asker
+       * (`SessionRequestService.handOff`).
        */
       steerIfLive?: boolean;
       /**
@@ -5918,7 +5920,8 @@ export class SessionsService {
     for (const turn of turns) {
       if (!turn.clientTurnId || turn.status !== 'PENDING') continue;
       if (isSessionReplyTurn(turn.clientTurnId)) {
-        const replies = await queuedRepliesContent(this.prisma, sessionId, turn.clientTurnId);
+        // In the turn's own kind too: a reply steer's blocks say which turn they join.
+        const replies = await queuedRepliesContent(this.prisma, sessionId, turn.clientTurnId, turn.kind);
         if (replies) wakeContent.set(turn.id, replies);
         continue;
       }
