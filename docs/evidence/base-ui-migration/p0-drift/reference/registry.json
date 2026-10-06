@@ -1,0 +1,4 @@
+{
+  "rule": "Main drift reference for the P0 regression. Only a P0 screenshot whose every difference from P0.2 was attributed to main product commits may be registered, generated on the tree of its last attributed main commit in the P0.2 environment. A migration change is never registered. Maintenance rules: ../README.md.",
+  "screenshots": []
+}
