@@ -277,8 +277,11 @@ final class RunnerPageFormatTests: XCTestCase {
         XCTAssertEqual(claude.map(\.percent), [98])
         XCTAssertEqual(RunnerPageFormat.accountWindows(wikova, engine: "claude", account: "default").map(\.label),
                        ["5-hour limit", "Weekly · all models"])
-        XCTAssertEqual(RunnerPageFormat.engineWindows(wikova, engine: "codex"), [],
-                       "with two accounts each one's quota is on the engine page")
+        XCTAssertNil(RunnerPageFormat.engineNextAccount(wikova, engine: "claude", now: now), "one account: none to name")
+        // With two, the row carries the window of the one a new session starts on, named: Work's 5 hours
+        // are nearly spent (91%), so Default. Each one's every window is the engine page's.
+        XCTAssertEqual(RunnerPageFormat.engineNextAccount(wikova, engine: "codex", now: now), "Default")
+        XCTAssertEqual(RunnerPageFormat.engineWindows(wikova, engine: "codex", now: now).map(\.percent), [20])
         XCTAssertEqual(RunnerPageFormat.accountWindows(wikova, engine: "codex", account: "default").map(\.percent),
                        [20])
         XCTAssertEqual(RunnerPageFormat.accountWindows(wikova, engine: "codex", account: "1fda3f43").map(\.percent),

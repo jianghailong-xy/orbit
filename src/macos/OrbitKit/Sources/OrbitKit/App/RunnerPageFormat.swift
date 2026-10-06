@@ -345,17 +345,43 @@ public enum RunnerPageFormat {
         return checked.map { RunnerPageCopy.runnerEnginesChecked(when: RunnerAttention.ago($0.0, nowMs: nowMs(now))) }
     }
 
-    /// The quota window an Engines row shows under the engine: Default's binding one — the window that
-    /// stops that login, or will stop it first (`PlanUsageSnapshot.bindingRow`, the one the composer's
-    /// gauge shows) — while the engine is signed in and has one account. One per row, whether the CLI
-    /// reports two windows or four: every window is the engine page's to list. With several accounts,
-    /// each account's quota is its own and lives on the engine's page (web: a group's own columns stay
-    /// empty rather than speak for one account).
+    /// The quota window an Engines row shows under the engine: the binding one — the window that stops
+    /// a login, or will stop it first (`PlanUsageSnapshot.bindingRow`, the one the composer's gauge
+    /// shows). Default's while the engine is signed in and has one account; with several, that of the
+    /// account a new session starts on, which the row names above it (`engineNextAccount`, web's
+    /// "Next: …") so it never reads as the whole machine's. One per row, whether the CLI reports two
+    /// windows or four: every window, and every account's, is the engine page's to list.
     public static func engineWindows(_ runner: Runner, engine: String, now: Date = Date()) -> [PlanUsageRow] {
-        guard let health = runner.engines?.first(where: { $0.engine == engine }), health.installed == true,
-              health.auth == "yes", (health.accounts ?? []).count < 2 else { return [] }
+        guard let health = runner.engines?.first(where: { $0.engine == engine }), health.installed == true else {
+            return []
+        }
+        let account: String
+        if (health.accounts ?? []).count >= 2 {
+            guard let next = nextAccount(runner, health: health, now: now) else { return [] }
+            account = next
+        } else {
+            guard health.auth == "yes" else { return [] }
+            account = CodexAccounts.defaultID
+        }
         let usage = CodexAccounts.usage(engine, planUsage: runner.planUsage, engines: runner.engines)
-        return CodexAccounts.snapshot(usage, account: CodexAccounts.defaultID)?.bindingRow(at: now).map { [$0] } ?? []
+        return CodexAccounts.snapshot(usage, account: account)?.bindingRow(at: now).map { [$0] } ?? []
+    }
+
+    /// The account an Engines row names above its window while the engine has several: the one a new
+    /// session starts on, whose window that is. Nil with one account, with none signed in, or when that
+    /// account has no window to show — web's row names it above one only too.
+    public static func engineNextAccount(_ runner: Runner, engine: String, now: Date = Date()) -> String? {
+        guard let health = runner.engines?.first(where: { $0.engine == engine }), health.installed == true,
+              let next = nextAccount(runner, health: health, now: now),
+              !engineWindows(runner, engine: engine, now: now).isEmpty else { return nil }
+        return CodexAccounts.label(next, accounts: health.accounts)
+    }
+
+    /// Which of an engine's several accounts a new session starts on (`CodexAccounts.toStartOn`, web's
+    /// `accountToStartOn`); nil with one account, or none signed in.
+    private static func nextAccount(_ runner: Runner, health: RunnerEngineHealth, now: Date) -> String? {
+        let usage = CodexAccounts.usage(health.engine, planUsage: runner.planUsage, engines: runner.engines)
+        return CodexAccounts.toStartOn(health.accounts, usage: usage, now: now)
     }
 
     /// One account's own windows: Default's are the engine snapshot's, another's its entry under
