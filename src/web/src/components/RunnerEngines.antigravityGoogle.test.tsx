@@ -57,10 +57,12 @@ describe('Antigravity Google login across client surfaces', () => {
     expect(rendered.textContent).toContain('5-hour18% remaining');
     expect(rendered.querySelectorAll('.re-reset')).toHaveLength(2);
     expect(rendered.querySelector('[aria-label="More actions"]')).not.toBeNull();
+    // The runner page's row carries the one bucket closest to its limit.
     const summary = renderToStaticMarkup(wrap(<RunnerEnginesSection runner={fixtures.google} />, fixtures.google));
     expect(summary).toContain('class="rd-engine-auth ok">Signed in<');
     expect(summary).not.toContain('Google account');
-    expect(summary).toContain('72% remaining');
+    expect(summary).toContain('18% remaining');
+    expect(summary).not.toContain('72% remaining');
     expect(summary).toContain('resets');
   });
 

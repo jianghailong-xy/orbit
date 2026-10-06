@@ -1,0 +1,111 @@
+<!doctype html>
+<!-- Design mock: Antigravity's row on a runner's page shows one quota bucket — the one closest to its
+     limit (PlanUsageSnapshot.bindingRow) — instead of all four; the engine page keeps all four. ① is the
+     owner's own iPhone screenshot (dark, 2026-10-07 06:07); ②–④ are drawn with kit.js in the same
+     appearance. Not shipped code. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Antigravity accounts · one bucket on the runner row (iOS)</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="kit.css">
+<style>
+  .m-sheet { width: 1900px; }
+  .row4 { display: grid; grid-template-columns: repeat(4, 431px); gap: 34px; align-items: start; }
+  .shot { width: 393px; height: 852px; display: block; }
+  .m-cap { font-size: 12.5px; line-height: 1.7; color: var(--text-2); margin: 6px 4px 0; }
+  .m-cap b { color: var(--text-1); }
+  .cuts { display: flex; flex-direction: column; gap: 14px; margin: 10px; }
+  .cut-l { font-size: 12.5px; font-weight: 600; color: var(--text-2); margin: 0 0 6px 4px; }
+</style>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">Antigravity 引擎行 · 只挂剩余最少的那一条额度（方案 3）</h1>
+  <p class="m-sub zh">只登录一个 Google 账号时，运行器页的 Antigravity 行现在铺开四条额度，行占了小半屏。改成只挂<b>最接近上限的那一条</b>：有用完的先显示用完的（几条都用完时显示最晚恢复的那条），否则显示剩余最少的，一样少时取第一条——和 composer 底部额度小圆点选的是同一条（<code>bindingRow</code>）。四条全部留在点进去的引擎页。Codex、Claude Code 的行不变；两个以上账号时行上照旧不挂额度。</p>
+
+  <div class="m-stage">
+    <div class="row4">
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k">现在</span>真机截图（深色）</div>
+        <div class="ph" id="p1"><img class="shot" src="00-today-ios-dark.png" alt=""></div>
+        <p class="m-cap zh"><b>A</b> 一个账号时四条额度全挂在行上：gemini-weekly、gemini-5h、3p-weekly、3p-5h，每条四行，一共十六行。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k new">改后</span>运行器页</div>
+        <div id="p2"></div>
+        <p class="m-cap zh"><b>①</b> 只挂一条：这台机器上最先卡住的那条。此刻四条里 3p-weekly 剩 98%、其余 100%，所以挂 3p-weekly。名字、百分比、重置时间和引擎页里那一条一字不差。<b>②</b> 行和 Codex 行差不多高，下面的按钮回到一屏里。</p>
+      </div>
+      <div class="ph-wrap">
+        <div class="ph-l zh"><span class="m-k new">改后</span>点进去：引擎页</div>
+        <div id="p3"></div>
+        <p class="m-cap zh"><b>③</b> 四条都在：Default 账号下面按 agy 给的顺序列出全部额度，和现在一样。行上那一条只是摘要，点行就能看全。</p>
+      </div>
+      <div>
+        <div class="ph-l zh" style="margin:0 0 8px 10px"><span class="m-k state">边界</span>行上挂哪一条</div>
+        <div class="cuts" id="cuts"></div>
+        <p class="m-cap zh" style="margin-left:14px; width:400px"><b>④</b> 有一条快用完（剩不到 10%）：挂它，条和重置时间变橙。<b>⑤</b> 有一条用完：挂它，会话要等它恢复或换账号。<b>⑥</b> 四条都满：挂第一条 gemini-weekly。</p>
+      </div>
+    </div>
+    <ul class="m-notes zh">
+      <li><span class="m-n">1</span><span><b>只改 Antigravity 的行</b>：它一个账号就有四条，别的引擎一个账号一到两条，照旧全挂。引擎页、Providers 页的账号行仍然列全部四条。</span></li>
+      <li><span class="m-n">2</span><span><b>web 运行器页同一规则</b>：Antigravity 那一行（以及多账号时「Next: 某账号」下面）也只挂这一条。</span></li>
+      <li><span class="m-n">3</span><span><b>macOS 是同一套页面</b>，改法相同。</span></li>
+    </ul>
+  </div>
+</section>
+
+<script src="glyphs.js"></script>
+<script src="kit.js"></script>
+<script>
+  const STATUS = { time: '6:07', net: '5G', batt: '15' };
+  const footer = '<p>Orbit keeps these CLIs updated every 30 min. Sign-ins live on this machine — a session spends that subscription, nothing to paste.</p>';
+  // The HPC runner as the evening screenshot shows it: Codex reports no quota this morning.
+  const others = [
+    engineRow({ engine: 'claude', name: 'Claude Code', version: '2.1.292', status: { text: '3 accounts signed in', tone: 'ok' } }),
+    engineRow({ engine: 'codex', name: 'Codex', version: '0.160.1', status: { text: 'Signed in', tone: 'ok' } }),
+    engineRow({ engine: 'kimi', name: 'Kimi Code', status: { text: 'Not installed', tone: 'muted' }, chevron: false }),
+    engineRow({ engine: 'opencode', name: 'OpenCode', status: { text: 'Not installed', tone: 'muted' }, chevron: false }),
+  ];
+  const buckets = [
+    { group: 'gemini-weekly', label: 'Weekly', pct: 100, remaining: true, resets: 'Resets Sun, Oct 11 at 1:31 AM' },
+    { group: 'gemini-5h', label: '5-hour', pct: 100, remaining: true, resets: 'Resets 11:03 AM' },
+    { group: '3p-weekly', label: 'Weekly', pct: 98, remaining: true, resets: 'Resets Mon, Oct 12 at 5:01 PM' },
+    { group: '3p-5h', label: '5-hour', pct: 100, remaining: true, resets: 'Resets 11:03 AM' },
+  ];
+  const agRow = (windows, id = 'ag') => engineRow({ id, engine: 'antigravity', name: 'Antigravity', version: '1.3.0',
+    status: { text: 'Signed in', tone: 'ok' }, windows });
+
+  const runnerPage = section({ header: 'Engines', trailing: 'Checked 23m ago', rows: [...others, agRow([buckets[2]]),
+    btnRow('Update Engines Now'), btnRow('Refresh Model Lists')], footer });
+  document.getElementById('p2').outerHTML = phone({ title: 'HPC', body: runnerPage, scroll: 0, cls: 'dark', status: STATUS });
+
+  const head = `<div class="hd">${mark('antigravity', 30)}<div><div class="n">Antigravity</div><div class="s">1.3.0 · checked 23m ago</div></div></div>`;
+  const enginePage = head + section({ header: 'Accounts', rows: [
+    accountRow({ id: 'def', name: 'Default', sub: '~/.orbit/antigravity/google', status: { text: 'Signed in', tone: 'ok' },
+      windows: buckets, buttons: [BTN.again, BTN.pause] }),
+    btnRow('Add Account'),
+  ], footer: GOOGLE_TERMS });
+  document.getElementById('p3').outerHTML = phone({ title: 'Antigravity', body: enginePage, cls: 'dark', status: STATUS });
+
+  const cut = (label, windows) => `<div><div class="cut-l zh">${label}</div><div class="cut dark">${section({ rows: [agRow(windows, '')] }).replace('<div class="s-gap"></div>', '')}</div></div>`;
+  document.getElementById('cuts').innerHTML = [
+    cut('④ gemini-5h 剩 4%', [{ group: 'gemini-5h', label: '5-hour', pct: 4, remaining: true, resets: 'Resets 7:40 PM', warn: true }]),
+    cut('⑤ gemini-5h 用完', [{ group: 'gemini-5h', label: '5-hour', pct: 0, remaining: true, resets: 'Resets 7:40 PM', warn: true }]),
+    cut('⑥ 四条都满', [{ group: 'gemini-weekly', label: 'Weekly', pct: 100, remaining: true, resets: 'Resets Sun, Oct 11 at 1:31 AM' }]),
+  ].join('');
+
+  window.drawMarks = () => {
+    const phones = document.querySelectorAll('.ph');
+    const grey = (html) => html.replace(/class="mk-n" style="([^"]*)"/g, 'class="mk-n" style="$1;background:#5b6270"');
+    // ① the screenshot: the four windows under Antigravity (measured on the 393-pt image).
+    phones[0].insertAdjacentHTML('beforeend', grey(marks([{ x: 66, y: 544, w: 270, h: 280 }, { n: 'A', x: 326, y: 534 }])));
+    ringMark(phones[1], phones[1].querySelector('#ag .ws .w'), '1', 5);
+    const btn = phones[1].querySelectorAll('.r.btn')[0];
+    phones[1].insertAdjacentHTML('beforeend', marks([{ n: '2', x: at(phones[1], btn).x + 330, y: at(phones[1], btn).y + 10 }]));
+    ringMark(phones[2], '#def .ws', '3', 4);
+  };
+</script>
+</body>
+</html>
