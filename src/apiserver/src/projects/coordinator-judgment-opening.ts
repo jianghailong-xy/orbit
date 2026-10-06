@@ -104,12 +104,17 @@ export function describeWakeFact(fact: WakeFact): string {
     }
     case 'COMPLETION_EVIDENCE_REVISED':
       // The title is there when the fact is delivered to be decided (`CompletionEvidenceProducer`);
-      // a fact that was only recorded carries the id alone.
+      // a fact that was only recorded carries the id alone. A revision a confirmed move handed over
+      // names the project it came from (`completionEvidenceRevisedFact`'s `movedFromProjectId`).
       return (
         (typeof detail.title === 'string'
           ? `任务「${detail.title}」（${uuidToBase62(fact.subjectId)}）`
           : `任务 ${uuidToBase62(fact.subjectId)} `)
-        + `提交了第 ${String(detail.evidenceRevision ?? '未知')} 版完成证据。`
+        + (typeof detail.movedFromProjectId === 'string'
+          ? `带着还没判定的第 ${String(detail.evidenceRevision ?? '未知')} 版完成证据，经账号所有者确认`
+            + `从项目 ${uuidToBase62(detail.movedFromProjectId)} 移进了这个项目：这一版现在由这个项目判，`
+            + '原项目不能再判它。'
+          : `提交了第 ${String(detail.evidenceRevision ?? '未知')} 版完成证据。`)
       );
     case 'COMPLETION_ACK_STALE':
       {

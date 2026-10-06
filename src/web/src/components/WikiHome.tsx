@@ -24,10 +24,12 @@ import {
   wikiChangeNote,
   wikiChangeVerb,
   wikiChangedSince,
+  wikiCountInSpace,
   wikiEntriesOfKind,
   wikiEntryPath,
   wikiOldest,
   wikiProposalsFrom,
+  wikiProposalsToReview,
   wikiSeenKey,
   wikiShortDay,
   moveWikiSeen,
@@ -71,7 +73,9 @@ export const RECENT_DECISIONS = 4;
  * between the head and the search), the search, the principles — only when there are any: the first three
  * and `All N ›` — the documents by category, and last `Browse by category · A–Z index`, a phone's (a
  * desktop has both atop the directory). A phone draws it as one column, and iOS the same bands in the same
- * order: this file, the phone rules in index.css and `WikiLogic.HomeBand` hold it together.
+ * order: this file, the phone rules in index.css and `WikiLogic.HomeBand` hold it together. A desktop
+ * draws the same rows in the same order, each category a card, two columns of them once the main column
+ * has room (mock 33 ① ②): index.css's desktop block alone.
  *
  * NOTHING HERE SAYS HOW THE WIKI IS KEPT. The status row, Review, the plan, Recent decisions, Recently
  * changed and Agents used the wiki are Activity's (design §12.3.2, `WikiActivityPage`), which still takes
@@ -344,15 +348,22 @@ export function WikiDecisionRows({
   );
 }
 
-/** The right rail's first card: the proposals waiting, and the way into Review. */
+/**
+ * Activity's Review card, a desktop's first banner: the proposals waiting in every space — this space's
+ * listed, each other space's share said after them as the banner says it (`· 2 in wikova`) — and the way
+ * into Review over all of them.
+ */
 export function ReviewCard({
   space,
   pending,
   changesets,
+  elsewhere = [],
 }: {
   space: WikiSpaceWithUsage;
   pending: WikiChangesetOp[];
   changesets: WikiChangeset[];
+  /** The other spaces with proposals waiting (`wikiProposalsElsewhere`). */
+  elsewhere?: ReadonlyArray<{ name: string; count: number }>;
 }) {
   const navigate = useNavigate();
   const sessions = new Set(changesets.map((changeset) => changeset.sessionId).filter(Boolean));
@@ -360,21 +371,23 @@ export function ReviewCard({
     .map((op) => changesets.find((changeset) => changeset.id === op.changesetId)?.createdAt)
     .filter((at): at is string => !!at)
     .sort()[0];
+  const waiting = elsewhere.reduce((sum, share) => sum + share.count, pending.length);
+  // With none here, the first banner's own sentence: `2 proposals to review · 2 in wikova`.
+  const here = pending.length > 0 ? wikiProposalsFrom(pending.length, sessions.size) : wikiProposalsToReview(waiting);
+  const sub = [here, ...elsewhere.map((share) => wikiCountInSpace(share.count, share.name))].join(' ');
 
   return (
     <WikiCard
       title={WIKI_REVIEW_TITLE}
       leading={<WikiDot tone="amber" />}
-      trailing={<span className="tp-count needs-you">{pending.length}</span>}
+      trailing={<span className="tp-count needs-you">{waiting}</span>}
       className="wk-review-card"
     >
-      {pending.length === 0 ? (
+      {waiting === 0 ? (
         <WikiEmpty>{WIKI_NO_REVIEW}</WikiEmpty>
       ) : (
         <>
-          <div className="project-open-items-hint wk-review-sub">
-            {wikiProposalsFrom(pending.length, sessions.size)}
-          </div>
+          <div className="project-open-items-hint wk-review-sub">{sub}</div>
           {pending.slice(0, 3).map((op, index) => (
             <div className={`wk-rv-row${index === 0 ? ' first' : ''}`} key={op.id}>
               <WikiOpChip op={op.op} />
