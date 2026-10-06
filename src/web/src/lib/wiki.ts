@@ -228,6 +228,11 @@ export const wikiCountInSpace = (count: number, space: string): string => `· ${
 export const wikiInSpace = (space: string): string => `· in ${space}`;
 /** After a space's name in the picker, what waits on the owner in it: `wikova · 2 waiting`. */
 export const wikiSpaceWaiting = (count: number): string => `· ${count} waiting`;
+/**
+ * Under the spaces of the native picker, the way into Wiki settings (design §12.3.4, mock 31 ④). The web's
+ * select has no such item; the word is kept here with the others so OrbitKit's `WikiCopy` says the same.
+ */
+export const WIKI_MANAGE_SPACES = 'Manage spaces';
 /** The same count under Review's own title. */
 export const wikiProposalsFrom = (count: number, sessions: number): string =>
   `${count} proposal${count === 1 ? '' : 's'} from ${sessions} session${sessions === 1 ? '' : 's'}`;
@@ -235,12 +240,22 @@ export const wikiOldest = (when: string): string => `oldest ${when}`;
 /** A pending op expires 14 days after it was written; Review says when. */
 export const WIKI_PENDING_EXPIRES = (when: string): string => `expires ${when}`;
 
-// The bands of the home page, in the order both clients draw them.
+// The bands' titles: Principles is the home's (design §12.3.1), the other three Activity's, in the order
+// both clients draw them.
 export const WIKI_PRINCIPLES = 'Principles';
 export const WIKI_RECENT_DECISIONS = 'Recent decisions';
 export const WIKI_RECENTLY_CHANGED = 'Recently changed';
 export const WIKI_AGENTS_USED = 'Agents used the wiki';
 export const WIKI_ALL_DECISIONS = 'All decisions ›';
+/** After the home's first principles, the rest of them (mock 31 ③): `All 6 ›`. */
+export const wikiAllPrinciples = (count: number): string => `All ${count} ›`;
+
+/** A principle's day at the end of its row on the home (mock 31 ③): `9/6`, in the reader's time zone. */
+export function wikiShortDay(iso: string): string | null {
+  const at = new Date(iso);
+  if (!Number.isFinite(at.getTime())) return null;
+  return `${at.getMonth() + 1}/${at.getDate()}`;
+}
 
 export const WIKI_PRINCIPLES_HINT = 'written by you · pinned';
 export const WIKI_TOPICS_HINT = 'topics';

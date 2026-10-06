@@ -19,6 +19,7 @@ import {
   wikiProposalsToReview,
   wikiTabOf,
   WIKI_ACTIVITY,
+  WIKI_MANAGE_SPACES,
   moveWikiSeen,
   readWikiSeen,
   readWikiSeenBefore,
@@ -30,7 +31,10 @@ import {
   wikiSpaceWaiting,
   wikiWaitingOnYou,
   writeWikiSeen,
+  wikiAllPrinciples,
+  wikiShortDay,
 } from './wiki';
+import { WIKI_NO_DOCUMENTS, wikiDocumentCount } from './wikiDocs';
 
 /**
  * The Wiki's derivations, which is where its words and its readings live.
@@ -313,6 +317,24 @@ describe('the words of Activity and of what waits', () => {
     expect(wikiProposalsToReview(1)).toBe('1 proposal to review');
     expect(`${wikiProposalsToReview(3)} ${wikiCountInSpace(2, 'wikova')}`).toBe('3 proposals to review · 2 in wikova');
     expect(wikiActivityPath('orbit')).toBe('/wiki/orbit/activity');
+  });
+
+  it("says the native picker's words as the design writes them", () => {
+    expect(WIKI_MANAGE_SPACES).toBe('Manage spaces');
+    expect(wikiDocumentCount(35)).toBe('35 documents');
+    expect(wikiDocumentCount(1)).toBe('1 document');
+    expect(wikiDocumentCount(1234)).toBe('1,234 documents');
+    expect(WIKI_NO_DOCUMENTS).toBe('No documents yet');
+  });
+});
+
+/** The home's principles (design §12.3.1, mock 31 ③): the first three, then the way to all of them. */
+describe('the words of the home’s principles', () => {
+  it('says the way to the rest with their number, and a principle’s day as month/day', () => {
+    expect(wikiAllPrinciples(6)).toBe('All 6 ›');
+    expect(wikiShortDay('2026-09-06T12:00:00.000Z')).toBe('9/6');
+    expect(wikiShortDay('2026-10-19T12:00:00.000Z')).toBe('10/19');
+    expect(wikiShortDay('not a day')).toBeNull();
   });
 });
 

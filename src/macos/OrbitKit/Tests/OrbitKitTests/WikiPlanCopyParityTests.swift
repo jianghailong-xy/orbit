@@ -45,7 +45,7 @@ final class WikiPlanCopyParityTests: XCTestCase {
     }
 
     private static let page = "src/web/src/components/WikiPlanPage.tsx"
-    private static let home = "src/web/src/components/WikiHome.tsx"
+    private static let activity = "src/web/src/components/WikiActivityPage.tsx"
     private static let app = "src/macos/OrbitApp/Sources/OrbitApp/"
 
     /// A native page's source without its comment lines, whitespace kept.
@@ -828,17 +828,21 @@ final class WikiPlanCopyParityTests: XCTestCase {
         assertSays(nativeEdit, "WikiPlanLogic.docEdit(stored, form: form)", in: "WikiPlanView.swift")
     }
 
-    /// The home's plan banner, the second under Review's at both ends — and its changes only on the plan page.
+    /// The plan's banners, second under Review's at both ends — on Activity now (design §12.3.2), the
+    /// desktop's Review and Plan cards after them — and the plan's changes handled only on the plan page.
     func testThePlanBannerIsTheHomesSecond() throws {
-        let home = try web(Self.home)
-        assertOrder(home, ["{wikiProposalsToReview(pending.length)}", "<WikiPlanBanner space={space} />", "<div className=\"wk-cols\">",
-                           "<WikiPlanCard space={space} />", "<ReviewCard"], "the web home")
-        let view = try native("Views/WikiView.swift")
-        let band = try slice(view, from: "case .reviewBanner:", to: "case .principles:")
-        assertOrder(band, ["reviewBanner", "WikiPlanBannerRow(banner: planBanner) { actions.openPlan(planBanner.to) }"], "the native home's banners")
-        let screens = try native("Views/WikiScreens.swift")
-        assertSays(screens, "openPlan: { to in open(to == .settings ? .wikiSettings : .wikiPlan(version: nil)) })", in: "WikiScreens.swift")
-        assertSays(screens, "planBanner: planBanner(wiki, now: context.date))", in: "WikiScreens.swift")
+        let activity = try web(Self.activity)
+        assertOrder(activity, ["<Link className=\"wk-banner\" to={WIKI_REVIEW_PATH}", "<WikiPlanBanners space={space} />",
+                               "<div className=\"wk-act-cards\">", "<ReviewCard space={space}", "<WikiPlanCard space={space} />"],
+                    "the web's Activity")
+        XCTAssertEqual(Array(WikiLogic.ActivityBand.allCases.prefix(4)), [.status, .reviewBanner, .planBanners, .otherPlanBanners],
+                       "the native Activity's banners: Review's, then the plan's")
+        let view = try native("Views/WikiActivityView.swift")
+        let page = try slice(view, from: "struct WikiActivityPage: View {", to: "private struct WikiActivityBannerRow: View {")
+        assertOrder(page, ["case .reviewBanner, .planBanners, .otherPlanBanners:", "ForEach(banners.filter { $0.band == band }) { banner in",
+                           "WikiActivityBannerRow(banner: banner) { actions.openBanner(banner) }"], "the native Activity's banners")
+        assertSays(view, "if case .settings = to { model.push(.wikiSettings) } else { model.push(.wikiPlan(version: nil)) }",
+                   in: "WikiActivityView.swift")
     }
 
     /// Accept: with no other draft waiting, accept and then confirm the draft it made — two requests, the

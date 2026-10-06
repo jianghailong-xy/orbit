@@ -18,7 +18,7 @@ import { clearToasts } from '../lib/toastStore';
  * reasons or the runner offline (never the daily limit), failed, the documents being written, held or
  * stopped — Draft plan, Confirm plan, Accept (with no other draft waiting, accept then confirm: two
  * requests, none confirmed when the gate refuses; with one waiting, accept only), Reject, an edit in the
- * draft's shape, and the home's card and banner.
+ * draft's shape, and Activity's card and banner (the home's until it became the space's content, design §12.3).
  *
  * The states are the shared fixture's (`wiki-docs.fixture.json`), which OrbitKit is held to as well.
  */
@@ -200,6 +200,7 @@ async function open(path: string): Promise<void> {
           <AntApp>
             <Routes>
               <Route path="/wiki/:space" element={<WikiPage route="home" />} />
+              <Route path="/wiki/:space/activity" element={<WikiPage route="activity" />} />
               <Route path="/wiki/:space/plan" element={<WikiPage route="plan" />} />
               <Route path="/wiki/:space/plan/d/:doc" element={<WikiPage route="planDoc" />} />
               <Route path="/wiki/:space/plan/d/:doc/:section" element={<WikiPage route="planSection" />} />
@@ -381,11 +382,11 @@ describe('confirming, and the changes proposed', () => {
   });
 });
 
-describe('the plan on the home', () => {
+describe('the plan on Activity', () => {
   it('is the phone’s second banner, under Review’s', async () => {
     phone = true;
     plan = stateOf('changes');
-    await open('/wiki/orbit');
+    await open('/wiki/orbit/activity');
     await vi.waitFor(() => expect(container.querySelector('.wk-plan-banner')).toBeTruthy());
     const banners = [...container.querySelectorAll('.wk-banner')];
     expect(banners).toHaveLength(2);
@@ -395,19 +396,19 @@ describe('the plan on the home', () => {
     expect(where()).toBe('/wiki/orbit/plan');
   });
 
-  it('tops the desktop’s right rail as a card, over Review', async () => {
+  it('is a card among the desktop’s, with Review', async () => {
     plan = stateOf('changes');
-    await open('/wiki/orbit');
+    await open('/wiki/orbit/activity');
     await vi.waitFor(() => expect(container.querySelector('.wk-plan-card')).toBeTruthy());
-    const rail = container.querySelectorAll('.wk-col')[1];
-    expect(rail.firstElementChild?.classList.contains('wk-plan-card')).toBe(true);
-    expect(text('.wk-plan-card .wk-review-sub', rail)).toEqual(['2 changes to review · v1 in force']);
+    const cards = container.querySelector('.wk-act-cards')!;
+    expect(cards.querySelector('.wk-review-card')).toBeTruthy();
+    expect(text('.wk-plan-card .wk-review-sub', cards)).toEqual(['2 changes to review · v1 in force']);
   });
 
   it('says a held draft sends the owner to Maintenance', async () => {
     phone = true;
     plan = stateOf('noneHeld');
-    await open('/wiki/orbit');
+    await open('/wiki/orbit/activity');
     await vi.waitFor(() => expect(container.querySelector('.wk-plan-banner')).toBeTruthy());
     expect(text('.wk-plan-banner .t')).toEqual(['Plan draft held — set up maintenance']);
     await press(container.querySelector('.wk-plan-banner'));

@@ -11,7 +11,7 @@ import { WikiDocRoute } from '../components/WikiDocPage';
 import { WikiCard, WikiEmpty } from '../components/WikiCards';
 import { WikiContentsButton, WikiContentsProvider, WikiDirectory, type WikiDirectoryAt } from '../components/WikiDirectory';
 import { WikiEntryDrawer } from '../components/WikiEntryDrawer';
-import { WikiHome } from '../components/WikiHome';
+import { WikiHome, WikiHomeState } from '../components/WikiHome';
 import { WikiIndexPage } from '../components/WikiIndexPage';
 import { WikiMaintenanceStatus } from '../components/WikiMaintenanceStatus';
 import { WikiNewEntryButton } from '../components/WikiNewEntry';
@@ -22,7 +22,7 @@ import { WikiSettingsButton } from '../components/WikiSettingsButton';
 import { WikiSettingsPage } from '../components/WikiSettingsPage';
 import { openSessionSearch } from '../components/SessionSearch';
 import { wikiLinkHost } from '../components/WikiSources';
-import { wikiEntriesQuery, wikiEntryQuery, wikiHealthQuery, wikiSpaceQuery, wikiSpacesQuery } from '../lib/queries';
+import { wikiEntriesQuery, wikiEntryQuery, wikiHealthQuery, wikiSpacesQuery } from '../lib/queries';
 import { routeId } from '../lib/idCodec';
 import {
   WIKI_DISABLED_NOTE,
@@ -116,11 +116,9 @@ export function WikiPage({ route }: { route: WikiRoute }) {
     );
   }
   if (!resolved) {
-    return (
-      <WikiFrame space={null}>
-        <WikiEmpty>{WIKI_NO_SPACES}</WikiEmpty>
-      </WikiFrame>
-    );
+    // Still reading the list (a page opened by its address, before the drawer read it): nothing is known
+    // yet, so nothing is said — not that there is no space.
+    return <WikiFrame space={null}>{spaces.isPending ? null : <WikiEmpty>{WIKI_NO_SPACES}</WikiEmpty>}</WikiFrame>;
   }
 
   const space: SpaceRow = resolved;
@@ -194,7 +192,7 @@ export function WikiPage({ route }: { route: WikiRoute }) {
   }
   return (
     <WikiFrame space={space} at={{ view: 'home' }}>
-      <HomeBody spaceId={space.id} />
+      <WikiHome space={space} />
     </WikiFrame>
   );
 }
@@ -203,13 +201,6 @@ export function WikiPage({ route }: { route: WikiRoute }) {
 function wikiPartParam(raw: string | undefined): number {
   const part = Number(raw ?? 0);
   return Number.isInteger(part) && part > 0 ? part : 0;
-}
-
-/** The home page's body: the space document with its usage window, and the two columns under it. */
-function HomeBody({ spaceId }: { spaceId: string }) {
-  const space = useQuery(wikiSpaceQuery(spaceId));
-  if (!space.data) return <WikiEmpty>{WIKI_NO_SPACES}</WikiEmpty>;
-  return <WikiHome space={space.data} />;
 }
 
 /**
@@ -253,7 +244,7 @@ function EntryRoute({ space, entryParam }: { space: SpaceRow; entryParam: string
             </WikiFrame>
           ) : (
             <WikiFrame space={space} at={{ view: 'home' }}>
-              <HomeBody spaceId={space.id} />
+              <WikiHome space={space} />
             </WikiFrame>
           )}
         </div>
@@ -276,7 +267,7 @@ function RunRoute({ space, runParam }: { space: SpaceRow; runParam: string }) {
     <div className="wk-with-drawer">
       <div className="wk-drawer-bg" aria-hidden="true">
         <WikiFrame space={space} at={{ view: 'home' }}>
-          <HomeBody spaceId={space.id} />
+          <WikiHome space={space} />
         </WikiFrame>
       </div>
       <button type="button" className="wk-scrim" aria-label="Close" onClick={() => navigate(back)} />
@@ -290,15 +281,18 @@ function RunRoute({ space, runParam }: { space: SpaceRow; runParam: string }) {
  * the search line and the status row. It is the project page's own title row and toolbar, which is
  * what the design's mock links and draws — the counts are the page's counts, not a new row of numbers.
  *
+ * THE HOME HAS NO STATUS ROW (design §12.3.1): the line under its head says what the space holds
+ * (`WikiHomeState`, mocks 30 ③ and 33 ①), and how the space is kept is Activity's.
+ *
  * THE DIRECTORY STANDS BESIDE EVERY READING VIEW (`at`: the home, a topic's article, Browse, the
  * index — mocks 11, 13, 15): a column on a desktop, and on anything narrower the Contents drawer the
  * head's list button opens. On a phone a reading view other than the home also drops the head — its
- * crumb row carries the list button instead (mock 14 ①) — and the home's status row comes before
- * the search (mock 12 ①). Review and the settings are not reading views and keep the frame as it was.
+ * crumb row carries the list button instead (mock 14 ①). Review and the settings are not reading
+ * views and keep the frame as it was.
  *
- * ACTIVITY (design §12.3.2) stands beside the directory too, with none of its rows lit, and takes the
- * status row under its own title (mock 33 ②); a phone draws it under its own head instead of this one
- * (mock 31 ②), as Review's mock does (09).
+ * ACTIVITY (design §12.3.2) stands beside the directory too, with none of its rows lit, under the home's
+ * head and its line, and takes the status row under its own title (mock 33 ④ ⑤); a phone draws it
+ * under its own head instead of this one (mock 31 ②), as Review's mock does (09).
  */
 function WikiFrame({
   space,
@@ -312,9 +306,10 @@ function WikiFrame({
   const spaces = useQuery(wikiSpacesQuery());
   const rows = spaces.data ?? (space ? [space] : []);
   const activity = at?.view === 'activity';
+  const home = at?.view === 'home';
 
   const page = (
-    <div className={`wk-page${at && at.view !== 'home' && !activity ? ' wk-page--reading' : ''}${activity ? ' wk-page--activity' : ''}`}>
+    <div className={`wk-page${at && !home && !activity ? ' wk-page--reading' : ''}${activity ? ' wk-page--activity' : ''}`}>
       <div className="wk-title-row">
         <h1 className="page-title">{WIKI_TITLE}</h1>
         {space && <WikiHeadSpace space={space} spaces={rows} />}
@@ -325,6 +320,8 @@ function WikiFrame({
           {space && <WikiNewEntryButton spaceId={space.id} />}
         </div>
       </div>
+
+      {space && (home || activity) && <WikiHomeState spaceId={space.id} />}
 
       {space && (
         <div className="wk-search" role="search">
@@ -337,10 +334,10 @@ function WikiFrame({
         </div>
       )}
 
-      {!activity && <WikiStatusRow space={space} />}
+      {!home && !activity && <WikiStatusRow space={space} />}
 
       {space && at ? (
-        <div className={`wk-layout${at.view === 'home' ? ' home' : ''}`}>
+        <div className={`wk-layout${home ? ' home' : ''}`}>
           <div className="wk-dir-col">
             <WikiDirectory spaceId={space.id} spaceSlug={space.slug} at={at} />
           </div>
