@@ -8,7 +8,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -407,10 +406,7 @@ func TestAntigravityGoogleLoginReplayCancel(t *testing.T) {
 }
 
 func TestAntigravityGoogleContractSignedOut(t *testing.T) {
-	path, err := exec.LookPath(agyExecutable)
-	if err != nil {
-		t.Fatal("real agy is required for the Linux Google contract tests:", err)
-	}
+	path := requireRealAgy(t)
 	t.Setenv("ORBIT_HOME", t.TempDir())
 	t.Setenv("GEMINI_API_KEY", "")
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -424,10 +420,7 @@ func TestAntigravityGoogleContractSignedOut(t *testing.T) {
 }
 
 func TestAntigravityGoogleContractAuthorizationLinkThenCancel(t *testing.T) {
-	path, err := exec.LookPath(agyExecutable)
-	if err != nil {
-		t.Fatal("real agy is required for the Linux Google contract tests:", err)
-	}
+	path := requireRealAgy(t)
 	t.Setenv("ORBIT_HOME", t.TempDir())
 	previous := lookLoginEngine
 	lookLoginEngine = func(engine string) (string, bool) { return path, engine == providerAntigravity }
