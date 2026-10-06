@@ -13,22 +13,24 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 STUDIES = {
     'dev-check': 'development pass before the baseline: sample 0 of every combination, burst and paced',
-    'baseline-menu': 'unchanged tree, menu sequences: 20 burst + 20 paced samples per target and sequence',
+    'baseline-menu': 'baseline tree, menu sequences: 20 burst + 20 paced samples per target and sequence',
     # One select run was killed by a runner drain before writing any report (checks/baseline-select-killed.*);
     # the select sequences were then run in five chunks.
-    'baseline-select-a': 'unchanged tree, select-down, select-down-enter, select-down-enter-from-7: 20 burst + 20 paced each',
-    'baseline-select-b': 'unchanged tree, select-down-home-enter, select-down-end-enter: 20 burst + 20 paced each',
-    'baseline-select-c': 'unchanged tree, select-down-pageup-enter, select-down-pagedown-enter: 20 burst + 20 paced each',
-    'baseline-select-d': 'unchanged tree, select-down-space, select-down-space-from-null, select-space-down-enter: 20 burst + 20 paced each',
-    'baseline-select-e': 'unchanged tree, select-enter-down-enter, select-down-7-enter, select-down-n-enter: 20 burst + 20 paced each',
-    'baseline-rerun': 'unchanged tree, the baseline samples whose page never mounted (environmental), run again',
+    'baseline-select-a': 'baseline tree, select-down, select-down-enter, select-down-enter-from-7: 20 burst + 20 paced each',
+    'baseline-select-b': 'baseline tree, select-down-home-enter, select-down-end-enter: 20 burst + 20 paced each',
+    'baseline-select-c': 'baseline tree, select-down-pageup-enter, select-down-pagedown-enter: 20 burst + 20 paced each',
+    'baseline-select-d': 'baseline tree, select-down-space, select-down-space-from-null, select-space-down-enter: 20 burst + 20 paced each',
+    'baseline-select-e': 'baseline tree, select-enter-down-enter, select-down-7-enter, select-down-n-enter: 20 burst + 20 paced each',
+    'baseline-rerun': 'baseline tree, the baseline samples whose page never mounted (environmental), run again',
     # Taken on the delivered tree (the branch after merging the project tip with P3.1): Menu, Select, Floating,
     # Base UI, AntD, the lockfile and the choices fixture and config are byte-identical to the tree above.
     'baseline-menu-up': 'delivered tree, menu-up-enter, menu-up-up-enter, menu-up-down-enter: 20 burst + 20 paced per target and sequence',
+    'baseline-menu-up-rerun': 'delivered tree, the baseline-menu-up sample whose page never mounted (environmental), run again',
 }
 # The judged data set: the studies taken together (a rerun replaces nothing; it only adds samples).
 DATASETS = {'baseline': ['baseline-menu', 'baseline-select-a', 'baseline-select-b', 'baseline-select-c',
-                         'baseline-select-d', 'baseline-select-e', 'baseline-rerun', 'baseline-menu-up']}
+                         'baseline-select-d', 'baseline-select-e', 'baseline-rerun', 'baseline-menu-up',
+                         'baseline-menu-up-rerun']}
 ANTD = {'menu': 'antd-menu', 'select': 'antd-sample'}
 ORBIT = {'menu': ['orbit-menu', 'orbit-menu-sample'], 'select': ['orbit-field', 'orbit-sample']}
 CONTROLS = {'menu-enter', 'select-down', 'select-down-enter', 'select-down-enter-from-7'}
@@ -154,12 +156,13 @@ def select_keys_burst(study):
     return rows
 
 
-if (HERE / 'regression-select-keys-burst' / 'summary.json').exists():
-    stats = json.loads((HERE / 'regression-select-keys-burst' / 'summary.json').read_text())['stats']
-    report['regression-select-keys-burst'] = {
-        'scope': 'this tree, the unchanged ../p2-select-keys/select-keys-burst.browser.mjs (20 burst + 3 paced per combination)',
-        'playwright': {k: stats[k] for k in ['expected', 'unexpected', 'skipped', 'flaky']},
-        'targets': select_keys_burst('regression-select-keys-burst'), 'sequences': {}}
+for study, tree in {'regression-select-keys-burst': 'baseline tree', 'regression-select-keys-burst-delivered': 'delivered tree'}.items():
+    if (HERE / study / 'summary.json').exists():
+        stats = json.loads((HERE / study / 'summary.json').read_text())['stats']
+        report[study] = {
+            'scope': f'{tree}, the unchanged ../p2-select-keys/select-keys-burst.browser.mjs (20 burst + 3 paced per combination)',
+            'playwright': {k: stats[k] for k in ['expected', 'unexpected', 'skipped', 'flaky']},
+            'targets': select_keys_burst(study), 'sequences': {}}
 (HERE / 'keyboard-window-summary.json').write_text(json.dumps(report, indent=1, ensure_ascii=False) + '\n')
 for study, entry in report.items():
     print(study, entry['playwright'])
