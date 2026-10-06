@@ -181,19 +181,18 @@ test('@PatSelf: every token reaches the route whatever it holds and wherever it 
   assert.deepEqual([closed.body.code, closed.body.reason], ['PAT_FORBIDDEN', 'ADMIN']);
 });
 
-test('@PatSelf goes through the request audit as every route does: GET /pat/self, a read, is not recorded, and a write @PatSelf let through would be pat.request', async () => {
+test('@PatSelf goes through the request audit as every route does: GET /pat/self, a read, is not recorded, and DELETE /pat/self, a write, is pat.request', async () => {
   const records: unknown[] = [];
   const prisma = { activity: { create: async ({ data }: { data: unknown }) => void records.push(data) } };
   const audited = new JwtAuthGuard(jwt, new Reflector(), pats, new PatRequestAudit(prisma as unknown as PrismaService));
-  // A real node:http server, so the audit sees each answer go out: GET reaches the real handler, and
-  // any other method a stand-in @PatSelf handler, as a DELETE /pat/self added later would.
+  // A real node:http server, so the audit sees each answer go out: GET reaches the real reading
+  // handler, and DELETE the real revoking one.
   const server = http.createServer(async (req, res) => {
-    const controller: new (...args: never[]) => { self: Function } = req.method === 'GET' ? PatSelfController : Routes;
     const routed = Object.assign(req, { route: { path: '/api/pat/self' }, params: {} });
     const context = {
       switchToHttp: () => ({ getRequest: () => routed, getResponse: () => res }),
-      getHandler: () => controller.prototype.self,
-      getClass: () => controller,
+      getHandler: () => (req.method === 'GET' ? PatSelfController.prototype.self : PatSelfController.prototype.revokeSelf),
+      getClass: () => PatSelfController,
     } as unknown as ExecutionContext;
     res.statusCode = await audited.canActivate(context).then(() => 200, (error) => (error instanceof HttpException ? error.getStatus() : 500));
     res.end();
@@ -222,9 +221,11 @@ test('@PatSelf goes through the request audit as every route does: GET /pat/self
   }
 });
 
-test('the real routes: GET /pat/self takes any token; issuing, listing and revoking tokens, and an administrator\'s token routes, refuse every token', async () => {
+test('the real routes: GET and DELETE /pat/self take any token; issuing, listing and revoking tokens, and an administrator\'s token routes, refuse every token', async () => {
   for (const scopes of [['wiki:read'], PAT_SCOPES]) {
-    assert.equal((await present(tokenWith(scopes), PatSelfController, 'self')).status, 200, scopes.join(' '));
+    for (const handler of ['self', 'revokeSelf']) {
+      assert.equal((await present(tokenWith(scopes), PatSelfController, handler)).status, 200, `${handler} ${scopes.join(' ')}`);
+    }
   }
   const everything = tokenWith(PAT_SCOPES);
   const refused: Array<[new (...args: never[]) => unknown, string, PatForbiddenReason]> = [
@@ -285,6 +286,7 @@ test('a login JWT is let through every one of these routes as before — credent
     [TasksController, 'create'],
     [AccessTokensController, 'issue'],
     [PatSelfController, 'self'],
+    [PatSelfController, 'revokeSelf'],
     [TaskOwnerConfirmationController, 'decide'],
     [AdminController, 'listUsers'],
   ];
