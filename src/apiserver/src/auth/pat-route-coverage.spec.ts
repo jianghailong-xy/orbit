@@ -19,6 +19,7 @@ import { PublicIdPipe } from '../common/public-id';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { OWNER_INTERACTIVE_ROUTES } from './pat-owner-channel-routes';
 import {
+  PAT_FORBIDDEN,
   PAT_FORBIDDEN_REASONS,
   PAT_SCOPE,
   PAT_SELF,
@@ -151,6 +152,12 @@ const NEVER_GRANTABLE: ReadonlyArray<{
   { rule: "rotating a runner's token", reason: 'RUNNER_CREDENTIALS', matches: (p) => p === '/runners/:id/rotate-token' },
   { rule: 'share links', reason: 'SHARE_LINK', matches: (p) => /\/share(-links)?(\/|$)/.test(p) },
 ];
+
+// The controllers under auth/ are refused to tokens whole, on the class (docs/google-sign-in-design.md
+// §4.4): most of their routes are public and so outside the rows above, and a route behind
+// JwtAuthGuard added to one later — Google's link and unlink — is refused without its author
+// repeating it. Exact both ways, so a new controller there is a decision made here.
+const AUTH_CONTROLLERS = ['AuthController', 'GoogleAuthController'];
 
 // ── §6.5: the token reading itself ──────────────────────────────────────────────────────────────
 // The one route every token reaches whatever it holds. Exact both ways, and read off the metadata
@@ -289,6 +296,15 @@ test('§4: auth/*, admin/*, the token routes, admitting a runner, rotating its t
       .map((r) => `${r.route} (${r.at}) declares ${describe(r.declared)}`);
     assert.deepEqual(wrong, [], `${rule} must be @PatForbidden('${reason}')`);
   }
+});
+
+test("§4: every controller under auth/ is @PatForbidden('AUTH') on the class, public routes and all", async () => {
+  const { controllers } = await census;
+  const underAuth = [...controllers].filter((c) =>
+    ([Reflect.getMetadata(PATH_METADATA, c) ?? ''].flat() as string[]).some((p) => /^\/auth(\/|$)/.test(join(p))));
+  assert.deepEqual(underAuth.map((c) => c.name).sort(), [...AUTH_CONTROLLERS].sort(), 'the controllers under auth/');
+  const wrong = underAuth.filter((c) => Reflect.getMetadata(PAT_FORBIDDEN, c) !== 'AUTH').map((c) => c.name);
+  assert.deepEqual(wrong, [], "must be @PatForbidden('AUTH') on the class");
 });
 
 test('§6.5: @PatSelf opens exactly one route to every token — GET /pat/self, the token reading itself', async () => {

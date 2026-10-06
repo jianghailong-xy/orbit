@@ -2,12 +2,16 @@ import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { JwtModule, type JwtSignOptions } from '@nestjs/jwt';
+import { AdminRoleGuard } from '../users/admin-role.guard';
 import { AccessTokensController, PatSelfController } from './access-tokens.controller';
+import { AdminSignInController } from './admin-sign-in.controller';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { GoogleAuthController } from './google-auth.controller';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { PatRefusalInterceptor, PatRequestAudit } from './pat-request-audit';
 import { PatService } from './pat.service';
+import { SignInProvidersService } from './sign-in-providers.service';
 
 @Global()
 @Module({
@@ -31,12 +35,16 @@ import { PatService } from './pat.service';
       },
     }),
   ],
-  controllers: [AuthController, AccessTokensController, PatSelfController],
+  controllers: [AuthController, AccessTokensController, PatSelfController, GoogleAuthController, AdminSignInController],
   providers: [
     AuthService,
     JwtAuthGuard,
     PatService,
     PatRequestAudit,
+    SignInProvidersService,
+    // For AdminSignInController's @UseGuards; it depends only on the global PrismaService, and
+    // UsersModule does not export it (ProvidersModule provides its own the same way).
+    AdminRoleGuard,
     // Global, as every APP_INTERCEPTOR is: a field only the owner sets is refused past JwtAuthGuard,
     // and the request audit records that refusal as it records the guard's.
     { provide: APP_INTERCEPTOR, useClass: PatRefusalInterceptor },

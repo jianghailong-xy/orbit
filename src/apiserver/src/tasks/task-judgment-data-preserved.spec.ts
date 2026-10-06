@@ -1928,7 +1928,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // index, constraint, enum, type, function or trigger is created, replaced or dropped; no
       // task, project, acceptance or DONE fence object is named; no INSERT, UPDATE or DELETE —
       // every runner reads NULL, "not reported" and "nobody asked", until its next heartbeat.
-      '0385_runner_self_update'],
+      '0385_runner_self_update',
+      // Sign-in providers (0387): one new table, sign_in_provider, with its primary key and two
+      // CHECKs of its own, and no other index, foreign key, function or trigger. No existing table,
+      // column, constraint, function, trigger or type is altered or dropped; no task, project,
+      // acceptance or DONE fence object is named, and no row is written. (0386 is spelled by a
+      // branch not yet landed.)
+      '0387_sign_in_provider'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

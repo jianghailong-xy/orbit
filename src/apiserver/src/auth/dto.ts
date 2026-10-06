@@ -1,3 +1,4 @@
+import { Transform } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
@@ -10,6 +11,10 @@ import {
 } from 'class-validator';
 import { IsPublicId } from '../common/public-id';
 import { PAT_EXPIRY_CHOICES } from './pat.service';
+import { SIGNUP_POLICIES, type SignupPolicy } from './sign-in-providers.service';
+
+// A pasted client ID or secret often carries a stray space or newline; it is judged without them.
+const trimmed = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 
 export class LoginDto {
   @IsEmail()
@@ -74,4 +79,25 @@ export class BootstrapDto {
   @IsString()
   @MinLength(6)
   password!: string;
+}
+
+/** `PUT /admin/sign-in/google` (docs/google-sign-in-design.md §6, §7.1): the whole setting. */
+export class UpdateGoogleSignInDto {
+  @IsBoolean()
+  enabled!: boolean;
+
+  /** Empty saves none, and Google sign-in stays off until there is one. */
+  @Transform(trimmed)
+  @IsString()
+  clientId!: string;
+
+  /** Omit to keep the saved secret; provide to replace it. It is never read back. */
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MinLength(1)
+  clientSecret?: string;
+
+  @IsIn(SIGNUP_POLICIES)
+  signupPolicy!: SignupPolicy;
 }
