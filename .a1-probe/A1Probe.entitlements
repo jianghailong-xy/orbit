@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- An unsigned simulator build's Keychain refuses every write; the sign-in keeps its session there. -->
+	<key>keychain-access-groups</key>
+	<array>
+		<string>io.orbitd.a1probe</string>
+	</array>
+</dict>
+</plist>
