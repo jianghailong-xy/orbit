@@ -99,8 +99,10 @@ import {
 import { TaskListPauseProjectorService } from '../task-lists/task-list-pause-projector.service';
 import type { HandoffApproval } from '../projects/project-scope-decision';
 import {
+  decideHandoffAcceptance,
   dependencyCrossingRefusal,
   handoffPayloadDigest,
+  type HandoffProjectFacts,
   type HandoffRequestIdentity,
 } from '../projects/project-handoff';
 import {
@@ -347,6 +349,12 @@ type ScopeWriteInput = {
    * and by nothing else — a write that declares no crossing never reaches them.
    */
   approval?: HandoffApproval | null;
+  /**
+   * A move request: whether the task serves one of the criteria of the project it would leave, as
+   * read from its row (`ProjectHandoffService.servesCriterionOf`). Read by R8 for a move out of a
+   * settled project, and by nothing else.
+   */
+  servesSourceCriterion?: boolean;
 };
 
 /** Unit L4: what a write that was allowed under an approval must spend inside its transaction. */
@@ -5382,6 +5390,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // What catches an approval that moved is the spend itself: one compare-and-set inside the
       // transaction that writes the task, which fails and takes the task with it.
       approval: write.approval ?? null,
+      servesSourceCriterion: write.servesSourceCriterion,
     };
   }
 
@@ -5925,7 +5934,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    *   1. the request is the move and nothing else. Another field would be a second edit riding on a
    *      question, applied or not by an answer that was never about it (400);
    *   2. §4 against no answer, as for a declared filing: R2/R3/R5, R6 for a session that holds
-   *      neither end, R8 for a settled end. Only R10 goes on;
+   *      neither end, R8 for a settled end — except a settled source giving up a task none of its
+   *      criteria count, and R8B for one that serves one of them. Only R10 goes on;
    *   3. a criterion it names is one the TARGET states (400);
    *   4. a question already waiting for this move answers it, whoever asked; an earlier answer to
    *      this same request is decided on (R12, R13), and a yes to it moves nothing here — applying a
@@ -5977,6 +5987,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       requestedProjectId: to,
       currentProjectId: from,
       scopeToken: dto.scopeToken,
+      // What a settled source asks of the task before it lets it go (R8/R8B), read from its row
+      // here and again under the locks the question is filed and confirmed under.
+      servesSourceCriterion: await this.handoffs.servesCriterionOf(
+        this.prisma, ownerId, task.id, from,
+      ),
     };
     const world = await this.projectScopeWorld(this.prisma, ownerId, sessionId, [write]);
     const refusal = (admission: ScopeAdmission, row: HandoffAnswer['row'] | null) =>
@@ -6134,7 +6149,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    *
    * Under those locks everything that made the move legal when it was asked is asked again, because
    * the answer can come days later: the task is still in the project the request moves it out of,
-   * both projects are open, its landing is not queued or running, the criterion the request names is
+   * the target is open and the source either open or giving up a task none of its criteria count
+   * (HP1, `decideHandoffAcceptance`, the rule R8 held the request to), its landing is not queued or
+   * running, the criterion the request names is
    * still one the target states, and the move leaves no subtask, verification, parent, verified
    * subject or supersession link on the other side of the line. When any of that no longer holds the
    * confirmation is refused with its own code and NOTHING is written — not the yes either — so the
@@ -6220,16 +6237,27 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           + 'request moves it out of'
           + (task.projectId ? ` (it is in ${uuidToBase62(task.projectId)} now)` : ''));
       }
-      // §4 R8, as the request was held to it: a settled project neither gives nor takes work.
+      // §4 R8, as the request was held to it, asked of the answer (HP1): a settled project takes no
+      // work, and gives up only a task none of its criteria count. What the task serves is read
+      // under this transaction's lock on it, so a declaration made while the request waited counts.
       const ends = await tx.project.findMany({
         where: { id: { in: [from, to] }, ownerId },
         select: { id: true, status: true },
       });
-      const settled = [from, to].find((id) => ends.find((end) => end.id === id)?.status !== 'OPEN');
-      if (settled) {
-        throw refuse('PROJECT_REOPEN_REQUIRED', 'REOPEN_PROJECT_FIRST',
-          `project ${uuidToBase62(settled)} is not open, and a settled project neither gives nor `
-          + 'takes work until it is reopened');
+      // A project this read does not find is not open: fail closed, as R8 does.
+      const statusOf = (id: string): HandoffProjectFacts =>
+        ({ status: ends.find((end) => end.id === id)?.status ?? 'CANCELLED' });
+      const acceptance = decideHandoffAcceptance(statusOf(from), statusOf(to), {
+        servesSourceCriterion: await this.handoffs.servesCriterionOf(tx, ownerId, taskId, from),
+      });
+      if (acceptance.refusal) {
+        throw refuse(acceptance.refusal, 'REOPEN_PROJECT_FIRST',
+          acceptance.refusal === 'MOVE_TASK_SERVES_SETTLED_CRITERION'
+            ? `task ${uuidToBase62(taskId)} serves an acceptance criterion of project `
+              + `${uuidToBase62(from)}, which is settled, and a settled project gives up only work `
+              + 'none of its criteria count'
+            : `project ${uuidToBase62(to)} is not open, and a settled project takes no work until `
+              + 'it is reopened');
       }
       await this.handoffs.assertMoveNotLanding(tx, ownerId, taskId, {
         handoffId: row.id,
