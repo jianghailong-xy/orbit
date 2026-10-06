@@ -78,14 +78,20 @@ export const approvalRememberOffered = (runtime: string): boolean => runtime !==
 /** What went wrong in a Harness session, when the runner's message says so. */
 export type DshRepair = 'needsKey' | 'invalidKey' | 'updateRunner' | 'notInstalled' | 'unsupportedPlatform';
 
+/** dsh_health.go's dshKeyRejectedPattern; OrbitKit's `DshRuntime.keyRejectedPattern`. */
+export const DSH_KEY_REJECTED_PATTERN = /api key(?:: *\S+)? is invalid/;
+
 /**
  * Read a runner or server message about a Harness session for the remedy it implies. The fixed
- * `DSH_*` codes come from the runner (dsh_environment.go, dsh_install.go); the key-rejection
- * phrases are the same evidence the runner's own dshRequestValidation accepts as "invalid" —
- * anything vaguer (a rate limit, a 5xx) is not treated as a bad key.
+ * `DSH_*` codes come from the runner (dsh_environment.go, dsh_install.go, dsh_health.go); a
+ * `DSH_REQUEST_FAILED` lead is the runner's verdict from an upstream status, and wins over any
+ * wording. Without a code, the key-rejection phrases are the same evidence the runner's own
+ * dshRequestValidation accepts as "invalid" — anything vaguer (a rate limit, a 5xx, a dropped
+ * connection) is not treated as a bad key.
  */
 export function dshRepair(message: string | null | undefined): DshRepair | null {
   const text = message ?? '';
+  if (text.startsWith('DSH_REQUEST_FAILED')) return null;
   if (text.includes('DSH_CREDENTIAL_MISSING')) return 'needsKey';
   if (text.includes('DSH_CREDENTIAL_INVALID')) return 'invalidKey';
   if (text.startsWith('DeepSeek Harness requires a newer Orbit runner')) return 'updateRunner';
@@ -95,9 +101,11 @@ export function dshRepair(message: string | null | undefined): DshRepair | null 
   if (!lower.startsWith('dsh ')) return null;
   if (lower.includes('no api key') || lower.includes('missing api key')) return 'needsKey';
   if (
-    ['invalid api key', 'api key is invalid', 'authentication_error', 'unauthorized', 'status 401', 'status code 401', 'http 401', 'revoked api key', 'api key has been revoked', 'invalid credentials'].some(
+    ['invalid api key', 'api key is invalid', 'authentication_error', 'authentication fails', 'unauthorized', 'status 401', 'status code 401', 'http 401', 'revoked api key', 'api key has been revoked', 'invalid credentials'].some(
       (evidence) => lower.includes(evidence),
     )
+    // The real DeepSeek 401 puts the masked key in between: "Your api key: ****0000 is invalid".
+    || DSH_KEY_REJECTED_PATTERN.test(lower)
   ) {
     return 'invalidKey';
   }

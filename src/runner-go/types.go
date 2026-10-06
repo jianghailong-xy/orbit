@@ -1123,6 +1123,9 @@ type TurnCompleteRequest struct {
 	CostUsd       float64                `json:"costUsd"`
 	Usage         *TokenUsage            `json:"usage,omitempty"`
 	ModelUsage    map[string]interface{} `json:"modelUsage,omitempty"`
+	// UsageUnknown: the runtime measured no cost or tokens for this turn (DeepSeek Harness reports
+	// neither). costUsd is then left off the wire instead of claiming a measured $0.
+	UsageUnknown bool `json:"-"`
 	// Provider-neutral runtime session/thread id discovered during this turn.
 	RuntimeSessionID string `json:"runtimeSessionId,omitempty"`
 	// Worktree isolation, reported each turn so the web can show a LIVE status bar (branch +
@@ -1208,7 +1211,7 @@ type RunFinalizeRequest struct {
 	RuntimeSessionID string                 `json:"runtimeSessionId,omitempty"`
 	NumTurns         int                    `json:"numTurns"`
 	DurationMs       int                    `json:"durationMs"`
-	CostUsd          float64                `json:"costUsd"`
+	CostUsd          *float64               `json:"costUsd,omitempty"` // nothing measures it at finalize: omitted, never a 0
 	Usage            *TokenUsage            `json:"usage,omitempty"`
 	ModelUsage       map[string]interface{} `json:"modelUsage,omitempty"`
 	// Worktree isolation outcome (see worktree.go): the branch the work was committed to,

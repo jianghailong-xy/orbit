@@ -72,6 +72,32 @@ final class DshRuntimeTests: XCTestCase {
         XCTAssertFalse(DshRuntime.Repair.notInstalled.isKeyProblem)
     }
 
+    /// D2: the real DeepSeek 401 (P6) is a bad key; a rate limit, a 5xx or a dropped connection is not.
+    func testRepairReadsTheRealDeepSeekKeyRejection() {
+        let real = "dsh session/prompt (-32603): Internal error: turn failed: Authentication Fails, Your api key: ****0000 is invalid (request_id: 64d2f58d-15e2-4744-aafd-d463abb21741) "
+        XCTAssertEqual(DshRuntime.repair("DSH_CREDENTIAL_INVALID: " + real), .invalidKey)
+        XCTAssertEqual(DshRuntime.repair(real), .invalidKey)
+        XCTAssertEqual(DshRuntime.repair("dsh session/prompt (-32603): Internal error: turn failed: Your API key: sk-****abcd is invalid"),
+                       .invalidKey)
+        for message in [
+            "dsh session/prompt (-32603): Internal error: turn failed: Rate Limit Reached",
+            "dsh session/prompt (-32603): Internal error: turn failed: synthetic-429",
+            "dsh session/prompt (-32603): Internal error: turn failed: 503 Service Unavailable",
+            "dsh session/prompt (-32603): Internal error: turn failed: Insufficient Balance",
+            "dsh session/prompt (-32603): Internal error: turn failed: fetch failed: socket hang up (ECONNRESET)",
+            "dsh ACP transport closed: EOF",
+            "DSH_REQUEST_FAILED: dsh session/prompt (-32603): Internal error: turn failed: invalid api key? {\"error\":{\"statusCode\":503}}",
+        ] {
+            XCTAssertNil(DshRuntime.repair(message), message)
+        }
+    }
+
+    /// The pattern is the same text in web and the runner.
+    func testKeyRejectedPatternMatchesWebAndRunner() throws {
+        XCTAssertTrue(try source("src/web/src/lib/dshRuntime.ts").contains("/\(DshRuntime.keyRejectedPattern)/"))
+        XCTAssertTrue(try source("src/runner-go/dsh_health.go").contains("`\(DshRuntime.keyRejectedPattern)`"))
+    }
+
     func testHarnessKeysResolveToTheirRuntimeAndModelSpace() {
         let configured = [harness, deepseek]
         XCTAssertEqual(AgentDefaults.runtime(for: "deepseek-harness", configured: configured), "dsh")
