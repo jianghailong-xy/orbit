@@ -778,6 +778,8 @@ final class AppModel {
     /// system's web authentication sheet, then in the way `login` is — the session kept and read
     /// back, the server remembered, the account read. Closing the sheet is not a failure.
     func loginWithGoogle() async {
+        // A second press before the button has redrawn as disabled: one sheet at a time.
+        guard !busy, !googleBusy else { return }
         errorText = nil
         guard let url = ServerURL.normalize(instanceField) else {
             errorText = "Enter a valid instance URL"

@@ -125,6 +125,11 @@ final class GoogleSignInWiringTests: XCTestCase {
             XCTAssertTrue(google.contains(step), step)
         }
         XCTAssertTrue(google.contains("GoogleWebAuthentication(anchor: anchor)"))
+        // One sheet at a time, however fast the button is pressed again.
+        XCTAssertTrue(google.contains("guard !busy, !googleBusy else { return }"))
+        let guardAt = try XCTUnwrap(google.range(of: "guard !busy, !googleBusy"))
+        let busyAt = try XCTUnwrap(google.range(of: "googleBusy = true"))
+        XCTAssertLessThan(guardAt.lowerBound, busyAt.lowerBound)
     }
 
     /// macOS has to be told which window the sheet goes over (§8.2).
