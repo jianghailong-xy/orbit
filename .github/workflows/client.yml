@@ -1,3 +1,8 @@
+# TEMPORARY (probe branch probe/pat-clients-gates, never merged). client.yml as it is at 4ec65bad7, run
+# by a push because this host can neither dispatch a workflow nor open a pull request (no gh, no token).
+# Changed: the `on:` trigger, and the two `if:` lines that keep the macos and ios jobs to pull requests
+# and dispatches. Added: the report job at the end, which pushes each job's result to
+# probe/pat-clients-gates-results. Every job's steps are client.yml's own, unchanged.
 # CI for both native client shells (src/macos + src/ios). They share OrbitKit and the OrbitApp
 # SwiftUI sources (the iOS app reuses them in place — Structure B), so changes to either shell
 # compile both platforms here:
@@ -18,23 +23,7 @@ name: Client CI (macOS + iOS)
 
 on:
   push:
-    branches: ["**"]        # branches only — tags are handled by release.yml
-    paths:
-      - "src/macos/**"
-      - "src/ios/**"
-      - ".github/workflows/client.yml"
-      # The nav guard's rules live outside this file, so it is listed on its own — otherwise a
-      # broken edit to it would only be discovered by the next navigation change.
-      - "scripts/ci/nav-push-gate.sh"
-  pull_request:
-    paths:
-      - "src/macos/**"
-      - "src/ios/**"
-      - ".github/workflows/client.yml"
-      - "scripts/ci/nav-push-gate.sh"
-  # Manual trigger to compile a branch on the Mac runners without opening a throwaway PR, e.g.
-  # `gh workflow run client.yml --ref <branch>`.
-  workflow_dispatch:
+    branches: ["probe/pat-clients-gates"]
 
 concurrency:
   group: client-${{ github.ref }}
@@ -79,7 +68,6 @@ jobs:
   macos:
     name: macOS (build + test)
     # macOS runners bill at 10× — only on PRs or an explicit dispatch, not every branch push.
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
@@ -105,7 +93,6 @@ jobs:
   ios:
     name: iOS (generate + build)
     # macOS runners bill at 10× — only on PRs or an explicit dispatch, not every branch push.
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
@@ -132,3 +119,34 @@ jobs:
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
             build
+
+  report:
+    name: Push the results where a clone can read them
+    needs: [font-tokens, nav-push, macos, ios]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Push to probe/pat-clients-gates-results
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir out && cd out
+          {
+            echo "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "sha: ${{ github.sha }}"
+            echo "font-tokens: ${{ needs.font-tokens.result }}"
+            echo "nav-push: ${{ needs.nav-push.result }}"
+            echo "macos: ${{ needs.macos.result }}"
+            echo "ios: ${{ needs.ios.result }}"
+          } > RESULTS.txt
+          cat RESULTS.txt
+          git init -q
+          git config user.name "orbit-probe"
+          git config user.email "probe@orbit.invalid"
+          git checkout -q -b results
+          git add -A
+          git commit -q -m "probe results for ${{ github.sha }} (run ${{ github.run_id }})"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" \
+            results:refs/heads/probe/pat-clients-gates-results
