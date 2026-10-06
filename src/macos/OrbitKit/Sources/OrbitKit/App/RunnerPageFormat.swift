@@ -443,9 +443,11 @@ public enum RunnerPageFormat {
 
     // MARK: About This Runner
 
-    /// `0.1.197 · Latest`; a root runner that is behind installs the release itself when no turn is
-    /// running, so it says so (`0.1.194 · 0.1.197 installs when no turn is running`). One that can't
-    /// update itself is Needs Attention's to say, and here is just its version.
+    /// `0.1.197 · Latest`; a runner that is behind and installs the release itself says so
+    /// (`0.1.194 · 0.1.197 installs when no turn is running`), and so does one a staged rollout holds
+    /// back (`0.1.194 · 0.1.197 not rolled out to it yet`). One that can't update itself is Needs
+    /// Attention's to say, and here is just its version. A runner that reports where its updates stand
+    /// says which it is; an older one is judged by `runsAsRoot`, as before.
     public static func versionValue(_ runner: Runner, latest: String?) -> String? {
         guard let version = runner.version?.trimmingCharacters(in: .whitespacesAndNewlines), !version.isEmpty else {
             return nil
@@ -456,9 +458,30 @@ public enum RunnerPageFormat {
         if RunnerAttention.compareRunnerVersions(version, latest) >= 0 {
             return version + RunnerPageCopy.RUNNER_LINE_SEPARATOR + RunnerPageCopy.RUNNER_VERSION_LATEST
         }
-        guard runner.runsAsRoot == true else { return version }
-        return version + RunnerPageCopy.RUNNER_LINE_SEPARATOR + latest + " "
-            + RunnerPageCopy.RUNNER_VERSION_INSTALLS_WHEN_IDLE
+        let note: String?
+        switch runner.selfUpdate?.state {
+        case nil: note = runner.runsAsRoot == true ? RunnerPageCopy.RUNNER_VERSION_INSTALLS_WHEN_IDLE : nil
+        case "enabled"?, "waitingForIdle"?: note = RunnerPageCopy.RUNNER_VERSION_INSTALLS_WHEN_IDLE
+        case "heldByRollout"?: note = RunnerPageCopy.RUNNER_VERSION_NOT_ROLLED_OUT
+        default: note = nil
+        }
+        guard let note else { return version }
+        return version + RunnerPageCopy.RUNNER_LINE_SEPARATOR + latest + " " + note
+    }
+
+    /// `Sep 20, 4:00 PM · 0.1.189 → 0.1.190`: when the runner last updated itself, in the reader's time
+    /// zone, and between which versions. Nil for a runner that doesn't report its updates, and for one
+    /// that hasn't updated itself yet.
+    public static func lastUpdate(_ runner: Runner, timeZone: TimeZone = .current) -> String? {
+        guard let report = runner.selfUpdate else { return nil }
+        let versions: String?
+        if let from = report.lastUpdatedFrom, let to = report.lastUpdatedTo {
+            versions = RunnerPageCopy.runnerUpdatedFromTo(from: from, to: to)
+        } else {
+            versions = report.lastUpdatedTo
+        }
+        let parts = [report.lastUpdatedAt.flatMap { lastSeen($0, timeZone: timeZone) }, versions].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: RunnerPageCopy.RUNNER_LINE_SEPARATOR)
     }
 
     public static func runsAsValue(_ runner: Runner) -> String? {

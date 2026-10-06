@@ -21,6 +21,7 @@ import { RunnerDetailPage } from './pages/RunnerDetailPage';
 import { RunnersPage } from './pages/RunnersPage';
 import { ProjectDetailPage, ProjectsPage } from './pages/ProjectsPage';
 import { SharedLinksPage } from './pages/SharedLinksPage';
+import { AccessTokensPage } from './pages/AccessTokensPage';
 import { SharedLinkPage, SharedProjectTaskRoute } from './pages/SharedLinkPage';
 import { SharedSessionPage } from './pages/SharedSessionPage';
 import { TaskRoute } from './pages/TaskRoute';
@@ -151,6 +152,15 @@ export function App() {
               element={
                 <DocView>
                   <SharedLinksPage />
+                </DocView>
+              }
+            />
+            {/* The personal access tokens this account has issued: issue, list, revoke. */}
+            <Route
+              path="settings/access-tokens"
+              element={
+                <DocView>
+                  <AccessTokensPage />
                 </DocView>
               }
             />

@@ -175,18 +175,25 @@ final class ProjectsWiringTests: XCTestCase {
         let project = try slice(app, from: "private func openProjectSessions(_ projectID: String, inColumn: Bool) {",
                                 to: "\n    }\n")
         XCTAssertTrue(project.contains("$0.projectMembership?.role == .coordinator"), "over the coordinator's workspace")
-        XCTAssertTrue(project.contains("nav.path = [.sessionProject(address)]"), "a phone's whole stack")
+        XCTAssertTrue(project.contains("nav.path = [.sessionProject(address, asDestination: true)]"),
+                      "a phone's whole stack, the project's own page")
         XCTAssertTrue(project.contains("nav.enterProjectSessions(address)"), "the iPad's list column only")
     }
 
     /// The left edge opens the drawer exactly on a destination's own page — a section's root, a
-    /// project's sessions page — and is the system back-swipe on any page pushed over one. The strip
-    /// and the sessions page's toggle read the same fact, so they cannot disagree about the edge.
+    /// project's sessions page put up as the project's own — and is the system back-swipe on any page
+    /// pushed over one. The strip and the sessions page's toggle read the same fact, so they cannot
+    /// disagree about the edge. A sessions page a session list's row pushed is a plain page over that
+    /// list (owner, 2026-10-06): the system back button, and the swipe back to the list.
     func testTheLeftEdgeOpensTheDrawerOnADestinationsOwnPage() throws {
         let shell = code(try appSource("Views/CompactShell.swift"))
         XCTAssertTrue(shell.contains("if !drawerOpen && model.atDestinationRoot {"),
                       "the drawer-open strip is up on a destination's own page")
         let agents = try slice(shell, from: "case .agents:", to: "case .projects:")
+        XCTAssertTrue(agents.contains(
+            "case .sessionProject(let address, asDestination: false): SessionProjectPage(address: address)\n"
+            + "                        case .sessionProject(let address, asDestination: true): SessionProjectPage(address: address)\n"),
+                      "a list row's sessions page keeps the system back button and back-swipe")
         XCTAssertTrue(agents.contains(
             "SessionProjectPage(address: address)\n                            .background { SwipeBackGestureToggle(enabled: !model.atDestinationRoot) }"),
                       "and the system back-swipe is off on the sessions page while it is on top")
@@ -313,7 +320,7 @@ final class ProjectsWiringTests: XCTestCase {
         XCTAssertTrue(spend.contains("requestScroll(to: card.id)"))
 
         // Start… opens the same card, set by the default rule, saying nothing a coordinator said.
-        let sheet = try slice(view, from: "private struct OwnerStartProjectSheet: View {",
+        let sheet = try slice(view, from: "struct OwnerStartProjectSheet: View {",
                               to: "private struct MergeCheckEditor: View {")
         XCTAssertTrue(sheet.contains("StartProjectCard("))
         XCTAssertTrue(sheet.contains("askedAt: nil,"))

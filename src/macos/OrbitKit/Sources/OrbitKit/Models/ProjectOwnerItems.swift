@@ -510,6 +510,10 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
     public let commitsAhead: Int?
     public let filesChanged: Int?
     public let taskIds: [String]
+    /// The same tasks by title, in the server's order — what the project's sessions page and the
+    /// receipt name, because the owner is deciding about tasks and a count of them is not a name
+    /// (`@orbit/shared`'s `tasks`). Empty from a server older than the field.
+    public let tasks: [PromotionTask]
     public let checks: [IntegrationCheckResult]
     public let conflicts: [String]
     /// `MERGE_COMMIT` for a project branch, `FAST_FORWARD` for a single task's branch (M6).
@@ -556,7 +560,7 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
 
     public init(promotionId: String, state: PromotionState, sourceRef: String, sourceSha: String,
                 upstreamRef: String, commitsAhead: Int? = nil, filesChanged: Int? = nil,
-                taskIds: [String] = [], checks: [IntegrationCheckResult] = [],
+                taskIds: [String] = [], tasks: [PromotionTask] = [], checks: [IntegrationCheckResult] = [],
                 conflicts: [String] = [], landsAs: String? = "MERGE_COMMIT",
                 askedAt: String? = nil, recheckedAt: String? = nil, decidedAt: String? = nil,
                 merged: Merged? = nil, execution: Execution? = nil) {
@@ -568,6 +572,7 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
         self.commitsAhead = commitsAhead
         self.filesChanged = filesChanged
         self.taskIds = taskIds
+        self.tasks = tasks
         self.checks = checks
         self.conflicts = conflicts
         self.landsAs = landsAs
@@ -588,6 +593,7 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
         commitsAhead = try c.decodeIfPresent(Int.self, forKey: .commitsAhead)
         filesChanged = try c.decodeIfPresent(Int.self, forKey: .filesChanged)
         taskIds = try c.decodeIfPresent([String].self, forKey: .taskIds) ?? []
+        tasks = try c.decodeIfPresent([PromotionTask].self, forKey: .tasks) ?? []
         checks = try c.decodeIfPresent([IntegrationCheckResult].self, forKey: .checks) ?? []
         conflicts = try c.decodeIfPresent([String].self, forKey: .conflicts) ?? []
         landsAs = try c.decodeIfPresent(String.self, forKey: .landsAs)
@@ -596,6 +602,17 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
         execution = try c.decodeIfPresent(Execution.self, forKey: .execution)
         decidedAt = try c.decodeIfPresent(String.self, forKey: .decidedAt)
         merged = try c.decodeIfPresent(Merged.self, forKey: .merged)
+    }
+}
+
+/// One task a merge would carry, as the candidate names it.
+public struct PromotionTask: Codable, Equatable, Sendable {
+    public let taskId: String
+    public let title: String
+
+    public init(taskId: String, title: String) {
+        self.taskId = taskId
+        self.title = title
     }
 }
 

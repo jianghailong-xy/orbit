@@ -1,0 +1,140 @@
+[
+  {
+    "t": 41,
+    "opacity": 0.703507,
+    "progress": 0.20555555555555574,
+    "owner": false,
+    "delay": "0s"
+  },
+  {
+    "t": 62,
+    "opacity": 0.853498,
+    "progress": 0.3277777777777778,
+    "owner": false,
+    "delay": "0s"
+  },
+  {
+    "t": 104,
+    "opacity": 0.964288,
+    "progress": 0.5611111111111113,
+    "owner": true,
+    "delay": "-0.059s"
+  },
+  {
+    "t": 109,
+    "opacity": 0.96909,
+    "progress": 0.5888888888888891,
+    "owner": true,
+    "delay": "-0.059s"
+  },
+  {
+    "t": 143,
+    "opacity": 0.993623,
+    "progress": 0.7777777777777782,
+    "owner": true,
+    "delay": "-0.059s"
+  },
+  {
+    "t": 172,
+    "opacity": 0.999583,
+    "progress": 0.9388888888888889,
+    "owner": true,
+    "delay": "-0.059s"
+  },
+  {
+    "t": 189,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.059s"
+  },
+  {
+    "t": 193,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.059s"
+  },
+  {
+    "t": 208,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.059s"
+  },
+  {
+    "t": 222,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.059s"
+  },
+  {
+    "t": 238,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.059s"
+  },
+  {
+    "t": 254,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.059s"
+  },
+  {
+    "t": 270,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.059s"
+  },
+  {
+    "t": 286,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.059s"
+  },
+  {
+    "t": 302,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.059s"
+  },
+  {
+    "t": 318,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.059s"
+  },
+  {
+    "t": 334,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.059s"
+  },
+  {
+    "t": 350,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.059s"
+  },
+  {
+    "t": 366,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.059s"
+  },
+  {
+    "t": 382,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.059s"
+  },
+  {
+    "t": 398,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.059s"
+  },
+  {
+    "t": 414,
+    "opacity": 1,
+    "owner": true,
+    "delay": "-0.059s"
+  }
+]

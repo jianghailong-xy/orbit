@@ -46,6 +46,7 @@ import {
 } from '../common/transaction-retry';
 import { SingleFlight } from '../common/single-flight';
 import { modelRoutingEnabledSql } from '../common/model-routing-switch';
+import type { AuthCredential } from '../common/current-user.decorator';
 import {
   DEFAULT_AGENT_PROVIDER,
   agentProviderSeed,
@@ -273,6 +274,7 @@ import {
   verificationSubjectNeedsVerifierRefusal,
   type TaskCompletionCriterionValue,
 } from './task-completion-criterion';
+import { buildTaskExecutionPrompt } from './task-execution-prompt';
 import {
   MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS,
   normaliseTaskCriterionOverrideReason,
@@ -504,68 +506,7 @@ function boundRunTask(
   };
 }
 
-export function buildTaskExecutionPrompt(task: {
-  title: string;
-  description?: string | null;
-  acceptanceCriteria?: string | null;
-  acceptanceCommand?: string | null;
-  acceptanceExpectedExitCode?: number | null;
-  completionCriterion?: TaskCompletionCriterionValue | null;
-  isForeman?: boolean;
-  verifiesTaskId?: string | null;
-  list?: { instructions?: string | null } | null;
-}): string {
-  const systemRun = task.isForeman === true || task.verifiesTaskId != null;
-  const instructions = systemRun ? undefined : task.list?.instructions?.trim();
-  // What would PROVE this task done, handed to the run that has to argue it is. It used to be
-  // left out, which asked every run to answer "am I finished?" against criteria it had to go and
-  // fetch with `task_get` — so a run that did not fetch them answered against the description
-  // instead, and the description says what to DO and never what would settle it. Not suppressed
-  // for a foreman or a verifier the way the list's instructions are: those describe how the
-  // LIST's work is done and neither of those runs is doing it, whereas a task's own acceptance
-  // criteria are about that task whoever is running it.
-  const acceptance = task.acceptanceCriteria?.trim();
-  const executableAcceptance =
-    task.acceptanceCommand != null && task.acceptanceExpectedExitCode != null;
-  // OWNER_CONFIRMED is settled only by the account owner pressing Confirm done in the app, so a run
-  // of such a task has nothing to submit. Handed the evidence envelope like every other task, its
-  // runs did as told and filed evidence that criterion never reads — often for a task in no
-  // project, with no project_get criterion to copy.
-  const ownerConfirmed = task.completionCriterion === 'OWNER_CONFIRMED';
-  return (
-    `请开始执行任务「${task.title}」。\n\n` +
-    (task.description ? `任务描述：\n${task.description}\n\n` : '') +
-    (acceptance ? `验收标准（判定本任务是否完成的依据）：\n${acceptance}\n\n` : '') +
-    (instructions ? `作业指导（本任务列表通用）：\n${instructions}\n\n` : '') +
-    `请按以下步骤进行：\n` +
-    `1. 先用 task_get 查看该任务的完整信息与历史评论。\n` +
-    `2. 执行任务。\n` +
-    (executableAcceptance
-      ? `3. 完成本次回复后，系统会在本执行会话的工作区自动运行任务声明的唯一 EXECUTABLE 验收命令` +
-        `（期望退出码 ${task.acceptanceExpectedExitCode}），并把命令、原始输出和实际退出码写入` +
-        `任务评论；退出码相等则推导 DONE，否则推导 FAILED。不要自行写 status，也不要让` +
-        ` coordinator 审批这个机械结论。\n`
-      : ownerConfirmed
-        ? `3. 完成后，先用 task_request_confirmation（MCP；CLI 是 \`orbit task request-confirmation\`）`
-          + `声明本次运行已经做完，再在本会话里用一两句话说明做了什么，然后结束本轮。`
-          + `只有这条声明才会让账户所有者收到确认卡；不声明就不会有任何卡片——任务会一直停在 OPEN，`
-          + `只能由所有者在任务面板里确认。卡片要等本次运行真的停下来（队列空、没有在飞的后台作业、`
-          + `没有自己排的唤醒）那一轮结束时才交给所有者。本任务的完成判据是 OWNER_CONFIRMED：`
-          + `由账户所有者在 Orbit app 里确认（Confirm done）或退回（Send back…），任何 agent 会话`
-          + `（包括 coordinator）都无法代为确认；退回的理由会作为下一条消息进入本会话，收到后按理由继续，`
-          + `再次做完时要重新声明一次。不要调用 task_evidence_submit，也不要写 status。\n`
-        : `3. 完成后，用 task_evidence_submit 提交完成证据信封，四个字段缺一不可：claim（你主张完成了什么）、`
-          + `criterion（{key, text}，抄自 project_get 的验收条目）、checks（每条 {kind, ref}，kind 取 `
-          + `TOOL_CALL / COMMIT / ARTIFACT，ref 指向本任务会话下已有的行；至少一条必须解析成功，否则整次提交被拒）、`
-          + `gaps（本次证据没能确立的部分，没有就给空数组）。TOOL_CALL 可再写 command/succeeded，服务端会拿它`
-          + `和被引 tool_call 逐字节核对。不要把命令原始输出抄进证据——Orbit 已经存了它；只由退出码回答的工作`
-          + `属于 EXECUTABLE 验收，不属于这里。不要用 task_comment 代替证据提交，也不要写 status——DONE 是`
-          + `解锁下游任务的授权，只能由任务声明的 completionCriterion 求值产生；服务端会拒绝任何主体直接写 DONE。\n`) +
-    `4. 如果执行失败或未能完成，先用 task_comment 说明失败/未完成的原因，再用 task_update 将` +
-    `状态（status）置为 FAILED。不要置为 DONE，也不要置为 IN_PROGRESS——IN_PROGRESS 会被下游` +
-    `当成普通等待一直等下去，FAILED 才会把下游标成需要人介入。`
-  );
-}
+export { buildTaskExecutionPrompt };
 
 // Version-agnostic (UUIDv7-safe) shape check. A non-UUID id would otherwise reach
 // Postgres and surface as a 500; we treat it like any unknown task instead.
@@ -3573,7 +3514,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async create(ownerId: string, dto: CreateTaskDto, creator?: Creator, creatorSessionId?: string) {
+  /**
+   * `credential` is the user credential the request came in through, given by the user door only:
+   * the task is still the user's (`creator` stays unset), and the credential is recorded beside it
+   * in `activity` — see `recordTasksCreated`.
+   */
+  async create(
+    ownerId: string,
+    dto: CreateTaskDto,
+    creator?: Creator,
+    creatorSessionId?: string,
+    credential?: AuthCredential,
+  ) {
     if (!dto.title) throw new BadRequestException('title is required');
     // The paired shape: this task and the check that settles it, in one call. Delegated rather than
     // reimplemented, because a second writer is a second thing to keep in step with every column a
@@ -3589,7 +3541,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         );
       }
       return await this.createWithVerifier(
-        ownerId, { ...dto, verification }, creator, creatorSessionId,
+        ownerId, { ...dto, verification }, creator, creatorSessionId, credential,
       );
     }
     const completionCriterion = this.assertCompletionDeclaration(dto);
@@ -3926,6 +3878,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
               { id: created.id, projectId: created.projectId }, new Date(),
             );
           }
+          await this.recordTasksCreated(tx, ownerId, credential, [created.id]);
           return created;
         },
         this.transientWriteRetry('tasks.create'),
@@ -4015,6 +3968,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     dto: CreateTaskDto & { verification: TaskVerificationDto },
     creator?: Creator,
     creatorSessionId?: string,
+    credential?: AuthCredential,
   ) {
     const { verification, ...subject } = dto;
     const [created, verifier] = await this.createMany(ownerId, {
@@ -4032,10 +3986,39 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           verifiesRef: VERIFICATION_PAIR_SUBJECT_REF,
         },
       ],
-    }, creator, creatorSessionId);
+    }, creator, creatorSessionId, credential);
     // `ref` is the batch's internal wiring, never stored and never part of this door's receipt.
     const { ref: _wiring, ...row } = created;
     return { ...row, verification: { id: verifier.id, status: verifier.status } };
+  }
+
+  /**
+   * The `activity` rows for tasks a user just created (docs/personal-access-token-design.md §6.4):
+   * one per task, naming the user and the door the request came in through — LOGIN, or a personal
+   * access token by its id. The task is the user's either way (creator USER); this is where the two
+   * doors are told apart.
+   *
+   * Inside the creating transaction, so the record commits with the rows it describes and rolls
+   * back with them. `activity` has no foreign key and no trigger, so the INSERT locks nothing but
+   * its own rows. A create that came in through no user credential — the runner door — is not
+   * recorded.
+   */
+  private async recordTasksCreated(
+    tx: Prisma.TransactionClient,
+    ownerId: string,
+    credential: AuthCredential | undefined,
+    taskIds: string[],
+  ): Promise<void> {
+    if (!credential || taskIds.length === 0) return;
+    await tx.activity.createMany({
+      data: taskIds.map((taskId) => ({
+        actorId: ownerId,
+        type: 'task.created',
+        payload: { taskId },
+        credentialKind: credential.kind,
+        credentialId: credential.kind === 'PAT' ? credential.tokenId : null,
+      })),
+    });
   }
 
   /**
@@ -4604,19 +4587,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * may list it in `dependsOnRefs`, so a whole dependency chain lands in a single round-trip
    * instead of one create per node (previously the only way to build one, since each edge needs
    * the id the previous call returned). Returns the created tasks in input order, echoing `ref`.
+   * `credential` is the user door's, as on `create`.
    */
   async createMany(
     ownerId: string,
     dto: CreateTasksBatchDto,
     creator?: Creator,
     creatorSessionId?: string,
+    credential?: AuthCredential,
   ) {
     // `dryRun: false` is what makes this a narrowing rather than a cast: the one branch below that
     // returns a preview instead of rows is the branch this call has just switched off, so the
     // callers of `createMany` keep the return type they have always had and the preview has a door
     // of its own (`previewPlan`).
     const written = await this.createManyPass(
-      ownerId, { ...dto, dryRun: false }, creator, creatorSessionId,
+      ownerId, { ...dto, dryRun: false }, creator, creatorSessionId, credential,
     );
     return written as Exclude<typeof written, PlanPreviewBody>;
   }
@@ -4644,6 +4629,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     dto: CreateTasksBatchDto,
     creator?: Creator,
     creatorSessionId?: string,
+    credential?: AuthCredential,
   ) {
     const validated = await this.assertBatchValid(ownerId, dto);
     // Unit L7. Read once, here, because it changes three things further down and they have to
@@ -4931,6 +4917,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const handoffSpends: Array<{ authority: HandoffAuthority; handoffId: string; taskId: string }> = [];
       const idByRef = new Map<string, string>();
       const rows: Array<Task & { ref?: string }> = [];
+      // The rows this attempt inserted, as distinct from the ones a replay or a within-batch
+      // duplicate found: only a write this call made is recorded as its credential's.
+      const insertedIds: string[] = [];
       for (const [index, item] of items.entries()) {
         // find-or-create by the item's key: a re-run's items already exist (committed by the first
         // run), and a within-batch duplicate resolves to the row this same transaction just wrote.
@@ -4975,6 +4964,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             ),
           }));
         if (!existing) {
+          insertedIds.push(task.id);
           await this.assertFixesOpenItem(
             tx, ownerId, task.projectId, item.fixesOpenItemId, creatorSessionId, true,
           );
@@ -5033,6 +5023,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         rows.push(item.ref === undefined ? task : { ...task, ref: item.ref });
       }
       await this.handoffs.spendAll(tx, handoffSpends, now);
+      await this.recordTasksCreated(tx, ownerId, credential, insertedIds);
       return rows;
     }, this.transientWriteRetry('tasks.createMany')).catch(async (e) => {
       // §13.1 AG6's activation guard, FIRST and for the same reason `create` puts it first: 0132
@@ -6635,8 +6626,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     return e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002';
   }
 
-  async list(ownerId: string, query: Pick<ListTasksPageQuery, 'creatorSessionId'> = {}) {
+  /** `assignedTo`: the workspaces a token confined to them may see (`workspaceConfinement`). */
+  async list(
+    ownerId: string,
+    query: Pick<ListTasksPageQuery, 'creatorSessionId'> = {},
+    assignedTo?: readonly string[],
+  ) {
     const where: Prisma.TaskWhereInput = { ownerId };
+    if (assignedTo) where.assigneeId = { in: [...assignedTo] };
     // The paged list's scope of the same name, for the native task list, which reads this one.
     if (query.creatorSessionId) {
       if (!UUID_RE.test(query.creatorSessionId)) throw new BadRequestException('invalid creator session id');

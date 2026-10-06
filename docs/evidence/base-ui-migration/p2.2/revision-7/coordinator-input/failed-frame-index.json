@@ -1,0 +1,74 @@
+[
+  {
+    "type": "screencast-frame",
+    "pageId": "page@dac114f1b663d0b4b6fe7b15e27083f4",
+    "file": "screencast/page@dac114f1b663d0b4b6fe7b15e27083f4-1791120322556.jpeg",
+    "width": 1280,
+    "height": 900,
+    "timestamp": 120297.911,
+    "frameSwapWallTime": 1791120322555.194
+  },
+  {
+    "type": "screencast-frame",
+    "pageId": "page@dac114f1b663d0b4b6fe7b15e27083f4",
+    "file": "screencast/page@dac114f1b663d0b4b6fe7b15e27083f4-1791120322571.jpeg",
+    "width": 1280,
+    "height": 900,
+    "timestamp": 120313.016,
+    "frameSwapWallTime": 1791120322571.876
+  },
+  {
+    "type": "screencast-frame",
+    "pageId": "page@dac114f1b663d0b4b6fe7b15e27083f4",
+    "file": "screencast/page@dac114f1b663d0b4b6fe7b15e27083f4-1791120322586.jpeg",
+    "width": 1280,
+    "height": 900,
+    "timestamp": 120327.366,
+    "frameSwapWallTime": 1791120322586.685
+  },
+  {
+    "type": "screencast-frame",
+    "pageId": "page@dac114f1b663d0b4b6fe7b15e27083f4",
+    "file": "screencast/page@dac114f1b663d0b4b6fe7b15e27083f4-1791120322593.jpeg",
+    "width": 1280,
+    "height": 900,
+    "timestamp": 120335.058,
+    "frameSwapWallTime": 1791120322593.715
+  },
+  {
+    "type": "screencast-frame",
+    "pageId": "page@dac114f1b663d0b4b6fe7b15e27083f4",
+    "file": "screencast/page@dac114f1b663d0b4b6fe7b15e27083f4-1791120322608.jpeg",
+    "width": 1280,
+    "height": 900,
+    "timestamp": 120350.253,
+    "frameSwapWallTime": 1791120322608.893
+  },
+  {
+    "type": "screencast-frame",
+    "pageId": "page@dac114f1b663d0b4b6fe7b15e27083f4",
+    "file": "screencast/page@dac114f1b663d0b4b6fe7b15e27083f4-1791120322628.jpeg",
+    "width": 1280,
+    "height": 900,
+    "timestamp": 120369.699,
+    "frameSwapWallTime": 1791120322628.564
+  },
+  {
+    "type": "screencast-frame",
+    "pageId": "page@dac114f1b663d0b4b6fe7b15e27083f4",
+    "file": "screencast/page@dac114f1b663d0b4b6fe7b15e27083f4-1791120322647.jpeg",
+    "width": 1280,
+    "height": 900,
+    "timestamp": 120388.809,
+    "frameSwapWallTime": 1791120322647.239
+  },
+  {
+    "type": "screencast-frame",
+    "pageId": "page@dac114f1b663d0b4b6fe7b15e27083f4",
+    "file": "screencast/page@dac114f1b663d0b4b6fe7b15e27083f4-1791120322652.jpeg",
+    "width": 1280,
+    "height": 900,
+    "timestamp": 120393.604,
+    "frameSwapWallTime": 1791120322652.582
+  }
+]

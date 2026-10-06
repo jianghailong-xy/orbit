@@ -1,0 +1,424 @@
+{
+  "parent": "801d41ac9b9ec33671a00190e6f3c77cee22ab94",
+  "testedCommit": "8d78a684b607094e416c18d48c8881492efa0e05",
+  "sources": {
+    "src/web/src/components/ui/Overlay.css": {
+      "sha256": "e5164678dd71c69744dc6356ffc9dfa85e2170a82a213a8ad033c35d3c203d2c",
+      "lines": [
+        {
+          "line": 2,
+          "text": ".orbit-overlay[hidden], .orbit-overlay-viewport[hidden], .orbit-overlay-backdrop[hidden] { display: none; }"
+        },
+        {
+          "line": 44,
+          "text": "@media (prefers-reduced-motion: no-preference) {"
+        },
+        {
+          "line": 45,
+          "text": "  .orbit-overlay-backdrop { transition: opacity .2s; }"
+        },
+        {
+          "line": 47,
+          "text": "  .orbit-dialog, .orbit-confirm { transition: opacity .2s, scale .2s; }"
+        }
+      ]
+    },
+    "src/web/src/components/ui/Overlay.tsx": {
+      "sha256": "9cf7e1e40a22465077c080aed14a1fc36e0c0b8e78963a1a0e3de15f9b1fd6af",
+      "lines": [
+        {
+          "line": 70,
+          "text": "  keepMounted?: boolean;"
+        },
+        {
+          "line": 77,
+          "text": "  closable = true, busy = false, keepMounted = false, kind = 'dialog',"
+        },
+        {
+          "line": 110,
+          "text": "      <BaseDialog.Portal container={parent?.container} keepMounted={keepMounted}>"
+        }
+      ]
+    },
+    "node_modules/@base-ui/react/dialog/root/useDialogRoot.mjs": {
+      "sha256": "bfa6a0ff7482aed1d472372c8f3e396de43c759769eaf5dfacd838eba37ec2ed",
+      "lines": [
+        {
+          "line": 73,
+          "text": "  useScrollLock(open && modal === true, popupElement);"
+        }
+      ]
+    },
+    "node_modules/@base-ui/react/dialog/popup/DialogPopup.mjs": {
+      "sha256": "0eb7fc621ff678a483b6f3c90b51913512c5ffaa82b300465be1bfeb3bf9ee51",
+      "lines": [
+        {
+          "line": 72,
+          "text": "      hidden: !mounted,"
+        }
+      ]
+    },
+    "node_modules/@base-ui/react/utils/popups/popupStoreUtils.mjs": {
+      "sha256": "4e594c53e4c693c328aa3dc1dd6e84318ef4c1921fc252234b1a345cfc11ddeb",
+      "lines": [
+        {
+          "line": 404,
+          "text": "export function useOpenStateTransitions(open, store, onUnmount, animateInitialOpen) {"
+        },
+        {
+          "line": 405,
+          "text": "  const {"
+        },
+        {
+          "line": 406,
+          "text": "    mounted,"
+        },
+        {
+          "line": 407,
+          "text": "    setMounted,"
+        },
+        {
+          "line": 408,
+          "text": "    transitionStatus"
+        },
+        {
+          "line": 409,
+          "text": "  } = useTransitionStatus(open, false, false, animateInitialOpen);"
+        },
+        {
+          "line": 410,
+          "text": "  const preventUnmountingOnClose = store.useState('preventUnmountingOnClose');"
+        },
+        {
+          "line": 411,
+          "text": "  // Opening starts a new close cycle. Clear during render so the close-completion hook below"
+        },
+        {
+          "line": 412,
+          "text": "  // reads the synchronized value on the same pass."
+        },
+        {
+          "line": 413,
+          "text": "  const syncedPreventUnmountingOnClose = open ? false : preventUnmountingOnClose;"
+        },
+        {
+          "line": 414,
+          "text": "  store.useSyncedValues({"
+        },
+        {
+          "line": 415,
+          "text": "    mounted,"
+        },
+        {
+          "line": 416,
+          "text": "    transitionStatus,"
+        },
+        {
+          "line": 417,
+          "text": "    preventUnmountingOnClose: syncedPreventUnmountingOnClose"
+        },
+        {
+          "line": 418,
+          "text": "  });"
+        },
+        {
+          "line": 419,
+          "text": "  const forceUnmount = useStableCallback(() => {"
+        },
+        {
+          "line": 420,
+          "text": "    setMounted(false);"
+        },
+        {
+          "line": 421,
+          "text": "    store.update({"
+        },
+        {
+          "line": 422,
+          "text": "      activeTriggerId: null,"
+        },
+        {
+          "line": 423,
+          "text": "      activeTriggerElement: null,"
+        },
+        {
+          "line": 424,
+          "text": "      mounted: false,"
+        },
+        {
+          "line": 425,
+          "text": "      preventUnmountingOnClose: false"
+        },
+        {
+          "line": 426,
+          "text": "    });"
+        },
+        {
+          "line": 427,
+          "text": "    onUnmount?.();"
+        },
+        {
+          "line": 428,
+          "text": "    store.context.onOpenChangeComplete?.(false);"
+        },
+        {
+          "line": 429,
+          "text": "  });"
+        },
+        {
+          "line": 430,
+          "text": "  useOpenChangeComplete({"
+        },
+        {
+          "line": 431,
+          "text": "    enabled: mounted && !open && !syncedPreventUnmountingOnClose,"
+        },
+        {
+          "line": 432,
+          "text": "    open,"
+        },
+        {
+          "line": 433,
+          "text": "    ref: store.context.popupRef,"
+        },
+        {
+          "line": 434,
+          "text": "    onComplete() {"
+        },
+        {
+          "line": 435,
+          "text": "      if (!open) {"
+        },
+        {
+          "line": 436,
+          "text": "        forceUnmount();"
+        },
+        {
+          "line": 437,
+          "text": "      }"
+        },
+        {
+          "line": 438,
+          "text": "    }"
+        },
+        {
+          "line": 439,
+          "text": "  });"
+        },
+        {
+          "line": 440,
+          "text": "  return {"
+        },
+        {
+          "line": 441,
+          "text": "    forceUnmount,"
+        },
+        {
+          "line": 442,
+          "text": "    transitionStatus"
+        },
+        {
+          "line": 443,
+          "text": "  };"
+        }
+      ]
+    },
+    "node_modules/@base-ui/react/internals/useOpenChangeComplete.mjs": {
+      "sha256": "c7e2ecac88c4e2185f221f8f35344f22ec8d8ed0acfcc977ddf6e17014956f2c",
+      "lines": [
+        {
+          "line": 1,
+          "text": "'use client';"
+        },
+        {
+          "line": 2,
+          "text": ""
+        },
+        {
+          "line": 3,
+          "text": "import * as React from 'react';"
+        },
+        {
+          "line": 4,
+          "text": "import { useStableCallback } from '@base-ui/utils/useStableCallback';"
+        },
+        {
+          "line": 5,
+          "text": "import { useAnimationsFinished } from \"./useAnimationsFinished.mjs\";"
+        },
+        {
+          "line": 6,
+          "text": ""
+        },
+        {
+          "line": 7,
+          "text": "/**"
+        },
+        {
+          "line": 8,
+          "text": " * Calls the provided function when the CSS open/close animation or transition completes."
+        },
+        {
+          "line": 9,
+          "text": " */"
+        },
+        {
+          "line": 10,
+          "text": "export function useOpenChangeComplete(parameters) {"
+        },
+        {
+          "line": 11,
+          "text": "  const {"
+        },
+        {
+          "line": 12,
+          "text": "    enabled = true,"
+        },
+        {
+          "line": 13,
+          "text": "    open,"
+        },
+        {
+          "line": 14,
+          "text": "    ref,"
+        },
+        {
+          "line": 15,
+          "text": "    batch = false,"
+        },
+        {
+          "line": 16,
+          "text": "    onComplete: onCompleteParam"
+        },
+        {
+          "line": 17,
+          "text": "  } = parameters;"
+        },
+        {
+          "line": 18,
+          "text": "  const onComplete = useStableCallback(onCompleteParam);"
+        },
+        {
+          "line": 19,
+          "text": "  const runOnceAnimationsFinish = useAnimationsFinished(ref, open, batch);"
+        },
+        {
+          "line": 20,
+          "text": "  React.useEffect(() => {"
+        },
+        {
+          "line": 21,
+          "text": "    if (!enabled) {"
+        },
+        {
+          "line": 22,
+          "text": "      return undefined;"
+        },
+        {
+          "line": 23,
+          "text": "    }"
+        },
+        {
+          "line": 24,
+          "text": "    const abortController = new AbortController();"
+        },
+        {
+          "line": 25,
+          "text": "    runOnceAnimationsFinish(onComplete, abortController.signal);"
+        },
+        {
+          "line": 26,
+          "text": "    return () => {"
+        },
+        {
+          "line": 27,
+          "text": "      abortController.abort();"
+        },
+        {
+          "line": 28,
+          "text": "    };"
+        },
+        {
+          "line": 29,
+          "text": "  }, [enabled, open, onComplete, runOnceAnimationsFinish]);"
+        },
+        {
+          "line": 30,
+          "text": "}"
+        }
+      ]
+    },
+    "node_modules/@base-ui/utils/useScrollLock.mjs": {
+      "sha256": "8f0150cbc228d9a3733f455bb24817a521f58ddc477bbaaee6232bc7621bcd0c",
+      "lines": [
+        {
+          "line": 203,
+          "text": "  release = () => {"
+        },
+        {
+          "line": 204,
+          "text": "    this.lockCount -= 1;"
+        },
+        {
+          "line": 205,
+          "text": "    if (this.lockCount === 0 && this.restore) {"
+        },
+        {
+          "line": 206,
+          "text": "      this.timeoutUnlock.start(0, this.unlock);"
+        },
+        {
+          "line": 207,
+          "text": "    }"
+        },
+        {
+          "line": 208,
+          "text": "  };"
+        },
+        {
+          "line": 209,
+          "text": "  unlock = () => {"
+        },
+        {
+          "line": 210,
+          "text": "    if (this.lockCount === 0 && this.restore) {"
+        },
+        {
+          "line": 211,
+          "text": "      this.restore?.();"
+        },
+        {
+          "line": 212,
+          "text": "      this.restore = null;"
+        },
+        {
+          "line": 213,
+          "text": "    }"
+        },
+        {
+          "line": 214,
+          "text": "  };"
+        },
+        {
+          "line": 215,
+          "text": "  lock(referenceElement) {"
+        }
+      ]
+    }
+  },
+  "reason": "Dialog close unmount is driven by completion of the actual CSS exit. Scroll lock cleanup uses a zero-delay task when open becomes false and can occur before unmount. Preserve Esc-relative timings; start the unchanged short 100ms cleanup allowance at observed popup removal/hidden, not keydown and not the later Playwright polling checkpoint. This is a test synchronization allowance, not a product SLA.",
+  "retainedChecks": [
+    "inner-close parent lock",
+    "each layer focus/visibility",
+    "original first read after hidden/focus",
+    "final unlocked state",
+    "trusted native input produces page displacement within 250ms",
+    "focus still returned after scrolling"
+  ],
+  "controls": [
+    "150ms render scheduling + actual 200ms CSS exit with timely release: must accept",
+    "release 150ms after actual removal: must reject",
+    "residual lock: must reject and native input must not move page"
+  ],
+  "runtimeChanges": []
+}

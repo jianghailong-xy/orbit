@@ -56,3 +56,16 @@ describe('nginx: a public share page', () => {
     expect(locationDirectives('/')).toContain('try_files $uri $uri/ /index.html');
   });
 });
+
+describe('nginx: runner downloads', () => {
+  const dl = locationDirectives('/dl/');
+
+  it('answers a missing file with 404, never the SPA shell a runner would read as a manifest', () => {
+    // /dl/previous/version.json is absent until one release has replaced another (src/web/Dockerfile).
+    expect(dl.filter((d) => d.startsWith('try_files '))).toEqual(['try_files $uri =404']);
+  });
+
+  it('is revalidated like the shell, so a cache never serves a release a deploy replaced', () => {
+    expect(dl.filter((d) => d.startsWith('add_header '))).toEqual(['add_header Cache-Control "no-cache" always']);
+  });
+});

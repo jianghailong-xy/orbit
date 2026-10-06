@@ -199,14 +199,12 @@ final class DshRuntimeTests: XCTestCase {
         XCTAssertEqual(dsh.label, "DeepSeek Harness")
         XCTAssertEqual(dsh.brandKey, "deepseek-harness")
         XCTAssertEqual(dsh.provider.slug, "deepseek-harness")
-        XCTAssertNil(dsh.providerDetail)
 
         let none = SessionProviderChoices.engines(
             SessionProviderChoices.choices(configured: [deepseek], catalog: catalog, dshState: .ready), configured: [deepseek])
         let connect = none.first { $0.slug == "dsh" }!
         XCTAssertEqual(connect.unavailable, "Add API key")
         XCTAssertEqual(connect.fixEngine, DshRuntime.connectFix)
-        XCTAssertNil(connect.providerDetail)
         XCTAssertFalse(none.first { $0.slug == "claude" }!.provider.setup)
     }
 

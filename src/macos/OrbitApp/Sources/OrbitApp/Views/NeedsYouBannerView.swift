@@ -43,6 +43,9 @@ struct NeedsYouBannerView: View {
     var below: WaitingBelow? = nil
     /// The console reveals this row and opens its existing review, if it has one.
     var onOpenBelow: ((String) -> Void)? = nil
+    /// Whether a project's sessions page opens in this shell's session column (an iPad's wide
+    /// shell) rather than as a page of its own — where the merge into main's card is.
+    var projectInColumn = false
 
     var body: some View {
         if let below {
@@ -68,7 +71,7 @@ struct NeedsYouBannerView: View {
                     ? "Opens the session waiting on you"
                     : "Opens the card waiting on you") {
                 if let item = banner.ownerItem {
-                    model.openNeedsYouItem(banner.target, item)
+                    model.openNeedsYouItem(banner.target, item, projectInColumn: projectInColumn)
                 } else {
                     model.openNeedsYouSession(banner.target)
                 }

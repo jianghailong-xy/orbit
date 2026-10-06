@@ -283,8 +283,8 @@ final class TaskDetailWiringTests: XCTestCase {
         XCTAssertTrue(view.contains("TaskDetailLogic.dependencyGraph(for: task, loaded: tasks.dependencyGraph)"))
         XCTAssertTrue(view.contains("TaskDependencyGraphView(graph: graph)"))
         // Removing an input or a prerequisite is asked first, in the browser's words.
-        XCTAssertTrue(view.contains("confirmationDialog(TaskDetailCopy.removeInputTitle"))
-        XCTAssertTrue(view.contains("confirmationDialog(TaskDetailCopy.removePrerequisiteTitle"))
+        XCTAssertTrue(view.contains("orbitConfirmation({ _ in TaskDetailCopy.removeInputTitle }"))
+        XCTAssertTrue(view.contains("orbitConfirmation({ _ in TaskDetailCopy.removePrerequisiteTitle }"))
     }
 
     func testLongTextFoldsFromItsLengthAndTheSheetsSaveExplicitly() throws {

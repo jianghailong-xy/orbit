@@ -1,0 +1,74 @@
+[
+  {
+    "browser": "chromium",
+    "variant": "revision2",
+    "elapsedMs": 6502,
+    "remaining": 1,
+    "events": [
+      {
+        "type": "mouseout",
+        "target": "",
+        "time": 579.4000000059605
+      },
+      {
+        "type": "mouseover",
+        "target": "toast-action",
+        "time": 579.5
+      }
+    ]
+  },
+  {
+    "browser": "chromium",
+    "variant": "reference",
+    "elapsedMs": 6502,
+    "remaining": 1,
+    "events": [
+      {
+        "type": "mouseout",
+        "target": "",
+        "time": 408.90000000596046
+      },
+      {
+        "type": "mouseover",
+        "target": "toast-action",
+        "time": 409
+      }
+    ]
+  },
+  {
+    "browser": "webkit",
+    "variant": "revision2",
+    "elapsedMs": 6507,
+    "remaining": 1,
+    "events": [
+      {
+        "type": "mouseout",
+        "target": "",
+        "time": 484
+      },
+      {
+        "type": "mouseover",
+        "target": "toast-action",
+        "time": 485
+      }
+    ]
+  },
+  {
+    "browser": "webkit",
+    "variant": "reference",
+    "elapsedMs": 6507,
+    "remaining": 1,
+    "events": [
+      {
+        "type": "mouseout",
+        "target": "",
+        "time": 489
+      },
+      {
+        "type": "mouseover",
+        "target": "toast-action",
+        "time": 489
+      }
+    ]
+  }
+]

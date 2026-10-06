@@ -1,0 +1,212 @@
+{
+  "stats": {
+    "startTime": "2026-10-04T13:06:14.478Z",
+    "duration": 27209.344999999998,
+    "expected": 8,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "tests": [
+    {
+      "name": "chromium-light-desktop--P2.3-production-notification-compatibility",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2717
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-desktop--P2.3-production-notification-compatibility--notification-appearance.json",
+          "sha256": "1fdf3ed3c589cf0de3f14609b32d38e9b7d18b74268eeb40646f0b50f7d535ae"
+        },
+        {
+          "file": "chromium-light-desktop--P2.3-production-notification-compatibility--production-notification.png",
+          "sha256": "e58caff51600e2bd02b240fa548bc830f77a764b8b6f7c950a5787a6f2faf2b6"
+        },
+        {
+          "file": "chromium-light-desktop--P2.3-production-notification-compatibility--computed-styles-and-timings.json",
+          "sha256": "8cfd85cb858807d3fb0fd5db0412c38aa14950d833b210ca8cfa17899b751fd9"
+        }
+      ]
+    },
+    {
+      "name": "chromium-light-phone--P2.3-production-notification-compatibility",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2619
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-light-phone--P2.3-production-notification-compatibility--notification-appearance.json",
+          "sha256": "dceb069b8caa2178eade8e2a5899763b78ed9724339924cdf8e49f4709cc7b5c"
+        },
+        {
+          "file": "chromium-light-phone--P2.3-production-notification-compatibility--production-notification.png",
+          "sha256": "9cd245f259ddd93569ffdfee9aa2bc55ab3e1f3469cb59314afed6c27a95e194"
+        },
+        {
+          "file": "chromium-light-phone--P2.3-production-notification-compatibility--computed-styles-and-timings.json",
+          "sha256": "ebb3d755c574a3457e6af245bbb2b841ff20726ff82a9c220b48d2c7496838c0"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-desktop--P2.3-production-notification-compatibility",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2579
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-desktop--P2.3-production-notification-compatibility--notification-appearance.json",
+          "sha256": "cf89e4da16348501ca07530ee1de81227d7389ca092451d326f6916ba6aa58dc"
+        },
+        {
+          "file": "chromium-dark-desktop--P2.3-production-notification-compatibility--production-notification.png",
+          "sha256": "1e799f036ced55b19820a0fb4d6e9bc0d25b8bf694997938fdbeb6074253698a"
+        },
+        {
+          "file": "chromium-dark-desktop--P2.3-production-notification-compatibility--computed-styles-and-timings.json",
+          "sha256": "e9b8fec63d93dd0546e4706a0d182ca9efd429135a1af2f4ff7725377807ccd9"
+        }
+      ]
+    },
+    {
+      "name": "chromium-dark-phone--P2.3-production-notification-compatibility",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 2537
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "chromium-dark-phone--P2.3-production-notification-compatibility--notification-appearance.json",
+          "sha256": "619706f5374e7cca53a3270623eae186b069eeb0c517f619bc364395567b2a74"
+        },
+        {
+          "file": "chromium-dark-phone--P2.3-production-notification-compatibility--production-notification.png",
+          "sha256": "a12160704f9814d42b26a9e9abf1ea9c170f15d4e3118f6e8bf36976035a644e"
+        },
+        {
+          "file": "chromium-dark-phone--P2.3-production-notification-compatibility--computed-styles-and-timings.json",
+          "sha256": "b15ddddd07d30d78e02193d0153a78478825689fdbda33ae7e559ec5a7e07ddb"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-desktop--P2.3-production-notification-compatibility",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3459
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-desktop--P2.3-production-notification-compatibility--notification-appearance.json",
+          "sha256": "878bda7c75e17cd4d3a52d308f64167a06688f7b82a8763a7e73e7e020f32dfc"
+        },
+        {
+          "file": "webkit-light-desktop--P2.3-production-notification-compatibility--production-notification.png",
+          "sha256": "f71ec3a6eb401180c4ef3c2afdb95a9f939f69a723f1edb59527c7884ce6b324"
+        },
+        {
+          "file": "webkit-light-desktop--P2.3-production-notification-compatibility--computed-styles-and-timings.json",
+          "sha256": "55eadb4e4dd7530237dbce7c363f3bb77b1e7b1b64db3b4fcb738074dce74771"
+        }
+      ]
+    },
+    {
+      "name": "webkit-light-phone--P2.3-production-notification-compatibility",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3195
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-light-phone--P2.3-production-notification-compatibility--notification-appearance.json",
+          "sha256": "706efeaad06e84ba1832f3a2ec4a22d4564210e5b8aa08e8dfb5c043ab482f3a"
+        },
+        {
+          "file": "webkit-light-phone--P2.3-production-notification-compatibility--production-notification.png",
+          "sha256": "a29eb4ac4bf476776583d8bce42555fc88d73139ad58f662741c4dc7070c37c8"
+        },
+        {
+          "file": "webkit-light-phone--P2.3-production-notification-compatibility--computed-styles-and-timings.json",
+          "sha256": "2f9671f0cf1079c4c010ce044d043e020ccc21a266ff30d4aef7c825f2ba6202"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-desktop--P2.3-production-notification-compatibility",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3340
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-desktop--P2.3-production-notification-compatibility--notification-appearance.json",
+          "sha256": "3aebcf6913caee8978c14331cafbf225eb3b0b286d89a719f8cdbe54f5b8ea3f"
+        },
+        {
+          "file": "webkit-dark-desktop--P2.3-production-notification-compatibility--production-notification.png",
+          "sha256": "d12982adfe17589b6c970851d0d2a80d5c8c35cfd37d9da72f6b28f4cb557797"
+        },
+        {
+          "file": "webkit-dark-desktop--P2.3-production-notification-compatibility--computed-styles-and-timings.json",
+          "sha256": "1d3d5103e627d29798c10e68efef5393bcba300198596d33906a0b535243c1f9"
+        }
+      ]
+    },
+    {
+      "name": "webkit-dark-phone--P2.3-production-notification-compatibility",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3239
+        }
+      ],
+      "artifacts": [
+        {
+          "file": "webkit-dark-phone--P2.3-production-notification-compatibility--notification-appearance.json",
+          "sha256": "2c329e0a5769442c93e21887d3bad660b8bd4762964186c2796eed04a02914db"
+        },
+        {
+          "file": "webkit-dark-phone--P2.3-production-notification-compatibility--production-notification.png",
+          "sha256": "f5d6ab570e4a9c77bfb60c69d1dccc3ba90caa1f14ef699e7dc34223ce4c0dc8"
+        },
+        {
+          "file": "webkit-dark-phone--P2.3-production-notification-compatibility--computed-styles-and-timings.json",
+          "sha256": "ee462bb1139ffece2b88e0255fc1ac92d0cf43851cb117a817558a7f810391fb"
+        }
+      ]
+    }
+  ]
+}

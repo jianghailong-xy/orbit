@@ -53,6 +53,7 @@ import {
 } from './integration-job-relay';
 import {
   AgentProvider,
+  openCodeKeyOf,
   AgentExecConfig,
   ActivateTurnLeasesRequest,
   ArtifactResultRequest,
@@ -130,12 +131,6 @@ import {
   ActivateTurnLeasesResponse,
   fastModeAvailable,
   type CodexRateLimitResetResultRequest,
-  type ConfirmationReturnCard,
-  type ConfirmationReviewRequestCard,
-  type OpenItemDeliveryCard,
-  type ProjectStartedCard,
-  type SessionMessageCard,
-  type TaskStartCard,
   type RunnerModelCatalog,
 } from '@orbit/shared';
 import { lastProviderByWorkspace, withProviderSeed } from '../workspaces/workspace-provider';
@@ -190,12 +185,9 @@ import { currentWikiRollout, wikiClaimFields } from '../wiki/wiki-rollout';
 import { wikiMaintenanceRunOf, withWikiMaintenanceRun } from '../wiki/wiki-maintenance-session';
 import {
   type TaskFailure,
-  openItemIdOfTurn,
-  readOpenItemDeliveryCard,
   recordTaskFailure,
   returnQueuedTurns,
 } from '../projects/project-open-item';
-import { projectStartOfTurn, readProjectStartedCard } from '../projects/project-started';
 import { enqueueForDoneTask } from '../projects/project-integration-job';
 import { ProjectFuseService } from '../projects/project-fuse.service';
 import { ProjectPromotionService } from '../projects/project-promotion.service';
@@ -243,18 +235,21 @@ import {
 } from './scheduled-wakeup';
 import { nextAutoRetryAt } from '../sessions/auto-retry.service';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
-import { appendSessionMessageContext, readSessionMessageCard } from '../sessions/session-message';
+import { appendSessionMessageContext } from '../sessions/session-message';
 import { SessionRequestService } from '../sessions/session-request.service';
 import {
   appendSessionRepliesContext,
   closeUnansweredRequests,
   closeUnreadSteerRequests,
+  foldQueuedReplyTurnsInto,
+  foldRequeuedReplyTurns,
   holdTurnRepliesForRetry,
+  isSessionReplyTurn,
   readRequestForBlock,
-  readSessionReplyCards,
-  readTurnRequestIds,
+  releaseUnreadSteerReplies,
   settleUnrunSessionRequests,
 } from '../sessions/session-request';
+import { readTurnCards } from '../sessions/turn-cards';
 import {
   recordOwnerConfirmationRequest,
   runStoppedWorking,
@@ -269,8 +264,6 @@ import {
 import {
   appendConfirmationReturnContext,
   appendOwnerConfirmationReviewContext,
-  readConfirmationReturnCard,
-  readConfirmationReviewRequestCard,
 } from '../tasks/owner-confirmation-review-turn';
 import { appendEvidenceReviewContext } from '../tasks/evidence-review';
 import { OwnerConfirmationReviewService } from '../tasks/owner-confirmation-review.service';
@@ -285,8 +278,7 @@ import {
   withSessionReplies,
   withTaskStart,
 } from './control-plane-note';
-import { readTaskStartCard } from '../tasks/task-start-card';
-import { accountPoolRuntime, isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
+import { accountPoolRuntime, isBuiltinProvider, openCodeKeyRows, resolveProviderExec } from '../providers/custom-provider';
 import { runtimeInitSessionId } from './runtime-init';
 import { bgLaunchConfirmed, bgLaunchKind } from './bg-launch-receipt';
 import { enginePhaseAfter, enginePhaseSinceAfter, engineTurnActiveAfter } from './engine-turn';
@@ -317,6 +309,7 @@ import { antigravityGoogleLoginRefusal, antigravitySignInUnderWay } from '../com
 import { RUNNER_OS_HEADER, withRunnerOs } from '../common/runner-platform';
 import { loginCodeRelay } from '../runners/login-code-relay';
 import { readRunnerRepoHealth, sanitizeRunnerRepoHealth } from '../common/runner-repo-health';
+import { sanitizeRunnerSelfUpdate } from '../common/runner-self-update';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { ALWAYS_ALLOWED_TOOLS, resolvePermissionMode } from '../common/permission-mode';
 import { orchestrationEnabled } from '../common/orchestration-switch';
@@ -337,6 +330,7 @@ import {
   PROVIDER_UNAVAILABLE_ERROR,
   SOURCE_PROTOCOL_UNSUPPORTED_ERROR,
   advertisedRunnerProviders,
+  dshRuntimeUnavailable,
   runnerAdvertisesProvider,
   withProviderDeclarations,
 } from './runner-provider-support';
@@ -539,6 +533,20 @@ async function persistedDshSupport(db: Prisma.TransactionClient, runnerId: strin
     where: { id: runnerId }, select: { capabilities: true, capabilitiesReportedAt: true },
   });
   return !!snapshot?.capabilitiesReportedAt && snapshot.capabilities.includes('provider:dsh');
+}
+
+/**
+ * What a claim from a runner whose request names dsh must withhold dsh sessions for: the upgrade
+ * notice when its persisted heartbeat does not declare dsh (P1b), else the install state its engine
+ * report gives (dshRuntimeUnavailable), null when it can start one. Reclaim and lease takeover ask
+ * only persistedDshSupport: they hand back sessions this runner already runs.
+ */
+async function persistedDshRefusal(db: Prisma.TransactionClient, runnerId: string): Promise<string | null> {
+  const snapshot = await db.runner.findUnique({
+    where: { id: runnerId }, select: { capabilities: true, capabilitiesReportedAt: true, engines: true },
+  });
+  if (!snapshot?.capabilitiesReportedAt || !snapshot.capabilities.includes('provider:dsh')) return DSH_RUNNER_UPGRADE_ERROR;
+  return dshRuntimeUnavailable(snapshot.engines);
 }
 
 async function assertDshLeaseSupport(
@@ -1011,6 +1019,12 @@ export class RunnerApiController {
         // ROOT_REFUSED_PERMISSION_MODES). Omitted by a runner too old to report it, which keeps
         // the stored value — NULL there means "never told us" and stays unrestricted.
         runsAsRoot: dto?.runsAsRoot ?? undefined,
+        // Where this runner's updates of itself stand. Written by every beat, and as NULL when the
+        // beat omits it: unlike `engines` or `repos`, absence is not "no news" but a binary that
+        // does not report it — an older release, or one a rollback put back — and the state a
+        // newer binary reported must not outlive it. A report this server can't read is NULL too.
+        selfUpdate:
+          (sanitizeRunnerSelfUpdate(dto?.selfUpdate) as unknown as Prisma.InputJsonValue | null) ?? Prisma.DbNull,
         // The directory this machine clones into, under which a workspace created from a git URL
         // gets its checkout. An empty string is treated as no report, exactly like the omission an
         // older runner sends: NULL here means "this machine never told us where it clones", and
@@ -1281,6 +1295,7 @@ export class RunnerApiController {
     let repoCleanupRequest: RunnerHeartbeatResponse['repoCleanupRequest'];
     let claudeHistoryRequest: RunnerHeartbeatResponse['claudeHistoryRequest'];
     let refreshModelCatalog: RunnerHeartbeatResponse['refreshModelCatalog'];
+    let checkSelfUpdate: RunnerHeartbeatResponse['checkSelfUpdate'];
     try {
       cancelSessionIds = await this.realtime.drainCancellations(runner.id);
       // Manual git mutations are fail-closed during rolling upgrades. A capable
@@ -1333,6 +1348,8 @@ export class RunnerApiController {
       // so a hiccup while draining it costs a heartbeat, where a hiccup IN it, drained earlier,
       // would have cost the directory listing behind it.
       refreshModelCatalog = await this.drainModelCatalogRefresh(runner.id);
+      // The same kind of request, kept on the row the same way, so it goes last beside it.
+      checkSelfUpdate = await this.drainSelfUpdateRequest(runner.id);
     } catch {
       // A transient DB hiccup shouldn't fail the heartbeat; all arrive next cycle.
     }
@@ -1355,6 +1372,7 @@ export class RunnerApiController {
       agentDirs,
       repoCleanupRequest,
       refreshModelCatalog,
+      checkSelfUpdate,
       // Only when a claim holds a command for this process: an older runner's response stays the shape
       // it always was, and a direct caller comparing responses sees no new key.
       ...(codexRateLimitResetRequest ? { codexRateLimitResetRequest } : {}),
@@ -1491,6 +1509,22 @@ export class RunnerApiController {
     const claimed = await this.prisma.runner.updateMany({
       where: { id: runnerId, modelCatalogRefreshAt: { not: null } },
       data: { modelCatalogRefreshAt: null },
+    });
+    return claimed.count > 0 ? true : undefined;
+  }
+
+  /**
+   * Whether this runner should check for a release of itself on this beat: the owner pressed
+   * Update Runner Now (RunnersService.requestSelfUpdate).
+   *
+   * Claimed, not redelivered, for drainModelCatalogRefresh's reason: the answer is the
+   * `selfUpdate` state later heartbeats carry — the new version, or `waitingForIdle` while a turn
+   * runs — so a redelivered request would re-run the check on every beat. The clear is the claim.
+   */
+  private async drainSelfUpdateRequest(runnerId: string): Promise<true | undefined> {
+    const claimed = await this.prisma.runner.updateMany({
+      where: { id: runnerId, selfUpdateRequestedAt: { not: null } },
+      data: { selfUpdateRequestedAt: null },
     });
     return claimed.count > 0 ? true : undefined;
   }
@@ -2145,9 +2179,16 @@ export class RunnerApiController {
     const supportsTerminalHandoff = runnerSupportsCapability(capabilities, SESSION_TERMINAL_HANDOFF_V1);
     const supportsSourcePin = runnerSupportsCapability(capabilities, SESSION_SOURCE_PIN_V1);
     const supportedProviders = advertisedRunnerProviders(providerHeader);
-    if (supportedProviders.includes(AgentProvider.DSH) && !await persistedDshSupport(this.prisma, runner.id)) {
+    const dshRefusal = supportedProviders.includes(AgentProvider.DSH)
+      ? await persistedDshRefusal(this.prisma, runner.id)
+      : null;
+    if (dshRefusal === DSH_RUNNER_UPGRADE_ERROR) {
       supportedProviders.splice(supportedProviders.indexOf(AgentProvider.DSH), 1);
     }
+    // Declared but not startable on this machine (not installed, or a platform or version the
+    // runner rejects). The declaration stays as sent; the queue holds the dsh rows instead, and
+    // they wait with that notice until a heartbeat reports the CLI ready, rather than failing.
+    const dshUnavailable = dshRefusal === DSH_RUNNER_UPGRADE_ERROR ? null : dshRefusal;
     for (const { provider, upgradeError } of ADVERTISED_RUNTIMES) {
       if (supportedProviders.includes(provider)) continue;
       // Explain the stall on the OpenCode/Antigravity rows themselves — a Gemini key's included,
@@ -2166,7 +2207,7 @@ export class RunnerApiController {
       await this.markSourceProtocolUnsupported(runner.id);
     }
     const job = await this.queue.claimSessionForRunner(
-      { id: runner.id, supportedProviders },
+      { id: runner.id, supportedProviders, ...(dshUnavailable ? { dshUnavailable } : {}) },
       LONG_POLL_MS,
       supportsTerminalHandoff,
       supportsSourcePin,
@@ -2373,11 +2414,13 @@ export class RunnerApiController {
           s.status === RunStatus.PENDING ? [{ id: s.id, error: s.error }] : []);
         continue;
       }
+      const openCodeKeys = declared === AgentProvider.OPENCODE ? await openCodeKeyRows(this.prisma, s.ownerId) : undefined;
       const resolveExec = (sessionModel: string | null) =>
         resolveProviderExec({
           declaredProvider: declared,
           declaredProviderBuiltin: s.providerBuiltin,
           customRow,
+          openCodeKeys,
           sessionModel,
           usesRuntimeDefaultModel: s.usesRuntimeDefaultModel,
           runtimeDefaultModels: s.assignedRunner?.runtimeDefaultModels,
@@ -3546,9 +3589,10 @@ export class RunnerApiController {
         // outcomes held for this session's next turn — the ones whose reply turn an interrupt dropped,
         // or that came back while it had ended. Outside the first-delivery branch for the reason the
         // wake is: a reply turn handed out again after its runner died still has to say what it is
-        // for. Not best-effort: for a reply turn this block IS the turn.
-        if (t.kind === 'message') {
-          content = (await appendSessionRepliesContext(tx, sessionId, t.clientTurnId, content)) ?? content;
+        // for. Not best-effort: for a reply turn this block IS the turn. An outcome written into the
+        // running turn is a reply steer, and carries its blocks the same way, saying which turn they join.
+        if (t.kind === 'message' || (t.kind === 'steer' && isSessionReplyTurn(t.clientTurnId))) {
+          content = (await appendSessionRepliesContext(tx, sessionId, t.clientTurnId, content, t.kind)) ?? content;
         }
         // A confirmation request handed to this session for review, and a reviewer's return handed to
         // a run (docs/owner-confirmation-review-contract.md §2 D6, §8 B3): turns with nobody's words,
@@ -3558,6 +3602,10 @@ export class RunnerApiController {
         if (t.kind === 'message') {
           content = (await appendOwnerConfirmationReviewContext(tx, t.clientTurnId, content)) ?? content;
           content = (await appendConfirmationReturnContext(tx, t.clientTurnId, content)) ?? content;
+        }
+        // An evidence revision is also written into the running turn (evidence-review.service.ts),
+        // so a steer carries its block the way a job's exit does.
+        if (t.kind === 'message' || t.kind === 'steer') {
           content = (await appendEvidenceReviewContext(tx, t.clientTurnId, content)) ?? content;
         }
         // The background work this session left running, said to the engine that comes back to it.
@@ -3743,6 +3791,10 @@ export class RunnerApiController {
       declaredProvider: session.provider,
       declaredProviderBuiltin: session.providerBuiltin,
       customRow,
+      openCodeKeys:
+        session.provider === AgentProvider.OPENCODE && openCodeKeyOf(session.model)
+          ? await openCodeKeyRows(tx, session.ownerId)
+          : undefined,
       sessionModel: session.model,
       usesRuntimeDefaultModel: session.usesRuntimeDefaultModel,
       runtimeDefaultModels: session.assignedRunner?.runtimeDefaultModels,
@@ -4334,6 +4386,9 @@ export class RunnerApiController {
           // A background job's exit the engine never read is a wake turn of its own again, and a
           // wake already queued for the next turn joins it rather than opening a second one.
           await foldQueuedWakeTurnsInto(tx, sessionId, steering);
+          // So is an outcome handed back to this session: the reply steer is its next-turn reply turn
+          // now, still carrying it, and a reply turn already queued joins it (session-request.ts).
+          await foldQueuedReplyTurnsInto(tx, sessionId, steering);
         }
         return {
           applied: requeued.count > 0,
@@ -4374,6 +4429,11 @@ export class RunnerApiController {
           && steering.deliveryStatus !== 'ACKNOWLEDGED'
           ? await closeUnreadSteerRequests(tx, sessionId, [dto.turnId])
           : [];
+        // And a reply steer the engine never took said nothing of the outcomes it carries back to this
+        // session as an asker: they are let go, for the request worker to hand back again.
+        if (acked.count > 0 && failedCurrentWork) {
+          await releaseUnreadSteerReplies(tx, sessionId, steering.clientTurnId);
+        }
         return {
           applied: acked.count > 0,
           steer: true,
@@ -4738,8 +4798,12 @@ export class RunnerApiController {
         const requeuedSteers = await requeueUnreadCurrentWorkSteers(tx, sessionId, [completedTurn.id]);
         currentWorkRequeued = requeuedSteers.length;
         // A background job's exit that missed this turn is a wake turn of its own again; a wake
-        // already queued for the next turn joins it rather than opening a second one behind it.
-        if (requeuedSteers.length > 0) await foldRequeuedWakeTurns(tx, sessionId, requeuedSteers);
+        // already queued for the next turn joins it rather than opening a second one behind it. The
+        // same for an outcome handed back to this session that missed it (session-request.ts).
+        if (requeuedSteers.length > 0) {
+          await foldRequeuedWakeTurns(tx, sessionId, requeuedSteers);
+          await foldRequeuedReplyTurns(tx, sessionId, requeuedSteers);
+        }
       } else if (completedTurn) {
         // A failing turn takes the session with it, and the drain below answers every queued row.
         // Requeueing into a queue about to be emptied would lose the message with nothing said;
@@ -5291,7 +5355,7 @@ export class RunnerApiController {
           engineStartedAt: true,
           enginePhase: true,
           // Which task this run executes and which door created it — read only when a user turn in
-          // this batch is the one that delivers the task's brief (`readTaskStartCard` below).
+          // this batch is the one that delivers the task's brief (`readTurnCards` below).
           taskId: true,
           runSource: true,
           // The line an account-pool member switch owes the transcript, taken below by the first
@@ -5350,106 +5414,30 @@ export class RunnerApiController {
           })
         : [];
       const authoredUserText = new Map(userTurns.map((turn) => [turn.id, turn.content]));
-      // The turns the control plane opened for an exception item, and the card each was drawn from
-      // (project-open-item.ts `readOpenItemDeliveryCard`). Which turns those are is the turn's own
-      // key — `open-item:v1:` is the prefix `openItemTurnId` mints — so this reads the item's
-      // columns and the task's merge receipts for exactly the deliveries that have a card, and
-      // reads nothing at all for a batch of ordinary messages.
-      const deliveryCards = new Map<string, OpenItemDeliveryCard>();
-      for (const turn of userTurns) {
-        const itemId = openItemIdOfTurn(turn.clientTurnId);
-        if (!itemId) continue;
-        const card = await readOpenItemDeliveryCard(tx, itemId);
-        if (card) deliveryCards.set(turn.id, card);
-      }
-      // The turn that hands a task's run its brief, and the task it was built from — drawn as a card
-      // rather than as the owner's own message (tasks/task-start-card.ts). Read only for a task
-      // run's opening or resume turn, so ordinary messages cost nothing here either.
-      const taskStartCards = new Map<string, TaskStartCard>();
-      for (const turn of userTurns) {
-        const card = await readTaskStartCard(
-          tx,
-          { id: sessionId, taskId: session.taskId, runSource: session.runSource },
-          turn,
-        );
-        if (card) taskStartCards.set(turn.id, card);
-      }
-      // The turns another Orbit session sent (`session_send` / `project_send`), and who sent each —
-      // drawn as "from [that session]" rather than as the owner's own message (session-message.ts,
-      // contract §2.3). Read off the turn's sender column, so a batch of the owner's messages reads
-      // nothing here.
-      //
-      // A message that asked for a reply names its request on the card (session-request.ts), and a
-      // client reads the request's state from there: the card is stored once and the state moves.
-      const sessionMessageCards = new Map<string, SessionMessageCard>();
-      const signed = userTurns.filter((turn) => turn.senderSessionId);
-      const requestOfTurn = await readTurnRequestIds(tx, sessionId, signed.map((turn) => turn.id));
-      for (const turn of signed) {
-        const card = await readSessionMessageCard(
-          tx, session.ownerId, turn.senderSessionId!, requestOfTurn.get(turn.id),
-        );
-        if (card) sessionMessageCards.set(turn.id, card);
-      }
-      // The outcomes of this session's own requests that a turn handed back to it — drawn as reply
-      // cards rather than as the owner's words, because the turn carries nobody's (contract §4.2).
-      const replyCards = await readSessionReplyCards(
-        tx, sessionId, userTurns.map((turn) => turn.clientTurnId),
+      // The cards those turns are drawn as rather than as the owner's own message — an exception
+      // item's delivery, a task run's brief, a project's start, a confirmation review or its return,
+      // another session's message, the outcomes of this session's requests — read by the function
+      // the queue reads them with (sessions/turn-cards.ts), so a card a queued turn was drawn as is
+      // the card its echo is stored with. A batch of ordinary messages costs one indexed read.
+      const turnCards = await readTurnCards(
+        tx,
+        { id: sessionId, ownerId: session.ownerId, taskId: session.taskId, runSource: session.runSource },
+        userTurns,
       );
-      // And the turns telling a coordinator its project was started, by the same kind of key
-      // (`project-started:v1:`, project-started.ts) — read for those turns and no others.
-      const startedCards = new Map<string, ProjectStartedCard>();
-      for (const turn of userTurns) {
-        const start = projectStartOfTurn(turn.clientTurnId);
-        if (!start) continue;
-        const card = await readProjectStartedCard(tx, session.ownerId, start);
-        if (card) startedCards.set(turn.id, card);
-      }
-      // A confirmation request handed to its reviewer, and a reviewer's return handed to the run
-      // (docs/owner-confirmation-review-contract.md D7, B3): each drawn as its own card rather than as
-      // the owner's message, by the turn's own key — read for those turns and no others.
-      const reviewRequestCards = new Map<string, ConfirmationReviewRequestCard>();
-      const returnCards = new Map<string, ConfirmationReturnCard>();
-      for (const turn of userTurns) {
-        const requested = await readConfirmationReviewRequestCard(tx, turn.clientTurnId);
-        if (requested) reviewRequestCards.set(turn.id, requested);
-        const returned = await readConfirmationReturnCard(tx, turn.clientTurnId);
-        if (returned) returnCards.set(turn.id, returned);
-      }
       for (const e of durable) {
         if (e.type !== RunEventType.USER) continue;
         e.payload = withControlPlaneNote(
           e.payload,
           e.turnId ? authoredUserText.get(e.turnId) : undefined,
         );
-        e.payload = withOpenItemDelivery(
-          e.payload,
-          (e.turnId ? deliveryCards.get(e.turnId) : undefined) ?? null,
-        );
-        e.payload = withTaskStart(
-          e.payload,
-          (e.turnId ? taskStartCards.get(e.turnId) : undefined) ?? null,
-        );
-        e.payload = withProjectStarted(
-          e.payload,
-          (e.turnId ? startedCards.get(e.turnId) : undefined) ?? null,
-        );
-        e.payload = withConfirmationReviewRequest(
-          e.payload,
-          (e.turnId ? reviewRequestCards.get(e.turnId) : undefined) ?? null,
-        );
-        e.payload = withConfirmationReturn(
-          e.payload,
-          (e.turnId ? returnCards.get(e.turnId) : undefined) ?? null,
-        );
-        e.payload = withSessionMessage(
-          e.payload,
-          (e.turnId ? sessionMessageCards.get(e.turnId) : undefined) ?? null,
-        );
-        const echoed = e.turnId ? userTurns.find((turn) => turn.id === e.turnId) : undefined;
-        e.payload = withSessionReplies(
-          e.payload,
-          (echoed ? replyCards.get(echoed.clientTurnId) : undefined) ?? null,
-        );
+        const cards = e.turnId ? turnCards.get(e.turnId) : undefined;
+        e.payload = withOpenItemDelivery(e.payload, cards?.openItemDelivery ?? null);
+        e.payload = withTaskStart(e.payload, cards?.taskStart ?? null);
+        e.payload = withProjectStarted(e.payload, cards?.projectStarted ?? null);
+        e.payload = withConfirmationReviewRequest(e.payload, cards?.confirmationReviewRequest ?? null);
+        e.payload = withConfirmationReturn(e.payload, cards?.confirmationReturn ?? null);
+        e.payload = withSessionMessage(e.payload, cards?.sessionMessage ?? null);
+        e.payload = withSessionReplies(e.payload, cards?.sessionReplies ?? null);
       }
       // A move between account-pool members is said on the first engine start after it — the first
       // event from a process holding the new member's key. It rides on the runner's own event

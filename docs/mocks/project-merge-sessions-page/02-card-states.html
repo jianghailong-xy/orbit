@@ -1,0 +1,57 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<body>
+<h1>② 合入卡的状态：都在项目 sessions 页的进度卡下面</h1>
+<p class="lede" style="max-width:2090px">卡片跟着候选的状态变，读的仍是 <code>GET /projects/:id/promotions/current</code>，状态由 <code>PromotionCards.stage</code> 决定。「等你确认」见图 ① 第 4 屏。没有在途的候选时，这张卡不出现，页面和今天一样。<br>
+<b>颜色只说明谁在动：</b>灰色是 Orbit 在检查，蓝色是正在合入，琥珀色是协调会话在处理。<b>只有橙色表示在等你</b>，会话列表的橙点和推送也只在橙色时出现。</p>
+<div class="row" id="figs"></div>
+<script>
+const coordWatching = coordRow({ eye: true, sub: 'Watching P6：验收端到端行为、故障语义与旧版本兼容' });
+const page = (at, sessions, done, run, card, coord = coordWatching, merged) => phone(`${statusBar(at)}${navProject(sessions)}<div class="list">
+${progCard(done, 20, run)}${card}${sh('Coordinator')}${coord}${sh('Today')}${todayRows(at, merged)}</div>`);
+const marked = (html, cls) => mk(html.replace(`class="mc ${cls}"`, `class="mc ${cls}" style="margin-top:0"`), 1, 'margin-top:10px;border-radius:16px');
+
+// 1 · 检查中（11:20）
+const p1 = page('11:20', 32, 16, 1, marked(cardChecking(), 'chk'));
+// 2 · 合入中（11:38，你 11:34 按了 Merge to main，main 又动过，在重查）
+const p2 = page('11:38', 33, 16, 1, marked(cardMerging(), 'run'));
+// 3 · 暂时合不了（11:38，另一种走向：和 main 冲突，协调会话在处理）
+const coordResolving = sessRow({ t: PROJECT, tm: 'just now', chip: 'Coordinator', run: true, sub: 'Resolving a merge conflict' });
+const p3 = page('11:38', 33, 16, 2, marked(cardBlocked(), 'blk'), coordResolving);
+// 4 · 已合入（12:01）：卡片收起，时间线里多一行
+const coord12 = coordRow({ eye: true, sub: 'Watching D3：DeepSeek Harness 会话上的 EXECUTABLE…' });
+const p4 = page('12:01', 35, 17, 2, '', coord12, (h) => mkRow(h, 1));
+// 5 · 点那一行：回执详情
+const receipt = sheet({ title: 'Merged into main', body: `<div class="prov">FROM ORBIT</div>
+${kv('Commit', '8d5a868 · merge of project/34ZurCP3bv9yLXGVyUGnx · by you · 11:42')}
+${mk(kv('Now on main', `2 tasks<ul class="tk">${TASKS.map((t) => `<li>${t}</li>`).join('')}</ul>`), 2, 'border-radius:10px;margin:0 -6px;padding:0 6px')}
+${kv('Checks', `<span style="color:var(--green-ink)">✓ Passed on the combined tree · 17m 52s</span><br><code>${CHECK}</code>`)}
+${kv('Landed', 'exactly the tested tree 5e5bfca · as a merge commit')}
+${kv('Changes', '5 commits · 10 files')}` });
+const p5 = phone(`${statusBar('12:01')}${navProject(35)}<div class="list">${progCard(17, 20, 2)}${sh('Coordinator')}${coord12}</div>${receipt}`);
+
+document.getElementById('figs').innerHTML = [
+  fig('after', '检查中 · 灰', p1, `<b>检查中：还没到问你的时候</b><ol>
+<li>${n(1)}Orbit 在「项目分支 + main」合并后的树上跑合入检查（CHECK_PROMOTION）。卡片是安静的灰底，蓝圈在转，写已用时间和通常用时。不亮橙点，也不推送。</li>
+<li>这就是现在进度卡里那行 “Merge check · checking”，挪进了合入卡。任务落到项目分支的 Landing 行还留在进度卡里。</li>
+<li>检查通过，卡片变成「等你确认」。如果开了 Automatic，最后一行改成 “Merges on its own when it passes”，通过后直接合入，不经过「等你确认」。</li></ol>`),
+  fig('after', '合入中 · 蓝', p2, `<b>合入中：你按下之后</b><ol>
+<li>${n(1)}标题跟着阶段变：Queued、Merging…、Re-checking…。检查之后 main 又动过的话，Orbit 自己重查，通过就合入，你不用再按一次。</li>
+<li>进度条是这一步的用时占预算的多少，竖线是通常用时，和 Work overview 的落地行同一套规则。</li>
+<li>Cancel 只在推送之前能按，开始推送后变灰（沿用现在 sheet 的规则）。</li></ol>`),
+  fig('after', '暂时合不了 · 琥珀', p3, `<b>暂时合不了：协调会话在处理</b><ol>
+<li>${n(1)}检查没过，或者和 main 冲突：卡片写出原因和冲突文件。按钮的位置写着谁在处理、处理了多久（沿用 09-24 定的 “Coordinator is resolving it · 4m”）。</li>
+<li>协调会话处理期间是琥珀色，不亮橙点。2 小时没人处理就转给你：卡片变橙，写 “It is yours · waiting 2h”，这时会话列表和推送才提醒你。<b>Open coordinator</b> 直达那张例外卡。</li>
+<li>修好后重新检查，卡片回到「检查中」，再到「等你确认」。</li></ol>`),
+  fig('after', '已合入 · 时间线里的一行', p4, `<b>已合入：卡片收起，时间线里留一行</b><ol>
+<li>${n(1)}顶部的卡片收起。时间线里多一行 “Merged into main”，按合入时刻排进 Today，和会话行共用一条时间轴。</li>
+<li>第二行写提交号、任务数和谁合的：手动合入写 by you，Automatic 合入写 automatically。</li>
+<li>行首是绿色的合入图标，和会话行长得不一样，不会被当成一个会话。等落地会话上线，这一行就是那一轮合入的会话入口。</li></ol>`),
+  fig('after', '点那一行 · 回执', p5, `<b>回执：只记合入那一刻</b><ol>
+<li>内容和现在的回执卡相同：提交、来源分支、谁合的、几点合的。</li>
+<li>${n(2)}“Now on main” 改成列出任务。现在写的是 “2 landed on the branch”，看不出是哪两个。</li>
+<li>检查命令、用时和改动规模也都留着。Automatic 合入的回执多一行 Undo，给出 <code>git revert</code> 命令；手动合入的没有。</li>
+<li>回执只读合入那一刻的记录，不读项目当前的状态，所以无论什么时候打开，内容都一样。</li></ol>`),
+].join('');
+</script>

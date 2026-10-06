@@ -126,14 +126,15 @@ struct ComposerView: View {
                 id: console.modelID,
                 name: console.isDraft ? "Runtime default" : console.modelID)]
         }
-        var models = AgentDefaults.models(for: console.provider, catalog: console.modelCatalog,
+        // `providerChoice`: on OpenCode with a configured key, that key's models (`OpenCodeKeys`).
+        var models = AgentDefaults.models(for: console.providerChoice, catalog: console.modelCatalog,
                                           configured: console.configuredProviders)
         // A Runtime may report a valid default that has not appeared in its catalog yet. Preserve
         // it as a selectable row so choosing another model does not make the original unreachable.
         if !models.contains(where: { $0.id == console.modelID }) {
             models.insert(ModelOption(
                 id: console.modelID,
-                name: AgentDefaults.friendlyName(console.modelID, for: console.provider,
+                name: AgentDefaults.friendlyName(console.modelID, for: console.providerChoice,
                                                   catalog: console.modelCatalog,
                                                   configured: console.configuredProviders)), at: 0)
         }
@@ -611,7 +612,7 @@ struct ComposerView: View {
                         // (web parity): hiding it turns "not signed in on this machine" into
                         // "Orbit lost my provider". The running one is exempt — it is the row's
                         // own caption, and a parenthetical there would sit under every turn.
-                        let blocked = choice.unavailable != nil && choice.slug != console.provider
+                        let blocked = choice.unavailable != nil && choice.slug != console.providerChoice
                         // Each built-in engine's accounts under it (web parity): on the engine the
                         // session (or draft) is on, the ones it moves
                         // between; under another, the ones a switch onto that engine lands on.
@@ -642,7 +643,7 @@ struct ComposerView: View {
                             } label: {
                                 menuItemLabel(
                                     blocked ? "\(choice.label) — \(reason)\(fix)" : [choice.label, choice.labelDetail].compactMap { $0 }.joined(separator: " · "),
-                                    selected: choice.slug == console.provider && !listsAccounts)
+                                    selected: choice.slug == console.providerChoice && !listsAccounts)
                             }
                             .disabled(blocked && !fixable)
                         }
@@ -657,9 +658,8 @@ struct ComposerView: View {
                 } label: {
                     menuSubmenuLabel(
                         "Provider",
-                        value: AgentDefaults.providerName(
-                            console.provider,
-                            configured: console.configuredProviders))
+                        value: console.providerSwitchChoices.first { $0.slug == console.providerChoice }?.label
+                            ?? AgentDefaults.providerName(console.provider, configured: console.configuredProviders))
                 }
                 Divider()
             }
@@ -672,7 +672,7 @@ struct ComposerView: View {
                         catalog: console.modelCatalog, configured: console.configuredProviders)
                     let resetEffort = nextEffort != console.effort
                     let clampedPermissionMode = console.selectModel(m.id)
-                    app.rememberDefaultModel(m.id, for: console.provider)
+                    app.rememberDefaultModel(m.id, for: console.providerChoice)
                     let permissionMode = clampedPermissionMode
                         ? console.permissionMode.rawValue
                         : nil
@@ -769,7 +769,7 @@ struct ComposerView: View {
         !console.providerCapabilitiesResolved && console.isDraft
             ? "Runtime default"
             : AgentDefaults.friendlyName(
-                console.modelID, for: console.provider,
+                console.modelID, for: console.providerChoice,
                 catalog: console.modelCatalog,
                 configured: console.configuredProviders)
     }

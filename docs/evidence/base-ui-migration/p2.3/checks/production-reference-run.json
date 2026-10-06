@@ -1,0 +1,14 @@
+{
+  "argv": [
+    "node",
+    "node_modules/@playwright/test/cli.js",
+    "test",
+    "--config",
+    "/tmp/orbit-p23-reference/src/web/ui-migration/production-reference.config.mjs"
+  ],
+  "cwd": "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc",
+  "startedFrom": "67e62c0b4028eefe2c619dac80d3fac312cea601",
+  "finishedAt": "2026-10-04T06:38:32.461296+00:00",
+  "seconds": 21.91212460800307,
+  "exitCode": 0
+}

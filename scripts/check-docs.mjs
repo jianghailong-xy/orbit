@@ -95,7 +95,7 @@ export async function checkLocalLinks(file, source, root, tracked, config) {
 async function main() {
   const root = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim();
   process.chdir(root);
-  const tracked = execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8' }).split('\0').filter(Boolean);
+  const tracked = execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).split('\0').filter(Boolean);
   const guides = readFileSync('scripts/docs-public-files.txt', 'utf8').trim().split('\n');
   const missing = guides.filter((file) => !tracked.includes(file));
   if (missing.length) throw new Error(`Public guides must be tracked: ${missing.join(', ')}`);

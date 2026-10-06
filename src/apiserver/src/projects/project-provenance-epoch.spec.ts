@@ -161,6 +161,11 @@ const ALLOWED_READERS: Readonly<Record<string, string>> = {
   // who may answer it.
   'src/apiserver/src/tasks/task-evidence-decision.ts':
     'refuses the evidence submitter its own decision; reads no task project provenance',
+  // The user door's submit route names the same N10 field in its access-token declaration, and only
+  // to REFUSE: a token confined to workspaces may not submit evidence from a session outside them
+  // (docs/personal-access-token-design.md §6.3). The request's field is judged, never a task column.
+  'src/apiserver/src/tasks/task-completion-evidence.controller.ts':
+    "refuses a confined access token a source session outside its workspaces; reads no task project provenance",
   // The B line's evidence review reads the same N10 column for one thing: which run submitted the
   // revision, so the owner's card can fall back to that run's conversation when the session that
   // dispatched the task is in Trash, and so the block handed to that session names the run. Who

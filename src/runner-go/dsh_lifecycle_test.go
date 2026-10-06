@@ -33,6 +33,7 @@ const lcSessionID = "lc-orbit-session"
 type lcTurn struct {
 	ID, Kind, Content string
 	Env               map[string]string
+	TaskAcceptance    bool
 	Status            string // PENDING, IN_FLIGHT, DELIVERED (control kinds) or the settled status
 	Deliveries        int
 	expired           bool
@@ -117,7 +118,7 @@ func (cp *lcControlPlane) next() (*RunInboxResponse, int) {
 	}
 	deliver := func(turn *lcTurn) *RunInboxResponse {
 		turn.Deliveries++
-		return &RunInboxResponse{TurnID: turn.ID, Kind: turn.Kind, Content: turn.Content, Env: turn.Env}
+		return &RunInboxResponse{TurnID: turn.ID, Kind: turn.Kind, Content: turn.Content, Env: turn.Env, TaskAcceptance: turn.TaskAcceptance}
 	}
 	for _, turn := range cp.turns {
 		if !lcExecutable(turn.Kind) && turn.Status == "PENDING" {
@@ -986,6 +987,47 @@ func TestDshLifecycleMultiTurnQueue(t *testing.T) {
 		h.settledOnce("t1", stSucceeded, "reply to m1 after []")
 		h.end(run, "end")
 		lcEqual(t, "engine prompts", h.promptTexts(), []string{"m1"})
+		h.cp.checkClean(t)
+	})
+	// D3: a task's EXECUTABLE acceptance command is the runner's to run, in the worktree, after the
+	// message ahead of it — never a prompt to dsh — while a person's `!` shell is still refused.
+	t.Run("task-acceptance-runs-on-the-runner", func(t *testing.T) {
+		h := newLCHarness(t)
+		h.cp.busyDelivery = true // the acceptance turn arrives while the message is still running
+		h.cp.add("t1", "message", "m1 [slow]")
+		h.cp.addTurn(&lcTurn{ID: "a1", Kind: "shell", TaskAcceptance: true,
+			Content: "pwd > acceptance-ran.txt; ls -A acceptance-ran.txt; echo d3-acceptance-output; exit 3"})
+		h.cp.add("s1", "shell", "touch user-shell-ran.txt")
+		run := h.start(h.job())
+		h.settledOnce("t1", stSucceeded, "reply to m1 after []")
+		acceptance := h.cp.waitSettled(t, "a1")
+		if len(acceptance.Completions) != 1 {
+			t.Fatalf("acceptance must settle once: %+v", acceptance)
+		}
+		done := acceptance.Completions[0]
+		if done.Status != stSucceeded || done.Subtype != "shell" || done.ShellExitCode == nil || *done.ShellExitCode != 3 ||
+			done.ShellOutput == nil || !strings.Contains(*done.ShellOutput, "d3-acceptance-output") ||
+			done.Result != "exit 3" || done.RuntimeSessionID != "lc-engine-session-1" {
+			t.Fatalf("acceptance completion: %+v (output %v)", done, done.ShellOutput)
+		}
+		ran, err := os.ReadFile(filepath.Join(h.work, "acceptance-ran.txt"))
+		if err != nil {
+			t.Fatalf("the acceptance command did not run in the worktree: %v", err)
+		}
+		if want, _ := filepath.EvalSymlinks(h.work); strings.TrimSpace(string(ran)) != want && strings.TrimSpace(string(ran)) != h.work {
+			t.Fatalf("acceptance ran in %q, not the worktree %q", ran, h.work)
+		}
+		user := h.cp.waitSettled(t, "s1")
+		if user.Status != stFailed || len(user.Completions) != 1 || user.Completions[0].Subtype != subtypeUnknownKind ||
+			user.Completions[0].ShellExitCode != nil {
+			t.Fatalf("a person's shell turn must still be refused: %+v", user)
+		}
+		if _, err := os.Stat(filepath.Join(h.work, "user-shell-ran.txt")); !os.IsNotExist(err) {
+			t.Fatalf("a refused shell turn ran: %v", err)
+		}
+		h.end(run, "end")
+		lcEqual(t, "engine prompts", h.promptTexts(), []string{"m1 [slow]"})
+		h.checkNoEngineViolations()
 		h.cp.checkClean(t)
 	})
 }

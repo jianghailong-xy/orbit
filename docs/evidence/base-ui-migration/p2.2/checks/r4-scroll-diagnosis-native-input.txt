@@ -1,0 +1,39 @@
+[WebServer] (node:326461) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 16 tests using 1 worker
+
+(node:326669) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium-light-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe-final.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (3.1s)
+  ✓   2 [chromium-light-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe-final.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time (1.3s)
+(node:327167) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   3 [chromium-light-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe-final.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (2.7s)
+  ✓   4 [chromium-light-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe-final.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time (1.3s)
+(node:330295) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   5 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe-final.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (3.1s)
+  ✓   6 [chromium-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe-final.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time (1.2s)
+(node:337344) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   7 [chromium-dark-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe-final.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (2.7s)
+  ✓   8 [chromium-dark-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe-final.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time (1.3s)
+(node:337503) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   9 [webkit-light-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe-final.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (2.7s)
+  ✓  10 [webkit-light-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe-final.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time (1.3s)
+(node:337743) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  11 [webkit-light-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe-final.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (2.6s)
+  ✓  12 [webkit-light-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe-final.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time (1.2s)
+(node:337984) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  13 [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe-final.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (2.6s)
+  ✓  14 [webkit-dark-desktop] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe-final.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time (1.4s)
+(node:338429) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  15 [webkit-dark-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe-final.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time (3.1s)
+  ✓  16 [webkit-dark-phone] › docs/evidence/base-ui-migration/p2.2/revision-4/scroll-probe-final.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time (4.3s)
+
+  16 passed (39.1s)

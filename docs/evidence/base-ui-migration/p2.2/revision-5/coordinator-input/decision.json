@@ -1,0 +1,19 @@
+{
+  "id": "1Sn2OmupIiRIKAOgnVsYea",
+  "taskId": "34Za394q2ZEgr7TKprjkF",
+  "evidenceId": "rvFLYDlW9qZTahxRv81EP",
+  "evidenceRevision": "4",
+  "criterionRevision": "3eae570ea54ff258b81eff30da6d8db0df6f40bd04c755a70fae494bb7ae955d",
+  "evidenceDigest": "68c0c3a967380ca464ae7f04e36a764b49ed68a5d53e33be52038015bf234f3b",
+  "decision": "SEND_BACK",
+  "note": "第4版 SEND_BACK，范围只限新增滚动解锁检查的稳定性；不撤回已确认的组件实现、外观证据和三处配置冲突处置。\n\n已独立核对交付 801d41ac9b9ec33671a00190e6f3c77cee22ab94 与被测 2bd040fe3bc642cdb53460539146e25eb4e8aad2 的 Web 树相同；相对r3只有 choices-lifecycle.browser.mjs 和测试 helper 变化。609份运行时文件、依赖/配置和12586份历史证据不变，507项归档哈希、448项附件哈希及520项发现身份通过。逐层焦点、父层仍锁定和真实输入/滚动断言保留，未增加 retries/skip/通用timeout。诊断支持异步清理先后问题；协调者40次减少动效检查也有3次首次仍锁定、随后解锁并真实滚动，40/40通过；标准文档负对照16/16通过。\n\n但协调者在隔离固定交付上原样跑八环境32项入口得到31通过/1失败：chromium-light-desktop，no-preference Dialog Popover Select exits restore one layer at a time，choices-lifecycle.browser.mjs:99 的 <=100ms 断言实测105.7000000178814ms。首次检查位于Esc后335.40000000596046ms，首次和最终均已无锁；由于上一断言失败，该个案没有执行后续实际滚动。原始trace、报告、观测和命令均保留，未为该失败追加重试。不能将这一轮称为32/32，也不能用40次减少动效成功替代普通动效失败。\n\n100ms是本版新增的测试约束，不是项目验收标准中的产品时延指标；本次不据此认定组件有永久锁或生产缺陷。下一版请依据真实关闭生命周期说明观测起点及局部等待边界，区分从Esc开始的渲染/动效/调度总时长与关闭后可滚动就绪；允许有证据地调整测试同步方法，不能只把100改成刚好高于105.7的数。继续记录从Esc开始的总时长、原位置首次读值、最终状态和实际滚动；保留内层父锁、焦点与真实输入断言。负对照须仍能拒绝残留锁和超出合理边界的恢复。不要为测试时序无证据修改运行时，也不要使用长sleep、重试、跳过或放宽通用timeout。\n\n修正后在固定提交重跑原32项八环境入口，并对这次失败的普通动效关闭做适量重复；同时验证减少动效及负对照仍成立。提交真实命令/退出码、原始报告/trace、源码及Web树身份，保留本版失败。若仍只改该测试同步，可继续复用r3独立build+test（295文件3661项）、四套类型检查及既有视觉证据；无需为此重跑完整520或P7。\n\n独立记录：/root/.orbit/uploads/01a1023e-9bb2-75b0-8a60-7d4b29ba57ed/p22-r4-coordinator-review.zip；SHA256 1e91b059eee392300fbc23948a55c1fa7a493b02785a4117152ccb549c5f4e7e。目录 /tmp/orbit-p22-r4-coordinator-review-c1iqk9rf，重点 coordinator-review-summary.json、coordinator-entry-failure.json、coordinator-observations.json 与 coordinator-choices-entry-results 下失败trace。",
+  "decidedAt": "2026-10-04T12:15:10.876Z",
+  "decidedByType": "AGENT",
+  "decidedById": "34ZHGcIxwsZUxkgh2z65V",
+  "decidingSessionId": "34ZYgWv9tyVjbJij7zwq5",
+  "publicId": "1Sn2OmupIiRIKAOgnVsYea",
+  "taskPublicId": "34Za394q2ZEgr7TKprjkF",
+  "decidedByPublicId": "34ZHGcIxwsZUxkgh2z65V",
+  "evidencePublicId": "rvFLYDlW9qZTahxRv81EP",
+  "decidingSessionPublicId": "34ZYgWv9tyVjbJij7zwq5"
+}

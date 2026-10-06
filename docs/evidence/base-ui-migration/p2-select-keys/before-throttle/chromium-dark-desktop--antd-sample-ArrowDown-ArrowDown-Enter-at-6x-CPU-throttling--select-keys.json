@@ -1,0 +1,151 @@
+{
+  "target": "antd-sample",
+  "rate": 6,
+  "runs": [
+    {
+      "run": 0,
+      "before": "Never",
+      "after": "7 days\n7 days",
+      "listboxOpen": false,
+      "keys": [
+        {
+          "key": "ArrowDown",
+          "t": 32.6,
+          "target": "combobox:Sample choice",
+          "listbox": false,
+          "highlighted": null
+        },
+        {
+          "key": "ArrowDown",
+          "t": 164.9,
+          "target": "combobox:Sample choice",
+          "listbox": false,
+          "highlighted": "Never"
+        },
+        {
+          "key": "Enter",
+          "t": 208.2,
+          "target": "combobox:Sample choice",
+          "listbox": true,
+          "highlighted": "7 days"
+        }
+      ]
+    },
+    {
+      "run": 1,
+      "before": "Never",
+      "after": "7 days\n7 days",
+      "listboxOpen": false,
+      "keys": [
+        {
+          "key": "ArrowDown",
+          "t": 29.8,
+          "target": "combobox:Sample choice",
+          "listbox": false,
+          "highlighted": null
+        },
+        {
+          "key": "ArrowDown",
+          "t": 132.2,
+          "target": "combobox:Sample choice",
+          "listbox": false,
+          "highlighted": "Never"
+        },
+        {
+          "key": "Enter",
+          "t": 170.7,
+          "target": "combobox:Sample choice",
+          "listbox": true,
+          "highlighted": "7 days"
+        }
+      ]
+    },
+    {
+      "run": 2,
+      "before": "Never",
+      "after": "7 days\n7 days",
+      "listboxOpen": false,
+      "keys": [
+        {
+          "key": "ArrowDown",
+          "t": 30.9,
+          "target": "combobox:Sample choice",
+          "listbox": false,
+          "highlighted": null
+        },
+        {
+          "key": "ArrowDown",
+          "t": 125.5,
+          "target": "combobox:Sample choice",
+          "listbox": false,
+          "highlighted": "Never"
+        },
+        {
+          "key": "Enter",
+          "t": 161.3,
+          "target": "combobox:Sample choice",
+          "listbox": true,
+          "highlighted": "7 days"
+        }
+      ]
+    },
+    {
+      "run": 3,
+      "before": "Never",
+      "after": "7 days\n7 days",
+      "listboxOpen": false,
+      "keys": [
+        {
+          "key": "ArrowDown",
+          "t": 29.6,
+          "target": "combobox:Sample choice",
+          "listbox": false,
+          "highlighted": null
+        },
+        {
+          "key": "ArrowDown",
+          "t": 124.9,
+          "target": "combobox:Sample choice",
+          "listbox": false,
+          "highlighted": "Never"
+        },
+        {
+          "key": "Enter",
+          "t": 162,
+          "target": "combobox:Sample choice",
+          "listbox": true,
+          "highlighted": "7 days"
+        }
+      ]
+    },
+    {
+      "run": 4,
+      "before": "Never",
+      "after": "7 days\n7 days",
+      "listboxOpen": false,
+      "keys": [
+        {
+          "key": "ArrowDown",
+          "t": 29.9,
+          "target": "combobox:Sample choice",
+          "listbox": false,
+          "highlighted": null
+        },
+        {
+          "key": "ArrowDown",
+          "t": 123.3,
+          "target": "combobox:Sample choice",
+          "listbox": false,
+          "highlighted": "Never"
+        },
+        {
+          "key": "Enter",
+          "t": 161,
+          "target": "combobox:Sample choice",
+          "listbox": true,
+          "highlighted": "7 days"
+        }
+      ]
+    }
+  ]
+}

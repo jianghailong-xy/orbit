@@ -1,0 +1,7 @@
+/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/docs/evidence/base-ui-migration/p2.3/revision-2/audit.py:42: DeprecationWarning: Image.Image.getdata is deprecated and will be removed in Pillow 14 (2027-10-15). Use get_flattened_data instead.
+  count = sum(x != y for x, y in zip(left.getdata(), right.getdata()))
+Traceback (most recent call last):
+  File "/root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/docs/evidence/base-ui-migration/p2.3/revision-2/audit.py", line 52, in <module>
+    assert c['differentPixels'] == 0, p
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: /root/.orbit/worktrees/bbf5c61b-59f5-5c6b-bccf-b91dfe21fdfc/docs/evidence/base-ui-migration/p2.3/revision-2/toasts-run/chromium-dark-desktop--existing-notifications-remain-accessible-in-Bottom-drawer-with-unchanged-appearance--appearance.json

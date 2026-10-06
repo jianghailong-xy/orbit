@@ -1,0 +1,13 @@
+{
+  "command": "node node_modules/typescript/bin/tsc -p src/web/ui-migration/choices.tsconfig.json --noEmit && node node_modules/typescript/bin/tsc -p src/web/ui-migration/overlays.tsconfig.json --noEmit && node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts.tsconfig.json --noEmit && node node_modules/typescript/bin/tsc -p src/web/ui-migration/toasts-tests.tsconfig.json --noEmit",
+  "runner": "mcp__orbit__bg_run",
+  "bgJobId": "bgj_d582e2fee425",
+  "cwd": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2",
+  "commit": "8a29e349324e7aaca83827a52148b540c118b992",
+  "webTree": "9aa3a0b96d7c1e3fd473995798774d4f20144885",
+  "started": "2026-10-06T06:31:55Z",
+  "outputLastWritten": "2026-10-06T06:31:55.868885+00:00",
+  "exitCode": 0,
+  "outputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "outputBytes": 0
+}

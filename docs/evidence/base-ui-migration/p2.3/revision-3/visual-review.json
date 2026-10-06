@@ -1,0 +1,25 @@
+{
+  "method": "Direct view_image inspection of four unmodified browser PNGs, supplemented by audit.py exact pixel comparison.",
+  "images": [
+    {
+      "file": "toasts-run/chromium-light-desktop--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--stationary-arrival.png",
+      "sha256": "821b4a02a7772d5deb1babe9ba0365f977fb8337d8af5933a3f6fa1e5f55dfb1",
+      "observed": "明色桌面通知位于右上角，标题、副标题与Undo完整可读；与页面控件分离。"
+    },
+    {
+      "file": "toasts-run/webkit-dark-phone--native-stationary-arrival-pauses-beyond-six-seconds-and-moving-away-resumes-dismissal--stationary-arrival.png",
+      "sha256": "eb7cca0123307297933e5e46efc53824fee4da5af297df6c6ae34fa8cda98e2f",
+      "observed": "暗色手机卡片、成功状态与Undo完整可见，保留原安全区与左右间距。"
+    },
+    {
+      "file": "toasts-run/chromium-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+      "sha256": "fb7b26cef278ec49ca15907e17782b085a15e299362d07e2641d30e4adabb497",
+      "observed": "错误诊断及复制/关闭、更多计数、短提示和结果卡片分别排列，没有互相重叠或裁切。"
+    },
+    {
+      "file": "toasts-run/chromium-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-page.png",
+      "sha256": "989622e17df3b385f05beac1cdb711363af0541f7069dcb27d2fa88b74437c5c",
+      "observed": "抽屉入场中点，错误通知仍固定在视口右上角并保持不透明；卡片跨出抽屉边界，没有受抽屉裁切或缩放。"
+    }
+  ]
+}

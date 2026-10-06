@@ -1,0 +1,10 @@
+{
+  "dark": {
+    "foreground": "rgb(201, 206, 213)",
+    "background": "rgb(34, 61, 126)"
+  },
+  "light": {
+    "foreground": "rgb(31, 35, 41)",
+    "background": "rgb(214, 232, 255)"
+  }
+}

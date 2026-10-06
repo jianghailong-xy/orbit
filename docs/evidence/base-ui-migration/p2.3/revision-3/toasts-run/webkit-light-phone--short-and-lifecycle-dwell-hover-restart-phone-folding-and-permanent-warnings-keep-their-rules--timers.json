@@ -1,0 +1,8 @@
+{
+  "shortMs": 3000,
+  "actionMs": 6000,
+  "hoverHeldMs": 10000,
+  "fullDwellRestarted": true,
+  "warningStillPresentAfterMs": 66000,
+  "phoneFolds": true
+}

@@ -61,9 +61,11 @@ function markup(
 }
 
 describe('NewSessionProviderHero', () => {
-  it('preserves the hidden Antigravity current choice and explains its environment credential', () => {
+  it('names Antigravity alone, however it signs in — that is the Provider menu’s to say', () => {
     const html = markup('antigravity');
-    expect(html).toContain('env key');
+    expect(html).toContain('aria-label="Engine: Antigravity"');
+    expect(html).not.toContain('env key');
+    expect(html).not.toContain('Google account');
     expect(html).toContain('Gemini 3.8 Flash');
     expect(html).not.toContain('Managed by the provider');
   });
@@ -147,15 +149,10 @@ describe('NewSessionProviderHero', () => {
     expect(html).not.toContain('engine=moonshot');
   });
 
-  it('names an unknown provider truthfully under the engine that would run it', () => {
-    const html = markup('gone-away');
-    expect(html).toContain('via gone-away');
-  });
-
-  it('names the engine on the card, and the provider it spends when that is not its own sign-in', () => {
+  it('names the engine on the card, and not the provider of it the draft spends', () => {
     const html = markup('deepseek');
-    expect(html).toContain('aria-label="Engine: Claude via DeepSeek"');
-    expect(html).toContain('<small class="np-label-detail">via DeepSeek</small>');
-    expect(markup('claude')).not.toContain('via ');
+    expect(html).toContain('aria-label="Engine: Claude"');
+    expect(html).not.toContain('DeepSeek</small>');
+    expect(html).not.toContain('via ');
   });
 });

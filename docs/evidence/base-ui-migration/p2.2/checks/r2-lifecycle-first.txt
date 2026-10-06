@@ -1,0 +1,82 @@
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs choices-lifecycle.browser.mjs --project=chromium-light-desktop --project=webkit-dark-phone --max-failures=1
+
+[WebServer] (node:3049440) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 24 tests using 1 worker
+
+(node:3049674) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:44:51 › no-preference Dialog Popover Select exits restore one layer at a time (3.4s)
+  ✓   2 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:44:51 › reduce Dialog Popover Select exits restore one layer at a time (1.5s)
+  ✓   3 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:92:90 › reduced motion attachment has no transition and dismisses cleanly (909ms)
+  ✓   4 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:92:90 › reduced motion expiry has no transition and dismisses cleanly (1.1s)
+  ✓   5 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:92:90 › reduced motion search has no transition and dismisses cleanly (1.1s)
+  ✓   6 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:92:90 › reduced motion multiple has no transition and dismisses cleanly (1.3s)
+  ✓   7 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:92:90 › reduced motion popover has no transition and dismisses cleanly (1.1s)
+  ✓   8 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:92:90 › reduced motion tooltip has no transition and dismisses cleanly (921ms)
+  ✓   9 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:109:67 › normal attachment can reopen during exit without stale unmount (1.8s)
+  ✓  10 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:109:67 › normal expiry can reopen during exit without stale unmount (2.7s)
+  ✘  11 [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:109:67 › normal search can reopen during exit without stale unmount (16.9s)
+Testing stopped early after 1 maximum allowed failures.
+
+
+  1) [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:109:67 › normal search can reopen during exit without stale unmount 
+
+    Error: expect(locator).toHaveValue(expected) failed
+
+    Locator:  getByRole('region', { name: 'Appearance sample' }).getByRole('combobox')
+    Expected: "7 days"
+    Received: ""
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveValue" getByRole('region', { name: 'Appearance sample' }).getByRole('combobox') with timeout 15000ms
+      - waiting for getByRole('region', { name: 'Appearance sample' }).getByRole('combobox')
+        4 × locator resolved to <input value="" role="combobox" autocorrect="off" autocomplete="off" spellcheck="false" id="base-ui-_r_2_" autocapitalize="none" aria-expanded="false" aria-haspopup="listbox" aria-autocomplete="list" aria-describedby="_r_1_" data-popup-side="bottom" aria-label="Sample choice" class="orbit-combobox-input"/>
+          - unexpected value ""
+        30 × locator resolved to <input value="" role="combobox" autocorrect="off" autocomplete="off" spellcheck="false" id="base-ui-_r_2_" autocapitalize="none" aria-expanded="false" aria-haspopup="listbox" aria-autocomplete="list" aria-describedby="_r_1_" aria-label="Sample choice" class="orbit-combobox-input"/>
+           - unexpected value ""
+
+
+      124 |     await activate(page.getByRole('option', { name: '7 days', exact: true }), info);
+      125 |     if (kind === 'expiry') await expect(trigger).toHaveText('7 days');
+    > 126 |     else await expect(trigger).toHaveValue('7 days');
+          |                                ^
+      127 |   } else if (info.project.use.hasTouch) await page.touchscreen.tap(3, 60);
+      128 |   else await page.mouse.click(3, 60);
+      129 |   await expect(popup).not.toBeVisible();
+        at /root/.orbit/worktrees/feecaa5d-352f-569c-bd2b-ad4b1d8d11bf/src/web/ui-migration/choices-lifecycle.browser.mjs:126:32
+
+    Error Context: .choices-results/choices-lifecycle.browser.-fd9c4--exit-without-stale-unmount-chromium-light-desktop/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .choices-results/choices-lifecycle.browser.-fd9c4--exit-without-stale-unmount-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .choices-results/choices-lifecycle.browser.-fd9c4--exit-without-stale-unmount-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [chromium-light-desktop] › ui-migration/choices-lifecycle.browser.mjs:109:67 › normal search can reopen during exit without stale unmount 
+  13 did not run
+  10 passed (34.4s)
+  1 error was not a part of any test, see above for details
+npm error Lifecycle script `test:ui-choices` failed with error:
+npm error code 1
+npm error path /root/.orbit/worktrees/***/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /root/.orbit/worktrees/***/src/web
+npm error command failed
+npm error command sh -c playwright test --config ui-migration/choices.config.mjs choices-lifecycle.browser.mjs --project=chromium-light-desktop --project=webkit-dark-phone --max-failures=1
