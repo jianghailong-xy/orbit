@@ -1268,6 +1268,18 @@ type Manifest struct {
 	MinimumCapabilityRevision int    `json:"minimumCapabilityRevision,omitempty"`
 	MinimumSchemaRevision     int    `json:"minimumSchemaRevision,omitempty"`
 	ContractDigest            string `json:"contractDigest,omitempty"`
+	// Assets is keyed by platformKey ("linux-x64", "darwin-arm64", …). A control plane older than
+	// the field publishes none; downloadAndSwap then installs unverified, with a warning.
+	Assets map[string]ManifestAsset `json:"assets,omitempty"`
+}
+
+// ManifestAsset is one platform's download in /dl/version.json, as cmd/release-manifest writes it:
+// File is its name under <origin>/dl/ (orbit-<platform>.gz), and SHA256 the lowercase hex SHA-256
+// of that file's bytes exactly as served — the gzip stream, not the binary inside it — so a client
+// checks the download before it decompresses anything.
+type ManifestAsset struct {
+	File   string `json:"file,omitempty"`
+	SHA256 string `json:"sha256,omitempty"`
 }
 
 // PermissionRule mirrors @orbit/shared: a claude permission rule to add for the rest of
