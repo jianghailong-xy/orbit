@@ -844,6 +844,10 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     /// The card this queued turn is, read by the same function the runner's echo is read by. Nil
     /// unless `openItemDelivery` is one.
     public var itemCard: OpenItemDelivery? { OpenItemDelivery.parseCard(openItemDelivery) }
+    /// The same for the turn that hands a task's run its brief (`taskStart`) — a resumed run's; a
+    /// run's opening turn is never listed — held raw for `TaskStart.parseCard`, the reader the echo's
+    /// payload is read by. Nil on every other turn, and from a server that predates the field.
+    public let taskStart: JSONValue?
     /// The same for the message telling a coordinator its project was started (`projectStarted`),
     /// held raw for `ProjectStarted.parseCard` — the reader the echo's payload is read by.
     public let projectStarted: JSONValue?
@@ -854,6 +858,13 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     /// sent, and from a server that predates the field.
     public let sessionMessage: JSONValue?
     public var senderCard: SessionMessage? { SessionMessage.parseCard(sessionMessage) }
+    /// The outcomes a reply turn hands back (`sessionReplies`) — held raw for `SessionReply.parse`,
+    /// the reader the echo's payload is read by, so the queue draws the reply cards the echo will be
+    /// drawn as. Nil on every other turn, and from a server that predates the field.
+    public let sessionReplies: JSONValue?
+    public var replyCards: [SessionReply]? {
+        sessionReplies.flatMap { SessionReply.parse(.object(["sessionReplies": $0])) }
+    }
     /// A confirmation review's two turns — the request a reviewer is handed and the reviewer's
     /// return handed to the run — held raw for the readers the echo's payload is read by
     /// (`ConfirmationReviewTurns.swift`). Nil on every other turn, and from an older server.
@@ -870,16 +881,19 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
 
     public init(turnId: String, kind: String? = nil, content: String,
                 attachments: [Attachment]? = nil, openItemDelivery: JSONValue? = nil,
+                taskStart: JSONValue? = nil,
                 projectStarted: JSONValue? = nil, sessionMessage: JSONValue? = nil,
-                authoredByOrbit: Bool? = nil, confirmationReviewRequest: JSONValue? = nil,
+                sessionReplies: JSONValue? = nil, authoredByOrbit: Bool? = nil, confirmationReviewRequest: JSONValue? = nil,
                 confirmationReturn: JSONValue? = nil) {
         self.turnId = turnId
         self.kind = kind
         self.content = content
         self.attachments = attachments
         self.openItemDelivery = openItemDelivery
+        self.taskStart = taskStart
         self.projectStarted = projectStarted
         self.sessionMessage = sessionMessage
+        self.sessionReplies = sessionReplies
         self.authoredByOrbit = authoredByOrbit
         self.confirmationReviewRequest = confirmationReviewRequest
         self.confirmationReturn = confirmationReturn

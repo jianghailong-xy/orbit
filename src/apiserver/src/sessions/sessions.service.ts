@@ -26,22 +26,19 @@ import { CLEARED_RUNNING_WORK } from './running-work';
 import { resolveLegacyArtifactPath } from './legacy-artifact-path';
 import { isWorktreeArtifactPath, readWorktreeArtifactRequest } from './worktree-artifact';
 import { isOrbitAuthoredTurn } from './orbit-authored-turn';
-import { readSessionMessageCard } from './session-message';
 import { readSessionProjectMembership, sessionProjectMembershipSql } from './session-project-membership';
 import {
   closeRequestsTheRetryWillNotResend,
   isSessionReplyTurn,
   queuedRepliesContent,
   readOpenRequestPeers,
-  readTurnRequestIds,
   settleUnrunSessionRequests,
 } from './session-request';
+import { readTurnCards, type TurnCards } from './turn-cards';
 import { readConfirmationsUnderReview } from '../tasks/owner-confirmation-read';
 import {
   isConfirmationReviewContentTurn,
   queuedConfirmationReviewContent,
-  readConfirmationReturnCard,
-  readConfirmationReviewRequestCard,
 } from '../tasks/owner-confirmation-review-turn';
 
 import { createHash, randomUUID } from 'crypto';
@@ -62,11 +59,6 @@ import {
   type RunnerModelCatalog,
   FilePatch,
   MAX_PROMPT_CHARS,
-  type ConfirmationReturnCard,
-  type ConfirmationReviewRequestCard,
-  type OpenItemDeliveryCard,
-  type ProjectStartedCard,
-  type SessionMessageCard,
   PermissionMode,
   type PermissionRule,
   ROOT_FALLBACK_PERMISSION_MODE,
@@ -130,8 +122,6 @@ import {
   sessionWaitingKind,
 } from '../projects/owner-decision-signal';
 import { decideSessionSource, type SessionSourceTaskRow } from '../projects/session-source';
-import { openItemIdOfTurn, readOpenItemDeliveryCard } from '../projects/project-open-item';
-import { projectStartOfTurn, readProjectStartedCard } from '../projects/project-started';
 import { branchName } from '../projects/project-criterion-landing';
 import {
   MERGE_RECEIPT_RESULTS,
@@ -293,29 +283,18 @@ export type RunnerSessionScope = { assignedRunnerId: string; workspaceId?: strin
 
 type TurnPlacement = SessionTurnPlacement;
 
-interface ListedQueuedTurn {
+/** A waiting turn, with the cards the runner's echo will carry (`TurnCards`, turn-cards.ts): an
+ *  exception item's delivery (§4.4 X-D2), a task run's brief, another session's message, and every
+ *  other card a turn the control plane opened is drawn as — so the card a client paints while this
+ *  turn waits is not a different rendering of a different reading. Absent on every turn a person
+ *  typed — and on this base rather than on one view, because BOTH projections carry them and both
+ *  ends draw the queue (`listQueuedTurns`). A client taking another session's message off the queue
+ *  unrun hands none of it back to the owner's composer: the words are the sending session's. */
+interface ListedQueuedTurn extends TurnCards {
   turnId: string;
   kind: string;
   content: string;
   attachments: Array<{ id: string; mimeType: string }>;
-  /** An exception item's delivery carries the item's own fields beside its words (§4.4 X-D2): the
-   *  card the runner's echo will be drawn as, so the card a client paints while this turn waits is
-   *  not a different rendering of a different reading. Absent on every turn a person typed — and on
-   *  this base rather than on one view, because BOTH projections carry it and both ends draw the
-   *  queue (`listQueuedTurns`). */
-  openItemDelivery?: OpenItemDeliveryCard;
-  /** The same for the message telling a coordinator its project was started (project-started.ts). */
-  projectStarted?: ProjectStartedCard;
-  /** Another Orbit session's message (session-message.ts, contract §2.3): the card the runner's echo
-   *  will carry, so the queue draws "From [that session]" rather than the owner's own bubble — and a
-   *  client taking it off the queue unrun hands none of it back to the owner's composer: the words
-   *  are the sending session's. Absent on every turn nobody's session sent. */
-  sessionMessage?: SessionMessageCard;
-  /** A confirmation request handed to this session for review, and a reviewer's return handed to a
-   *  run (docs/owner-confirmation-review-contract.md D7, B3): the cards the runner's echo will carry,
-   *  for the reason `openItemDelivery` is here. Absent on every other turn. */
-  confirmationReviewRequest?: ConfirmationReviewRequestCard;
-  confirmationReturn?: ConfirmationReturnCard;
   /** The control plane wrote this turn itself (`isOrbitAuthoredTurn`): nobody typed its words, so a
    *  client taking it off the queue unrun hands none of them back to the composer. Absent on every
    *  turn somebody sent. */
@@ -5568,10 +5547,10 @@ export class SessionsService {
    *  placement — PENDING queued successors and steers, never the accepted head or IN_FLIGHT rows.
    *  `!cmd` shell turns queue and cross that handoff like messages do, so they're classified too.
    *
-   *  Both projections carry the same exception-item card for the rows they return (`openItemDelivery`,
-   *  §4.4 X-D2), because both ends draw the queued tail: the native one reads THIS projection, and a
-   *  delivery whose card only came with the `active` view would be prose on a phone and a card in a
-   *  browser for as long as it waits.
+   *  Both projections carry the same cards for the rows they return (`TurnCards`, turn-cards.ts — an
+   *  exception item's delivery among them, §4.4 X-D2), because both ends draw the queued tail: the
+   *  native one reads THIS projection, and a delivery whose card only came with the `active` view
+   *  would be prose on a phone and a card in a browser for as long as it waits.
    *
    *  A still-PENDING `steer` is listed for the same reason and NOT for the same purpose: it
    *  is not waiting its turn, it is on its way into the one already running, and the runner
@@ -5596,7 +5575,9 @@ export class SessionsService {
   ): Promise<ListedQueuedTurn[] | ListedActiveTurn[]> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
-      select: { id: true },
+      // What the cards are read against (turn-cards.ts): whose rows they may name, and the task a
+      // run's brief was built from.
+      select: { id: true, ownerId: true, taskId: true, runSource: true },
     });
     if (!session) throw new NotFoundException('session not found');
     const turns = await this.prisma.conversationTurn.findMany({
@@ -5663,21 +5644,14 @@ export class SessionsService {
     if (view !== 'active') {
       const queued = classified
         .filter(({ turn, placement }) => turn.status === 'PENDING' && placement !== 'accepted');
-      // The card, for the same reason the active view carries it and by the same two calls: the
+      // The cards, for the same reason the active view carries them and by the same read: the
       // narrow projection is what the installed native client draws its queue from, and a delivery
       // it cannot see the card on is 30 lines of prose in the reader's own bubble until the runner
       // takes the turn — the reading this row's whole shape exists to avoid (web parity: the
-      // queue tail, `WorkspaceView`). Read after the filter, so neither an ordinary message nor an
-      // accepted head the native client will not see costs a query.
-      const deliveryCards = await this.openItemDeliveryCards(queued.map(({ turn }) => turn));
-      const startedCards = await this.projectStartedCards(ownerId, queued.map(({ turn }) => turn));
-      const messageCards = await this.sessionMessageCards(ownerId, id, queued.map(({ turn }) => turn));
-      const reviewCards = await this.confirmationReviewCards(queued.map(({ turn }) => turn));
+      // queue tail, `WorkspaceView`). Read after the filter, so an accepted head the native client
+      // will not see costs no card read.
+      const cards = await readTurnCards(this.prisma, session, queued.map(({ turn }) => turn));
       return queued.map(({ turn, content }) => {
-        const card = deliveryCards.get(turn.id);
-        const started = startedCards.get(turn.id);
-        const message = messageCards.get(turn.id);
-        const review = reviewCards.get(turn.id);
         return {
           turnId: turn.id,
           kind: turn.kind,
@@ -5686,10 +5660,7 @@ export class SessionsService {
             id: attachment.id,
             mimeType: attachment.mimeType,
           })),
-          ...(card ? { openItemDelivery: card } : {}),
-          ...(started ? { projectStarted: started } : {}),
-          ...(message ? { sessionMessage: message } : {}),
-          ...review,
+          ...cards.get(turn.id),
           ...(isOrbitAuthoredTurn(turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
         };
       });
@@ -5739,17 +5710,10 @@ export class SessionsService {
         if (turn.deliveryStatus === 'UNCONFIRMED') return true;
         return !announcedTurnIds.has(turn.id);
       });
-    // The card an exception item's delivery is, for the rows this snapshot actually returns.
-    const deliveryCards = await this.openItemDeliveryCards(activeRows.map(({ turn }) => turn));
-    const startedCards = await this.projectStartedCards(ownerId, activeRows.map(({ turn }) => turn));
-    const messageCards = await this.sessionMessageCards(ownerId, id, activeRows.map(({ turn }) => turn));
-    const reviewCards = await this.confirmationReviewCards(activeRows.map(({ turn }) => turn));
+    // The cards these turns are drawn as, for the rows this snapshot actually returns.
+    const cards = await readTurnCards(this.prisma, session, activeRows.map(({ turn }) => turn));
     const activeTurns: ListedActiveTurn[] = activeRows
       .map(({ turn, placement, content }) => {
-        const card = deliveryCards.get(turn.id);
-        const started = startedCards.get(turn.id);
-        const message = messageCards.get(turn.id);
-        const review = reviewCards.get(turn.id);
         return {
           turnId: turn.id,
           kind: turn.kind,
@@ -5765,10 +5729,7 @@ export class SessionsService {
                   : {}),
               }
             : {}),
-          ...(card ? { openItemDelivery: card } : {}),
-          ...(started ? { projectStarted: started } : {}),
-          ...(message ? { sessionMessage: message } : {}),
-          ...review,
+          ...cards.get(turn.id),
           ...(isOrbitAuthoredTurn(turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
           content,
           createdAt: turn.createdAt.toISOString(),
@@ -5782,91 +5743,6 @@ export class SessionsService {
     // unrelated UUID would reorder the executable head behind its queued successor in a recovered
     // snapshot.
     return [...activeTurns].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  }
-
-  /** The card each of these turns carries, by turn id — for the ones that ARE an exception item's
-   *  delivery, and nothing at all for a batch of ordinary messages.
-   *
-   *  The same two calls the ingest path makes for the runner's echo (`openItemIdOfTurn` and
-   *  `readOpenItemDeliveryCard`, runner-api.controller.ts), for the same reason `queuedWakeContent`
-   *  below calls the very functions delivery calls: a client that draws this turn while it waits
-   *  must draw what it is about to be replaced by. Two listeners asking the same function on the
-   *  same rows is what makes the replacement invisible — a second derivation of the same fields is
-   *  what would show it. The reading is re-taken at each of those moments by design (the card is a
-   *  snapshot of what the platform knows, and a row that MOVED between them is the one case where
-   *  the two differ, which is the row having changed rather than the reading drifting).
-   *
-   *  Read after the announced/terminal filter rather than before it, so a row already represented by
-   *  a durable event costs no query. */
-  private async openItemDeliveryCards(
-    turns: ReadonlyArray<{ id: string; clientTurnId: string | null }>,
-  ): Promise<Map<string, OpenItemDeliveryCard>> {
-    const cards = new Map<string, OpenItemDeliveryCard>();
-    for (const turn of turns) {
-      const itemId = openItemIdOfTurn(turn.clientTurnId);
-      if (!itemId) continue;
-      const card = await readOpenItemDeliveryCard(this.prisma, itemId);
-      if (card) cards.set(turn.id, card);
-    }
-    return cards;
-  }
-
-  /** The confirmation-review card each of these turns is drawn as, by turn id — a review handed to
-   *  its reviewer or a return handed to the run, read by the same functions the ingest path records
-   *  the echo's with, and for those turns only. */
-  private async confirmationReviewCards(
-    turns: ReadonlyArray<{ id: string; clientTurnId: string | null }>,
-  ): Promise<Map<string, Pick<ListedQueuedTurn, 'confirmationReviewRequest' | 'confirmationReturn'>>> {
-    const cards = new Map<string, Pick<ListedQueuedTurn, 'confirmationReviewRequest' | 'confirmationReturn'>>();
-    for (const turn of turns) {
-      if (!isConfirmationReviewContentTurn(turn.clientTurnId)) continue;
-      const requested = await readConfirmationReviewRequestCard(this.prisma, turn.clientTurnId);
-      if (requested) cards.set(turn.id, { confirmationReviewRequest: requested });
-      const returned = await readConfirmationReturnCard(this.prisma, turn.clientTurnId);
-      if (returned) cards.set(turn.id, { confirmationReturn: returned });
-    }
-    return cards;
-  }
-
-  /** The card each project-start turn among these is drawn as, by turn id — read for those turns
-   *  and nothing else, by the same function the ingest path records the echo's with. */
-  private async projectStartedCards(
-    ownerId: string,
-    turns: ReadonlyArray<{ id: string; clientTurnId: string | null }>,
-  ): Promise<Map<string, ProjectStartedCard>> {
-    const cards = new Map<string, ProjectStartedCard>();
-    for (const turn of turns) {
-      const start = projectStartOfTurn(turn.clientTurnId);
-      if (!start) continue;
-      const card = await readProjectStartedCard(this.prisma, ownerId, start);
-      if (card) cards.set(turn.id, card);
-    }
-    return cards;
-  }
-
-  /** The "From [that session]" card each of these turns carries, by turn id — for the ones another
-   *  Orbit session sent, and nothing at all for a batch of the owner's own messages.
-   *
-   *  Read by the same two calls the ingest path records the runner's echo with
-   *  (`readTurnRequestIds` and `readSessionMessageCard`, runner-api.controller.ts), off the turn's
-   *  sender column, so the card a client draws while the message waits is the one the echo will be
-   *  drawn as — the request it carries included (contract §2.3). */
-  private async sessionMessageCards(
-    ownerId: string,
-    sessionId: string,
-    turns: ReadonlyArray<{ id: string; senderSessionId: string | null }>,
-  ): Promise<Map<string, SessionMessageCard>> {
-    const cards = new Map<string, SessionMessageCard>();
-    const signed = turns.filter((turn) => turn.senderSessionId);
-    if (signed.length === 0) return cards;
-    const requestOfTurn = await readTurnRequestIds(this.prisma, sessionId, signed.map((turn) => turn.id));
-    for (const turn of signed) {
-      const card = await readSessionMessageCard(
-        this.prisma, ownerId, turn.senderSessionId!, requestOfTurn.get(turn.id),
-      );
-      if (card) cards.set(turn.id, card);
-    }
-    return cards;
   }
 
   /** What each of the session's still-queued wake turns has to say, by turn id.
