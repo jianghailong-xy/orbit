@@ -1,0 +1,13 @@
+{
+  "command": "npm run test:ui-choices -w @orbit/web -- --grep 'Dialog owns choices|Dialog keeps composition|Dialog Popover Select exits'",
+  "runner": "mcp__orbit__bg_run",
+  "bgJobId": "bgj_58ae8e7158b3",
+  "cwd": "/root/.orbit/worktrees/a110c7ff-d224-5578-84b1-3e07548136d2",
+  "commit": "38947755e48ac979362db36f82bfcf966b527a75",
+  "webTree": "848736509199b4db94c3a30a20b43d5c202599a4",
+  "started": "2026-10-06T05:21:00Z",
+  "outputLastWritten": "2026-10-06T05:22:06.626642+00:00",
+  "exitCode": 0,
+  "outputSha256": "55004b009de4fa65fa5b198aa27f91625870067b458ee82f94e953cf30839f75",
+  "outputBytes": 5548
+}

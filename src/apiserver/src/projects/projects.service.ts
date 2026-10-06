@@ -28,6 +28,8 @@ import {
   toUuid,
 } from '@orbit/shared';
 import { countLiveApprovals } from '../sessions/abandoned-approvals';
+import { refuseOwnerFieldsToToken } from '../auth/pat-scope.decorator';
+import type { AuthCredential } from '../common/current-user.decorator';
 import { isSessionGenerating } from '../common/session-generating';
 import { SingleFlight } from '../common/single-flight';
 import { modelRoutingEnabled } from '../common/model-routing-switch';
@@ -449,13 +451,16 @@ const PROJECT_LIST_SELECT = {
  * The rail draws activity, attention, title and task progress. This select supplies the project
  * fields; `readProjectSidebarRollups` reads progress from the maintained status tally. `goal`,
  * `updatedAt` and coordination bindings are absent on purpose: nothing on the rail reads them,
- * and a 15-second poll does not carry what a page view carries.
+ * and a 15-second poll does not carry what a page view carries. `startedAt` is the one column the
+ * project sessions page reads off this row: null is a project nobody has started, which that page
+ * offers to start under its progress strip.
  */
 const SIDEBAR_PROJECT_SELECT = {
   id: true,
   title: true,
   status: true,
   createdAt: true,
+  startedAt: true,
   coordinatorSession: { select: COORDINATOR_ACTIVITY_SELECT },
 } satisfies Prisma.ProjectSelect;
 
@@ -882,10 +887,12 @@ export class ProjectsService {
    * The fields that decide whether an action the coordinator wants to take may happen — and the
    * complete list of them, which is the property that matters.
    *
-   * Two things read it, and they must not disagree: writing any of them bumps `configRevision`
-   * (so a revoke that races an action is a comparison rather than an archaeology), and the runner
-   * door refuses all of them (an agent does not widen its own authority). A field that can change
-   * what the coordinator is allowed to do and is not in here is a hole in both.
+   * Three things read it, and they must not disagree: writing any of them bumps `configRevision`
+   * (so a revoke that races an action is a comparison rather than an archaeology), the runner door
+   * refuses all of them (an agent does not widen its own authority), and the user door refuses all
+   * of them to a personal access token (a script does not set them for the owner —
+   * `governanceFields`). A field that can change what the coordinator is allowed to do and is not
+   * in here is a hole in all three.
    *
    * `automationPolicy` was the third until the column went: it said HOW FAR the coordinator may go,
    * and it was the one entry that could widen what a decider was allowed to do without any action
@@ -905,6 +912,19 @@ export class ProjectsService {
     'maxConcurrentTasks',
     'sessionBudgetPerDay',
   ] as const;
+
+  /**
+   * How far this project's coordinator may act and who it is, as `dto` carries them: the
+   * authorization set and `coordinatorAgentId` — what the runner door refuses an agent
+   * (`RunnerProjectsController.refuseGovernance`), and what `create` and `update` refuse a personal
+   * access token, whole (docs/personal-access-token-design.md §5.1).
+   */
+  private static governanceFields(dto: CreateProjectDto | UpdateProjectDto): Record<string, unknown> {
+    const sent = dto as unknown as Record<string, unknown>;
+    return Object.fromEntries(
+      [...ProjectsService.AUTHORIZATION_FIELDS, 'coordinatorAgentId'].map((field) => [field, sent[field]]),
+    );
+  }
 
   /** One wording for every reason an agent id is not one this project may coordinate with —
    *  unknown, another owner's, or deleted. Distinguishing them would answer "does this id exist"
@@ -1975,14 +1995,20 @@ export class ProjectsService {
    * came from. Putting it on the DTO would let any caller name any session and any workspace on a
    * project it is creating — which is to say claim a conversation it does not own as this
    * project’s coordinator, and point it into a workspace it was never given.
+   *
+   * `credential` is the user door's: a personal access token does not choose the integration line
+   * either, nor how far the coordinator may act or who it is (docs/personal-access-token-design.md
+   * §5.1), and is refused before anything is written.
    */
   async create(
     ownerId: string,
     dto: CreateProjectDto,
     coordinator?: ProjectCoordinatorSeed,
     principal: ProjectCreatePrincipal = { type: 'SYSTEM', id: ownerId },
+    credential?: AuthCredential,
   ) {
     if (!dto.title) throw new BadRequestException('title is required');
+    refuseOwnerFieldsToToken(credential, { integration: dto.integration, ...ProjectsService.governanceFields(dto) });
     ProjectsService.assertOneAcceptanceAuthoringShape(dto);
     const structuredCriteria = dto.acceptanceCriteriaItems === undefined
       ? undefined
@@ -2280,9 +2306,11 @@ export class ProjectsService {
     /** The session that proved the caller may name a workspace, when one did. Its presence is what
      *  makes an integration choice in the same request this session's rather than the owner's. */
     actingSessionId?: string,
+    /** The user door's credential, handed to `create`, which refuses a token's integration choice. */
+    credential?: AuthCredential,
   ) {
     ProjectsService.assertIntegrationIsNotWrittenFromASession(dto, actingSessionId);
-    const project = await this.create(ownerId, dto, undefined, principal);
+    const project = await this.create(ownerId, dto, undefined, principal, credential);
     await this.coordinator(ownerId, project.id, workspaceId);
     return this.get(ownerId, project.id);
   }
@@ -3299,8 +3327,20 @@ export class ProjectsService {
    * on who asks: refused whole when an acting session is on the request, written verbatim when
    * there is none, for `refuseProjectStatusWrite`'s reasons. Neither answer decides what DONE says:
    * that is projected from rows already committed by `projects/project-done-derived.ts`, on this
-   * method's own post-commit edge as much as anywhere else. */
-  async update(ownerId: string, id: string, dto: UpdateProjectDto, actingSessionId?: string) {
+   * method's own post-commit edge as much as anywhere else.
+   *
+   * `credential` is the user door's. A personal access token is refused `status`, `integration` and
+   * `acceptanceCriteriaItems` whole, as an acting session is refused the first two, and the
+   * authorization set and `coordinatorAgentId`, as the runner door refuses an agent them: they are
+   * the account owner's own decisions (docs/personal-access-token-design.md §5.1). Every other field
+   * is a token's to write. */
+  async update(
+    ownerId: string,
+    id: string,
+    dto: UpdateProjectDto,
+    actingSessionId?: string,
+    credential?: AuthCredential,
+  ) {
     const current = await this.prisma.project.findFirst({
       where: { id, ownerId },
       select: { id: true, coordinatorSessionId: true },
@@ -3316,6 +3356,12 @@ export class ProjectsService {
     }
     ProjectsService.assertStatusIsNotWrittenFromASession(dto, actingSessionId);
     ProjectsService.assertIntegrationIsNotWrittenFromASession(dto, actingSessionId);
+    refuseOwnerFieldsToToken(credential, {
+      status: dto.status,
+      integration: dto.integration,
+      acceptanceCriteriaItems: dto.acceptanceCriteriaItems,
+      ...ProjectsService.governanceFields(dto),
+    });
     await this.assertHumanOnlyProjectWrites(ownerId, dto, actingSessionId);
 
     const agentId =

@@ -652,6 +652,10 @@ struct RunnerDetailContent: View {
             aboutRow(RunnerPageCopy.RUNNER_ABOUT_HOSTNAME, runner.hostname)
             aboutRow(RunnerPageCopy.RUNNER_ABOUT_VERSION,
                      RunnerPageFormat.versionValue(runner, latest: runners.latestVersion))
+            aboutRow(RunnerPageCopy.RUNNER_ABOUT_LAST_UPDATE, RunnerPageFormat.lastUpdate(runner))
+            if RunnerAttention.runnerCanUpdateNow(runner, nowMs: RunnerPageFormat.nowMs(now)) {
+                Button(RunnerPageCopy.RUNNER_UPDATE_RUNNER_NOW) { updateRunner() }
+            }
             aboutRow(RunnerPageCopy.RUNNER_ABOUT_RUNS_AS, RunnerPageFormat.runsAsValue(runner))
             aboutRow(RunnerPageCopy.RUNNER_ABOUT_REPOS_FOLDER, runner.reposRoot)
             aboutRow(RunnerPageCopy.RUNNER_ABOUT_LAST_CHECK_IN, RunnerPageFormat.lastCheckIn(runner, now: now))
@@ -755,6 +759,8 @@ struct RunnerDetailContent: View {
         case .updateEngines:
             Button(RunnerPageCopy.RUNNER_UPDATE_ENGINES_NOW) { updateEngines() }
                 .disabled(RunnerPageFormat.engineUpdateInFlight(runner.install))
+        case .updateRunner:
+            Button(RunnerPageCopy.RUNNER_UPDATE_RUNNER_NOW) { updateRunner() }
         }
     }
 
@@ -842,6 +848,13 @@ struct RunnerDetailContent: View {
         Task {
             show(await runners.refreshModels(id)
                  ?? "Re-reading this machine’s model lists — the picker updates within a minute.")
+        }
+    }
+
+    private func updateRunner() {
+        let id = runner.id
+        Task {
+            show(await runners.updateRunner(id) ?? RunnerPageCopy.RUNNER_UPDATE_RUNNER_REQUESTED)
         }
     }
 

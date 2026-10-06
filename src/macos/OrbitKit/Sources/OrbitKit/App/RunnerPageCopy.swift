@@ -70,12 +70,15 @@ public enum RunnerPageCopy {
     public static let RUNNER_ABOUT_REPOS_FOLDER = "Repos Folder"
     public static let RUNNER_ABOUT_LAST_CHECK_IN = "Last Check-in"
     public static let RUNNER_ABOUT_REGISTERED = "Registered"
+    public static let RUNNER_ABOUT_LAST_UPDATE = "Last Update"
     public static let RUNNER_VERSION_LATEST = "Latest"
     public static let RUNNER_VERSION_INSTALLS_WHEN_IDLE = "installs when no turn is running"
+    public static let RUNNER_VERSION_NOT_ROLLED_OUT = "not rolled out to it yet"
     public static let RUNNER_RUNS_AS_ROOT = "root"
     public static let RUNNER_RUNS_AS_REGULAR_USER = "regular user"
     public static let RUNNER_ROOT_NO_BYPASS =
         "Runs as root, so sessions here can’t use Bypass permissions."
+    public static func runnerUpdatedFromTo(from: String, to: String) -> String { "\(from) → \(to)" }
 
     public static let RUNNER_ROTATE_TOKEN = "Rotate Token…"
     public static let RUNNER_ROTATE_TOKEN_FOOTER =
@@ -201,6 +204,30 @@ public enum RunnerPageCopy {
     public static func attentionCantUpdateItselfDetail(version: String, latest: String,
                                                         command: String) -> String {
         "It runs as a regular user, so it can’t replace its own binary — still on \(version), latest is \(latest). On that machine, run \(command)."
+    }
+
+    public static let ATTENTION_INSTALL_FOLDER_NOT_WRITABLE = "Install folder isn’t writable"
+    public static let RUNNER_INSTALL_FOLDER = "its install folder"
+    public static let ATTENTION_UPDATES_TURNED_OFF = "Updates are turned off"
+    public static let ATTENTION_UPDATER_OFF = "Its updater is switched off"
+    public static let ATTENTION_UPDATES_TURN_ON =
+        "To turn them back on, remove ORBIT_NO_SELFUPDATE from the runner’s environment and restart it — "
+        + "on a Mac, opening the latest Orbit app does this."
+    public static let ATTENTION_RUNNER_UPDATE_FAILED = "Runner update failed"
+    public static let ATTENTION_UPDATE_DIDNT_GO_THROUGH = "Its last update didn’t go through"
+    public static let RUNNER_UPDATE_RUNNER_NOW = "Update Runner Now"
+    public static let RUNNER_UPDATE_RUNNER_REQUESTED =
+        "Checking for a runner release now — a new one installs once no turn is running."
+    public static func attentionInstallFolderNotWritableDetail(folder: String, version: String,
+                                                                latest: String, command: String) -> String {
+        "It can’t write to \(folder), so it can’t replace its own binary — still on \(version), latest is \(latest). On that machine, run \(command) once; after that it updates itself."
+    }
+    public static func attentionUpdatesTurnedOffDetail(reason: String, version: String, latest: String) -> String {
+        "\(reason), so it doesn’t update itself — still on \(version), latest is \(latest)."
+    }
+    public static func attentionRunnerUpdateFailedDetail(reason: String, version: String,
+                                                          latest: String) -> String {
+        "\(reason). Still on \(version), latest is \(latest). It retries every 10 min — Update Runner Now tries again right away."
     }
 
     public static func attentionEngineUpdateFailed(engine: String) -> String {

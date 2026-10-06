@@ -1,0 +1,58 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<body>
+<h1>① 未启动的项目：进度卡下面放启动按钮</h1>
+<p class="lede" style="max-width:2090px">现在，还没启动的项目在 sessions 页上写的是 “0/5 done · 0 running”，配一条空进度条，看不出它在等你启动，这一页也没有启动入口（左一）。<br><b>方案：项目没启动时，进度卡先写明 “Not started”，下面加一行启动。</b>协调者已经请求启动时，这一行用实心蓝 <b>Review and start</b>；还没请求时，用浅蓝 <b>Start…</b>。两个按钮都打开现有的起始卡（sheet），在那里看判据、计划和跑法，按 <b>Start the project</b> 才真正启动。启动以后这一行收起。<br>数据取自截图里这个项目的真实状态：5 个任务、5 条判据，协调者还没发启动请求（它在对话里问你 “Should I send the start request?”）。</p>
+<div class="row" id="figs"></div>
+<script>
+// a · 现在（和截图同一屏）
+const a = phone(`${statusBar('3:45')}${nav(1)}<div class="list">
+${mk(pcard(progLine('0/5 done · 0 running')), 1, 'margin-top:8px;border-radius:12px').replace('class="pcard"', 'class="pcard" style="margin-top:0"')}
+${sh('Coordinator')}${coordRow()}</div>`);
+
+// b · 方案：协调者还没请求（这个项目现在的状态）
+const b = phone(`${statusBar('3:45')}${nav(1)}<div class="list">
+<div class="pcard has-start">${mk(progLine('Not started · 5 tasks'), 1, 'border-radius:12px 12px 6px 6px;outline-offset:0')}
+<div class="start">${mk(ownLine(), 2, 'border-radius:8px')}${mk('<div class="go tin" style="margin-top:0">Start…</div>', 3, 'margin-top:10px;border-radius:999px')}</div></div>
+${sh('Coordinator')}${coordRow()}</div>`);
+
+// c · 方案：协调者已请求
+const c = phone(`${statusBar('3:52')}${nav(1)}<div class="list">
+<div class="pcard has-start">${progLine('Not started · 5 tasks')}
+<div class="start">${mk(askLine(), 1, 'border-radius:8px')}${mk('<div class="go pri" style="margin-top:0">Review and start</div>', 2, 'margin-top:10px;border-radius:999px')}</div></div>
+${sh('Coordinator')}${coordRow({ tm: '2m ago', dot: true, amb: true, sub: 'Ready to start' })}</div>`);
+
+// d · 点按后：起始卡以 sheet 盖在本页上（还没请求 → 默认规则的设置）
+const d = phone(`${statusBar('3:45')}${nav(1)}<div class="list">
+${pcard(progLine('Not started · 5 tasks'), startOwn())}
+${sh('Coordinator')}${coordRow()}</div>${startSheet()}`);
+
+// e · 启动以后
+const e = phone(`${statusBar('3:47')}${nav(2)}<div class="list">
+${mk(pcard(progLine('0/5 done · 1 running', { run: 1 })), 1, 'margin-top:8px;border-radius:12px').replace('class="pcard"', 'class="pcard" style="margin-top:0"')}
+${sh('Coordinator')}${coordRow()}
+${sh('Today')}${mk(sessRow({ t: '执行任务：P1 Web：合并 Runners 与 Providers 为 Infrastructure 页', tm: 'just now', run: true, sub: '正在对照 web-prototype.patch 拆 Infrastructure 页…' }), 2, 'border-radius:10px;margin:0 -6px;padding:0 6px')}</div>`);
+
+document.getElementById('figs').innerHTML = [
+  fig('now', '现在 · 截图这一屏', a, `<b>看不出没启动，也没地方启动</b><ol>
+<li>${n(1)}“0/5 done · 0 running” 加一条空进度条，读起来像“卡住了”，不像“还没开始”。“0 running” 对没启动的项目也没有意义。</li>
+<li>想启动，得点右上角 ⊞ 进项目页，再打开 Open items 找 Start…；要么回协调会话，等它发启动请求。这一页上什么提示都没有。</li></ol>`),
+  fig('after', '方案 · 协调者还没请求（这个项目现在的状态）', b, `<b>安静的一行：随时能启动，但没人在等你</b><ol>
+<li>${n(1)}状态行直说 <b>Not started · 5 tasks</b>，不再写 0 running。进度条保留成空的，卡片形状不变，启动后不跳。</li>
+<li>${n(2)}灰点 + <b>The coordinator hasn’t asked yet</b>：说明没人在等，所以不亮橙色，也不算进 Needs you。</li>
+<li>${n(3)}浅蓝（tinted）全宽胶囊 <b>Start…</b>，高 44pt。省略号的意思是“先看再启动”：点了打开起始卡，不会直接启动。</li></ol>`),
+  fig('after', '方案 · 协调者已请求', c, `<b>这一页最该按的就是它</b><ol>
+<li>${n(1)}橙点 + <b>Ready to start · asked 2m ago</b>，和协调者那一行、项目列表的说法一样。下面一行是协调者建议的跑法（分支 · Automatic · 并发），一行写完，打开前就知道它会怎么跑。</li>
+<li>${n(2)}实心蓝 <b>Review and start</b>。卡片不变色，也不加 Needs you 徽标：启动不卡住任何事，系统本来就不把它算进角标和抽屉计数。</li>
+<li>协调者那一行照旧显示橙色的 “Ready to start”，不改。</li></ol>`),
+  fig('after', '方案 · 点按后：起始卡', d, `<b>用的是现有的起始卡，不新做</b><ul>
+<li>以 sheet 盖在本页上，判据、计划、跑法都在这里看和改。按 <b>Start the project</b> 才写入；点 Cancel 或下滑关掉，回到本页，什么都没写。</li>
+<li>还没请求时，设置按默认规则填：任务互相依赖 → 项目分支；并发取项目现在的 3；Automatic 开。这个项目没配 merge check，往下滚那一行会是琥珀色提醒。</li>
+<li>已请求时，填的是协调者的建议，带上它的理由和 “Orbit checked the plan”。<b>Start the project</b> 回答这份请求。这里不放 Chat about this：想先改再启动，就点 sheet 下面协调者那一行，会话里的卡上有这个按钮。</li>
+<li>Plan 那一行用的是这次修好的编号规则：标题以 “P1 ” 开头时认作编号 P1。修之前，每个标题会被截成 23 个字再拼起来。</li></ul>`),
+  fig('after', '方案 · 启动以后', e, `<b>启动行收起，不另外弹提示</b><ol>
+<li>${n(1)}卡片回到平常的进度行 <b>0/5 done · 1 running</b>，蓝色那段就是在跑的 P1。</li>
+<li>${n(2)}P1 的会话出现在 Today 并开始转圈，这就是回执。协调会话里照常出现 “Project started” 卡。</li></ol>`),
+].join('');
+</script>

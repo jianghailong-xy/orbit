@@ -119,6 +119,12 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'signedById',
   'coordinatorSessionId',
   'workspaceId',
+  // The workspaces a personal access token is confined to (migration 0383): addresses its owner
+  // picks when issuing it and reads back in the token list — never a fence.
+  'workspaceIds',
+  // The personal access token an activity row was written through (migration 0384): the same id
+  // the token list hands out and its revoke takes back — an address, never a fence.
+  'credentialId',
   'foremanWorkspaceId',
   'coordinatorWorkspaceId',
   'runnerId',

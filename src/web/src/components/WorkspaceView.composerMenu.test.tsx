@@ -299,9 +299,10 @@ describe('the composer card, 24px in', () => {
 
   it('starts the thumbnails and the text where the corner stops curving', () => {
     expect(px(desktop, /\.composer-box\s*\{[^}]*border-radius:\s*([\d.]+)px/)).toBe(24);
-    // 1px of border + 23. The mirror behind the textarea claims the same declaration.
+    // 1px of border + 23. The mirror behind the textarea claims the same declaration, and so does
+    // the Orbit Textarea that is to replace the AntD field (P3.1).
     expect(desktop).toMatch(
-      /\.composer-field \.composer-mirror,\s*\.composer-field textarea\.ant-input\s*\{[^}]*padding:\s*12px 23px 2px/,
+      /\.composer-field \.composer-mirror,\s*\.composer-field textarea\.ant-input,\s*\.composer-field textarea\.orbit-textarea\s*\{[^}]*padding:\s*12px 23px 2px/,
     );
     expect(desktop).toMatch(/\.composer-attachments\s*\{[^}]*padding:\s*12px 23px 0/);
   });

@@ -1,0 +1,74 @@
+[
+  {
+    "name": "web-build",
+    "command": [
+      "npm",
+      "run",
+      "build",
+      "-w",
+      "@orbit/web"
+    ],
+    "exitCode": 0,
+    "seconds": 2.1057512760162354
+  },
+  {
+    "name": "web-tests",
+    "command": [
+      "npm",
+      "run",
+      "test",
+      "-w",
+      "@orbit/web"
+    ],
+    "exitCode": 0,
+    "seconds": 199.2037057876587
+  },
+  {
+    "name": "choices-types",
+    "command": [
+      "node",
+      "node_modules/typescript/bin/tsc",
+      "-p",
+      "src/web/ui-migration/choices.tsconfig.json",
+      "--noEmit"
+    ],
+    "exitCode": 0,
+    "seconds": 0.35648083686828613
+  },
+  {
+    "name": "overlays-types",
+    "command": [
+      "node",
+      "node_modules/typescript/bin/tsc",
+      "-p",
+      "src/web/ui-migration/overlays.tsconfig.json",
+      "--noEmit"
+    ],
+    "exitCode": 0,
+    "seconds": 0.2905850410461426
+  },
+  {
+    "name": "toasts-types",
+    "command": [
+      "node",
+      "node_modules/typescript/bin/tsc",
+      "-p",
+      "src/web/ui-migration/toasts.tsconfig.json",
+      "--noEmit"
+    ],
+    "exitCode": 0,
+    "seconds": 0.31532812118530273
+  },
+  {
+    "name": "toasts-tests-types",
+    "command": [
+      "node",
+      "node_modules/typescript/bin/tsc",
+      "-p",
+      "src/web/ui-migration/toasts-tests.tsconfig.json",
+      "--noEmit"
+    ],
+    "exitCode": 0,
+    "seconds": 0.45482492446899414
+  }
+]

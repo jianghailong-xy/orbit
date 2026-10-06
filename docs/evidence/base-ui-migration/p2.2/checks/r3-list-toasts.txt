@@ -1,0 +1,234 @@
+Listing tests:
+  [chromium-light-desktop] › toasts-hover.browser.mjs:40:1 › native stationary arrival pauses beyond six seconds and moving away resumes dismissal
+  [chromium-light-desktop] › toasts-hover.browser.mjs:56:1 › stationary arrival stays paused across modal owners and clearing then replacing the feed
+  [chromium-light-desktop] › toasts-hover.browser.mjs:89:1 › layout moving a result under and away from a stationary pointer pauses and resumes dwell
+  [chromium-light-desktop] › toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Dialog entry
+  [chromium-light-desktop] › toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Drawer entry
+  [chromium-light-desktop] › toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Bottom drawer entry
+  [chromium-light-desktop] › toasts-lifecycle.browser.mjs:46:1 › hover pause releases after a keyboard opened and closed overlay changes portal
+  [chromium-light-desktop] › toasts-lifecycle.browser.mjs:69:1 › native hover deadline resumes after portal changes
+  [chromium-light-desktop] › toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Dialog entry, nested layers and exit
+  [chromium-light-desktop] › toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Drawer entry, nested layers and exit
+  [chromium-light-desktop] › toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit
+  [chromium-light-desktop] › toasts-lifecycle.browser.mjs:146:1 › stationary hover stays paused across nested modal owners then resumes for exactly six seconds
+  [chromium-light-desktop] › toasts-lifecycle.browser.mjs:172:1 › unhovered notifications retain their original deadline through modal owner changes
+  [chromium-light-desktop] › toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Dialog opening and closing
+  [chromium-light-desktop] › toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Drawer opening and closing
+  [chromium-light-desktop] › toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Bottom drawer opening and closing
+  [chromium-light-desktop] › toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Confirmation opening and closing
+  [chromium-light-desktop] › toasts-lifecycle.browser.mjs:238:1 › a newly posted notification still plays its original entrance animation once
+  [chromium-light-desktop] › toasts.browser.mjs:42:3 › existing notifications remain accessible in Dialog with unchanged appearance
+  [chromium-light-desktop] › toasts.browser.mjs:42:3 › existing notifications remain accessible in Drawer with unchanged appearance
+  [chromium-light-desktop] › toasts.browser.mjs:42:3 › existing notifications remain accessible in Bottom drawer with unchanged appearance
+  [chromium-light-desktop] › toasts.browser.mjs:71:1 › mixed pinned and passing notifications stack without overlap and retain all pinned errors
+  [chromium-light-desktop] › toasts.browser.mjs:98:1 › short and lifecycle dwell, hover restart, phone folding and permanent warnings keep their rules
+  [chromium-light-desktop] › toasts.browser.mjs:134:1 › event and entity deduplication, Undo and session navigation retain the business boundary
+  [chromium-light-desktop] › toasts.browser.mjs:164:1 › copyable diagnostics and live announcements survive nested overlays and theme changes
+  [chromium-light-desktop] › toasts.browser.mjs:208:1 › async confirmation keeps pending locks, accessible failure feedback and successful retry
+  [chromium-light-desktop] › toasts.browser.mjs:241:1 › legacy AntApp confirmation still works with the same notification service
+  [chromium-light-desktop] › toasts.browser.mjs:251:1 › retained closed overlays release notifications and normal motion settles at the original origin
+  [chromium-light-desktop] › toasts.browser.mjs:285:1 › notification origin follows viewport resize across the phone breakpoint
+  [chromium-light-phone] › toasts-hover.browser.mjs:40:1 › native stationary arrival pauses beyond six seconds and moving away resumes dismissal
+  [chromium-light-phone] › toasts-hover.browser.mjs:56:1 › stationary arrival stays paused across modal owners and clearing then replacing the feed
+  [chromium-light-phone] › toasts-hover.browser.mjs:89:1 › layout moving a result under and away from a stationary pointer pauses and resumes dwell
+  [chromium-light-phone] › toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Dialog entry
+  [chromium-light-phone] › toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Drawer entry
+  [chromium-light-phone] › toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Bottom drawer entry
+  [chromium-light-phone] › toasts-lifecycle.browser.mjs:46:1 › hover pause releases after a keyboard opened and closed overlay changes portal
+  [chromium-light-phone] › toasts-lifecycle.browser.mjs:69:1 › native hover deadline resumes after portal changes
+  [chromium-light-phone] › toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Dialog entry, nested layers and exit
+  [chromium-light-phone] › toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Drawer entry, nested layers and exit
+  [chromium-light-phone] › toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit
+  [chromium-light-phone] › toasts-lifecycle.browser.mjs:146:1 › stationary hover stays paused across nested modal owners then resumes for exactly six seconds
+  [chromium-light-phone] › toasts-lifecycle.browser.mjs:172:1 › unhovered notifications retain their original deadline through modal owner changes
+  [chromium-light-phone] › toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Dialog opening and closing
+  [chromium-light-phone] › toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Drawer opening and closing
+  [chromium-light-phone] › toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Bottom drawer opening and closing
+  [chromium-light-phone] › toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Confirmation opening and closing
+  [chromium-light-phone] › toasts-lifecycle.browser.mjs:238:1 › a newly posted notification still plays its original entrance animation once
+  [chromium-light-phone] › toasts.browser.mjs:42:3 › existing notifications remain accessible in Dialog with unchanged appearance
+  [chromium-light-phone] › toasts.browser.mjs:42:3 › existing notifications remain accessible in Drawer with unchanged appearance
+  [chromium-light-phone] › toasts.browser.mjs:42:3 › existing notifications remain accessible in Bottom drawer with unchanged appearance
+  [chromium-light-phone] › toasts.browser.mjs:71:1 › mixed pinned and passing notifications stack without overlap and retain all pinned errors
+  [chromium-light-phone] › toasts.browser.mjs:98:1 › short and lifecycle dwell, hover restart, phone folding and permanent warnings keep their rules
+  [chromium-light-phone] › toasts.browser.mjs:134:1 › event and entity deduplication, Undo and session navigation retain the business boundary
+  [chromium-light-phone] › toasts.browser.mjs:164:1 › copyable diagnostics and live announcements survive nested overlays and theme changes
+  [chromium-light-phone] › toasts.browser.mjs:208:1 › async confirmation keeps pending locks, accessible failure feedback and successful retry
+  [chromium-light-phone] › toasts.browser.mjs:241:1 › legacy AntApp confirmation still works with the same notification service
+  [chromium-light-phone] › toasts.browser.mjs:251:1 › retained closed overlays release notifications and normal motion settles at the original origin
+  [chromium-light-phone] › toasts.browser.mjs:285:1 › notification origin follows viewport resize across the phone breakpoint
+  [chromium-dark-desktop] › toasts-hover.browser.mjs:40:1 › native stationary arrival pauses beyond six seconds and moving away resumes dismissal
+  [chromium-dark-desktop] › toasts-hover.browser.mjs:56:1 › stationary arrival stays paused across modal owners and clearing then replacing the feed
+  [chromium-dark-desktop] › toasts-hover.browser.mjs:89:1 › layout moving a result under and away from a stationary pointer pauses and resumes dwell
+  [chromium-dark-desktop] › toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Dialog entry
+  [chromium-dark-desktop] › toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Drawer entry
+  [chromium-dark-desktop] › toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Bottom drawer entry
+  [chromium-dark-desktop] › toasts-lifecycle.browser.mjs:46:1 › hover pause releases after a keyboard opened and closed overlay changes portal
+  [chromium-dark-desktop] › toasts-lifecycle.browser.mjs:69:1 › native hover deadline resumes after portal changes
+  [chromium-dark-desktop] › toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Dialog entry, nested layers and exit
+  [chromium-dark-desktop] › toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Drawer entry, nested layers and exit
+  [chromium-dark-desktop] › toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit
+  [chromium-dark-desktop] › toasts-lifecycle.browser.mjs:146:1 › stationary hover stays paused across nested modal owners then resumes for exactly six seconds
+  [chromium-dark-desktop] › toasts-lifecycle.browser.mjs:172:1 › unhovered notifications retain their original deadline through modal owner changes
+  [chromium-dark-desktop] › toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Dialog opening and closing
+  [chromium-dark-desktop] › toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Drawer opening and closing
+  [chromium-dark-desktop] › toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Bottom drawer opening and closing
+  [chromium-dark-desktop] › toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Confirmation opening and closing
+  [chromium-dark-desktop] › toasts-lifecycle.browser.mjs:238:1 › a newly posted notification still plays its original entrance animation once
+  [chromium-dark-desktop] › toasts.browser.mjs:42:3 › existing notifications remain accessible in Dialog with unchanged appearance
+  [chromium-dark-desktop] › toasts.browser.mjs:42:3 › existing notifications remain accessible in Drawer with unchanged appearance
+  [chromium-dark-desktop] › toasts.browser.mjs:42:3 › existing notifications remain accessible in Bottom drawer with unchanged appearance
+  [chromium-dark-desktop] › toasts.browser.mjs:71:1 › mixed pinned and passing notifications stack without overlap and retain all pinned errors
+  [chromium-dark-desktop] › toasts.browser.mjs:98:1 › short and lifecycle dwell, hover restart, phone folding and permanent warnings keep their rules
+  [chromium-dark-desktop] › toasts.browser.mjs:134:1 › event and entity deduplication, Undo and session navigation retain the business boundary
+  [chromium-dark-desktop] › toasts.browser.mjs:164:1 › copyable diagnostics and live announcements survive nested overlays and theme changes
+  [chromium-dark-desktop] › toasts.browser.mjs:208:1 › async confirmation keeps pending locks, accessible failure feedback and successful retry
+  [chromium-dark-desktop] › toasts.browser.mjs:241:1 › legacy AntApp confirmation still works with the same notification service
+  [chromium-dark-desktop] › toasts.browser.mjs:251:1 › retained closed overlays release notifications and normal motion settles at the original origin
+  [chromium-dark-desktop] › toasts.browser.mjs:285:1 › notification origin follows viewport resize across the phone breakpoint
+  [chromium-dark-phone] › toasts-hover.browser.mjs:40:1 › native stationary arrival pauses beyond six seconds and moving away resumes dismissal
+  [chromium-dark-phone] › toasts-hover.browser.mjs:56:1 › stationary arrival stays paused across modal owners and clearing then replacing the feed
+  [chromium-dark-phone] › toasts-hover.browser.mjs:89:1 › layout moving a result under and away from a stationary pointer pauses and resumes dwell
+  [chromium-dark-phone] › toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Dialog entry
+  [chromium-dark-phone] › toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Drawer entry
+  [chromium-dark-phone] › toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Bottom drawer entry
+  [chromium-dark-phone] › toasts-lifecycle.browser.mjs:46:1 › hover pause releases after a keyboard opened and closed overlay changes portal
+  [chromium-dark-phone] › toasts-lifecycle.browser.mjs:69:1 › native hover deadline resumes after portal changes
+  [chromium-dark-phone] › toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Dialog entry, nested layers and exit
+  [chromium-dark-phone] › toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Drawer entry, nested layers and exit
+  [chromium-dark-phone] › toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit
+  [chromium-dark-phone] › toasts-lifecycle.browser.mjs:146:1 › stationary hover stays paused across nested modal owners then resumes for exactly six seconds
+  [chromium-dark-phone] › toasts-lifecycle.browser.mjs:172:1 › unhovered notifications retain their original deadline through modal owner changes
+  [chromium-dark-phone] › toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Dialog opening and closing
+  [chromium-dark-phone] › toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Drawer opening and closing
+  [chromium-dark-phone] › toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Bottom drawer opening and closing
+  [chromium-dark-phone] › toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Confirmation opening and closing
+  [chromium-dark-phone] › toasts-lifecycle.browser.mjs:238:1 › a newly posted notification still plays its original entrance animation once
+  [chromium-dark-phone] › toasts.browser.mjs:42:3 › existing notifications remain accessible in Dialog with unchanged appearance
+  [chromium-dark-phone] › toasts.browser.mjs:42:3 › existing notifications remain accessible in Drawer with unchanged appearance
+  [chromium-dark-phone] › toasts.browser.mjs:42:3 › existing notifications remain accessible in Bottom drawer with unchanged appearance
+  [chromium-dark-phone] › toasts.browser.mjs:71:1 › mixed pinned and passing notifications stack without overlap and retain all pinned errors
+  [chromium-dark-phone] › toasts.browser.mjs:98:1 › short and lifecycle dwell, hover restart, phone folding and permanent warnings keep their rules
+  [chromium-dark-phone] › toasts.browser.mjs:134:1 › event and entity deduplication, Undo and session navigation retain the business boundary
+  [chromium-dark-phone] › toasts.browser.mjs:164:1 › copyable diagnostics and live announcements survive nested overlays and theme changes
+  [chromium-dark-phone] › toasts.browser.mjs:208:1 › async confirmation keeps pending locks, accessible failure feedback and successful retry
+  [chromium-dark-phone] › toasts.browser.mjs:241:1 › legacy AntApp confirmation still works with the same notification service
+  [chromium-dark-phone] › toasts.browser.mjs:251:1 › retained closed overlays release notifications and normal motion settles at the original origin
+  [chromium-dark-phone] › toasts.browser.mjs:285:1 › notification origin follows viewport resize across the phone breakpoint
+  [webkit-light-desktop] › toasts-hover.browser.mjs:40:1 › native stationary arrival pauses beyond six seconds and moving away resumes dismissal
+  [webkit-light-desktop] › toasts-hover.browser.mjs:56:1 › stationary arrival stays paused across modal owners and clearing then replacing the feed
+  [webkit-light-desktop] › toasts-hover.browser.mjs:89:1 › layout moving a result under and away from a stationary pointer pauses and resumes dwell
+  [webkit-light-desktop] › toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Dialog entry
+  [webkit-light-desktop] › toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Drawer entry
+  [webkit-light-desktop] › toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Bottom drawer entry
+  [webkit-light-desktop] › toasts-lifecycle.browser.mjs:46:1 › hover pause releases after a keyboard opened and closed overlay changes portal
+  [webkit-light-desktop] › toasts-lifecycle.browser.mjs:69:1 › native hover deadline resumes after portal changes
+  [webkit-light-desktop] › toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Dialog entry, nested layers and exit
+  [webkit-light-desktop] › toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Drawer entry, nested layers and exit
+  [webkit-light-desktop] › toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit
+  [webkit-light-desktop] › toasts-lifecycle.browser.mjs:146:1 › stationary hover stays paused across nested modal owners then resumes for exactly six seconds
+  [webkit-light-desktop] › toasts-lifecycle.browser.mjs:172:1 › unhovered notifications retain their original deadline through modal owner changes
+  [webkit-light-desktop] › toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Dialog opening and closing
+  [webkit-light-desktop] › toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Drawer opening and closing
+  [webkit-light-desktop] › toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Bottom drawer opening and closing
+  [webkit-light-desktop] › toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Confirmation opening and closing
+  [webkit-light-desktop] › toasts-lifecycle.browser.mjs:238:1 › a newly posted notification still plays its original entrance animation once
+  [webkit-light-desktop] › toasts.browser.mjs:42:3 › existing notifications remain accessible in Dialog with unchanged appearance
+  [webkit-light-desktop] › toasts.browser.mjs:42:3 › existing notifications remain accessible in Drawer with unchanged appearance
+  [webkit-light-desktop] › toasts.browser.mjs:42:3 › existing notifications remain accessible in Bottom drawer with unchanged appearance
+  [webkit-light-desktop] › toasts.browser.mjs:71:1 › mixed pinned and passing notifications stack without overlap and retain all pinned errors
+  [webkit-light-desktop] › toasts.browser.mjs:98:1 › short and lifecycle dwell, hover restart, phone folding and permanent warnings keep their rules
+  [webkit-light-desktop] › toasts.browser.mjs:134:1 › event and entity deduplication, Undo and session navigation retain the business boundary
+  [webkit-light-desktop] › toasts.browser.mjs:164:1 › copyable diagnostics and live announcements survive nested overlays and theme changes
+  [webkit-light-desktop] › toasts.browser.mjs:208:1 › async confirmation keeps pending locks, accessible failure feedback and successful retry
+  [webkit-light-desktop] › toasts.browser.mjs:241:1 › legacy AntApp confirmation still works with the same notification service
+  [webkit-light-desktop] › toasts.browser.mjs:251:1 › retained closed overlays release notifications and normal motion settles at the original origin
+  [webkit-light-desktop] › toasts.browser.mjs:285:1 › notification origin follows viewport resize across the phone breakpoint
+  [webkit-light-phone] › toasts-hover.browser.mjs:40:1 › native stationary arrival pauses beyond six seconds and moving away resumes dismissal
+  [webkit-light-phone] › toasts-hover.browser.mjs:56:1 › stationary arrival stays paused across modal owners and clearing then replacing the feed
+  [webkit-light-phone] › toasts-hover.browser.mjs:89:1 › layout moving a result under and away from a stationary pointer pauses and resumes dwell
+  [webkit-light-phone] › toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Dialog entry
+  [webkit-light-phone] › toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Drawer entry
+  [webkit-light-phone] › toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Bottom drawer entry
+  [webkit-light-phone] › toasts-lifecycle.browser.mjs:46:1 › hover pause releases after a keyboard opened and closed overlay changes portal
+  [webkit-light-phone] › toasts-lifecycle.browser.mjs:69:1 › native hover deadline resumes after portal changes
+  [webkit-light-phone] › toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Dialog entry, nested layers and exit
+  [webkit-light-phone] › toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Drawer entry, nested layers and exit
+  [webkit-light-phone] › toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit
+  [webkit-light-phone] › toasts-lifecycle.browser.mjs:146:1 › stationary hover stays paused across nested modal owners then resumes for exactly six seconds
+  [webkit-light-phone] › toasts-lifecycle.browser.mjs:172:1 › unhovered notifications retain their original deadline through modal owner changes
+  [webkit-light-phone] › toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Dialog opening and closing
+  [webkit-light-phone] › toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Drawer opening and closing
+  [webkit-light-phone] › toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Bottom drawer opening and closing
+  [webkit-light-phone] › toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Confirmation opening and closing
+  [webkit-light-phone] › toasts-lifecycle.browser.mjs:238:1 › a newly posted notification still plays its original entrance animation once
+  [webkit-light-phone] › toasts.browser.mjs:42:3 › existing notifications remain accessible in Dialog with unchanged appearance
+  [webkit-light-phone] › toasts.browser.mjs:42:3 › existing notifications remain accessible in Drawer with unchanged appearance
+  [webkit-light-phone] › toasts.browser.mjs:42:3 › existing notifications remain accessible in Bottom drawer with unchanged appearance
+  [webkit-light-phone] › toasts.browser.mjs:71:1 › mixed pinned and passing notifications stack without overlap and retain all pinned errors
+  [webkit-light-phone] › toasts.browser.mjs:98:1 › short and lifecycle dwell, hover restart, phone folding and permanent warnings keep their rules
+  [webkit-light-phone] › toasts.browser.mjs:134:1 › event and entity deduplication, Undo and session navigation retain the business boundary
+  [webkit-light-phone] › toasts.browser.mjs:164:1 › copyable diagnostics and live announcements survive nested overlays and theme changes
+  [webkit-light-phone] › toasts.browser.mjs:208:1 › async confirmation keeps pending locks, accessible failure feedback and successful retry
+  [webkit-light-phone] › toasts.browser.mjs:241:1 › legacy AntApp confirmation still works with the same notification service
+  [webkit-light-phone] › toasts.browser.mjs:251:1 › retained closed overlays release notifications and normal motion settles at the original origin
+  [webkit-light-phone] › toasts.browser.mjs:285:1 › notification origin follows viewport resize across the phone breakpoint
+  [webkit-dark-desktop] › toasts-hover.browser.mjs:40:1 › native stationary arrival pauses beyond six seconds and moving away resumes dismissal
+  [webkit-dark-desktop] › toasts-hover.browser.mjs:56:1 › stationary arrival stays paused across modal owners and clearing then replacing the feed
+  [webkit-dark-desktop] › toasts-hover.browser.mjs:89:1 › layout moving a result under and away from a stationary pointer pauses and resumes dwell
+  [webkit-dark-desktop] › toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Dialog entry
+  [webkit-dark-desktop] › toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Drawer entry
+  [webkit-dark-desktop] › toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Bottom drawer entry
+  [webkit-dark-desktop] › toasts-lifecycle.browser.mjs:46:1 › hover pause releases after a keyboard opened and closed overlay changes portal
+  [webkit-dark-desktop] › toasts-lifecycle.browser.mjs:69:1 › native hover deadline resumes after portal changes
+  [webkit-dark-desktop] › toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Dialog entry, nested layers and exit
+  [webkit-dark-desktop] › toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Drawer entry, nested layers and exit
+  [webkit-dark-desktop] › toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit
+  [webkit-dark-desktop] › toasts-lifecycle.browser.mjs:146:1 › stationary hover stays paused across nested modal owners then resumes for exactly six seconds
+  [webkit-dark-desktop] › toasts-lifecycle.browser.mjs:172:1 › unhovered notifications retain their original deadline through modal owner changes
+  [webkit-dark-desktop] › toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Dialog opening and closing
+  [webkit-dark-desktop] › toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Drawer opening and closing
+  [webkit-dark-desktop] › toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Bottom drawer opening and closing
+  [webkit-dark-desktop] › toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Confirmation opening and closing
+  [webkit-dark-desktop] › toasts-lifecycle.browser.mjs:238:1 › a newly posted notification still plays its original entrance animation once
+  [webkit-dark-desktop] › toasts.browser.mjs:42:3 › existing notifications remain accessible in Dialog with unchanged appearance
+  [webkit-dark-desktop] › toasts.browser.mjs:42:3 › existing notifications remain accessible in Drawer with unchanged appearance
+  [webkit-dark-desktop] › toasts.browser.mjs:42:3 › existing notifications remain accessible in Bottom drawer with unchanged appearance
+  [webkit-dark-desktop] › toasts.browser.mjs:71:1 › mixed pinned and passing notifications stack without overlap and retain all pinned errors
+  [webkit-dark-desktop] › toasts.browser.mjs:98:1 › short and lifecycle dwell, hover restart, phone folding and permanent warnings keep their rules
+  [webkit-dark-desktop] › toasts.browser.mjs:134:1 › event and entity deduplication, Undo and session navigation retain the business boundary
+  [webkit-dark-desktop] › toasts.browser.mjs:164:1 › copyable diagnostics and live announcements survive nested overlays and theme changes
+  [webkit-dark-desktop] › toasts.browser.mjs:208:1 › async confirmation keeps pending locks, accessible failure feedback and successful retry
+  [webkit-dark-desktop] › toasts.browser.mjs:241:1 › legacy AntApp confirmation still works with the same notification service
+  [webkit-dark-desktop] › toasts.browser.mjs:251:1 › retained closed overlays release notifications and normal motion settles at the original origin
+  [webkit-dark-desktop] › toasts.browser.mjs:285:1 › notification origin follows viewport resize across the phone breakpoint
+  [webkit-dark-phone] › toasts-hover.browser.mjs:40:1 › native stationary arrival pauses beyond six seconds and moving away resumes dismissal
+  [webkit-dark-phone] › toasts-hover.browser.mjs:56:1 › stationary arrival stays paused across modal owners and clearing then replacing the feed
+  [webkit-dark-phone] › toasts-hover.browser.mjs:89:1 › layout moving a result under and away from a stationary pointer pauses and resumes dwell
+  [webkit-dark-phone] › toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Dialog entry
+  [webkit-dark-phone] › toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Drawer entry
+  [webkit-dark-phone] › toasts-lifecycle.browser.mjs:10:3 › existing notification stays at viewport origin during Bottom drawer entry
+  [webkit-dark-phone] › toasts-lifecycle.browser.mjs:46:1 › hover pause releases after a keyboard opened and closed overlay changes portal
+  [webkit-dark-phone] › toasts-lifecycle.browser.mjs:69:1 › native hover deadline resumes after portal changes
+  [webkit-dark-phone] › toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Dialog entry, nested layers and exit
+  [webkit-dark-phone] › toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Drawer entry, nested layers and exit
+  [webkit-dark-phone] › toasts-lifecycle.browser.mjs:94:3 › notification card stays fixed through Bottom drawer entry, nested layers and exit
+  [webkit-dark-phone] › toasts-lifecycle.browser.mjs:146:1 › stationary hover stays paused across nested modal owners then resumes for exactly six seconds
+  [webkit-dark-phone] › toasts-lifecycle.browser.mjs:172:1 › unhovered notifications retain their original deadline through modal owner changes
+  [webkit-dark-phone] › toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Dialog opening and closing
+  [webkit-dark-phone] › toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Drawer opening and closing
+  [webkit-dark-phone] › toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Bottom drawer opening and closing
+  [webkit-dark-phone] › toasts-lifecycle.browser.mjs:190:3 › notification pixels stay intact through Confirmation opening and closing
+  [webkit-dark-phone] › toasts-lifecycle.browser.mjs:238:1 › a newly posted notification still plays its original entrance animation once
+  [webkit-dark-phone] › toasts.browser.mjs:42:3 › existing notifications remain accessible in Dialog with unchanged appearance
+  [webkit-dark-phone] › toasts.browser.mjs:42:3 › existing notifications remain accessible in Drawer with unchanged appearance
+  [webkit-dark-phone] › toasts.browser.mjs:42:3 › existing notifications remain accessible in Bottom drawer with unchanged appearance
+  [webkit-dark-phone] › toasts.browser.mjs:71:1 › mixed pinned and passing notifications stack without overlap and retain all pinned errors
+  [webkit-dark-phone] › toasts.browser.mjs:98:1 › short and lifecycle dwell, hover restart, phone folding and permanent warnings keep their rules
+  [webkit-dark-phone] › toasts.browser.mjs:134:1 › event and entity deduplication, Undo and session navigation retain the business boundary
+  [webkit-dark-phone] › toasts.browser.mjs:164:1 › copyable diagnostics and live announcements survive nested overlays and theme changes
+  [webkit-dark-phone] › toasts.browser.mjs:208:1 › async confirmation keeps pending locks, accessible failure feedback and successful retry
+  [webkit-dark-phone] › toasts.browser.mjs:241:1 › legacy AntApp confirmation still works with the same notification service
+  [webkit-dark-phone] › toasts.browser.mjs:251:1 › retained closed overlays release notifications and normal motion settles at the original origin
+  [webkit-dark-phone] › toasts.browser.mjs:285:1 › notification origin follows viewport resize across the phone breakpoint
+Total: 232 tests in 3 files

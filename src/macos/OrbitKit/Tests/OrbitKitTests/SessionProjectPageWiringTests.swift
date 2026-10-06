@@ -156,7 +156,8 @@ final class SessionProjectPageWiringTests: XCTestCase {
     func testTheTwoShellsOpenTheProjectSessionsPageTheirOwnWay() throws {
         let compact = code(try appSource("Views/CompactShell.swift"))
         let frames = try slice(compact, from: "case .compose(let agentID, let folderID):", to: "default:")
-        XCTAssertTrue(frames.contains("case .sessionProject(let address):"))
+        XCTAssertTrue(frames.contains("case .sessionProject(let address, asDestination: false):"))
+        XCTAssertTrue(frames.contains("case .sessionProject(let address, asDestination: true):"))
         XCTAssertTrue(frames.contains("SessionProjectPage(address: address)"))
 
         let agents = code(try appSource("Views/AgentsView.swift"))
@@ -231,6 +232,9 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let title = try slice(page, from: "private var title: some View {", to: "\n    }")
         XCTAssertTrue(title.contains("Text(titleText)"))
         XCTAssertTrue(title.contains("SessionProjectCopy.pageSubtitle(sessions: sessions.count)"))
+        XCTAssertTrue(title.contains("app.projectSessionsLoading && sessions.isEmpty"),
+                      "no member count before the members have been read")
+        XCTAssertTrue(title.contains("SessionProjectCopy.pageSubtitleLoading"))
         XCTAssertTrue(title.contains(".foregroundStyle(.secondary)"))
         XCTAssertTrue(page.contains("ToolbarItem(placement: .principal) { title }"))
         let back = try slice(page, from: "if rowNavigation == .selection {", to: "\n            }")
@@ -313,9 +317,14 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(load.contains("sessionDetails.store(row)"))
         let open = try slice(app, from: "func openProjectMember(_ session: Session, push: Bool) {", to: "\n    }")
         XCTAssertTrue(open.contains("sessionDetails.store(session)"))
-        XCTAssertTrue(open.contains("selectedAgentID = agentID"), "opening a cross-workspace member follows its workspace")
-        XCTAssertTrue(open.contains("self.push(node)"))
-        XCTAssertTrue(open.contains("nav.selectConsole(node)"))
+        let pushed = try slice(open, from: "if push {", to: "} else {")
+        XCTAssertTrue(pushed.contains("self.push(node)"))
+        XCTAssertFalse(pushed.contains("selectedAgentID"),
+                       "a phone leaves the Workspace beneath alone, so back lands on the one the project's page "
+                       + "was entered from (owner, 2026-10-06)")
+        let selected = try slice(open, from: "} else {", to: "nav.selectConsole(node)")
+        XCTAssertTrue(selected.contains("selectedAgentID = agentID"),
+                      "a wide shell's column follows a cross-workspace member into its workspace")
     }
 
     func testThePageDrawsProgressCoordinatorThenOrdinaryMemberRows() throws {
@@ -328,9 +337,10 @@ final class SessionProjectPageWiringTests: XCTestCase {
         ]
         XCTAssertEqual(order, order.sorted())
         XCTAssertTrue(page.contains("$0.projectMembership?.role != .coordinator"))
-        let sections = try slice(page, from: "private var timeSections: [SessionTimeSection] {", to: "\n    }")
-        XCTAssertTrue(sections.contains("SessionTimeGrouping.sections(sessions.filter"))
-        XCTAssertTrue(sections.contains("pinnedFirst: false"))
+        let sections = try slice(page, from: "private var timeSections: [ProjectTimelineSection] {", to: "\n    }")
+        XCTAssertTrue(sections.contains("ProjectTimeline.sections(sessions: sessions.filter"),
+                      "the page's recency sections are the session grouping's, merges drawn among them")
+        XCTAssertTrue(sections.contains("merges: merge?.receipts ?? []"))
         XCTAssertTrue(page.contains(".task(id: address)"))
         XCTAssertTrue(page.contains("await app.loadProjectSessions(address)"))
         let progress = try slice(page, from: "private var progressLine: some View {", to: "\n    }")
@@ -373,7 +383,9 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let landing = try slice(page, from: "@ViewBuilder private var landingLine: some View {", to: "\n    }")
         XCTAssertTrue(landing.contains("integration.inFlight != nil"), "no landing in flight leaves the card as it was")
         XCTAssertTrue(landing.contains("TimelineView(.periodic(from: .now, by: 1))"))
-        XCTAssertTrue(landing.contains("ProjectPage.landingLine(integration, now: context.date,"))
+        XCTAssertTrue(landing.contains("ProjectMergeCard.progressLandingLine(integration, now: context.date,"),
+                      "a merge job's live line is the merge card's, not the progress card's")
+        XCTAssertTrue(landing.contains("!ProjectMergeCard.isMergeJob(integration.inFlight)"))
         XCTAssertTrue(landing.contains("updatedAt: app.projectSessionsIntegrationReadAt"))
         XCTAssertTrue(landing.contains("refreshFailed: app.projectSessionsIntegrationReadFailed"))
         XCTAssertTrue(landing.contains("ProjectLandingRow(line: line)"), "the same row the project page draws")
@@ -387,6 +399,129 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let guardRange = try XCTUnwrap(load.range(of: "guard projectSessionsAddress == address, !Task.isCancelled else { return }\n        if let integration"))
         XCTAssertLessThan(guardRange.lowerBound, store.lowerBound)
         XCTAssertTrue(load.contains("projectSessionsIntegrationReadFailed = true"))
+    }
+
+    /// The merge into main lives on this page (owner decision 2026-10-06): its card under the
+    /// progress card, its records on the timeline, and both sheets hosted by the page itself.
+    func testThePageCarriesTheMergeIntoMainUnderTheProgressCardAndOnItsTimeline() throws {
+        let source = code(try appSource("Views/SessionProjectPage.swift"))
+        let page = try slice(source, from: "struct SessionProjectPage: View {", to: "\n}\n")
+        let order = try [
+            XCTUnwrap(page.range(of: "            progressCard")?.lowerBound),
+            XCTUnwrap(page.range(of: "            mergeCard")?.lowerBound),
+            XCTUnwrap(page.range(of: "Section(SessionProjectCopy.coordinatorSection)")?.lowerBound),
+        ]
+        XCTAssertEqual(order, order.sorted(), "the merge card sits between the progress card and the coordinator")
+        let merge = try slice(page, from: "private var merge: ProjectMergeModel? {", to: "\n    }")
+        XCTAssertTrue(merge.contains("$0.projectID == address.projectID"),
+                      "another project's merge must never show on this page")
+        let card = try slice(page, from: "@ViewBuilder private var mergeCard: some View {", to: "\n    }\n")
+        XCTAssertTrue(card.contains("ProjectMergeCard.shape(promotion: merge.current,"))
+        XCTAssertTrue(card.contains("ProjectMergeCard.mergeLandingLine($0, now: context.date,"))
+        XCTAssertTrue(card.contains("promotionReview = PromotionReviewTarget(id: $0)"))
+        XCTAssertTrue(page.contains("case .merge(let receipt): mergeRow(receipt)"))
+        XCTAssertTrue(page.contains("case .session(let session): sessionRow(session)"))
+        XCTAssertTrue(page.contains("PromotionReviewSheet(source: merge, promotionID: target.id)"),
+                      "the page opens the conversation's own review, reading the page's model")
+        XCTAssertTrue(page.contains(".sheet(item: $promotionReceipt) { PromotionReceiptSheet(promotion: $0.promotion) }"))
+        let task = try slice(page, from: ".task(id: address) {", to: "\n        }")
+        XCTAssertEqual(task.components(separatedBy: "await app.loadProjectMerge(address)").count - 1, 2,
+                       "the merge is read on arrival and on every poll")
+
+        let app = code(try appSource("AppModel.swift"))
+        let load = try slice(app, from: "func loadProjectMerge(_ address: SessionProjectAddress, force: Bool = false) async {",
+                             to: "\n    }")
+        XCTAssertTrue(load.contains("projectSessionsMerge?.projectID != address.projectID"))
+        XCTAssertTrue(load.contains("ProjectMergeModel(projectID: address.projectID, api: api)"))
+        XCTAssertFalse(load.contains("async let"))
+        let model = try appSource("ProjectMergeModel.swift")
+        XCTAssertFalse(code(model).contains("async let"), "the model's reads follow loadProjectSessions' rule")
+        XCTAssertEqual(try branches(of: "final class ProjectMergeModel: PromotionReviewSource", in: model), ["os(iOS)"])
+
+        // The banner's press on a merge waiting for the owner opens this page, not the conversation.
+        let banner = try slice(app, from: "func openNeedsYouItem(_ s: Session, _ item: SessionOwnerItem, projectInColumn: Bool = false) {",
+                               to: "\n    }")
+        XCTAssertTrue(banner.contains("if item.kind == .promotionApproval, let projectID = s.projectMembership?.projectId {"))
+        XCTAssertTrue(banner.contains("return openProjectSessions(projectID, inColumn: projectInColumn)"))
+    }
+
+    /// A read that failed with no rows in hand says why in one sentence, with Retry, and stays up
+    /// through the page's 4-second polls rather than blinking out while each one is in flight.
+    func testAFailedReadStaysUpWithItsReasonAndRetry() throws {
+        let source = code(try appSource("Views/SessionProjectPage.swift"))
+        let page = try slice(source, from: "struct SessionProjectPage: View {", to: "\n}\n")
+        let overlay = try slice(page, from: ".overlay {", to: "\n        }")
+        let failed = try slice(overlay, from: "if sessions.isEmpty, let failure = app.projectSessionsError {",
+                               to: "} else if")
+        XCTAssertFalse(failed.contains("projectSessionsLoading"))
+        XCTAssertTrue(failed.contains("Text(CodexSignIn.sentence(failure))"))
+        XCTAssertTrue(failed.contains("Button(\"Retry\") { Task { await app.loadProjectSessions(address) } }"))
+    }
+
+    /// A project nobody has started says so on its progress line and offers its start under it
+    /// (docs/mocks/project-start-sessions-page): the project page's own rule, the start card over
+    /// this page, and the open items read only while the sidebar says nobody has started it.
+    func testAProjectNobodyStartedOffersItsStartUnderTheProgressLine() throws {
+        let raw = try appSource("Views/SessionProjectPage.swift")
+        let source = code(raw)
+        let page = try slice(source, from: "struct SessionProjectPage: View {", to: "\n}\n")
+        let card = try slice(page, from: "private var progressCard: some View {", to: "\n    }")
+        let order = try ["progressLine", "startLine", "landingLine"].map {
+            try XCTUnwrap(card.range(of: $0)?.lowerBound)
+        }
+        XCTAssertEqual(order, order.sorted(), "the start sits under the progress line, inside the card")
+        let progress = try slice(page, from: "private var progressLine: some View {", to: "\n    }")
+        XCTAssertTrue(progress.contains("notStarted ? SessionProjectCopy.pageNotStarted(tasks: counts.total)"))
+        let notStarted = try slice(page, from: "private var notStarted: Bool {", to: "\n    }")
+        XCTAssertTrue(notStarted.contains("project?.status == .open && project?.started == false"))
+        let rule = try slice(page, from: "private var startRow: StartProject.PageRow? {", to: "\n    }")
+        XCTAssertTrue(rule.contains("StartProject.pageRow(status: project.status, started: project.started,"),
+                      "the project page's own rule decides the row")
+        XCTAssertTrue(rule.contains("openItems: app.projectSessionsOpenItems)"))
+
+        let row = try slice(page, from: "@ViewBuilder private var startLine: some View {",
+                            to: "private func openStart(")
+        let asked = try slice(row, from: "case .asked(let item):", to: "case .own:")
+        for part in ["Circle().fill(Color.orange)", "Text(StartProject.readyToStart)",
+                     "SessionProjectCopy.startAsked(ago)", "SessionProjectCopy.startSuggestion(settings)",
+                     "SessionProjectCopy.startReview", ".buttonStyle(.borderedProminent)", "openStart(.asked)"] {
+            XCTAssertTrue(asked.contains(part), "the coordinator's request keeps `\(part)`")
+        }
+        let own = try slice(row, from: "case .own:", to: ".buttonBorderShape(.capsule)")
+        for part in ["SessionProjectCopy.startNotAsked", "Text(StartProject.rowOwn)",
+                     ".buttonStyle(.bordered)", "openStart(.own)"] {
+            XCTAssertTrue(own.contains(part), "the owner's own start keeps `\(part)`")
+        }
+        XCTAssertFalse(row.contains("needsYouBadge"), "a start request is counted nowhere, so it carries no badge")
+        XCTAssertFalse(row.contains(".background("), "the row sits on the progress card's own grey")
+
+        let sheet = try slice(page, from: ".sheet(item: $startSheet) { sheet in", to: ".task(id: address) {")
+        XCTAssertTrue(sheet.contains("app.projects?.detail(address.projectID)"))
+        XCTAssertTrue(sheet.contains("case .asked: RequestedStartProjectSheet(store: store"))
+        XCTAssertTrue(sheet.contains("case .own: OwnerStartProjectSheet(store: store"))
+        XCTAssertTrue(sheet.contains(".task { await store.load() }"), "the card's reads are refreshed as it opens")
+        let task = try slice(page, from: ".task(id: address) {", to: "\n        }")
+        XCTAssertEqual(task.components(separatedBy: "await app.loadProjectStart(address)").count - 1, 2,
+                       "the start is read on arrival and on every poll")
+
+        let requested = try slice(source, from: "private struct RequestedStartProjectSheet: View {", to: "\n}\n")
+        XCTAssertTrue(requested.contains("StartProject.live(openItems: store.openItems, started: $0.started)"))
+        XCTAssertTrue(requested.contains("askedAt: row.waitingSince,"))
+        XCTAssertTrue(requested.contains("requestId: itemID"), "the press answers the request it was drawn for")
+        XCTAssertFalse(requested.contains("onChatAbout"), "Chat about this stays the conversation's")
+        XCTAssertEqual(try branches(of: "private struct RequestedStartProjectSheet: View", in: raw), ["os(iOS)"])
+
+        let app = code(try appSource("AppModel.swift"))
+        let load = try slice(app, from: "func loadProjectStart(_ address: SessionProjectAddress) async {",
+                             to: "\n    }")
+        XCTAssertTrue(load.contains("guard row?.status == .open, row?.started == false else {"),
+                      "a started project's page reads nothing more than before")
+        XCTAssertTrue(load.contains("api.projectOpenItems(projectID: address.projectID)"))
+        XCTAssertTrue(load.contains("projectSessionsAddress == address, !Task.isCancelled"))
+        XCTAssertFalse(load.contains("async let"))
+        let sessions = try slice(app, from: "func loadProjectSessions(_ address: SessionProjectAddress) async {",
+                                 to: "\n    }")
+        XCTAssertTrue(sessions.contains("projectSessionsOpenItems = nil"), "another project's request never shows here")
     }
 
     func testTheProjectUILayerIsCompiledForIOSOnly() throws {

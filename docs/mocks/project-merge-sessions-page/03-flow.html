@@ -1,0 +1,172 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<style>
+  svg.flow text { font-family: "Inter", "Noto Sans SC", sans-serif; }
+  svg.flow .t { font-size: 17px; font-weight: 700; fill: #16161a; }
+  svg.flow .s { font-size: 13px; fill: #55555e; }
+  svg.flow .l { font-size: 13px; font-weight: 600; fill: #3c3c44; }
+  svg.flow .a { fill: none; stroke: #8e8e96; stroke-width: 1.8; }
+  svg.flow .d { stroke-dasharray: 5 4; }
+  .side { width: 393px; flex: none; background: #fff; border-radius: 22px; padding: 22px 24px; box-shadow: 0 6px 24px rgba(0,0,0,.07); font-size: 13.5px; line-height: 1.62; color: #3c3c44; }
+  .side h3 { font-size: 15.5px; margin: 0 0 6px; color: #16161a; }
+  .side p { margin: 0 0 12px; }
+  .side b { color: #16161a; }
+</style>
+<body>
+<h1>③ 流程：从提醒到回执</h1>
+<p class="lede" style="max-width:2090px">合入只放在一个地方：<b>项目 sessions 页的合入卡</b>。会话列表、推送、协调会话、Project 页都只负责把你带到这张卡，或者打开同一个审阅 sheet，自己不再画卡。</p>
+
+<div class="panel" style="width:2090px">
+  <h2>状态怎么走</h2>
+  <p class="hint">一个候选从检查到合入（或者没合入）的全过程。卡片颜色：灰 = Orbit 在检查，橙 = 等你，蓝 = 正在合入，琥珀 = 协调会话在处理，绿 = 已经在 main 上。</p>
+  <svg class="flow" width="2030" height="420" viewBox="0 0 2030 420">
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8e8e96"/></marker></defs>
+    <!-- 起点 -->
+    <rect x="0" y="106" width="150" height="44" rx="22" fill="#f2f2f5" stroke="#c7c7cc"/>
+    <text x="75" y="133" text-anchor="middle" class="l">任务落到项目分支</text>
+    <path class="a" d="M150 128H206" marker-end="url(#ar)"/>
+    <!-- 第一层：主线 -->
+    <rect x="210" y="88" width="330" height="80" rx="16" fill="#f2f2f5" stroke="#aeaeb2" stroke-width="1.5"/>
+    <text x="230" y="120" class="t">检查中</text><text x="230" y="146" class="s">Merge check · 灰 · 不打扰你</text>
+    <rect x="690" y="88" width="330" height="80" rx="16" fill="#fff4e5" stroke="#ffb547" stroke-width="1.5"/>
+    <text x="710" y="120" class="t">等你确认</text><text x="710" y="146" class="s">Merge into main? · 橙 · 橙点 + 推送</text>
+    <rect x="1170" y="88" width="330" height="80" rx="16" fill="#eef2fe" stroke="#8ea8f8" stroke-width="1.5"/>
+    <text x="1190" y="120" class="t">合入中</text><text x="1190" y="146" class="s">Queued / Re-checking / Merging · 蓝</text>
+    <rect x="1650" y="88" width="370" height="80" rx="16" fill="#eaf8ee" stroke="#86d59a" stroke-width="1.5"/>
+    <text x="1670" y="120" class="t">已合入</text><text x="1670" y="146" class="s">卡片收起 → 时间线里一行 → 回执</text>
+    <path class="a" d="M540 128H686" marker-end="url(#ar)"/><text x="613" y="118" text-anchor="middle" class="l">检查通过</text>
+    <path class="a" d="M1020 128H1166" marker-end="url(#ar)"/><text x="1093" y="118" text-anchor="middle" class="l">Merge to main</text>
+    <path class="a" d="M1500 128H1646" marker-end="url(#ar)"/><text x="1573" y="118" text-anchor="middle" class="l">推送成功</text>
+    <!-- Automatic：跳过等你确认 -->
+    <path class="a d" d="M470 88C470 14 1240 14 1240 84" marker-end="url(#ar)"/>
+    <text x="855" y="26" text-anchor="middle" class="l" style="paint-order:stroke;stroke:#fff;stroke-width:8px">检查通过且开了 Automatic：不问你，直接合入</text>
+    <!-- 重查自环 -->
+    <path class="a" d="M1420 88C1420 52 1480 52 1480 84" marker-end="url(#ar)"/>
+    <text x="1500" y="62" class="l">main 又动了 → 自动重查</text>
+    <!-- 第二层：这一轮不合 -->
+    <rect x="820" y="214" width="430" height="72" rx="16" fill="#fafafc" stroke="#aeaeb2" stroke-width="1.5" stroke-dasharray="6 4"/>
+    <text x="840" y="244" class="t">这一轮不合</text><text x="840" y="270" class="s">卡片收起；项目分支再有新落地时重新检查</text>
+    <path class="a" d="M900 168V210" marker-end="url(#ar)"/><text x="910" y="196" class="l">Not now</text>
+    <path class="a" d="M1210 168V210" marker-end="url(#ar)"/><text x="1220" y="196" class="l">Cancel（推送前）</text>
+    <!-- 第三层：暂时合不了 -->
+    <rect x="210" y="320" width="470" height="92" rx="16" fill="#fff8ee" stroke="#f5c77e" stroke-width="1.5"/>
+    <text x="230" y="352" class="t">暂时合不了</text><text x="230" y="377" class="s">检查或重查没过、和 main 冲突</text><text x="230" y="399" class="s">协调会话在处理 · 琥珀；2h 没动就转给你 · 变橙</text>
+    <path class="a" d="M290 168V316" marker-end="url(#ar)"/><text x="282" y="250" text-anchor="end" class="l">没过 / 冲突</text>
+    <path class="a" d="M420 320V172" marker-end="url(#ar)"/><text x="430" y="250" class="l">修好 → 重新检查</text>
+    <path class="a" d="M1440 168V352Q1440 366 1426 366H684" marker-end="url(#ar)"/><text x="1450" y="300" class="l">重查没过</text>
+  </svg>
+</div>
+
+<div class="panel" style="width:2090px">
+  <h2>每个状态在哪里出现</h2>
+  <p class="hint">蓝底是这次要改的地方，其余照旧。</p>
+  <table class="mx">
+    <thead><tr><th></th><th>检查中</th><th>等你确认</th><th>合入中</th><th>暂时合不了</th><th>已合入</th><th>这一轮不合</th></tr></thead>
+    <tbody>
+      <tr><th>项目 sessions 页 · 合入卡</th>
+        <td class="new">灰卡：<span class="k">Merge check · checking</span>，写用时（原来进度卡里那一行挪进来）</td>
+        <td class="new">橙卡：<span class="o">Merge into main?</span> 任务、检查、冲突、判据；<span class="k">Merge to main / Not now / Details</span></td>
+        <td class="new">蓝卡：阶段、用时、通常用时；<span class="k">Cancel</span>（推送前）</td>
+        <td class="new">琥珀卡：原因和冲突文件，<span class="k">Coordinator is resolving it · 4m</span>；转给你后变橙</td>
+        <td class="new">卡片收起</td>
+        <td class="new">卡片收起</td></tr>
+      <tr><th>项目 sessions 页 · 时间线</th>
+        <td class="m">—</td><td class="m">—</td><td class="m">—</td><td class="m">—</td>
+        <td class="new"><span class="g">✓ Merged into main</span> 一行，按合入时刻排进时间线；点开是回执</td>
+        <td class="m">—</td></tr>
+      <tr><th>协调会话</th>
+        <td class="m">—</td>
+        <td class="new">一行橙色：<span class="o">Merge into main is waiting for you · Review</span>，点开是审阅 sheet；顶部提示条照旧计数</td>
+        <td class="new">同一行变灰：<span class="k">you confirmed it 11:34</span></td>
+        <td class="new">一行琥珀：<span class="k">Can’t merge into main yet · 2 files conflict</span>；转给你后，例外卡照旧画在这里</td>
+        <td class="new">一行：<span class="k">✓ Merged into main · 8d5a868</span>，<b>替代现在的回执大卡</b></td>
+        <td class="new">同一行变灰：<span class="k">you said not now</span> / <span class="k">cancelled</span></td></tr>
+      <tr><th>项目 sessions 页 · 协调会话那一行</th>
+        <td class="m">照旧</td>
+        <td class="new">不再因为合入亮橙点（橙点挪到合入卡上）</td>
+        <td class="m">照旧</td><td class="m">照旧</td><td class="m">照旧</td><td class="m">照旧</td></tr>
+      <tr><th>会话列表 · 项目行</th>
+        <td class="m">Merge check · checking · 7m（照旧）</td>
+        <td>Approve merge to main + 橙点（照旧）；<b>点开进项目 sessions 页</b></td>
+        <td class="m">Merge to main · checking · 4m（照旧）</td>
+        <td class="m">协调会话的状态；转给你后写 Escalated to you（照旧）</td>
+        <td class="m">照旧</td><td class="m">照旧</td></tr>
+      <tr><th>推送 / 应用内横幅</th>
+        <td class="m">不推</td>
+        <td class="new">Approve merge to main → <b>打开项目 sessions 页</b>，合入卡在最上面</td>
+        <td class="m">不推</td>
+        <td class="new">转给你时 Escalated to you → 同样打开项目 sessions 页</td>
+        <td class="m">不推（照旧）</td><td class="m">不推</td></tr>
+      <tr><th>Project 页</th>
+        <td class="m" colspan="6">Work overview 的落地行和 Open items 照旧；Open items 里的 <b>Review</b> 打开同一个审阅 sheet。</td></tr>
+    </tbody>
+  </table>
+  <div class="leg"><span><i></i>这次要改</span><span>没有蓝底的格子：照旧</span></div>
+</div>
+
+<div class="row" id="figs"></div>
+<script>
+// 1 · 会话列表 + 推送（11:31）
+const projRow = `<div class="r"><div class="a"><span class="t">${PROJECT}</span><span class="dot"></span><span class="tm">just now</span></div>
+<div class="b"><span class="pchip"><span class="mini"><i style="width:80%;background:var(--green)"></i><i style="width:5%;background:var(--tint)"></i></span>16/20</span><span class="sub amb">Approve merge to main</span></div></div>`;
+const listPage = phone(`${statusBar('11:31')}
+<div class="nav"><div class="circ">${ic('ham', 21, '#000', 2.1)}</div><div class="circ">${ic('plus', 22, '#000', 2.2)}</div></div>
+<div class="big">orbit-develop</div>
+<div class="list">${sh('Today')}${mkRow(projRow, 1)}
+${sessRow({ t: 'iOS：登录时区分凭据错误和服务器不可达', tm: '38m ago', sub: '已合入 main（40a70be），TestFlight 等下一次发版。' })}
+${sessRow({ t: 'Xcode 27：模拟器改按 UDID 选择', tm: '52m ago', sub: '文档已更新：用 UDID 选模拟器，name= 不再匹配。' })}
+${sessRow({ t: 'Android 推送：安装登记与重试', tm: '1h ago', sub: '已提交：安装登记接口和失败重试。' })}
+${sessRow({ t: 'Provider 页：待处理账号的提示', tm: '2h ago', sub: 'Ended' })}
+${sessRow({ t: '周报：本周合入与发版', tm: '3h ago', sub: '草稿已写好，等你看一眼。' })}</div>
+${mk(`<div class="push" style="position:static"><span class="app">${ic('orbit', 22, '#fff', 1.8)}</span><div class="pc"><div class="pt">Approve merge to main<span>now</span></div>
+<div class="pb">${PROJECT}：2 tasks ready · checks passed · no conflicts</div></div></div>`, 2, 'position:absolute;top:10px;left:9px;right:9px;z-index:20;border-radius:24px')}`);
+
+// 2 · 审阅 sheet（11:33）
+const review = sheet({ title: 'Merge to main', body: `<div class="prov">FROM ORBIT</div>
+${kv('Branch', 'project/34ZurCP3bv9yLXGVyUGnx · 5 commits ahead of main')}
+${mk(kv('Tasks', `2 landed on the branch<ul class="tk">${TASKS.map((t) => `<li>${t}</li>`).join('')}</ul>`), 1, 'border-radius:10px;margin:0 -6px;padding:0 6px')}
+${kv('Checks', `<span style="color:var(--green-ink)">✓ Passed on the combined tree · 17m 52s</span><br><code>${CHECK}</code>`)}
+${kv('main', 'no conflicts')}
+${kv('Criteria', '8 of 10 met on this branch — merging does not close the project')}
+${kv('Lands', 'exactly the tested tree 5e5bfca · as a merge commit')}
+<div class="asked">asked 2m ago</div>`, bar: `<span class="btn pri grow">Merge to main</span><span class="btn sec">Not now</span>` });
+const sheetPage = phone(`${statusBar('11:33')}${navProject(33)}<div class="list">${progCard(16, 20, 1)}${cardAsk()}</div>${review}`);
+
+// 3 · 协调会话：等你时只有一行（11:33）
+const sysWrap = (html, k) => mk(html.replace('class="sys', 'style="margin:0" class="sys'), k, 'align-self:center;margin:8px 0;border-radius:999px');
+const chatPending = chatPage({ at: '11:33', extra: mk(`<div class="nyb" style="position:static;transform:none">${ic('merge', 14, 'var(--orange)', 2.3)}Approve merge to main<span class="go">· Review</span></div>`, 2, 'position:absolute;top:122px;left:50%;transform:translateX(-50%);z-index:4;border-radius:17px'), body: `
+${ubub('D2/F1 的结论出来了吗？')}
+${abub('D2/F1 已判定通过：真实 401 判为无效 Key，未知用量显示为不可用，不再显示 $0。')}
+${abub('P6 的端到端回归已开始，P7 在等 P6。')}
+${ubub('D1 和日志那两项落完之后，先合一次 main。')}
+${abub('好的。D2/F1 已落到项目分支，D1 和「会话日志默认关闭」还在跑验收。')}
+${abub('D1 和「dsh 会话日志默认关闭」都已落到项目分支，合入 main 的检查在合并后的树上跑。')}
+${sysWrap(sysLine(`${ic('merge', 13, 'currentColor', 2.3)}Merge into main is waiting for you <span class="go">· Review ${ic('chevr', 11, 'var(--tint)', 2.8)}</span>`, 'amb'), 1)}
+${abub('P6 的端到端回归还在跑：12 个场景已过 9 个。P7 等 P6 判定后再开始。')}
+${ubub('P6 跑完告诉我。')}
+${abub('好的，P6 有结果我第一时间告诉你。')}` });
+
+const side = `<div class="side"><h3>其他端</h3>
+<p><b>iPad</b>：同一个项目 sessions 页显示在 sessions 列里，合入卡同样在进度卡下面，Details 和回执用 sheet 打开。</p>
+<p><b>web / macOS</b>：项目 sessions 视图（在侧栏点项目进入）的进度条下面放同一张合入卡，回执行进时间线。卡片文案三端共用 <code>PromotionCards</code> 和 web 的 <code>ProjectPromotionCard</code>，在同一个提交里改。等你确认方向后，再出这两端的图。</p>
+<h3>要你拍板的三件事</h3>
+<p>1. 卡片上直接按 <b>Merge to main</b>，不先进 Details。按下后到推送之前都能 Cancel，所以不再加确认框。</p>
+<p>2. 协调会话里<b>留一行事件</b>，不是什么都不留：agent 的话里提到合入时，能对上发生的时间。</p>
+<p>3. 合完的记录<b>放进时间线</b>，不单独开一个 Merges 区。一个项目一般只合几次，不会把列表刷满。</p></div>`;
+
+document.getElementById('figs').innerHTML = [
+  fig('after', '入口 · 会话列表和推送', listPage, `<b>提醒都落在项目 sessions 页</b><ol>
+<li>${n(1)}项目行的第二行照旧写 “Approve merge to main”。点开进项目 sessions 页，合入卡就在最上面。</li>
+<li>${n(2)}推送和应用内横幅也一样，打开项目 sessions 页，不再进协调会话找卡。</li></ol>`),
+  fig('after', 'Details · 审阅 sheet', sheetPage, `<b>Details：完整审阅，还是原来那个 sheet</b><ol>
+<li>沿用现在的 <code>PromotionReviewSheet</code>：分支、检查命令和用时、和 main 有没有冲突、判据、Lands，底部是 Merge to main / Not now。</li>
+<li>${n(1)}只改一处：Tasks 下面列出任务标题，和卡片上一致。</li>
+<li>合入卡的 Details、协调会话里那一行、Project 页 Open items 的 Review，打开的都是这一个 sheet。</li></ol>`),
+  fig('after', '协调会话 · 等你时', chatPending, `<b>在对话里也能一下找到</b><ol>
+<li>${n(1)}等你确认时，对话里那一行是橙色的。点开就是审阅 sheet，不用往上翻找卡。</li>
+<li>${n(2)}顶部提示条照旧计数，点它也直接打开这个 sheet。</li>
+<li>卡片不画在对话里，agent 再说多少话也不会把它顶上去。改的只是你看到的画法，协调会话收到的消息不变。</li></ol>`),
+  `<figure style="width:393px"><span class="tag after">说明</span>${side}</figure>`,
+].join('');
+</script>

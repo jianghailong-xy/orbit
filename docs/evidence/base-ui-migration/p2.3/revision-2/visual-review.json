@@ -1,0 +1,18 @@
+{
+  "method": "Inspected unmodified browser PNGs with view_image, alongside zero-tolerance pixel comparison against the original source.",
+  "checked": {
+    "lightDesktopDrawerEntry": "static-raster-after/chromium-light-desktop--notification-pixels-stay-intact-through-Drawer-opening-and-closing--opening-page.png",
+    "darkPhoneBottomDrawerExit": "static-raster-after/webkit-dark-phone--notification-pixels-stay-intact-through-Bottom-drawer-opening-and-closing--closing-page.png",
+    "productionDarkPhone": "production-run/webkit-dark-phone--P2.3-production-notification-compatibility--production-notification.png",
+    "mixedStack": "toasts-run/chromium-light-desktop--mixed-pinned-and-passing-notifications-stack-without-overlap-and-retain-all-pinned-errors--mixed-stack.png",
+    "darkPhoneConfirmation": "toasts-run/webkit-dark-phone--notification-pixels-stay-intact-through-Confirmation-opening-and-closing--opening-page.png"
+  },
+  "observations": [
+    "Notification stays at the viewport origin while the right drawer is partially translated.",
+    "During the dark phone bottom-drawer exit, the notification retains its full opacity, safe-area position, diagnostic text, Copy error and Dismiss controls.",
+    "The real production route retains the error card and copy action over the existing session content and composer.",
+    "Mixed persistent error, lifecycle completion with Undo, and short notification are distinct and do not overlap; the +1 more control retains the additional pinned warning.",
+    "On the dark phone, the existing viewport-origin notification covers the confirmation title/body, exactly as in the original-source screenshot; Cancel and Save remain visible and the notification can be dismissed. This migration does not move the original notification origin."
+  ],
+  "scope": "Representative visual review; exact full-image comparison is separately recorded by audit.py. No claim of real-device or screen-reader audio verification."
+}

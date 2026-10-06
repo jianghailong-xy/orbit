@@ -1,0 +1,13 @@
+{
+  "argv": [
+    "bash",
+    "-c",
+    "npm run build -w @orbit/web && npm run test -w @orbit/web"
+  ],
+  "cwd": "/root/.orbit/worktrees/03e8c989-09f5-5d43-831c-c6187aea54e0",
+  "sourceCommitAtStart": "d6d32fe69a8e331b199f08022979d95d0fc1eb94",
+  "sourceCommitAtEnd": "d6d32fe69a8e331b199f08022979d95d0fc1eb94",
+  "finishedAt": "2026-10-04T12:37:09.861512+00:00",
+  "seconds": 211.04298714298056,
+  "exitCode": 0
+}

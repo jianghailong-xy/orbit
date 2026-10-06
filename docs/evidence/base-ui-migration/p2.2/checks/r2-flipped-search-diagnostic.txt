@@ -1,0 +1,34 @@
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs choices-motion.browser.mjs --project=webkit-dark-phone --grep normal flipped.*search --repeat-each=5 --max-failures=1
+
+[WebServer] (node:3208404) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 5 tests using 1 worker
+
+(node:3208485) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:92:3 › normal flipped entrance and exit motion matches search (2.1s)
+(node:3208841) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  2 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:92:3 › normal flipped entrance and exit motion matches search (2.0s)
+(node:3209295) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  3 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:92:3 › normal flipped entrance and exit motion matches search (2.1s)
+(node:3209764) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  4 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:92:3 › normal flipped entrance and exit motion matches search (2.6s)
+(node:3211414) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  5 [webkit-dark-phone] › ui-migration/choices-motion.browser.mjs:92:3 › normal flipped entrance and exit motion matches search (2.4s)
+
+  5 passed (13.5s)

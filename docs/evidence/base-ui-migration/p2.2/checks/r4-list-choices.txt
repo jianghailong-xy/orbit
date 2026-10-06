@@ -1,0 +1,534 @@
+
+> @orbit/web@0.1.0 pretest:ui-choices
+> npm run build -w @orbit/shared
+
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/web@0.1.0 test:ui-choices
+> playwright test --config ui-migration/choices.config.mjs --list
+
+Listing tests:
+  [chromium-light-desktop] › choices-lifecycle.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time
+  [chromium-light-desktop] › choices-lifecycle.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time
+  [chromium-light-desktop] › choices-lifecycle.browser.mjs:113:90 › reduced motion attachment has no transition and dismisses cleanly
+  [chromium-light-desktop] › choices-lifecycle.browser.mjs:113:90 › reduced motion expiry has no transition and dismisses cleanly
+  [chromium-light-desktop] › choices-lifecycle.browser.mjs:113:90 › reduced motion search has no transition and dismisses cleanly
+  [chromium-light-desktop] › choices-lifecycle.browser.mjs:113:90 › reduced motion multiple has no transition and dismisses cleanly
+  [chromium-light-desktop] › choices-lifecycle.browser.mjs:113:90 › reduced motion popover has no transition and dismisses cleanly
+  [chromium-light-desktop] › choices-lifecycle.browser.mjs:113:90 › reduced motion tooltip has no transition and dismisses cleanly
+  [chromium-light-desktop] › choices-lifecycle.browser.mjs:130:67 › normal attachment can reopen during exit without stale unmount
+  [chromium-light-desktop] › choices-lifecycle.browser.mjs:130:67 › normal expiry can reopen during exit without stale unmount
+  [chromium-light-desktop] › choices-lifecycle.browser.mjs:130:67 › normal search can reopen during exit without stale unmount
+  [chromium-light-desktop] › choices-lifecycle.browser.mjs:130:67 › normal popover can reopen during exit without stale unmount
+  [chromium-light-desktop] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches attachment
+  [chromium-light-desktop] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches attachment
+  [chromium-light-desktop] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches attachment
+  [chromium-light-desktop] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches expiry
+  [chromium-light-desktop] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches expiry
+  [chromium-light-desktop] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches expiry
+  [chromium-light-desktop] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches search
+  [chromium-light-desktop] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches search
+  [chromium-light-desktop] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches search
+  [chromium-light-desktop] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches multiple
+  [chromium-light-desktop] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches multiple
+  [chromium-light-desktop] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches multiple
+  [chromium-light-desktop] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches popover
+  [chromium-light-desktop] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches popover
+  [chromium-light-desktop] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches popover
+  [chromium-light-desktop] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches tooltip
+  [chromium-light-desktop] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches tooltip
+  [chromium-light-desktop] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches tooltip
+  [chromium-light-desktop] › choices-motion.browser.mjs:141:83 › popover center zoom origin matches
+  [chromium-light-desktop] › choices-motion.browser.mjs:141:83 › popover end zoom origin matches
+  [chromium-light-desktop] › choices-motion.browser.mjs:141:83 › tooltip center zoom origin matches
+  [chromium-light-desktop] › choices-motion.browser.mjs:141:83 › tooltip end zoom origin matches
+  [chromium-light-desktop] › choices-motion.browser.mjs:160:41 › submenu left edge zoom matches and stays in view
+  [chromium-light-desktop] › choices-motion.browser.mjs:160:41 › submenu right edge zoom matches and stays in view
+  [chromium-light-desktop] › choices-open-value.browser.mjs:31:53 › expiry dims the current value while open and restores it on Escape
+  [chromium-light-desktop] › choices-open-value.browser.mjs:31:53 › account dims the current value while open and restores it on Escape
+  [chromium-light-desktop] › choices-open-value.browser.mjs:31:53 › search dims the current value while open and restores it on Escape
+  [chromium-light-desktop] › choices.browser.mjs:83:3 › attachment matches the current surface, density and option states
+  [chromium-light-desktop] › choices.browser.mjs:83:3 › access matches the current surface, density and option states
+  [chromium-light-desktop] › choices.browser.mjs:83:3 › expiry matches the current surface, density and option states
+  [chromium-light-desktop] › choices.browser.mjs:83:3 › account matches the current surface, density and option states
+  [chromium-light-desktop] › choices.browser.mjs:83:3 › search matches the current surface, density and option states
+  [chromium-light-desktop] › choices.browser.mjs:83:3 › popover matches the current surface, density and option states
+  [chromium-light-desktop] › choices.browser.mjs:83:3 › tooltip matches the current surface, density and option states
+  [chromium-light-desktop] › choices.browser.mjs:158:1 › empty, disabled, hover and focus choice surfaces match the existing states
+  [chromium-light-desktop] › choices.browser.mjs:198:1 › menu arrows, disabled items, submenu, checkbox and focus return work
+  [chromium-light-desktop] › choices.browser.mjs:231:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus
+  [chromium-light-desktop] › choices.browser.mjs:263:1 › select supports arrows, Enter, clear, empty, disabled and empty-string account values
+  [chromium-light-desktop] › choices.browser.mjs:292:1 › search preserves selection, filters groups, handles no results, composition and explicit clear
+  [chromium-light-desktop] › choices.browser.mjs:323:1 › remote search accepts server labels and resets an action picker without local filtering
+  [chromium-light-desktop] › choices.browser.mjs:343:37 › Dialog owns choices, top-layer Escape, Tab and theme
+  [chromium-light-desktop] › choices.browser.mjs:343:37 › legacy Modal owns choices, top-layer Escape, Tab and theme
+  [chromium-light-desktop] › choices.browser.mjs:381:1 › legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary
+  [chromium-light-desktop] › choices.browser.mjs:400:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover
+  [chromium-light-desktop] › choices.browser.mjs:435:1 › open choices follow the live system theme without losing selection
+  [chromium-light-desktop] › choices.browser.mjs:453:1 › Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner
+  [chromium-light-desktop] › choices.browser.mjs:486:42 › multiple chip appearance matches current labels and email fields
+  [chromium-light-desktop] › choices.browser.mjs:486:42 › tags chip appearance matches current labels and email fields
+  [chromium-light-desktop] › choices.browser.mjs:515:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values
+  [chromium-light-desktop] › choices.browser.mjs:552:1 › email tags support controlled typing, separators, composition, Enter, blur and deletion
+  [chromium-light-desktop] › choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row
+  [chromium-light-desktop] › choices.browser.mjs:631:1 › search option touch selects once and preserves input focus
+  [chromium-light-desktop] › choices.browser.mjs:642:1 › disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen
+  [chromium-light-phone] › choices-lifecycle.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time
+  [chromium-light-phone] › choices-lifecycle.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time
+  [chromium-light-phone] › choices-lifecycle.browser.mjs:113:90 › reduced motion attachment has no transition and dismisses cleanly
+  [chromium-light-phone] › choices-lifecycle.browser.mjs:113:90 › reduced motion expiry has no transition and dismisses cleanly
+  [chromium-light-phone] › choices-lifecycle.browser.mjs:113:90 › reduced motion search has no transition and dismisses cleanly
+  [chromium-light-phone] › choices-lifecycle.browser.mjs:113:90 › reduced motion multiple has no transition and dismisses cleanly
+  [chromium-light-phone] › choices-lifecycle.browser.mjs:113:90 › reduced motion popover has no transition and dismisses cleanly
+  [chromium-light-phone] › choices-lifecycle.browser.mjs:113:90 › reduced motion tooltip has no transition and dismisses cleanly
+  [chromium-light-phone] › choices-lifecycle.browser.mjs:130:67 › normal attachment can reopen during exit without stale unmount
+  [chromium-light-phone] › choices-lifecycle.browser.mjs:130:67 › normal expiry can reopen during exit without stale unmount
+  [chromium-light-phone] › choices-lifecycle.browser.mjs:130:67 › normal search can reopen during exit without stale unmount
+  [chromium-light-phone] › choices-lifecycle.browser.mjs:130:67 › normal popover can reopen during exit without stale unmount
+  [chromium-light-phone] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches attachment
+  [chromium-light-phone] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches attachment
+  [chromium-light-phone] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches attachment
+  [chromium-light-phone] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches expiry
+  [chromium-light-phone] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches expiry
+  [chromium-light-phone] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches expiry
+  [chromium-light-phone] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches search
+  [chromium-light-phone] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches search
+  [chromium-light-phone] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches search
+  [chromium-light-phone] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches multiple
+  [chromium-light-phone] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches multiple
+  [chromium-light-phone] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches multiple
+  [chromium-light-phone] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches popover
+  [chromium-light-phone] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches popover
+  [chromium-light-phone] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches popover
+  [chromium-light-phone] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches tooltip
+  [chromium-light-phone] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches tooltip
+  [chromium-light-phone] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches tooltip
+  [chromium-light-phone] › choices-motion.browser.mjs:141:83 › popover center zoom origin matches
+  [chromium-light-phone] › choices-motion.browser.mjs:141:83 › popover end zoom origin matches
+  [chromium-light-phone] › choices-motion.browser.mjs:141:83 › tooltip center zoom origin matches
+  [chromium-light-phone] › choices-motion.browser.mjs:141:83 › tooltip end zoom origin matches
+  [chromium-light-phone] › choices-motion.browser.mjs:160:41 › submenu left edge zoom matches and stays in view
+  [chromium-light-phone] › choices-motion.browser.mjs:160:41 › submenu right edge zoom matches and stays in view
+  [chromium-light-phone] › choices-open-value.browser.mjs:31:53 › expiry dims the current value while open and restores it on Escape
+  [chromium-light-phone] › choices-open-value.browser.mjs:31:53 › account dims the current value while open and restores it on Escape
+  [chromium-light-phone] › choices-open-value.browser.mjs:31:53 › search dims the current value while open and restores it on Escape
+  [chromium-light-phone] › choices.browser.mjs:83:3 › attachment matches the current surface, density and option states
+  [chromium-light-phone] › choices.browser.mjs:83:3 › access matches the current surface, density and option states
+  [chromium-light-phone] › choices.browser.mjs:83:3 › expiry matches the current surface, density and option states
+  [chromium-light-phone] › choices.browser.mjs:83:3 › account matches the current surface, density and option states
+  [chromium-light-phone] › choices.browser.mjs:83:3 › search matches the current surface, density and option states
+  [chromium-light-phone] › choices.browser.mjs:83:3 › popover matches the current surface, density and option states
+  [chromium-light-phone] › choices.browser.mjs:83:3 › tooltip matches the current surface, density and option states
+  [chromium-light-phone] › choices.browser.mjs:158:1 › empty, disabled, hover and focus choice surfaces match the existing states
+  [chromium-light-phone] › choices.browser.mjs:198:1 › menu arrows, disabled items, submenu, checkbox and focus return work
+  [chromium-light-phone] › choices.browser.mjs:231:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus
+  [chromium-light-phone] › choices.browser.mjs:263:1 › select supports arrows, Enter, clear, empty, disabled and empty-string account values
+  [chromium-light-phone] › choices.browser.mjs:292:1 › search preserves selection, filters groups, handles no results, composition and explicit clear
+  [chromium-light-phone] › choices.browser.mjs:323:1 › remote search accepts server labels and resets an action picker without local filtering
+  [chromium-light-phone] › choices.browser.mjs:343:37 › Dialog owns choices, top-layer Escape, Tab and theme
+  [chromium-light-phone] › choices.browser.mjs:343:37 › legacy Modal owns choices, top-layer Escape, Tab and theme
+  [chromium-light-phone] › choices.browser.mjs:381:1 › legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary
+  [chromium-light-phone] › choices.browser.mjs:400:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover
+  [chromium-light-phone] › choices.browser.mjs:435:1 › open choices follow the live system theme without losing selection
+  [chromium-light-phone] › choices.browser.mjs:453:1 › Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner
+  [chromium-light-phone] › choices.browser.mjs:486:42 › multiple chip appearance matches current labels and email fields
+  [chromium-light-phone] › choices.browser.mjs:486:42 › tags chip appearance matches current labels and email fields
+  [chromium-light-phone] › choices.browser.mjs:515:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values
+  [chromium-light-phone] › choices.browser.mjs:552:1 › email tags support controlled typing, separators, composition, Enter, blur and deletion
+  [chromium-light-phone] › choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row
+  [chromium-light-phone] › choices.browser.mjs:631:1 › search option touch selects once and preserves input focus
+  [chromium-light-phone] › choices.browser.mjs:642:1 › disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen
+  [chromium-dark-desktop] › choices-lifecycle.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time
+  [chromium-dark-desktop] › choices-lifecycle.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time
+  [chromium-dark-desktop] › choices-lifecycle.browser.mjs:113:90 › reduced motion attachment has no transition and dismisses cleanly
+  [chromium-dark-desktop] › choices-lifecycle.browser.mjs:113:90 › reduced motion expiry has no transition and dismisses cleanly
+  [chromium-dark-desktop] › choices-lifecycle.browser.mjs:113:90 › reduced motion search has no transition and dismisses cleanly
+  [chromium-dark-desktop] › choices-lifecycle.browser.mjs:113:90 › reduced motion multiple has no transition and dismisses cleanly
+  [chromium-dark-desktop] › choices-lifecycle.browser.mjs:113:90 › reduced motion popover has no transition and dismisses cleanly
+  [chromium-dark-desktop] › choices-lifecycle.browser.mjs:113:90 › reduced motion tooltip has no transition and dismisses cleanly
+  [chromium-dark-desktop] › choices-lifecycle.browser.mjs:130:67 › normal attachment can reopen during exit without stale unmount
+  [chromium-dark-desktop] › choices-lifecycle.browser.mjs:130:67 › normal expiry can reopen during exit without stale unmount
+  [chromium-dark-desktop] › choices-lifecycle.browser.mjs:130:67 › normal search can reopen during exit without stale unmount
+  [chromium-dark-desktop] › choices-lifecycle.browser.mjs:130:67 › normal popover can reopen during exit without stale unmount
+  [chromium-dark-desktop] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches attachment
+  [chromium-dark-desktop] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches attachment
+  [chromium-dark-desktop] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches attachment
+  [chromium-dark-desktop] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches expiry
+  [chromium-dark-desktop] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches expiry
+  [chromium-dark-desktop] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches expiry
+  [chromium-dark-desktop] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches search
+  [chromium-dark-desktop] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches search
+  [chromium-dark-desktop] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches search
+  [chromium-dark-desktop] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches multiple
+  [chromium-dark-desktop] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches multiple
+  [chromium-dark-desktop] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches multiple
+  [chromium-dark-desktop] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches popover
+  [chromium-dark-desktop] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches popover
+  [chromium-dark-desktop] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches popover
+  [chromium-dark-desktop] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches tooltip
+  [chromium-dark-desktop] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches tooltip
+  [chromium-dark-desktop] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches tooltip
+  [chromium-dark-desktop] › choices-motion.browser.mjs:141:83 › popover center zoom origin matches
+  [chromium-dark-desktop] › choices-motion.browser.mjs:141:83 › popover end zoom origin matches
+  [chromium-dark-desktop] › choices-motion.browser.mjs:141:83 › tooltip center zoom origin matches
+  [chromium-dark-desktop] › choices-motion.browser.mjs:141:83 › tooltip end zoom origin matches
+  [chromium-dark-desktop] › choices-motion.browser.mjs:160:41 › submenu left edge zoom matches and stays in view
+  [chromium-dark-desktop] › choices-motion.browser.mjs:160:41 › submenu right edge zoom matches and stays in view
+  [chromium-dark-desktop] › choices-open-value.browser.mjs:31:53 › expiry dims the current value while open and restores it on Escape
+  [chromium-dark-desktop] › choices-open-value.browser.mjs:31:53 › account dims the current value while open and restores it on Escape
+  [chromium-dark-desktop] › choices-open-value.browser.mjs:31:53 › search dims the current value while open and restores it on Escape
+  [chromium-dark-desktop] › choices.browser.mjs:83:3 › attachment matches the current surface, density and option states
+  [chromium-dark-desktop] › choices.browser.mjs:83:3 › access matches the current surface, density and option states
+  [chromium-dark-desktop] › choices.browser.mjs:83:3 › expiry matches the current surface, density and option states
+  [chromium-dark-desktop] › choices.browser.mjs:83:3 › account matches the current surface, density and option states
+  [chromium-dark-desktop] › choices.browser.mjs:83:3 › search matches the current surface, density and option states
+  [chromium-dark-desktop] › choices.browser.mjs:83:3 › popover matches the current surface, density and option states
+  [chromium-dark-desktop] › choices.browser.mjs:83:3 › tooltip matches the current surface, density and option states
+  [chromium-dark-desktop] › choices.browser.mjs:158:1 › empty, disabled, hover and focus choice surfaces match the existing states
+  [chromium-dark-desktop] › choices.browser.mjs:198:1 › menu arrows, disabled items, submenu, checkbox and focus return work
+  [chromium-dark-desktop] › choices.browser.mjs:231:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus
+  [chromium-dark-desktop] › choices.browser.mjs:263:1 › select supports arrows, Enter, clear, empty, disabled and empty-string account values
+  [chromium-dark-desktop] › choices.browser.mjs:292:1 › search preserves selection, filters groups, handles no results, composition and explicit clear
+  [chromium-dark-desktop] › choices.browser.mjs:323:1 › remote search accepts server labels and resets an action picker without local filtering
+  [chromium-dark-desktop] › choices.browser.mjs:343:37 › Dialog owns choices, top-layer Escape, Tab and theme
+  [chromium-dark-desktop] › choices.browser.mjs:343:37 › legacy Modal owns choices, top-layer Escape, Tab and theme
+  [chromium-dark-desktop] › choices.browser.mjs:381:1 › legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary
+  [chromium-dark-desktop] › choices.browser.mjs:400:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover
+  [chromium-dark-desktop] › choices.browser.mjs:435:1 › open choices follow the live system theme without losing selection
+  [chromium-dark-desktop] › choices.browser.mjs:453:1 › Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner
+  [chromium-dark-desktop] › choices.browser.mjs:486:42 › multiple chip appearance matches current labels and email fields
+  [chromium-dark-desktop] › choices.browser.mjs:486:42 › tags chip appearance matches current labels and email fields
+  [chromium-dark-desktop] › choices.browser.mjs:515:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values
+  [chromium-dark-desktop] › choices.browser.mjs:552:1 › email tags support controlled typing, separators, composition, Enter, blur and deletion
+  [chromium-dark-desktop] › choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row
+  [chromium-dark-desktop] › choices.browser.mjs:631:1 › search option touch selects once and preserves input focus
+  [chromium-dark-desktop] › choices.browser.mjs:642:1 › disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen
+  [chromium-dark-phone] › choices-lifecycle.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time
+  [chromium-dark-phone] › choices-lifecycle.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time
+  [chromium-dark-phone] › choices-lifecycle.browser.mjs:113:90 › reduced motion attachment has no transition and dismisses cleanly
+  [chromium-dark-phone] › choices-lifecycle.browser.mjs:113:90 › reduced motion expiry has no transition and dismisses cleanly
+  [chromium-dark-phone] › choices-lifecycle.browser.mjs:113:90 › reduced motion search has no transition and dismisses cleanly
+  [chromium-dark-phone] › choices-lifecycle.browser.mjs:113:90 › reduced motion multiple has no transition and dismisses cleanly
+  [chromium-dark-phone] › choices-lifecycle.browser.mjs:113:90 › reduced motion popover has no transition and dismisses cleanly
+  [chromium-dark-phone] › choices-lifecycle.browser.mjs:113:90 › reduced motion tooltip has no transition and dismisses cleanly
+  [chromium-dark-phone] › choices-lifecycle.browser.mjs:130:67 › normal attachment can reopen during exit without stale unmount
+  [chromium-dark-phone] › choices-lifecycle.browser.mjs:130:67 › normal expiry can reopen during exit without stale unmount
+  [chromium-dark-phone] › choices-lifecycle.browser.mjs:130:67 › normal search can reopen during exit without stale unmount
+  [chromium-dark-phone] › choices-lifecycle.browser.mjs:130:67 › normal popover can reopen during exit without stale unmount
+  [chromium-dark-phone] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches attachment
+  [chromium-dark-phone] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches attachment
+  [chromium-dark-phone] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches attachment
+  [chromium-dark-phone] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches expiry
+  [chromium-dark-phone] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches expiry
+  [chromium-dark-phone] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches expiry
+  [chromium-dark-phone] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches search
+  [chromium-dark-phone] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches search
+  [chromium-dark-phone] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches search
+  [chromium-dark-phone] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches multiple
+  [chromium-dark-phone] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches multiple
+  [chromium-dark-phone] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches multiple
+  [chromium-dark-phone] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches popover
+  [chromium-dark-phone] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches popover
+  [chromium-dark-phone] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches popover
+  [chromium-dark-phone] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches tooltip
+  [chromium-dark-phone] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches tooltip
+  [chromium-dark-phone] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches tooltip
+  [chromium-dark-phone] › choices-motion.browser.mjs:141:83 › popover center zoom origin matches
+  [chromium-dark-phone] › choices-motion.browser.mjs:141:83 › popover end zoom origin matches
+  [chromium-dark-phone] › choices-motion.browser.mjs:141:83 › tooltip center zoom origin matches
+  [chromium-dark-phone] › choices-motion.browser.mjs:141:83 › tooltip end zoom origin matches
+  [chromium-dark-phone] › choices-motion.browser.mjs:160:41 › submenu left edge zoom matches and stays in view
+  [chromium-dark-phone] › choices-motion.browser.mjs:160:41 › submenu right edge zoom matches and stays in view
+  [chromium-dark-phone] › choices-open-value.browser.mjs:31:53 › expiry dims the current value while open and restores it on Escape
+  [chromium-dark-phone] › choices-open-value.browser.mjs:31:53 › account dims the current value while open and restores it on Escape
+  [chromium-dark-phone] › choices-open-value.browser.mjs:31:53 › search dims the current value while open and restores it on Escape
+  [chromium-dark-phone] › choices.browser.mjs:83:3 › attachment matches the current surface, density and option states
+  [chromium-dark-phone] › choices.browser.mjs:83:3 › access matches the current surface, density and option states
+  [chromium-dark-phone] › choices.browser.mjs:83:3 › expiry matches the current surface, density and option states
+  [chromium-dark-phone] › choices.browser.mjs:83:3 › account matches the current surface, density and option states
+  [chromium-dark-phone] › choices.browser.mjs:83:3 › search matches the current surface, density and option states
+  [chromium-dark-phone] › choices.browser.mjs:83:3 › popover matches the current surface, density and option states
+  [chromium-dark-phone] › choices.browser.mjs:83:3 › tooltip matches the current surface, density and option states
+  [chromium-dark-phone] › choices.browser.mjs:158:1 › empty, disabled, hover and focus choice surfaces match the existing states
+  [chromium-dark-phone] › choices.browser.mjs:198:1 › menu arrows, disabled items, submenu, checkbox and focus return work
+  [chromium-dark-phone] › choices.browser.mjs:231:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus
+  [chromium-dark-phone] › choices.browser.mjs:263:1 › select supports arrows, Enter, clear, empty, disabled and empty-string account values
+  [chromium-dark-phone] › choices.browser.mjs:292:1 › search preserves selection, filters groups, handles no results, composition and explicit clear
+  [chromium-dark-phone] › choices.browser.mjs:323:1 › remote search accepts server labels and resets an action picker without local filtering
+  [chromium-dark-phone] › choices.browser.mjs:343:37 › Dialog owns choices, top-layer Escape, Tab and theme
+  [chromium-dark-phone] › choices.browser.mjs:343:37 › legacy Modal owns choices, top-layer Escape, Tab and theme
+  [chromium-dark-phone] › choices.browser.mjs:381:1 › legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary
+  [chromium-dark-phone] › choices.browser.mjs:400:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover
+  [chromium-dark-phone] › choices.browser.mjs:435:1 › open choices follow the live system theme without losing selection
+  [chromium-dark-phone] › choices.browser.mjs:453:1 › Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner
+  [chromium-dark-phone] › choices.browser.mjs:486:42 › multiple chip appearance matches current labels and email fields
+  [chromium-dark-phone] › choices.browser.mjs:486:42 › tags chip appearance matches current labels and email fields
+  [chromium-dark-phone] › choices.browser.mjs:515:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values
+  [chromium-dark-phone] › choices.browser.mjs:552:1 › email tags support controlled typing, separators, composition, Enter, blur and deletion
+  [chromium-dark-phone] › choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row
+  [chromium-dark-phone] › choices.browser.mjs:631:1 › search option touch selects once and preserves input focus
+  [chromium-dark-phone] › choices.browser.mjs:642:1 › disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen
+  [webkit-light-desktop] › choices-lifecycle.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time
+  [webkit-light-desktop] › choices-lifecycle.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time
+  [webkit-light-desktop] › choices-lifecycle.browser.mjs:113:90 › reduced motion attachment has no transition and dismisses cleanly
+  [webkit-light-desktop] › choices-lifecycle.browser.mjs:113:90 › reduced motion expiry has no transition and dismisses cleanly
+  [webkit-light-desktop] › choices-lifecycle.browser.mjs:113:90 › reduced motion search has no transition and dismisses cleanly
+  [webkit-light-desktop] › choices-lifecycle.browser.mjs:113:90 › reduced motion multiple has no transition and dismisses cleanly
+  [webkit-light-desktop] › choices-lifecycle.browser.mjs:113:90 › reduced motion popover has no transition and dismisses cleanly
+  [webkit-light-desktop] › choices-lifecycle.browser.mjs:113:90 › reduced motion tooltip has no transition and dismisses cleanly
+  [webkit-light-desktop] › choices-lifecycle.browser.mjs:130:67 › normal attachment can reopen during exit without stale unmount
+  [webkit-light-desktop] › choices-lifecycle.browser.mjs:130:67 › normal expiry can reopen during exit without stale unmount
+  [webkit-light-desktop] › choices-lifecycle.browser.mjs:130:67 › normal search can reopen during exit without stale unmount
+  [webkit-light-desktop] › choices-lifecycle.browser.mjs:130:67 › normal popover can reopen during exit without stale unmount
+  [webkit-light-desktop] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches attachment
+  [webkit-light-desktop] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches attachment
+  [webkit-light-desktop] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches attachment
+  [webkit-light-desktop] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches expiry
+  [webkit-light-desktop] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches expiry
+  [webkit-light-desktop] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches expiry
+  [webkit-light-desktop] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches search
+  [webkit-light-desktop] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches search
+  [webkit-light-desktop] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches search
+  [webkit-light-desktop] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches multiple
+  [webkit-light-desktop] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches multiple
+  [webkit-light-desktop] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches multiple
+  [webkit-light-desktop] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches popover
+  [webkit-light-desktop] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches popover
+  [webkit-light-desktop] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches popover
+  [webkit-light-desktop] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches tooltip
+  [webkit-light-desktop] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches tooltip
+  [webkit-light-desktop] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches tooltip
+  [webkit-light-desktop] › choices-motion.browser.mjs:141:83 › popover center zoom origin matches
+  [webkit-light-desktop] › choices-motion.browser.mjs:141:83 › popover end zoom origin matches
+  [webkit-light-desktop] › choices-motion.browser.mjs:141:83 › tooltip center zoom origin matches
+  [webkit-light-desktop] › choices-motion.browser.mjs:141:83 › tooltip end zoom origin matches
+  [webkit-light-desktop] › choices-motion.browser.mjs:160:41 › submenu left edge zoom matches and stays in view
+  [webkit-light-desktop] › choices-motion.browser.mjs:160:41 › submenu right edge zoom matches and stays in view
+  [webkit-light-desktop] › choices-open-value.browser.mjs:31:53 › expiry dims the current value while open and restores it on Escape
+  [webkit-light-desktop] › choices-open-value.browser.mjs:31:53 › account dims the current value while open and restores it on Escape
+  [webkit-light-desktop] › choices-open-value.browser.mjs:31:53 › search dims the current value while open and restores it on Escape
+  [webkit-light-desktop] › choices.browser.mjs:83:3 › attachment matches the current surface, density and option states
+  [webkit-light-desktop] › choices.browser.mjs:83:3 › access matches the current surface, density and option states
+  [webkit-light-desktop] › choices.browser.mjs:83:3 › expiry matches the current surface, density and option states
+  [webkit-light-desktop] › choices.browser.mjs:83:3 › account matches the current surface, density and option states
+  [webkit-light-desktop] › choices.browser.mjs:83:3 › search matches the current surface, density and option states
+  [webkit-light-desktop] › choices.browser.mjs:83:3 › popover matches the current surface, density and option states
+  [webkit-light-desktop] › choices.browser.mjs:83:3 › tooltip matches the current surface, density and option states
+  [webkit-light-desktop] › choices.browser.mjs:158:1 › empty, disabled, hover and focus choice surfaces match the existing states
+  [webkit-light-desktop] › choices.browser.mjs:198:1 › menu arrows, disabled items, submenu, checkbox and focus return work
+  [webkit-light-desktop] › choices.browser.mjs:231:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus
+  [webkit-light-desktop] › choices.browser.mjs:263:1 › select supports arrows, Enter, clear, empty, disabled and empty-string account values
+  [webkit-light-desktop] › choices.browser.mjs:292:1 › search preserves selection, filters groups, handles no results, composition and explicit clear
+  [webkit-light-desktop] › choices.browser.mjs:323:1 › remote search accepts server labels and resets an action picker without local filtering
+  [webkit-light-desktop] › choices.browser.mjs:343:37 › Dialog owns choices, top-layer Escape, Tab and theme
+  [webkit-light-desktop] › choices.browser.mjs:343:37 › legacy Modal owns choices, top-layer Escape, Tab and theme
+  [webkit-light-desktop] › choices.browser.mjs:381:1 › legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary
+  [webkit-light-desktop] › choices.browser.mjs:400:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover
+  [webkit-light-desktop] › choices.browser.mjs:435:1 › open choices follow the live system theme without losing selection
+  [webkit-light-desktop] › choices.browser.mjs:453:1 › Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner
+  [webkit-light-desktop] › choices.browser.mjs:486:42 › multiple chip appearance matches current labels and email fields
+  [webkit-light-desktop] › choices.browser.mjs:486:42 › tags chip appearance matches current labels and email fields
+  [webkit-light-desktop] › choices.browser.mjs:515:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values
+  [webkit-light-desktop] › choices.browser.mjs:552:1 › email tags support controlled typing, separators, composition, Enter, blur and deletion
+  [webkit-light-desktop] › choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row
+  [webkit-light-desktop] › choices.browser.mjs:631:1 › search option touch selects once and preserves input focus
+  [webkit-light-desktop] › choices.browser.mjs:642:1 › disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen
+  [webkit-light-phone] › choices-lifecycle.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time
+  [webkit-light-phone] › choices-lifecycle.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time
+  [webkit-light-phone] › choices-lifecycle.browser.mjs:113:90 › reduced motion attachment has no transition and dismisses cleanly
+  [webkit-light-phone] › choices-lifecycle.browser.mjs:113:90 › reduced motion expiry has no transition and dismisses cleanly
+  [webkit-light-phone] › choices-lifecycle.browser.mjs:113:90 › reduced motion search has no transition and dismisses cleanly
+  [webkit-light-phone] › choices-lifecycle.browser.mjs:113:90 › reduced motion multiple has no transition and dismisses cleanly
+  [webkit-light-phone] › choices-lifecycle.browser.mjs:113:90 › reduced motion popover has no transition and dismisses cleanly
+  [webkit-light-phone] › choices-lifecycle.browser.mjs:113:90 › reduced motion tooltip has no transition and dismisses cleanly
+  [webkit-light-phone] › choices-lifecycle.browser.mjs:130:67 › normal attachment can reopen during exit without stale unmount
+  [webkit-light-phone] › choices-lifecycle.browser.mjs:130:67 › normal expiry can reopen during exit without stale unmount
+  [webkit-light-phone] › choices-lifecycle.browser.mjs:130:67 › normal search can reopen during exit without stale unmount
+  [webkit-light-phone] › choices-lifecycle.browser.mjs:130:67 › normal popover can reopen during exit without stale unmount
+  [webkit-light-phone] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches attachment
+  [webkit-light-phone] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches attachment
+  [webkit-light-phone] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches attachment
+  [webkit-light-phone] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches expiry
+  [webkit-light-phone] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches expiry
+  [webkit-light-phone] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches expiry
+  [webkit-light-phone] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches search
+  [webkit-light-phone] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches search
+  [webkit-light-phone] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches search
+  [webkit-light-phone] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches multiple
+  [webkit-light-phone] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches multiple
+  [webkit-light-phone] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches multiple
+  [webkit-light-phone] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches popover
+  [webkit-light-phone] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches popover
+  [webkit-light-phone] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches popover
+  [webkit-light-phone] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches tooltip
+  [webkit-light-phone] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches tooltip
+  [webkit-light-phone] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches tooltip
+  [webkit-light-phone] › choices-motion.browser.mjs:141:83 › popover center zoom origin matches
+  [webkit-light-phone] › choices-motion.browser.mjs:141:83 › popover end zoom origin matches
+  [webkit-light-phone] › choices-motion.browser.mjs:141:83 › tooltip center zoom origin matches
+  [webkit-light-phone] › choices-motion.browser.mjs:141:83 › tooltip end zoom origin matches
+  [webkit-light-phone] › choices-motion.browser.mjs:160:41 › submenu left edge zoom matches and stays in view
+  [webkit-light-phone] › choices-motion.browser.mjs:160:41 › submenu right edge zoom matches and stays in view
+  [webkit-light-phone] › choices-open-value.browser.mjs:31:53 › expiry dims the current value while open and restores it on Escape
+  [webkit-light-phone] › choices-open-value.browser.mjs:31:53 › account dims the current value while open and restores it on Escape
+  [webkit-light-phone] › choices-open-value.browser.mjs:31:53 › search dims the current value while open and restores it on Escape
+  [webkit-light-phone] › choices.browser.mjs:83:3 › attachment matches the current surface, density and option states
+  [webkit-light-phone] › choices.browser.mjs:83:3 › access matches the current surface, density and option states
+  [webkit-light-phone] › choices.browser.mjs:83:3 › expiry matches the current surface, density and option states
+  [webkit-light-phone] › choices.browser.mjs:83:3 › account matches the current surface, density and option states
+  [webkit-light-phone] › choices.browser.mjs:83:3 › search matches the current surface, density and option states
+  [webkit-light-phone] › choices.browser.mjs:83:3 › popover matches the current surface, density and option states
+  [webkit-light-phone] › choices.browser.mjs:83:3 › tooltip matches the current surface, density and option states
+  [webkit-light-phone] › choices.browser.mjs:158:1 › empty, disabled, hover and focus choice surfaces match the existing states
+  [webkit-light-phone] › choices.browser.mjs:198:1 › menu arrows, disabled items, submenu, checkbox and focus return work
+  [webkit-light-phone] › choices.browser.mjs:231:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus
+  [webkit-light-phone] › choices.browser.mjs:263:1 › select supports arrows, Enter, clear, empty, disabled and empty-string account values
+  [webkit-light-phone] › choices.browser.mjs:292:1 › search preserves selection, filters groups, handles no results, composition and explicit clear
+  [webkit-light-phone] › choices.browser.mjs:323:1 › remote search accepts server labels and resets an action picker without local filtering
+  [webkit-light-phone] › choices.browser.mjs:343:37 › Dialog owns choices, top-layer Escape, Tab and theme
+  [webkit-light-phone] › choices.browser.mjs:343:37 › legacy Modal owns choices, top-layer Escape, Tab and theme
+  [webkit-light-phone] › choices.browser.mjs:381:1 › legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary
+  [webkit-light-phone] › choices.browser.mjs:400:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover
+  [webkit-light-phone] › choices.browser.mjs:435:1 › open choices follow the live system theme without losing selection
+  [webkit-light-phone] › choices.browser.mjs:453:1 › Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner
+  [webkit-light-phone] › choices.browser.mjs:486:42 › multiple chip appearance matches current labels and email fields
+  [webkit-light-phone] › choices.browser.mjs:486:42 › tags chip appearance matches current labels and email fields
+  [webkit-light-phone] › choices.browser.mjs:515:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values
+  [webkit-light-phone] › choices.browser.mjs:552:1 › email tags support controlled typing, separators, composition, Enter, blur and deletion
+  [webkit-light-phone] › choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row
+  [webkit-light-phone] › choices.browser.mjs:631:1 › search option touch selects once and preserves input focus
+  [webkit-light-phone] › choices.browser.mjs:642:1 › disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen
+  [webkit-dark-desktop] › choices-lifecycle.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time
+  [webkit-dark-desktop] › choices-lifecycle.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time
+  [webkit-dark-desktop] › choices-lifecycle.browser.mjs:113:90 › reduced motion attachment has no transition and dismisses cleanly
+  [webkit-dark-desktop] › choices-lifecycle.browser.mjs:113:90 › reduced motion expiry has no transition and dismisses cleanly
+  [webkit-dark-desktop] › choices-lifecycle.browser.mjs:113:90 › reduced motion search has no transition and dismisses cleanly
+  [webkit-dark-desktop] › choices-lifecycle.browser.mjs:113:90 › reduced motion multiple has no transition and dismisses cleanly
+  [webkit-dark-desktop] › choices-lifecycle.browser.mjs:113:90 › reduced motion popover has no transition and dismisses cleanly
+  [webkit-dark-desktop] › choices-lifecycle.browser.mjs:113:90 › reduced motion tooltip has no transition and dismisses cleanly
+  [webkit-dark-desktop] › choices-lifecycle.browser.mjs:130:67 › normal attachment can reopen during exit without stale unmount
+  [webkit-dark-desktop] › choices-lifecycle.browser.mjs:130:67 › normal expiry can reopen during exit without stale unmount
+  [webkit-dark-desktop] › choices-lifecycle.browser.mjs:130:67 › normal search can reopen during exit without stale unmount
+  [webkit-dark-desktop] › choices-lifecycle.browser.mjs:130:67 › normal popover can reopen during exit without stale unmount
+  [webkit-dark-desktop] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches attachment
+  [webkit-dark-desktop] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches attachment
+  [webkit-dark-desktop] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches attachment
+  [webkit-dark-desktop] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches expiry
+  [webkit-dark-desktop] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches expiry
+  [webkit-dark-desktop] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches expiry
+  [webkit-dark-desktop] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches search
+  [webkit-dark-desktop] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches search
+  [webkit-dark-desktop] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches search
+  [webkit-dark-desktop] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches multiple
+  [webkit-dark-desktop] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches multiple
+  [webkit-dark-desktop] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches multiple
+  [webkit-dark-desktop] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches popover
+  [webkit-dark-desktop] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches popover
+  [webkit-dark-desktop] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches popover
+  [webkit-dark-desktop] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches tooltip
+  [webkit-dark-desktop] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches tooltip
+  [webkit-dark-desktop] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches tooltip
+  [webkit-dark-desktop] › choices-motion.browser.mjs:141:83 › popover center zoom origin matches
+  [webkit-dark-desktop] › choices-motion.browser.mjs:141:83 › popover end zoom origin matches
+  [webkit-dark-desktop] › choices-motion.browser.mjs:141:83 › tooltip center zoom origin matches
+  [webkit-dark-desktop] › choices-motion.browser.mjs:141:83 › tooltip end zoom origin matches
+  [webkit-dark-desktop] › choices-motion.browser.mjs:160:41 › submenu left edge zoom matches and stays in view
+  [webkit-dark-desktop] › choices-motion.browser.mjs:160:41 › submenu right edge zoom matches and stays in view
+  [webkit-dark-desktop] › choices-open-value.browser.mjs:31:53 › expiry dims the current value while open and restores it on Escape
+  [webkit-dark-desktop] › choices-open-value.browser.mjs:31:53 › account dims the current value while open and restores it on Escape
+  [webkit-dark-desktop] › choices-open-value.browser.mjs:31:53 › search dims the current value while open and restores it on Escape
+  [webkit-dark-desktop] › choices.browser.mjs:83:3 › attachment matches the current surface, density and option states
+  [webkit-dark-desktop] › choices.browser.mjs:83:3 › access matches the current surface, density and option states
+  [webkit-dark-desktop] › choices.browser.mjs:83:3 › expiry matches the current surface, density and option states
+  [webkit-dark-desktop] › choices.browser.mjs:83:3 › account matches the current surface, density and option states
+  [webkit-dark-desktop] › choices.browser.mjs:83:3 › search matches the current surface, density and option states
+  [webkit-dark-desktop] › choices.browser.mjs:83:3 › popover matches the current surface, density and option states
+  [webkit-dark-desktop] › choices.browser.mjs:83:3 › tooltip matches the current surface, density and option states
+  [webkit-dark-desktop] › choices.browser.mjs:158:1 › empty, disabled, hover and focus choice surfaces match the existing states
+  [webkit-dark-desktop] › choices.browser.mjs:198:1 › menu arrows, disabled items, submenu, checkbox and focus return work
+  [webkit-dark-desktop] › choices.browser.mjs:231:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus
+  [webkit-dark-desktop] › choices.browser.mjs:263:1 › select supports arrows, Enter, clear, empty, disabled and empty-string account values
+  [webkit-dark-desktop] › choices.browser.mjs:292:1 › search preserves selection, filters groups, handles no results, composition and explicit clear
+  [webkit-dark-desktop] › choices.browser.mjs:323:1 › remote search accepts server labels and resets an action picker without local filtering
+  [webkit-dark-desktop] › choices.browser.mjs:343:37 › Dialog owns choices, top-layer Escape, Tab and theme
+  [webkit-dark-desktop] › choices.browser.mjs:343:37 › legacy Modal owns choices, top-layer Escape, Tab and theme
+  [webkit-dark-desktop] › choices.browser.mjs:381:1 › legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary
+  [webkit-dark-desktop] › choices.browser.mjs:400:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover
+  [webkit-dark-desktop] › choices.browser.mjs:435:1 › open choices follow the live system theme without losing selection
+  [webkit-dark-desktop] › choices.browser.mjs:453:1 › Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner
+  [webkit-dark-desktop] › choices.browser.mjs:486:42 › multiple chip appearance matches current labels and email fields
+  [webkit-dark-desktop] › choices.browser.mjs:486:42 › tags chip appearance matches current labels and email fields
+  [webkit-dark-desktop] › choices.browser.mjs:515:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values
+  [webkit-dark-desktop] › choices.browser.mjs:552:1 › email tags support controlled typing, separators, composition, Enter, blur and deletion
+  [webkit-dark-desktop] › choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row
+  [webkit-dark-desktop] › choices.browser.mjs:631:1 › search option touch selects once and preserves input focus
+  [webkit-dark-desktop] › choices.browser.mjs:642:1 › disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen
+  [webkit-dark-phone] › choices-lifecycle.browser.mjs:51:51 › no-preference Dialog Popover Select exits restore one layer at a time
+  [webkit-dark-phone] › choices-lifecycle.browser.mjs:51:51 › reduce Dialog Popover Select exits restore one layer at a time
+  [webkit-dark-phone] › choices-lifecycle.browser.mjs:113:90 › reduced motion attachment has no transition and dismisses cleanly
+  [webkit-dark-phone] › choices-lifecycle.browser.mjs:113:90 › reduced motion expiry has no transition and dismisses cleanly
+  [webkit-dark-phone] › choices-lifecycle.browser.mjs:113:90 › reduced motion search has no transition and dismisses cleanly
+  [webkit-dark-phone] › choices-lifecycle.browser.mjs:113:90 › reduced motion multiple has no transition and dismisses cleanly
+  [webkit-dark-phone] › choices-lifecycle.browser.mjs:113:90 › reduced motion popover has no transition and dismisses cleanly
+  [webkit-dark-phone] › choices-lifecycle.browser.mjs:113:90 › reduced motion tooltip has no transition and dismisses cleanly
+  [webkit-dark-phone] › choices-lifecycle.browser.mjs:130:67 › normal attachment can reopen during exit without stale unmount
+  [webkit-dark-phone] › choices-lifecycle.browser.mjs:130:67 › normal expiry can reopen during exit without stale unmount
+  [webkit-dark-phone] › choices-lifecycle.browser.mjs:130:67 › normal search can reopen during exit without stale unmount
+  [webkit-dark-phone] › choices-lifecycle.browser.mjs:130:67 › normal popover can reopen during exit without stale unmount
+  [webkit-dark-phone] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches attachment
+  [webkit-dark-phone] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches attachment
+  [webkit-dark-phone] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches attachment
+  [webkit-dark-phone] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches expiry
+  [webkit-dark-phone] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches expiry
+  [webkit-dark-phone] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches expiry
+  [webkit-dark-phone] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches search
+  [webkit-dark-phone] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches search
+  [webkit-dark-phone] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches search
+  [webkit-dark-phone] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches multiple
+  [webkit-dark-phone] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches multiple
+  [webkit-dark-phone] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches multiple
+  [webkit-dark-phone] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches popover
+  [webkit-dark-phone] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches popover
+  [webkit-dark-phone] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches popover
+  [webkit-dark-phone] › choices-motion.browser.mjs:104:3 › normal bottom entrance and exit motion matches tooltip
+  [webkit-dark-phone] › choices-motion.browser.mjs:104:3 › normal top entrance and exit motion matches tooltip
+  [webkit-dark-phone] › choices-motion.browser.mjs:104:3 › normal flipped entrance and exit motion matches tooltip
+  [webkit-dark-phone] › choices-motion.browser.mjs:141:83 › popover center zoom origin matches
+  [webkit-dark-phone] › choices-motion.browser.mjs:141:83 › popover end zoom origin matches
+  [webkit-dark-phone] › choices-motion.browser.mjs:141:83 › tooltip center zoom origin matches
+  [webkit-dark-phone] › choices-motion.browser.mjs:141:83 › tooltip end zoom origin matches
+  [webkit-dark-phone] › choices-motion.browser.mjs:160:41 › submenu left edge zoom matches and stays in view
+  [webkit-dark-phone] › choices-motion.browser.mjs:160:41 › submenu right edge zoom matches and stays in view
+  [webkit-dark-phone] › choices-open-value.browser.mjs:31:53 › expiry dims the current value while open and restores it on Escape
+  [webkit-dark-phone] › choices-open-value.browser.mjs:31:53 › account dims the current value while open and restores it on Escape
+  [webkit-dark-phone] › choices-open-value.browser.mjs:31:53 › search dims the current value while open and restores it on Escape
+  [webkit-dark-phone] › choices.browser.mjs:83:3 › attachment matches the current surface, density and option states
+  [webkit-dark-phone] › choices.browser.mjs:83:3 › access matches the current surface, density and option states
+  [webkit-dark-phone] › choices.browser.mjs:83:3 › expiry matches the current surface, density and option states
+  [webkit-dark-phone] › choices.browser.mjs:83:3 › account matches the current surface, density and option states
+  [webkit-dark-phone] › choices.browser.mjs:83:3 › search matches the current surface, density and option states
+  [webkit-dark-phone] › choices.browser.mjs:83:3 › popover matches the current surface, density and option states
+  [webkit-dark-phone] › choices.browser.mjs:83:3 › tooltip matches the current surface, density and option states
+  [webkit-dark-phone] › choices.browser.mjs:158:1 › empty, disabled, hover and focus choice surfaces match the existing states
+  [webkit-dark-phone] › choices.browser.mjs:198:1 › menu arrows, disabled items, submenu, checkbox and focus return work
+  [webkit-dark-phone] › choices.browser.mjs:231:1 › touch or pointer menus dismiss outside, fit viewport and open a dialog with stable return focus
+  [webkit-dark-phone] › choices.browser.mjs:263:1 › select supports arrows, Enter, clear, empty, disabled and empty-string account values
+  [webkit-dark-phone] › choices.browser.mjs:292:1 › search preserves selection, filters groups, handles no results, composition and explicit clear
+  [webkit-dark-phone] › choices.browser.mjs:323:1 › remote search accepts server labels and resets an action picker without local filtering
+  [webkit-dark-phone] › choices.browser.mjs:343:37 › Dialog owns choices, top-layer Escape, Tab and theme
+  [webkit-dark-phone] › choices.browser.mjs:343:37 › legacy Modal owns choices, top-layer Escape, Tab and theme
+  [webkit-dark-phone] › choices.browser.mjs:381:1 › legacy host final Tab matches the AntD-only baseline, including its browser-focus boundary
+  [webkit-dark-phone] › choices.browser.mjs:400:1 › popover owns a select and restores focus one layer at a time; tooltip responds to focus and hover
+  [webkit-dark-phone] › choices.browser.mjs:435:1 › open choices follow the live system theme without losing selection
+  [webkit-dark-phone] › choices.browser.mjs:453:1 › Dialog keeps composition, outside dismissal, submenu Escape and keyboard clear within its owner
+  [webkit-dark-phone] › choices.browser.mjs:486:42 › multiple chip appearance matches current labels and email fields
+  [webkit-dark-phone] › choices.browser.mjs:486:42 › tags chip appearance matches current labels and email fields
+  [webkit-dark-phone] › choices.browser.mjs:515:1 › multiple labels search, toggle, collapse, remove and clear without losing the remaining values
+  [webkit-dark-phone] › choices.browser.mjs:552:1 › email tags support controlled typing, separators, composition, Enter, blur and deletion
+  [webkit-dark-phone] › choices.browser.mjs:592:1 › multiple choices in Dialog keep their owner and menus do not activate a clickable row
+  [webkit-dark-phone] › choices.browser.mjs:631:1 › search option touch selects once and preserves input focus
+  [webkit-dark-phone] › choices.browser.mjs:642:1 › disabled-button and long tooltips remain accessible; a plan-usage-sized popover fits the screen
+Total: 520 tests in 4 files

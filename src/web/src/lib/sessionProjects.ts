@@ -5,6 +5,7 @@ import {
   type CoordinatorLeadKind,
   type ProjectListIntegration,
   type ProjectSidebarTaskCounts,
+  type ProjectStartSettings,
   type SessionProjectMembership,
 } from '@orbit/shared';
 import type { SessionFolder } from '../api';
@@ -71,8 +72,23 @@ export const SESSION_PROJECT_COPY = {
   unpin: 'Unpin',
   move: 'Move…',
   pageSubtitle: (sessions: number) => `Project · ${sessions} sessions`,
+  /** The page's subtitle before its members have been read: no count it cannot vouch for yet. */
+  pageSubtitleLoading: 'Project',
+  /** The progress line of a project whose task counts no read has given: its status. */
+  pageStatus: (status: string) => ({ OPEN: 'Open', DONE: 'Done', CANCELLED: 'Cancelled' } as Record<string, string>)[status] ?? status,
+  pageEmpty: 'No sessions',
+  pageUnread: 'Couldn’t load sessions',
+  retry: 'Retry',
   coordinatorSection: 'Coordinator',
   pageProgress: (done: number, total: number, running: number) => `${done}/${total} done · ${running} running`,
+  // A project nobody has started, and its start row (docs/mocks/project-start-sessions-page).
+  pageNotStarted: (tasks: number) => `Not started · ${tasks} ${tasks === 1 ? 'task' : 'tasks'}`,
+  startAsked: (ago: string) => `asked ${ago}`,
+  startSuggestion: (settings: Pick<ProjectStartSettings, 'line' | 'automatic' | 'maxConcurrentTasks'>) =>
+    `${settings.line === 'MAIN' ? 'Directly into main' : 'Project branch'} · Automatic ${settings.automatic ? 'on' : 'off'} · ${settings.maxConcurrentTasks} at a time`,
+  startReview: 'Review and start',
+  startNotAsked: 'The coordinator hasn’t asked yet',
+  startHint: 'Opens the start card: the criteria, the plan and how it runs.',
 } as const;
 
 // Capitalized COORDINATOR_LEAD_COPY; literals also let OrbitKit read the shared wording.

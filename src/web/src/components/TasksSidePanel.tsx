@@ -42,11 +42,13 @@ import type {
   RunnerEngineHealth,
   RunnerInstallState,
   RunnerModelCatalog,
+  RunnerSelfUpdate,
   RuntimeDefaultModels,
   SlashCommandInfo,
 } from '@orbit/shared';
 import { api, clearToken, logoutSession } from '../api';
 import { routeId, encodeId } from '../lib/idCodec';
+import { useIsMobile } from '../lib/useMediaQuery';
 import {
   avatarQuery,
   meQuery,
@@ -230,6 +232,10 @@ export interface Runner {
   // Bypass under root and exits before its first message. undefined/null = a runner too old to
   // report it, which stays unrestricted.
   runsAsRoot?: boolean | null;
+  // Where this runner's updates of itself stand, as it last reported: why it is or isn't on the
+  // latest release, and the last update it installed. undefined/null = a runner too old to report
+  // it, which the Runners page judges by runsAsRoot as it always has.
+  selfUpdate?: RunnerSelfUpdate | null;
   // Free-space floor in MB (PATCH minFreeDiskMb): below it this machine takes no new task runs.
   // null = no floor.
   minFreeDiskMb?: number | null;
@@ -329,6 +335,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   const agentsMatch = useMatch('/agents/:id/*');
   const openWorkspaceId = routeId((workspacesMatch ?? agentsMatch)?.params.id);
   const sessionId = routeId(useMatch('/sessions/:id')?.params.id);
+  const narrow = useIsMobile();
   const sessionQ = useQuery({
     ...sessionQuery(sessionId),
     // Keep the previous session's data while the next one loads so activeWorkspaceId
@@ -640,12 +647,18 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
 
   // A project's row opens its sessions page over the workspace showing (members span workspaces,
   // so the workspace only decides where the page's back leads), or the first one; with no
-  // workspace to show it over, the project's own page.
+  // workspace to show it over, the project's own page. Beside an open conversation on a wide screen
+  // only the list column changes and the conversation stays, as the iPad's sidebar has it; a phone
+  // shows one pane, so there the page is what opens.
   const openProject = (project: SidebarProject) => {
     onNavigate?.();
     const key = encodeId(project.id);
     if (sel === `project:${key}`) return;
     setSel(`project:${key}`);
+    if (sessionId && !narrow) {
+      navigate(`/sessions/${encodeId(sessionId)}?project=${key}`);
+      return;
+    }
     const over = activeWorkspaceId ?? orderedWorkspaces.find((a) => a.runner?.id ?? a.runnerId)?.id;
     navigate(over ? `/workspaces/${encodeId(over)}?project=${key}` : `/projects/${key}`);
   };

@@ -1,0 +1,8 @@
+{
+  "sourceCommit": "58c42783b5439d25a6674463170916f131da28de",
+  "diagnosticOnly": true,
+  "change": "Only add the accepted project-side .toast { will-change: transform; } to main CSS; keep main body portal and all other notification source unchanged.",
+  "originalCssSha256": "6be756833db10c2e5703e16f6f547c545e39647d64e76c0da46dffe6b569ad79",
+  "diagnosticCssSha256": "961a1e3198daa89551d7f085b414e58cfa0d26c2734556691cf215846b704149",
+  "testSha256": "69b9d41961b97e44676716f28302c566b6aa81b372c133a68e2bf14f00cae0c7"
+}

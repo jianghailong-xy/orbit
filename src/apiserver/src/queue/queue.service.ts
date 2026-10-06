@@ -7,6 +7,7 @@ import {
   ClaimedSession,
   PermissionMode,
   fastModeAvailable,
+  openCodeKeyOf,
   type PlanUsageSnapshot,
   type RunnerModelCatalog,
 } from '@orbit/shared';
@@ -14,7 +15,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { codexPoolUnavailableReason } from '../providers/codex-login';
 import { loginCanRun, loginPoolResumesAt, loginRunsAgainAt, type LoginAccount } from '../providers/pool-login-select';
 import { choosePoolCredential } from '../providers/pool-credential-select';
-import { accountPoolRuntime, isBuiltinProvider, resolveProviderExec, type ModelProviderRow } from '../providers/custom-provider';
+import { accountPoolRuntime, isBuiltinProvider, openCodeKeyRows, resolveProviderExec, runsOnOpenCode, type ModelProviderRow } from '../providers/custom-provider';
 import { ProviderPlanUsageService } from '../providers/plan-usage.service';
 import { isPoolCandidate, poolUnavailableReason } from '../providers/pool-admission';
 import { keyCanRun, keyRunsAgainAt, poolKeysResumeAt } from '../providers/pool-key-select';
@@ -48,7 +49,10 @@ import {
 } from '../common/session-tree-sql';
 import {
   ANTIGRAVITY_RUNNER_UPGRADE_ERROR,
+  DSH_NOT_INSTALLED_ERROR,
+  DSH_PLATFORM_UNSUPPORTED_ERROR,
   DSH_RUNNER_UPGRADE_ERROR,
+  DSH_VERSION_INCOMPATIBLE_ERROR,
   OPENCODE_RUNNER_UPGRADE_ERROR,
   PROVIDER_UNAVAILABLE_ERROR,
   SOURCE_PROTOCOL_UNSUPPORTED_ERROR,
@@ -124,7 +128,7 @@ export class QueueService {
    * minutes — until an unrelated failed claim made the new process reconcile.
    */
   async claimSessionForRunner(
-    runner: { id: string; supportedProviders?: readonly AgentProvider[] },
+    runner: { id: string; supportedProviders?: readonly AgentProvider[]; dshUnavailable?: string | null },
     waitMs = 0,
     supportsTerminalHandoff = false,
     supportsSourcePin = false,
@@ -143,16 +147,26 @@ export class QueueService {
   }
 
   /** Evaluate pauses before the short global claim lock. The inbox rechecks after claim,
-   * so a concurrent pause cannot leak a new turn; paused rows never occupy runner capacity. */
-  private async pausedPendingSessions(runnerId: string, supportsWikiMaintenance: boolean): Promise<string[]> {
+   * so a concurrent pause cannot leak a new turn; paused rows never occupy runner capacity.
+   * `dshUnavailable` is why a runner that declares dsh cannot start it (dshRuntimeUnavailable):
+   * its dsh rows are held with that notice too, until a heartbeat reports the CLI ready. */
+  private async pausedPendingSessions(
+    runnerId: string, supportsWikiMaintenance: boolean, dshUnavailable?: string | null,
+  ): Promise<string[]> {
     const now = new Date();
     const pending = await this.prisma.session.findMany({
       where: {
         assignedRunnerId: runnerId, status: 'PENDING', cancelRequestedAt: null,
-        OR: [{ providerBuiltin: false }, { assignedRunner: { accountPauses: { not: Prisma.DbNull } } }],
+        OR: [
+          { providerBuiltin: false },
+          { assignedRunner: { accountPauses: { not: Prisma.DbNull } } },
+          ...(dshUnavailable ? [{ provider: AgentProvider.DSH, providerBuiltin: true }] : []),
+          // An OpenCode session on one of the owner's configured keys (shared `openCodeKeys`).
+          { provider: AgentProvider.OPENCODE, model: { startsWith: 'orbit-' } },
+        ],
       },
       select: {
-        id: true, ownerId: true, provider: true, providerBuiltin: true, error: true,
+        id: true, ownerId: true, provider: true, providerBuiltin: true, error: true, model: true,
         codexAccount: true, codexAccountPinned: true, claudeAccount: true, claudeAccountPinned: true,
         workspace: { select: { env: true, codexAccount: true, claudeAccount: true } },
         assignedRunner: { select: { engines: true, accountPauses: true, planUsage: true, capabilities: true } },
@@ -165,6 +179,7 @@ export class QueueService {
       let until = runner ? sessionAccountPausedUntil(session, session.workspace, runner, now) : null;
       const engine = session.provider;
       let unavailable = false;
+      let dshHeld = !!dshUnavailable && session.providerBuiltin && engine === AgentProvider.DSH;
       if (until && runner && (engine === 'codex' || engine === 'claude')) {
         const canMove = runner.capabilities.includes(engine === 'codex' ? CODEX_ACCOUNT_MOVE_V1 : CLAUDE_ACCOUNT_MOVE_V1);
         const move = canMove && accountBeforeDispatch(engine, {
@@ -181,6 +196,7 @@ export class QueueService {
         unavailable = provider
           ? !provider.enabled || !['claude', 'codex', 'kimi', 'antigravity', 'dsh'].includes(provider.runtime)
           : !await accountPoolRuntime(this.prisma, session.ownerId, engine);
+        dshHeld = !!dshUnavailable && provider?.runtime === AgentProvider.DSH;
         // A Wiki maintenance session is not held for it by a runner that declares wiki-maintenance-run/v1: the
         // claim hands it over with its refusal (wiki/wiki-maintenance-session.ts), which that runner ends FAILED
         // without starting any engine. Held here, it would wait PENDING for good, and its space's maintenance with it.
@@ -193,9 +209,22 @@ export class QueueService {
         if (!poolPauses.has(key)) poolPauses.set(key, await this.accountPoolPausedUntil(session.ownerId, engine, now));
         until = poolPauses.get(key) ?? null;
       }
-      if (!until && !unavailable) continue;
+      // The key an OpenCode model names has to be there to run it on: gone, disabled or not one
+      // OpenCode may spend, the session waits with the same reason a configured provider's does,
+      // rather than being claimed and refused by resolveProviderExec.
+      const openCodeKey = engine === AgentProvider.OPENCODE ? openCodeKeyOf(session.model) : null;
+      if (openCodeKey) {
+        const row = await this.prisma.modelProvider.findFirst({
+          where: { slug: openCodeKey.slug, OR: [{ ownerId: null }, { ownerId: session.ownerId }] },
+          select: { enabled: true, runtime: true, apiKeyEnc: true },
+        });
+        unavailable = !row || !runsOnOpenCode(row);
+      }
+      if (!until && !unavailable && !dshHeld) continue;
       blocked.push(session.id);
-      const error = unavailable ? PROVIDER_UNAVAILABLE_ERROR : `Account paused until ${until!.toISOString()}`;
+      const error = unavailable
+        ? PROVIDER_UNAVAILABLE_ERROR
+        : until ? `Account paused until ${until.toISOString()}` : dshUnavailable!;
       if (session.error !== error) {
         const updated = await this.prisma.session.updateMany({
           where: { id: session.id, status: 'PENDING' }, data: { error },
@@ -207,7 +236,7 @@ export class QueueService {
   }
 
   private async trySessionClaim(
-    runner: { id: string; supportedProviders?: readonly AgentProvider[] },
+    runner: { id: string; supportedProviders?: readonly AgentProvider[]; dshUnavailable?: string | null },
     supportsTerminalHandoff: boolean,
     supportsSourcePin: boolean,
     supportsWikiMaintenance: boolean,
@@ -215,8 +244,10 @@ export class QueueService {
   ): Promise<ClaimedSession | null> {
     const supportsOpenCode = runner.supportedProviders?.includes(AgentProvider.OPENCODE) ?? false;
     const supportsAntigravity = runner.supportedProviders?.includes(AgentProvider.ANTIGRAVITY) ?? false;
-    const supportsDsh = runner.supportedProviders?.includes(AgentProvider.DSH) ?? false;
-    const paused = await this.pausedPendingSessions(runner.id, supportsWikiMaintenance);
+    // A runner that declares dsh but whose engine report does not show the CLI ready
+    // (RunnerApiController.claim, dshRuntimeUnavailable) is withheld dsh rows like one that does not.
+    const supportsDsh = (runner.supportedProviders?.includes(AgentProvider.DSH) ?? false) && !runner.dshUnavailable;
+    const paused = await this.pausedPendingSessions(runner.id, supportsWikiMaintenance, runner.dshUnavailable);
     // Atomically claim one PENDING session assigned to this runner. The runner id
     // must be cast to ::uuid: Prisma binds template params as text, and Postgres
     // has no `uuid = text` operator (claim silently fails otherwise — 42883).
@@ -264,6 +295,9 @@ export class QueueService {
               ${OPENCODE_RUNNER_UPGRADE_ERROR},
               ${ANTIGRAVITY_RUNNER_UPGRADE_ERROR},
               ${DSH_RUNNER_UPGRADE_ERROR},
+              ${DSH_NOT_INSTALLED_ERROR},
+              ${DSH_PLATFORM_UNSUPPORTED_ERROR},
+              ${DSH_VERSION_INCOMPATIBLE_ERROR},
               ${PROVIDER_UNAVAILABLE_ERROR},
               ${SOURCE_PROTOCOL_UNSUPPORTED_ERROR}
             ) OR error LIKE 'Account paused until %' THEN NULL
@@ -698,11 +732,14 @@ export class QueueService {
           : ((await this.resolveLoginPool(this.prisma, session, declared!, true)) ??
             (await this.resolvePoolMember(this.prisma, session, declared!, true)) ??
             (await this.resolveSharedPool(this.prisma, session, declared!, true)))));
+    // An OpenCode model may name one of the owner's configured keys, which the exec writes in.
+    const openCodeKeys = declared === AgentProvider.OPENCODE ? await openCodeKeyRows(this.prisma, session.ownerId) : undefined;
     const resolveExec = (sessionModel: string | null) =>
       resolveProviderExec({
         declaredProvider: declared,
         declaredProviderBuiltin,
         customRow,
+        openCodeKeys,
         sessionModel,
         usesRuntimeDefaultModel: session.usesRuntimeDefaultModel,
         runtimeDefaultModels: session.assignedRunner?.runtimeDefaultModels,

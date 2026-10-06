@@ -19,6 +19,7 @@ import {
   getSessionDiff,
   getSessionRequest,
   listShareLinks,
+  listAccessTokens,
   type SessionFolder,
   type SessionListItem,
   type WorkspacePermissionRuleInfo,
@@ -543,7 +544,7 @@ export const openProjectsQuery = () =>
 export const projectDetailsQuery = (projectId: string) =>
   queryOptions({
     queryKey: ['project', projectId] as const,
-    queryFn: () => api<{ id: string; title: string; tasksByStatus?: Record<string, number> }>(
+    queryFn: () => api<{ id: string; title: string; status?: string; tasksByStatus?: Record<string, number> }>(
       `/projects/${encodeURIComponent(projectId)}`,
     ),
   });
@@ -906,6 +907,13 @@ export const shareLinksQuery = () =>
   queryOptions({
     queryKey: ['share-links'] as const,
     queryFn: listShareLinks,
+  });
+
+/** The account's personal access tokens (Settings → Access tokens) — never the tokens themselves. */
+export const accessTokensQuery = () =>
+  queryOptions({
+    queryKey: ['access-tokens'] as const,
+    queryFn: listAccessTokens,
   });
 
 /**

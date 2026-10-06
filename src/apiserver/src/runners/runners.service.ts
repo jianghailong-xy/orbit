@@ -24,6 +24,7 @@ import {
   antigravityState,
 } from '../common/antigravity-readiness';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
+import { sanitizeRunnerSelfUpdate } from '../common/runner-self-update';
 import { ACTIVE_TURN_STATUSES } from '../common/session-scheduling';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
@@ -94,8 +95,19 @@ export class RunnersService {
   }
 
   async listRunners(ownerId: string) {
+    return this.runnerViews({ ownerId });
+  }
+
+  /** One of this owner's runners, in exactly the shape the list gives each of them. */
+  async getRunner(ownerId: string, id: string) {
+    const [runner] = await this.runnerViews({ ownerId, id });
+    if (!runner) throw new NotFoundException('runner not found');
+    return runner;
+  }
+
+  private async runnerViews(where: { ownerId: string; id?: string }) {
     const runners = await this.prisma.runner.findMany({
-      where: { ownerId },
+      where,
       orderBy: [
         { position: { sort: 'asc', nulls: 'last' } },
         { enrolledAt: 'asc' },
@@ -126,6 +138,9 @@ export class RunnersService {
         // Same: reported, not configured. Withdraws Bypass from this machine's Mode pickers, which
         // is the only reason clients need to know (see ROOT_REFUSED_PERMISSION_MODES).
         runsAsRoot: true,
+        // Reported too: why this runner is or isn't updating itself, for the Runners page's card
+        // and its Update Runner Now. Re-sanitized below, null for a runner that does not report it.
+        selfUpdate: true,
         // The runner page's Capacity › Keep Free reads the floor it writes (PATCH minFreeDiskMb),
         // and About › Repos Folder shows where this machine clones to (reported, not configured).
         minFreeDiskMb: true,
@@ -188,11 +203,13 @@ export class RunnersService {
       codexAccountRemoveAccount,
       codexAccountRemoveStatus,
       codexAccountRemoveMessage,
+      selfUpdate,
       ...r
     }) => ({
       ...r,
       // Never expose null or malformed JSON: clients can always index this as a provider map.
       runtimeDefaultModels: sanitizeRuntimeDefaultModels(runtimeDefaultModels),
+      selfUpdate: sanitizeRunnerSelfUpdate(selfUpdate),
       // null (not []) for a runner that has never reported: "we don't know yet" and "nothing is
       // installed" are different answers, and only one of them is ours to make up.
       engines: namedRunnerEngines({ engines, accountNames, accountPauses }),
@@ -765,6 +782,35 @@ export class RunnersService {
     }
     const requestedAt = new Date();
     await this.prisma.runner.update({ where: { id }, data: { modelCatalogRefreshAt: requestedAt } });
+    return { requestedAt: requestedAt.toISOString() };
+  }
+
+  /**
+   * Ask this runner to check for a release of itself now — Update Runner Now — rather than at its
+   * next periodic check, up to ten minutes away.
+   *
+   * It is the runner's own check, so its rules hold: it installs the release the control plane
+   * assigns it (a staged rollout can still hold it back), and never while a turn is in flight —
+   * then it reports `waitingForIdle` and updates once a check finds it idle. As with the model
+   * catalog refresh, that state on later heartbeats is the only answer, so this writes one
+   * timestamp the next heartbeat clears as it hands the request over — and wakes the runner, so
+   * that heartbeat is now rather than up to half a minute from now.
+   *
+   * A runner that does not report its self-update state is refused: it is a release from before
+   * this request, which would take it from the heartbeat and do nothing with it.
+   */
+  async requestSelfUpdate(ownerId: string, id: string): Promise<{ requestedAt: string }> {
+    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
+    if (!runner) throw new NotFoundException('runner not found');
+    if (runner.status === 'OFFLINE') {
+      throw new BadRequestException('Runner is offline — it can only update while connected');
+    }
+    if (!sanitizeRunnerSelfUpdate(runner.selfUpdate)) {
+      throw new BadRequestException('Runner is too old to update on request — it reports no self-update state');
+    }
+    const requestedAt = new Date();
+    await this.prisma.runner.update({ where: { id }, data: { selfUpdateRequestedAt: requestedAt } });
+    this.realtime?.notifyRunnerWake(id);
     return { requestedAt: requestedAt.toISOString() };
   }
 

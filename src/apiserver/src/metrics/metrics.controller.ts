@@ -1,5 +1,6 @@
 import { Controller, Get, Header, Optional, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PatForbidden } from '../auth/pat-scope.decorator';
 import { renderDbConflictMetrics } from '../common/db-conflict-metrics';
 import { PrismaService } from '../prisma/prisma.service';
 import { renderCodexResetMetrics } from '../runners/codex-reset-metrics';
@@ -19,6 +20,7 @@ import { renderWatchMetrics } from '../watches/watch-metrics';
  * dump of anything a caller sent, however the server is used.
  */
 @UseGuards(JwtAuthGuard)
+@PatForbidden('NO_SCOPE')
 @Controller('metrics')
 export class MetricsController {
   /** Absent only where a module boots this controller without a database; the Watch gauges are then not read. */

@@ -1,0 +1,80 @@
+<!doctype html>
+<!-- Design mock: the web Providers page, Antigravity's rows. Every frame is a capture of the real
+     console (vite dev, shipped components and CSS) on synthetic REST data. "Today" is this branch's
+     web; "after" is the same web with Antigravity added to ACCOUNT_ENGINES (lib/engineAccounts.ts)
+     and its per-account quota read like Claude's — a throwaway patch in /tmp, not shipped code. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Antigravity accounts · web Providers</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<style>
+  .m-sheet { width: 1930px; }
+  .cols { display: grid; grid-template-columns: 900px 900px; gap: 40px; align-items: start; }
+  .shot { position: relative; width: 900px; }
+  .shot img { display: block; width: 900px; border-radius: 10px; box-shadow: 0 1px 4px rgba(15, 23, 42, .12); }
+  .m-cap { font-size: 12.5px; line-height: 1.7; color: var(--text-2); margin: 8px 2px 0; }
+  .m-cap b { color: var(--text-1); }
+  .lbl { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text-2); margin: 0 0 10px; }
+  .ring { position: absolute; border: 2px dashed var(--warning-solid); border-radius: 8px; pointer-events: none; }
+  .ring.grey { border-color: #5b6270; }
+  .n { position: absolute; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%;
+       background: var(--warning-solid); color: #fff; font: 700 12px/1 Inter, sans-serif; box-shadow: 0 0 0 2px #fff; }
+  .n.grey { background: #5b6270; }
+  .gap { height: 28px; }
+</style>
+</head>
+<body class="m">
+<section class="board m-sheet">
+  <h1 class="m-h1 zh">Antigravity 账号 · web Providers 页：和 Claude Code 一样分组列账号，「+ Add account」加 Google 账号</h1>
+  <p class="m-sub zh">四张都是真实 web 控制台截图（同一套组件和样式，接口数据是造的）。「改后」只是把 Antigravity 加进账号引擎名单（和 Claude Code、Codex 共用的那份 <code>ACCOUNT_ENGINES</code>），每个账号读自己的额度——页面上其余东西都是现成的：分组头、账号行、NEXT、⋯ 菜单（改名 / 重新登录 / 暂停 / 移除）、加账号面板。</p>
+
+  <div class="m-stage">
+    <div class="cols">
+      <div>
+        <div class="lbl zh"><span class="m-k">现在</span>HPC 运行器卡片</div>
+        <div class="shot">
+          <img src="04a-web-today.png" alt="">
+          <span class="ring grey" style="left:84px;top:638px;width:95px;height:22px"></span><span class="n grey" style="left:169px;top:626px">A</span>
+          <span class="ring grey" style="left:736px;top:603px;width:150px;height:40px"></span><span class="n grey" style="left:876px;top:591px">B</span>
+        </div>
+        <p class="m-cap zh"><b>A</b> 写 Google account，不说有几个账号。<b>B</b> Claude Code、Codex 行上都有「+ Add account」，Antigravity 没有：机器上只能有一个 Google 账号，换号只能在 ⋯ 里 Re-sign in 把它顶掉。</p>
+      </div>
+      <div>
+        <div class="lbl zh"><span class="m-k new">改后</span>两个 Google 账号</div>
+        <div class="shot">
+          <img src="04b-web-two-accounts.png" alt="">
+          <span class="ring" style="left:84px;top:636px;width:146px;height:24px"></span><span class="n" style="left:220px;top:624px">1</span>
+          <span class="ring" style="left:767px;top:620px;width:122px;height:36px"></span><span class="n" style="left:879px;top:608px">2</span>
+          <span class="ring" style="left:10px;top:672px;width:612px;height:26px"></span><span class="n" style="left:612px;top:660px">3</span>
+          <span class="ring" style="left:48px;top:718px;width:100px;height:26px"></span><span class="n" style="left:138px;top:706px">4</span>
+          <span class="ring" style="left:516px;top:1088px;width:200px;height:72px"></span><span class="n" style="left:706px;top:1076px">5</span>
+        </div>
+        <p class="m-cap zh"><b>①</b> 分组头写「2 of 2 accounts available」，和 Claude Code 的一样。<b>②</b> 「+ Add account」。<b>③</b> Google 条款留在 Antigravity 名下、紧挨着加账号按钮。<b>④</b> NEXT：自动选账号时下一个会话用哪个。<b>⑤</b> 每个账号自己的四条额度；Work 的 gemini-5h 只剩 4%，条变橙。</p>
+      </div>
+    </div>
+    <div class="gap"></div>
+    <div class="cols">
+      <div>
+        <div class="lbl zh"><span class="m-k new">改后</span>只有一个 Google 账号</div>
+        <div class="shot">
+          <img src="04c-web-one-account.png" alt="">
+          <span class="ring" style="left:48px;top:61px;width:136px;height:24px"></span><span class="n" style="left:174px;top:49px">6</span>
+          <span class="ring" style="left:731px;top:40px;width:122px;height:36px"></span><span class="n" style="left:843px;top:28px">7</span>
+        </div>
+        <p class="m-cap zh"><b>⑥</b> 一个账号时就是一行，和 Codex 一样：不再写 Google account。<b>⑦</b> 但已经有「+ Add account」——从一个账号到两个就是从这里开始的。</p>
+      </div>
+      <div>
+        <div class="lbl zh"><span class="m-k state">过程</span>点「+ Add account」</div>
+        <div class="shot">
+          <img src="04d-web-add-account.png" alt="">
+          <span class="ring" style="left:12px;top:136px;width:876px;height:148px"></span><span class="n" style="left:878px;top:124px">8</span>
+        </div>
+        <p class="m-cap zh"><b>⑧</b> Claude Code 加账号的同一个面板：名字先叫 Account 3，点下就开始 Google 登录；接下来是「Open the sign-in page → 粘贴授权码」，成功后面板自己收起，多出一行新账号（和 iOS 图 3 同一套规则）。</p>
+      </div>
+    </div>
+  </div>
+</section>
+</body>
+</html>
