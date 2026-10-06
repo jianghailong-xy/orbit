@@ -1,0 +1,15 @@
+13:41:06.332 MARK p1-first tap
+13:41:22.605 p1-first +15.69s header=Google 账号登录与开放注册, Project · 5 sessions (the read's count)
+13:41:22.605 MARK p1-first read answered
+13:41:22.796 p1-first SUMMARY first-count=never at-1s=none final=5 reached=+15.69s saw-0-sessions=no
+13:41:22.800 MARK p1-first polls-from
+13:41:42.812 MARK p1-first polls-to
+13:41:50.369 MARK p2-first tap
+13:41:52.535 p2-first +1.18s header=Open-only probe project, Project
+13:42:08.789 p2-first +18.42s header=Open-only probe project, Project · 2 sessions (the read's count)
+13:42:08.789 MARK p2-first read answered
+13:42:09.010 p2-first SUMMARY first-count=never at-1s=none final=2 reached=+18.42s saw-0-sessions=no
+13:42:15.792 MARK p1-again tap
+13:42:25.520 p1-again +9.73s header=Google 账号登录与开放注册, Project · 5 sessions (the read's count)
+13:42:25.520 MARK p1-again read answered
+13:42:25.706 p1-again SUMMARY first-count=never at-1s=none final=5 reached=+9.73s saw-0-sessions=no

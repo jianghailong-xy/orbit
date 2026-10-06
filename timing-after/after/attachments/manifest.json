@@ -1,0 +1,97 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "864FE63C-59CC-4AE4-A25E-D78128CE95D0.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "p1-again-final_0_D8FB3498-F59B-437C-B026-6735AC63858D.png",
+        "timestamp" : 1791294357.854
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "4A80EC06-44D8-4ADD-9343-537FF5F15524.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "p1-again-1_0_8C769F55-A43B-4E4E-848D-3579384D8BC1.0s",
+        "timestamp" : 1791294357.093
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "CE6E1977-8F99-44D9-9251-6B6B40748C9E.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "p1-again-0_0_B44D6C4C-C4B2-43F6-95E4-3507FC8FA334.5s",
+        "timestamp" : 1791294356.644
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "2B027636-5FC8-4211-92B7-1A79ECA50DDE.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "p2-first-final_0_541F18BA-A86C-497B-A0F0-FEE5DD767B6E.png",
+        "timestamp" : 1791294346.222
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "24CAE166-2704-47AD-9E73-35AC0875E226.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "p2-first-1_0_E1292A37-37CC-4498-A8AC-DE39F1C57171.0s",
+        "timestamp" : 1791294345.471
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "754105EF-F730-4A21-BBBF-BD38B5E42B19.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "p2-first-0_0_F2090E8E-8DB8-4CEB-8A1A-F4CACD0D99F5.5s",
+        "timestamp" : 1791294345.076
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "82ABB7ED-3D92-49DD-A3EA-4407F092F0FD.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "p1-first-after-polls_0_D6290636-20C9-43EB-9D25-62DDC6B619A5.png",
+        "timestamp" : 1791294334.317
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "7E290BC2-53D4-4488-A583-E372F3E7BA0F.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "p1-first-final_0_BC09199B-7A08-419D-A395-30EBBA8E49EB.png",
+        "timestamp" : 1791294314.04
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "0D407861-9FA1-4C52-AE8C-4CA3EF0EF7BE.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "00-list_0_B3750B5E-CF57-4FFD-9B11-149E029C2105.png",
+        "timestamp" : 1791294295.584
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "22452A91-4697-4369-8812-53ADB77EB73B",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "F6B64BE8-9F35-4191-9358-6A984FFA7E30.txt",
+        "isAssociatedWithFailure" : true,
+        "suggestedHumanReadableName" : "Complete Issue Description.txt"
+      }
+    ],
+    "testIdentifier" : "ProjectPageOpenTimingTests/testOpeningTheProjectPage()",
+    "testIdentifierURL" : "test://com.apple.xcode/SwipeProbe/SwipeProbeUITests/ProjectPageOpenTimingTests/testOpeningTheProjectPage"
+  }
+]

@@ -1,0 +1,300 @@
+    builtin-RegisterExecutionPolicyException /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/PlugIns/SwipeProbeUITests.xctest
+
+Touch /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/PlugIns/SwipeProbeUITests.xctest (in target 'SwipeProbeUITests' from project 'SwipeProbe')
+    cd /Users/runner/work/_temp/tree/.open-probe
+    /usr/bin/touch -c /Users/runner/work/_temp/tree/.open-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/PlugIns/SwipeProbeUITests.xctest
+
+2026-10-06 13:39:26.511212+0000 SwipeProbeUITests-Runner[19255:57578] [Default] Running tests...
+objc[19255]: Class UIAccessibilityLoaderWebShared is implemented in both /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x107ca8310) and /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x107d50398). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+    t =      nans Interface orientation changed to Portrait
+Test Suite 'All tests' started at 2026-10-06 13:39:36.182.
+Test Suite 'SwipeProbeUITests.xctest' started at 2026-10-06 13:39:36.186.
+Test Suite 'ProjectPageOpenTimingTests' started at 2026-10-06 13:39:36.187.
+Test Case '-[SwipeProbeUITests.ProjectPageOpenTimingTests testOpeningTheProjectPage]' started.
+    t =     0.00s Start Test at 2026-10-06 13:39:36.190
+    t =     3.99s Set Up
+    t =     4.00s Open io.orbitd.swipeprobe
+    t =     4.00s     Launch io.orbitd.swipeprobe
+2026-10-06 13:39:41.330 xcodebuild[4842:20953] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-06 13:39:41.330 xcodebuild[4842:20953] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    53.44s         Setting up automation session
+    t =    55.77s         Wait for io.orbitd.swipeprobe to idle
+    t =    59.09s Waiting 60.0s for Any (First Match) to exist
+    t =    60.14s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    60.14s         Checking existence of `Any (First Match)`
+    t =    74.82s         Capturing element debug description
+    t =    75.12s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    75.13s         Checking existence of `Any (First Match)`
+    t =    78.49s         Capturing element debug description
+    t =    79.11s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    79.12s         Checking existence of `Any (First Match)`
+    t =    81.02s Waiting 20.0s for Any (First Match) to exist
+    t =    82.06s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    82.06s         Checking existence of `Any (First Match)`
+    t =    88.69s Added attachment named '00-list'
+    t =    88.70s Waiting 20.0s for Any (First Match) to exist
+    t =    89.72s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    89.72s         Checking existence of `Any (First Match)`
+    t =    90.16s Tap Any (First Match)
+    t =    90.16s     Wait for io.orbitd.swipeprobe to idle
+    t =    90.16s     Find the Any (First Match)
+    t =    90.50s     Check for interrupting elements affecting "Google 账号登录与开放注册, 12m ago, 2/4, Watching the members." Button
+    t =    94.39s     Synthesize event
+    t =    94.88s     Wait for io.orbitd.swipeprobe to idle
+    t =    95.47s Checking existence of `Any (First Match)`
+    t =    96.93s Find the Any (First Match)
+    t =    97.11s Checking existence of `"No sessions" StaticText`
+    t =    97.49s Checking existence of `Any (First Match)`
+    t =    97.60s Find the Any (First Match)
+    t =    97.68s Checking existence of `"No sessions" StaticText`
+    t =    98.03s Checking existence of `Any (First Match)`
+    t =    98.12s Find the Any (First Match)
+    t =    98.21s Checking existence of `"No sessions" StaticText`
+    t =    98.55s Checking existence of `Any (First Match)`
+    t =    98.64s Find the Any (First Match)
+    t =    98.73s Checking existence of `"No sessions" StaticText`
+    t =    99.06s Checking existence of `Any (First Match)`
+    t =    99.28s Find the Any (First Match)
+    t =    99.38s Checking existence of `"No sessions" StaticText`
+    t =    99.73s Checking existence of `Any (First Match)`
+    t =    99.89s Find the Any (First Match)
+    t =   100.00s Checking existence of `"No sessions" StaticText`
+    t =   100.32s Checking existence of `Any (First Match)`
+    t =   100.40s Find the Any (First Match)
+    t =   100.51s Checking existence of `"No sessions" StaticText`
+    t =   100.87s Checking existence of `Any (First Match)`
+    t =   101.01s Find the Any (First Match)
+    t =   101.08s Checking existence of `"No sessions" StaticText`
+    t =   101.42s Checking existence of `Any (First Match)`
+    t =   101.48s Find the Any (First Match)
+    t =   101.54s Checking existence of `"No sessions" StaticText`
+    t =   101.86s Checking existence of `Any (First Match)`
+    t =   101.92s Find the Any (First Match)
+    t =   101.97s Checking existence of `"No sessions" StaticText`
+    t =   102.29s Checking existence of `Any (First Match)`
+    t =   102.36s Find the Any (First Match)
+    t =   102.42s Checking existence of `"No sessions" StaticText`
+    t =   102.74s Checking existence of `Any (First Match)`
+    t =   102.78s Find the Any (First Match)
+    t =   102.87s Checking existence of `"No sessions" StaticText`
+    t =   103.20s Checking existence of `Any (First Match)`
+    t =   103.29s Find the Any (First Match)
+    t =   103.36s Checking existence of `"No sessions" StaticText`
+    t =   103.68s Checking existence of `Any (First Match)`
+    t =   103.74s Find the Any (First Match)
+    t =   103.79s Checking existence of `"No sessions" StaticText`
+    t =   104.11s Checking existence of `Any (First Match)`
+    t =   104.15s Find the Any (First Match)
+    t =   104.24s Checking existence of `"No sessions" StaticText`
+    t =   104.56s Checking existence of `Any (First Match)`
+    t =   104.67s Find the Any (First Match)
+    t =   104.73s Checking existence of `"No sessions" StaticText`
+    t =   105.51s Checking existence of `Any (First Match)`
+    t =   105.66s Find the Any (First Match)
+    t =   105.71s Checking existence of `"No sessions" StaticText`
+    t =   106.61s Added attachment named 'p1-first-final'
+    t =   126.87s Added attachment named 'p1-first-after-polls'
+    t =   126.88s Checking existence of `"BackButton" Button`
+    t =   127.10s Tap "BackButton" Button
+    t =   127.10s     Wait for io.orbitd.swipeprobe to idle
+    t =   127.11s     Find the "BackButton" Button
+    t =   127.21s     Check for interrupting elements affecting "BackButton" Button
+    t =   127.31s     Synthesize event
+    t =   127.89s     Wait for io.orbitd.swipeprobe to idle
+    t =   129.40s Waiting 10.0s for Any (First Match) to exist
+    t =   130.44s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   130.45s         Checking existence of `Any (First Match)`
+    t =   132.91s Waiting 20.0s for Any (First Match) to exist
+    t =   133.97s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   133.97s         Checking existence of `Any (First Match)`
+    t =   134.18s Tap Any (First Match)
+    t =   134.18s     Wait for io.orbitd.swipeprobe to idle
+    t =   134.18s     Find the Any (First Match)
+    t =   134.50s     Check for interrupting elements affecting "Open-only probe project, 18m ago, 0/2, Nothing completed yet." Button
+    t =   134.71s     Synthesize event
+    t =   135.04s     Wait for io.orbitd.swipeprobe to idle
+    t =   135.36s Checking existence of `Any (First Match)`
+    t =   135.54s Find the Any (First Match)
+    t =   135.95s Checking existence of `"No sessions" StaticText`
+    t =   136.60s Added attachment named 'p2-first-0.5s'
+    t =   136.82s Added attachment named 'p2-first-1.0s'
+    t =   136.93s Checking existence of `Any (First Match)`
+    t =   137.18s Find the Any (First Match)
+    t =   137.24s Checking existence of `"No sessions" StaticText`
+    t =   137.57s Checking existence of `Any (First Match)`
+    t =   137.67s Find the Any (First Match)
+    t =   137.76s Checking existence of `"No sessions" StaticText`
+    t =   138.12s Checking existence of `Any (First Match)`
+    t =   138.22s Find the Any (First Match)
+    t =   138.33s Checking existence of `"No sessions" StaticText`
+    t =   138.69s Checking existence of `Any (First Match)`
+    t =   138.75s Find the Any (First Match)
+    t =   138.80s Checking existence of `"No sessions" StaticText`
+    t =   139.11s Checking existence of `Any (First Match)`
+    t =   139.16s Find the Any (First Match)
+    t =   139.20s Checking existence of `"No sessions" StaticText`
+    t =   139.52s Checking existence of `Any (First Match)`
+    t =   139.56s Find the Any (First Match)
+    t =   139.61s Checking existence of `"No sessions" StaticText`
+    t =   139.94s Checking existence of `Any (First Match)`
+    t =   139.99s Find the Any (First Match)
+    t =   140.04s Checking existence of `"No sessions" StaticText`
+    t =   140.35s Checking existence of `Any (First Match)`
+    t =   140.41s Find the Any (First Match)
+    t =   140.46s Checking existence of `"No sessions" StaticText`
+    t =   140.78s Checking existence of `Any (First Match)`
+    t =   140.85s Find the Any (First Match)
+    t =   140.91s Checking existence of `"No sessions" StaticText`
+    t =   141.23s Checking existence of `Any (First Match)`
+    t =   141.27s Find the Any (First Match)
+    t =   141.32s Checking existence of `"No sessions" StaticText`
+    t =   141.64s Checking existence of `Any (First Match)`
+    t =   141.71s Find the Any (First Match)
+    t =   141.77s Checking existence of `"No sessions" StaticText`
+    t =   142.09s Checking existence of `Any (First Match)`
+    t =   142.14s Find the Any (First Match)
+    t =   142.19s Checking existence of `"No sessions" StaticText`
+    t =   142.51s Checking existence of `Any (First Match)`
+    t =   142.56s Find the Any (First Match)
+    t =   142.60s Checking existence of `"No sessions" StaticText`
+    t =   142.92s Checking existence of `Any (First Match)`
+    t =   142.98s Find the Any (First Match)
+    t =   143.05s Checking existence of `"No sessions" StaticText`
+    t =   143.41s Checking existence of `Any (First Match)`
+    t =   143.48s Find the Any (First Match)
+    t =   143.59s Checking existence of `"No sessions" StaticText`
+    t =   143.91s Checking existence of `Any (First Match)`
+    t =   144.11s Find the Any (First Match)
+    t =   144.32s Checking existence of `"No sessions" StaticText`
+    t =   144.67s Checking existence of `Any (First Match)`
+    t =   144.74s Find the Any (First Match)
+    t =   144.79s Checking existence of `"No sessions" StaticText`
+    t =   145.12s Checking existence of `Any (First Match)`
+    t =   145.17s Find the Any (First Match)
+    t =   145.25s Checking existence of `"No sessions" StaticText`
+    t =   145.58s Checking existence of `Any (First Match)`
+    t =   145.64s Find the Any (First Match)
+    t =   145.72s Checking existence of `"No sessions" StaticText`
+    t =   146.04s Checking existence of `Any (First Match)`
+    t =   146.39s Find the Any (First Match)
+    t =   146.44s Checking existence of `"No sessions" StaticText`
+    t =   146.78s Checking existence of `Any (First Match)`
+    t =   146.84s Find the Any (First Match)
+    t =   146.89s Checking existence of `"No sessions" StaticText`
+    t =   147.22s Checking existence of `Any (First Match)`
+    t =   147.26s Find the Any (First Match)
+    t =   147.32s Checking existence of `"No sessions" StaticText`
+    t =   147.63s Checking existence of `Any (First Match)`
+    t =   147.67s Find the Any (First Match)
+    t =   147.73s Checking existence of `"No sessions" StaticText`
+    t =   148.06s Checking existence of `Any (First Match)`
+    t =   148.09s Find the Any (First Match)
+    t =   148.13s Checking existence of `"No sessions" StaticText`
+    t =   148.45s Checking existence of `Any (First Match)`
+    t =   148.53s Find the Any (First Match)
+    t =   148.60s Checking existence of `"No sessions" StaticText`
+    t =   148.97s Checking existence of `Any (First Match)`
+    t =   149.09s Find the Any (First Match)
+    t =   149.28s Checking existence of `"No sessions" StaticText`
+    t =   149.67s Checking existence of `Any (First Match)`
+    t =   149.80s Find the Any (First Match)
+    t =   149.91s Checking existence of `"No sessions" StaticText`
+    t =   150.30s Checking existence of `Any (First Match)`
+    t =   150.43s Find the Any (First Match)
+    t =   150.53s Checking existence of `"No sessions" StaticText`
+    t =   150.86s Checking existence of `Any (First Match)`
+    t =   151.03s Find the Any (First Match)
+    t =   151.18s Checking existence of `"No sessions" StaticText`
+    t =   151.52s Checking existence of `Any (First Match)`
+    t =   151.61s Find the Any (First Match)
+    t =   151.75s Checking existence of `"No sessions" StaticText`
+    t =   152.27s Checking existence of `Any (First Match)`
+    t =   152.37s Find the Any (First Match)
+    t =   152.50s Checking existence of `"No sessions" StaticText`
+    t =   152.82s Added attachment named 'p2-first-final'
+    t =   152.83s Checking existence of `"BackButton" Button`
+    t =   152.96s Tap "BackButton" Button
+    t =   152.96s     Wait for io.orbitd.swipeprobe to idle
+    t =   152.96s     Find the "BackButton" Button
+    t =   153.12s     Check for interrupting elements affecting "BackButton" Button
+    t =   153.23s     Synthesize event
+    t =   153.56s     Wait for io.orbitd.swipeprobe to idle
+    t =   154.71s Waiting 10.0s for Any (First Match) to exist
+    t =   155.77s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   155.77s         Checking existence of `Any (First Match)`
+    t =   158.26s Waiting 20.0s for Any (First Match) to exist
+    t =   159.34s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   159.34s         Checking existence of `Any (First Match)`
+    t =   159.60s Tap Any (First Match)
+    t =   159.61s     Wait for io.orbitd.swipeprobe to idle
+    t =   159.61s     Find the Any (First Match)
+    t =   159.87s     Check for interrupting elements affecting "Google 账号登录与开放注册, 14m ago, 2/4, Watching the members." Button
+    t =   160.00s     Synthesize event
+    t =   160.34s     Wait for io.orbitd.swipeprobe to idle
+    t =   161.35s Checking existence of `Any (First Match)`
+    t =   161.59s Find the Any (First Match)
+    t =   161.71s Checking existence of `"No sessions" StaticText`
+    t =   162.09s Checking existence of `Any (First Match)`
+    t =   162.18s Find the Any (First Match)
+    t =   162.25s Checking existence of `"No sessions" StaticText`
+    t =   162.63s Checking existence of `Any (First Match)`
+    t =   162.71s Find the Any (First Match)
+    t =   162.79s Checking existence of `"No sessions" StaticText`
+    t =   163.14s Checking existence of `Any (First Match)`
+    t =   163.30s Find the Any (First Match)
+    t =   163.44s Checking existence of `"No sessions" StaticText`
+    t =   163.78s Checking existence of `Any (First Match)`
+    t =   164.05s Find the Any (First Match)
+    t =   164.19s Checking existence of `"No sessions" StaticText`
+    t =   164.54s Checking existence of `Any (First Match)`
+    t =   164.60s Find the Any (First Match)
+    t =   164.66s Checking existence of `"No sessions" StaticText`
+    t =   164.98s Checking existence of `Any (First Match)`
+    t =   165.05s Find the Any (First Match)
+    t =   165.11s Checking existence of `"No sessions" StaticText`
+    t =   165.43s Checking existence of `Any (First Match)`
+    t =   165.48s Find the Any (First Match)
+    t =   165.52s Checking existence of `"No sessions" StaticText`
+    t =   165.84s Checking existence of `Any (First Match)`
+    t =   165.90s Find the Any (First Match)
+    t =   165.94s Checking existence of `"No sessions" StaticText`
+    t =   166.28s Checking existence of `Any (First Match)`
+    t =   166.34s Find the Any (First Match)
+    t =   166.40s Checking existence of `"No sessions" StaticText`
+    t =   166.72s Checking existence of `Any (First Match)`
+    t =   166.76s Find the Any (First Match)
+    t =   166.81s Checking existence of `"No sessions" StaticText`
+    t =   167.13s Checking existence of `Any (First Match)`
+    t =   167.17s Find the Any (First Match)
+    t =   167.21s Checking existence of `"No sessions" StaticText`
+    t =   167.53s Checking existence of `Any (First Match)`
+    t =   167.57s Find the Any (First Match)
+    t =   167.62s Checking existence of `"No sessions" StaticText`
+    t =   167.92s Checking existence of `Any (First Match)`
+    t =   167.97s Find the Any (First Match)
+    t =   168.02s Checking existence of `"No sessions" StaticText`
+    t =   168.33s Checking existence of `Any (First Match)`
+    t =   168.37s Find the Any (First Match)
+    t =   168.41s Checking existence of `"No sessions" StaticText`
+    t =   168.73s Checking existence of `Any (First Match)`
+    t =   169.09s Find the Any (First Match)
+    t =   169.16s Checking existence of `"No sessions" StaticText`
+    t =   169.52s Added attachment named 'p1-again-final'
+    t =   169.52s Tear Down
+Test Case '-[SwipeProbeUITests.ProjectPageOpenTimingTests testOpeningTheProjectPage]' passed (170.158 seconds).
+Test Suite 'ProjectPageOpenTimingTests' passed at 2026-10-06 13:42:26.349.
+	 Executed 1 test, with 0 failures (0 unexpected) in 170.158 (170.162) seconds
+Test Suite 'SwipeProbeUITests.xctest' passed at 2026-10-06 13:42:26.349.
+	 Executed 1 test, with 0 failures (0 unexpected) in 170.158 (170.163) seconds
+Test Suite 'All tests' passed at 2026-10-06 13:42:26.350.
+	 Executed 1 test, with 0 failures (0 unexpected) in 170.158 (170.168) seconds
+2026-10-06 13:42:58.269 xcodebuild[4842:20953] [MT] IDETestOperationsObserverDebug: 259.676 elapsed -- Testing started completed.
+2026-10-06 13:42:58.270 xcodebuild[4842:20953] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-06 13:42:58.270 xcodebuild[4842:20953] [MT] IDETestOperationsObserverDebug: 259.676 sec, +259.676 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/_temp/tree/.open-probe/results/ios.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

@@ -1,0 +1,28 @@
+==> stub ready after 2s
+==> iPhone 22452A91-4697-4369-8812-53ADB77EB73B (iPhone 17 Pro com.apple.CoreSimulator.SimRuntime.iOS-26-5)
+Test Case '-[SwipeProbeUITests.ProjectPageOpenTimingTests testOpeningTheProjectPage]' started.
+Test Case '-[SwipeProbeUITests.ProjectPageOpenTimingTests testOpeningTheProjectPage]' passed (165.263 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 165.263 (165.267) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 165.263 (165.270) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 165.263 (165.272) seconds
+** TEST SUCCEEDED **
+/Users/runner/work/_temp/tree/.open-probe/run.sh: line 46:  2415 Terminated: 15          python3 -u stub.py 8765 "$OUT/requests.log" > "$OUT/stub.out" 2>&1
+total 3056
+drwxr-xr-x  18 runner  staff     576 Oct  6 13:47 .
+drwxr-xr-x  13 runner  staff     416 Oct  6 13:33 ..
+-rw-r--r--   1 runner  staff  159835 Oct  6 13:44 00-list.png
+drwxr-xr-x  13 runner  staff     416 Oct  6 13:47 attachments
+-rw-r--r--   1 runner  staff     567 Oct  6 13:47 not-served.txt
+-rw-r--r--   1 runner  staff  190404 Oct  6 13:45 p1-again-0.5s.png
+-rw-r--r--   1 runner  staff  186606 Oct  6 13:45 p1-again-1.0s.png
+-rw-r--r--   1 runner  staff  186606 Oct  6 13:45 p1-again-final.png
+-rw-r--r--   1 runner  staff  186625 Oct  6 13:45 p1-first-after-polls.png
+-rw-r--r--   1 runner  staff  186625 Oct  6 13:45 p1-first-final.png
+-rw-r--r--   1 runner  staff  143290 Oct  6 13:45 p2-first-0.5s.png
+-rw-r--r--   1 runner  staff  142629 Oct  6 13:45 p2-first-1.0s.png
+-rw-r--r--   1 runner  staff  138446 Oct  6 13:45 p2-first-final.png
+-rw-r--r--   1 runner  staff    7619 Oct  6 13:46 requests.log
+-rw-r--r--   1 runner  staff      58 Oct  6 13:30 simulator.txt
+-rw-r--r--   1 runner  staff      49 Oct  6 13:30 stub.out
+-rw-r--r--@  1 runner  staff    1102 Oct  6 13:45 timeline.txt
+-rw-r--r--   1 runner  staff      41 Oct  6 13:30 tree-sha.txt
