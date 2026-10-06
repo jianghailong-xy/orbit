@@ -830,11 +830,6 @@ final class AppModel {
                             icon: "bell.badge.fill", awaitsApproval: true)
         }
         #endif
-        #if os(macOS)
-        // Frozen-runner upkeep: a Sparkle app update ships a newer bundled runner than the installed
-        // ~/.orbit/bin copy (its network self-update is off), so re-sync it once at launch.
-        Task { await runnerControl?.syncBundledRunner() }
-        #endif
     }
 
     /// Keep Open fresh. The control-plane stream (below) is the primary source of *latency* — a

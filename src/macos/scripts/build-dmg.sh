@@ -35,40 +35,6 @@ cp "$bin" "$app/Contents/MacOS/$APP_NAME"
 iconset="$out/AppIcon.iconset"; rm -rf "$iconset"; mkdir -p "$iconset"
 cp "$here/../Assets.xcassets/AppIcon.appiconset/"icon_*.png "$iconset/"
 iconutil -c icns "$iconset" -o "$app/Contents/Resources/AppIcon.icns"
-echo "▶ build orbit runner binary from source (frozen into the app)"
-# The macOS app installs + runs a local runner with no Terminal: "Enroll this Mac" copies this
-# bundled `orbit` binary to ~/.orbit/bin and loads the LaunchAgent. The runner's network self-update
-# is disabled (ORBIT_NO_SELFUPDATE in the plist), so its version tracks the app: we build it here
-# from the same source tree at the same $VERSION, and the app re-syncs ~/.orbit/bin on launch. This
-# is why we build (not download /dl): the bundled copy is an exact, version-matched build rather than
-# whatever the control plane currently serves, so a fresh install needs no second download.
-# SKIP_RUNNER_BUNDLE=1 skips it (fast offline builds without the Go toolchain) — the in-app installer
-# then reports the binary missing.
-runner_out="$app/Contents/Resources/orbit"
-if [ -n "${SKIP_RUNNER_BUNDLE:-}" ]; then
-  echo "  (skipped: SKIP_RUNNER_BUNDLE set)"
-else
-  runner_src="$here/../../runner-go"
-  runner_parts=""
-  for a in $ARCHS; do
-    case "$a" in
-      arm64)            goarch="arm64" ;;
-      x86_64|x64|amd64) goarch="amd64" ;;
-      *) echo "✗ unsupported runner arch: $a" >&2; exit 1 ;;
-    esac
-    part="$out/orbit-darwin-$goarch"
-    echo "  ⚒ go build darwin/$goarch v$VERSION"
-    ( cd "$runner_src" && CGO_ENABLED=0 GOOS=darwin GOARCH="$goarch" \
-      go build -trimpath -ldflags "-s -w -X main.version=$VERSION" -o "$part" . )
-    runner_parts="$runner_parts $part"
-  done
-  if [ "$(echo $ARCHS | wc -w)" -gt 1 ]; then
-    lipo -create $runner_parts -output "$runner_out"
-  else
-    cp $runner_parts "$runner_out"
-  fi
-  chmod +x "$runner_out"
-fi
 sparkle_keys=""
 if [ -n "$SU_PUBLIC_ED_KEY" ]; then
   sparkle_keys="  <key>SUFeedURL</key><string>$SU_FEED_URL</string>
@@ -112,10 +78,9 @@ fi
 echo "▶ codesign ($SIGN_ID)"
 appfwk="$app/Contents/Frameworks/Sparkle.framework"
 if [ "$SIGN_ID" = "-" ]; then
-  [ -f "$runner_out" ] && codesign --force --sign - "$runner_out"   # bundled runner (nested executable)
   codesign --force --deep --sign - "$app"        # ad-hoc for local dev
 else
-  # Developer ID + hardened runtime: sign nested code (Sparkle, bundled runner) inside-out, then the app.
+  # Developer ID + hardened runtime: sign nested code (Sparkle) inside-out, then the app.
   sign() { codesign --force --options runtime --timestamp --sign "$SIGN_ID" "$@"; }
   if [ -d "$appfwk" ]; then
     vdir="$(ls -d "$appfwk"/Versions/[A-Z] 2>/dev/null | head -1)"
@@ -124,7 +89,6 @@ else
     [ -e "$vdir/Updater.app" ] && sign "$vdir/Updater.app"
     sign "$appfwk"
   fi
-  [ -f "$runner_out" ] && sign "$runner_out"
   sign "$app"
 fi
 codesign --verify --deep --strict --verbose=2 "$app" || true
