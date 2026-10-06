@@ -118,6 +118,28 @@
   min-height: var(--orbit-control-height);
   resize: vertical;
   vertical-align: bottom;
+  /* As the AntD textarea: every change eases over 0.3s, the auto-size height included. */
+  transition: all 0.3s;
+}
+
+/* Borderless: no frame or fill, the frame's 1px given back as padding, and AntD's in-field focus
+   ring. While that ring shows only it transitions, so growth while typing is immediate. */
+.orbit-textarea[data-variant='borderless'],
+.orbit-textarea[data-variant='borderless']:is(:hover, :focus) {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.orbit-textarea[data-variant='borderless'] {
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+
+.orbit-textarea[data-variant='borderless']:focus-visible {
+  outline: 1px solid var(--orbit-control-primary);
+  outline-offset: -1px;
+  transition: outline-offset 0s, outline 0s;
 }
 
 /* Preserve the existing mobile text-field sizing: index.css lifts AntD's unadorned inputs and

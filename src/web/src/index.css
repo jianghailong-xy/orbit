@@ -6199,7 +6199,8 @@ html[data-theme='dark'] .session-tag-chip {
   min-width: 0;
 }
 .composer-field .composer-mirror,
-.composer-field textarea.ant-input {
+.composer-field textarea.ant-input,
+.composer-field textarea.orbit-textarea {
   font: inherit;
   font-size: 15px;
   line-height: 1.6;
@@ -6221,7 +6222,8 @@ html[data-theme='dark'] .session-tag-chip {
   color: var(--text-1);
 }
 /* The input keeps the caret and the selection; the mirror behind it supplies the glyphs. */
-.composer-field textarea.ant-input {
+.composer-field textarea.ant-input,
+.composer-field textarea.orbit-textarea {
   position: relative;
   background: transparent;
   color: transparent;
@@ -6231,10 +6233,12 @@ html[data-theme='dark'] .session-tag-chip {
 /* The glyphs above are transparent so the mirror can draw them — and a placeholder inherits that
    too, with no mirror behind it to draw it instead. Give it back its own colour (antd's placeholder
    grey, which it carries as `color`), or an empty composer is a blank card with no prompt in it. */
-.composer-field textarea.ant-input::placeholder {
+.composer-field textarea.ant-input::placeholder,
+.composer-field textarea.orbit-textarea::placeholder {
   -webkit-text-fill-color: currentColor;
 }
-.composer-field textarea.ant-input::selection {
+.composer-field textarea.ant-input::selection,
+.composer-field textarea.orbit-textarea::selection {
   background: rgba(22, 119, 255, 0.25);
   -webkit-text-fill-color: var(--text-1);
 }
@@ -6242,7 +6246,8 @@ html[data-theme='dark'] .session-tag-chip {
    (antd 5 set `outline: none` there). Inside the composer that paints a second blue ring around
    the textarea, nested inside the box's own `:focus-within` border — one focus affordance, drawn
    twice. The box border stays; this one goes. */
-.composer-field textarea.ant-input:focus-visible {
+.composer-field textarea.ant-input:focus-visible,
+.composer-field textarea.orbit-textarea:focus-visible {
   outline: none;
 }
 /* Zero net layout width: the padding shaping the pill is cancelled by an equal negative margin,
@@ -6270,14 +6275,16 @@ html[data-theme='dark'] .session-tag-chip {
 .composer-box-shell .composer-mirror {
   display: none;
 }
-.composer-box-shell .composer-field textarea.ant-input {
+.composer-box-shell .composer-field textarea.ant-input,
+.composer-box-shell .composer-field textarea.orbit-textarea {
   -webkit-text-fill-color: var(--error);
 }
 
 /* `resize: none` because the composer has its own top drag handle (native corner grip would
    fight autoSize). Padding is NOT set here: it lives in the shared `.composer-field` block, where
    the mirror behind the textarea takes the same value. */
-.composer-box textarea.ant-input {
+.composer-box textarea.ant-input,
+.composer-box textarea.orbit-textarea {
   resize: none;
 }
 /* `!cmd` shell mode: the draft runs raw on the runner instead of going to the agent, so the
@@ -13029,7 +13036,8 @@ button.chat-jump-start:hover {
   padding: 12px 16px;
   border-top: 1px solid var(--border-subtle);
 }
-.tdp-compose .ant-input {
+.tdp-compose .ant-input,
+.tdp-compose .orbit-textarea {
   flex: 1;
 }
 
