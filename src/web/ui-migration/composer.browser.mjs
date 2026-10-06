@@ -47,8 +47,15 @@ async function compareRuns(page, info, scenario, query, script) {
     differences: found, pixels,
   });
   expect(found).toEqual([]);
+  // Styles and geometry are equal above, exactly. Pixels: two different DOMs reach the same final
+  // paint along different invalidation histories, and Chromium may rasterize antialiased curves
+  // (rounded corners, outline corners) up to 2 levels apart, in either capture. Anything a reader
+  // could see — a colour, an offset, a size — differs by far more. Counts are kept in the JSON.
   for (const [name, result] of Object.entries(pixels)) {
-    expect(result.repainted, `${name}: composer pixels`).toMatchObject({ sameSize: true, different: 0 });
+    for (const capture of ['repainted', 'firstPaint']) {
+      expect(result[capture].sameSize, `${name}: ${capture} size`).toBe(true);
+      expect(result[capture].maxChannelDelta, `${name}: ${capture} pixels`).toBeLessThanOrEqual(2);
+    }
   }
   return runs;
 }
