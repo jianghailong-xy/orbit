@@ -1271,6 +1271,14 @@ type Manifest struct {
 	// Assets is keyed by platformKey ("linux-x64", "darwin-arm64", …). A control plane older than
 	// the field publishes none; downloadAndSwap then installs unverified, with a warning.
 	Assets map[string]ManifestAsset `json:"assets,omitempty"`
+	// RunsAssignedRelease says a runner of this release runs the release its control plane assigns
+	// it (assignedManifest) rather than whatever /dl/version.json names — so it is a release that can
+	// be rolled back to. Absent from releases built before assignment.
+	RunsAssignedRelease bool `json:"runsAssignedRelease,omitempty"`
+
+	// Not in version.json: where publishedManifest found it, and what the assignment said about it.
+	dir      string // the /dl subdirectory holding this release's assets: "" or "previous/"
+	rollback bool   // the control plane moved its release pointer back to this release
 }
 
 // ManifestAsset is one platform's download in /dl/version.json, as cmd/release-manifest writes it:
