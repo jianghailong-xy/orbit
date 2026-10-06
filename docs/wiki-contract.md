@@ -231,7 +231,33 @@ JSON 的 `kinds.<kind>.fields` 与 TS 的 `KIND_SPECS[kind].fields` 用同一套
   `merge_receipt`、`criterion`、`commit`、`note`、`url`。wiki 条目、主题摘要或任何视图都不能当出处，否则检索会塌缩成自引用。
 - **提议时的形状**：`{ kind, ref?, session?, seq?, locator?, quote? }`。`ref` 是记录 id 或 commit sha；引用调用方会话的
   turn 时写 `{ kind: 'turn', session: 'self', seq? }`，不写 `ref`，引文在会话结算时补验，Review 卡上显示是否验过。
-- **校验**（T3）：每个出处都要在本 owner 的行里解析出来，否则 `WIKI_SOURCE_UNRESOLVED`；引文做空白归一化后必须是原文子串，
+- **每种 kind 的 `ref` 填什么**（契约 `sourceInput.refs`）。id 两种写法都收：UUID，或 Orbit 显示的短 id。
+
+  | kind | `ref` |
+  | --- | --- |
+  | `turn` | 那条 turn 的 id；调用方会话的 turn 写 `session: 'self'`，不写 `ref` |
+  | `event` | run event 的 id |
+  | `tool_call` | tool call 行的 id，或引擎给这次调用的 tool_use_id（`toolu_…`、`call_…`）：会话在自己记录里看到的就是它，`task_evidence_submit` 的 TOOL_CALL 收的也是它 |
+  | `task`、`task_comment`、`approval`、`merge_receipt` | 那条记录的 id |
+  | `owner_decision` | owner 带备注解决的那条项目 blocker 的 id |
+  | `note` | `orbit wiki import` 登记的 note 的 id |
+  | `commit` | 完整 sha，要是本 owner 某条 merge receipt 里记着的 |
+  | `evidence`、`criterion`、`url` | 暂时引不了：没有哪道门解析它们，一律 `WIKI_SOURCE_UNRESOLVED` |
+
+  `wiki_propose` 的 `sources` 参数说明和 `orbit wiki propose --help` 写的是同一张表（runner-go `wikiSourceRefs`，
+  `TestWikiProposeSaysWhatEachSourceKindTakesAsItsRef` 钉住每种 kind 都说到）。
+- **ref 先过形状，再查库**：`sourceInput.rowIdKinds` 里的 kind（turn、event、task、task_comment、approval、owner_decision、
+  merge_receipt、note），`ref` 两种写法都解不出 id 的，在 schema 这一步就拒 `WIKI_SCHEMA`，`errors[]` 按 path
+  （`ops[i].sources[j].ref`）点名，消息里说这种 kind 该填什么。任何 ref 都不会原样拿去比 uuid 列：10-04 线上把 tool_use_id
+  填进出处，值原样进了 uuid 列，Prisma 报 P2007，整个请求 500，dryRun 也一样。
+- **`tool_call` 的 tool_use_id**（契约 `sourceInput.toolUseId`）：先当行 id 找；本 owner 没有这个 id 的行，再当 tool_use_id 找。
+  先找调用方会话自己的调用；没有，再找本 owner 的其他会话，恰好一个会话带它才算数。同一会话里同一次调用被重复入库
+  （线上有 324 个 tool_use_id 各存了 2–19 行，内容逐字节相同），算一次调用，取最早那一行；两个及以上会话都带它，或者谁都
+  没带，就是 `WIKI_SOURCE_UNRESOLVED`。存进 `wiki_source.ref` 的是行 id。决定（decide）和核实时，op 的出处从它的 payload 重读，
+  调用方同样是提议它的那个会话。调用方会话那一步是 `(session_id, tool_use_id)` 索引的一次探测；跨会话那一步要沿同一个索引
+  走遍 owner 的会话（10-06 线上 5.5k 个会话约 0.14 秒），只有引的不是自己会话的调用时才走到。
+- **校验**（T3）：每个出处都要在本 owner 的行里解析出来，否则 `WIKI_SOURCE_UNRESOLVED`，`errors[]` 按 path 点名那条出处，
+  消息里说这种 kind 的 ref 该填什么；引文做空白归一化后必须是原文子串，
   否则 `WIKI_QUOTE_NOT_FOUND`；非 owner 的 add / amend / supersede / reinforce 至少带一个出处，owner 自己写的可以不带。
 - **存储**：出处行挂在它支撑的那一版上；reinforce 只往当前版追加出处行。`quote` 至多 300 字、先脱敏；`quote_sha256`
   与 `quote` 同在同缺。`url` 只给 assumption 用，并且一定标 `tainted`。
@@ -535,7 +561,9 @@ Review 只列还有 op 等 owner 的变更集，时间线列的是 op、不说�
   `base_revision` 恰好出现在这三种 op 上，`entry_id` 恰好不出现在 add 上。
 - op 按它在请求 `ops` 里的位置从 0 编号（`seq`），所有回答都按这个编号指认它。
 - 每个 op 独立判定：通过的 op 在一个事务里一起记录，被拒的 op 什么都不写。一个都没记录的请求，用第一个拒绝的 HTTP 状态回，
-  正文里带每个 op 的结果；记录了东西的请求回 200。`dryRun` 只校验、照常回答，不记录也不发事件；回答里另带 `breaker`：
+  正文里带每个 op 的结果；记录了东西的请求回 200。`dryRun` 只校验、照常回答，不记录也不发事件。状态码也和正式提交一样：
+  有 op 会被记录就回 200，一个都不会记录就回第一个拒绝的状态，所以先 dryRun 自检的调用方，拿到的就是正式提交会拿到的
+  （runner 的 MCP 工具、`orbit wiki maintain` 与 `orbit wiki import` 一直把带 ops 正文的 4xx 当回答读）。回答里另带 `breaker`：
   请求开始时（还没算它的任何 op）熔断的读数 `{scope, activeAtStart, changed, remaining}`——`scope` 对维护运行的 changeset 是
   `run`（整次运行，§19.4 第 6 步），否则是 `changeset`；`activeAtStart` 是熔断按的 active 基数；`changed` 是已经经模式改动的条目；
   `remaining` 是模式还能再改动几个不同条目，越过它的 op 会被拒。没有 op 受熔断约束时（Manual、owner 自己写、active 少于 100）
@@ -576,9 +604,9 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
 | --- | --- | --- | --- |
 | `WIKI_DISABLED` | 404 | 请求 | 这个账号的 wiki 关着（`ORBIT_WIKI` 灰度） |
 | `WIKI_SPACE_UNBOUND` | 409 | 请求 | 调用会话的 workspace 没绑 space，也没能自动绑上 |
-| `WIKI_SCHEMA` | 400 | op | 形状不对：字段、限制、阶段 3 的 kind、amend 一条 decision、该带或不该带 baseRevision；`errors[]` 列出每个出错字段 |
+| `WIKI_SCHEMA` | 400 | op | 形状不对：字段、限制、阶段 3 的 kind、amend 一条 decision、该带或不该带 baseRevision、该是行 id 的出处 ref 解不出 id（`sourceInput.rowIdKinds`）；`errors[]` 列出每个出错字段 |
 | `WIKI_KIND_OWNER_ONLY` | 403 | op | 非 owner 对只有 owner 能写的类型 add / amend / supersede |
-| `WIKI_SOURCE_UNRESOLVED` | 422 | op | 出处在本 owner 内解析不到、引用了 wiki 条目或视图，或该带出处却没带 |
+| `WIKI_SOURCE_UNRESOLVED` | 422 | op | 出处在本 owner 内解析不到（`errors[]` 按 path 点名那条）、引用了 wiki 条目或视图，或该带出处却没带 |
 | `WIKI_QUOTE_NOT_FOUND` | 422 | op | 引文空白归一化后不是原文子串 |
 | `WIKI_REVISION_CONFLICT` | 409 | op | baseRevision 不是当前版；回答里带当前版和 diff |
 | `WIKI_QUOTA` | 429 | op | 超过每个变更集 30 个；或这个 op 要等 owner、且超过每轮或每会话的待审配额；或审阅模式会直接应用它、但变更集会越过熔断线 |
@@ -681,7 +709,7 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
 
 - **TS ↔ JSON**：`wikiContract.spec.ts` 逐个比对闭集、限制、生效策略、`KIND_SPECS` 的字段 schema、锚点 schema；检查状态机
   自洽（终态无出边、每个状态可达）；检查每个拒绝码都声明了 HTTP 状态与范围、正文里提到的每个 `WIKI_*` 都已声明；
-  并把 JSON 里的 20 条 `vectors` 逐条跑过校验函数，要求报出的字段路径与向量完全一致。每类条目都至少有一条合法、一条非法向量。
+  并把 JSON 里的 21 条 `vectors` 逐条跑过校验函数，要求报出的字段路径与向量完全一致。每类条目都至少有一条合法、一条非法向量。
 - **库 ↔ JSON**：`wiki-schema.pg.spec.ts` 在跑完全部迁移的新库上，对每个闭集逐值写入、写 `bogus` 被对应 CHECK 拒绝、
   并核对 CHECK 列出的值与 JSON 完全一致；逐条验证限制、不变量、跨 owner 的复合外键、`(entry_id, revision)` 唯一、
   外键清单（历史 id 不挂外键）、删除 owner 的两路级联，以及检索索引只被同一函数调用命中。
