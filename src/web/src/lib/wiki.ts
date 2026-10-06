@@ -228,6 +228,11 @@ export const wikiCountInSpace = (count: number, space: string): string => `· ${
 export const wikiInSpace = (space: string): string => `· in ${space}`;
 /** After a space's name in the picker, what waits on the owner in it: `wikova · 2 waiting`. */
 export const wikiSpaceWaiting = (count: number): string => `· ${count} waiting`;
+/**
+ * Under the spaces of the native picker, the way into Wiki settings (design §12.3.4, mock 31 ④). The web's
+ * select has no such item; the word is kept here with the others so OrbitKit's `WikiCopy` says the same.
+ */
+export const WIKI_MANAGE_SPACES = 'Manage spaces';
 /** The same count under Review's own title. */
 export const wikiProposalsFrom = (count: number, sessions: number): string =>
   `${count} proposal${count === 1 ? '' : 's'} from ${sessions} session${sessions === 1 ? '' : 's'}`;

@@ -443,7 +443,7 @@ final class ProjectPageTests: XCTestCase {
         let doc = try JSONDecoder().decode(ProjectDocument.self, from: Data("""
         {"id":"p1","title":"Landing","status":"OPEN","goal":"G","instructions":null,
          "createdAt":"2026-09-23T00:00:00.000Z","updatedAt":"2026-09-24T00:00:00.000Z",
-         "coordinatorEnabled":true,"configRevision":"7","coordinatorSessionId":"s1",
+         "coordinatorEnabled":true,"configRevision":"7","coordinatorSessionId":"s1","coordinatorWorkspaceId":"w1",
          "maxConcurrentTasks":3,"_count":{"tasks":7},"tasksByStatus":{"OPEN":4,"DONE":3},
          "acceptanceCriteriaItems":[{"id":"c1","ordinal":1,"text":"T","revision":2,"satisfied":false,
            "unmet":[{"clause":"NO_WORK_SERVES_IT","heldUpBy":[]}],"landing":"UNKNOWN",
@@ -457,6 +457,8 @@ final class ProjectPageTests: XCTestCase {
         XCTAssertEqual(doc.taskCount, 7)
         XCTAssertEqual(doc.configRevision, "7")
         XCTAssertEqual(doc.coordinatorEnabled, true)
+        XCTAssertEqual(doc.coordinatorWorkspaceId, "w1", "the workspace whose Wiki space the Wiki opens from the project")
+        XCTAssertEqual(try JSONDecoder().decode(ProjectDocument.self, from: JSONEncoder().encode(doc)).coordinatorWorkspaceId, "w1")
         XCTAssertEqual(doc.acceptanceCriteriaItems.first?.unmet.first?.clause, "NO_WORK_SERVES_IT")
         XCTAssertEqual(doc.integration?.ref, "project/landing")
         XCTAssertEqual(doc.integration?.locked, true)
