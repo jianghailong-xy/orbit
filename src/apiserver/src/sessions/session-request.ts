@@ -46,16 +46,23 @@ import { SESSION_REPLY_TURN_KEY_PREFIX } from './watch-turn-key';
  * rule and not only this file's.
  *
  * HANDED BACK ONCE. An outcome is handed to the asker on a `session-reply:` turn of its conversation
- * (`SessionRequestService.handOff`): queued like any other turn, NEXT_TURN, with no words of its own —
- * the outcomes are kept beside it on their rows (`reply_client_turn_id`) and written in at delivery
- * (`appendSessionRepliesContext`), exactly as a background job's wake is. Outcomes that arrive while
- * that turn is still queued join it, so five workers answering at once wake the asker once. An asker
- * that has ended is not revived for it (§4.3): the outcome is held on the row, and a comment goes on
- * the task the asker ran. An asker interrupted with the reply turn still queued loses that turn with
- * the rest of its queue — stopping means stopping — and the outcome is held the same way. So is one
- * whose turn the asker never read through: the turn failed, or its run ended with it in flight. Either
- * way a held outcome is written into the next turn the asker IS handed, so none is lost — and a retry
- * of a failed reply turn is that turn (`hasHeldSessionReplies`, auto-retry.service.ts).
+ * (`SessionRequestService.handOff`), with no words of its own — the outcomes are kept beside it on
+ * their rows (`reply_client_turn_id`) and written in at delivery (`appendSessionRepliesContext`),
+ * exactly as a background job's wake is, and routed as one is: written into the turn the asker is
+ * running, as a CURRENT_WORK steer aimed at it, when its runtime and runner can take one (createTurn's
+ * `steerIfLive`) — an asker running a turn is usually waiting in it for this very answer — and queued
+ * for its next turn otherwise. Outcomes that arrive while that turn still waits join it, on its own
+ * route only: a steer still waiting for the same running turn, or the queued next-turn reply turn. So
+ * five workers answering at once reach the asker once. A steer whose turn ended before the engine read
+ * it is the next-turn reply turn again, on the same row, and takes the one already queued into itself
+ * (`foldQueuedReplyTurnsInto`); one the runner could not write in lets its outcomes go, to be handed
+ * back again (`releaseUnreadSteerReplies`). An asker that has ended is not revived for it (§4.3): the
+ * outcome is held on the row, and a comment goes on the task the asker ran. An asker interrupted with
+ * the reply turn still queued — or its reply steer not yet taken — loses that turn with the rest of
+ * its queue: stopping means stopping, and the outcome is held the same way. So is one whose turn the
+ * asker never read through: the turn failed, or its run ended with it in flight. Either way a held
+ * outcome is written into the next turn the asker IS handed, so none is lost — and a retry of a
+ * failed reply turn is that turn (`hasHeldSessionReplies`, auto-retry.service.ts).
  *
  * An asker a transient failure stopped with an auto-retry armed has NOT ended (§8 criterion 17,
  * `awaitsAutoRetry`): its outcomes are held for the retry's turn, and its task is told nothing. If the
@@ -610,9 +617,12 @@ export type UnrunSessionRequests =
  * anything of it (§8 criterion 27, `retryRecords`); one the retry cannot find is UNDELIVERED here, as a
  * queued one is. If another turn later takes the retry's place, what no engine read is closed then
  * (`closeRequestsTheRetryWillNotResend`). A turn of this session as an ASKER may
- * carry outcomes back to it — a reply turn still queued, or any turn they were written into when it
- * was handed out — and those outcomes are not lost with it, nor with the turn whose failure is ending
- * the run. When the session lives on — interrupted, the owner withdrew the turn, or a retry is armed —
+ * carry outcomes back to it — a reply turn still queued, a reply steer the engine never confirmed
+ * (every door that calls this has just written its CURRENT_WORK steers off as FAILED or UNCONFIRMED,
+ * `terminalizePendingCurrentWorkSteers`, and an earlier one may have), or any turn they were written
+ * into when it was handed out — and those outcomes are not lost with it, nor with the turn whose
+ * failure is ending the run. A reply steer the engine acknowledged has said them, as a delivered turn
+ * has. When the session lives on — interrupted, the owner withdrew the turn, or a retry is armed —
  * they are held on their rows for the next turn it is handed: stopping means stopping, so no new reply
  * turn is queued for them, and a retry's re-send is that next turn (a failed reply turn is re-sent as
  * one, auto-retry.service.ts). When its run is over they are let go again, and the hand-off finds an
@@ -636,6 +646,7 @@ export async function settleUnrunSessionRequests(
   });
   const carriers = [
     ...unrunTurns.filter((turn) => turn.kind === 'message').map((turn) => turn.clientTurnId),
+    ...(await replySteersSettledUnread(tx, sessionId)),
     ...(ending && unrun.failedTurnKey ? [unrun.failedTurnKey] : []),
   ];
   if (carriers.length > 0) {
@@ -689,6 +700,24 @@ export async function settleUnrunSessionRequests(
   await closeUnreadSteerRequests(tx, sessionId, unrunTurns
     .filter((turn) => turn.kind === 'steer' && turn.status === 'IN_FLIGHT' && turn.deliveryStatus !== 'ACKNOWLEDGED')
     .map((turn) => turn.id));
+}
+
+/**
+ * The keys of this session's reply steers that were written off undelivered — FAILED or UNCONFIRMED
+ * (`terminalizePendingCurrentWorkSteers`): an interrupt took one before the runner did, or a run ended
+ * with one its engine never acknowledged — so whatever outcome is still on one, nothing will deliver
+ * it now. One whose outcomes an earlier pass already let go is found again and moves nothing.
+ */
+async function replySteersSettledUnread(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+): Promise<string[]> {
+  // A delivery written off is only ever a CURRENT_WORK steer's (the row constraints of 0210).
+  const writtenOff = await tx.conversationTurn.findMany({
+    where: { sessionId, sendIntent: 'CURRENT_WORK', deliveryStatus: { in: ['FAILED', 'UNCONFIRMED'] } },
+    select: { clientTurnId: true },
+  });
+  return writtenOff.map((turn) => turn.clientTurnId).filter((key) => isSessionReplyTurn(key));
 }
 
 /**
@@ -1106,22 +1135,125 @@ export async function expireSessionRequest(
 export class SessionReplyHandedOff extends Error {}
 
 /**
- * The asker's reply turn nobody has been handed yet, if there is one. Read under the Session lock
- * `createTurn` holds, as `undeliveredWakeTurn` reads the wake turn: every door that hands a turn out
- * or takes a queued one away takes that same lock first.
+ * The asker's reply turn nobody has been handed yet on this route, if there is one: the queued
+ * next-turn reply turn, or — for an outcome going into the turn the asker is running — a reply steer
+ * still waiting for that same turn. Never the other route's, as `undeliveredWakeTurn` keeps a wake's:
+ * an outcome joining a queued reply turn would wait for the next turn after all, and one joining a
+ * steer would be written into a turn it was not routed to. A steer the runner has taken, or the engine
+ * has acknowledged, is no longer PENDING, so a later outcome is a steer of its own.
+ *
+ * Read under the Session lock `createTurn` holds: every door that hands a turn out or takes a queued
+ * one away takes that same lock first.
  */
 export function undeliveredReplyTurn(
   tx: Prisma.TransactionClient,
   sessionId: string,
+  route: { kind: string; targetTurnId?: string } = { kind: 'message' },
 ): Promise<ConversationTurn | null> {
   return tx.conversationTurn.findFirst({
     where: {
       sessionId,
-      kind: 'message',
+      ...(route.kind === 'steer'
+        ? { kind: 'steer', sendIntent: 'CURRENT_WORK', targetTurnId: route.targetTurnId }
+        : { kind: 'message' }),
       status: 'PENDING',
       clientTurnId: { startsWith: SESSION_REPLY_TURN_PREFIX },
     },
     orderBy: { seq: 'asc' },
+  });
+}
+
+/**
+ * Fold every other queued next-turn reply turn into the reply turn a missed steer just became.
+ *
+ * A reply steer whose turn ended before the engine read it is put back in the queue as an ordinary
+ * next-turn message, on the same row and still carrying its outcomes (`requeueUnreadCurrentWorkSteers`
+ * at the target's completion, or the runner's `steer_requeue`). An outcome that arrived meanwhile for
+ * the next turn — the running turn's lease was running out, say — is queued on a reply turn of its
+ * own, so without this the two would each open a turn, back to back, to say what one turn says.
+ *
+ * The requeued row is the one kept, so every outcome it carried still names the turn that delivers it:
+ * it may already have a `user` event in the transcript, and its re-delivery amends that line. A queued
+ * reply turn nobody was handed hands its outcomes over and goes, as a withdrawn one would. One already
+ * in the transcript (handed out once, and back unanswered) is left as it is: deleting it would strand
+ * the line drawn for it. So is one a steer is still aimed at, which the row's own foreign key keeps.
+ * `foldQueuedWakeTurnsInto` is the same fold for a background job's wakes.
+ *
+ * Under the Session lock its caller holds, in the transaction that requeued the steer.
+ */
+export async function foldQueuedReplyTurnsInto(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+  kept: { id: string; clientTurnId: string },
+): Promise<number> {
+  if (!isSessionReplyTurn(kept.clientTurnId)) return 0;
+  const queued = await tx.conversationTurn.findMany({
+    where: {
+      sessionId,
+      id: { not: kept.id },
+      kind: 'message',
+      status: 'PENDING',
+      clientTurnId: { startsWith: SESSION_REPLY_TURN_PREFIX },
+      targetedTurns: { none: {} },
+    },
+    select: { id: true, clientTurnId: true },
+    orderBy: { seq: 'asc' },
+  });
+  if (queued.length === 0) return 0;
+  const shown = new Set((await tx.runEvent.findMany({
+    where: { sessionId, type: RunEventType.USER, turnId: { in: queued.map((turn) => turn.id) } },
+    select: { turnId: true },
+  })).map((event) => event.turnId));
+  const others = queued.filter((turn) => !shown.has(turn.id));
+  for (const other of others) {
+    await tx.sessionRequest.updateMany({
+      where: { fromSessionId: sessionId, replyClientTurnId: other.clientTurnId },
+      data: { replyClientTurnId: kept.clientTurnId },
+    });
+    await tx.conversationTurn.deleteMany({ where: { id: other.id, sessionId, status: 'PENDING' } });
+  }
+  return others.length;
+}
+
+/**
+ * `foldQueuedReplyTurnsInto` for the steers a turn's completion just requeued: the first of them that
+ * is a reply turn keeps every other reply queued for the next turn, the other requeued ones included.
+ */
+export async function foldRequeuedReplyTurns(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+  requeuedTurnIds: readonly string[],
+): Promise<void> {
+  const kept = await tx.conversationTurn.findFirst({
+    where: { sessionId, id: { in: [...requeuedTurnIds] }, clientTurnId: { startsWith: SESSION_REPLY_TURN_PREFIX } },
+    select: { id: true, clientTurnId: true },
+    orderBy: { seq: 'asc' },
+  });
+  if (kept) await foldQueuedReplyTurnsInto(tx, sessionId, kept);
+}
+
+/**
+ * A reply steer the runner could not write into the running turn, settled FAILED with no
+ * acknowledgement (runnerApi.turnComplete, as the steer settles): no engine confirmed reading what it
+ * carries — the platform's reading of an unconfirmed steer, as `closeUnreadSteerRequests` reads one
+ * for the requests a steer carries. Left on that row they are on a turn nothing will deliver, and the
+ * asker has not stopped, so nothing holds them for a later turn either: they are let go, on no turn and
+ * not held, and the request worker hands them back on its next pass (`SessionRequestService.handOff`)
+ * — into the running turn if it can still take one, else as the next turn's reply turn. The worker's
+ * pass, and not this completion, is what hands them back: a runtime refusing every steer would
+ * otherwise be handed a new one as fast as it can refuse it.
+ *
+ * Under the asker's Session lock, which the steer's completion holds.
+ */
+export async function releaseUnreadSteerReplies(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+  clientTurnId: string,
+): Promise<void> {
+  if (!isSessionReplyTurn(clientTurnId)) return;
+  await tx.sessionRequest.updateMany({
+    where: { fromSessionId: sessionId, replyClientTurnId: clientTurnId },
+    data: { replyClientTurnId: null, replyHeldAt: null },
   });
 }
 
@@ -1162,14 +1294,16 @@ export async function holdReply(
  * that turn (`reply_client_turn_id`), so a re-delivery of it says it again and no other turn does.
  *
  * Called at delivery for every message turn, outside the first-delivery branch: a reply turn handed
- * out again after its runner died still has to say what it is for. Throws on a database failure: for
- * a reply turn this block IS the turn, and the claim rolls back and leaves it queued.
+ * out again after its runner died still has to say what it is for. And for a reply steer, whose blocks
+ * say they joined the turn the asker is in (`turnKind`). Throws on a database failure: for a reply
+ * turn this block IS the turn, and the claim rolls back and leaves it queued.
  */
 export async function appendSessionRepliesContext(
   tx: Prisma.TransactionClient,
   sessionId: string,
   clientTurnId: string,
   content: string | null | undefined,
+  turnKind: string = 'message',
 ): Promise<string | null | undefined> {
   // Held outcomes join this turn — and so does one whose hand-off has not run yet: it is said now,
   // and the hand-off finds it already on a turn. Every path that takes a reply turn off the queue
@@ -1186,7 +1320,7 @@ export async function appendSessionRepliesContext(
   // In the order the outcomes arrived, ordered here rather than trusted from the read.
   carried.sort((a, b) => (a.closedAt?.getTime() ?? 0) - (b.closedAt?.getTime() ?? 0) || a.id.localeCompare(b.id));
   const recipients = await recipientsOf(tx, carried);
-  const blocks = carried.map((request) => sessionReplyBlock(request, recipients.get(request.toSessionId) ?? null));
+  const blocks = carried.map((request) => sessionReplyBlock(request, recipients.get(request.toSessionId) ?? null, turnKind));
   const block = blocks.join('\n\n');
   return content ? `${content}\n\n${block}` : block;
 }
@@ -1194,12 +1328,14 @@ export async function appendSessionRepliesContext(
 /**
  * What a queued reply turn will be delivered with, read without writing anything: the queue view a
  * client draws before the runner takes the turn (`SessionsService.listQueuedTurns`). Empty when no
- * outcome is on it.
+ * outcome is on it. In the turn's own kind, as the claim writes it: a steer's blocks say which turn
+ * they join.
  */
 export async function queuedRepliesContent(
   db: Pick<Prisma.TransactionClient, 'sessionRequest' | 'session'>,
   sessionId: string,
   clientTurnId: string,
+  turnKind: string = 'message',
 ): Promise<string> {
   const carried = await db.sessionRequest.findMany({
     where: { fromSessionId: sessionId, replyClientTurnId: clientTurnId },
@@ -1207,7 +1343,9 @@ export async function queuedRepliesContent(
   if (carried.length === 0) return '';
   carried.sort((a, b) => (a.closedAt?.getTime() ?? 0) - (b.closedAt?.getTime() ?? 0) || a.id.localeCompare(b.id));
   const recipients = await recipientsOf(db, carried);
-  return carried.map((request) => sessionReplyBlock(request, recipients.get(request.toSessionId) ?? null)).join('\n\n');
+  return carried
+    .map((request) => sessionReplyBlock(request, recipients.get(request.toSessionId) ?? null, turnKind))
+    .join('\n\n');
 }
 
 /** The recipient sessions of these requests, by id: what a block and a card name them by. */
@@ -1233,15 +1371,31 @@ const UNDELIVERED_BECAUSE: Record<string, string> = {
   LOST_IN_FLIGHT: '这条请求没有送到：对方的 runner 领走它之后，那一轮随对方的 run 一起结束了，平台的自动重试找不回这一轮，不会重发它。需要的话请重新发送。',
 };
 
-/** §4.2: one outcome, as the asker reads it. */
-export function sessionReplyBlock(request: SessionRequest, recipient: { id: string; title: string } | null): string {
+/**
+ * The line a reply block opens with when a steer delivers it — what background-job-wake.ts's
+ * `WAKE_HEADS` says for a steered wake: the asker is working, so the outcome joined the turn it is in,
+ * and no turn was opened for it. Said of every outcome the steer carries, a held one that rides along
+ * included (`appendSessionRepliesContext`). A reply turn of its own says nothing of the kind: the
+ * blocks are all that turn is.
+ */
+const STEERED_REPLY_HEAD = '你正在工作，所以这条回信加进了你当前这一轮，没有为它另开一轮。';
+
+/**
+ * §4.2: one outcome, as the asker reads it. `turnKind` is the delivering turn's: a steer's block says
+ * it joined the turn the asker is in.
+ */
+export function sessionReplyBlock(
+  request: SessionRequest,
+  recipient: { id: string; title: string } | null,
+  turnKind: string = 'message',
+): string {
   const attributes = [
     `request-id="${uuidToBase62(request.id)}"`,
     `from-session="${uuidToBase62(request.toSessionId)}"`,
     `from-title="${attribute(recipient?.title ?? '')}"`,
     `outcome="${request.state}"`,
   ];
-  const lines = [`你问的是：${request.requestPreview}`];
+  const lines = [...(turnKind === 'steer' ? [STEERED_REPLY_HEAD] : []), `你问的是：${request.requestPreview}`];
   const options = readStoredOptions(request.options);
   const excerpt = request.excerpt ? clip(request.excerpt, EXCERPT_BLOCK_CHARS) : null;
   switch (request.state) {

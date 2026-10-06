@@ -1134,8 +1134,12 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         // handing back the outcomes of session requests carries nobody's words either, and stepping
         // past it is wrong for the same reason; what it said is on the request rows, where its
         // failure held it, and the sweep re-sends it as a reply turn (sessions/session-request.ts).
-        const keyOfTurn = turns.find((turn) => turn.id === event.turnId)?.clientTurnId;
-        if (isSessionReplyTurn(keyOfTurn)) {
+        // Not a reply STEER: it joined a turn that was running, and that turn is what failed — the
+        // steer is followed to it below, as any CURRENT_WORK steer is, and what the steer carried
+        // and its engine never confirmed is held for the turn that re-sends it.
+        const turnOfEvent = turns.find((turn) => turn.id === event.turnId);
+        const keyOfTurn = turnOfEvent?.clientTurnId;
+        if (isSessionReplyTurn(keyOfTurn) && turnOfEvent?.kind !== 'steer') {
           return { content: '', attachmentsOf: null, senderSessionId: null, turnId: null, sessionReplies: true };
         }
         // A confirmation request handed to its reviewer, or a reviewer's return handed to the run
