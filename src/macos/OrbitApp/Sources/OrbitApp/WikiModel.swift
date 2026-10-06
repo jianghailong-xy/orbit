@@ -65,6 +65,10 @@ final class WikiModel {
     /// Every version, newest first (the version menu), and the older ones read whole when picked.
     private(set) var planVersions: [WikiPlanVersionSummary] = []
     private(set) var planVersionReads: [Int: WikiPlanVersion] = [:]
+    /// The plans of the other spaces where something waits on the owner (`planWaiting`), by space id:
+    /// Activity's banners for them (design §12.3.3). Read for Activity, and only those.
+    private(set) var otherPlans: [String: WikiPlanState] = [:]
+    @ObservationIgnored private var otherPlansRead = false
 
     private let api: APIClient
     @ObservationIgnored private var nudgeTask: Task<Void, Never>?
@@ -72,7 +76,8 @@ final class WikiModel {
     /// screen is read again when it next appears.
     @ObservationIgnored private var onScreen: [String: Int] = [:]
 
-    /// The space the home page shows, by slug — the last one picked, kept across launches.
+    /// The space the home page shows, by slug — the one picked, or opened by the rule (`open(fromWorkspace:)`),
+    /// kept across launches as the last one looked at (`orbit.wiki.space`, design §12.3.4).
     var selectedSlug: String? {
         didSet {
             guard selectedSlug != oldValue else { return }
@@ -86,15 +91,59 @@ final class WikiModel {
         selectedSlug = UserDefaults.standard.string(forKey: Self.spaceKey)
     }
 
-    /// The drawer's amber number: every space's proposals, summed as the web sidebar sums them.
-    var proposalsToReview: Int { WikiLogic.proposalsToReview(spaces) }
+    /// The drawer's amber number — the iPad sidebar's, and the bar's Activity badge: what waits on the owner
+    /// across every space, each space's proposals and what its plan waits for, as the web sidebar counts it.
+    var waiting: Int { WikiSpaceLogic.waiting(spaces) }
 
     /// Whether the drawer — and the iPad sidebar, the same rail — draws the Wiki row at all.
     var shown: Bool { WikiLogic.shown(spacesState, disabled: disabled) }
 
-    /// The space the home page is about: the one picked, else the first by slug.
+    /// The space the pages are about: the one picked or opened, else the one the Wiki opens by its rule.
     var currentSpace: WikiSpace? {
-        spaces.first { $0.slug == selectedSlug } ?? spaces.first
+        spaces.first { $0.slug == selectedSlug }
+            ?? WikiSpaceLogic.defaultSpace(spaces, workspaceID: fromWorkspaceID, lastSlug: nil)
+    }
+
+    /// The workspace the reader was in when they last came into the Wiki (design §12.3.4).
+    private(set) var fromWorkspaceID: String?
+    /// The reader came into the Wiki: the space it opens is chosen once the spaces are in.
+    @ObservationIgnored private var choosing = false
+
+    /// The reader comes into the Wiki from `workspaceID` — nil from a page of no workspace: it opens the space
+    /// bound to that workspace, else the one last looked at, else the one with the most documents written
+    /// (`WikiSpaceLogic.defaultSpace`), as `/wiki` does on the web. Chosen now, or once the spaces read answers.
+    func open(fromWorkspace workspaceID: String?) {
+        fromWorkspaceID = workspaceID
+        choosing = true
+        chooseSpace()
+    }
+
+    private func chooseSpace() {
+        guard choosing, spacesState.hasLoaded else { return }
+        choosing = false
+        if let space = WikiSpaceLogic.defaultSpace(spaces, workspaceID: fromWorkspaceID, lastSlug: selectedSlug) {
+            selectedSlug = space.slug
+        }
+    }
+
+    // MARK: since the reader last looked
+
+    /// What each space's stamp said before this run of the app last moved it.
+    @ObservationIgnored private var seenLog = WikiSeenLog()
+
+    /// When the reader last looked at the space `slug` (seconds since 1970, 0 for never), as Activity reads
+    /// it: from before the home moved it as it opened (`WikiSeenLog`, the web's `readWikiSeenBefore`).
+    func seenBefore(_ slug: String) -> Double {
+        let key = WikiSeenLog.key(space: slug)
+        return seenLog.seenBefore(key, stored: UserDefaults.standard.double(forKey: key))
+    }
+
+    /// The reader looks at the space `slug` now — the home as it opens, and Activity (`moveWikiSeen`).
+    func moveSeen(_ slug: String, at date: Date = Date()) {
+        let key = WikiSeenLog.key(space: slug)
+        let now = date.timeIntervalSince1970
+        seenLog.move(key, at: now, stored: UserDefaults.standard.double(forKey: key))
+        UserDefaults.standard.set(now, forKey: key)
     }
 
     /// The pending ops Review pages through.
@@ -130,6 +179,7 @@ final class WikiModel {
             if list != spaces { spaces = list }
             disabled = false
             spacesState.succeed()
+            chooseSpace()
         } catch let error where WikiLogic.isDisabled(error) {
             disabled = true
             if !spaces.isEmpty { spaces = [] }
@@ -349,6 +399,7 @@ final class WikiModel {
         if docIndex != nil { await loadDocIndex() }
         for slug in Array(docs.keys) { await loadDoc(slug) }
         if plan != nil || planState.hasLoaded { await loadPlan() }
+        if otherPlansRead { await loadOtherPlans() }
         for key in Array(runs.keys) { await loadRun(key) }
         if reviewState.hasLoaded { await loadReview() }
         for key in Array(onScreen.keys) { await loadEntry(key) }
@@ -415,6 +466,25 @@ final class WikiModel {
         if let versions = try? await versionsRead, articlesSpaceID == space.id, versions.versions != planVersions {
             planVersions = versions.versions
         }
+    }
+
+    /// The plans of the other spaces where something waits (`planWaiting`), side by side: Activity says what
+    /// waits in each. A read that fails leaves that space's banners out.
+    func loadOtherPlans() async {
+        if spaces.isEmpty { await loadSpaces() }
+        let current = currentSpace?.id
+        let waiting = spaces.filter { $0.id != current && ($0.planWaiting ?? 0) > 0 }
+        let api = self.api
+        let read = await withTaskGroup(of: (String, WikiPlanState?).self) { group in
+            for space in waiting {
+                group.addTask { (space.id, try? await api.wikiPlan(spaceID: space.id)) }
+            }
+            var plans: [String: WikiPlanState] = [:]
+            for await (id, plan) in group { if let plan { plans[id] = plan } }
+            return plans
+        }
+        otherPlansRead = true
+        if read != otherPlans { otherPlans = read }
     }
 
     /// One older version, read whole when the version menu picks it.

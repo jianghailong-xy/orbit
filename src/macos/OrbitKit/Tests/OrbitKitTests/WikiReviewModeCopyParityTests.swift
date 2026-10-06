@@ -22,7 +22,7 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
     private static let runPage = "src/web/src/components/WikiRunPage.tsx"
     private static let review = "src/web/src/components/WikiReviewPage.tsx"
     private static let page = "src/web/src/pages/WikiPage.tsx"
-    private static let home = "src/web/src/components/WikiHome.tsx"
+    private static let activity = "src/web/src/components/WikiActivityPage.tsx"
     private static let fixturePath = "src/shared/src/wiki-review-mode.fixture.json"
     private static let app = "src/macos/OrbitApp/Sources/OrbitApp/"
 
@@ -722,14 +722,17 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
                     "the native Revert confirm")
         assertSays(screen, ".task(id: changesetID) { await wiki.loadRun(changesetID) }", in: "WikiRunView.swift")
 
-        // Recently changed folds a run into a row at both ends, and a row opens the run's page.
-        let home = try web(Self.home)
-        assertSays(home, "row.kind === 'run' ? ( <WikiRunTimelineRow", in: Self.home)
-        let view = try self.native("Views/WikiView.swift")
-        XCTAssertTrue(view.contains("ForEach(content.recentRows) { row in"))
-        XCTAssertTrue(view.contains("case .run(let changesetId, let origin, let at, let items):"))
-        XCTAssertTrue(view.contains("runRow(changesetId, origin: origin, at: at, changes: items.count)"))
-        XCTAssertTrue(view.contains("actions.openRun(changesetId)"))
+        // Recently changed — Activity's now (design §12.3.2) — folds a run into a row at both ends, and a row
+        // opens the run's page.
+        let activity = try web(Self.activity)
+        assertSays(activity, "row.kind === 'run' ? ( <WikiRunTimelineRow", in: Self.activity)
+        let activityPage = try self.native("Views/WikiActivityView.swift")
+        XCTAssertTrue(activityPage.contains("ForEach(content.recentRows) { row in"))
+        XCTAssertTrue(activityPage.contains("case .run(let changesetId, let origin, let at, let items):"))
+        XCTAssertTrue(activityPage.contains("rows.runRow(changesetId, origin: origin, at: at, changes: items.count, new: isNew(at))"))
+        XCTAssertTrue(activityPage.contains("openRun: { id in model.push(.wikiRun(changesetID: id)) }"))
+        let rows = try self.native("Views/WikiView.swift")
+        XCTAssertTrue(rows.contains("actions.openRun(changesetId)"), "the band's run row presses through to it")
     }
 
     /// The head's way into the settings: the web's Settings button beside New entry, the native gear.
