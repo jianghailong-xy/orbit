@@ -4965,6 +4965,245 @@ html[data-theme='dark'] .session-tag-chip {
 .session-project-progress-bar .failed {
   background: var(--error);
 }
+/* The merge into main on a project's sessions page, under the progress strip (owner decision
+   2026-10-06): one card at four moments. Only the asking card is warm — it is the one thing on the
+   page waiting on the reader. */
+.session-project-merge {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 10px 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-subtle);
+  color: var(--text-2);
+  font-size: 12px;
+}
+.session-project-merge.is-asking {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+}
+.session-project-merge.is-merging {
+  border-color: var(--brand-border);
+  background: var(--brand-tint);
+}
+.session-project-merge.is-blocked {
+  border-color: var(--warning-border);
+}
+.session-project-merge-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.session-project-merge-title {
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 600;
+}
+.session-project-merge.is-merging .session-project-merge-title {
+  color: var(--brand);
+}
+.session-project-merge.is-blocked .session-project-merge-title {
+  color: var(--warning);
+}
+.session-project-merge-badge {
+  margin-left: auto;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--warning-solid);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+}
+.session-project-merge-ref,
+.session-project-merge-tasks li,
+.session-project-merge-row-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-project-merge-ref,
+.session-project-merge-note,
+.session-project-merge-foot {
+  color: var(--text-3);
+}
+.session-project-merge-counts {
+  color: var(--text-1);
+  font-weight: 600;
+}
+/* Inside, so the row's ellipsis does not clip the marker away. */
+.session-project-merge-tasks {
+  margin: 0;
+  padding-left: 2px;
+  color: var(--text-1);
+  list-style: disc inside;
+}
+.session-project-merge-tasks li.is-more {
+  list-style: none;
+  color: var(--text-3);
+}
+.session-project-merge-checks.is-ok {
+  color: var(--success);
+  font-weight: 600;
+}
+.session-project-merge-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+}
+.session-project-merge-actions button,
+.session-project-merge-foot > button:not(.session-project-merge-link) {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-base);
+  color: var(--text-1);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.session-project-merge-actions .session-project-merge-primary {
+  flex: 1;
+  border-color: var(--brand);
+  background: var(--brand);
+  color: #fff;
+}
+.session-project-merge button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.session-project-merge-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.session-project-merge-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--brand);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.session-project-merge-press {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--text-2);
+  font-weight: 600;
+}
+.session-project-merge-press.is-yours {
+  color: var(--warning);
+}
+.session-project-merge-error {
+  color: var(--error);
+}
+/* A merge already made, as a row on the page's timeline. The mark says it is not a session. */
+.session-row.session-project-merge-row {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--bg-hover);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.session-project-merge-row-mark {
+  position: relative;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--success-bg);
+}
+.session-project-merge-row-mark::after {
+  content: '✓';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--success);
+  font-size: 13px;
+  font-weight: 700;
+}
+.session-project-merge-row-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.session-project-merge-row-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.session-project-merge-row-title {
+  flex: 1;
+  color: var(--text-1);
+  font-weight: 600;
+}
+.session-project-merge-row-detail {
+  color: var(--text-3);
+  font-size: 12px;
+}
+/* A merge in the coordinator conversation (owner decision 2026-10-06): one line where each moment
+   happened, the card itself the review it opens. Orange only while it waits on the reader. */
+.review-card:has(> .promotion-line) {
+  display: flex;
+  justify-content: center;
+}
+.review-card-preview.promotion-line {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  max-width: 100%;
+  margin: 6px auto;
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--text-2);
+  font-size: 13px;
+}
+.promotion-line.is-needsYou,
+.promotion-line.is-blocked {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.promotion-line.is-needsYou {
+  font-weight: 600;
+}
+.promotion-line.is-working {
+  background: var(--brand-tint);
+  color: var(--brand);
+}
+.promotion-line-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.promotion-line-action {
+  flex: none;
+  color: var(--brand);
+  font-weight: 600;
+}
+.promotion-line-chev {
+  flex: none;
+  opacity: 0.7;
+}
 /* A public link opens this session (the list row's `shared`): a globe beside the time. */
 .session-shared {
   display: inline-flex;

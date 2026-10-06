@@ -559,7 +559,8 @@ struct AgentPanes: View {
                     }
                     .background(.bar)
                 }
-                NeedsYouBannerView(excluding: app.selectedAgentSessionID)
+                NeedsYouBannerView(excluding: app.selectedAgentSessionID,
+                                   projectInColumn: rowNavigation == .selection)
             }
         }
         #endif
