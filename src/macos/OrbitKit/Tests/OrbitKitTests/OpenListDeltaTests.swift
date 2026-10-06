@@ -188,7 +188,7 @@ final class OpenListDeltaTests: XCTestCase {
         XCTAssertEqual(reader.replacedRows, [], "an empty delta after an event replaced nothing itself")
         reader.adopted()
         _ = try await reader.read()
-        XCTAssertNil(reader.replacedRows, "a new order")
+        XCTAssertEqual(reader.replacedRows, [], "a new order of the same rows")
         reader.adopted()
         _ = try await reader.read()
         XCTAssertNil(reader.replacedRows, "a row removed")

@@ -1385,13 +1385,15 @@ final class AppModel {
                 return true
             }
             openListFromLaunchSnapshot = false
-            // A poll that only changed rows in place goes through the same one-row path as an
+            // A poll that changed rows of the same sessions goes through the same one-row path as an
             // event: the rows it changed, and the rows events wrote since the last adopted list
-            // (which the server's list now answers for), are all that can differ from it.
+            // (which the server's list now answers for), are all that can differ from it. A new
+            // order is then taken as it stands (`adoptOpenOrder`).
             if openListIsReaderBase, let replaced = reader.replacedRows, lastSnapshot != nil,
-               let changes = OpenRowChange.replacements(
+               let poll = OpenRowChange.replacements(
                    of: Set(replaced.map(\.id)).union(eventWrittenRows), in: list, over: sessions) {
-                for change in changes { applySessionRow(.replace(index: change.index, row: change.row)) }
+                for change in poll.changes { applySessionRow(.replace(index: change.index, row: change.row)) }
+                if poll.reordered { adoptOpenOrder(list) }
                 scheduleReviewDueRefresh(sessions)
             } else {
                 applySessionSnapshot(list)
@@ -1553,6 +1555,19 @@ final class AppModel {
         if needsYouIDsMoved { reconcileDeliveredApprovals(Set(derived.needsYou.map(\.id))) }
         #endif
         return true
+    }
+
+    /// `list` is `sessions` in another order (`fetchOpenSessions` has already applied every row that
+    /// differs). Nothing transitions, so nothing is announced; only what is read in list order moves.
+    private func adoptOpenOrder(_ list: [Session]) {
+        sessions = list
+        lastSnapshot = list
+        var derived = OpenListDerived(needsYou: needsYouSessions, agentNeedsYou: agentNeedsYou,
+                                      menu: menuSummary, activity: nil)
+        derived.reorder(list)
+        if derived.needsYou != needsYouSessions { needsYouSessions = derived.needsYou }
+        if derived.menu != menuSummary { menuSummary = derived.menu }
+        agents?.applyOpenSnapshot(list)
     }
 
     /// The Open list and everything the drawer and the session lists derive from it. Written by a

@@ -182,11 +182,12 @@ final class OpenListRowUpdateTests: XCTestCase {
         next[5] = row("f", "AWAITING_INPUT", agent: "w3")
         guard let changes = OpenRowChange.replacements(of: ["a", "c", "e", "f", "g"], in: next, over: list)
         else { return XCTFail("rows changed in place") }
-        XCTAssertEqual(changes.map(\.index), [0, 2, 4, 5], "g reads the same and is left out")
+        XCTAssertFalse(changes.reordered)
+        XCTAssertEqual(changes.changes.map(\.index), [0, 2, 4, 5], "g reads the same and is left out")
         var held = list
         var derived = OpenListDerived(list)
         var events: [NotificationEvent] = []
-        for change in changes {
+        for change in changes.changes {
             let old = held[change.index]
             held[change.index] = change.row
             events += SessionDelta.diff(previous: [old], current: [change.row])
@@ -198,12 +199,45 @@ final class OpenListRowUpdateTests: XCTestCase {
         XCTAssertEqual(events.count, 2)
     }
 
-    func testAListThatMovedIsNotReplacedInPlace() {
+    /// The server's order moves whenever a session takes a turn: the rows that changed are applied
+    /// where they were, then the order is taken, and the result is the new list's in every respect.
+    func testChangedRowsInANewOrderMatchTheFullSnapshot() {
+        let list = busy
+        var next = list
+        next[1] = row("b", agent: "w1", approvals: 1)
+        next[3] = row("d", agent: "w2")
+        next[6] = row("g", agent: "w4", project: "p1", lastTurnAt: "2026-10-05T12:00:00Z")
+        next = [next[6], next[3], next[1], next[0], next[2], next[4], next[5]]
+        guard let poll = OpenRowChange.replacements(of: ["b", "d", "g"], in: next, over: list)
+        else { return XCTFail("the same sessions in another order") }
+        XCTAssertTrue(poll.reordered)
+        XCTAssertEqual(poll.changes.map(\.index), [6, 3, 1], "where the held list has them, in the new order")
+        var held = list
+        var derived = OpenListDerived(list)
+        var events: [NotificationEvent] = []
+        for change in poll.changes {
+            let old = held[change.index]
+            held[change.index] = change.row
+            events += SessionDelta.diff(previous: [old], current: [change.row])
+            derived.replace(old, with: change.row, in: held)
+        }
+        derived.reorder(next)
+        XCTAssertEqual(Set(held.map(\.id)), Set(next.map(\.id)))
+        XCTAssertEqual(held.sorted { $0.id < $1.id }, next.sorted { $0.id < $1.id })
+        XCTAssertEqual(derived, OpenListDerived(next))
+        XCTAssertEqual(events, SessionDelta.diff(previous: list, current: next))
+        XCTAssertEqual(derived.menu.items.first?.id, "b", "the menu follows the new order")
+    }
+
+    func testAListOfOtherSessionsIsAdoptedWhole() {
         let list = busy
         XCTAssertNil(OpenRowChange.replacements(of: ["a"], in: Array(list.dropFirst()), over: list))
-        XCTAssertNil(OpenRowChange.replacements(of: ["a"], in: Array(list.reversed()), over: list))
+        XCTAssertNil(OpenRowChange.replacements(of: [], in: Array(list.dropFirst()) + [row("new")], over: list))
+        XCTAssertNil(OpenRowChange.replacements(of: [], in: [list[1]] + list.dropFirst(), over: list),
+                     "a session twice")
         XCTAssertNil(OpenRowChange.replacements(of: ["zz"], in: list, over: list))
-        XCTAssertEqual(OpenRowChange.replacements(of: [], in: list, over: list)?.count, 0)
+        XCTAssertEqual(OpenRowChange.replacements(of: [], in: list, over: list)?.changes.count, 0)
+        XCTAssertEqual(OpenRowChange.replacements(of: [], in: list.reversed(), over: list)?.reordered, true)
     }
 
     // MARK: which events take the one-row path

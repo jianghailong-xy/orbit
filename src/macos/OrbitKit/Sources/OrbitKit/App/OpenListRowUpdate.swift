@@ -42,21 +42,35 @@ public enum OpenRowChange: Equatable, Sendable {
                         row: sessions[index].settingPendingApprovals(pending, waitingKind: waitingKind))
     }
 
-    /// A polled `list` that differs from `sessions` only in the rows named by `ids`, each in its
-    /// place, as the replacements to apply in list order — or nil when it cannot be told that way
-    /// (a row count that moved, an id not where `sessions` has it), and the list is adopted whole.
-    /// Rows that already read the same are left out.
-    public static func replacements(of ids: Set<String>, in list: [Session],
-                                    over sessions: [Session]) -> [(index: Int, row: Session)]? {
+    /// A polled `list` that holds the same sessions as `sessions` and differs from it only in the
+    /// rows named by `ids` and, perhaps, in their order: the rows to replace where `sessions` has
+    /// them (`index` is theirs), in `list`'s order, and whether the order moved. nil when it cannot
+    /// be told that way — a session added or gone, or one of `ids` not in the list — and the list
+    /// is adopted whole. Rows that already read the same are left out.
+    public static func replacements(of ids: Set<String>, in list: [Session], over sessions: [Session])
+        -> (changes: [(index: Int, row: Session)], reordered: Bool)? {
         guard list.count == sessions.count else { return nil }
+        let reordered = zip(list, sessions).contains { $0.id != $1.id }
+        var position: [String: Int] = [:]
+        if reordered {
+            position.reserveCapacity(sessions.count)
+            for (index, row) in sessions.enumerated() {
+                if position.updateValue(index, forKey: row.id) != nil { return nil }
+            }
+            // Same count, unique ids, each found once: the same sessions.
+            var seen = Set<String>(minimumCapacity: list.count)
+            for row in list {
+                guard position[row.id] != nil, seen.insert(row.id).inserted else { return nil }
+            }
+        }
         var changes: [(index: Int, row: Session)] = []
         var found = 0
         for (index, row) in list.enumerated() where ids.contains(row.id) {
             found += 1
-            guard sessions[index].id == row.id else { return nil }
-            if sessions[index] != row { changes.append((index, row)) }
+            let held = reordered ? position[row.id]! : index
+            if sessions[held] != row { changes.append((held, row)) }
         }
-        return found == ids.count ? changes : nil
+        return found == ids.count ? (changes, reordered) : nil
     }
 
     private static func change(at index: Int, to row: Session, in sessions: [Session]) -> OpenRowChange {
@@ -116,6 +130,15 @@ public struct OpenListDerived: Equatable, Sendable {
         self.agentNeedsYou = agentNeedsYou
         self.menu = menu
         self.activity = activity
+    }
+
+    /// `list` holds the same rows as the list these values were derived from, in another order.
+    /// Only the needs-you rows and the menu's items are read in list order; the counts, the
+    /// per-workspace numbers and marks, and the pulses are the same in any order.
+    public mutating func reorder(_ list: [Session]) {
+        let groups = SessionGrouping.group(list)
+        needsYou = groups.needsYou
+        menu = MenuBar.summary(groups)
     }
 
     /// `old` was replaced by `new` (the same session) in place; `list` is the list after it.

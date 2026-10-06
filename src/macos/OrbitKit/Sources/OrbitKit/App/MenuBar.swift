@@ -29,7 +29,10 @@ public struct MenuBarSummary: Equatable, Sendable {
 
 public enum MenuBar {
     public static func summary(from sessions: [Session], limit: Int = 8) -> MenuBarSummary {
-        let g = SessionGrouping.group(sessions)
+        summary(SessionGrouping.group(sessions), limit: limit)
+    }
+
+    static func summary(_ g: SessionGroups, limit: Int = 8) -> MenuBarSummary {
         let items = (g.needsYou + g.running).prefix(limit).map(item)
         return MenuBarSummary(needsYou: g.needsYou.count,
                               running: g.running.count,
