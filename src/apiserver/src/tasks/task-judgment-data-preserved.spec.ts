@@ -1957,7 +1957,26 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // a transaction-local setting and an unspent, USER-approved project_handoff_approval row the
       // function only reads. It is none of the six preserved triggers/functions and not the DONE
       // fence; no table, column, constraint, index or type is touched, and no row is written.
-      '0389_move_task_confirmation_live_claim'],
+      '0389_move_task_confirmation_live_claim',
+      // Sign-in providers (0390): one new table, sign_in_provider, with its primary key and two
+      // CHECKs of its own, and no other index, foreign key, function or trigger. No existing table,
+      // column, constraint, function, trigger or type is altered or dropped; no task, project,
+      // acceptance or DONE fence object is named, and no row is written. Written as 0387 and
+      // renumbered before landing, unchanged otherwise, when main's 0387_antigravity_account took
+      // that number first.
+      '0390_sign_in_provider',
+      // Signing in with Google (0391): two new tables. user_identity, with its primary key, two
+      // CHECKs, two unique indexes and a foreign key to `user` (ON DELETE CASCADE); and
+      // oauth_login_flow, with its primary key, four CHECKs, two unique indexes, two indexes and a
+      // foreign key to `user` (ON DELETE CASCADE). No function or trigger. No existing table, column,
+      // constraint, function, trigger or type is altered or dropped; no task, project, acceptance or
+      // DONE fence object is named, and no row is written.
+      '0391_google_login_flow',
+      // Accounts without a password (0392): one ALTER COLUMN … DROP NOT NULL of `user.password_hash`,
+      // and nothing else. `user` is not a preserved relation; its email's unique index, every other
+      // column and every constraint stay as they were; no task, project, acceptance or DONE fence
+      // object, function, trigger or type is named, and no row is written or backfilled.
+      '0392_user_password_hash_nullable'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

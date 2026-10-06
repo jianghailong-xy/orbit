@@ -19,6 +19,15 @@ export class CreateUserDto {
   @IsOptional()
   @IsBoolean()
   force?: boolean;
+
+  /**
+   * Create the account without a password: it signs in with Google only (docs/google-sign-in-design.md
+   * §5.4). Refused together with `password`, and with `force`, which would otherwise erase an existing
+   * account's password.
+   */
+  @IsOptional()
+  @IsBoolean()
+  passwordless?: boolean;
 }
 
 /** The longest display name an account may give itself. */
