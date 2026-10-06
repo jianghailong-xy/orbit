@@ -1,0 +1,30 @@
+{
+  "target": "orbit-sample",
+  "run": 13,
+  "before": "Never",
+  "after": "7 days",
+  "listboxOpen": false,
+  "keys": [
+    {
+      "key": "ArrowDown",
+      "t": 22.3,
+      "target": "combobox:Sample choice",
+      "listbox": false,
+      "highlighted": null
+    },
+    {
+      "key": "ArrowDown",
+      "t": 44.3,
+      "target": "option:Never",
+      "listbox": true,
+      "highlighted": "Never"
+    },
+    {
+      "key": "Enter",
+      "t": 51.3,
+      "target": "option:7 days",
+      "listbox": true,
+      "highlighted": "7 days"
+    }
+  ]
+}

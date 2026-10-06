@@ -1,0 +1,72 @@
+{
+  "antd": {
+    "closed": [
+      {
+        "text": "Never",
+        "color": "rgb(31, 35, 41)",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "opacity": 1,
+        "controlBorderColor": "rgb(222, 224, 227)",
+        "controlBoxShadow": "none"
+      }
+    ],
+    "open": [
+      {
+        "text": "Never",
+        "color": "rgb(31, 35, 41)",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "opacity": 0.25,
+        "controlBorderColor": "rgb(51, 112, 255)",
+        "controlBoxShadow": "rgba(5, 122, 255, 0.06) 0px 0px 0px 2px"
+      }
+    ],
+    "restored": [
+      {
+        "text": "Never",
+        "color": "rgb(31, 35, 41)",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "opacity": 1,
+        "controlBorderColor": "rgb(51, 112, 255)",
+        "controlBoxShadow": "rgba(5, 122, 255, 0.06) 0px 0px 0px 2px"
+      }
+    ]
+  },
+  "orbit": {
+    "closed": [
+      {
+        "text": "Never",
+        "color": "rgb(31, 35, 41)",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "opacity": 1,
+        "controlBorderColor": "rgb(222, 224, 227)",
+        "controlBoxShadow": "none"
+      }
+    ],
+    "open": [
+      {
+        "text": "Never",
+        "color": "rgb(31, 35, 41)",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "opacity": 0.25,
+        "controlBorderColor": "rgb(51, 112, 255)",
+        "controlBoxShadow": "rgba(5, 122, 255, 0.06) 0px 0px 0px 2px"
+      }
+    ],
+    "restored": [
+      {
+        "text": "Never",
+        "color": "rgb(31, 35, 41)",
+        "fontSize": "14px",
+        "fontWeight": "400",
+        "opacity": 1,
+        "controlBorderColor": "rgb(51, 112, 255)",
+        "controlBoxShadow": "rgba(5, 122, 255, 0.06) 0px 0px 0px 2px"
+      }
+    ]
+  }
+}
