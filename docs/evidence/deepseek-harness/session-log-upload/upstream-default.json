@@ -370,7 +370,7 @@
       },
       "dsh_session_log": {
         "afterSeq": -1,
-        "bytes": 188000,
+        "bytes": 188003,
         "eventTypes": {
           "agent/inbox/spliced": 2,
           "approval/policy": 1,
@@ -629,7 +629,7 @@
       },
       "dsh_session_log": {
         "afterSeq": 42,
-        "bytes": 3635,
+        "bytes": 3669,
         "eventTypes": {
           "assistant/message": 1,
           "session-log-deepseek/delivery-accepted": 1,

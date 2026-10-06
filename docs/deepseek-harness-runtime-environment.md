@@ -18,7 +18,7 @@
 
 共享声明 `dsh_launch.go` 与 P3a 提交一致，避免并行合并出现重复类型或常量。P3a 的 `prepareDshSessionLaunch(ctx, job, scratchDir, execDir)` seam 保持未接入时明确失败；P3b 需要忽略 scratchDir，以 execDir 和显式验证的文件策略调用 P2 准备器，两个签名的字符串参数含义不同，不能直接赋值。
 
-每个 Orbit 会话使用 `${machineHome}/dsh-sessions/<canonical-session-id>`，与可清理的 run scratch 分开。目录为 0700，Orbit overlay 与身份记录为 0600。身份记录固定 canonical cwd、CLI 版本、配置哈希和 profile 哈希。启动参数为 `--profile acp --patch <absolute-overlay>`；overlay 明确设置 `llm-deepseek.config.apiKeyEnv=ORBIT_DSH_API_KEY` 和 baseURL。
+每个 Orbit 会话使用 `${machineHome}/dsh-sessions/<canonical-session-id>`，与可清理的 run scratch 分开。目录为 0700，Orbit overlay 与身份记录为 0600。身份记录固定 canonical cwd、CLI 版本、配置哈希和 profile 哈希。启动参数为 `--profile acp --patch <absolute-overlay>`；overlay 明确设置 `llm-deepseek.config.apiKeyEnv=ORBIT_DSH_API_KEY` 和 baseURL，并关闭会话日志与插件清单上传（见下文）。
 
 启动环境保留真实 HOME 和服务 PATH，只继承基础 locale、临时目录及网络代理设置。用户 Harness profile、其他 provider Key、NODE_OPTIONS 和项目 `.env` 不用于推断 dsh 凭据。专用 Key 只在子进程环境中存在，不写入 overlay、身份记录或恢复文件；缺少授权 Key 时在启动前返回 `DSH_CREDENTIAL_MISSING`。同 UID 工具可以读取进程环境和恢复数据，目录隔离不构成 OS 用户安全边界。
 
@@ -31,6 +31,21 @@ P3 按以下顺序接入：
 `ConfigHash` 覆盖固定 CLI 版本、acp profile 身份、文件策略和 Orbit overlay。Harness 启动生成的四个 profile 文件由 Seal 另行计算 `ProfileHash` 并持久化；下一次 Prepare 会在启动前验证两个哈希。profile、overlay、cwd、身份或版本不符返回 `DSH_CONFIG_CONFLICT`，保留恢复数据。已授权的 endpoint 或文件策略更改先 Dispose 旧进程，再 Prepare 更新 overlay；Key 更新不改变 profile 或恢复路径。
 
 `Close` 只关闭 ACP session；EOF、SIGTERM 与 Dispose 结束进程。两种操作都保留整棵 DSH_HOME，包含 profile、sessions、storages、cache 和锁等运行时数据。本模块不提供删除恢复数据的隐式路径。撤销 Key 后旧进程的环境不会自动变更，调用方必须结束旧进程并以最新授权派发重新 Prepare；不得继续使用旧 Env，也不得自动重发崩溃前的 prompt 或 tool。
+
+## 随模型请求上传的会话日志
+
+`DSH_TELEMETRY_DISABLED=1` 只关闭 OpenTelemetry 遥测，不关闭请求扩展字段。固定版本默认 bundle（`dsh-base/cordis.patch.yml`）挂载两个插件，它们通过 `@deepseek-ai/dsh-deepseek-llm-api-extensions` 给 `llm-deepseek` 发出的每个模型请求加上顶层字段，发往配置的 baseURL，即 api.deepseek.com 或任何自定义端点：
+
+- `@deepseek-ai/dsh-session-log-deepseek`（row `session-log-deepseek`）写 `dsh_session_log`。字段内容为 `{version, sessionFormatVersion, session: {version, id, createdAt, cwd}, afterSeq, throughSeq, events}`，`events` 是会话规范日志中上次服务端确认之后的全部事件，原样不脱敏。实测出现的事件类型：用户消息（含 workspace `AGENTS.md`/skills 注入）、system 消息（含 Orbit 追加提示词）、`request/header`（模型、工具定义）、助手消息与流、`tool/call` 参数、`tool/result` 输出（读文件的路径与逐行内容、bash 输出）、会话标题、审批策略、沙箱模式及 `session-log-deepseek/delivery-accepted`。单次字段上限 `maxBytes` 默认 8 MiB；积压分多次请求续传，超限的单个事件不发送并阻塞其后事件。HTTP 2xx 后在日志追加 `delivery-accepted` 水位，失败的范围下次重发（至少一次）。
+- `@deepseek-ai/dsh-plugin-package-inventory-deepseek`（row `plugin-package-inventory-deepseek`）写 `dsh_plugin_packages`，内容为 `{version, packages: [{name, version}]}`，列出启用的插件包；实测 84 个，其中包括 Orbit 的 `orbit-dsh-append-system-prompt`。
+
+两者的官方开关是各自 row 的 `config.enabled`，上游默认 `true`。Orbit 的 `orbit.patch.json` 默认把两者都设为 `{"enabled": false}`。命令行 `--patch` 的优先级高于 profile、`DSH_HOME` 补丁和 Web 设置开关；ACP 模式没有设置界面。关闭后插件仍挂载，只是不登记字段，也不写 `delivery-accepted`。上游说明：若之后重新打开，会补传关闭期间记录的未确认事件。已有会话下次 Prepare 时会改写 overlay 并更新 `ConfigHash`，恢复数据保留。
+
+凭据：Key 只放在 dsh 进程环境和请求的 `x-api-key` 头里。dsh 启动子进程时会去掉名字匹配 `KEY|PASSWORD|SECRET|TOKEN` 的环境变量和所有 `DSH_*` 变量（`dsh-subprocess` 的 `scrubbedParentEnv`），所以 agent 执行 `env` 看不到 `ORBIT_DSH_API_KEY`。runner 自身的其他环境变量不会进入 dsh。实测两种配置下，Key 和 runner 侧合成凭据都没有出现在任何请求体或其他请求头中。限制：agent 读取的文件和命令输出本来就作为模型输入发往端点，与本开关无关；名字不匹配上述模式、但值里带凭据的变量（例如带用户名密码的 `HTTP_PROXY`）会出现在 `env` 输出中。
+
+本开关不控制的部分：每个请求仍带 `user-agent`、`x-deepseek-harness-session-id`，以及 `x-deepseek-harness-user-id`（保存在 `DSH_HOME/.anonymous-user-id` 的随机 UUID，Orbit 下每个会话一个）。固定版本没有关闭它们的配置。
+
+复现：`node scripts/deepseek-harness-session-log/record.mjs <dir>`。脚本先安装 canonical P0 锁，然后用真 dsh 和本地 mock 端点各录制一遍上游默认和 Orbit 配置。结果与字段清单在 `docs/evidence/deepseek-harness/session-log-upload/`。
 
 ## 目录与健康状态
 
