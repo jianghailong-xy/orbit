@@ -831,9 +831,9 @@ final class AppModel {
         }
         #endif
         #if os(macOS)
-        // Frozen-runner upkeep: a Sparkle app update ships a newer bundled runner than the installed
-        // ~/.orbit/bin copy (its network self-update is off), so re-sync it once at launch.
-        Task { await runnerControl?.syncBundledRunner() }
+        // A Mac an older app enrolled runs a LaunchAgent that keeps its runner from updating
+        // itself; rewrite it once, at launch.
+        Task { await runnerControl?.migrateLaunchAgent() }
         #endif
     }
 
@@ -1786,9 +1786,10 @@ final class AppModel {
     /// selected, and the one whose tap only closes the drawer.
     var drawerDestination: DrawerDestination { nav.drawerDestination(agentID: selectedAgentID) }
 
-    /// iOS compact: the page on top is its drawer destination's own — a section's list or a
-    /// project's sessions page — so the left screen edge opens the drawer; over any page pushed above
-    /// it the edge is the system back-swipe's.
+    /// iOS compact: the page on top is its drawer destination's own — a section's list, or a
+    /// project's sessions page put up as the project's own rather than pushed by a list row — so the
+    /// left screen edge opens the drawer; over any page pushed above one the edge is the system
+    /// back-swipe's.
     var atDestinationRoot: Bool { nav.atDestinationRoot }
 
     /// True when the current section's navigation stack is at its root (nothing pushed) — the
@@ -2248,7 +2249,8 @@ final class AppModel {
     }
 
     /// A project's sessions page over its coordinator's workspace (or the one already showing).
-    /// Without any workspace it opens the project's page.
+    /// Without any workspace it opens the project's page. On a phone it is the stack's whole content,
+    /// the project's own page, rather than a page pushed over that workspace's list.
     private func openProjectSessions(_ projectID: String, inColumn: Bool) {
         let key = PublicID.storageKey(projectID)
         let coordinator = (sessions + (agents?.allSessions ?? [])).first {
@@ -2266,7 +2268,7 @@ final class AppModel {
         if inColumn {
             nav.enterProjectSessions(address)
         } else {
-            nav.path = [.sessionProject(address)]
+            nav.path = [.sessionProject(address, asDestination: true)]
         }
     }
 
@@ -2332,13 +2334,20 @@ final class AppModel {
         await projectSessionsMerge?.load(force: force)
     }
 
-    /// A member may belong to another Workspace. Carry its record into the console's cache and
-    /// change the Workspace without replacing the project page underneath that console.
+    /// A member may belong to another Workspace. Carry its record into the console's cache, which
+    /// is where its console reads that Workspace from. A phone pushes the console over the page it
+    /// was opened from and leaves the Workspace beneath alone, so back retraces the way in to the
+    /// Workspace the project's page was entered from (owner, 2026-10-06). A wide shell's list column
+    /// follows the console into its Workspace, without replacing the project page underneath it.
     func openProjectMember(_ session: Session, push: Bool) {
         sessionDetails.store(session)
-        if let agentID = session.agent?.id ?? session.agentId { selectedAgentID = agentID }
         let node = NavNode.console(sessionID: session.id, origin: .list)
-        if push { self.push(node) } else { nav.selectConsole(node) }
+        if push {
+            self.push(node)
+        } else {
+            if let agentID = session.agent?.id ?? session.agentId { selectedAgentID = agentID }
+            nav.selectConsole(node)
+        }
     }
 
     /// Load the owner's folder library: when a workspace's session list appears, and again when

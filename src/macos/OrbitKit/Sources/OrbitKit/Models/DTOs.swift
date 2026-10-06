@@ -201,6 +201,9 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     /// runner too old to report it, which stays unrestricted — an unknown must not withdraw a mode
     /// that works (see `AgentDefaults.isRunnable`).
     public let runsAsRoot: Bool?
+    /// Where this runner's updates of itself stand, as it last reported. Nil from an older server or
+    /// a runner too old to report it, which the Runners pages judge by `runsAsRoot` as they always have.
+    public var selfUpdate: RunnerSelfUpdate? = nil
     /// What the runner declared it can do on its last poll — `codex-account-move/v1` and
     /// `claude-account-move/v1` say it carries a session's conversation to another of its accounts.
     /// Nil from an older server, which claims nothing.
@@ -848,6 +851,7 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     /// run's opening turn is never listed — held raw for `TaskStart.parseCard`, the reader the echo's
     /// payload is read by. Nil on every other turn, and from a server that predates the field.
     public let taskStart: JSONValue?
+    public var taskStartCard: TaskStart? { TaskStart.parseCard(taskStart) }
     /// The same for the message telling a coordinator its project was started (`projectStarted`),
     /// held raw for `ProjectStarted.parseCard` — the reader the echo's payload is read by.
     public let projectStarted: JSONValue?
@@ -874,6 +878,14 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     }
     public let confirmationReturn: JSONValue?
     public var reviewReturnCard: ConfirmationReturnCard? { ConfirmationReturnCard.parseCard(confirmationReturn) }
+    /// Every card this turn is drawn as while it waits, each read as above — the one place the queue's
+    /// cards are gathered, so the row reconciled in place and the row first seen in a listing carry
+    /// the same ones (`TranscriptReducer.reconcileQueuedTurns`).
+    public var cards: TurnCards {
+        TurnCards(itemCard: itemCard, taskStart: taskStartCard, startedCard: startedCard,
+                  sessionMessage: senderCard, sessionReplies: replyCards,
+                  reviewRequest: reviewRequestCard, reviewReturn: reviewReturnCard)
+    }
     /// The control plane wrote this turn itself — an acceptance round, a task's brief, a wake, a
     /// delivery — so nobody typed its words. Nil on every turn somebody sent, and from a server that
     /// predates the field.

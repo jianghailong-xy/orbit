@@ -49,6 +49,7 @@ import {
   ApprovalInfo,
   ApprovalStatus,
   AgentProvider,
+  openCodeKeyOf,
   type BgShell,
   CLAUDE_HISTORY_MAX_TRANSCRIPTS,
   deriveBackgroundShells,
@@ -105,6 +106,8 @@ import {
   accountDefaultPermissionMode,
   resolvePermissionMode,
 } from '../common/permission-mode';
+import { refuseOwnerFieldsToToken } from '../auth/pat-scope.decorator';
+import type { AuthCredential } from '../common/current-user.decorator';
 import { orchestrationEnabled } from '../common/orchestration-switch';
 import { normalizePermissionRules } from '../common/permission-rules';
 import {
@@ -174,7 +177,9 @@ import {
   accountPoolRuntime,
   execRuntime,
   isBuiltinProvider,
+  openCodeKeyRows,
   resolveProviderExec,
+  runsOnOpenCode,
   sessionExecRuntime,
 } from '../providers/custom-provider';
 import { ownsModel } from '../providers/preset-overlay';
@@ -969,6 +974,18 @@ export class SessionsService {
     if (borrowedRuntime && (!Object.values(AgentProvider).includes(borrowedRuntime as AgentProvider) ||
       borrowedRuntime === AgentProvider.OPENCODE)) {
       throw new BadRequestException(`provider runtime not available: "${borrowedRuntime}"`);
+    }
+    // An OpenCode model on one of the caller's configured keys (shared `openCodeKeys`) has to name a
+    // key that can run there, or the claim would only refuse it later.
+    const openCodeKey = provider === AgentProvider.OPENCODE ? openCodeKeyOf(dto.model) : null;
+    if (openCodeKey) {
+      const row = await this.prisma.modelProvider.findFirst({
+        where: { slug: openCodeKey.slug, OR: [{ ownerId: null }, { ownerId }] },
+        select: { enabled: true, runtime: true, apiKeyEnc: true },
+      });
+      if (!row || !runsOnOpenCode(row)) {
+        throw new BadRequestException(`provider not available on OpenCode: "${openCodeKey.slug}"`);
+      }
     }
     await this.assertOwnedRefs(ownerId, { workspaceId: dto.workspaceId, assignedRunnerId });
     // §3.2: a session opened from a folder's page is filed in that folder, which has to be one of
@@ -2719,6 +2736,8 @@ export class SessionsService {
       workspaceId?: string;
       tagId?: string;
       projectId?: string;
+      /** The workspaces a token confined to them may see (`workspaceConfinement`). */
+      confinedTo?: readonly string[];
       view?: 'open' | 'completed' | 'trash' | 'active' | 'archived' | 'deleted' | 'system';
       limit?: number;
     },
@@ -2751,6 +2770,9 @@ export class SessionsService {
     // could be all *other* workspaces' sessions and read as an empty (or stalled) list.
     const workspaceFilter = filters.workspaceId
       ? Prisma.sql`AND s.workspace_id = ${filters.workspaceId}::uuid`
+      : Prisma.empty;
+    const confinedFilter = filters.confinedTo
+      ? Prisma.sql`AND s.workspace_id = ANY(${[...filters.confinedTo]}::uuid[])`
       : Prisma.empty;
     // Same reasoning for the list's tag filter: narrowing a page client-side can leave too few
     // rows to fill (or scroll) the column while the matches sit in pages nobody asked for.
@@ -2786,7 +2808,7 @@ export class SessionsService {
         ? Prisma.sql`COALESCE(s.completed_at, s.archived_at) DESC NULLS LAST, s.created_at DESC`
         : Prisma.sql`(s.pinned_at IS NOT NULL) DESC, COALESCE(s.last_turn_at, s.created_at) DESC, s.created_at DESC`;
     return this.listRows(ownerId, {
-      scope: Prisma.sql`${runnerFilter} ${workspaceFilter} ${tagFilter} ${projectFilter}`,
+      scope: Prisma.sql`${runnerFilter} ${workspaceFilter} ${confinedFilter} ${tagFilter} ${projectFilter}`,
       visibility,
       orderBy,
       pageLimit,
@@ -2802,12 +2824,19 @@ export class SessionsService {
    */
   async listOpenSince(
     ownerId: string,
-    filters: { runnerId?: string; workspaceId?: string; tagId?: string; projectId?: string },
+    filters: {
+      runnerId?: string;
+      workspaceId?: string;
+      tagId?: string;
+      projectId?: string;
+      confinedTo?: readonly string[];
+    },
     since: string | undefined,
   ) {
     const rows = await this.list(ownerId, { ...filters, view: 'open' });
     const scope = JSON.stringify([
       filters.runnerId ?? null, filters.workspaceId ?? null, filters.tagId ?? null, filters.projectId ?? null,
+      filters.confinedTo ?? null,
     ]);
     // A runner's heartbeat restamps every row it hosts every 30 seconds; with a few runners that
     // alone would resend most of the list on most polls. The clients that read this delta draw
@@ -4910,7 +4939,9 @@ export class SessionsService {
        * answered under the same Session lock in the same transaction — and as the NEXT_TURN message
        * it was otherwise. A route, never a refusal: nothing here answers 409 for a turn that cannot
        * steer. An option of this call and never a field of `dto`, so no request body can ask for it;
-       * a background job's exit is its one caller (runner-api `backgroundWake`).
+       * its callers are the platform's own deliveries: a background job's exit (runner-api
+       * `backgroundWake`) and a session request's outcome handed back to its asker
+       * (`SessionRequestService.handOff`).
        */
       steerIfLive?: boolean;
       /**
@@ -5769,7 +5800,8 @@ export class SessionsService {
     for (const turn of turns) {
       if (!turn.clientTurnId || turn.status !== 'PENDING') continue;
       if (isSessionReplyTurn(turn.clientTurnId)) {
-        const replies = await queuedRepliesContent(this.prisma, sessionId, turn.clientTurnId);
+        // In the turn's own kind too: a reply steer's blocks say which turn they join.
+        const replies = await queuedRepliesContent(this.prisma, sessionId, turn.clientTurnId, turn.kind);
         if (replies) wakeContent.set(turn.id, replies);
         continue;
       }
@@ -7119,8 +7151,15 @@ export class SessionsService {
        * they keep the refusal, and the person's door gets the routing.
        */
       routeToCurrentRun?: boolean;
+      /**
+       * The HTTP resume door's credential. A personal access token may not re-apply `permissionMode`
+       * on the way back in, for the reason `updateConfig` refuses it one (§5 of
+       * docs/personal-access-token-design.md): reviving a session is another way of setting its mode.
+       */
+      credential?: AuthCredential;
     },
   ): Promise<SessionResumeAnswer> {
+    refuseOwnerFieldsToToken(opts?.credential, { permissionMode: dto.permissionMode });
     assertPromptSize(dto.content, 'message');
     const requestFingerprint = resumeRequestFingerprint(dto);
     const session = await this.prisma.session.findFirst({
@@ -7932,8 +7971,13 @@ export class SessionsService {
    * did — see `acceptsLiveConfig` below.
    *
    * A not-yet-claimed (PENDING) session needs neither: the claim reads the new values.
+   *
+   * `credential` is the user door's. A personal access token may not change the permission mode at
+   * all, to any value: a mode that runs without asking would take approvals — which only a login may
+   * answer — out of the session's way (docs/personal-access-token-design.md §5). The rest is a token's.
    */
-  async updateConfig(ownerId: string, id: string, dto: SessionConfigDto) {
+  async updateConfig(ownerId: string, id: string, dto: SessionConfigDto, credential?: AuthCredential) {
+    refuseOwnerFieldsToToken(credential, { permissionMode: dto.permissionMode });
     if (
       dto.model === undefined &&
       dto.permissionMode === undefined &&
@@ -7979,6 +8023,11 @@ export class SessionsService {
         declaredProvider: poolRuntime ?? next.provider,
         declaredProviderBuiltin: poolRuntime ? true : next.providerBuiltin,
         customRow: next.customRow,
+        // A model naming a configured key is refused here, with its reason, when the key cannot run.
+        openCodeKeys:
+          next.provider === AgentProvider.OPENCODE && openCodeKeyOf(dto.model ?? session.model)
+            ? await openCodeKeyRows(tx, ownerId)
+            : undefined,
         sessionModel: dto.model ?? (next.keepsModel ? session.model : null),
         usesRuntimeDefaultModel: session.usesRuntimeDefaultModel,
         runtimeDefaultModels: session.assignedRunner?.runtimeDefaultModels,
@@ -8090,6 +8139,10 @@ export class SessionsService {
       // — so it joins the provider on the spawn-only side even on the runtime that HAS a control
       // channel. (On Codex `acceptsLiveConfig` is false, so this term changes nothing there.)
       const respawns = !acceptsLiveConfig || next.changed || fastModeMoved;
+      // The key an OpenCode model names lives in the process environment (resolveProviderExec).
+      const openCodeKeyMoved =
+        exec.provider === AgentProvider.OPENCODE &&
+        openCodeKeyOf(exec.model)?.slug !== openCodeKeyOf(session.model)?.slug;
       // A switch that re-resolves the MODEL must not be said to the running engine, whatever else
       // moved beside it. Every value on this PATCH was resolved against the provider the session
       // is moving TO, while the process a control frame reaches is still talking to the one it is
@@ -8151,7 +8204,9 @@ export class SessionsService {
             // The identity only. It tells the runner its process environment is stale — the
             // credential behind it is resolved when the inbox delivers this turn, so a decrypted
             // provider key never lands in conversation_turn.
-            provider: next.changed ? next.provider : undefined,
+            // An OpenCode session moving between keys (or onto its machine's own config) needs a new
+            // OPENCODE_CONFIG_CONTENT just as a provider switch does, so it names its provider too.
+            provider: next.changed || openCodeKeyMoved ? next.provider : undefined,
           }),
           clientTurnId: randomUUID(),
         });

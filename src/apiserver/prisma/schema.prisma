@@ -516,6 +516,16 @@ model Runner {
   // NULL means a runner too old to report it, which stays unrestricted — "we don't know" must not
   // remove a mode that works today.
   runsAsRoot        Boolean?     @map("runs_as_root")
+  // Where this runner's updates of itself stand, reported each heartbeat: @orbit/shared
+  // RunnerSelfUpdate (enabled / disabledByEnv / dirNotWritable / waitingForIdle / failed /
+  // heldByRollout, with the reason, install directory and last update). Rewritten by every beat,
+  // including to NULL when one omits it: NULL means this runner does not report it — a release
+  // too old to, or one rolled back to such a release — and the clients keep their old behaviour.
+  selfUpdate        Json?        @map("self_update")
+  // When the owner last asked this machine to check for a runner release now ("Update Runner
+  // Now"), cleared as the next heartbeat hands the request over. No reply: the state above is
+  // the answer, on the heartbeats that follow — the shape of modelCatalogRefreshAt.
+  selfUpdateRequestedAt DateTime? @map("self_update_requested_at")
   // Where this machine puts checkouts Orbit clones for it, reported each heartbeat. A clone of
   // `<owner>/<repo>` lands at `<reposRoot>/<owner>-<repo>`.
   // NULL means this runner has never reported one — a build too old to send it. That withdraws
@@ -2126,11 +2136,17 @@ model Attachment {
 
 // Lightweight activity feed (no FKs, append-only).
 model Activity {
-  id        String   @id @default(uuid(7)) @db.Uuid
-  actorId   String?  @map("actor_id") @db.Uuid
-  type      String
-  payload   Json?
-  createdAt DateTime @default(now()) @map("created_at")
+  id             String   @id @default(uuid(7)) @db.Uuid
+  actorId        String?  @map("actor_id") @db.Uuid
+  type           String
+  payload        Json?
+  /// The door the write came in through (docs/personal-access-token-design.md §6.4): `LOGIN` |
+  /// `PAT`. NULL on a row no user credential wrote.
+  credentialKind String?  @map("credential_kind")
+  /// The personal access token's id when `credentialKind` is `PAT`, and only then
+  /// (activity_credential_chk, 0384). No FK, like actorId: the record outlives the token.
+  credentialId   String?  @map("credential_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at")
 
   @@map("activity")
 }

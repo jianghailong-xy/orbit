@@ -26,6 +26,7 @@ import { ApprovalDecisionRequest, RunEventType } from '@orbit/shared';
 import { replayableEventSql } from '../common/system-noise';
 import { AllowQueryToken } from '../auth/allow-query-token.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PatForbidden, PatScope, workspaceConfinement } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -275,6 +276,13 @@ export class SessionsController {
   // reach Prisma raw. These three are the ones a caller types or pastes — a workspace or runner
   // copied out of a client URL, a task id from a tool result — so they arrive base62 as often
   // as not.
+  @PatScope('sessions:write', {
+    workspaceConfinable: {
+      body: { workspaceId: 'workspace', agentId: 'workspace', taskId: 'task' },
+      // The session is made in the workspace it names; a confined token names it, not a runner.
+      requires: ['workspaceId'],
+    },
+  })
   @Post()
   create(
     @CurrentUser() user: AuthUser,
@@ -286,6 +294,7 @@ export class SessionsController {
   }
 
   /** Start (or return) the repair session attached to this merge recovery. */
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
   @Post(':id/merge-repair')
   mergeRepair(
     @CurrentUser() user: AuthUser,
@@ -301,6 +310,7 @@ export class SessionsController {
    * along — the runner locates the file by the Claude session id and verifies the recorded cwd
    * against the workspace itself (the server check happens there instead of here).
    */
+  @PatScope('sessions:write', { workspaceConfinable: false })
   @Post('import')
   importSession(
     @CurrentUser() user: AuthUser,
@@ -322,6 +332,7 @@ export class SessionsController {
    * ids it was given rather than ids it invented. Each one is created as a pending import and
    * replayed by the runner on its own; this answers as soon as the rows exist.
    */
+  @PatScope('sessions:write', { workspaceConfinable: false })
   @Post('import-batch')
   importBatch(
     @CurrentUser() user: AuthUser,
@@ -333,6 +344,7 @@ export class SessionsController {
 
   /** How many of a workspace's sessions arrived as imported transcripts. Declared before the
    *  `:id` routes so "imported" is never read as a session id. */
+  @PatScope('sessions:read', { workspaceConfinable: false })
   @Get('imported')
   importedCount(
     @CurrentUser() user: AuthUser,
@@ -342,6 +354,7 @@ export class SessionsController {
   }
 
   /** Remove them all again — the promise the import offer's warning line makes. */
+  @PatScope('sessions:write', { workspaceConfinable: false })
   @Post('remove-imported')
   removeImported(
     @CurrentUser() user: AuthUser,
@@ -350,6 +363,7 @@ export class SessionsController {
     return this.sessions.removeImported(user.userId, dto.workspaceId);
   }
 
+  @PatScope('sessions:read', { workspaceConfinable: 'LIST' })
   @Get()
   async list(
     @CurrentUser() user: AuthUser,
@@ -372,10 +386,11 @@ export class SessionsController {
     @Headers('if-none-match') ifNoneMatch?: string,
     @Res({ passthrough: true }) res?: Response,
   ) {
+    const confinedTo = workspaceConfinement(user);
     if (since !== undefined && (view === undefined || view === 'open' || view === 'active')) {
       return this.sessions.listOpenSince(
         user.userId,
-        { runnerId, workspaceId: workspaceId ?? agentId, tagId, projectId },
+        { runnerId, workspaceId: workspaceId ?? agentId, tagId, projectId, confinedTo },
         since,
       );
     }
@@ -385,6 +400,7 @@ export class SessionsController {
       workspaceId: workspaceId ?? agentId,
       tagId,
       projectId,
+      confinedTo,
       view,
       limit: Number.isFinite(parsed) && parsed > 0 ? parsed : undefined,
     };
@@ -400,6 +416,7 @@ export class SessionsController {
         workspaceId: filters.workspaceId,
         tagId,
         projectId,
+        confinedTo: confinedTo?.join(','),
         limit: filters.limit,
       });
       res.setHeader('ETag', etag);
@@ -413,6 +430,7 @@ export class SessionsController {
 
   // Per-workspace Open-session tallies for the nav sidebar's attention badges. Also above
   // `@Get(':id')`, for the same declaration-order reason as `search` below.
+  @PatScope('sessions:read', { workspaceConfinable: false })
   @Get('counts')
   counts(@CurrentUser() user: AuthUser) {
     return this.sessions.workspaceSessionCounts(user.userId);
@@ -421,6 +439,7 @@ export class SessionsController {
   // Cross-scope search for the clients' ⌘K palette. MUST stay above `@Get(':id')` — Nest matches
   // routes in declaration order, so below it the literal path would be swallowed as an id.
   // An empty `q` returns recents, which is what makes the palette a session switcher too.
+  @PatScope('sessions:read', { workspaceConfinable: false })
   @Get('search')
   search(
     @CurrentUser() user: AuthUser,
@@ -430,11 +449,13 @@ export class SessionsController {
     return this.sessions.search(user.userId, q, Number(limit) || 20);
   }
 
+  @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.get(user.userId, id);
   }
 
+  @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
   @Get(':id/artifacts')
   async artifact(
     @CurrentUser() user: AuthUser,
@@ -445,6 +466,7 @@ export class SessionsController {
     return new StreamableFile(data, { type: mimeType, disposition, length: data.length });
   }
 
+  @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
   @Get(':id/worktree-file')
   @Header('Cache-Control', 'no-store')
   async worktreeFile(
@@ -458,6 +480,7 @@ export class SessionsController {
 
   // Per-file unified diffs for this session's worktree changes, fetched on demand when a
   // file's diff is opened (kept off the session payload — see SessionsService.getDiff).
+  @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
   @Get(':id/diff')
   diff(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.getDiff(user.userId, id);
@@ -466,11 +489,13 @@ export class SessionsController {
   // Ask the live runner to recompute the worktree diff now, so an opened file whose stored
   // patch lagged the live worktree (the heartbeat refreshes the file list but not the patch
   // text) gets its diff. No-op for a non-live session — see requestDiffRefresh.
+  @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
   @Post(':id/diff/refresh')
   refreshDiff(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.requestDiffRefresh(user.userId, id);
   }
 
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
   @Post(':id/turns')
   turn(
     @CurrentUser() user: AuthUser,
@@ -483,6 +508,7 @@ export class SessionsController {
 
   /** Versioned mutation door for Web. An N-1 API returns 404 before touching a turn, so a new
    * explicit NEXT_TURN can never be silently interpreted by an old server as auto-steer. */
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
   @Post(':id/turns/current-work-routing')
   routedTurn(
     @CurrentUser() user: AuthUser,
@@ -495,6 +521,7 @@ export class SessionsController {
 
   // Default stays the installed native client's queue-only contract. Web opts into `active` to
   // bridge the dequeue → first-event window and receive authoritative placement metadata.
+  @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
   @Get(':id/turns')
   queuedTurns(
     @CurrentUser() user: AuthUser,
@@ -507,6 +534,7 @@ export class SessionsController {
 
   // Withdraw a still-queued message (turnId is the raw conversation_turn id returned
   // by POST /turns, not a base62 public id).
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
   @Delete(':id/turns/:turnId')
   cancelTurn(
     @CurrentUser() user: AuthUser,
@@ -516,6 +544,7 @@ export class SessionsController {
     return this.sessions.cancelQueuedTurn(user.userId, id, turnId);
   }
 
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' }, body: { stopSessionId: 'session' } } })
   @Post(':id/resume')
   resume(
     @CurrentUser() user: AuthUser,
@@ -526,19 +555,23 @@ export class SessionsController {
     // The person's door, and the only one that routes a message onto the run that holds this
     // session's task — see SessionsService.resume's `routeToCurrentRun` for why the sweeps and the
     // dispatchers keep the refusal instead.
-    return this.sessions.resume(user.userId, id, dto, { routeToCurrentRun: true });
+    return this.sessions.resume(user.userId, id, dto, { routeToCurrentRun: true, credential: user.credential });
   }
 
+  /** A personal access token reaches this with `sessions:write`, but never changes the permission
+   *  mode — see SessionsService.updateConfig. */
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
   @Patch(':id/config')
   updateConfig(
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
     @Body() dto: SessionConfigDto,
   ) {
-    return this.sessions.updateConfig(user.userId, id, dto);
+    return this.sessions.updateConfig(user.userId, id, dto, user.credential);
   }
 
   /** Which of its runner's Codex or Claude accounts the session runs on — see switchAccount. */
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
   @Patch(':id/account')
   switchAccount(
     @CurrentUser() user: AuthUser,
@@ -550,6 +583,7 @@ export class SessionsController {
 
   /** Rename a session's display title. Works on any session (live or ended) and never
    *  touches the runner — purely a metadata update. */
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
   @Patch(':id')
   rename(
     @CurrentUser() user: AuthUser,
@@ -562,6 +596,7 @@ export class SessionsController {
   /** Stop the running turn. With a body carrying `content`, the follow-up is queued in
    *  the same transaction — see SessionsService.interrupt for why the two cannot be two
    *  requests. A bodyless POST stays exactly what it was. */
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
   @Post(':id/interrupt')
   interrupt(
     @CurrentUser() user: AuthUser,
@@ -572,6 +607,7 @@ export class SessionsController {
     return this.sessions.interrupt(user.userId, id, dto);
   }
 
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
   @Post(':id/end')
   end(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.end(user.userId, id);
@@ -581,6 +617,7 @@ export class SessionsController {
    *  (body.targetBranch; omitted → the runner auto-detects main, else master). With
    *  body.waitSeconds the response waits for the outcome and carries it; without it, the reply is
    *  the queued acknowledgement the Merge button has always read. */
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
   @Post(':id/merge')
   mergeToMain(
     @CurrentUser() user: AuthUser,
@@ -599,6 +636,7 @@ export class SessionsController {
    * which is how these branches actually land. Idempotent: the same merge posted twice returns the
    * first receipt with `created: false`.
    */
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
   @Post(':id/merge-receipts')
   recordMergeReceipt(
     @CurrentUser() user: AuthUser,
@@ -609,6 +647,7 @@ export class SessionsController {
   }
 
   /** Every merge recorded against this session's branch, newest first. */
+  @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
   @Get(':id/merge-receipts')
   listMergeReceipts(
     @CurrentUser() user: AuthUser,
@@ -619,6 +658,7 @@ export class SessionsController {
   }
 
   /** Ask the runner to commit this live session's uncommitted worktree changes onto its branch. */
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
   @Post(':id/commit')
   commitWorktree(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.commitWorktree(user.userId, id);
@@ -626,6 +666,7 @@ export class SessionsController {
 
   /** Adopt the worktree's actual HEAD branch (after an in-worktree `git checkout -b`) as the
    *  session's tracked branch, so Merge/diff act on the real work instead of a stale "In main". */
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
   @Post(':id/adopt-branch')
   adoptWorktreeBranch(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.adoptWorktreeBranch(user.userId, id);
@@ -637,6 +678,7 @@ export class SessionsController {
   /** What this session's Retry button would re-send, chosen by the sweep's own chooser — so the
    *  card can offer the button on a run whose message is thousands of events behind the loaded
    *  window. `{ text: '' }` when there is nothing to re-send. */
+  @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
   @Get(':id/retry-message')
   retryMessage(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.autoRetry.retryMessage(user.userId, id);
@@ -651,6 +693,7 @@ export class SessionsController {
    *  19): the caller names nothing, so no click can queue a second turn for the same failure. A body
    *  carrying `clientTurnId` from a client that predates that is ignored, not refused — the key it
    *  chose is simply not the one the re-send goes out under. */
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
   @Post(':id/retry-message')
   resendRetryMessage(
     @CurrentUser() user: AuthUser,
@@ -665,11 +708,13 @@ export class SessionsController {
   /** Turn off the pending auto-retry on this session. Arming happens by itself when a quota or a
    *  transient provider error kills a turn; the POST below is only for putting back what this
    *  took away, so the card's switch is a switch and not a one-way trapdoor. */
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
   @Delete(':id/auto-retry')
   cancelAutoRetry(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.cancelAutoRetry(user.userId, id);
   }
 
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
   @Post(':id/auto-retry')
   armAutoRetry(
     @CurrentUser() user: AuthUser,
@@ -679,29 +724,34 @@ export class SessionsController {
     return this.sessions.armAutoRetry(user.userId, id, dto.retryAt);
   }
 
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
   @Post(':id/complete')
   complete(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.complete(user.userId, id);
   }
 
   /** @deprecated Compatibility route for clients deployed before Complete was canonical. */
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
   @Post(':id/archive')
   archiveCompatibility(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.complete(user.userId, id);
   }
 
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
   @Post(':id/restore')
   restore(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.restore(user.userId, id);
   }
 
   /** Pin this session to the top of the list (personal ordering). */
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
   @Post(':id/pin')
   pin(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.pin(user.userId, id);
   }
 
   /** Remove this session's pin. */
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
   @Delete(':id/pin')
   unpin(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.unpin(user.userId, id);
@@ -709,6 +759,7 @@ export class SessionsController {
 
   /** What the Move panel shows: this workspace's folders, the other workspaces the session can or
    *  cannot move to and why, and whether it has to be ended first. See SessionsService.moveTargets. */
+  @PatScope('sessions:read', { workspaceConfinable: false })
   @Get(':id/move-targets')
   moveTargets(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.moveTargets(user.userId, id);
@@ -717,6 +768,7 @@ export class SessionsController {
   /** File this session in one of its workspace's folders, or in none (`folderId` null or omitted);
    *  with a `workspaceId` other than its own, move an ended session to that workspace (and folder).
    *  A move the rules refuse is a 409 with the reason. See SessionsService.move. */
+  @PatScope('sessions:write', { workspaceConfinable: false })
   @Post(':id/move')
   move(
     @CurrentUser() user: AuthUser,
@@ -728,6 +780,7 @@ export class SessionsController {
 
   /** Replace the set of personal colored tags applied to this session (picker sends the full
    *  selection). Returns the session's new tag set. */
+  @PatScope('sessions:write', { workspaceConfinable: false })
   @Put(':id/tags')
   setTags(
     @CurrentUser() user: AuthUser,
@@ -738,18 +791,21 @@ export class SessionsController {
   }
 
   // Soft-delete: moves the session to the trash (deletedAt), retaining all data.
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
   @Delete(':id')
   remove(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.remove(user.userId, id);
   }
 
   // Hard-delete: permanently remove a trashed session and all its data (irreversible).
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
   @Delete(':id/purge')
   purge(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.purge(user.userId, id);
   }
 
   /** Tool-permission approvals for this session (optionally filtered by status). */
+  @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
   @Get(':id/approvals')
   approvals(
     @CurrentUser() user: AuthUser,
@@ -760,6 +816,7 @@ export class SessionsController {
   }
 
   /** Allow or deny a pending tool-permission approval. */
+  @PatForbidden('OWNER_INTERACTIVE')
   @Post(':id/approvals/:approvalId/decision')
   decideApproval(
     @CurrentUser() user: AuthUser,
@@ -777,6 +834,7 @@ export class SessionsController {
    * client regardless of how much transcript is loaded. Clients merge this with a live-derived
    * overlay for the freshest tail of anything still running.
    */
+  @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
   @Get(':id/background')
   backgroundShells(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.getBackgroundShells(user.userId, id);
@@ -795,6 +853,7 @@ export class SessionsController {
    * `anchor` it resolved to and a `before` / `after` cursor; `after=<seq>&limit=N` returns the N
    * events just newer than a seq, paging from there back down to the tail.
    */
+  @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
   @Get(':id/events/page')
   eventPage(
     @CurrentUser() user: AuthUser,
@@ -839,6 +898,7 @@ export class SessionsController {
    * transcript window it has loaded. Sibling of `:id/events/page`; same segment count, distinct
    * literal, so neither shadows the other.
    */
+  @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
   @Get(':id/events/search')
   eventSearch(
     @CurrentUser() user: AuthUser,
@@ -853,6 +913,7 @@ export class SessionsController {
   /** One event's untrimmed payload — what a client fetches when the user expands a card that
    *  arrived `truncated`. Declared after `:id/events/page`, which it can't shadow (different
    *  segment count), and below the SSE `:id/events` for the same reason. */
+  @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
   @Get(':id/events/:seq/full')
   eventFull(
     @CurrentUser() user: AuthUser,
@@ -868,6 +929,7 @@ export class SessionsController {
    *  bulky tool bodies on both halves alike (see truncate-payload), so a card looks the same
    *  whether it arrived by replay or live. */
   @AllowQueryToken()
+  @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
   @Sse(':id/events')
   events(
     @CurrentUser() user: AuthUser,

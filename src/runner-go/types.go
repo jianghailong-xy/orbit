@@ -100,6 +100,30 @@ type HeartbeatRequest struct {
 	// for it here can only ever fail. A pointer so `false` is still sent — the control plane's
 	// NULL means "not reported", and a non-root runner has to be able to say so.
 	RunsAsRoot *bool `json:"runsAsRoot,omitempty"`
+	// SelfUpdate is where this runner's updates of itself stand (selfUpdateReport). Sent on every
+	// beat once the startup update has looked, so the control plane can tell a runner too old to
+	// report it — which omits it — from one that reports.
+	SelfUpdate *SelfUpdateReport `json:"selfUpdate,omitempty"`
+}
+
+// SelfUpdateReport mirrors @orbit/shared RunnerSelfUpdate: whether this runner can replace itself
+// with the release it is assigned, as the last look found it, and the last update it installed.
+// Before it, a runner pinned to an old release said so only in runner.log.
+type SelfUpdateReport struct {
+	// enabled | disabledByEnv | dirNotWritable | waitingForIdle | failed | heldByRollout — the
+	// selfUpdateState* constants.
+	State string `json:"state"`
+	// Why, in the runner's own words: set for failed, and for disabledByEnv (which of the things
+	// that turn self-update off it was).
+	Reason string `json:"reason,omitempty"`
+	// The directory holding the binary an update replaces, symlinks resolved: the one that has to
+	// be writable by this user.
+	InstallDir string `json:"installDir,omitempty"`
+	// The last update this runner installed into itself: RFC3339 time and the versions it moved
+	// between. Omitted until there has been one.
+	LastUpdatedAt   string `json:"lastUpdatedAt,omitempty"`
+	LastUpdatedFrom string `json:"lastUpdatedFrom,omitempty"`
+	LastUpdatedTo   string `json:"lastUpdatedTo,omitempty"`
 }
 
 // AgentDirProbe is what the runner found at one agent's working directory: whether the path is
@@ -339,6 +363,12 @@ type HeartbeatResponse struct {
 	// Handed over once and cleared there, not redelivered: the refreshed catalog we report on a
 	// later heartbeat is the only outcome there is. False/absent on older control planes.
 	RefreshModelCatalog bool `json:"refreshModelCatalog,omitempty"`
+	// Check for a runner release now — the owner's "Update Runner Now" — instead of at the next
+	// periodic check. The same check behind the same turn gate: a turn in flight still defers the
+	// update, which SelfUpdate then reports as waitingForIdle. Handed over once and cleared, like
+	// RefreshModelCatalog: the outcome is what later heartbeats report. False/absent on older
+	// control planes.
+	CheckSelfUpdate bool `json:"checkSelfUpdate,omitempty"`
 	// A working directory to report local Claude Code history for, answered by POSTing
 	// /runner/claude-history-result. Handed over once rather than redelivered: the form that asked
 	// is waiting on a person, and a retype asks again. Nil on older control planes and whenever
@@ -1271,6 +1301,14 @@ type Manifest struct {
 	// Assets is keyed by platformKey ("linux-x64", "darwin-arm64", …). A control plane older than
 	// the field publishes none; downloadAndSwap then installs unverified, with a warning.
 	Assets map[string]ManifestAsset `json:"assets,omitempty"`
+	// RunsAssignedRelease says a runner of this release runs the release its control plane assigns
+	// it (assignedManifest) rather than whatever /dl/version.json names — so it is a release that can
+	// be rolled back to. Absent from releases built before assignment.
+	RunsAssignedRelease bool `json:"runsAssignedRelease,omitempty"`
+
+	// Not in version.json: where publishedManifest found it, and what the assignment said about it.
+	dir      string // the /dl subdirectory holding this release's assets: "" or "previous/"
+	rollback bool   // the control plane moved its release pointer back to this release
 }
 
 // ManifestAsset is one platform's download in /dl/version.json, as cmd/release-manifest writes it:

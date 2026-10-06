@@ -1,7 +1,13 @@
-import type { OpenItemDeliveryCard, ProjectStartedCard, SessionMessageCard } from '@orbit/shared';
+import type { TurnCards } from '../api';
+import { parseBackgroundWake } from './backgroundWake';
 
-/** A user turn the API accepted but whose durable `user` event has not reached this tab yet. */
-export interface AcceptedUserTurn {
+/** A user turn the API accepted but whose durable `user` event has not reached this tab yet.
+ *
+ *  The cards it is drawn as (`TurnCards`) are held beside its words, as the active snapshot carried
+ *  them — read by the same function the runner's echo is read by — so the placeholder painted while
+ *  the turn waits is drawn as the card the echo will replace it with: the shape the reader sees does
+ *  not change when the echo lands. None on a turn the reader typed, whichever `source` recovered it. */
+export interface AcceptedUserTurn extends TurnCards {
   key: string;
   sessionId: string;
   /** Local POST acknowledgements outlive stale REST reads; recovered rows follow active snapshots. */
@@ -11,17 +17,27 @@ export interface AcceptedUserTurn {
   text: string;
   acceptedAt: string;
   attachments: { id: string; mime?: string; name?: string }[];
-  /** An exception item's delivery to the coordinator carries the item's own fields beside its words
-   *  (`openItemDelivery`, lib/openItemDelivery — read by the same function the runner's echo is read
-   *  by). Held here so the placeholder painted while that turn waits is drawn as the card the echo
-   *  will replace it with: the shape the reader sees does not change when the echo lands. Absent on
-   *  every turn a person typed, whichever `source` recovered it. */
-  openItemDelivery?: OpenItemDeliveryCard;
-  /** The same for the message telling a coordinator its project was started (lib/projectStarted). */
-  projectStarted?: ProjectStartedCard;
-  /** And for another Orbit session's message (lib/sessionMessage): the placeholder is drawn "From
-   *  [that session]", as its echo will be, rather than as the reader's own bubble. */
-  sessionMessage?: SessionMessageCard;
+}
+
+/** Every field of `TurnCards`, which the compiler holds this list to: a card added there cannot be
+ *  left off the placeholder or the queued row, which carry what `turnCardsOf` picks. */
+export const TURN_CARD_FIELDS = {
+  openItemDelivery: true,
+  taskStart: true,
+  projectStarted: true,
+  confirmationReviewRequest: true,
+  confirmationReturn: true,
+  sessionMessage: true,
+  sessionReplies: true,
+} satisfies Record<keyof TurnCards, true>;
+
+/** The cards a row carries and nothing else of it, under the payload keys the echo stores them by. */
+export function turnCardsOf(row: TurnCards): TurnCards {
+  return Object.fromEntries(
+    (Object.keys(TURN_CARD_FIELDS) as (keyof TurnCards)[])
+      .filter((field) => row[field] !== undefined)
+      .map((field) => [field, row[field]]),
+  ) as TurnCards;
 }
 
 export interface UserTurnEvent {
@@ -117,13 +133,70 @@ export function acceptedUserTurnEvent(
     payload: {
       text: turn.text,
       ...(turn.attachments.length ? { attachments: turn.attachments } : {}),
-      // Beside the text, as the control plane records it on the runner's echo (withOpenItemDelivery,
-      // control-plane-note.ts): the paragraph and the reading of it, one payload either way — so the
+      // Beside the text, as the control plane records them on the runner's echo (readTurnCards,
+      // turn-cards.ts): the words and the cards they are drawn as, one payload either way — so the
       // placeholder is drawn as the card, by the same parser, rather than as a bubble the card
       // replaces. Whoever built the row (`source`) the render is the same.
-      ...(turn.openItemDelivery ? { openItemDelivery: turn.openItemDelivery } : {}),
-      ...(turn.projectStarted ? { projectStarted: turn.projectStarted } : {}),
-      ...(turn.sessionMessage ? { sessionMessage: turn.sessionMessage } : {}),
+      ...turnCardsOf(turn),
+    },
+  };
+}
+
+/** What of a row on the queue its event is built from (WorkspaceView's `QueuedTurn`). */
+interface QueuedTurnRow extends TurnCards {
+  turnId: string;
+  content: string;
+  shell?: boolean;
+  createdAt?: string;
+  attachments?: { id: string; mimeType: string }[];
+  authoredByOrbit?: true;
+}
+
+/** Whether the queue listed this turn with the block it will be delivered with rather than with
+ *  words of its own (apiserver `isPlatformContentTurn`). Never another session's message, whatever
+ *  its words look like: they are that session's. A reply or a review turn says so by the card it
+ *  carries on a turn Orbit wrote — outcomes can also ride on a message somebody typed — and a wake by
+ *  its block, which is all its row carries. */
+function listedWithItsBlock(turn: QueuedTurnRow): boolean {
+  if (turn.sessionMessage) return false;
+  if (
+    turn.authoredByOrbit
+    && (turn.sessionReplies || turn.confirmationReviewRequest || turn.confirmationReturn)
+  ) {
+    return true;
+  }
+  return parseBackgroundWake(turn.content) !== null;
+}
+
+/**
+ * The `user` event a row still on the queue is drawn from: the event its echo will be, so the
+ * queued tail draws each turn by the transcript's own dispatch (Transcript `QueuedUserTurn`) and a
+ * turn keeps its card when a runner takes it.
+ *
+ * Built like the placeholder above, less what the queue's own line says (QueuedTurnMeta): no `steer`
+ * and no `delivery`, because how far the turn has got is that line's to say, and the same state drawn
+ * inside the card as well would say it twice. Its seq places it nowhere — the row is drawn after the
+ * transcript and is no event for ⌘F to land on, so none is stamped on it.
+ *
+ * A turn the control plane opened to hand over a block has no words of its own: the queue lists it
+ * with that block, and the echo records all of it as the control plane's note, so it is the note here
+ * too. A `!cmd` has no echo at all — the runner runs it as a Bash card — so it says it is one, and is
+ * drawn as the command it will run.
+ */
+export function queuedTurnEvent(turn: QueuedTurnRow): UserTurnEvent {
+  return {
+    seq: 0,
+    type: 'user',
+    turnId: turn.turnId,
+    ts: turn.createdAt,
+    payload: {
+      text: turn.content,
+      ...(turn.attachments?.length
+        ? { attachments: turn.attachments.map(({ id, mimeType }) => ({ id, mime: mimeType })) }
+        : {}),
+      ...(listedWithItsBlock(turn) ? { controlPlaneNote: turn.content } : {}),
+      ...(turn.shell ? { shell: true } : {}),
+      ...turnCardsOf(turn),
     },
   };
 }

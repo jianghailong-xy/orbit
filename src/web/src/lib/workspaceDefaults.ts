@@ -3,6 +3,8 @@ import {
   autoAvailable,
   DSH_PERMISSION_MODES,
   isRetiredModel,
+  openCodeKeyModel,
+  openCodeKeyOf,
   type PlanUsageSnapshot,
   type RunnerModelCatalog,
   type RuntimeDefaultModels,
@@ -44,7 +46,33 @@ export interface ConfiguredProvider {
    *  endpoint reached with a subscription token). Null for a metered API key or a third-party
    *  endpoint, neither of which has a 5-hour/weekly window at all. Served by GET /providers. */
   planUsage?: PlanUsageSnapshot | null;
+  /** Whether an OpenCode session may spend this key too (shared `openCodeKeys`), as GET /providers
+   *  decides it: absent from an older server, which reads as no. */
+  runsOnOpenCode?: boolean;
 }
+
+const OPENCODE_KEY_CHOICE = `${AgentProvider.OPENCODE}/`;
+
+/**
+ * The Provider-menu identity of a configured key run on OpenCode: `opencode/<slug>`. Not a value a
+ * session stores — its provider stays `opencode` and the key rides in its model (shared
+ * `openCodeKeys`) — but the one the pickers select, list and seed models by. No configured slug can
+ * hold a `/`, so it never names anything else.
+ */
+export const openCodeKeyChoice = (slug: string): string => `${OPENCODE_KEY_CHOICE}${slug}`;
+
+/** The configured key an `opencode/<slug>` choice names, or null for any other identity. */
+export const openCodeChoiceKey = (choice?: string | null): string | null =>
+  choice?.startsWith(OPENCODE_KEY_CHOICE) && choice.length > OPENCODE_KEY_CHOICE.length
+    ? choice.slice(OPENCODE_KEY_CHOICE.length)
+    : null;
+
+/** The Provider-menu identity a session runs on: its provider, except that an OpenCode session whose
+ *  model names a configured key is on that key's choice. */
+export const providerChoiceFor = (provider: string, model?: string | null): string => {
+  const key = provider === AgentProvider.OPENCODE ? openCodeKeyOf(model) : null;
+  return key ? openCodeKeyChoice(key.slug) : provider;
+};
 
 /** Resolve a configured provider by slug — built-in slugs never match. */
 const configuredProvider = (
@@ -58,6 +86,8 @@ export const runtimeForProvider = (
   provider?: string | null,
   configured?: ConfiguredProvider[] | null,
 ): AgentProvider => {
+  // A key run on OpenCode is run by OpenCode, whichever CLI the key itself borrows.
+  if (openCodeChoiceKey(provider)) return AgentProvider.OPENCODE;
   const custom = configuredProvider(provider, configured);
   // Configured providers borrow Claude, Codex, Kimi or Antigravity; invalid/legacy runtime values
   // use the same safe Claude fallback as the backend. First-class Kimi and Antigravity are also the
@@ -209,6 +239,14 @@ export const modelOptionsForProvider = (
   modelCatalog?: RunnerModelCatalog | null,
   configured?: ConfiguredProvider[] | null,
 ): ModelOption[] => {
+  // A key run on OpenCode offers the key's own models, under the OpenCode ids that name the key.
+  const key = openCodeChoiceKey(provider);
+  if (key) {
+    return modelOptionsForProvider(key, modelCatalog, configured).map((option) => ({
+      value: openCodeKeyModel(key, option.value),
+      label: option.label,
+    }));
+  }
   // A configured provider carries its own model list (from the API), which wins for its slug.
   const custom = configuredProvider(provider, configured);
   if (custom) {
@@ -252,6 +290,9 @@ export const defaultModelForProvider = (
   configured?: ConfiguredProvider[] | null,
   runtimeDefaultModels?: RuntimeDefaultModels,
 ): string => {
+  // A key run on OpenCode starts on the key's own default, named for OpenCode.
+  const key = openCodeChoiceKey(provider);
+  if (key) return openCodeKeyModel(key, defaultModelForProvider(key, modelCatalog, configured, runtimeDefaultModels));
   const custom = configuredProvider(provider, configured);
   // OpenCode picks the model itself when none is passed; '' is the choice, not a missing value.
   if (!custom && provider === AgentProvider.OPENCODE) {
@@ -315,6 +356,8 @@ export const livePinnedModel = (
   configured?: ConfiguredProvider[] | null,
   runtimeDefaultModels?: RuntimeDefaultModels,
 ): string | null | undefined => {
+  // A key's model on OpenCode is OpenCode's selection, which dispatch leaves alone.
+  if (openCodeChoiceKey(provider)) return model;
   const custom = configuredProvider(provider, configured);
   // Antigravity's '' is the stand-in for a catalogue not reported yet, not a pick that outlives
   // one: dispatch runs a model-less session on the reported default, so that is what to show.

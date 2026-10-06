@@ -43,8 +43,11 @@ public enum NavNode: Hashable, Sendable {
     /// top of its session list opens the sessions filed in that folder. iOS only — macOS and web
     /// show no folders (§1).
     case folder(SessionFolderAddress)
-    /// A project's sessions across workspaces, opened from its progress label (design §5).
-    case sessionProject(SessionProjectAddress)
+    /// A project's sessions across workspaces (design §5). A session list's row pushes it over that
+    /// list, so back returns there; the drawer's project row, the merge banner and a merge
+    /// notification put it up `asDestination` instead — the project's own page, the drawer row's
+    /// destination (``NavState/atDestinationRoot``).
+    case sessionProject(SessionProjectAddress, asDestination: Bool = false)
     case taskDetail(taskID: String)
     case taskListsDirectory
     case runnerDetail(runnerID: String)
@@ -185,11 +188,12 @@ public struct NavState: Equatable, Sendable {
     }
 
     /// The page on top is its drawer destination's own — a section's list, or a project's sessions
-    /// page — so a phone's left edge opens the drawer there. Over any page pushed above it, the edge
-    /// is the system back-swipe's.
+    /// page put up as the project's own — so a phone's left edge opens the drawer there. Over any
+    /// page pushed above one, a project's sessions page a session list's row pushed included, the
+    /// edge is the system back-swipe's (owner, 2026-10-06).
     public var atDestinationRoot: Bool {
         guard let top = path.last else { return true }
-        if case .sessionProject = top { return true }
+        if case .sessionProject(_, let asDestination) = top { return asDestination }
         return false
     }
 
@@ -214,14 +218,14 @@ public struct NavState: Equatable, Sendable {
 
     /// The project's session page on a phone, when it is the frame on top.
     public var projectSessionsPage: SessionProjectAddress? {
-        if case .sessionProject(let address) = path.last { return address }
+        if case .sessionProject(let address, _) = path.last { return address }
         return nil
     }
 
     /// The page the iPad's session column shows, beneath any selected console and over a folder.
     public var projectSessionsColumn: SessionProjectAddress? {
         for frame in path.reversed() {
-            if case .sessionProject(let address) = frame { return address }
+            if case .sessionProject(let address, _) = frame { return address }
         }
         return nil
     }
@@ -436,14 +440,14 @@ public struct NavState: Equatable, Sendable {
         var frames = path
         frames.removeAll { if case .sessionProject = $0 { return true }; return false }
         let index = frames.first.map { if case .folder = $0 { return 1 }; return 0 } ?? 0
-        frames.insert(.sessionProject(address), at: index)
+        frames.insert(.sessionProject(address, asDestination: false), at: index)
         path = frames
     }
 
     /// Leave the project's list without closing a console in the detail pane or its folder.
     public mutating func leaveProjectSessions(_ projectID: String? = nil) {
         path = path.filter { frame in
-            guard case .sessionProject(let address) = frame else { return true }
+            guard case .sessionProject(let address, _) = frame else { return true }
             return projectID.map { $0 != address.projectID } ?? false
         }
     }
