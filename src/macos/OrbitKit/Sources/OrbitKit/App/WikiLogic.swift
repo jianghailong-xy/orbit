@@ -18,7 +18,7 @@ public enum WikiCopy {
     public static let searchPlaceholder = "Search the wiki"              // WIKI_SEARCH_PLACEHOLDER
     public static let reviewTitle = "Review"                             // WIKI_REVIEW_TITLE
 
-    /// The drawer's amber count said in words, and the home page's banner (`wikiProposalsToReview`).
+    /// The proposals waiting in Review: Activity's first banner, and the home page's (`wikiProposalsToReview`).
     public static func proposalsToReview(_ count: Int) -> String {
         "\(count) proposal\(count == 1 ? "" : "s") to review"
     }
@@ -27,6 +27,30 @@ public enum WikiCopy {
         "\(count) proposal\(count == 1 ? "" : "s") from \(sessions) session\(sessions == 1 ? "" : "s")"
     }
     public static func oldest(_ when: String) -> String { "oldest \(when)" }             // wikiOldest
+
+    /// The Activity page and the number waiting on the owner (design §12.3.2–§12.3.4, §12.3.7). The
+    /// number is every space's proposals and the things each plan waits on the owner for
+    /// (`WikiSpaceLogic.waiting`); the drawer's Wiki row and the bar's Activity badge show it, and say it
+    /// the way the Projects row says its own.
+    public static let activity = "Activity"                                             // WIKI_ACTIVITY
+    public static func waitingOnYou(_ count: Int) -> String { "\(count) waiting on you" }   // wikiWaitingOnYou
+    /// Beside Recently changed: how many of its rows came after the reader last looked.
+    public static func newSinceLastLooked(_ count: Int) -> String {                     // wikiNewSinceLastLooked
+        "\(count) new since you last looked"
+    }
+    /// The share of Activity's first banner that is another space's: `3 proposals to review · 2 in wikova`.
+    public static func countInSpace(_ count: Int, _ space: String) -> String { "· \(count) in \(space)" }   // wikiCountInSpace
+    /// After another space's plan banner, which space it is: `Plan draft ready to confirm · in wikova`.
+    public static func inSpace(_ space: String) -> String { "· in \(space)" }           // wikiInSpace
+    /// After a space's name in the picker, what waits on the owner in it: `wikova · 2 waiting`.
+    public static func spaceWaiting(_ count: Int) -> String { "· \(count) waiting" }    // wikiSpaceWaiting
+    /// The native picker's words (design §12.3.4, mock 31 ④): the way into Wiki settings under the spaces,
+    /// and each space's documents under its repository.
+    public static let manageSpaces = "Manage spaces"                                    // WIKI_MANAGE_SPACES
+    public static func documentCount(_ count: Int) -> String {                          // wikiDocumentCount
+        "\(WikiArticleCopy.count(count)) \(count == 1 ? "document" : "documents")"
+    }
+    public static let noDocumentsYet = "No documents yet"                               // WIKI_NO_DOCUMENTS_YET
 
     // The bands of the home page, in the order both clients draw them.
     public static let principles = "Principles"                         // WIKI_PRINCIPLES
@@ -328,6 +352,25 @@ public enum WikiLogic {
         }
     }
 
+    /// Activity's blocks, top to bottom (design §12.3.2, mock 31 ②) — the home's management blocks, moved
+    /// in their order, as the web's `WikiActivityPage.tsx` draws them: the status line, the proposals'
+    /// banner, the space's plan banners, then the other spaces' plan banners that wait on the owner,
+    /// Recent decisions, Recently changed and Agents used the wiki. `WikiActivityPage` lays its sections out
+    /// in this order and `WikiCopyParityTests` holds the web page to it.
+    public enum ActivityBand: String, CaseIterable, Sendable {
+        case status, reviewBanner, planBanners, otherPlanBanners, recentDecisions, recentlyChanged, agentsUsed
+
+        /// The band's heading, for the three that have one.
+        public var title: String? {
+            switch self {
+            case .status, .reviewBanner, .planBanners, .otherPlanBanners: return nil
+            case .recentDecisions: return WikiCopy.recentDecisions
+            case .recentlyChanged: return WikiCopy.recentlyChanged
+            case .agentsUsed:      return WikiCopy.agentsUsed
+            }
+        }
+    }
+
     /// The entry page's sections, in the order both clients draw them (`WikiEntryDrawer.tsx`), and
     /// the order `WikiView` lays them out in.
     public enum EntrySection: String, CaseIterable, Sendable {
@@ -346,14 +389,8 @@ public enum WikiLogic {
 
     public static var entrySections: [String] { EntrySection.allCases.map(\.title) }
 
-    // MARK: the drawer's amber number
-
-    /// The proposals waiting for the owner, summed over every space — the drawer row's amber number,
-    /// counted exactly as the web sidebar counts it (`space.pendingOps`, summed). A space an older
-    /// server sent no count for adds nothing.
-    public static func proposalsToReview(_ spaces: [WikiSpace]) -> Int {
-        spaces.reduce(0) { $0 + max(0, $1.pendingOps ?? 0) }
-    }
+    // The drawer's amber number is what waits on the owner across every space — `WikiSpaceLogic.waiting`,
+    // the web sidebar's `wikiWaiting` — and Activity's first banner the proposals alone.
 
     // MARK: whether the account has the wiki
 
@@ -880,6 +917,20 @@ public struct WikiHomeContent: Equatable, Sendable {
     /// items name (`wikiRecentRows(...).slice(0, 5)` on the web).
     public var recentRows: [WikiModeLogic.RecentRow] {
         Array(WikiModeLogic.recentRows(timeline).prefix(5))
+    }
+
+    /// When one of those rows happened: the change's own time, or the newest of a run's.
+    public static func time(of row: WikiModeLogic.RecentRow) -> String? {
+        switch row {
+        case .op(let item):          return item.at
+        case .run(_, _, let at, _):  return at
+        }
+    }
+
+    /// How many of those rows came after the reader last looked (`seen`, `WikiSeenLog`): what Activity
+    /// says beside Recently changed (`N new since you last looked`), the rows that wear its blue dot.
+    public func newRows(seen: Double) -> Int {
+        recentRows.filter { WikiSeenLog.isNew(Self.time(of: $0), seen: seen) }.count
     }
 
     /// The runs those rows fold, by their changesets' ids — what the home reads for each one.

@@ -46,10 +46,12 @@ public enum AppSection: String, CaseIterable, Sendable, Identifiable {
     /// (its detail view still exists but is no longer a top-level destination). Projects sits just
     /// before Tasks — a project is what its tasks are for — and the Wiki, what the work learned,
     /// follows them: the work, then what is known, then the machines. Following, the watches kept on
-    /// sessions and tasks, comes after. Admin is gated by role.
-    public static func visible(isAdmin: Bool) -> [AppSection] {
+    /// sessions and tasks, comes after. Admin is gated by role, and the Wiki by whether the server has
+    /// the wiki on for the account (`WikiLogic.shown`): an account it answers WIKI_DISABLED gets no Wiki
+    /// row, as the drawer and the web sidebar draw none.
+    public static func visible(isAdmin: Bool, wiki: Bool = true) -> [AppSection] {
         let order: [AppSection] = [.runners, .agents, .projects, .tasks, .wiki, .following, .settings, .admin]
-        return order.filter { !$0.adminOnly || isAdmin }
+        return order.filter { (!$0.adminOnly || isAdmin) && ($0 != .wiki || wiki) }
     }
 
     /// What the drawer — the iPhone's, and the iPad's sidebar, which is the same view — leads with,
