@@ -154,11 +154,23 @@ private struct ToastHost: ViewModifier {
     }
 
     /// ③ open: what failed or waits, what it's about, the diagnostic to read or paste, and what to do.
+    ///
+    /// The card's own copy is the way in, exactly as it is on ② — a press that only follows the
+    /// toast is one the whole card should answer, not one it keeps to a button of its own. What still
+    /// earns a button here is only what does MORE than follow it (`Resolve in session`) or what acts
+    /// on the card's own words (`Copy error`). There is deliberately no chevron on the copy either:
+    /// ② has never carried one, and the two cards are the same gesture.
     private func attentionCard(_ toast: ToastItem) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 12) {
                 ToastIcon(toast: toast, card: true)
-                ToastCopy(toast: toast, showsDetail: false)
+                if toast.opens {
+                    Button { model.openToastSession(toast.id) } label: { ToastCopy(toast: toast, showsDetail: false) }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Opens the session")
+                } else {
+                    ToastCopy(toast: toast, showsDetail: false)
+                }
                 Button { model.dismissToast(toast.id) } label: {
                     Image(systemName: "xmark")
                         .font(.caption.weight(.bold))
@@ -183,16 +195,11 @@ private struct ToastHost: ViewModifier {
                     .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .padding(.leading, 38)
             }
-            if toast.opens || toast.detail != nil {
+            if toast.mergeConflict != nil || toast.detail != nil {
                 HStack(spacing: 8) {
-                    if toast.opens {
-                        if toast.mergeConflict != nil {
-                            Button("Resolve in session") { model.resolveToastConflict(toast.id) }
-                                .buttonStyle(.borderedProminent)
-                        } else {
-                            Button(toast.awaitsApproval ? "Review" : "Open session") { model.openToastSession(toast.id) }
-                                .buttonStyle(.borderedProminent)
-                        }
+                    if toast.mergeConflict != nil {
+                        Button("Resolve in session") { model.resolveToastConflict(toast.id) }
+                            .buttonStyle(.borderedProminent)
                     }
                     if let detail = toast.detail {
                         Button("Copy error") { PlatformPasteboard.copyString(detail) }

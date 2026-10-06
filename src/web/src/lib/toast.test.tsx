@@ -183,6 +183,29 @@ describe('a session result', () => {
     });
     expect(toasts().map((one) => one.querySelector('.toast-head')?.textContent)).toEqual(['Merged into main']);
   });
+
+  it('is a failure whose own copy is the way into the session, with no button for it', async () => {
+    await act(async () => {
+      toast.sessionNotice({
+        sessionId: SESSION,
+        sessionTitle: 'Fix login redirect',
+        event: 'resolve-conflict-error',
+        headline: "Couldn't start resolving the conflict",
+        detail: 'index.lock: File exists.',
+        tone: 'error',
+      });
+    });
+    const [card] = toasts();
+    expect(card.classList.contains('toast--attention')).toBe(true);
+    // The press only follows the toast, so it belongs to the card — no "Open session" beside it. A
+    // button is left for what does more than follow it (Resolve in session) or acts on its words.
+    expect([...card.querySelectorAll('.toast-actions button')].map((one) => one.textContent)).toEqual(['Copy error']);
+    await act(async () => {
+      card.querySelector<HTMLButtonElement>('.toast-copy--link')!.click();
+    });
+    expect(document.querySelector('.where')?.textContent).toBe('session');
+    expect(toasts()).toHaveLength(0);
+  });
 });
 
 describe('a toast leaving', () => {

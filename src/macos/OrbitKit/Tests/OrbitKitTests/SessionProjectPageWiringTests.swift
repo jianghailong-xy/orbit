@@ -225,7 +225,7 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertFalse(row.contains("progressChip.hidden()"))
     }
 
-    func testThePageHeaderShowsTheProjectNameCountAndTwoNavigationActions() throws {
+    func testThePageHeaderShowsTheProjectNameCountAndOneProjectAction() throws {
         let source = code(try appSource("Views/SessionProjectPage.swift"))
         let page = try slice(source, from: "struct SessionProjectPage: View {", to: "\n}\n")
         let title = try slice(page, from: "private var title: some View {", to: "\n    }")
@@ -236,13 +236,14 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let back = try slice(page, from: "if rowNavigation == .selection {", to: "\n            }")
         XCTAssertTrue(back.contains("app.leaveProjectSessions(address.projectID)"))
         XCTAssertTrue(back.contains("chevron.backward"))
-        let menu = try slice(page, from: "private var projectMenu: some View {", to: "\n    }")
-        XCTAssertTrue(menu.contains("SessionProjectCopy.openProject"))
-        XCTAssertTrue(menu.contains("SessionProjectCopy.openCoordinator"))
-        let coordinatorLookup = try slice(page, from: "private var availableCoordinator: Session? {", to: "\n    }")
-        XCTAssertTrue(coordinatorLookup.contains("coordinator ?? (app.sessions + (app.agents?.allSessions ?? [])).first"),
-                      "Open Coordinator can use the cross-workspace Completed cache as well as the Open snapshot")
-        XCTAssertFalse(menu.contains("New session"))
+        let open = try slice(page, from: "private var openProjectButton: some View {", to: "\n    }")
+        XCTAssertTrue(open.contains("Button { openProject() }"))
+        XCTAssertTrue(open.contains("SessionProjectCopy.openProject"))
+        XCTAssertTrue(page.contains("ToolbarItem(placement: .topBarTrailing) { openProjectButton }"))
+        XCTAssertFalse(page.contains("SessionProjectCopy.openCoordinator"),
+                       "the page has one way into the project (owner 10-06); the coordinator is the section above")
+        XCTAssertFalse(page.contains("availableCoordinator"))
+        XCTAssertFalse(open.contains("New session"))
         XCTAssertFalse(page.contains("startComposingSession"))
     }
 
@@ -342,11 +343,12 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(running.contains("sessions.filter { session in"))
         XCTAssertTrue(running.contains("if case .spinner = SessionStatusGlyph.make(for: session, watching: app.watches?.summary(for: session.id)).shape"))
         XCTAssertTrue(running.contains("}.count"))
-        XCTAssertTrue(progress.contains("Button { openProject() } label: {"))
+        XCTAssertFalse(progress.contains("openProject()"),
+                       "the progress line carries no link of its own (owner 10-06); the header button is the way in")
+        XCTAssertFalse(progress.contains("chevron.right"))
         let open = try slice(page, from: "private func openProject() {", to: "\n    }")
         XCTAssertTrue(open.contains("app.openProjectFromConversation(address.projectID, overConsole: rowNavigation == .push)"),
                       "a phone pushes the project's page over the sessions page, so back returns to it")
-        XCTAssertTrue(progress.contains("chevron.right"))
 
         let row = try slice(page, from: "@ViewBuilder private func sessionRow(_ session: Session)", to: "\n    }")
         for part in ["AgentSessionRow(session: session", "app.openProjectMember(session, push: true)",
