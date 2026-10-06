@@ -1,0 +1,5 @@
+Query chain:
+ →Find: Target Application 'io.orbitd.wikiprobe'
+  ↪︎Find: Descendants matching type Any
+    ↪︎Find: Elements matching predicate 'label BEGINSWITH "3 proposals from 2 sessions"'
+      ↪︎Find: First Match

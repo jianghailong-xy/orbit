@@ -1,0 +1,53 @@
+==> stubs ready after 2s
+iPhone 17 Pro com.apple.CoreSimulator.SimRuntime.iOS-26-5
+==> iPhone 22452A91-4697-4369-8812-53ADB77EB73B
+Test Case '-[WikiProbeUITests.WikiShotsTests testOneSpace]' started.
+Test Case '-[WikiProbeUITests.WikiShotsTests testOneSpace]' passed (155.758 seconds).
+Test Case '-[WikiProbeUITests.WikiShotsTests testThreeSpaces]' started.
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/WikiShotsTests.swift:71: error: -[WikiProbeUITests.WikiShotsTests testThreeSpaces] : XCTAssertTrue failed - a menu row says github.com/jianghailong-xy/orbit
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/WikiShotsTests.swift:71: error: -[WikiProbeUITests.WikiShotsTests testThreeSpaces] : XCTAssertTrue failed - a menu row says github.com/jianghailong-xy/wikova
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/WikiShotsTests.swift:71: error: -[WikiProbeUITests.WikiShotsTests testThreeSpaces] : XCTAssertTrue failed - a menu row says No documents yet
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/WikiShotsTests.swift:133: error: -[WikiProbeUITests.WikiShotsTests testThreeSpaces] : failed - the Wiki's bar has no Activity button
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/WikiShotsTests.swift:80: error: -[WikiProbeUITests.WikiShotsTests testThreeSpaces] : XCTAssertTrue failed - every space's proposals, wikova's share said
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/WikiShotsTests.swift:81: error: -[WikiProbeUITests.WikiShotsTests testThreeSpaces] : XCTAssertTrue failed - orbit's plan, blue
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/WikiShotsTests.swift:82: error: -[WikiProbeUITests.WikiShotsTests testThreeSpaces] : XCTAssertTrue failed - wikova's plan waits: amber, named
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/WikiShotsTests.swift:155: error: -[WikiProbeUITests.WikiShotsTests testThreeSpaces] : failed - nothing to press says 3 proposals to review · 2 in wikova
+/Users/runner/work/orbit/orbit/.wiki-probe/UITests/WikiShotsTests.swift:88: error: -[WikiProbeUITests.WikiShotsTests testThreeSpaces] : XCTAssertTrue failed - Review over every space: 3
+Test Case '-[WikiProbeUITests.WikiShotsTests testThreeSpaces]' failed (186.175 seconds).
+	 Executed 2 tests, with 9 failures (0 unexpected) in 341.933 (341.939) seconds
+	 Executed 2 tests, with 9 failures (0 unexpected) in 341.933 (341.997) seconds
+	 Executed 2 tests, with 9 failures (0 unexpected) in 341.933 (341.998) seconds
+** TEST FAILED **
+.wiki-probe/run.sh: line 49:  1718 Terminated: 15          python3 -u stub.py 8765 "$OUT/requests-one.log" one > "$OUT/stub-one.out" 2>&1
+.wiki-probe/run.sh: line 49:  1719 Terminated: 15          python3 -u stub.py 8766 "$OUT/requests-three.log" three > "$OUT/stub-three.out" 2>&1
+total 6664
+drwxr-xr-x   30 runner  staff     960 Oct  6 18:20 .
+drwxr-xr-x   13 runner  staff     416 Oct  6 18:06 ..
+-rw-r--r--    1 runner  staff  563329 Oct  6 18:15 01-one-drawer.png
+-rw-r--r--    1 runner  staff  294264 Oct  6 18:15 02-one-home-head.png
+-rw-r--r--    1 runner  staff  308379 Oct  6 18:15 03-one-activity.png
+-rw-r--r--    1 runner  staff  361887 Oct  6 18:16 04-one-activity-scrolled.png
+-rw-r--r--    1 runner  staff  234562 Oct  6 18:16 05-one-review.png
+-rw-r--r--    1 runner  staff  563339 Oct  6 18:16 11-three-drawer.png
+-rw-r--r--    1 runner  staff  295264 Oct  6 18:16 12-three-home-head.png
+-rw-r--r--    1 runner  staff  384520 Oct  6 18:17 13-three-space-menu.png
+-rw-r--r--    1 runner  staff   87936 Oct  6 18:18 14-three-activity.png
+-rw-r--r--    1 runner  staff   87830 Oct  6 18:19 15-three-review.png
+drwxr-xr-x  162 runner  staff    5184 Oct  6 18:20 attachments
+-rw-r--r--    1 runner  staff     267 Oct  6 18:20 not-served.txt
+-rw-r--r--    1 runner  staff    4608 Oct  6 18:16 requests-one.log
+-rw-r--r--    1 runner  staff    7075 Oct  6 18:19 requests-three.log
+-rw-r--r--    1 runner  staff      55 Oct  6 18:03 stub-one.out
+-rw-r--r--    1 runner  staff      57 Oct  6 18:03 stub-three.out
+-rw-r--r--@   1 runner  staff   12509 Oct  6 18:15 tree-drawer-01-one-drawer.txt
+-rw-r--r--@   1 runner  staff   12509 Oct  6 18:16 tree-drawer-11-three-drawer.txt
+-rw-r--r--@   1 runner  staff    7888 Oct  6 18:17 tree-no-activity-button.txt
+-rw-r--r--@   1 runner  staff   21243 Oct  6 18:15 tree-one-activity.txt
+-rw-r--r--@   1 runner  staff   21110 Oct  6 18:15 tree-one-home.txt
+-rw-r--r--@   1 runner  staff   12472 Oct  6 18:16 tree-one-review.txt
+-rw-r--r--@   1 runner  staff    7888 Oct  6 18:18 tree-three-activity.txt
+-rw-r--r--@   1 runner  staff   21462 Oct  6 18:16 tree-three-home.txt
+-rw-r--r--@   1 runner  staff    7888 Oct  6 18:19 tree-three-review.txt
+-rw-r--r--@   1 runner  staff   24542 Oct  6 18:17 tree-three-space-menu.txt
+-rw-r--r--@   1 runner  staff     812 Oct  6 18:16 WikiShotsTeststestOneSpace-notes.txt
+-rw-r--r--@   1 runner  staff     495 Oct  6 18:19 WikiShotsTeststestThreeSpaces-notes.txt

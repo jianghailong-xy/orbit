@@ -1,0 +1,46 @@
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift:81:86: error: cannot find 'workspaceInView' in scope
+     |                                                                                      `- error: cannot find 'workspaceInView' in scope
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift:81:86: error: cannot find 'workspaceInView' in scope
+     |                                                                                      `- error: cannot find 'workspaceInView' in scope
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift:81:86: error: cannot find 'workspaceInView' in scope
+     |                                                                                      `- error: cannot find 'workspaceInView' in scope
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift:81:86: error: cannot find 'workspaceInView' in scope
+     |                                                                                      `- error: cannot find 'workspaceInView' in scope
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift:81:86: error: cannot find 'workspaceInView' in scope
+     |                                                                                      `- error: cannot find 'workspaceInView' in scope
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift:81:86: error: cannot find 'workspaceInView' in scope
+     |                                                                                      `- error: cannot find 'workspaceInView' in scope
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift:81:86: error: cannot find 'workspaceInView' in scope
+     |                                                                                      `- error: cannot find 'workspaceInView' in scope
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift:81:86: error: cannot find 'workspaceInView' in scope
+     |                                                                                      `- error: cannot find 'workspaceInView' in scope
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift:81:86: error: cannot find 'workspaceInView' in scope
+     |                                                                                      `- error: cannot find 'workspaceInView' in scope
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift:81:86: error: cannot find 'workspaceInView' in scope
+     |                                                                                      `- error: cannot find 'workspaceInView' in scope
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift:81:86: error: cannot find 'workspaceInView' in scope
+     |                                                                                      `- error: cannot find 'workspaceInView' in scope
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift:81:86: error: cannot find 'workspaceInView' in scope
+     |                                                                                      `- error: cannot find 'workspaceInView' in scope
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift:81:86: error: cannot find 'workspaceInView' in scope
+     |                                                                                      `- error: cannot find 'workspaceInView' in scope
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift:81:86: error: cannot find 'workspaceInView' in scope
+     |                                                                                      `- error: cannot find 'workspaceInView' in scope
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift:81:86: error: cannot find 'workspaceInView' in scope
+     |                                                                                      `- error: cannot find 'workspaceInView' in scope
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift:81:86: error: cannot find 'workspaceInView' in scope
+     |                                                                                      `- error: cannot find 'workspaceInView' in scope
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift:81:86: error: cannot find 'workspaceInView' in scope
+     |                                                                                      `- error: cannot find 'workspaceInView' in scope
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift:81:86: error: cannot find 'workspaceInView' in scope
+     |                                                                                      `- error: cannot find 'workspaceInView' in scope
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift:81:86: error: cannot find 'workspaceInView' in scope
+     |                                                                                      `- error: cannot find 'workspaceInView' in scope
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift:81:86: error: cannot find 'workspaceInView' in scope
+     |                                                                                      `- error: cannot find 'workspaceInView' in scope
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift:81:86: error: cannot find 'workspaceInView' in scope
+     |                                                                                      `- error: cannot find 'workspaceInView' in scope
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift:81:86: error: cannot find 'workspaceInView' in scope
+     |                                                                                      `- error: cannot find 'workspaceInView' in scope
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/AppModel.swift:81:86: error: cannot find 'workspaceInView' in scope
+     |                                                                                      `- error: cannot find 'workspaceInView' in scope

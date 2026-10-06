@@ -1,0 +1,5 @@
+Query chain:
+ →Find: Target Application 'io.orbitd.wikiprobe'
+  ↪︎Find: Descendants matching type Any
+    ↪︎Find: Elements matching predicate 'label == "Writing documents · 5 of 35"'
+      ↪︎Find: First Match

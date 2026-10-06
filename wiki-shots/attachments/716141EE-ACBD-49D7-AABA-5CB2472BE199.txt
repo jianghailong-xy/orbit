@@ -1,0 +1,5 @@
+Query chain:
+ →Find: Target Application 'io.orbitd.wikiprobe'
+  ↪︎Find: Descendants matching type Any
+    ↪︎Find: Elements matching predicate 'label CONTAINS "github.com/jianghailong-xy/orbit"'
+      ↪︎Find: First Match
