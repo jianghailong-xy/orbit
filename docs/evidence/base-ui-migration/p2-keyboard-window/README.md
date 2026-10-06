@@ -142,8 +142,8 @@ Base UI 1.8.0 的 Menu 与 Select 都是非 virtual 列表导航：键盘打开�
 | 检查 | 结果 | 原件 |
 | --- | --- | --- |
 | 前一任务的 burst 探针 `p2-select-keys/select-keys-burst.browser.mjs`（文件未改） | **276/276**，与基线树上的结果逐项相同：Orbit Select 已修好的 ↓↓⏎、↓↑⏎、↓⏎（从 null）burst 全部正确，且全部交给列表（字段 3×20、样例 2×20）；旧 AntD、Combobox、MultiSelect 全对；Orbit Menu ↓↓⏎ 仍为 20/20 不执行 | [regression-select-keys-burst-delivered](regression-select-keys-burst-delivered/summary.json)，汇总见 [keyboard-window-summary.json](keyboard-window-summary.json) 的 `regression-select-keys-burst-delivered` |
-| choices 原入口（Dialog/旧 Modal 内选择器、逐层 Esc、Tab、主题、IME 合成、外部点击、子菜单 Esc、键盘清除、正常/减少动效下 Dialog→Popover→Select 逐层退出），八环境 | ENTRY_DELIVERED | [regression-choices-entry-delivered](regression-choices-entry-delivered/summary.json) |
-| choices 测试清单 `--list` | LIST_DELIVERED | [checks/list-choices-delivered.txt](checks/list-choices-delivered.txt) |
+| choices 原入口（Dialog/旧 Modal 内选择器、逐层 Esc、Tab、主题、IME 合成、外部点击、子菜单 Esc、键盘清除、正常/减少动效下 Dialog→Popover→Select 逐层退出），八环境 | **32/32**，与基线树相同 | [regression-choices-entry-delivered](regression-choices-entry-delivered/summary.json) |
+| choices 测试清单 `--list` | 520 个测试 / 4 个文件，从「Listing tests:」起与基线树的 `checks/list-choices.txt` 和 `p2-select-keys/checks/list-choices.txt` 逐字节相同（sha256 `869171286b2f…`）：没有增删或改名 | [checks/list-choices-delivered.txt](checks/list-choices-delivered.txt) |
 | 完整 choices 矩阵 `npm run test:ui-choices -w @orbit/web` | FULL_DELIVERED | [regression-choices-full-delivered](regression-choices-full-delivered/summary.json) |
 | overlays 矩阵 `npm run test:ui-overlays -w @orbit/web`（Dialog/Drawer 外观、Tab 循环、Esc/外部关闭与焦点归还、嵌套层、新旧弹层双向共存、异步确认、主题继承、合成中 Esc、动效与滚动恢复），八环境 | OVERLAYS_DELIVERED | [regression-overlays-delivered](regression-overlays-delivered/summary.json) |
 | choices / overlays / toasts / toasts-tests 四套 fixture 类型检查 | 通过（退出码 0，无输出） | [checks/fixture-types-delivered.json](checks/fixture-types-delivered.json) |
@@ -180,7 +180,7 @@ Base UI 1.8.0 的 Menu 与 Select 都是非 virtual 列表导航：键盘打开�
 
 ## 原件与复核
 
-- 每次后台作业的命令、作业号、提交、Web 树、退出码和原始输出，都用 [record-check.py](record-check.py) 写入 [checks/](checks/)，不覆盖已有文件；退出码取自 runner 的 bg_output。被 runner 在排空时终止、没有留下报告的那次选择基线也保留在 [checks/baseline-select-killed.json](checks/baseline-select-killed.json)。前一会话停止前在基线树上启动过一次合并检查，它的退出码那个会话没有读到，本会话也读不到（作业属于前一会话），所以没有记录、不计入；合并检查以交付树上的这一次为准。
+- 每次后台作业的命令、作业号、提交、Web 树、退出码和原始输出，都用 [record-check.py](record-check.py) 写入 [checks/](checks/)，不覆盖已有文件；退出码取自 runner 的 bg_output。记录里的提交是归档时的 HEAD，被测内容以其中的 Web 树为准：同一棵 Web 树上，作业运行期间只有本目录在变。被 runner 在排空时终止、没有留下报告的那次选择基线也保留在 [checks/baseline-select-killed.json](checks/baseline-select-killed.json)。前一会话停止前在基线树上启动过一次合并检查，它的退出码那个会话没有读到，本会话也读不到（作业属于前一会话），所以没有记录、不计入；合并检查以交付树上的这一次为准。
 - 浏览器原件用仓库现有的 `src/web/ui-migration/collect-choice-evidence.mjs`（overlays 用 `collect-overlay-evidence.mjs`）归档到新目录，每份附件带 SHA-256；有失败的运行用 `--diagnostic` 归档，trace 和 error-context 都保留，并用 p2.2 第 8 版的 `read-trace.py` 归类到同名的 `*-traces.json`。
 
 | 目录 | 树 | 内容 |
