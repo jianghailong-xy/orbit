@@ -7,13 +7,15 @@ import type { PatScopeName } from './pat.service';
  * What a personal access token may do on a route (docs/personal-access-token-design.md §4, §6.2).
  *
  * JwtAuthGuard reads these only for a request that came with a token (credential PAT); a login never
- * meets them. Every route behind JwtAuthGuard declares one or the other, and
- * `pat-route-coverage.spec.ts` fails on a route that declares neither. The guard answers such a route
- * 403 PAT_ROUTE_UNDECLARED all the same: a route nobody decided about is closed to tokens, not open.
+ * meets them. Every route behind JwtAuthGuard declares one of them — @PatScope, @PatForbidden, or on
+ * exactly one route @PatSelf — and `pat-route-coverage.spec.ts` fails on a route that declares none.
+ * The guard answers such a route 403 PAT_ROUTE_UNDECLARED all the same: a route nobody decided about
+ * is closed to tokens, not open.
  */
 export const PAT_SCOPE = 'patScope';
 export const PAT_FORBIDDEN = 'patForbidden';
 export const PAT_WORKSPACE = 'patWorkspace';
+export const PAT_SELF = 'patSelf';
 
 /** What a request names that a token confined to workspaces is judged on: each must sit in one of them. */
 export type PatWorkspaceObject = 'task' | 'session' | 'workspace';
@@ -61,6 +63,15 @@ export const PatScope = (
   scope: PatScopeName,
   { workspaceConfinable }: { workspaceConfinable: PatWorkspaceConfinable },
 ): MethodDecorator => applyDecorators(SetMetadata(PAT_SCOPE, scope), SetMetadata(PAT_WORKSPACE, workspaceConfinable));
+
+/**
+ * Every token reaches this route, whatever scopes and workspaces it was granted: the token reading
+ * itself (§6.5) — who it acts as and what it holds — so the `orbit` CLI can say what it signed in
+ * with. It reads nothing but the row the request was verified against, so no scope guards it and no
+ * workspace can hold it. On a handler, never on a controller, and the census holds it to exactly one
+ * route: anything more is a token reaching a route nobody granted it.
+ */
+export const PatSelf = (): MethodDecorator => SetMetadata(PAT_SELF, true);
 
 /**
  * The workspaces a `'LIST'` route narrows its answer to: those of a token confined to workspaces, and
@@ -114,11 +125,13 @@ export const PatForbidden = (reason: PatForbiddenReason) => SetMetadata(PAT_FORB
 export type PatDeclaration =
   | { kind: 'FORBIDDEN'; reason: PatForbiddenReason }
   | { kind: 'SCOPE'; scope: PatScopeName; workspaceConfinable?: PatWorkspaceConfinable }
+  | { kind: 'SELF' }
   | { kind: 'UNDECLARED' };
 
 /**
  * A route's declaration, read the one way JwtAuthGuard and the census both read it: a refusal on the
- * handler or its controller wins over everything; otherwise the handler's own scope; otherwise none.
+ * handler or its controller wins over everything; otherwise the handler's own scope; otherwise
+ * @PatSelf; otherwise none.
  */
 export function patDeclaration(reflector: Reflector, handler: Function, controller: Function): PatDeclaration {
   const reason = reflector.getAllAndOverride<PatForbiddenReason | undefined>(PAT_FORBIDDEN, [handler, controller]);
@@ -127,6 +140,7 @@ export function patDeclaration(reflector: Reflector, handler: Function, controll
   if (scope) {
     return { kind: 'SCOPE', scope, workspaceConfinable: reflector.get<PatWorkspaceConfinable | undefined>(PAT_WORKSPACE, handler) };
   }
+  if (reflector.get<boolean | undefined>(PAT_SELF, handler)) return { kind: 'SELF' };
   return { kind: 'UNDECLARED' };
 }
 

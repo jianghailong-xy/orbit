@@ -7,11 +7,13 @@ import {
   Modal,
   Popconfirm,
   Space,
+  Spin,
   Table,
   Tag,
   type TableColumnsType,
 } from 'antd';
-import { api } from '../api';
+import { api, listUserAccessTokens, revokeUserAccessToken, type AccessToken } from '../api';
+import { AccessTokenTable } from '../components/AccessTokenTable';
 import { useToast } from '../lib/toast';
 
 interface AdminUser {
@@ -41,6 +43,7 @@ export function AdminUsersPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
+  const [tokensOf, setTokensOf] = useState<AdminUser | null>(null);
 
   const invalidate = () => void qc.invalidateQueries({ queryKey: ['admin', 'users'] });
   const announce = (label: string, pwd?: string) => {
@@ -116,6 +119,9 @@ export function AdminUsersPage() {
           >
             <Button size="small">Reset password</Button>
           </Popconfirm>
+          <Button size="small" onClick={() => setTokensOf(u)}>
+            Access tokens
+          </Button>
           <Button
             size="small"
             loading={roleMut.isPending}
@@ -168,6 +174,54 @@ export function AdminUsersPage() {
           </div>
         </Space>
       </Modal>
+
+      <Modal
+        title={tokensOf ? `Access tokens — ${tokensOf.email}` : 'Access tokens'}
+        open={tokensOf !== null}
+        onCancel={() => setTokensOf(null)}
+        footer={null}
+        width={1120}
+        destroyOnHidden
+      >
+        {tokensOf && <UserAccessTokens user={tokensOf} />}
+      </Modal>
     </div>
+  );
+}
+
+/**
+ * One user's personal access tokens, for an administrator (docs/personal-access-token-design.md
+ * §11.4): the list that user sees, and a way to revoke a token — recorded as revoked by an
+ * administrator. Never a token itself: Orbit keeps only its hash.
+ */
+function UserAccessTokens({ user }: { user: AdminUser }) {
+  const message = useToast();
+  const qc = useQueryClient();
+  const key = ['admin', 'users', user.id, 'access-tokens'] as const;
+  const tokensQ = useQuery({ queryKey: key, queryFn: () => listUserAccessTokens(user.id) });
+  const revoke = useMutation({
+    mutationFn: (token: AccessToken) => revokeUserAccessToken(user.id, token.id),
+    onSuccess: (_, token) => {
+      void qc.invalidateQueries({ queryKey: key });
+      message.success('Token revoked', `${user.email}’s “${token.name}” stopped working.`);
+    },
+    onError: (e: Error) => message.error("Couldn't revoke the token", e.message),
+  });
+  if (tokensQ.isPending) return <Spin />;
+  if (tokensQ.isError) return <div>Couldn’t load the tokens: {tokensQ.error.message}</div>;
+  return (
+    <>
+      <p style={{ color: 'var(--text-3)', marginTop: 0 }}>
+        Revoking a token stops it at once and is recorded as revoked by an administrator. The tokens themselves are
+        never shown — Orbit keeps only a hash of each.
+      </p>
+      <AccessTokenTable
+        tokens={tokensQ.data.tokens}
+        now={Date.now()}
+        onRevoke={(token) => revoke.mutate(token)}
+        revokingId={revoke.isPending ? revoke.variables?.id : null}
+        emptyText="This user has no access tokens."
+      />
+    </>
   );
 }

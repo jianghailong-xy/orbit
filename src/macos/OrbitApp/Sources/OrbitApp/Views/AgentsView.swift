@@ -1328,16 +1328,13 @@ struct NewSessionView: View {
                             HStack(spacing: 7) {
                                 Text(currentEngine.label)
                                     .font(.title.weight(.bold)).foregroundStyle(.primary).lineLimit(1)
-                                if let detail = currentEngine.providerDetail {
-                                    Text(detail).font(.footnote).foregroundStyle(.secondary)
-                                }
                                 Image(systemName: "chevron.down").font(.subheadline.weight(.semibold))
                                     .foregroundStyle(.secondary)
                             }
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("Engine: \(currentEngine.label)\(currentEngine.providerDetail.map { " \($0)" } ?? ""). Switch")
+                        .accessibilityLabel("Engine: \(currentEngine.label). Switch")
                     }
                     VStack(spacing: 5) {
                         // The pick is sticky, so it can point at an engine this machine can no
