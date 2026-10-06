@@ -26,7 +26,7 @@ function read(relative: string): string {
 }
 
 function git(...args: string[]): string {
-  return execFileSync('git', args, { cwd: repoRoot(), encoding: 'utf8' }).trim();
+  return execFileSync('git', args, { cwd: repoRoot(), encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).trim();
 }
 
 const REMOVAL_MIGRATION =
