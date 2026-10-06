@@ -1,0 +1,73 @@
+HEAD 538b5a47645fb628793046401d99c1c796429c30
+=== build: npm run build
+EXIT build=0
+dist/assets/ProjectTaskPanel-MOD7Jlk-.js            1.01 kB │ gzip:   0.60 kB
+dist/assets/ProjectDependencyGraph-LFs7CWuH.js     14.24 kB │ gzip:   5.21 kB
+dist/assets/projectDependencyGraph-s30KEpUp.js    164.99 kB │ gzip:  55.80 kB
+dist/assets/TaskDependencyGraph-Ce7TH1Vj.js       188.58 kB │ gzip:  60.86 kB
+dist/assets/taskDependencyGraph-B91604km.js       538.24 kB │ gzip: 176.90 kB
+dist/assets/sessionExport-BTDeZ26-.js             812.26 kB │ gzip: 195.80 kB
+dist/assets/Transcript-KEZ0iY0W.js                816.84 kB │ gzip: 252.19 kB
+dist/assets/index-Ck5XOR68.js                   1,771.66 kB │ gzip: 530.12 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.05s
+=== shared: npm test -w @orbit/shared
+EXIT shared=0
+ [32m✓[39m src/models.spec.ts [2m([22m[2m27 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m src/dsh-routing.spec.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m src/sessionCreatedTasks.spec.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m src/wikiContract.spec.ts [2m([22m[2m56 tests[22m[2m)[22m[32m 33[2mms[22m[39m
+ [32m✓[39m src/codexRateLimitReset.spec.ts [2m([22m[2m67 tests[22m[2m)[22m[32m 161[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m23 passed[39m[22m[90m (23)[39m
+[2m      Tests [22m [1m[32m388 passed[39m[22m[90m (388)[39m
+[2m   Start at [22m 07:35:43
+[2m   Duration [22m 421ms[2m (transform 70%, import 19%, tests 9%, worker 2%)[22m
+
+[2m  Transform [22m [33mtransforming modules took 2.93s[39m[2m · 70% of tracked time, re-done on every run[22m
+[2m            [22m [2mpersist transforms across runs with [22m[33mfsModuleCache: true[39m
+[2m            [22m [2mlearn more: https://vitest.dev/guide/improving-performance#caching-between-reruns[22m
+
+=== apiserver: npm test -w @orbit/apiserver
+EXIT apiserver=0
+✔ orchestration named on workspace create or update is never written (0.182898ms)
+✔ the repair queue matches a runner that has never been asked (0.48076ms)
+✔ an agent that coordinates a project is not soft-deleted either (1.937259ms)
+✔ an agent no project coordinates with is deleted as before (0.359111ms)
+✔ a repository URL stated on the workspace is stored as stated (0.216142ms)
+✔ a workspace patch that names no repository URL does not touch the column (0.215748ms)
+✔ deleting an agent that is already deleted is a no-op, not a second stamp (0.19583ms)
+ℹ tests 4422
+ℹ suites 0
+ℹ pass 4422
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 22221.249688
+=== web: npm test -w @orbit/web
+EXIT web=0
+ [32m✓[39m src/lib/outcomeSurfaces.contract.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m src/lib/engineAccounts.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m src/lib/providerAdmin.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m src/lib/providerGlyphs.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m src/lib/wikiImport.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m312 passed[39m[22m[90m (312)[39m
+[2m      Tests [22m [1m[32m3928 passed[39m[22m[90m (3928)[39m
+[2m   Start at [22m 07:36:10
+[2m   Duration [22m 192.94s[2m (tests 55%, import 32%, environment 11%, transform 2%)[22m
+
+[2m     Import [22m [33m674 modules were evaluated 2565 times[39m[2m · 117.78s total, 32% of tracked time[22m
+[2m            [22m [2m~35.63s faster with [22m[33misolate: false[39m[2m — shared modules are evaluated once per worker instead of once per file[22m
+[2m            [22m [2mlearn more: https://vitest.dev/guide/improving-performance#test-isolation[22m
+
+=== runnergo: bash -c cd src/runner-go && env -u ORBIT_SESSION_ID -u ORBIT_TASK_ID go test ./...
+EXIT runnergo=0
+ok  	orbit	207.732s
+?   	orbit/cmd/release-manifest	[no test files]

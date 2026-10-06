@@ -71,32 +71,34 @@ than the 409 the server returns at create time.
   `MainView` probe apps, `DshShotTests` XCUITests that fail on any state that does not render);
   results on `probe/p5-dsh-shots-results`.
 
-## Runs and results (code under test: `7ca6ab87e`, which merges `origin/main` 26bf46884)
+## Runs and results (code under test: `538b5a476` — P5 merged with `origin/main` 5b132c135)
 
-- Native shots: GitHub Actions run 37384094025 on probe `probe/p5-dsh-shots` (fc66a96ba = `7ca6ab87e`
-  + `.dsh-probe/` + a push-triggered workflow), results branch `probe/p5-dsh-shots-results`
-  (521c838a9). iPhone (newest simulator) 5/5 and Mac 5/5 XCUITests passed — the tests `XCTFail` on any
-  state that does not render and on any of the four writes missing from the stub's log
-  (`native-test-summary.txt`, `ios/writes.txt`, `mac/writes.txt`, `*-notes.txt`). iPhone pictures are
-  stored at half size.
-- Client compile gates: run 37384089702 on `probe/p5-dsh-clients` (`7ca6ab87e` + gates-only
-  client.yml): macOS OrbitKit `swift test` 2937 executed / 5 skipped / 0 failures, OrbitApp
-  `swift build` success, iOS simulator build success.
-- OrbitKit on Linux: `swift test` in swift:6.1 docker, 2937 executed / 0 failures (DshRuntimeTests 9/9).
-- Web: `DshRuntime`/picker/transcript unit tests (`src/web/src/lib/dshRuntime.test.ts`,
-  `src/web/src/components/Transcript.dsh.test.tsx`), full web suite in the merge check.
+- Native shots: GitHub Actions run 37391018790 on probe `probe/p5-dsh-shots` (93ae0b333 = `538b5a476`
+  + `.dsh-probe/` + a push-triggered workflow; copies in `probe-harness/`), results branch
+  `probe/p5-dsh-shots-results` (23f740962). iPhone (newest simulator) 5/5 and Mac 5/5 XCUITests passed.
+  The tests `XCTFail` on any state that does not render, on a missing engine switch, and on any of the
+  four writes missing from the stub's log (`native-test-summary.txt`, `ios/writes.txt`,
+  `mac/writes.txt`, `*-notes.txt`). iPhone pictures are stored at half size.
+- Client compile gates: run 37388517360 on `probe/p5-dsh-clients` (`538b5a476` + gates-only
+  client.yml, `probe-harness/client-gates.yml`): macOS OrbitKit `swift test` 2965 executed / 5 skipped /
+  0 failures, OrbitApp `swift build` success, iOS simulator build success.
+- OrbitKit on Linux (swift:6.1 docker): 2965 executed / 5 skipped / 0 failures.
+- Merge check on `538b5a476` (`merge-check-538b5a476.txt`): `npm run build` 0, `npm test -w
+  @orbit/shared` 0 (388), `npm test -w @orbit/apiserver` 0 (4422), `npm test -w @orbit/web` 0
+  (3928), `go test ./...` in src/runner-go 0.
+- Web frames in `web/` were taken on `538b5a476`; `web/requests.log` holds both passes.
 
 Probe branches `probe/p5-dsh-shots`, `probe/p5-dsh-clients` and their `-results` branches are
-temporary and never merged. An earlier shots run (37343111078) is not evidence: its tests could not
-fail, and its console frames show a cached transcript (no stream in that stub).
+temporary and never merged. Earlier shots runs are not evidence — notably 37343111078, whose tests
+could not fail and whose console frames show a cached transcript (no stream in that stub).
 
 ## Not established here
 
 - No real runner, dsh process or model: every state comes from the fixtures above. Real dsh +
   runner end to end is P6.
-- macOS: the composer's model/effort menu did not open under XCUITest (its frame shows the closed
-  pill); the levels are covered by OrbitKit tests and by the iPhone and web menus.
+- macOS: the composer's model/effort menu was not photographed open (`mac/2b-model-menu-*` shows the
+  closed pill); the levels are covered by OrbitKit tests and by the iPhone and web menus.
 - When the assigned runner reports no Harness catalogue (an old runner), a session's opaque model
   value is shown raw in the composer; a workspace still set to a deleted Harness key shows the slug
-  with the generic removed-provider fallback.
+  with the generic removed-provider fallback ("Claude via deepseek-harness").
 - Platforms other than the newest iPhone simulator and the CI Mac (no iPad, no physical device).
