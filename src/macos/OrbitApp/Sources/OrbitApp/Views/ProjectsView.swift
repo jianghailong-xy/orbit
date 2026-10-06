@@ -395,6 +395,11 @@ struct ProjectDetailView: View {
     @State private var shareRead: ShareLinkRead?
     /// The page's open items, the owner's own start card, or the merge check's editor.
     @State private var pageSheet: ProjectPageSheet?
+    /// The crossing whose second press is showing, and the answer it would give. One at a time:
+    /// opening another question closes this one.
+    @State private var crossingAsk: ProjectCrossingAsk?
+    /// The door's refusal of that answer, on the row it was given on.
+    @State private var crossingRefusal: ProjectCrossingRefusal?
 
     /// A phone's width: two columns of lanes, four criteria before "View all" — the web's narrow page.
     private var compact: Bool {
@@ -497,6 +502,7 @@ struct ProjectDetailView: View {
                 criteriaSection(document)
                 instructionsSection(document)
                 tasksSection(store, document)
+                crossingsSection(store)
             }
             .projectPageListStyle()
             .sheet(item: $pageSheet) { sheet in
@@ -1847,6 +1853,64 @@ struct ProjectDetailView: View {
     /// on that list instead of on this page.
     private func openTask(_ taskID: String) {
         model.push(.taskDetail(taskID: taskID))
+    }
+
+    // MARK: crossings
+
+    /// Work asked across this project's line, in either direction — the account owner's to answer,
+    /// and nobody else's (web's `ProjectCrossingsCard.tsx`). Last, where the web draws it; drawn once
+    /// the project is an end of a crossing, or when the read failed with nothing to show.
+    @ViewBuilder
+    private func crossingsSection(_ store: ProjectDetailModel) -> some View {
+        if let rows = store.crossings, !rows.isEmpty {
+            Section {
+                ForEach(ProjectCrossings.ordered(rows)) { row in
+                    let asking = crossingAsk?.id == row.id
+                    ProjectCrossingRow(
+                        row: row,
+                        confirming: asking ? crossingAsk?.decision : nil,
+                        busy: store.answeringCrossing == row.id,
+                        locked: store.answeringCrossing.map { $0 != row.id } ?? false,
+                        refusal: asking && crossingRefusal?.id == row.id ? crossingRefusal?.refusal : nil,
+                        onAsk: { decision in
+                            crossingRefusal = nil
+                            crossingAsk = ProjectCrossingAsk(id: row.id, decision: decision)
+                        },
+                        onCancel: {
+                            crossingAsk = nil
+                            crossingRefusal = nil
+                        },
+                        onAnswer: { decision in answerCrossing(row, decision, store: store) })
+                }
+            } header: {
+                sectionHeader(ProjectCrossings.title,
+                              detail: ProjectCrossings.waiting(ProjectCrossings.waitingCount(rows)))
+            }
+        } else if store.crossingsUnread {
+            Section {
+                Label(ProjectCrossings.unreadable, systemImage: "exclamationmark.triangle")
+                    .font(.orbitLabel)
+                    .foregroundStyle(.secondary)
+            } header: {
+                sectionHeader(ProjectCrossings.title, detail: nil)
+            }
+        }
+    }
+
+    /// The second press: the answer goes with the key of the crossing it was given on. Taken, the
+    /// question closes over the re-read row — a confirmed move reads as moved; refused, it stays
+    /// open beside the door's own code and reason.
+    private func answerCrossing(_ row: ProjectCrossing, _ decision: ProjectCrossingDecision,
+                                store: ProjectDetailModel) {
+        PlatformHaptics.tap()
+        Task {
+            if let refusal = await store.decideCrossing(row, decision) {
+                crossingRefusal = ProjectCrossingRefusal(id: row.id, refusal: refusal)
+            } else {
+                crossingAsk = nil
+                crossingRefusal = nil
+            }
+        }
     }
 
     // MARK: menu
