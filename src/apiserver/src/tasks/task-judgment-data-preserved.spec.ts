@@ -1928,7 +1928,17 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // index, constraint, enum, type, function or trigger is created, replaced or dropped; no
       // task, project, acceptance or DONE fence object is named; no INSERT, UPDATE or DELETE —
       // every runner reads NULL, "not reported" and "nobody asked", until its next heartbeat.
-      '0385_runner_self_update'],
+      '0385_runner_self_update',
+      // Antigravity accounts (0386): one nullable TEXT with no default on `workspace`
+      // (`antigravity_account`, 0309's `claude_account` exactly), and on `session` one nullable TEXT
+      // with no default (`antigravity_account`) and one BOOLEAN NOT NULL DEFAULT false
+      // (`antigravity_account_pinned`) — 0336's pair exactly, catalog-only as a constant default is —
+      // with no index, no CHECK and no foreign key, and nothing else. `task`, `project` and
+      // `project_acceptance_criterion_definition` are not named, no `project_acceptance_*` object nor
+      // any of the six preserved triggers/functions is, and no function, trigger, enum or type is
+      // created — so it is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: nothing
+      // is backfilled.
+      '0386_antigravity_account'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

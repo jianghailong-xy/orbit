@@ -82,7 +82,9 @@ import {
   supportsTargetBoundCurrentWorkSteer,
   uuidToBase62,
   accountToMoveTo,
+  isAccountEngine,
   planUsageBlockedUntil,
+  withEnginePlanUsage,
   type AccountEngine,
   type PlanUsage,
 } from '@orbit/shared';
@@ -213,10 +215,12 @@ import {
   automaticAccount,
   runAccount,
   workspaceLeavesAccountToOrbit,
+  type WorkspaceAccountChoices,
 } from '../providers/plan-usage-accounts';
+import { ACCOUNT_CHOICE, ACCOUNT_PINNED } from '../providers/account';
 import { namedRunnerEngines, sanitizeRunnerEngines } from '../common/runner-engines';
 import { runnerAccountPausedUntil } from '../common/account-pause';
-import { CLAUDE_ACCOUNT_MOVE_V1, CODEX_ACCOUNT_MOVE_V1 } from '../providers/account-move-capability';
+import { ACCOUNT_MOVE_CAPABILITY } from '../providers/account-move-capability';
 import { sessionPoolCodexLogin } from '../providers/codex-login';
 import {
   CURRENT_WORK_INTERRUPTED,
@@ -624,7 +628,7 @@ export class SessionNotSendable extends ConflictException {}
 function automaticAccountOnSwitch(
   session: {
     numTurns: number;
-    workspace: { env: unknown; codexAccount: string | null; claudeAccount: string | null } | null;
+    workspace: ({ env: unknown } & WorkspaceAccountChoices) | null;
     assignedRunner: { engines: unknown; accountPauses?: unknown; planUsage: unknown; capabilities: string[] } | null;
   },
   engine: AccountEngine,
@@ -638,7 +642,7 @@ function automaticAccountOnSwitch(
 
 /** Whether `runner` carries a conversation from one of its `engine` accounts to another. */
 function runnerCarriesAccounts(runner: { capabilities: string[] }, engine: AccountEngine): boolean {
-  return (runner.capabilities ?? []).includes(engine === AgentProvider.CODEX ? CODEX_ACCOUNT_MOVE_V1 : CLAUDE_ACCOUNT_MOVE_V1);
+  return (runner.capabilities ?? []).includes(ACCOUNT_MOVE_CAPABILITY[engine]);
 }
 
 /** The account columns a provider switch writes (accountOnProviderSwitch); empty writes none. */
@@ -647,6 +651,8 @@ interface AccountSwitchWrite {
   codexAccountPinned?: boolean;
   claudeAccount?: string;
   claudeAccountPinned?: boolean;
+  antigravityAccount?: string;
+  antigravityAccountPinned?: boolean;
 }
 
 @Injectable()
@@ -835,6 +841,12 @@ export class SessionsService {
     ) {
       throw new BadRequestException('claudeAccount must be "default" or the id of one of the runner\'s accounts');
     }
+    if (
+      dto.antigravityAccount != null &&
+      (typeof dto.antigravityAccount !== 'string' || !ACCOUNT_ID_PATTERN.test(dto.antigravityAccount))
+    ) {
+      throw new BadRequestException('antigravityAccount must be "default" or the id of one of the runner\'s accounts');
+    }
     // The session runs on a runner. Prefer an explicit pin; otherwise derive it from
     // the chosen workspace's machine (workspaces belong to a runner) — picking a workspace is
     // enough to know which machine + project dir to run in.
@@ -884,7 +896,7 @@ export class SessionsService {
     // runner's engine sign-in irrelevant — see the sign-in preflight below.
     let workspaceEnv: unknown;
     // The accounts the workspace pins its sessions to, whose sign-ins the preflight below judges.
-    let accountChoices: { codexAccount?: string | null; claudeAccount?: string | null } | undefined;
+    let accountChoices: WorkspaceAccountChoices | undefined;
     if (!assignedRunnerId && dto.workspaceId) {
       const workspace = await this.prisma.workspace.findFirst({
         where: { id: dto.workspaceId, ownerId, deletedAt: null },
@@ -895,6 +907,7 @@ export class SessionsService {
           env: true,
           codexAccount: true,
           claudeAccount: true,
+          antigravityAccount: true,
         },
       });
       if (!workspace) throw new ForbiddenException('workspace not found');
@@ -913,7 +926,7 @@ export class SessionsService {
     } else if (dto.workspaceId) {
       const workspace = await this.prisma.workspace.findFirst({
         where: { id: dto.workspaceId, ownerId, deletedAt: null },
-        select: { enableWorktree: true, enabled: true, env: true, codexAccount: true, claudeAccount: true },
+        select: { enableWorktree: true, enabled: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true },
       });
       if (!workspace) throw new ForbiddenException('workspace not found');
       if (workspace.enabled === false) throw new ForbiddenException('workspace is disabled');
@@ -1137,16 +1150,16 @@ export class SessionsService {
       const unavailable = dshRuntimeUnavailable(targetRunner.engines);
       if (unavailable) throw new ConflictException(unavailable);
     }
-    // The Codex or Claude account this session runs on: the one picked for it — which pins it there —
-    // else, when its workspace leaves the account to Orbit, the runner's account whose quota resets
-    // soonest (automaticAccount), which Orbit may move it off when that account's usage limit stops
-    // it. Stored here; its conversation lives in that account's directory. Null runs on the
-    // workspace's.
+    // The Codex, Claude or Antigravity account this session runs on: the one picked for it — which
+    // pins it there — else, when its workspace leaves the account to Orbit, the runner's account whose
+    // quota resets soonest (automaticAccount), which Orbit may move it off when that account's usage
+    // limit stops it. Stored here; a Codex or Claude conversation lives in that account's directory.
+    // Null runs on the workspace's.
     const automatic = (engine: AccountEngine) =>
       provider === engine && providerBuiltin && targetRunner
         ? automaticAccount(
             engine,
-            { env: workspaceEnv, codexAccount: accountChoices?.codexAccount, claudeAccount: accountChoices?.claudeAccount },
+            { env: workspaceEnv, ...accountChoices },
             targetRunner.engines,
             targetRunner.planUsage,
             new Date(),
@@ -1155,6 +1168,7 @@ export class SessionsService {
         : null;
     const codexAccount = dto.codexAccount ?? automatic(AgentProvider.CODEX);
     const claudeAccount = dto.claudeAccount ?? automatic(AgentProvider.CLAUDE);
+    const antigravityAccount = dto.antigravityAccount ?? automatic(AgentProvider.ANTIGRAVITY);
     const refusal =
       targetRunner &&
       signedOutEngineRefusal({
@@ -1166,6 +1180,7 @@ export class SessionsService {
           ...accountChoices,
           ...(codexAccount ? { codexAccount } : {}),
           ...(claudeAccount ? { claudeAccount } : {}),
+          ...(antigravityAccount ? { antigravityAccount } : {}),
         },
         runner: targetRunner,
       });
@@ -1217,6 +1232,8 @@ export class SessionsService {
         codexAccountPinned: dto.codexAccount != null,
         claudeAccount,
         claudeAccountPinned: dto.claudeAccount != null,
+        antigravityAccount,
+        antigravityAccountPinned: dto.antigravityAccount != null,
         workspaceId: dto.workspaceId,
         assignedRunnerId,
         taskId: dto.taskId,
@@ -4875,8 +4892,7 @@ export class SessionsService {
     session: Session,
   ): Promise<Prisma.SessionUncheckedUpdateInput | null> {
     if (session.status !== RunStatus.AWAITING_INPUT || !session.assignedRunnerId) return null;
-    const engine: AccountEngine | null =
-      session.provider === AgentProvider.CODEX || session.provider === AgentProvider.CLAUDE ? session.provider : null;
+    const engine: AccountEngine | null = isAccountEngine(session.provider) ? session.provider : null;
     if (!engine || !isBuiltinProvider(session.provider, session.providerBuiltin)) return null;
     const runner = await tx.runner.findUnique({
       where: { id: session.assignedRunnerId },
@@ -4886,13 +4902,12 @@ export class SessionsService {
     const workspace = session.workspaceId
       ? await tx.workspace.findUnique({
           where: { id: session.workspaceId },
-          select: { env: true, codexAccount: true, claudeAccount: true },
+          select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true },
         })
       : null;
-    const codex = engine === AgentProvider.CODEX;
     const move = accountBeforeDispatch(
       engine,
-      { account: codex ? session.codexAccount : session.claudeAccount, pinned: codex ? session.codexAccountPinned : session.claudeAccountPinned },
+      { account: session[ACCOUNT_CHOICE[engine]], pinned: session[ACCOUNT_PINNED[engine]] },
       workspace,
       runner.engines,
       runner.planUsage,
@@ -4906,7 +4921,7 @@ export class SessionsService {
       clientTurnId: randomUUID(),
     });
     return {
-      ...(codex ? { codexAccount: move.to } : { claudeAccount: move.to }),
+      [ACCOUNT_CHOICE[engine]]: move.to,
       // Said on the `resumed` that reload earns, unless another line is already owed.
       ...(session.poolSwitchNotice ? {} : { poolSwitchNotice: accountSwitchNotice(engine, move, runner) }),
     };
@@ -7810,14 +7825,10 @@ export class SessionsService {
     account: string | undefined,
   ): Promise<AccountSwitchWrite> {
     const engine: AccountEngine | null =
-      next.changed &&
-      next.providerBuiltin &&
-      (next.provider === AgentProvider.CODEX || next.provider === AgentProvider.CLAUDE)
-        ? next.provider
-        : null;
+      next.changed && next.providerBuiltin && isAccountEngine(next.provider) ? next.provider : null;
     if (account !== undefined && !engine) {
       throw new BadRequestException(
-        "an account goes with a switch onto the built-in Codex or Claude engine — a session already there moves with PATCH /sessions/:id/account",
+        "an account goes with a switch onto the built-in Codex, Claude or Antigravity engine — a session already there moves with PATCH /sessions/:id/account",
       );
     }
     if (!engine) return {};
@@ -7830,27 +7841,24 @@ export class SessionsService {
         numTurns: true,
         codexAccountPinned: true,
         claudeAccountPinned: true,
-        workspace: { select: { env: true, codexAccount: true, claudeAccount: true } },
+        antigravityAccountPinned: true,
+        workspace: { select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true } },
         assignedRunner: { select: { engines: true, accountPauses: true, planUsage: true, capabilities: true } },
       },
     });
     const write = (to: string, pinned: boolean): AccountSwitchWrite =>
-      engine === AgentProvider.CODEX
-        ? { codexAccount: to, codexAccountPinned: pinned }
-        : { claudeAccount: to, claudeAccountPinned: pinned };
+      ({ [ACCOUNT_CHOICE[engine]]: to, [ACCOUNT_PINNED[engine]]: pinned });
     const runner = session.assignedRunner;
     if (account === undefined || account === AUTOMATIC_ACCOUNT) {
       if (account === AUTOMATIC_ACCOUNT && !workspaceLeavesAccountToOrbit(engine, session.workspace, runner?.engines)) {
         throw new BadRequestException("this session's workspace decides its account");
       }
-      const pinned = engine === AgentProvider.CODEX ? session.codexAccountPinned : session.claudeAccountPinned;
+      const pinned = session[ACCOUNT_PINNED[engine]];
       if (account === undefined && pinned) return {};
       const to = automaticAccountOnSwitch(session, engine, new Date());
       if (to) return write(to, false);
       // Asked for by name, Automatic unpins even when it has nowhere to move the session yet.
-      if (account === AUTOMATIC_ACCOUNT) {
-        return engine === AgentProvider.CODEX ? { codexAccountPinned: false } : { claudeAccountPinned: false };
-      }
+      if (account === AUTOMATIC_ACCOUNT) return { [ACCOUNT_PINNED[engine]]: false };
       return {};
     }
     const row = sanitizeRunnerEngines(runner?.engines)
@@ -8045,6 +8053,8 @@ export class SessionsService {
         workspaceEnv: session.workspace?.env as Record<string, string> | null,
         codexAccount: accounts.codexAccount ?? session.codexAccount ?? session.workspace?.codexAccount,
         claudeAccount: accounts.claudeAccount ?? session.claudeAccount ?? session.workspace?.claudeAccount,
+        antigravityAccount:
+          accounts.antigravityAccount ?? session.antigravityAccount ?? session.workspace?.antigravityAccount,
         runnerEngines: session.assignedRunner?.engines,
       });
       if (exec.provider === AgentProvider.DSH && (!session.assignedRunner?.capabilitiesReportedAt ||
@@ -8261,25 +8271,26 @@ export class SessionsService {
           codexAccountPinned: true,
           claudeAccount: true,
           claudeAccountPinned: true,
-          workspace: { select: { env: true, codexAccount: true, claudeAccount: true } },
+          antigravityAccount: true,
+          antigravityAccountPinned: true,
+          workspace: { select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true } },
           assignedRunner: { select: { engines: true, accountNames: true, accountPauses: true, planUsage: true, capabilities: true } },
         },
       });
-      const engine: AccountEngine | null =
-        session.provider === AgentProvider.CODEX || session.provider === AgentProvider.CLAUDE
-          ? session.provider
-          : null;
+      const engine: AccountEngine | null = isAccountEngine(session.provider) ? session.provider : null;
       if (!engine || !isBuiltinProvider(session.provider, session.providerBuiltin) || !session.assignedRunner) {
-        throw new BadRequestException("only a session on the built-in Codex or Claude engine runs on one of its runner's accounts");
+        throw new BadRequestException(
+          "only a session on the built-in Codex, Claude or Antigravity engine runs on one of its runner's accounts",
+        );
       }
       const runner = session.assignedRunner;
-      const own = engine === AgentProvider.CODEX ? session.codexAccount : session.claudeAccount;
-      const workspacePick = engine === AgentProvider.CODEX ? session.workspace?.codexAccount : session.workspace?.claudeAccount;
-      const choice = engine === AgentProvider.CODEX ? { codexAccount: own ?? workspacePick } : { claudeAccount: own ?? workspacePick };
+      const column = ACCOUNT_CHOICE[engine];
+      const choice = { [column]: session[column] ?? session.workspace?.[column] };
       const current = runAccount(engine, session.workspace?.env, choice, runner.engines);
       if (!current) throw new BadRequestException("this session spends a key of its own, not one of its runner's accounts");
       const accounts = namedRunnerEngines(runner)?.find((entry) => entry.engine === engine)?.accounts;
-      const usage = runner.planUsage as PlanUsage | null;
+      // Antigravity's quota travels with its engine health, and is weighed with the rest here.
+      const usage = withEnginePlanUsage(runner.planUsage as PlanUsage | null, sanitizeRunnerEngines(runner.engines));
       const now = new Date();
       let to = current;
       let pinned = true;
@@ -8307,7 +8318,7 @@ export class SessionsService {
         if (to !== current) notice = `Switched to ${accountLabel(engine, to, runner)}`;
       }
       const moves = to !== current;
-      if (moves && !runner.capabilities.includes(engine === AgentProvider.CODEX ? CODEX_ACCOUNT_MOVE_V1 : CLAUDE_ACCOUNT_MOVE_V1)) {
+      if (moves && !runnerCarriesAccounts(runner, engine)) {
         throw new ConflictException(
           "this session's runner cannot move a conversation to another account yet — it updates itself when no turn is running",
         );
@@ -8316,9 +8327,8 @@ export class SessionsService {
       await tx.session.update({
         where: { id },
         data: {
-          ...(engine === AgentProvider.CODEX
-            ? { codexAccount: to, codexAccountPinned: pinned }
-            : { claudeAccount: to, claudeAccountPinned: pinned }),
+          [column]: to,
+          [ACCOUNT_PINNED[engine]]: pinned,
           ...(notice ? { poolSwitchNotice: notice } : {}),
           // A session waiting out the old account's reset goes now, on the one with room.
           ...(moves && session.retryAt && session.retryAt > now ? { retryAt: now } : {}),
