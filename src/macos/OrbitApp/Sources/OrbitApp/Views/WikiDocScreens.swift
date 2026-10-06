@@ -71,6 +71,7 @@ struct WikiDocScreen: View {
             .task {
                 await wiki.loadDoc(address.slug)
                 await wiki.loadDocsDirectory()
+                if wiki.entries.isEmpty { await wiki.loadEntries() }
             }
             .refreshable { await wiki.loadDoc(address.slug) }
             .sheet(isPresented: $contentsShown) {
@@ -87,10 +88,10 @@ struct WikiDocScreen: View {
         return (docs.written, docs.total)
     }
 
-    /// The space's entries the home read, by id: the summaries under the entries the quotes came through.
+    /// The space's newest entries, by id: the summaries under the entries the quotes came through.
     private func summaries(_ wiki: WikiModel) -> [String: String] {
         var out: [String: String] = [:]
-        for entry in wiki.home?.entries ?? [] { if let summary = entry.summary { out[PublicID.storageKey(entry.id)] = summary } }
+        for entry in wiki.entries { if let summary = entry.summary { out[PublicID.storageKey(entry.id)] = summary } }
         return out
     }
 
