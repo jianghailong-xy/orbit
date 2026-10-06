@@ -47,6 +47,26 @@ test('the key an evidence revision is looked up by is the key its fact is claime
   );
 });
 
+// A confirmed move hands an undecided revision to the project the task moved into
+// (`TasksService.handOverMovedEvidence`). Under the revision's own key that hand-over would be
+// deduped by the delivery made before the move, so it is keyed with the project it goes to — and
+// the pending read looks it up by the same key.
+test('a revision handed over to the project its task moved into is keyed with that project', () => {
+  const revision = { revision: '7', criterionRevision: 'a'.repeat(64), evidenceDigest: 'b'.repeat(64) };
+  const OTHER = '10000000-0000-4000-8000-000000000003';
+  const submitted = completionEvidenceRevisedFact({ projectId: OTHER, taskId: TASK, ...revision });
+  const moved = completionEvidenceRevisedFact({
+    projectId: PROJECT, taskId: TASK, movedFromProjectId: OTHER, ...revision,
+  });
+  assert.notEqual(wakeIdempotencyKey(moved), wakeIdempotencyKey(submitted));
+  assert.match(wakeIdempotencyKey(moved), new RegExp(PROJECT));
+  assert.equal(completionEvidenceWakeKey(TASK, revision, PROJECT), wakeIdempotencyKey(moved));
+  assert.notEqual(completionEvidenceWakeKey(TASK, revision, OTHER), wakeIdempotencyKey(moved));
+  assert.equal(moved.projectId, PROJECT);
+  assert.equal(moved.detail?.movedFromProjectId, OTHER);
+  assert.equal(submitted.detail?.movedFromProjectId, undefined);
+});
+
 // The judgment machinery was removed on 2026-09-02. Four of the five completion inputs were facts
 // ABOUT a `task_judgment_request` — an exit-code result that decided one, a verdict that decided
 // one, and the two request lifecycle events — so their constructors went with the table. What is

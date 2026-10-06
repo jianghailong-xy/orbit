@@ -38,7 +38,7 @@ import {
   type WikiSpaceRow,
 } from '../lib/wiki';
 import { wikiRecentRows } from '../lib/wikiReviewMode';
-import { wikiProposalsBanner, wikiProposalsWaiting, wikiSpaceNames } from '../lib/wikiSpace';
+import { wikiProposalsBanner, wikiProposalsElsewhere, wikiProposalsWaiting, wikiSpaceNames } from '../lib/wikiSpace';
 
 /**
  * Activity (design §12.3.2, mocks 31 ② and 33 ④): what the Wiki home said besides its content — how the
@@ -53,7 +53,9 @@ import { wikiProposalsBanner, wikiProposalsWaiting, wikiSpaceNames } from '../li
  * other space's share said on its line, and it opens Review over all of them; the plan's banners follow,
  * one for each kind of thing waiting, another space's saying which space. Together they are the number
  * on the head's Activity badge and the sidebar's Wiki row (`wikiWaiting`), each banner's part of it in
- * `data-waiting`.
+ * `data-waiting`. A desktop draws cards for this space instead (mock 33 ④ ⑤), so nothing waiting
+ * elsewhere may hide behind them: its Review card counts every space's proposals and says the other
+ * spaces' shares as the banner does, and the other spaces' plan banners stand over the cards.
  *
  * WHAT IS NEW is what came after the reader last looked at this space (`wikiSeenKey(space, 'home')`, the
  * stamp the home keeps): those rows of Recently changed wear a blue dot and are counted beside its title.
@@ -95,6 +97,7 @@ export function WikiActivityPage({
 
   const proposals = wikiProposalsBanner(spaces, space.id, names);
   const elsewhere = spaces.filter((row) => row.id !== space.id && (row.planWaiting ?? 0) > 0);
+  const reviewElsewhere = wikiProposalsElsewhere(spaces, space.id, names);
 
   return (
     <div className="wk-act">
@@ -112,7 +115,8 @@ export function WikiActivityPage({
       </div>
       {status}
 
-      {/* A phone's banners (mock 31 ②): the proposals of every space, then what each plan waits for. */}
+      {/* A phone's banners (mock 31 ②): the proposals of every space, then what each plan waits for — another
+          space's on a desktop too, over the cards. */}
       {proposals && (
         <Link className="wk-banner" to={WIKI_REVIEW_PATH} data-waiting={wikiProposalsWaiting(spaces)}>
           <WikiDot tone="amber" />
@@ -126,7 +130,7 @@ export function WikiActivityPage({
       ))}
 
       <div className="wk-act-cards">
-        <ReviewCard space={space} pending={pending} changesets={review.data ?? []} />
+        <ReviewCard space={space} pending={pending} changesets={review.data ?? []} elsewhere={reviewElsewhere} />
         <WikiPlanCard space={space} />
         <WikiCard
           title={WIKI_RECENT_DECISIONS}
@@ -136,6 +140,7 @@ export function WikiActivityPage({
               {WIKI_ALL_DECISIONS}
             </Link>
           }
+          className="wk-decisions-card"
         >
           {decisions.length === 0 ? (
             <WikiEmpty>{WIKI_NO_DECISIONS}</WikiEmpty>
@@ -153,6 +158,7 @@ export function WikiActivityPage({
               </span>
             ) : undefined
           }
+          className="wk-changed-card"
         >
           {rows.length === 0 ? (
             <WikiEmpty>{WIKI_NO_CHANGES}</WikiEmpty>
