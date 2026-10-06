@@ -191,6 +191,10 @@ func prepareDshAgentConfigAt(input DshLaunchInput, agent *DshAgentOverlay, execu
 		map[string]interface{}{"id": "llm-deepseek", "config": map[string]interface{}{
 			"apiKeyEnv": "ORBIT_DSH_API_KEY", "baseURL": baseURL,
 		}},
+		// Harness's official switches for the request fields that carry the session log and the
+		// plugin inventory to the model endpoint; both default on upstream.
+		map[string]interface{}{"id": "session-log-deepseek", "config": map[string]interface{}{"enabled": false}},
+		map[string]interface{}{"id": "plugin-package-inventory-deepseek", "config": map[string]interface{}{"enabled": false}},
 	})
 	patchPath := filepath.Join(home, "orbit.patch.json")
 	if err := writeDshConfigFile(patchPath, patch); err != nil {

@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -26,13 +27,14 @@ func TestDshEnvironmentChildProcess(t *testing.T) {
 	}
 	home := os.Getenv("DSH_HOME")
 	var patch []struct {
+		ID     string `json:"id"`
 		Config struct {
 			APIKeyEnv string `json:"apiKeyEnv"`
 			BaseURL   string `json:"baseURL"`
 		} `json:"config"`
 	}
 	data, err := os.ReadFile(filepath.Join(home, "orbit.patch.json"))
-	if err != nil || json.Unmarshal(data, &patch) != nil || len(patch) != 1 {
+	if err != nil || json.Unmarshal(data, &patch) != nil || len(patch) != 3 || patch[0].ID != "llm-deepseek" {
 		os.Exit(21)
 	}
 	key := os.Getenv(patch[0].Config.APIKeyEnv)
@@ -467,5 +469,338 @@ func TestDshRecoveryDirectoryConflictsFailClosed(t *testing.T) {
 	data, _ := os.ReadFile(filepath.Join(unowned, "cordis.patch.yml"))
 	if string(data) != "retain" {
 		t.Fatal("symlink target changed")
+	}
+}
+
+// dshUploadRows are Harness's official switches for the two request fields its default profile
+// adds to every model request: the session log and the active plugin inventory.
+var dshUploadRows = []string{"session-log-deepseek", "plugin-package-inventory-deepseek"}
+
+// dshPatchRows reads every --patch a launch passes, in order, keyed by row id (last write wins).
+func dshPatchRows(t *testing.T, spec DshLaunchSpec) map[string]map[string]interface{} {
+	t.Helper()
+	rows := map[string]map[string]interface{}{}
+	for i, arg := range spec.Args {
+		if arg != "--patch" {
+			continue
+		}
+		data, err := os.ReadFile(spec.Args[i+1])
+		if err != nil {
+			t.Fatal(err)
+		}
+		var patch []map[string]interface{}
+		if err := json.Unmarshal(data, &patch); err != nil {
+			t.Fatal(err)
+		}
+		for _, row := range patch {
+			if id, _ := row["id"].(string); id != "" {
+				rows[id] = row
+			}
+		}
+	}
+	return rows
+}
+
+// TestDshSessionLogUploadDisabledByDefault: every Orbit launch, a session with its agent overlay
+// and a credentialless catalogue probe alike, turns both upload contributions off.
+func TestDshSessionLogUploadDisabledByDefault(t *testing.T) {
+	_, workspace := dshEnvironmentFixture(t)
+	input := DshLaunchInput{"upload-session", workspace, "fake-key", "https://synthetic.example", "workspace-write"}
+	session, err := prepareDshAgentConfigAt(input, &DshAgentOverlay{AppendSystemPrompt: "synthetic"}, testDshExecutable(t), filepath.Join(t.TempDir(), "session"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	probe, err := prepareDshConfigAt(input, testDshExecutable(t), filepath.Join(t.TempDir(), "probe"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, spec := range map[string]DshLaunchSpec{"session": session, "probe": probe} {
+		rows := dshPatchRows(t, spec)
+		for _, id := range dshUploadRows {
+			config, _ := json.Marshal(rows[id]["config"])
+			if string(config) != `{"enabled":false}` || rows[id]["disabled"] != nil {
+				t.Fatalf("%s launch leaves %s at %v", name, id, rows[id])
+			}
+		}
+	}
+}
+
+// dshUploadMarkers are synthetic values a recorded session puts in each place a log could carry.
+type dshUploadMarker struct{ name, value string }
+
+// dshFieldPaths lists a JSON value's key paths, arrays collapsed to [], with each leaf's JSON type.
+func dshFieldPaths(prefix string, value interface{}, out map[string]string) {
+	switch v := value.(type) {
+	case map[string]interface{}:
+		for key, child := range v {
+			if key == "parameters" {
+				// A tool's JSON schema is the tool definition the model sees, not session data.
+				out[prefix+".parameters"] = "schema"
+				continue
+			}
+			dshFieldPaths(prefix+"."+key, child, out)
+		}
+	case []interface{}:
+		if len(v) == 0 {
+			out[prefix+"[]"] = "empty"
+		}
+		for _, child := range v {
+			dshFieldPaths(prefix+"[]", child, out)
+		}
+	case string:
+		out[prefix] = "string"
+	case float64:
+		out[prefix] = "number"
+	case bool:
+		out[prefix] = "boolean"
+	case nil:
+		out[prefix] = "null"
+	}
+}
+
+func dshSortedKeys(m map[string]interface{}) []string {
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// dshRedactedUploads reduces recorded requests to structure: field presence, event types, key paths,
+// package identities and which synthetic markers each part carries. No recorded text is kept.
+func dshRedactedUploads(bodies []map[string]interface{}, headers []http.Header, markers []dshUploadMarker) map[string]interface{} {
+	var requests []map[string]interface{}
+	eventTypes, eventPaths, headerPaths := map[string]int{}, map[string]map[string]string{}, map[string]string{}
+	packages := map[string]bool{}
+	found := map[string]map[string]bool{}
+	for _, marker := range markers {
+		found[marker.name] = map[string]bool{}
+	}
+	for i, body := range bodies {
+		row := map[string]interface{}{"index": i, "topLevelKeys": dshSortedKeys(body)}
+		var harnessHeaders []string
+		for name := range headers[i] {
+			if strings.HasPrefix(strings.ToLower(name), "x-deepseek-harness-") {
+				harnessHeaders = append(harnessHeaders, strings.ToLower(name))
+			}
+		}
+		sort.Strings(harnessHeaders)
+		row["harnessHeaders"] = harnessHeaders
+		if log, ok := body["dsh_session_log"].(map[string]interface{}); ok {
+			events, _ := log["events"].([]interface{})
+			types := map[string]int{}
+			for _, raw := range events {
+				event := mapValue(raw)
+				typ, _ := event["type"].(string)
+				types[typ]++
+				eventTypes[typ]++
+				if eventPaths[typ] == nil {
+					eventPaths[typ] = map[string]string{}
+				}
+				dshFieldPaths("", event, eventPaths[typ])
+			}
+			dshFieldPaths("", map[string]interface{}{"session": log["session"]}, headerPaths)
+			encoded, _ := json.Marshal(log)
+			row["dsh_session_log"] = map[string]interface{}{"keys": dshSortedKeys(log), "version": log["version"], "afterSeq": log["afterSeq"],
+				"throughSeq": log["throughSeq"], "events": len(events), "eventTypes": types, "bytes": len(encoded)}
+		}
+		if inventory, ok := body["dsh_plugin_packages"].(map[string]interface{}); ok {
+			list, _ := inventory["packages"].([]interface{})
+			for _, raw := range list {
+				pkg := mapValue(raw)
+				packages[fmt.Sprintf("%v@%v", pkg["name"], pkg["version"])] = true
+			}
+			row["dsh_plugin_packages"] = map[string]interface{}{"keys": dshSortedKeys(inventory), "version": inventory["version"], "packages": len(list)}
+		}
+		parts := map[string]string{}
+		for _, field := range []string{"dsh_session_log", "dsh_plugin_packages"} {
+			if value, ok := body[field]; ok {
+				data, _ := json.Marshal(value)
+				parts[field] = string(data)
+			}
+		}
+		for _, field := range []string{"system", "messages", "tools"} {
+			data, _ := json.Marshal(body[field])
+			parts["modelInput."+field] = string(data)
+		}
+		// The request's own authentication header is where the key belongs; every other header is scanned.
+		other := headers[i].Clone()
+		other.Del("x-api-key")
+		other.Del("authorization")
+		headerText, _ := json.Marshal(other)
+		parts["otherHeaders"] = string(headerText)
+		for _, marker := range markers {
+			for part, text := range parts {
+				// JSON escapes path separators nowhere and quotes nothing in these markers, so a substring is exact.
+				if strings.Contains(text, marker.value) {
+					found[marker.name][part] = true
+				}
+			}
+		}
+		requests = append(requests, row)
+	}
+	var names []string
+	for name := range packages {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	matrix := map[string][]string{}
+	for name, parts := range found {
+		matrix[name] = []string{}
+		for part := range parts {
+			matrix[name] = append(matrix[name], part)
+		}
+		sort.Strings(matrix[name])
+	}
+	paths := map[string][]string{}
+	for typ, set := range eventPaths {
+		for path, kind := range set {
+			paths[typ] = append(paths[typ], path+": "+kind)
+		}
+		sort.Strings(paths[typ])
+	}
+	var header []string
+	for path, kind := range headerPaths {
+		header = append(header, path+": "+kind)
+	}
+	sort.Strings(header)
+	return map[string]interface{}{"requests": requests, "eventTypes": eventTypes, "eventFieldPaths": paths, "sessionHeaderPaths": header,
+		"pluginPackages": names, "markerFoundIn": matrix}
+}
+
+// TestDshRealSessionLogUpload records what the pinned official dsh sends beside the model input:
+// once with the two upload rows stripped from Orbit's launch patch (Harness's shipped default) and
+// once under Orbit's launch configuration unchanged. Each session holds a plain turn, a file read and
+// write, and a command that prints the process environment.
+func TestDshRealSessionLogUpload(t *testing.T) {
+	for _, variant := range []struct {
+		name     string
+		upstream bool
+	}{{"upstream-default", true}, {"orbit-default", false}} {
+		t.Run(variant.name, func(t *testing.T) { dshRecordSessionLogUpload(t, variant.upstream) })
+	}
+}
+
+func dshRecordSessionLogUpload(t *testing.T, upstream bool) {
+	h := newDshRealHarness(t, "auto", true)
+	const key, ambient = "sk-sl-synthetic-credential-5e1f", "sl-runner-ambient-secret-77c2"
+	h.job.Agent.Env["ORBIT_DSH_API_KEY"], h.model.key = key, key
+	t.Setenv("SL_RUNNER_SECRET", ambient)
+	h.job.Agent.AppendSystemPrompt = "SL_SYSTEM_PROMPT_MARKER"
+	var mu sync.Mutex
+	var bodies []map[string]interface{}
+	var headers []http.Header
+	recorder := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		data, _ := io.ReadAll(r.Body)
+		var body map[string]interface{}
+		_ = json.Unmarshal(data, &body)
+		mu.Lock()
+		bodies, headers = append(bodies, body), append(headers, r.Header.Clone())
+		mu.Unlock()
+		r.Body = io.NopCloser(bytes.NewReader(data))
+		h.model.serve(w, r)
+	}))
+	t.Cleanup(recorder.Close)
+	h.job.Agent.Env["ORBIT_DSH_BASE_URL"] = recorder.URL
+	if upstream {
+		prepare := prepareDshSessionLaunch
+		prepareDshSessionLaunch = func(ctx context.Context, job *ClaimedSession, execDir string) (DshLaunchSpec, error) {
+			spec, err := prepare(ctx, job, execDir)
+			if err != nil {
+				return spec, err
+			}
+			path := filepath.Join(spec.DshHome, "orbit.patch.json")
+			data, _ := os.ReadFile(path)
+			var rows []map[string]interface{}
+			_ = json.Unmarshal(data, &rows)
+			kept := rows[:0]
+			for _, row := range rows {
+				if id := row["id"]; id != dshUploadRows[0] && id != dshUploadRows[1] {
+					kept = append(kept, row)
+				}
+			}
+			stripped, _ := json.Marshal(kept)
+			return spec, os.WriteFile(path, stripped, 0o600)
+		}
+	}
+	h.writeWorkspace("notes.txt", "SL_FILE_CONTENT_MARKER\n")
+	written := filepath.Join(h.work, "out.txt")
+	h.model.plans = []dshPlan{
+		{text: "SL_ASSISTANT_MARKER plain answer"},
+		{tool: "read", args: map[string]interface{}{"file_path": filepath.Join(h.work, "notes.txt")}},
+		{tool: "write", args: map[string]interface{}{"file_path": written, "content": "SL_WRITE_CONTENT_MARKER\n"}},
+		{text: "SL file turn answer"},
+		{tool: "bash", args: map[string]interface{}{"command": "printf 'SL_BASH_OUTPUT_MARKER\\n'; env | sort", "description": "print the environment"}},
+		{text: "SL bash turn answer"},
+	}
+	h.start()
+	for _, turn := range []struct{ id, text string }{
+		{"t1", "SL_USER_MARKER say hello"}, {"t2", "Read notes.txt and write out.txt."}, {"t3", "Print the environment."},
+	} {
+		h.send(turn.id, "message", turn.text)
+		if done := h.settled(turn.id); done.Status != stSucceeded {
+			t.Fatalf("turn %s = %+v", turn.id, done)
+		}
+	}
+	if dshFileState(written) != "SL_WRITE_CONTENT_MARKER\n" {
+		t.Fatalf("write tool left %q", dshFileState(written))
+	}
+	_, bash := h.toolResult("t3", "bash")
+	bashSawKey := strings.Contains(firstString(bash, "content"), key)
+	h.end()
+	mu.Lock()
+	defer mu.Unlock()
+	markers := []dshUploadMarker{
+		{"userMessage", "SL_USER_MARKER"}, {"assistantText", "SL_ASSISTANT_MARKER"}, {"orbitSystemPrompt", "SL_SYSTEM_PROMPT_MARKER"},
+		{"fileContentRead", "SL_FILE_CONTENT_MARKER"}, {"fileContentWritten", "SL_WRITE_CONTENT_MARKER"}, {"bashOutput", "SL_BASH_OUTPUT_MARKER"},
+		{"workspacePath", h.work}, {"dshHomePath", h.home}, {"runnerHome", userHome()}, {"apiKey", key}, {"runnerAmbientSecret", ambient},
+	}
+	report := dshRedactedUploads(bodies, headers, markers)
+	carried := 0
+	for _, body := range bodies {
+		_, log := body["dsh_session_log"]
+		_, inventory := body["dsh_plugin_packages"]
+		if log || inventory {
+			carried++
+		}
+	}
+	// Harness keeps each session's canonical log zstd-compressed; count its acceptance marks.
+	logs, _ := filepath.Glob(filepath.Join(h.home, "sessions", "*", "*", "session.v*.jsonl.zstd"))
+	if len(logs) != 1 {
+		t.Fatalf("found %d session logs in DSH_HOME, want 1", len(logs))
+	}
+	canonical, err := exec.Command(os.Getenv("P4_NODE_BIN"), "-e",
+		"process.stdout.write(require('node:zlib').zstdDecompressSync(require('node:fs').readFileSync(process.argv[1])))", logs[0]).Output()
+	if err != nil {
+		t.Fatalf("decompress the session log: %v", err)
+	}
+	accepted := bytes.Count(canonical, []byte(`"session-log-deepseek/delivery-accepted"`))
+	if len(bodies) < 6 {
+		t.Fatalf("recorded %d model requests, want at least 6", len(bodies))
+	}
+	if upstream && carried != len(bodies) {
+		t.Fatalf("Harness's shipped default sent the upload fields on %d of %d requests", carried, len(bodies))
+	}
+	if !upstream && (carried != 0 || accepted != 0) {
+		t.Fatalf("Orbit's launch sent upload fields on %d requests and recorded %d acceptance marks", carried, accepted)
+	}
+	for _, part := range report["markerFoundIn"].(map[string][]string)["apiKey"] {
+		if !upstream && !strings.HasPrefix(part, "modelInput.") {
+			t.Fatalf("the API key reached %s", part)
+		}
+	}
+	report["variant"] = map[bool]string{true: "upstream-default", false: "orbit-default"}[upstream]
+	report["modelRequests"] = len(bodies)
+	report["requestsCarryingUploadFields"] = carried
+	report["deliveryAcceptedMarksInDshHome"] = accepted
+	report["bashToolSawApiKey"] = bashSawKey
+	t.Logf("variant=%s requests=%d carrying=%d accepted=%d bashSawKey=%v markers=%v", report["variant"], len(bodies), carried, accepted, bashSawKey, report["markerFoundIn"])
+	if dir := os.Getenv("DSH_SESSION_LOG_EVIDENCE_DIR"); dir != "" {
+		_ = os.MkdirAll(dir, 0o755)
+		data, _ := json.MarshalIndent(report, "", "  ")
+		if err := os.WriteFile(filepath.Join(dir, report["variant"].(string)+".json"), append(data, '\n'), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
