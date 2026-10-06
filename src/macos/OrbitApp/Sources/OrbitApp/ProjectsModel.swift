@@ -322,6 +322,40 @@ final class ProjectDetailModel {
         }
     }
 
+    // MARK: the owner's record of done
+
+    /// What "Is this project done?" over the page needs beyond the page's reads: the seal standing
+    /// now — what a press names when nobody asked — and when the owner confirmed it.
+    func loadDoneCard() async {
+        await loadStartCard()
+    }
+
+    /// Record the project done from the card over the page (`POST /projects/:id/done`) — the
+    /// coordinator's request when it asked, the owner's own record when nobody did. The record, or
+    /// what the card says when the door did not take it.
+    func recordDone(_ body: ProjectDoneRequestBody) async -> Result<ProjectDoneRecord, ProjectActionError> {
+        guard !busy else { return .failure(ProjectActionError(message: ProjectDone.notRecorded)) }
+        busy = true
+        defer { busy = false }
+        do {
+            let record = try await api.recordProjectDone(projectID: projectID, body)
+            onChanged()
+            await load()
+            return .success(record)
+        } catch {
+            await load()
+            return .failure(ProjectActionError(message: APIClient.failureReason(error)))
+        }
+    }
+
+    /// "Not yet…" on the coordinator's request: the note goes to the coordinator, and the request
+    /// ends. Nil when it went through; otherwise the sentence to show.
+    func declineDone(itemID: String, note: String) async -> String? {
+        await runWrite(ProjectDone.notDeclined) {
+            _ = try await self.api.declineDoneRequest(projectID: self.projectID, itemID: itemID, note: note)
+        }
+    }
+
     /// Remove the project. Only an empty one can go; the server's refusal says how many tasks it
     /// still holds.
     func delete() async -> String? {

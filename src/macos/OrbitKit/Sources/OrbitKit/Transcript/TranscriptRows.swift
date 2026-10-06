@@ -60,6 +60,16 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         /// request to start it (`START_REQUEST`), whose open item is the address: a new request is a
         /// new question, with its own suggestions, and replaces the card drawn for the old one.
         case startProject(itemID: String)
+        /// "Is this project done?" — the coordinator asked its owner to record the project done
+        /// (`DONE_REQUEST`), or its row says Record as done… — and, once the project is recorded
+        /// done, that card's receipt. One per project, re-derived from the reads on every render
+        /// (`ProjectDone.swift`): a request the coordinator filed again is this same card with the
+        /// new request in it, as the browser's single card is.
+        case projectDone
+        /// "Why is this project not done?" — an OPEN project the projection does not call done, and
+        /// nobody has asked to record it. One per project; it gives way to `projectDone` once a
+        /// request arrives, the way the browser's card does.
+        case projectNotDone
         /// "Confirm the new criteria?" — a started project whose criteria moved since the owner
         /// confirmed them. One per project, like the confirmation it re-asks, and re-derived from the
         /// confirmation read on every render: it lists what moved in the version standing NOW.
@@ -158,6 +168,8 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
             return "criteria-decision-receipt-\(settled.intentId)"
         case .acceptanceConfirmation:         return "acceptance-confirmation"
         case .startProject(let itemID):       return "start-project-\(itemID)"
+        case .projectDone:                    return "project-done"
+        case .projectNotDone:                 return "project-not-done"
         case .criteriaChange:                 return "criteria-change"
         // Beside the question's id rather than equal to it for `criteriaDecisionReceipt`'s reason:
         // for one confirmation both rows can be on screen at once — the record of the version that
@@ -348,9 +360,14 @@ public enum DeliveryAnchor {
         //
         // The start card and the change card anchor where they arrived too: both are delivered by
         // the read that follows the coordinator's turn, and what they ask about — the plan it asked
-        // to start, the criteria it changed — is in that turn, above them.
+        // to start, the criteria it changed — is in that turn, above them. So do the two closing
+        // cards: the request is in the coordinator's turn above the done card, and the card that
+        // explains why the project is not done stays where the reader first saw it. (A project
+        // already recorded done is placed by its record's moment instead — the console's
+        // `donePlacement`.)
         case .criteriaDecision, .criteriaDecisionReceipt, .acceptanceConfirmation,
-             .startProject, .criteriaChange, .acceptanceConfirmationReceipt,
+             .startProject, .projectDone, .projectNotDone, .criteriaChange,
+             .acceptanceConfirmationReceipt,
              .evidenceDecision, .ownerDecisionReceipt, .evidenceDecisionReceipt,
              .promotionApproval, .promotionReceipt, .coordinatorQuestion, .escalatedItem,
              .fusePause:

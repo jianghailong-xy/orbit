@@ -618,6 +618,23 @@ public final class APIClient: @unchecked Sendable {
         try await postRaw("projects/\(projectID)/start", body: body)
     }
 
+    /// Record the project done (`POST /projects/:id/done`): the request the press answers, the seal
+    /// the owner read and the gaps accepted, in one write (`ProjectDone.body`). The owner's own
+    /// credential and no acting session — the door refuses one. A request that was superseded, or a
+    /// seal that moved, is a 409 and nothing is written.
+    public func recordProjectDone(projectID: String,
+                                  _ body: ProjectDoneRequestBody) async throws -> ProjectDoneRecord {
+        try await post("projects/\(projectID)/done", body: body)
+    }
+
+    /// "Not yet…" on the coordinator's request to record the project done: the request is ended and
+    /// the owner's note goes to the coordinator conversation with the card's facts.
+    public func declineDoneRequest(projectID: String, itemID: String,
+                                   note: String) async throws -> ProjectDoneRequestDeclined {
+        try await post("projects/\(projectID)/done-requests/\(itemID)/decline",
+                       body: ProjectDoneDeclineBody(note: note))
+    }
+
     // MARK: a project's owner items — the merge to confirm, and the coordinator's question
 
     /// What this project still owes somebody a decision about, split by who is expected to act
