@@ -74,10 +74,16 @@ func elevateUpgrade(exe string) {
 	os.Exit(0)
 }
 
+// osExecutable is os.Executable, a var so a test can run this binary from a symlinked
+// install.
+var osExecutable = os.Executable
+
 // resolvedExecutable returns this process's binary with symlinks resolved — the
-// path an update replaces, and whose directory must be writable to do so.
+// path an update replaces, and whose directory must be writable to do so. With
+// install.sh's layout that is ~/.orbit/bin/orbit, not the /usr/local/bin/orbit
+// symlink to it.
 func resolvedExecutable() (string, error) {
-	exe, err := os.Executable()
+	exe, err := osExecutable()
 	if err != nil {
 		return "", err
 	}
@@ -275,6 +281,7 @@ func downloadAndSwap(server, key string, manifest Manifest, logf func(string)) b
 		logf("write failed: " + err.Error() + "\n")
 		return false
 	}
+	giveToDirOwner(tmp, filepath.Dir(exe))
 
 	probe, _ := exec.Command(tmp, "version").Output()
 	if strings.TrimSpace(string(probe)) != ver {
@@ -296,6 +303,21 @@ func downloadAndSwap(server, key string, manifest Manifest, logf func(string)) b
 		return false
 	}
 	return true
+}
+
+// giveToDirOwner hands a file written as root (`sudo orbit upgrade`) to whoever owns the
+// directory it sits in, so the binary in an account's ~/.orbit/bin stays that account's.
+func giveToDirOwner(path, dir string) {
+	if os.Geteuid() != 0 {
+		return
+	}
+	fi, err := os.Stat(dir)
+	if err != nil {
+		return
+	}
+	if st, ok := fi.Sys().(*syscall.Stat_t); ok {
+		_ = os.Lchown(path, int(st.Uid), int(st.Gid))
+	}
 }
 
 // execCurrentProcess starts a clean runner process image. In particular, it is
@@ -387,7 +409,20 @@ func upgrade(server string) {
 	} else {
 		fmt.Printf("updating %s -> %s...\n", version, m.Version)
 	}
-	if !downloadAndSwap(server, key, m, func(s string) { fmt.Fprint(os.Stderr, s) }) {
+	// As root — the `sudo orbit upgrade` a runner that cannot update itself asks for — first
+	// move a legacy install out of root's /usr/local/bin, so this release lands where the
+	// runner can replace it next time. Its service restarts once the release is in place.
+	var restart func()
+	if os.Geteuid() == 0 {
+		if exe, err := resolvedExecutable(); err == nil {
+			restart = migrateLegacyInstall(exe)
+		}
+	}
+	swapped := downloadAndSwap(server, key, m, func(s string) { fmt.Fprint(os.Stderr, s) })
+	if restart != nil {
+		restart()
+	}
+	if !swapped {
 		fmt.Fprintln(os.Stderr, "upgrade failed.")
 		os.Exit(1)
 	}
