@@ -54,7 +54,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { Module, RequestMethod, ValidationPipe } from '@nestjs/common';
+import { BadRequestException, Module, RequestMethod, ValidationPipe } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { HttpAdapterHost, NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
@@ -80,6 +80,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
 import { RunnerProvidersController } from '../runner-api/runner-providers.controller';
+import { PROVIDER_UNAVAILABLE_ERROR } from '../runner-api/runner-provider-support';
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from '../tasks/tasks.service';
 import { AdminRoleGuard } from '../users/admin-role.guard';
@@ -747,22 +748,22 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
     const own = await queued(db, bob, ownAt, bobPool.slug);
     assert.equal(token((await claim(ownAt.runnerId, own)).agent.env), theirs.key);
 
-    const poolAt = await machine(db, bob, 'bob-claims-her-pool');
-    const onPool = await queued(db, bob, poolAt, alicePool.slug);
-    const claimed = await claim(poolAt.runnerId, onPool);
-    assert.deepEqual(herKeysIn(claimed), [], 'her key is in what his runner was handed');
-    // Exactly the agent's own env: the Claude default, with nothing resolved for the slug.
-    assert.deepEqual(claimed.agent.env, configuredEnv.get(poolAt.workspaceId));
-    assert.equal((await recorded(onPool)).poolMemberProviderId, null);
-
-    const memberAt = await machine(db, bob, 'bob-claims-her-member');
-    const onMember = await queued(db, bob, memberAt, personal.row.slug);
-    const direct = await claim(memberAt.runnerId, onMember);
-    assert.deepEqual(herKeysIn(direct), [], 'her key is in what his runner was handed');
-    assert.deepEqual(direct.agent.env, configuredEnv.get(memberAt.workspaceId));
+    // A slug that resolves to nothing of his is not dispatched at all, not even on the Claude default: his
+    // runner is handed nothing, and the session waits where it was, saying why.
+    for (const [label, slug] of [['bob-claims-her-pool', alicePool.slug], ['bob-claims-her-member', personal.row.slug]]) {
+      const at = await machine(db, bob, label);
+      const session = await queued(db, bob, at, slug);
+      const offered = await queue.claimSessionForRunner({ id: at.runnerId }, 0, false, false);
+      assert.deepEqual(herKeysIn(offered), [], 'her key is in what his runner was handed');
+      assert.equal(offered, null, `his runner was handed his session on ${label}`);
+      assert.deepEqual(
+        await db.session.findUniqueOrThrow({ where: { id: session }, select: { status: true, error: true, poolMemberProviderId: true } }),
+        { status: RunStatus.PENDING, error: PROVIDER_UNAVAILABLE_ERROR, poolMemberProviderId: null },
+      );
+    }
   });
 
-  await t.test("(A3) a restarted runner's reclaim rebuilds another owner's session with none of the pool's tokens", async () => {
+  await t.test("(A3) a restarted runner's reclaim rebuilds none of another owner's pool into his session", async () => {
     const at = await machine(db, bob, 'bob-reclaims');
     const own = await live(db, bob, at, bobPool.slug);
     const onHers = await live(db, bob, at, alicePool.slug);
@@ -770,13 +771,14 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
     const rebuilt = (id: string) => reclaimed.find((s) => s.sessionId === id);
 
     assert.equal(token(rebuilt(own)?.agent.env), theirs.key, 'his own pool session was not rebuilt on his key');
-    assert.ok(rebuilt(onHers), 'the session on her pool was left out of the reclaim, so it says nothing');
-    assert.deepEqual(herKeysIn(rebuilt(onHers)), [], 'her key is in what his runner was handed');
-    assert.deepEqual(rebuilt(onHers)?.agent.env, configuredEnv.get(at.workspaceId));
+    // Her pool resolves to nothing of his, and a slug nothing holds is not rebuilt on the Claude default
+    // either: the session is left out, and nothing his runner was handed carries her key.
+    assert.equal(rebuilt(onHers), undefined, 'the session on her pool was rebuilt');
+    assert.deepEqual(herKeysIn(reclaimed), [], 'her key is in what his runner was handed');
     assert.equal((await recorded(onHers)).poolMemberProviderId, null);
   });
 
-  await t.test("(A3) a provider-switch reload re-spawns another owner's session with none of the pool's tokens", async () => {
+  await t.test("(A3) a provider-switch reload hands another owner's session none of the pool's tokens", async () => {
     // Positive control: a switch onto his own pool re-spawns on his own key.
     const ownAt = await machine(db, bob, 'bob-reloads-own');
     const own = await live(db, bob, ownAt, 'claude');
@@ -786,7 +788,7 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
     // Past the door — the row and the queued reload written by hand, as nothing in the product can.
     const at = await machine(db, bob, 'bob-reloads-hers');
     const onHers = await live(db, bob, at, alicePool.slug);
-    await db.conversationTurn.create({
+    const queuedReload = await db.conversationTurn.create({
       data: {
         sessionId: onHers,
         seq: 1,
@@ -796,10 +798,13 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
         status: 'PENDING',
       },
     });
-    const reload = await dequeueReload(onHers, at.runnerId);
-    assert.deepEqual(herKeysIn(reload), [], 'her key is in what his runner was handed');
-    // Exactly the agent's own env: nothing was resolved for the slug at all.
-    assert.deepEqual(reload.env, configuredEnv.get(at.workspaceId));
+    // Nothing of his holds the slug, so the reload is refused rather than re-spawned on the Claude default:
+    // his runner is handed nothing, and the reload is not given out.
+    await assert.rejects(dequeueReload(onHers, at.runnerId), (e: unknown) => e instanceof BadRequestException);
+    assert.deepEqual(
+      await db.conversationTurn.findUniqueOrThrow({ where: { id: queuedReload.id }, select: { status: true, deliveredAt: true } }),
+      { status: 'PENDING', deliveredAt: null },
+    );
     assert.equal((await recorded(onHers)).poolMemberProviderId, null);
   });
 
