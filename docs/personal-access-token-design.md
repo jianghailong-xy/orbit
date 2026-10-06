@@ -434,6 +434,9 @@ DELETE /api/pat/self               → {id, revokedAt, revokedReason}
   `user.json` 里的令牌永远只发往它自己的 `serverUrl`。
 - 与现有代码的出入（已在任务评论里说明）：`orbit session` 子命令与 capabilities 的 headless 门在会话内仍让
   `ORBIT_SERVICE_TOKEN` 优先，两者同时设置时 `whoami` 报会话、`orbit session list` 用 service token。统一交给子命令移植任务。
+  子命令移植任务已统一（2026-10-06）：`requireCLIOrchestrationContext`、`orbit session merge-receipt(s)` 与
+  `buildCLICapabilities` 都按 `resolveCLIIdentity` 走，会话内 `ORBIT_SERVICE_TOKEN` 不再生效，`capabilities` 的
+  `context.serviceToken` 也只在身份是 service token 时出现。会话外（headless）照旧：有 service token 就用它。
 
 ### 7.3 命令
 
@@ -475,6 +478,41 @@ orbit api [-X METHOD] PATH [--data JSON | --data-file -] [--paginate] [--json]  
   各带自己的 input schema。`cli_mcp_parity_test.go` 只要求每个 MCP 工具有 CLI 命令，不要求反向；
   `cli_help_flag_coverage_test.go` 现在也检查单命令（`orbit api --help` 等）的帮助文本。
 - 本任务没有让未移植的子命令在用户模式下报错，那是子命令移植任务的验收条目。
+
+落地时（子命令移植任务，2026-10-06）：
+
+- 用户身份下，`orbit task` / `project` / `session` 里有「用户路由按 runner 路由的形状作答」的动作，都改打用户路由，
+  带 PAT，发往令牌自己的服务器（`src/runner-go/user_mode.go`）；`--json` 打印与 runner 模式相同。每族一个接口
+  （`taskTransport` / `projectTransport` / `sessionTransport`），`*Transport`（runner 路由）与 `*userTransport`
+  （用户路由）各实现一份，命令本身不分叉。
+  - task：list、labels、get、attribution、evidence-list、evidence-submit（`sourceSessionId` 放进 body，须给
+    `--source-session-id`）、create、create-batch、update、reopen、delete、start（同样命名、同样重发）、comment、
+    progress、dependency-graph/add/remove。`task list` 打 `GET /tasks/page?counts=none`，打印其 `items`，即 runner
+    路由答的数组；`--all` 同样逐页走 `/tasks/page`。
+  - project：get、crossings、resolve-blocker、merge-evidence、create（用户路由可直接给 `workspaceId`，不需要会话）、
+    update、delete。
+  - session：list、search、get、send、interrupt、merge、merge-receipt、merge-receipts、end、complete、delete。
+    list/get 的形状差异由服务端补齐：新加 `GET /sessions/compact`（`status`、`parentSessionId` 过滤，
+    `workspaceConfinable: false`）与 `GET /sessions/:id/compact`（按会话判定），即 runner 路由用的
+    `listForOrchestration` / `getForOrchestration`；HTTP spec `sessions/session-compact-doors.http.spec.ts`。send 把
+    `message` 改名 `content`，没给 `--client-turn-id` 时由 CLI 生成（用户路由必填）；`--resume-if-ended` 打
+    `POST /sessions/:id/resume`；`--expect-reply` 拒绝（回复要回到一个会话）。merge 走用户的 Merge 门：指定的
+    `--target-branch` 会成为 workspace 默认目标，与菜单里选一样。
+  - 限定了 workspace 的令牌：`task list` 走的 `/tasks/page` 与 `session list` 走的 `/sessions/compact` 都是
+    `workspaceConfinable: false`（第 6.3 节），服务端答 403 `PAT_ROUTE_NOT_WORKSPACE_CONFINABLE`，CLI 原样报出；
+    按 id 的 get/update 等照常按对象判定。
+- 其余动作在用户身份下、读写任何东西之前拒绝，说明原因与替代（`userModeActions`）：需要会话上下文的
+  （task evidence-decide / request-confirmation / confirmation-review / confirmation-return / await，project
+  ensure-coordinator / send / request-start / request-done，session await / reply），以及用户路由形状不同或没有的
+  （task batch-pin，session create、import）。所有拒绝都以「`orbit api` 以你的身份调 REST API，`orbit capabilities
+  --json` 标出哪些命令以你的身份运行」收尾。
+- 绝不退回 runner 凭证：`cliTransport()`（所有以机器身份发请求的命令都从它拿凭证）在用户身份下直接拒绝，
+  所以 `task-list`、`provider`、`notify`、`token`、`agent` 等其他命令族在用户身份下同样报错。
+- `orbit capabilities --json`：每条命令带 `available`，不可用时带 `unavailableReason`；用户身份下列出全部会话命令
+  并逐条标注，`context.actor` 为 `user`。runner 身份下 `api` 标为不可用（未登录）。
+- 已知后果：runner 起的不带 `ORBIT_SESSION_ID` 的进程（EXECUTABLE 验收命令、`!` shell）同样按 §7.2 解析身份。
+  若 runner 的 `ORBIT_HOME` 里存了 `user.json`（第 8 节警告的同一 OS 用户登录），这些进程里的 `orbit task …`
+  会以登录者身份运行，`orbit wiki check` 等机器命令会被拒绝，而不是像之前那样静默用 runner 凭证。
 
 落地时（设备流任务，2026-10-06）：
 

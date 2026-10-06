@@ -919,11 +919,17 @@ type userAPIResponse struct {
 // userAPIRequest sends one request to target — a path under /api, with its query — on server, as token
 // (none when token is empty).
 func userAPIRequest(server, token, method, target string, body []byte) (*userAPIResponse, error) {
+	return userAPIRequestWithin(server, token, method, target, body, userAPITimeout)
+}
+
+// userAPIRequestWithin is userAPIRequest bounded by timeout instead, for a request the server holds open
+// on purpose: `orbit session merge --wait-seconds`.
+func userAPIRequestWithin(server, token, method, target string, body []byte, timeout time.Duration) (*userAPIResponse, error) {
 	base, err := normalizeServerURL(server)
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), userAPITimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	var reader io.Reader
 	if body != nil {

@@ -309,9 +309,20 @@ The first of these that is present decides. `orbit whoami` prints the identity a
 3. `ORBIT_USER_TOKEN`, or else the login saved in `user.json`: you.
 4. The runner credential in `config.json`: the machine.
 
-`orbit api` acts only as you and never falls back to the runner credential. The `task`, `project` and `session`
-commands do not act as you yet: they keep using the session or the runner credential, so use `orbit api` for
-anything you want done as yourself.
+`orbit api` acts only as you. So do the `task`, `project` and `session` commands while you are logged in: each one
+whose user route answers it the way its runner route does calls that route with your token, on your server, and
+prints the same JSON it prints as the runner. `orbit session list` and `orbit session get` read
+`GET /api/sessions/compact` and `GET /api/sessions/:id/compact` for that. The rest are refused before anything is
+read or sent, saying why and what to use instead: the ones that act for an Orbit session (`task evidence-decide`,
+`request-confirmation`, `confirmation-review`, `confirmation-return` and `await`; `project ensure-coordinator`,
+`send`, `request-start` and `request-done`; `session await` and `reply`), and the few whose user route answers
+in another shape or not at all (`task batch-pin`, `session create`, `session import`). No command falls back to
+the runner credential while you are logged in: the machine's other commands — `orbit task-list`, `orbit provider`,
+`orbit notify`, `orbit token` and the rest — are refused too, so run them where you are not logged in.
+`orbit capabilities --json` marks every command `available` or not under the identity in effect, with the reason.
+
+Inside a session the session decides for every command, the session commands included: a service token in the
+session's environment is not used there.
 
 ### Service token or personal access token?
 
