@@ -392,6 +392,51 @@ final class TaskDetailLogicTests: XCTestCase {
         XCTAssertEqual(rows[3].notes.first, "UNKNOWN · owner USER")
     }
 
+    /// `GET /tasks/:id/attribution` for a task a crossing of `kind` touches, in `state`.
+    private func attribution(crossing kind: String, _ state: String) throws -> TaskAttribution {
+        try JSONDecoder().decode(TaskAttribution.self, from: Data("""
+        {"taskId":"T","owning":{"projectId":"P1","title":"Coordinator control loop","status":"DONE"},
+         "owningAbsentReason":null,
+         "discovery":{"project":null,"triggerEvent":null,"task":null,"session":null,"recorded":false,
+                      "absentReason":"NO_DISCOVERY_RECORDED","authority":"EVIDENCE_ONLY"},
+         "crossing":{"handoffId":"H","kind":"\(kind)","state":"\(state)",
+                     "from":{"projectId":"P1","title":"Coordinator control loop","status":"DONE"},
+                     "to":{"projectId":"P2","title":"Runner hardening","status":"OPEN"},
+                     "subjectTaskId":"T","crossingKey":"c0ffee","requestedAt":"2026-10-06T09:00:00.000Z",
+                     "decidedAt":null,"expiresAt":null,"code":null,"requiredAction":null},
+         "crossingAbsentReason":null,"blocker":null,"blockerAbsentReason":"NOTHING_BLOCKING_ATTRIBUTION"}
+        """.utf8))
+    }
+
+    func testARequestToMoveTheTaskReadsAsAMove() throws {
+        XCTAssertEqual(try attribution(crossing: "MOVE_TASK", "PENDING").crossing?.kind, "MOVE_TASK")
+        for state in ["PENDING", "APPROVED", "DENIED", "APPLIED"] {
+            let row = try TaskDetailLogic.attributionRows(attribution(crossing: "MOVE_TASK", state))[2]
+            XCTAssertEqual(row.notes.first, TaskDetailCopy.moveTaskStateMeaning[state], state)
+            // The task is already filed, so a filing's words would be false of it.
+            XCTAssertFalse(row.notes.contains(TaskDetailCopy.crossingStateMeaning[state] ?? ""), state)
+        }
+        let pending = try TaskDetailLogic.attributionRows(attribution(crossing: "MOVE_TASK", "PENDING"))[2]
+        XCTAssertEqual(pending.text, "Waiting for your answer")
+        XCTAssertEqual(pending.notes, ["the task stays in its project until you answer, and confirming moves it",
+                                       "Coordinator control loop → Runner hardening"])
+    }
+
+    func testAFilingAndADependencyKeepTheirWords() throws {
+        let filing = [
+            "PENDING": "the work is not filed anywhere until you answer",
+            "APPROVED": "the writer may now file it; it has not been filed yet",
+            "DENIED": "refusing is final for this crossing — file the work yourself if you change your mind",
+            "APPLIED": "this answer has been spent; it authorises nothing further",
+        ]
+        for kind in ["FILE_TASK", "DEPEND_ON_TASK"] {
+            for (state, words) in filing {
+                let row = try TaskDetailLogic.attributionRows(attribution(crossing: kind, state))[2]
+                XCTAssertEqual(row.notes.first, words, "\(kind) \(state)")
+            }
+        }
+    }
+
     // MARK: followed by
 
     func testFollowersAreTheWatchesNamingThisTaskAndEndedOnesAreCounted() {
