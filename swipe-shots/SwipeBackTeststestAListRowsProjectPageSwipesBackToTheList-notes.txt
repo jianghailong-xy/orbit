@@ -1,0 +1,3 @@
+list row: 9 label="Swipe probe project, 14m ago, 1/3, Watching the member." id="" frame=(0.0, 116.0, 402.0, 75.33333333333334) hittable=true
+header: 48 label="Swipe probe project, Project · 3 sessions" id="" frame=(121.0, 66.33333587646484, 159.66668701171875, 35.33332824707031) hittable=true
+leading bar buttons: ["9 label=\"Back\" id=\"BackButton\" frame=(16.0, 62.0, 44.0, 44.0) hittable=true", "9 label=\"Projects\" id=\"\" frame=(0.0, 128.0, 305.3333333333333, 44.33333333333334) hittable=false"]

@@ -1,0 +1,300 @@
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework /Users/runner/work/orbit/orbit/.swipe-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.swipe-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/Frameworks/XCTestCore.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework (in target 'SwipeProbeUITests' from project 'SwipeProbe')
+    cd /Users/runner/work/orbit/orbit/.swipe-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework /Users/runner/work/orbit/orbit/.swipe-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.swipe-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/Frameworks/XCTest.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCTest.framework (in target 'SwipeProbeUITests' from project 'SwipeProbe')
+    cd /Users/runner/work/orbit/orbit/.swipe-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/XCTest.framework /Users/runner/work/orbit/orbit/.swipe-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.swipe-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/Frameworks/XCTAutomationSupport.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework (in target 'SwipeProbeUITests' from project 'SwipeProbe')
+    cd /Users/runner/work/orbit/orbit/.swipe-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework /Users/runner/work/orbit/orbit/.swipe-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.swipe-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/Frameworks/Testing.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/Testing.framework (in target 'SwipeProbeUITests' from project 'SwipeProbe')
+    cd /Users/runner/work/orbit/orbit/.swipe-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks/Testing.framework /Users/runner/work/orbit/orbit/.swipe-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/Frameworks
+
+CodeSign /Users/runner/work/orbit/orbit/.swipe-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/PlugIns/SwipeProbeUITests.xctest (in target 'SwipeProbeUITests' from project 'SwipeProbe')
+    cd /Users/runner/work/orbit/orbit/.swipe-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.swipe-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/PlugIns/SwipeProbeUITests.xctest
+
+CodeSign /Users/runner/work/orbit/orbit/.swipe-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app (in target 'SwipeProbeUITests' from project 'SwipeProbe')
+    cd /Users/runner/work/orbit/orbit/.swipe-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.swipe-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app
+/Users/runner/work/orbit/orbit/.swipe-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app: replacing existing signature
+
+RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.swipe-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/PlugIns/SwipeProbeUITests.xctest (in target 'SwipeProbeUITests' from project 'SwipeProbe')
+    cd /Users/runner/work/orbit/orbit/.swipe-probe
+    builtin-RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.swipe-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/PlugIns/SwipeProbeUITests.xctest
+
+Touch /Users/runner/work/orbit/orbit/.swipe-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/PlugIns/SwipeProbeUITests.xctest (in target 'SwipeProbeUITests' from project 'SwipeProbe')
+    cd /Users/runner/work/orbit/orbit/.swipe-probe
+    /usr/bin/touch -c /Users/runner/work/orbit/orbit/.swipe-probe/.dd/Build/Products/Debug-iphonesimulator/SwipeProbeUITests-Runner.app/PlugIns/SwipeProbeUITests.xctest
+
+2026-10-06 06:41:31.548055+0000 SwipeProbeUITests-Runner[16903:51320] [Default] Running tests...
+2026-10-06 06:41:31.708541+0000 SwipeProbeUITests-Runner[16903:52353] [General] Failed to send CA Event for app launch measurements for ca_event_type: 0 event_name: com.apple.app_launch_measurement.FirstFramePresentationMetric
+2026-10-06 06:41:31.751756+0000 SwipeProbeUITests-Runner[16903:52352] [General] Failed to send CA Event for app launch measurements for ca_event_type: 1 event_name: com.apple.app_launch_measurement.ExtendedLaunchMetrics
+objc[16903]: Class UIAccessibilityLoaderWebShared is implemented in both /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x10a248310) and /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x10a2dc398). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+    t =      nans Interface orientation changed to Portrait
+Test Suite 'All tests' started at 2026-10-06 06:41:43.652.
+Test Suite 'SwipeProbeUITests.xctest' started at 2026-10-06 06:41:43.654.
+Test Suite 'SwipeBackTests' started at 2026-10-06 06:41:43.654.
+Test Case '-[SwipeProbeUITests.SwipeBackTests testAListRowsProjectPageSwipesBackToTheList]' started.
+    t =     0.00s Start Test at 2026-10-06 06:41:43.656
+    t =     1.25s Set Up
+    t =     1.27s Open io.orbitd.swipeprobe
+    t =     1.27s     Launch io.orbitd.swipeprobe
+2026-10-06 06:41:50.167 xcodebuild[3251:15106] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-06 06:41:50.167 xcodebuild[3251:15106] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    15.41s         Setting up automation session
+    t =    17.63s         Wait for io.orbitd.swipeprobe to idle
+    t =    21.19s Waiting 60.0s for Any (First Match) to exist
+    t =    22.26s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    22.26s         Checking existence of `Any (First Match)`
+    t =    23.04s         Capturing element debug description
+    t =    23.25s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    23.25s         Checking existence of `Any (First Match)`
+    t =    24.67s         Capturing element debug description
+    t =    25.20s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    25.20s         Checking existence of `Any (First Match)`
+    t =    28.44s Added attachment named '01-workspace-list'
+    t =    28.58s Checking existence of `Any (First Match)`
+    t =    29.22s Find the Any (First Match)
+    t =    29.62s Find the "Swipe probe project, 14m ago, 1/3, Watching the member." Button
+    t =    30.01s Find the "Swipe probe project, 14m ago, 1/3, Watching the member." Button
+    t =    30.39s Find the "Swipe probe project, 14m ago, 1/3, Watching the member." Button
+    t =    30.89s Find the "Swipe probe project, 14m ago, 1/3, Watching the member." Button
+    t =    31.39s Tap "Swipe probe project, 14m ago, 1/3, Watching the member." Button
+    t =    31.39s     Wait for io.orbitd.swipeprobe to idle
+    t =    31.40s     Find the "Swipe probe project, 14m ago, 1/3, Watching the member." Button
+    t =    31.88s     Check for interrupting elements affecting "Swipe probe project, 14m ago, 1/3, Watching the member." Button
+    t =    32.21s     Synthesize event
+    t =    32.67s     Wait for io.orbitd.swipeprobe to idle
+    t =    32.96s Waiting 20.0s for Any (First Match) to exist
+    t =    33.96s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    33.97s         Checking existence of `Any (First Match)`
+    t =    36.15s Added attachment named '02-page-pushed-from-list'
+    t =    36.37s Requesting snapshot of accessibility hierarchy for app with pid 17657
+    t =    37.51s Requesting snapshot of accessibility hierarchy for app with pid 17657
+    t =    37.70s Checking existence of `Any (First Match)`
+    t =    37.93s Find the Any (First Match)
+    t =    38.17s Find the "Swipe probe project, Project · 3 sessions" StaticText
+    t =    38.43s Find the "Swipe probe project, Project · 3 sessions" StaticText
+    t =    38.62s Find the "Swipe probe project, Project · 3 sessions" StaticText
+    t =    38.81s Find the "Swipe probe project, Project · 3 sessions" StaticText
+    t =    39.34s Get all elements bound by index for: Descendants matching type Button
+    t =    39.48s Checking existence of `Button (Element at index 0)`
+    t =    39.57s Find the Button (Element at index 0)
+    t =    39.74s Find the "magnifyingglass" Button
+    t =    39.83s Checking existence of `Button (Element at index 1)`
+    t =    39.94s Find the Button (Element at index 1)
+    t =    40.04s Checking existence of `Button (Element at index 2)`
+    t =    40.13s Find the Button (Element at index 2)
+    t =    40.21s Checking existence of `Button (Element at index 3)`
+    t =    40.30s Find the Button (Element at index 3)
+    t =    40.40s Find the "BackButton" Button
+    t =    40.49s Checking existence of `Button (Element at index 4)`
+    t =    40.60s Find the Button (Element at index 4)
+    t =    40.71s Find the "square.grid.2x2" Button
+    t =    40.84s Checking existence of `Button (Element at index 5)`
+    t =    40.94s Find the Button (Element at index 5)
+    t =    41.13s Find the "Projects" Button
+    t =    41.27s Checking existence of `Button (Element at index 6)`
+    t =    41.44s Find the Button (Element at index 6)
+    t =    41.59s Checking existence of `Button (Element at index 7)`
+    t =    41.76s Find the Button (Element at index 7)
+    t =    41.94s Checking existence of `Button (Element at index 8)`
+    t =    42.10s Find the Button (Element at index 8)
+    t =    42.38s Checking existence of `Button (Element at index 9)`
+    t =    42.49s Find the Button (Element at index 9)
+    t =    42.66s Checking existence of `Button (Element at index 10)`
+    t =    42.82s Find the Button (Element at index 10)
+    t =    42.95s Checking existence of `Button (Element at index 11)`
+    t =    43.09s Find the Button (Element at index 11)
+    t =    43.22s Checking existence of `Button (Element at index 12)`
+    t =    43.36s Find the Button (Element at index 12)
+    t =    43.48s Checking existence of `Button (Element at index 13)`
+    t =    43.58s Find the Button (Element at index 13)
+    t =    43.82s Checking existence of `"BackButton" Button`
+    t =    43.98s Find the "BackButton" Button
+    t =    44.13s Find the "BackButton" Button
+    t =    44.31s Find the "BackButton" Button
+    t =    44.42s Find the "BackButton" Button
+    t =    44.52s Find the "BackButton" Button
+    t =    44.64s Checking existence of `"Projects" Button`
+    t =    44.74s Find the "Projects" Button
+    t =    44.83s Find the "Projects" Button
+    t =    44.93s Find the "Projects" Button
+    t =    45.03s Find the "Projects" Button
+    t =    45.15s Find the "Projects" Button
+    t =    45.30s Checking existence of `"Open navigation" Button`
+    t =    45.40s Press Window (First Match)[0.00, 0.55] for 0.1 seconds, then drag to Window (First Match)[0.90, 0.55] with velocity of 500.00 pixels per second, and then hold for 0.1 seconds 
+    t =    45.40s     Wait for io.orbitd.swipeprobe to idle
+    t =    45.41s     Find the Window (First Match)
+    t =    45.44s     Check for interrupting elements affecting Window
+    t =    45.55s     Synthesize event
+    t =    45.56s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    45.61s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    45.66s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    45.70s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    45.75s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    46.88s     Wait for io.orbitd.swipeprobe to idle
+    t =    48.07s Checking existence of `"Swipe probe project, Project · 3 sessions" StaticText`
+    t =    49.03s Waiting 10.0s for Any (First Match) to exist
+    t =    50.05s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    50.05s         Checking existence of `Any (First Match)`
+    t =    51.77s Added attachment named '03-after-edge-swipe'
+    t =    51.91s Requesting snapshot of accessibility hierarchy for app with pid 17657
+    t =    52.44s Requesting snapshot of accessibility hierarchy for app with pid 17657
+    t =    52.56s Tear Down
+Test Case '-[SwipeProbeUITests.SwipeBackTests testAListRowsProjectPageSwipesBackToTheList]' passed (53.095 seconds).
+Test Case '-[SwipeProbeUITests.SwipeBackTests testBackFromAnotherWorkspacesMemberRetracesToTheEntryWorkspace]' started.
+    t =     0.00s Start Test at 2026-10-06 06:42:36.752
+    t =     0.05s Set Up
+    t =     0.05s Open io.orbitd.swipeprobe
+    t =     0.05s     Launch io.orbitd.swipeprobe
+    t =     0.05s         Terminate io.orbitd.swipeprobe:17657
+2026-10-06 06:42:37.824 xcodebuild[3251:15106] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-06 06:42:37.824 xcodebuild[3251:15106] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    15.15s         Setting up automation session
+    t =    17.31s         Wait for io.orbitd.swipeprobe to idle
+    t =    19.99s Waiting 60.0s for Any (First Match) to exist
+    t =    21.02s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    21.02s         Checking existence of `Any (First Match)`
+    t =    22.01s Checking existence of `Any (First Match)`
+    t =    24.42s Tap Any (First Match)
+    t =    24.42s     Wait for io.orbitd.swipeprobe to idle
+    t =    24.43s     Find the Any (First Match)
+    t =    24.78s     Check for interrupting elements affecting "Swipe probe project, 14m ago, 1/3, Watching the member." Button
+    t =    24.99s     Synthesize event
+    t =    25.32s     Wait for io.orbitd.swipeprobe to idle
+    t =    25.74s Waiting 20.0s for Any (First Match) to exist
+    t =    26.82s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    26.82s         Checking existence of `Any (First Match)`
+    t =    27.26s Waiting 20.0s for Any (First Match) to exist
+    t =    28.30s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    28.30s         Checking existence of `Any (First Match)`
+    t =    29.56s Tap Any (First Match)
+    t =    29.57s     Wait for io.orbitd.swipeprobe to idle
+    t =    29.57s     Find the Any (First Match)
+    t =    29.84s     Check for interrupting elements affecting "Member in orbit-macos, 17m ago, A member that lives in the other workspace." Button
+    t =    29.97s     Synthesize event
+    t =    30.27s     Wait for io.orbitd.swipeprobe to idle
+    t =    33.78s Checking existence of `Any (First Match)`
+    t =    36.94s Added attachment named '07-member-from-other-workspace'
+    t =    37.11s Requesting snapshot of accessibility hierarchy for app with pid 19122
+    t =    37.91s Requesting snapshot of accessibility hierarchy for app with pid 19122
+    t =    38.05s Press Window (First Match)[0.00, 0.55] for 0.1 seconds, then drag to Window (First Match)[0.90, 0.55] with velocity of 500.00 pixels per second, and then hold for 0.1 seconds 
+    t =    38.05s     Wait for io.orbitd.swipeprobe to idle
+    t =    38.05s     Find the Window (First Match)
+    t =    38.07s     Check for interrupting elements affecting Window
+    t =    38.15s     Synthesize event
+    t =    38.16s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    38.19s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    38.25s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    38.28s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    38.31s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    39.42s     Wait for io.orbitd.swipeprobe to idle
+    t =    40.13s Waiting 10.0s for Any (First Match) to exist
+    t =    41.18s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    41.19s         Checking existence of `Any (First Match)`
+    t =    43.03s Added attachment named '08-back-on-project-page'
+    t =    43.18s Press Window (First Match)[0.00, 0.55] for 0.1 seconds, then drag to Window (First Match)[0.90, 0.55] with velocity of 500.00 pixels per second, and then hold for 0.1 seconds 
+    t =    43.18s     Wait for io.orbitd.swipeprobe to idle
+    t =    43.19s     Find the Window (First Match)
+    t =    43.21s     Check for interrupting elements affecting Window
+    t =    43.31s     Synthesize event
+    t =    43.32s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    43.35s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    43.39s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    43.46s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    43.48s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    44.61s     Wait for io.orbitd.swipeprobe to idle
+    t =    45.72s Checking existence of `Any (First Match)`
+    t =    46.59s Waiting 10.0s for Any (First Match) to exist
+    t =    47.62s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    47.62s         Checking existence of `Any (First Match)`
+    t =    47.97s Checking existence of `Any (First Match)`
+    t =    49.53s Added attachment named '09-back-on-entry-workspace'
+    t =    49.70s Requesting snapshot of accessibility hierarchy for app with pid 19122
+    t =    50.30s Requesting snapshot of accessibility hierarchy for app with pid 19122
+    t =    50.48s Tear Down
+Test Case '-[SwipeProbeUITests.SwipeBackTests testBackFromAnotherWorkspacesMemberRetracesToTheEntryWorkspace]' passed (50.752 seconds).
+Test Case '-[SwipeProbeUITests.SwipeBackTests testTheDrawersProjectPageKeepsTheHamburgerAndTheEdgeOpensTheDrawer]' started.
+    t =     0.00s Start Test at 2026-10-06 06:43:27.504
+    t =     0.05s Set Up
+    t =     0.05s Open io.orbitd.swipeprobe
+    t =     0.05s     Launch io.orbitd.swipeprobe
+    t =     0.05s         Terminate io.orbitd.swipeprobe:19122
+2026-10-06 06:43:28.602 xcodebuild[3251:15106] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-06 06:43:28.603 xcodebuild[3251:15106] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     2.44s         Setting up automation session
+    t =     5.02s         Wait for io.orbitd.swipeprobe to idle
+    t =     7.66s Waiting 60.0s for Any (First Match) to exist
+    t =     8.69s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =     8.69s         Checking existence of `Any (First Match)`
+    t =    10.27s Tap "Open navigation" Button
+    t =    10.27s     Wait for io.orbitd.swipeprobe to idle
+    t =    10.28s     Find the "Open navigation" Button
+    t =    10.50s     Check for interrupting elements affecting "line.3.horizontal" Button
+    t =    10.61s     Synthesize event
+    t =    10.96s     Wait for io.orbitd.swipeprobe to idle
+    t =    11.83s Waiting 20.0s for Button (First Match) to exist
+    t =    12.83s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    12.83s         Checking existence of `Button (First Match)`
+    t =    14.43s Added attachment named '04-drawer'
+    t =    14.60s Tap Button (First Match)
+    t =    14.60s     Wait for io.orbitd.swipeprobe to idle
+    t =    14.61s     Find the Button (First Match)
+    t =    14.98s     Check for interrupting elements affecting "Swipe probe project" Button
+    t =    15.11s     Synthesize event
+    t =    15.47s     Wait for io.orbitd.swipeprobe to idle
+    t =    15.70s Waiting 20.0s for Any (First Match) to exist
+    t =    16.75s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =    16.76s         Checking existence of `Any (First Match)`
+    t =    19.12s Added attachment named '05-page-opened-from-drawer'
+    t =    19.30s Requesting snapshot of accessibility hierarchy for app with pid 20343
+    t =    19.95s Requesting snapshot of accessibility hierarchy for app with pid 20343
+    t =    20.12s Checking existence of `"Open navigation" Button`
+    t =    20.24s Find the Any (First Match)
+    t =    20.39s Press Window (First Match)[0.00, 0.55] for 0.1 seconds, then drag to Window (First Match)[0.90, 0.55] with velocity of 500.00 pixels per second, and then hold for 0.1 seconds 
+    t =    20.39s     Wait for io.orbitd.swipeprobe to idle
+    t =    20.39s     Find the Window (First Match)
+    t =    20.43s     Check for interrupting elements affecting Window
+    t =    20.54s     Synthesize event
+    t =    20.56s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    20.59s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    20.63s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    20.66s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    20.69s         Find the Window at {{0.0, 0.0}, {402.0, 874.0}}
+    t =    21.81s     Wait for io.orbitd.swipeprobe to idle
+    t =    23.52s Added attachment named '06-edge-swipe-on-drawer-page'
+    t =    23.73s Checking existence of `"Swipe probe project, Project · 3 sessions" StaticText`
+    t =    23.98s Find the "Swipe probe project, Project · 3 sessions" StaticText
+    t =    24.22s Find the "Swipe probe project, Project · 3 sessions" StaticText
+    t =    24.44s Tear Down
+Test Case '-[SwipeProbeUITests.SwipeBackTests testTheDrawersProjectPageKeepsTheHamburgerAndTheEdgeOpensTheDrawer]' passed (24.726 seconds).
+Test Suite 'SwipeBackTests' passed at 2026-10-06 06:43:52.230.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 128.573 (128.576) seconds
+Test Suite 'SwipeProbeUITests.xctest' passed at 2026-10-06 06:43:52.232.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 128.573 (128.578) seconds
+Test Suite 'All tests' passed at 2026-10-06 06:43:52.232.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 128.573 (128.580) seconds
+2026-10-06 06:44:35.042 xcodebuild[3251:15106] [MT] IDETestOperationsObserverDebug: 229.491 elapsed -- Testing started completed.
+2026-10-06 06:44:35.042 xcodebuild[3251:15106] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-06 06:44:35.042 xcodebuild[3251:15106] [MT] IDETestOperationsObserverDebug: 229.491 sec, +229.491 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.swipe-probe/results/ios.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

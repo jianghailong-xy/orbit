@@ -1,0 +1,38 @@
+==> stub ready after 2s
+iPhone 17 Pro com.apple.CoreSimulator.SimRuntime.iOS-26-5
+==> iPhone 22452A91-4697-4369-8812-53ADB77EB73B
+Test Case '-[SwipeProbeUITests.SwipeBackTests testAListRowsProjectPageSwipesBackToTheList]' started.
+Test Case '-[SwipeProbeUITests.SwipeBackTests testAListRowsProjectPageSwipesBackToTheList]' passed (53.095 seconds).
+Test Case '-[SwipeProbeUITests.SwipeBackTests testBackFromAnotherWorkspacesMemberRetracesToTheEntryWorkspace]' started.
+Test Case '-[SwipeProbeUITests.SwipeBackTests testBackFromAnotherWorkspacesMemberRetracesToTheEntryWorkspace]' passed (50.752 seconds).
+Test Case '-[SwipeProbeUITests.SwipeBackTests testTheDrawersProjectPageKeepsTheHamburgerAndTheEdgeOpensTheDrawer]' started.
+Test Case '-[SwipeProbeUITests.SwipeBackTests testTheDrawersProjectPageKeepsTheHamburgerAndTheEdgeOpensTheDrawer]' passed (24.726 seconds).
+	 Executed 3 tests, with 0 failures (0 unexpected) in 128.573 (128.576) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 128.573 (128.578) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 128.573 (128.580) seconds
+** TEST SUCCEEDED **
+.swipe-probe/run.sh: line 44:  1630 Terminated: 15          python3 -u stub.py 8765 "$OUT/requests.log" > "$OUT/stub.out" 2>&1
+total 4480
+drwxr-xr-x  23 runner  staff     736 Oct  6 06:44 .
+drwxr-xr-x  13 runner  staff     416 Oct  6 06:33 ..
+-rw-r--r--   1 runner  staff  133567 Oct  6 06:42 01-workspace-list.png
+-rw-r--r--   1 runner  staff  158149 Oct  6 06:42 02-page-pushed-from-list.png
+-rw-r--r--   1 runner  staff  133799 Oct  6 06:42 03-after-edge-swipe.png
+-rw-r--r--   1 runner  staff  575114 Oct  6 06:43 04-drawer.png
+-rw-r--r--   1 runner  staff  157213 Oct  6 06:43 05-page-opened-from-drawer.png
+-rw-r--r--   1 runner  staff  584428 Oct  6 06:43 06-edge-swipe-on-drawer-page.png
+-rw-r--r--   1 runner  staff  135142 Oct  6 06:43 07-member-from-other-workspace.png
+-rw-r--r--   1 runner  staff  158301 Oct  6 06:43 08-back-on-project-page.png
+-rw-r--r--   1 runner  staff  134358 Oct  6 06:43 09-back-on-entry-workspace.png
+drwxr-xr-x  15 runner  staff     480 Oct  6 06:44 attachments
+-rw-r--r--   1 runner  staff     585 Oct  6 06:44 not-served.txt
+-rw-r--r--   1 runner  staff   11935 Oct  6 06:43 requests.log
+-rw-r--r--   1 runner  staff      49 Oct  6 06:30 stub.out
+-rw-r--r--@  1 runner  staff     503 Oct  6 06:42 SwipeBackTeststestAListRowsProjectPageSwipesBackToTheList-notes.txt
+-rw-r--r--@  1 runner  staff       0 Oct  6 06:43 SwipeBackTeststestBackFromAnotherWorkspacesMemberRetracesToTheEntryWorkspace-notes.txt
+-rw-r--r--@  1 runner  staff      49 Oct  6 06:43 SwipeBackTeststestTheDrawersProjectPageKeepsTheHamburgerAndTheEdgeOpensTheDrawer-notes.txt
+-rw-r--r--@  1 runner  staff   14193 Oct  6 06:42 tree-after-edge-swipe-from-list-page.txt
+-rw-r--r--@  1 runner  staff   14193 Oct  6 06:43 tree-after-member-round-trip.txt
+-rw-r--r--@  1 runner  staff   13148 Oct  6 06:43 tree-member-console.txt
+-rw-r--r--@  1 runner  staff   16094 Oct  6 06:43 tree-page-opened-from-drawer.txt
+-rw-r--r--@  1 runner  staff   15802 Oct  6 06:42 tree-page-pushed-from-list.txt
