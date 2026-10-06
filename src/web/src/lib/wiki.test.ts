@@ -15,6 +15,8 @@ import {
   wikiEntryPath,
   wikiFieldRows,
   wikiKindWord,
+  wikiProposalsFrom,
+  wikiProposalsToReview,
   wikiTabOf,
 } from './wiki';
 
@@ -252,6 +254,14 @@ describe('the words Review decides by', () => {
     expect(wikiDecidedToast('challenge', 'reconfirm')).toBe('Re-confirmed');
     expect(wikiDecidedToast('challenge', 'amend')).toBe('Amended');
     expect(wikiDecidedToast('challenge', 'retire')).toBe('Retired');
+  });
+
+  it('counts the proposals in the number it says: one proposal, several proposals', () => {
+    expect(wikiProposalsToReview(1)).toBe('1 proposal to review');
+    expect(wikiProposalsToReview(3)).toBe('3 proposals to review');
+    expect(wikiProposalsToReview(0)).toBe('0 proposals to review');
+    expect(wikiProposalsFrom(1, 1)).toBe('1 proposal from 1 session');
+    expect(wikiProposalsFrom(3, 2)).toBe('3 proposals from 2 sessions');
   });
 });
 

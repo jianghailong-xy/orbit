@@ -19,7 +19,9 @@ public enum WikiCopy {
     public static let reviewTitle = "Review"                             // WIKI_REVIEW_TITLE
 
     /// The drawer's amber count said in words, and the home page's banner (`wikiProposalsToReview`).
-    public static func proposalsToReview(_ count: Int) -> String { "\(count) proposals to review" }
+    public static func proposalsToReview(_ count: Int) -> String {
+        "\(count) proposal\(count == 1 ? "" : "s") to review"
+    }
     /// The same count under Review's own title (`wikiProposalsFrom`).
     public static func proposalsFrom(_ count: Int, sessions: Int) -> String {
         "\(count) proposal\(count == 1 ? "" : "s") from \(sessions) session\(sessions == 1 ? "" : "s")"
@@ -40,6 +42,8 @@ public enum WikiCopy {
     }
 
     public static let noSpaces = "No wiki space yet. A space is a codebase, and the first one is made when a session proposes into it."
+    /// What the Wiki section says to an account the server has not switched the wiki on for.
+    public static let disabledNote = "The wiki is not switched on for this account."   // WIKI_DISABLED_NOTE
     public static let spacePickerHint = "The codebase this wiki describes"   // WIKI_SPACE_PICKER_HINT
 
     /// The two numbers of the usage block.
@@ -177,7 +181,8 @@ public enum WikiCopy {
     public static let tabRetire = "Retire"                                  // WIKI_TAB_RETIRE
 
     /// Empty states.
-    public static let noEntries = "Nothing has been recorded in this space yet."   // WIKI_NO_ENTRIES
+    /// The home's Principles with none to list — about the principles, not the whole space.
+    public static let noPrinciples = "No principle has been recorded yet."         // WIKI_NO_PRINCIPLES
     public static let noReview = "Nothing is waiting for you."                     // WIKI_NO_REVIEW
     public static let noChanges = "Nothing has changed yet."                       // WIKI_NO_CHANGES
     public static let noDecisions = "No decision has been recorded yet."           // WIKI_NO_DECISIONS
@@ -348,6 +353,27 @@ public enum WikiLogic {
     /// server sent no count for adds nothing.
     public static func proposalsToReview(_ spaces: [WikiSpace]) -> Int {
         spaces.reduce(0) { $0 + max(0, $1.pendingOps ?? 0) }
+    }
+
+    // MARK: whether the account has the wiki
+
+    /// The refusal every wiki route answers an account the server has not switched the wiki on for —
+    /// the apiserver's ORBIT_WIKI (`WIKI_DISABLED`).
+    public static let disabledCode = "WIKI_DISABLED"
+
+    /// Whether an error is that answer: a 404 carrying WIKI_DISABLED, which says the wiki is off, not
+    /// that a read failed (`isWikiDisabled`).
+    public static func isDisabled(_ error: Error) -> Bool {
+        guard case APIError.http(let status, _) = error, status == 404 else { return false }
+        return APIClient.refusalCode(error) == disabledCode
+    }
+
+    /// Whether the wiki's entry points are drawn — the drawer's Wiki row, which is the iPad sidebar's
+    /// too (`wikiShown`): once the spaces read has answered anything but WIKI_DISABLED, and when it
+    /// failed for any other reason, since a read that failed is not the server saying there is no wiki.
+    /// Not while it is on its way, so an account the wiki is off for is never offered a row to press.
+    public static func shown(_ spaces: ListLoadState, disabled: Bool) -> Bool {
+        spaces.hasLoaded ? !disabled : spaces.lastLoadFailed
     }
 
     // MARK: marks
@@ -685,11 +711,13 @@ public enum WikiLogic {
         knownTitle(card, entry: entry) ?? WikiCopy.entryWord
     }
 
-    /// The card's title when one is known — the draft's, else the named entry's; nil rather than the
+    /// The card's title when one is known — the draft's, else the named entry's: as its own read has it,
+    /// or until that read lands, as Review's read carries it (`entryTitle`). Nil rather than the
     /// placeholder word, for a line that is better left out than filled with "entry".
     public static func knownTitle(_ card: ReviewCard, entry: WikiEntry?) -> String? {
         if let title = card.op.payload?["entry"]?["title"]?.stringValue { return title }
         if let title = entry?.title, !title.isEmpty { return title }
+        if let title = card.op.entryTitle, !title.isEmpty { return title }
         return nil
     }
 
@@ -785,7 +813,14 @@ public struct WikiHomeContent: Equatable, Sendable {
     public let space: WikiSpace
     /// Every space, for the picker.
     public let spaces: [WikiSpace]
+    /// The newest entries of every kind, as many as one read answers (200): what the status line counts
+    /// until the health read is in, and the summaries a document's page looks up. Never the bands' rows —
+    /// a space holds thousands of entries, and its principles are among the oldest of them.
     public let entries: [WikiEntry]
+    /// Every principle of the space, read on its own (`?kind=principle`, `principlesRead` at most).
+    public let principleEntries: [WikiEntry]
+    /// The space's newest decisions, read on their own (`?kind=decision`, `recentDecisionCount` of them).
+    public let decisionEntries: [WikiEntry]
     public let timeline: [WikiTimelineItem]
     /// Proposals waiting in this space — the banner's number, as the web home's Review card counts it
     /// (the drawer's row sums every space's).
@@ -797,12 +832,19 @@ public struct WikiHomeContent: Equatable, Sendable {
     /// where its maintenance run stands — what the status line says. Nil when that read failed.
     public let health: WikiSpaceHealth?
 
-    public init(space: WikiSpace, spaces: [WikiSpace], entries: [WikiEntry],
-                timeline: [WikiTimelineItem], proposals: Int, runs: [WikiChangesetView] = [],
-                health: WikiSpaceHealth? = nil) {
+    /// How many principles the home reads: the most one read answers, far above any space's own rules.
+    public static let principlesRead = 200
+    /// The decision log's rows: the newest four.
+    public static let recentDecisionCount = 4
+
+    public init(space: WikiSpace, spaces: [WikiSpace], entries: [WikiEntry], principles: [WikiEntry] = [],
+                decisions: [WikiEntry] = [], timeline: [WikiTimelineItem], proposals: Int,
+                runs: [WikiChangesetView] = [], health: WikiSpaceHealth? = nil) {
         self.space = space
         self.spaces = spaces
         self.entries = entries
+        self.principleEntries = principles
+        self.decisionEntries = decisions
         self.timeline = timeline
         self.proposals = proposals
         self.runs = runs
@@ -810,9 +852,10 @@ public struct WikiHomeContent: Equatable, Sendable {
     }
 
     /// Every principle, of any status, oldest recorded first — the web's order for the owner's own
-    /// rules, which do not reshuffle as the space fills up.
+    /// rules, which do not reshuffle as the space fills up. From their own read, never picked out of
+    /// `entries`: out of the newest 200, a space of thousands had none left to show.
     public var principles: [WikiEntry] {
-        entries.filter { $0.kind == .principle }.sorted {
+        principleEntries.filter { $0.kind == .principle }.sorted {
             (RelativeTime.parse($0.recordedAt ?? "") ?? .distantPast)
                 < (RelativeTime.parse($1.recordedAt ?? "") ?? .distantPast)
         }
@@ -825,8 +868,10 @@ public struct WikiHomeContent: Equatable, Sendable {
         return !rows.isEmpty && rows.allSatisfy { $0.trust == .owner }
     }
 
-    /// The four newest decisions, of any status.
-    public var recentDecisions: [WikiEntry] { Array(WikiLogic.entries(entries, ofKind: .decision).prefix(4)) }
+    /// The four newest decisions, of any status, from their own read.
+    public var recentDecisions: [WikiEntry] {
+        Array(WikiLogic.entries(decisionEntries, ofKind: .decision).prefix(Self.recentDecisionCount))
+    }
 
     /// The five newest changes.
     public var recentlyChanged: [WikiTimelineItem] { Array(timeline.prefix(5)) }

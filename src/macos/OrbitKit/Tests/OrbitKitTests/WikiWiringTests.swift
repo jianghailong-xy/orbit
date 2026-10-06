@@ -60,10 +60,69 @@ final class WikiWiringTests: XCTestCase {
     func testTheDrawerDrawsAWikiRowAfterTasks() throws {
         let shell = code(try source("Views/CompactShell.swift"))
         let rail = try slice(shell, from: "ForEach(AppSection.workSections) { section in", to: "workspacesHeader")
-        XCTAssertTrue(rail.contains("} else if section == .wiki {\n                        wikiRow"),
-                      "the Wiki's section is drawn by its own row")
+        XCTAssertTrue(rail.contains("} else if section == .wiki {\n                        if model.wiki?.shown == true { wikiRow }"),
+                      "the Wiki's section is drawn by its own row, and only for an account that has the wiki")
         XCTAssertTrue(shell.contains(".task { await model.wiki?.loadSpaces() }"),
                       "the drawer reads the spaces that its number counts")
+    }
+
+    /// The wiki off for this account (404 WIKI_DISABLED on the spaces read) is an answer the model
+    /// keeps, not a failure: the drawer — the iPad sidebar is the same rail — draws no Wiki row, and
+    /// the section, reached by a link or kept from before, says the web's sentence instead of offering
+    /// a retry.
+    func testTheWikiOffForThisAccountDrawsNoRowAndSaysWhy() throws {
+        let model = code(try source("WikiModel.swift"))
+        XCTAssertTrue(model.contains("var shown: Bool { WikiLogic.shown(spacesState, disabled: disabled) }"))
+        let spaces = try slice(model, from: "func loadSpaces() async {", to: "func loadHome() async {")
+        assertOrder(spaces, ["let list = try await api.wikiSpaces()", "disabled = false", "spacesState.succeed()",
+                             "} catch let error where WikiLogic.isDisabled(error) {", "} catch {", "spacesState.fail()"],
+                    "the spaces read")
+        let answer = try slice(spaces, from: "} catch let error where WikiLogic.isDisabled(error) {", to: "} catch {")
+        XCTAssertTrue(answer.contains("disabled = true"))
+        XCTAssertTrue(answer.contains("spacesState.succeed()"), "WIKI_DISABLED is an answer, not a failure to retry")
+        let entry = try slice(model, from: "func loadEntry(_ id: String) async {", to: "private func articlesSpace()")
+        assertOrder(entry, ["} catch let error where WikiLogic.isDisabled(error) {", "disabled = true",
+                            "} catch APIError.http(let status, _) where status == 404 {"], "an entry's read")
+
+        let screens = code(try source("Views/WikiScreens.swift"))
+        let placeholder = try slice(screens, from: "private struct WikiHomePlaceholder: View {",
+                                    to: "struct WikiDetailPane: View {")
+        assertOrder(placeholder, ["if wiki.disabled {", "WikiDisabledNote()", "} else if wiki.homeState.lastLoadFailed {"],
+                    "the home's placeholder")
+        let note = try slice(screens, from: "struct WikiDisabledNote: View {", to: "struct WikiContentsScreen: View {")
+        XCTAssertTrue(note.contains("description: Text(WikiCopy.disabledNote)"))
+        let pane = try slice(screens, from: "struct WikiDetailPane: View {", to: "struct WikiDisabledNote: View {")
+        XCTAssertTrue(pane.contains("} else if model.wiki?.disabled == true {\n            WikiDisabledNote()"))
+        let entryPage = try slice(screens, from: "struct WikiEntryView: View {", to: ".task { await wiki.loadEntry(entryID) }")
+        assertOrder(entryPage, ["if wiki.disabled {", "WikiDisabledNote()", "} else if let detail = wiki.detail(entryID) {"],
+                    "an entry's page")
+    }
+
+    /// The home's six reads side by side through task handles — never `async let`, whose teardown
+    /// iOS 27 can abort on (d22b276cc) — with Principles and Recent decisions each reading its own kind
+    /// rather than being picked out of the newest 200 entries of every kind.
+    func testTheHomeReadsEachBandsKindWithoutAsyncLet() throws {
+        let model = code(try source("WikiModel.swift"))
+        let load = try slice(model, from: "func loadHome() async {", to: "func loadReview() async {")
+        XCTAssertFalse(load.contains("async let"), "the home's reads must avoid async-let teardown")
+        for read in ["let documentRead = Task { try await api.wikiSpace(space.id) }",
+                     "let entriesRead = Task { try await api.wikiEntries(spaceID: space.id) }",
+                     "try await api.wikiEntries(spaceID: space.id, kind: .principle, limit: WikiHomeContent.principlesRead)",
+                     "try await api.wikiEntries(spaceID: space.id, kind: .decision, limit: WikiHomeContent.recentDecisionCount)",
+                     "let timelineRead = Task { try await api.wikiTimeline(spaceID: space.id) }",
+                     "let healthRead = Task { try await api.wikiHealth(spaceID: space.id) }"] {
+            XCTAssertTrue(load.contains(read), "the home no longer reads \(read)")
+        }
+        let cancels = try slice(load, from: "defer {", to: "}")
+        for handle in ["documentRead", "entriesRead", "principlesRead", "decisionsRead", "timelineRead", "healthRead"] {
+            XCTAssertTrue(cancels.contains("\(handle).cancel()"), "\(handle) is not cancelled on the way out")
+        }
+        XCTAssertTrue(load.contains("principles: principles,") && load.contains("decisions: decisions,"),
+                      "the bands are drawn from their own reads")
+        XCTAssertTrue(load.contains("principles: base.principleEntries, decisions: base.decisionEntries,"))
+        let page = code(try source("Views/WikiView.swift"))
+        let principles = try slice(page, from: "case .principles:", to: "case .recentDecisions:")
+        XCTAssertTrue(principles.contains("empty(WikiCopy.noPrinciples)"), "an empty band speaks for the principles alone")
     }
 
     /// The amber number is written the way the Projects row writes its own — the same font, colour and
