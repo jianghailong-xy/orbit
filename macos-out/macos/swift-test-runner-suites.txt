@@ -1,0 +1,36 @@
+[356/426] Compiling OrbitKitTests Phase4LogicTests.swift
+[390/449] Compiling OrbitKitTests LaunchdPlistMigrationTests.swift
+Test Suite 'LaunchdPlistMigrationTests' started at 2026-10-06 06:42:53.233.
+Test Case '-[OrbitKitTests.LaunchdPlistMigrationTests testAFrozenPlistIsRewrittenWithItsOwnValues]' started.
+Test Case '-[OrbitKitTests.LaunchdPlistMigrationTests testAFrozenPlistIsRewrittenWithItsOwnValues]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.LaunchdPlistMigrationTests testAFrozenPlistThatDoesntParseIsLeftAlone]' started.
+Test Case '-[OrbitKitTests.LaunchdPlistMigrationTests testAFrozenPlistThatDoesntParseIsLeftAlone]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.LaunchdPlistMigrationTests testARewrittenPlistIsLeftAlone]' started.
+Test Case '-[OrbitKitTests.LaunchdPlistMigrationTests testARewrittenPlistIsLeftAlone]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.LaunchdPlistMigrationTests testNoServiceInstalledDoesNothing]' started.
+Test Case '-[OrbitKitTests.LaunchdPlistMigrationTests testNoServiceInstalledDoesNothing]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.LaunchdPlistMigrationTests testTheCLIsPlistIsLeftAlone]' started.
+Test Case '-[OrbitKitTests.LaunchdPlistMigrationTests testTheCLIsPlistIsLeftAlone]' passed (0.000 seconds).
+Test Suite 'LaunchdPlistMigrationTests' passed at 2026-10-06 06:42:53.235.
+Test Suite 'Phase4LogicTests' started at 2026-10-06 06:42:58.723.
+Test Case '-[OrbitKitTests.Phase4LogicTests testDeviceResponsesDecode]' started.
+Test Case '-[OrbitKitTests.Phase4LogicTests testDeviceResponsesDecode]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.Phase4LogicTests testLaunchctlCommands]' started.
+Test Case '-[OrbitKitTests.Phase4LogicTests testLaunchctlCommands]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.Phase4LogicTests testLaunchdPlistContents]' started.
+Test Case '-[OrbitKitTests.Phase4LogicTests testLaunchdPlistContents]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.Phase4LogicTests testLoginPathAssembly]' started.
+Test Case '-[OrbitKitTests.Phase4LogicTests testLoginPathAssembly]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.Phase4LogicTests testLogTail]' started.
+Test Case '-[OrbitKitTests.Phase4LogicTests testLogTail]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.Phase4LogicTests testParseLaunchctlList]' started.
+Test Case '-[OrbitKitTests.Phase4LogicTests testParseLaunchctlList]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.Phase4LogicTests testReadConfigFromDisk]' started.
+Test Case '-[OrbitKitTests.Phase4LogicTests testReadConfigFromDisk]' passed (0.002 seconds).
+Test Case '-[OrbitKitTests.Phase4LogicTests testRunnerBinPath]' started.
+Test Case '-[OrbitKitTests.Phase4LogicTests testRunnerBinPath]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.Phase4LogicTests testRunnerPathsResolution]' started.
+Test Case '-[OrbitKitTests.Phase4LogicTests testRunnerPathsResolution]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.Phase4LogicTests testRunnerStatusLine]' started.
+Test Case '-[OrbitKitTests.Phase4LogicTests testRunnerStatusLine]' passed (0.000 seconds).
+Test Suite 'Phase4LogicTests' passed at 2026-10-06 06:42:58.729.
