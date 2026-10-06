@@ -240,8 +240,15 @@ struct SessionProjectPage: View {
     @State private var taggingSession: Session?
     @State private var sharingSession: Session?
     @State private var movingSession: Session?
+    @State private var promotionReview: PromotionReviewTarget?
+    @State private var promotionReceipt: PromotionReceiptTarget?
 
     private var sessions: [Session] { app.projectSessions }
+    /// This project's merge into main — never another project's, which the model still holds for
+    /// the moment between an address change and its first read.
+    private var merge: ProjectMergeModel? {
+        app.projectSessionsMerge.flatMap { $0.projectID == address.projectID ? $0 : nil }
+    }
     private var runningCount: Int {
         sessions.filter { session in
             if case .spinner = SessionStatusGlyph.make(for: session, watching: app.watches?.summary(for: session.id)).shape {
@@ -259,9 +266,11 @@ struct SessionProjectPage: View {
     private var titleText: String {
         project?.title ?? sessions.first?.projectMembership?.projectTitle ?? "Project"
     }
-    private var timeSections: [SessionTimeSection] {
-        SessionTimeGrouping.sections(sessions.filter { $0.projectMembership?.role != .coordinator },
-                                     pinnedFirst: false)
+    /// The member sessions by recency, with the merges into main already made drawn among them at
+    /// their own instant (owner decision 2026-10-06). No Pinned section: the page has none.
+    private var timeSections: [ProjectTimelineSection] {
+        ProjectTimeline.sections(sessions: sessions.filter { $0.projectMembership?.role != .coordinator },
+                                 merges: merge?.receipts ?? [])
     }
     private var selection: Binding<String?>? {
         guard rowNavigation == .selection else { return nil }
@@ -276,12 +285,19 @@ struct SessionProjectPage: View {
         List(selection: selection) {
             progressCard
                 .listRowSeparator(.hidden)
+            mergeCard
+                .listRowSeparator(.hidden)
             if let coordinator {
                 Section(SessionProjectCopy.coordinatorSection) { sessionRow(coordinator) }
             }
             ForEach(timeSections) { section in
                 Section {
-                    ForEach(section.sessions) { sessionRow($0) }
+                    ForEach(section.items) { item in
+                        switch item {
+                        case .session(let session): sessionRow(session)
+                        case .merge(let receipt): mergeRow(receipt)
+                        }
+                    }
                 } header: {
                     Text(section.title).textCase(nil)
                 }
@@ -290,7 +306,10 @@ struct SessionProjectPage: View {
         .listStyle(.plain)
         .navigationBarTitleDisplayMode(.inline)
         .rowSwipeList(rowSwipe)
-        .refreshable { await app.loadProjectSessions(address) }
+        .refreshable {
+            await app.loadProjectSessions(address)
+            await app.loadProjectMerge(address, force: true)
+        }
         .overlay {
             if sessions.isEmpty && !app.projectSessionsLoading {
                 if let failure = app.projectSessionsError {
@@ -324,13 +343,21 @@ struct SessionProjectPage: View {
                 SessionMoveSheet(session: session, workspace: agent, listed: sessions).environment(app)
             }
         }
+        // Hosted here rather than by the card or the row, so a poll redrawing either cannot dismiss
+        // what the owner is reading. The review is the coordinator conversation's own sheet.
+        .sheet(item: $promotionReview) { target in
+            if let merge { PromotionReviewSheet(source: merge, promotionID: target.id) }
+        }
+        .sheet(item: $promotionReceipt) { PromotionReceiptSheet(promotion: $0.promotion) }
         .task(id: address) {
             await app.loadProjectSessions(address)
+            await app.loadProjectMerge(address)
             await app.projects?.load()
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(4))
                 if Task.isCancelled { break }
                 await app.loadProjectSessions(address)
+                await app.loadProjectMerge(address)
             }
         }
     }
@@ -376,12 +403,14 @@ struct SessionProjectPage: View {
     }
 
     /// The project page's landing line, drawn only while something is in flight; a tap opens the
-    /// project page, whose Work overview carries the same row.
+    /// project page, whose Work overview carries the same row. A merge job's line is the merge
+    /// card's (`mergeCard`), so this one stays about tasks landing on the project branch.
     @ViewBuilder private var landingLine: some View {
-        if let integration = app.projectSessionsIntegration, integration.inFlight != nil {
+        if let integration = app.projectSessionsIntegration, integration.inFlight != nil,
+           !ProjectMergeCard.isMergeJob(integration.inFlight) {
             Divider().padding(.leading, 12)
             TimelineView(.periodic(from: .now, by: 1)) { context in
-                if let line = ProjectPage.landingLine(integration, now: context.date,
+                if let line = ProjectMergeCard.progressLandingLine(integration, now: context.date,
                                                      updatedAt: app.projectSessionsIntegrationReadAt,
                                                      refreshFailed: app.projectSessionsIntegrationReadFailed) {
                     Button { app.openProject(address.projectID) } label: {
@@ -398,6 +427,37 @@ struct SessionProjectPage: View {
                     .padding(.vertical, 6)
                 }
             }
+        }
+    }
+
+    /// The merge into main, under the progress card (owner decision 2026-10-06): the candidate's
+    /// card while it asks, merges or is blocked, and the merge check's live line before that. Absent
+    /// otherwise — a merge already made is a row on the timeline instead.
+    @ViewBuilder private var mergeCard: some View {
+        if let merge, let shape = ProjectMergeCard.shape(promotion: merge.current,
+                                                         integration: app.projectSessionsIntegration) {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                ProjectMergeCardView(
+                    merge: merge, shape: shape,
+                    landing: app.projectSessionsIntegration.flatMap {
+                        ProjectMergeCard.mergeLandingLine($0, now: context.date,
+                                                          updatedAt: app.projectSessionsIntegrationReadAt,
+                                                          refreshFailed: app.projectSessionsIntegrationReadFailed)
+                    },
+                    now: context.date,
+                    onDetails: { promotionReview = PromotionReviewTarget(id: $0) },
+                    onCoordinator: coordinator.map { coordinator in
+                        { app.openProjectMember(coordinator, push: rowNavigation == .push) }
+                    })
+            }
+        }
+    }
+
+    /// A merge already made, on the timeline at its own instant. Not a session: it has no selection,
+    /// swipe or menu, and a tap opens its receipt.
+    private func mergeRow(_ receipt: PromotionCards.Receipt) -> some View {
+        ProjectMergeTimelineRow(promotion: receipt.promotion) {
+            promotionReceipt = PromotionReceiptTarget(promotion: receipt.promotion)
         }
     }
 
@@ -429,4 +489,233 @@ struct SessionProjectPage: View {
         }
     }
 }
+/// The merge into main as the project's sessions page draws it, under the progress card (owner
+/// decision 2026-10-06, mocks in docs/mocks/project-merge-sessions-page). One card at four moments:
+/// the merge check running, the candidate asking, merging, or blocked. Its presses are the review
+/// sheet's — both ask `ProjectMergeModel` — and Details opens that sheet for the whole of it.
+///
+/// Only the asking card is orange: it is the one thing on the page waiting on the reader.
+private struct ProjectMergeCardView: View {
+    let merge: ProjectMergeModel
+    let shape: ProjectMergeCard.Shape
+    /// The merge job's live line, drawn inside the card while one is in flight.
+    let landing: ProjectPage.LandingLine?
+    let now: Date
+    let onDetails: (String) -> Void
+    /// Opens the coordinator, for a blocked candidate; nil when the page has no coordinator row.
+    let onCoordinator: (() -> Void)?
+    @State private var acting = false
+    @State private var actionError: String?
+
+    private var tint: Color {
+        switch shape {
+        case .checking: return .secondary
+        case .asking, .blocked: return .orange
+        case .merging: return .accentColor
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            switch shape {
+            case .checking:
+                if let landing { ProjectLandingRow(line: landing) }
+            case .asking:
+                if let view = merge.current { asking(view) }
+            case .merging:
+                if let view = merge.current { merging(view) }
+            case .blocked:
+                if let view = merge.current { blocked(view) }
+            }
+            if let actionError {
+                Text(actionError)
+                    .font(.orbitMeta).foregroundStyle(.red).lineLimit(3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(shape == .checking ? Color.secondary.opacity(0.1) : tint.opacity(0.08),
+                    in: RoundedRectangle(cornerRadius: 14))
+        .overlay {
+            if shape != .checking {
+                RoundedRectangle(cornerRadius: 14).strokeBorder(tint.opacity(0.3), lineWidth: 1)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func header(_ title: String, symbol: String?, badge: String? = nil) -> some View {
+        HStack(spacing: 8) {
+            if let symbol {
+                Image(systemName: symbol)
+                    .font(.orbitLabel.weight(.semibold))
+                    .foregroundStyle(tint)
+                    .frame(width: 26, height: 26)
+                    .background(tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 7))
+            } else {
+                ProgressView().controlSize(.small).tint(tint)
+            }
+            Text(title).font(.headline).foregroundStyle(shape == .asking ? Color.primary : tint)
+                .lineLimit(2)
+            Spacer(minLength: 6)
+            if let badge {
+                Text(badge)
+                    .font(.caption2.weight(.semibold)).foregroundStyle(.white)
+                    .padding(.horizontal, 8).padding(.vertical, 2)
+                    .background(Color.orange, in: Capsule())
+            }
+        }
+    }
+
+    /// A: what would land, the proof it was checked, and the two presses — the full review is a
+    /// tap away for anyone who wants every row before pressing.
+    @ViewBuilder private func asking(_ view: ProjectPromotionView) -> some View {
+        header(PromotionCards.pageTitle(view), symbol: "arrow.triangle.merge", badge: PromotionCards.needsYouBadge)
+        Text(PromotionCards.branchLine(view))
+            .font(.orbitMeta).foregroundStyle(.secondary)
+            .lineLimit(1).truncationMode(.middle)
+        Divider()
+        Text(PromotionCards.pageCounts(view)).font(.orbitLabel.weight(.semibold))
+        let tasks = PromotionCards.taskTitles(view)
+        ForEach(Array(tasks.shown.enumerated()), id: \.offset) { _, title in
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text("•").foregroundStyle(.secondary)
+                Text(title).lineLimit(1)
+            }
+            .font(.orbitLabel)
+        }
+        if let more = PromotionCards.moreTasks(tasks.more) {
+            Text(more).font(.orbitMeta).foregroundStyle(.secondary)
+        }
+        Text("\(PromotionCards.previewChecks(view)) · \(PromotionCards.upstreamLine(view))")
+            .font(.orbitMeta.weight(.semibold))
+            .foregroundStyle(!view.checks.isEmpty && view.checks.allSatisfy(\.passed) && view.conflicts.isEmpty
+                             ? Color.green : Color.primary)
+        if let met = merge.criteriaMet, let line = PromotionCards.criteriaLine(met: met.met, of: met.total) {
+            Text(line).font(.orbitMeta).foregroundStyle(.secondary)
+        }
+        HStack(spacing: 8) {
+            Button { act { await merge.confirmMergeToMain(view) } } label: {
+                Text(PromotionCards.mergeToMain).frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(acting || !PromotionCards.confirmable(view))
+            Button { act { await merge.declineMergeToMain(view) } } label: {
+                Text(PromotionCards.notNow)
+            }
+            .buttonStyle(.bordered)
+            .disabled(acting)
+        }
+        .padding(.top, 2)
+        footer(left: PromotionCards.askedLine(view, now: now), view: view)
+    }
+
+    /// B: under way, and the reader may walk away; Cancel until the push begins.
+    @ViewBuilder private func merging(_ view: ProjectPromotionView) -> some View {
+        header(PromotionCards.pageTitle(view), symbol: nil)
+        Text(PromotionCards.mergingStatusLine(view)).font(.orbitLabel)
+        if let landing { ProjectLandingRow(line: landing) }
+        Text(PromotionCards.pageNothingToDo).font(.orbitMeta).foregroundStyle(.secondary)
+        HStack {
+            Spacer()
+            Button { act { await merge.cancelMergeToMain(view) } } label: {
+                Text(PromotionCards.cancel)
+            }
+            .buttonStyle(.bordered)
+            .disabled(acting || view.execution?.phase == "PUSH")
+        }
+    }
+
+    /// D: why it cannot merge, and who has it — the coordinator, until the clock hands it over.
+    @ViewBuilder private func blocked(_ view: ProjectPromotionView) -> some View {
+        let item = merge.promotionItems.first { $0.promotionId == view.promotionId }
+        header(PromotionCards.pageTitle(view), symbol: "exclamationmark.triangle.fill")
+        Text(PromotionCards.blockedLine(view)).font(.orbitLabel)
+        HStack(spacing: 6) {
+            if PromotionCards.resolvingSpins(item) { ProgressView().controlSize(.mini) }
+            Text(PromotionCards.resolvingLine(item, now: now))
+        }
+        .font(.orbitMeta.weight(.semibold))
+        .foregroundStyle(item?.assignee == .owner ? Color.orange : Color.secondary)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 7)
+        .background(Color.secondary.opacity(0.12), in: Capsule())
+        HStack {
+            Spacer()
+            if let onCoordinator {
+                Button(action: onCoordinator) {
+                    HStack(spacing: 2) {
+                        Text(PromotionCards.openCoordinator)
+                        Image(systemName: "chevron.right")
+                    }
+                }
+                .buttonStyle(.borderless)
+            }
+        }
+        .font(.orbitMeta.weight(.semibold))
+    }
+
+    private func footer(left: String?, view: ProjectPromotionView) -> some View {
+        HStack {
+            if let left { Text(left).foregroundStyle(.secondary) }
+            Spacer(minLength: 8)
+            Button { onDetails(view.promotionId) } label: {
+                HStack(spacing: 2) {
+                    Text(PromotionCards.details)
+                    Image(systemName: "chevron.right")
+                }
+            }
+            .buttonStyle(.borderless)
+        }
+        .font(.orbitMeta.weight(.semibold))
+    }
+
+    private func act(_ run: @escaping () async -> String?) {
+        guard !acting else { return }
+        PlatformHaptics.tap()
+        acting = true
+        actionError = nil
+        Task {
+            actionError = await run()
+            acting = false
+        }
+    }
+}
+
+/// A merge already made, as a row on the project's timeline: what went onto main and who merged it,
+/// at the instant it happened. Shaped unlike a session row (the mark, no status line) because it is
+/// not one, and a tap opens its receipt.
+private struct ProjectMergeTimelineRow: View {
+    let promotion: ProjectPromotionView
+    let onOpen: () -> Void
+
+    var body: some View {
+        Button(action: onOpen) {
+            HStack(spacing: 11) {
+                Image(systemName: "arrow.triangle.merge")
+                    .font(.orbitGlyph.weight(.semibold))
+                    .foregroundStyle(.green)
+                    .frame(width: 30, height: 30)
+                    .background(Color.green.opacity(0.15), in: Circle())
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 8) {
+                        Text(PromotionCards.timelineTitle(promotion))
+                            .fontWeight(.semibold).lineLimit(1)
+                        Spacer(minLength: 8)
+                        if let at = promotion.merged?.at, let relative = RelativeTime.format(at) {
+                            Text(relative).font(.orbitMeta).foregroundStyle(.secondary).fixedSize()
+                        }
+                    }
+                    Text(PromotionCards.timelineDetail(promotion))
+                        .font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Opens the merge's receipt")
+    }
+}
+
 #endif

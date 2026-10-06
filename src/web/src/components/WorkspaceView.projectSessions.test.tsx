@@ -129,6 +129,9 @@ let routerNavigate: NavigateFunction;
 let mobile = false;
 let projectReadError = false;
 let withControlPlane = false;
+/** What the project's two promotion doors serve: the candidate on offer, and the merges made. */
+let currentPromotion: Record<string, unknown> | null = null;
+let merges: Array<Record<string, unknown>> = [];
 
 function LocationProbe() {
   const l = useLocation();
@@ -222,6 +225,8 @@ beforeEach(() => {
   mobile = false;
   projectReadError = false;
   withControlPlane = false;
+  currentPromotion = null;
+  merges = [];
   FakeEventSource.streams = [];
   vi.mocked(apiModule.pinSession).mockReset().mockResolvedValue({});
   vi.mocked(apiModule.unpinSession).mockReset().mockResolvedValue({});
@@ -253,6 +258,8 @@ beforeEach(() => {
       projectDetailsCalls.push(path);
       return reply(projectDetails);
     }
+    if (path === `/projects/${PROJECT_ID}/promotions/current`) return reply(currentPromotion);
+    if (path === `/projects/${PROJECT_ID}/promotions/merged`) return reply(merges);
     if (path.startsWith('/sessions/search?')) return reply({
       q: '', contentSearched: false, total: rows.length,
       hits: rows.map((r) => ({ ...r, matchField: 'title', snippet: null })),
@@ -826,5 +833,92 @@ describe('project-specific supplemental reads', { timeout: 60_000 }, () => {
     await settle();
     expect(projectQueryCalls()).toHaveLength(countBefore + (surface === 'page' ? 2 : 1));
     expect(projectQueryCalls().every((params) => params.get('projectId') === PROJECT_ID)).toBe(true);
+  });
+});
+
+/**
+ * The merge into main lives on this page (owner decision 2026-10-06): its card under the progress
+ * strip while a candidate asks, merges or is blocked, and every merge already made as a row on the
+ * page's timeline, at its own instant.
+ */
+describe('the merge into main on the project sessions page', { timeout: 60_000 }, () => {
+  const candidate = (state: string, extra: Record<string, unknown> = {}): Record<string, unknown> => ({
+    promotionId: 'promo-1', state, sourceKind: 'PROJECT_BRANCH', sourceRef: 'refs/heads/project/alpha',
+    sourceSha: '5e5bfca23aa1', upstreamRef: 'refs/heads/main', commitsAhead: 5, filesChanged: 10,
+    tasks: [{ taskId: 't1', title: 'Fix the runner gate' }, { taskId: 't2', title: 'Turn the session log off' }],
+    taskIds: ['t1', 't2'],
+    checks: [{ name: 'MERGE_CHECK', command: 'npm test', expectedExitCode: 0, exitCode: 0, timedOut: false, durationMs: 60_000 }],
+    conflicts: [], upstreamShaChecked: 'abc1234', landsTreeSha: 'def5678', landsAs: 'MERGE_COMMIT',
+    askedAt: '2026-10-04T08:30:00Z', upstream: { syncedAt: null, conflicts: false }, recheckedAt: null,
+    recheck: null, merged: null, decidedAt: null, ...extra,
+  });
+  const card = (): HTMLElement | null => page()?.querySelector<HTMLElement>('.session-project-merge') ?? null;
+
+  it('draws the asking candidate under the progress strip, and presses its own door from there', async () => {
+    currentPromotion = candidate('READY');
+    await mount();
+    await openSessions();
+    await until(() => expect(card()?.getAttribute('data-shape')).toBe('asking'));
+    const progress = page()!.querySelector('.session-project-page-progress')!;
+    expect(progress.compareDocumentPosition(card()!) & Node.DOCUMENT_POSITION_FOLLOWING,
+      'the merge card is not under the progress strip').toBeTruthy();
+    const text = card()!.textContent ?? '';
+    for (const part of ['Merge into main?', 'Needs you', 'project/alpha · 5 commits ahead of main', '2 tasks · 10 files',
+      'Fix the runner gate', 'Turn the session log off', '✓ Checks passed · no conflicts', 'Details ›']) {
+      expect(text).toContain(part);
+    }
+    // The page's card claims no chord: the keys stay with the card the reader opened.
+    expect(card()!.querySelector('.approval-kbd')).toBeNull();
+
+    const merge = [...card()!.querySelectorAll('button')].find((button) => button.textContent === 'Merge to main');
+    await click(merge, 'Merge to main');
+    await until(() => expect(vi.mocked(apiModule.api)).toHaveBeenCalledWith(
+      `/projects/${encodeURIComponent(PROJECT_ID)}/promotions/promo-1/confirm`,
+      { method: 'POST', body: { sourceSha: '5e5bfca23aa1' } },
+    ));
+  });
+
+  it('says a blocked candidate is the coordinator’s, and offers the way to it', async () => {
+    currentPromotion = candidate('BLOCKED', { conflicts: ['src/a.go', 'src/b.go'], decidedAt: '2026-10-04T08:40:00Z' });
+    await mount();
+    await openSessions();
+    await until(() => expect(card()?.getAttribute('data-shape')).toBe('blocked'));
+    const text = card()!.textContent ?? '';
+    expect(text).toContain('Can’t merge into main yet');
+    expect(text).toContain('2 files conflict with main: src/a.go, src/b.go');
+    expect(text).toContain('Coordinator is resolving it');
+    expect(card()!.querySelector('a')?.getAttribute('href')).toBe(`/sessions/${encodeURIComponent(COORDINATOR.id)}`);
+  });
+
+  it('draws nothing about main while nothing is on offer', async () => {
+    await mount();
+    await openSessions();
+    await settle();
+    expect(card()).toBeNull();
+    expect(page()!.querySelector('.session-project-merge-row')).toBeNull();
+  });
+
+  it('draws each merge already made on the timeline at its own instant, and opens its receipt', async () => {
+    merges = [candidate('MERGED', {
+      promotionId: 'promo-0',
+      merged: { sha: '8d5a868e90df', byUserId: 'user-1', at: '2026-10-04T09:00:00Z', automatic: false, revert: null },
+    })];
+    await mount();
+    await openSessions();
+    const mergeRow = (): HTMLElement | null => page()?.querySelector<HTMLElement>('.session-project-merge-row') ?? null;
+    await until(() => expect(mergeRow()).not.toBeNull());
+    expect(mergeRow()!.textContent).toContain('Merged into main');
+    expect(mergeRow()!.textContent).toContain('8d5a868 · 2 tasks · by you');
+    // Newer than the task's last turn, so it leads it, in the same section.
+    const task = memberRow('Build the package')!;
+    expect(mergeRow()!.compareDocumentPosition(task) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(mergeRow()!.closest('section')).toBe(task.closest('section'));
+    expect(card(), 'a merge already made drew the card').toBeNull();
+
+    await click(mergeRow(), 'the merge row');
+    await until(() => expect(document.querySelector('.review-card-dialog .project-promotion-receipt')).not.toBeNull());
+    const receipt = document.querySelector('.review-card-dialog .project-promotion-receipt')!;
+    expect(receipt.textContent).toContain('8d5a868');
+    expect(receipt.textContent).toContain('Fix the runner gate');
   });
 });
