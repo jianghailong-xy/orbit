@@ -29,7 +29,7 @@ export function Popconfirm({ trigger, anchor, title, description, confirmText = 
   const layer = useFloating(state);
   const popup = useRef<HTMLDivElement>(null);
   const triggerNode = useRef<HTMLButtonElement>(null);
-  const offsets = useWholePixelOffsets(anchor ?? triggerNode, 12);
+  const { positionerRef, ...offsets } = useWholePixelOffsets(anchor ?? triggerNode, 12, 0);
   const [pending, setPending] = useState(false);
   const mounted = useRef(true);
   useEffect(() => () => { mounted.current = false; }, []);
@@ -50,7 +50,7 @@ export function Popconfirm({ trigger, anchor, title, description, confirmText = 
     {trigger && <BasePopover.Trigger ref={triggerNode} render={trigger} disabled={disabled} />}
     <BasePopover.Portal container={layer.container()}>
       {/* No collision padding: the replaced confirmation was shifted right up to the viewport edge. */}
-      <BasePopover.Positioner anchor={anchor} side={side} align={align} {...offsets} collisionPadding={0} className="orbit-floating-positioner" style={{ zIndex: layer.zIndex }}>
+      <BasePopover.Positioner ref={positionerRef} anchor={anchor} side={side} align={align} {...offsets} collisionPadding={0} className="orbit-floating-positioner" style={{ zIndex: layer.zIndex }}>
         <BasePopover.Popup ref={popup} initialFocus={popup} finalFocus={returnFocus}
           className={`orbit-popover orbit-popconfirm${popupClassName ? ` ${popupClassName}` : ''}`} style={popupStyle}>
           <BasePopover.Arrow className="orbit-floating-arrow" style={calloutArrowStyle} />

@@ -52,6 +52,8 @@
 .orbit-floating-arrow[data-side='bottom'] { top: 0; transform: translateY(-100%); }
 .orbit-floating-arrow[data-side='left'] { right: 0; transform: translateX(100%) rotate(90deg); }
 .orbit-floating-arrow[data-side='right'] { left: 0; transform: translateX(-100%) rotate(-90deg); }
+/* Pointed where the replaced callout pointed it (see useWholePixelOffsets). */
+.orbit-floating-arrow[data-align='center']:is([data-side='top'], [data-side='bottom']) { translate: var(--orbit-arrow-nudge, 0px) 0; }
 @keyframes orbit-slide-up-in {
   from { opacity: 0; transform: scaleY(.8); transform-origin: 0% 0%; }
   to { opacity: 1; transform: scaleY(1); transform-origin: 0% 0%; }

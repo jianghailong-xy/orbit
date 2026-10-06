@@ -123,7 +123,7 @@ P3.2 试点据真实页面补齐：Select 家族根类名为 `.orbit-select`（�
 
 Combobox 的值、占位与搜索输入框放在同一个行盒 `.orbit-combobox-field` 中（与被替换选择器的 content 盒相同）：行高来自隐藏的不换行空格，同时给控件提供文字基线；输入框由 inset 撑满而非百分比高度（后者使输入文字低1px）；打开且有值时整个行盒（含业务的悬停底色）一起淡化到 .25。未选值时打开即高亮第一项，Enter 选它（旧选择器的 defaultActiveFirstOption）。
 
-浮层位置按被替换的 rc-trigger 计算：其每个 inset 向下取整（顶/左边缘 floor(锚点边+间距)，以底/右边缘定位的——在锚点上方/左侧或与锚点末端对齐——取对应 ceil），Floating UI 则四舍五入，小数部分≥.5 时会差1px，`useWholePixelOffsets` 用 Base UI 公开的 sideOffset/alignOffset 函数补齐。Menu、Select、Combobox、MultiSelect 的列表另用 `useDropdownPlacement`：与触发器起/止边对齐，超出视口时若另一边能显示更多则改对另一边，不沿触发器平移，并收窄到对齐一侧的剩余宽度（`--orbit-dropdown-room`）；`align="center"` 的菜单仍用 Base UI 平移。Popconfirm 与旧确认浮层一样贴视口边缘（无避让留白），最宽 100vw。浮层箭头仍由 Floating UI 按取整后的位置居中，与旧组件差 <0.6px。
+浮层位置按被替换的 rc-trigger 计算：其每个 inset 向下取整（顶/左边缘 floor(锚点边+间距)，以底/右边缘定位的——在锚点上方/左侧或与锚点末端对齐——取对应 ceil），Floating UI 则四舍五入，小数部分≥.5 时会差1px，`useWholePixelOffsets` 用 Base UI 公开的 sideOffset/alignOffset 函数补齐。Menu、Select、Combobox、MultiSelect 的列表另用 `useDropdownPlacement`：与触发器起/止边对齐，超出视口时若另一边能显示更多则改对另一边，不沿触发器平移，并收窄到对齐一侧的剩余宽度（`--orbit-dropdown-room`）；与 rc-trigger 先按不受限宽度测量一样，列表在第一次越界前保持自然宽度，由那次越界决定本次打开的对齐边；`align="center"` 的菜单仍用 Base UI 平移。Tooltip、Popover、Popconfirm 越界时按各自避让留白滑回视口后再向下取整，箭头指向旧组件所指之处（未取整位置下所覆盖锚点段的中点，`--orbit-arrow-nudge`）。Popconfirm 与旧确认浮层一样贴视口边缘（无避让留白），最宽 100vw。与末端对齐的列表左缘仍由 Base UI 取整（旧组件用 right 定位、左缘可为小数），差 <0.2px。
 
 `MultiSelect` 使用字符串数组 value/onValueChange；搜索选项后保持列表打开，支持逐项移除、全清、分组和 maxTagCount。`mode="tags"`、`open={false}`、`searchValue/onSearch`、`tokenSeparators={[',', ' ']}` 对应现有邮件输入：Enter 或失焦提交尾项，输入法组合期间不提交，值去重；格式校验和分享请求仍由业务负责。Backspace 删除数组末项，即使它在折叠计数内。
 
