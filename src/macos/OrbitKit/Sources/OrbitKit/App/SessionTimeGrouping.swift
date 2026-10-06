@@ -32,7 +32,7 @@ public enum SessionTimeGrouping {
         var pinned: [Session] = []
         // Fixed bucket order; titles double as the rendered section headers.
         var buckets: [[Session]] = Array(repeating: [], count: 5)
-        let titles = ["Today", "Yesterday", "2–7 days ago", "8–30 days ago", "Older"]
+        let titles = bucketTitles
         let today = calendar.startOfDay(for: now)
 
         for s in sessions {
@@ -50,10 +50,19 @@ public enum SessionTimeGrouping {
         return out
     }
 
+    /// The bucket titles, in order — `bucketIndex` indexes into these.
+    static let bucketTitles = ["Today", "Yesterday", "2–7 days ago", "8–30 days ago", "Older"]
+
     /// 0 Today · 1 Yesterday · 2 2–7 days ago · 3 8–30 days ago · 4 Older. A future timestamp
     /// (clock skew) reads as Today; a missing/unparseable one falls to Older.
     private static func bucketIndex(for s: Session, today: Date, calendar: Calendar) -> Int {
-        guard let iso = s.lastTurnAt ?? s.createdAt, let date = RelativeTime.parse(iso) else { return 4 }
+        bucketIndex(at: s.lastTurnAt ?? s.createdAt, today: today, calendar: calendar)
+    }
+
+    /// The same buckets for any instant, so a row that is not a session (a merge on the project's
+    /// timeline) lands in the section its time says.
+    static func bucketIndex(at iso: String?, today: Date, calendar: Calendar) -> Int {
+        guard let iso, let date = RelativeTime.parse(iso) else { return 4 }
         let day = calendar.startOfDay(for: date)
         let days = calendar.dateComponents([.day], from: day, to: today).day ?? 0
         if days <= 0 { return 0 }

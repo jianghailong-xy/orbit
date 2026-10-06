@@ -185,6 +185,9 @@ function makeService(
         integrationRef: `refs/heads/project/${PROJECT_ID}`,
       }),
     },
+    // The outcomes riding on any of these turns (session-request.ts `readSessionReplyCards`, read for
+    // every listed turn as the echo reads them): none here.
+    sessionRequest: { findMany: async () => [] },
     $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx),
   } as never;
   const service = new SessionsService(
